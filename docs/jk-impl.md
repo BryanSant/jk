@@ -26,7 +26,7 @@ This document is a **terse strategic implementation overview**, not a per-featur
 
 ## 3. Module map
 
-**Multi-module Gradle build from day one**, but consolidated by area — not one module per package. **Nine modules** at the repo root, grouped by dependency tier and how often the contained packages change together. Packages remain granular inside each module: `:core` contains `dev.buildjk.util`, `dev.buildjk.model`, etc. Inter-module dependencies are explicit in each `build.gradle.kts`; no cycles. Convention plugins live in `buildSrc/` (Java 25 toolchain, SPDX header check, Spotless, Checkstyle, JUnit 5). Library pins live in `gradle/libs.versions.toml` (Gradle version catalog).
+**Multi-module Gradle build from day one**, but consolidated by area — not one module per package. **Nine modules** at the repo root, grouped by dependency tier and how often the contained packages change together. Packages remain granular inside each module: `:core` contains `dev.buildjk.util`, `dev.buildjk.model`, etc. Inter-module dependencies are explicit in each `build.gradle.kts`; no cycles. Convention plugins live in `buildSrc/` (Java 25 toolchain, SPDX header check, Spotless, Checkstyle, JUnit 6). Library pins live in `gradle/libs.versions.toml` (Gradle version catalog).
 
 Listed in dependency order — foundations first, the native binary last.
 
@@ -53,7 +53,7 @@ Listed in dependency order — foundations first, the native binary last.
 | CLI parsing | **picocli** | GraalVM-first design (used by Quarkus). Minimal reflection footprint, completion-script generation, mature subcommand support. |
 | HTTP/2 client | **`java.net.http.HttpClient`** (JDK built-in) | Zero added dep, HTTP/2 native, virtual-thread friendly, GraalVM-safe. Avoids Netty's binary-size cost. |
 | Git client | **JGit** (`org.eclipse.jgit`) | Pure Java, no native libs, well-tested under GraalVM. libgit2 via FFI is rejected for native-image complexity. |
-| Bytecode / ABI | **ASM 9.x** | PRD-specified. Pulled in at v0.2 for jar manifest assembly; v1.5 ABI fingerprinting reuses it. |
+| Bytecode / ABI | **ASM 9.10** | PRD-specified. Pulled in at v0.2 for jar manifest assembly; v1.5 ABI fingerprinting reuses it. |
 | GPG signatures | **BouncyCastle** (`bcpg-jdk18on`) | Pure Java, no `gpg` binary dependency. System `gpg` is the documented fallback per PRD §21.2. |
 | Sigstore / cosign | **sigstore-java** (`dev.sigstore:sigstore-java`) | Official client, keyless OIDC, Rekor verification built in. |
 | CycloneDX SBOM | **cyclonedx-core-java** | Official; emits CycloneDX 1.6. |
@@ -62,7 +62,7 @@ Listed in dependency order — foundations first, the native binary last.
 | JDK metadata | **Roll-our-own** Disco API client over the JDK HttpClient | foojay's API is small; no library worth pulling. |
 | OSV client | **Roll-our-own** over OSV REST | Same reasoning. Schema version pinned per release. |
 | In-toto / SLSA | **Hand-rolled JSON** to the `slsa.dev/v1` predicate schema | No production-grade Java client; predicate is a small, frozen schema. |
-| Test framework | **JUnit Platform 1.11 + AssertJ** | PRD §18 blesses JUnit 5; jk's own tests dogfood the same. |
+| Test framework | **JUnit 6 + AssertJ** | PRD §18 blesses JUnit Jupiter; jk's own tests dogfood the same. (JUnit 6 unifies Jupiter/Platform/Launcher under a single version.) |
 | JSON (internal) | **Jackson Databind** | Restricted to event log + REST clients (Disco, OSV, Rekor). GraalVM-stable with the standard `META-INF/native-image/` config files. |
 | PubGrub | **Hand-port from the `pub` Dart reference** | No production-grade Java port exists. Algorithm core ≈ 1500 LoC; the differentiating effort is the diagnostics layer. |
 | Logging | **`java.lang.System.Logger`** routed to a jk-internal JSONL appender | Avoids SLF4J + bridge proliferation in the native binary. |
@@ -106,7 +106,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 
 ## 8. Testing strategy
 
-- **Unit:** JUnit 5 + AssertJ per subsystem.
+- **Unit:** JUnit 6 + AssertJ per subsystem.
 - **Resolver fixtures:** snapshot real Maven POMs (Spring Boot 3.4, Quarkus 3.x, Micronaut 4, Kotlin stdlib, Jackson, Netty) into `src/test/resources/fixtures/`. Serve via an in-memory HTTP/2 stub. PubGrub regressions caught by golden-output diffs.
 - **End-to-end:** shell-level scripts under `src/test/e2e/`, run via JUnit + `ProcessBuilder` first against the JVM build, then against the native binary in CI.
 - **Reproducibility:** every release tag runs `jk verify-reproducible` in a clean workspace and on at least one second OS/arch combination.

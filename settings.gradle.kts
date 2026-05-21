@@ -1,0 +1,32 @@
+// SPDX-License-Identifier: Apache-2.0
+
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        mavenCentral()
+    }
+}
+
+plugins {
+    id("org.gradle.toolchains.foojay-resolver-convention") version "0.10.0"
+}
+
+dependencyResolutionManagement {
+    repositories {
+        mavenCentral()
+    }
+}
+
+rootProject.name = "jk"
+
+include(
+    ":core",
+    ":io",
+    ":resolver",
+    ":toolchain",
+    ":engine",
+    ":supply-chain",
+    ":image",
+    ":compat",
+    ":cli",
+)

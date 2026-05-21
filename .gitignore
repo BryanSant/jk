@@ -5,7 +5,6 @@ target/
 # --- Gradle (bootstrap build system) ---
 .gradle/
 build/
-!gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/
 !**/src/test/**/build/
 
@@ -17,6 +16,9 @@ build/
 *.nar
 hs_err_pid*
 replay_pid*
+
+# Keep the Gradle wrapper jar tracked (overrides *.jar above).
+!gradle/wrapper/gradle-wrapper.jar
 
 # --- IntelliJ IDEA ---
 .idea/
