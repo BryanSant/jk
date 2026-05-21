@@ -24,36 +24,23 @@ This document is a **terse strategic implementation overview**, not a per-featur
 
 ---
 
-## 3. Module map (under `dev.buildjk.*`)
+## 3. Module map
 
-Single Gradle module for v0.1–v0.2. Logical packages below; first Gradle-module split happens at v0.3 (extract `:core` and `:cli`).
+**Multi-module Gradle build from day one**, but consolidated by area — not one module per package. **Nine modules** at the repo root, grouped by dependency tier and how often the contained packages change together. Packages remain granular inside each module: `:core` contains `dev.buildjk.util`, `dev.buildjk.model`, etc. Inter-module dependencies are explicit in each `build.gradle.kts`; no cycles. Convention plugins live in `buildSrc/` (Java 25 toolchain, SPDX header check, Spotless, Checkstyle, JUnit 5). Library pins live in `gradle/libs.versions.toml` (Gradle version catalog).
 
-| Package | Responsibility |
-|---|---|
-| `dev.buildjk.cli` | Verb dispatch, flag parsing, exit codes, ANSI rendering. |
-| `dev.buildjk.model` | `build.jk`/`build.toml` data classes, coordinate types, scope enums. |
-| `dev.buildjk.hocon` | HOCON load, JSON-Schema validation, line-precise error rendering wrapper over Lightbend Config (PRD §31 open question #3). |
-| `dev.buildjk.lock` | `jk.lock` read/write, deterministic serialization, merge driver. |
-| `dev.buildjk.resolver` | PubGrub solver, constraint set, version selectors, conflict diagnostics. |
-| `dev.buildjk.repo` | Maven repo HTTP layout, sparse-index, mirror, auth, normalization. |
-| `dev.buildjk.cache` | CAS, action cache, `~/.m2` interop view. |
-| `dev.buildjk.http` | HTTP/2 client wrapper, retry/backoff, ETag / If-Modified-Since. |
-| `dev.buildjk.git` | JGit-backed git resolver, sparse checkout, URL canonicalization, tag-rewrite detection. |
-| `dev.buildjk.jdk` | Disco-API client, install/use/pin, `.sdkmanrc` interop, `jk shell` / `jk env`. |
-| `dev.buildjk.compile` | javac + kotlinc-embeddable driver, KSP, source set glue, per-file incremental. |
-| `dev.buildjk.task` | Action graph engine, hashing, action cache lookup, parallel worker pool. |
-| `dev.buildjk.test` | JUnit Platform launcher, fork-per-N, Surefire-XML emit, SARIF, JaCoCo. |
-| `dev.buildjk.script` | JBang-compatible header parsing, single-file Java 25 execution. |
-| `dev.buildjk.tool` | `jk install` / `jkx`, tool envs, LRU eviction. |
-| `dev.buildjk.publish` | POM export, signing, Sigstore, SLSA in-toto. |
-| `dev.buildjk.image` | Jib-core-based OCI builder, multi-arch, reproducible layers. |
-| `dev.buildjk.audit` | OSV client, SARIF emit. |
-| `dev.buildjk.sbom` | CycloneDX + SPDX emission. |
-| `dev.buildjk.deny` | License / source / yanked policy gate. |
-| `dev.buildjk.mvn` | `jk mvn` passthrough + `jk import pom.xml` (three-tier). |
-| `dev.buildjk.gradle` | `jk gradle` passthrough + `jk import build.gradle(.kts)`. |
-| `dev.buildjk.event` | JSONL event log, chrome://tracing emitter, BEP-compatible streaming. |
-| `dev.buildjk.util` | Hashing, paths, env scrubbing, ANSI. |
+Listed in dependency order — foundations first, the native binary last.
+
+| Module | Packages | Responsibility |
+|---|---|---|
+| `:core` | `dev.buildjk.{util, event, model, hocon, lock}` | Foundations. Hashing/paths/ANSI/env-scrubbing, JSONL event log + chrome://tracing emitter, `build.jk` model + coordinate types, HOCON parser wrapper (line-precise diagnostics for PRD §31 #3), `jk.lock` read/write/merge. Zero network, zero process spawning. |
+| `:io` | `dev.buildjk.{http, cache, git, repo}` | All fetches and on-disk artifact storage. HTTP/2 client wrapper, CAS + action cache + `~/.m2` view, JGit-backed git resolver (sparse checkout, URL canonicalization, tag-rewrite detection), Maven repo client (sparse-index, mirror, auth, normalization). |
+| `:resolver` | `dev.buildjk.resolver` | PubGrub solver, version selectors, prose conflict diagnostics. Depends on `:io` for POM fetch, `:core` for types. |
+| `:toolchain` | `dev.buildjk.{jdk, script, tool}` | Anything that manages a JVM on disk. JDK manager (Disco API, install/use/pin, `.sdkmanrc` interop, `jk shell`/`jk env`), JBang-compatible single-file Java 25 scripts, `jk install`/`jkx` tool envs with LRU eviction. |
+| `:engine` | `dev.buildjk.{task, compile, test}` | The compile/test pipeline. Action graph engine + parallel worker pool, javac + `kotlin-compiler-embeddable` driver + KSP, JUnit Platform launcher with Surefire-XML/SARIF/JaCoCo output. (Named `:engine`, not `:build`, because `build/` at the repo root would collide with Gradle's default output directory.) |
+| `:supply-chain` | `dev.buildjk.{audit, sbom, deny, publish}` | Everything that gates or attests a release. `jk audit` (OSV), CycloneDX + SPDX SBOMs, `jk deny` license/source/yanked policy gate, `jk publish` (POM export, GPG + Sigstore signing, SLSA in-toto attestation). |
+| `:image` | `dev.buildjk.image` | Jib-core OCI builder for `jk image`. Kept isolated because jib-core is a heavyweight dependency that most builds never load. |
+| `:compat` | `dev.buildjk.{mvn, gradle}` | Maven/Gradle migration layer. `jk mvn` / `jk gradle` passthroughs, three-tier `jk import pom.xml`, best-effort `jk import build.gradle(.kts)`, `jk export pom.xml`. |
+| `:cli` | `dev.buildjk.cli` | picocli verb dispatch, flag parsing, exit codes, ANSI rendering. Depends on every module above. Also the application entrypoint: applies `application` + `org.graalvm.buildtools.native` plugins, so `./gradlew :cli:run` and `./gradlew :cli:nativeCompile` produce the JVM and native binaries respectively. |
 
 ---
 
@@ -88,7 +75,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 
 - **v0.1 — Resolver MVP.** HOCON `build.jk` parse, `jk.lock` read/write, Maven Central HTTP fetch, PubGrub solver with prose diagnostics. Commands: `jk init`, `jk add`, `jk remove`, `jk lock`, `jk sync`, `jk update`, `jk tree`, `jk why`, `jk fetch`. No compile yet.
 - **v0.2 — Builder.** javac driver, action graph + CAS + action cache, per-file incremental, JUnit Platform tests. Commands: `jk check`, `jk build`, `jk test`, `jk clean`, `jk explain`, `jk why-rebuilt`.
-- **v0.3 — Kotlin & workspaces.** Embedded `kotlin-compiler-embeddable`, KSP, multi-module workspaces, features, profiles. *First Gradle-module split: `:core` and `:cli`.*
+- **v0.3 — Kotlin & workspaces.** Embedded `kotlin-compiler-embeddable`, KSP, user-facing multi-module workspaces (in `build.jk`), features, profiles.
 - **v0.4 — Toolchain.** JDK manager (Disco), `.sdkmanrc` interop, `jk shell` / `jk env`, project-level JDK pinning.
 - **v0.5 — Migration.** `jk mvn` / `jk gradle` passthroughs, three-tier `jk import pom.xml`, best-effort `jk import build.gradle(.kts)`, `jk export pom.xml`.
 - **v0.6 — Publishing & scripting.** `jk publish` (GPG + Sigstore + SLSA + SBOM). `jk run script.java` (JBang-compat). `jk install` / `jkx`.
@@ -150,15 +137,33 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 jk/
 ├── LICENSE                          # Apache 2.0 verbatim
 ├── NOTICE                           # short attribution
-├── .gitignore                       # already present
-├── build.gradle.kts                 # added at v0.1 start
-├── settings.gradle.kts              # ditto
+├── .gitignore
+├── .sdkmanrc                        # java=25.0.3-tem, gradle=9.5.1
+├── settings.gradle.kts              # `include(":core", ":io", ":resolver", ...)`
+├── build.gradle.kts                 # root: applies convention plugins to subprojects
+├── buildSrc/                        # Gradle convention plugins
+│   └── src/main/kotlin/             # jk.java-conventions.gradle.kts, jk.spdx-header.gradle.kts, ...
+├── gradle/
+│   └── libs.versions.toml           # version catalog (single source of truth for deps)
 ├── docs/
 │   ├── jk-prd.md
 │   └── jk-impl.md                   # this document
-└── src/
-    ├── main/java/dev/buildjk/...    # populated from v0.1 onward
-    └── test/java/dev/buildjk/...
+├── core/
+│   ├── build.gradle.kts
+│   └── src/{main,test}/java/dev/buildjk/{util,event,model,hocon,lock}/
+├── io/
+│   └── src/{main,test}/java/dev/buildjk/{http,cache,git,repo}/
+├── resolver/
+├── toolchain/
+│   └── src/{main,test}/java/dev/buildjk/{jdk,script,tool}/
+├── engine/                          # renamed from :build to avoid collision with Gradle's build/ dir
+│   └── src/{main,test}/java/dev/buildjk/{task,compile,test}/
+├── supply-chain/
+│   └── src/{main,test}/java/dev/buildjk/{audit,sbom,deny,publish}/
+├── image/
+├── compat/
+│   └── src/{main,test}/java/dev/buildjk/{mvn,gradle}/
+└── cli/                             # entrypoint; applies application + native-image plugins
 ```
 
 ---
