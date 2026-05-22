@@ -246,7 +246,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk export {pom.xml}` | Emit a publishable POM (Gradle export is v1.1+). |
 | `jk scan` | Write a local HTML/JSON build scan report. |
 | `jk fetch [--offline-prepare]` | Download all dependencies without building (CI-friendly). |
-| `jk verify-reproducible` | Rebuild in a clean directory and diff outputs. |
+| `jk verify-build` | Rebuild in a clean directory and diff outputs. |
 
 Common flags:
 
@@ -1086,7 +1086,7 @@ First-class. Verify cosign signatures and Rekor inclusion proofs when present. `
 
 - Hermetic build inputs (locked deps, locked toolchain).
 - Non-falsifiable build platform identity via OIDC.
-- Reproducible verification (`jk verify-reproducible` rerun in clean dir).
+- Reproducible verification (`jk verify-build` rerun in clean dir).
 
 Opt-out: `publish.slsa = false` for air-gapped environments. Default-on is by design.
 
@@ -1128,7 +1128,7 @@ Default behavior:
 Opt-in:
 
 - `jk build --hermetic` enables sandbox-exec (macOS) / bwrap (Linux) per-action sandboxing. Not the default in v1.0.
-- `jk verify-reproducible` rebuilds in a clean directory and diffs.
+- `jk verify-build` rebuilds in a clean directory and diffs.
 
 ### 23.8 Dependency confusion defense
 

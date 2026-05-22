@@ -82,7 +82,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 - **v0.6 — Publishing & scripting.** ✅ Shipped. `jk publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOMs). `jk run script.java` (JBang-compat). `jk install` / `jkx`.
 - **v0.7 — Git deps.** ✅ Shipped. JGit resolver, HOCON git-source syntax, GitFetcher + GitSource + GitUrl.
 - **v0.8 — Container & supply chain.** ✅ Shipped. `jk image` (Jib-core), `jk audit` (OSV), `jk deny`, CycloneDX + SPDX, `jk native-image`.
-- **v0.9 — Self-hosting.** ✅ Shipped. `jk verify-reproducible`, candidate self-hosting `build.jks`, jk builds itself end-to-end. Subprocess compile strategies behind a pluggable SPI (kotlin-compiler-embeddable removed). Native-image config consolidated; binary trimmed 187 MB → 138 MB. Good-neighbor tool discovery layered on after the milestone.
+- **v0.9 — Self-hosting.** ✅ Shipped. `jk verify-build`, candidate self-hosting `build.jks`, jk builds itself end-to-end. Subprocess compile strategies behind a pluggable SPI (kotlin-compiler-embeddable removed). Native-image config consolidated; binary trimmed 187 MB → 138 MB. Good-neighbor tool discovery layered on after the milestone.
 - **v1.0 — GA.** Next. IntelliJ plugin (synthetic-POM bridge mode), VS Code extension shell, docs site, benchmark dashboard, `setup-jk` GitHub Action, signed v1.0.0 release.
 
 ---
@@ -101,7 +101,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 
 1. ✅ Every feature the jk-build itself depends on shipped in a tagged release before the flip.
 2. ✅ Candidate `build.jks` files committed in v0.9 slice A; multi-module workspace derived from the existing Gradle build.
-3. ✅ Parity via `jk verify-reproducible` (byte-identical jar across boxes).
+3. ✅ Parity via `jk verify-build` (byte-identical jar across boxes).
 4. ✅ jk builds itself end-to-end as of commit `88c2fdf`. Gradle build retained at the repo root as the bootstrap path through at least v1.1.
 
 ---
@@ -111,7 +111,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 - **Unit:** JUnit 6 + AssertJ per subsystem.
 - **Resolver fixtures:** snapshot real Maven POMs (Spring Boot 3.4, Quarkus 3.x, Micronaut 4, Kotlin stdlib, Jackson, Netty) into `src/test/resources/fixtures/`. Serve via an in-memory HTTP/2 stub. PubGrub regressions caught by golden-output diffs.
 - **End-to-end:** shell-level scripts under `src/test/e2e/`, run via JUnit + `ProcessBuilder` first against the JVM build, then against the native binary in CI.
-- **Reproducibility:** every release tag runs `jk verify-reproducible` in a clean workspace and on at least one second OS/arch combination.
+- **Reproducibility:** every release tag runs `jk verify-build` in a clean workspace and on at least one second OS/arch combination.
 
 ---
 

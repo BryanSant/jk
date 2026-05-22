@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk verify-reproducible} — re-build the project into a clean
+ * {@code jk verify-build} — re-build the project into a clean
  * scratch directory and compare the produced jar's SHA-256 against the
  * existing {@code target/<artifact>-<version>.jar} (PRD §23.7,
  * impl-plan §7 step 3).
@@ -32,9 +32,9 @@ import java.util.concurrent.Callable;
  * second pass and the comparison — if jk's build is reproducible, the
  * two sha256s match.
  */
-@Command(name = "verify-reproducible",
-        description = "Rebuild into a scratch dir and diff the jar against target/.")
-public final class VerifyReproducibleCommand implements Callable<Integer> {
+@Command(name = "verify-build",
+        description = "Rebuild in scratch; diff jar vs target/.")
+public final class VerifyBuildCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},
             description = "Project directory. Default: current directory.")
@@ -50,7 +50,7 @@ public final class VerifyReproducibleCommand implements Callable<Integer> {
         Path buildFile = dir.resolve("build.jk");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
-            System.err.println("jk verify-reproducible: build.jk and jk.lock required in " + dir);
+            System.err.println("jk verify-build: build.jk and jk.lock required in " + dir);
             return 2;
         }
 
@@ -59,7 +59,7 @@ public final class VerifyReproducibleCommand implements Callable<Integer> {
         Path existingJar = dir.resolve("target").resolve(
                 project.project().artifact() + "-" + project.project().version() + ".jar");
         if (!Files.exists(existingJar)) {
-            System.err.println("jk verify-reproducible: no existing jar at " + existingJar
+            System.err.println("jk verify-build: no existing jar at " + existingJar
                     + " — run `jk build` first.");
             return 66;
         }
