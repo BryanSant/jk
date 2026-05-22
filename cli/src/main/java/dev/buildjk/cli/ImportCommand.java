@@ -69,14 +69,25 @@ public final class ImportCommand implements Callable<Integer> {
             return 73; // EX_CANTCREAT
         }
 
-        PomImporter.Result result = PomImporter.importFrom(source);
-        String hocon = BuildJkRenderer.render(result.buildJk());
-        Files.writeString(target, hocon, StandardCharsets.UTF_8);
+        PomImporter.WorkspaceImportResult result = PomImporter.importWorkspace(source);
+        Files.writeString(target, BuildJkRenderer.render(result.root()), StandardCharsets.UTF_8);
+        System.out.println("Wrote " + target);
+
+        for (var entry : result.members().entrySet()) {
+            Path memberBuildJk = projectDir.resolve(entry.getKey()).resolve("build.jk");
+            if (Files.exists(memberBuildJk) && !force) {
+                System.err.println("jk import: refusing to overwrite existing " + memberBuildJk
+                        + " (use --force to replace).");
+                return 73;
+            }
+            Files.writeString(memberBuildJk,
+                    BuildJkRenderer.render(entry.getValue()), StandardCharsets.UTF_8);
+            System.out.println("Wrote " + memberBuildJk);
+        }
+
         Files.writeString(reportTarget,
                 result.report().renderMarkdown(source.toString()),
                 StandardCharsets.UTF_8);
-
-        System.out.println("Wrote " + target);
         System.out.println("Wrote " + reportTarget);
         if (!result.report().isEmpty()) {
             System.out.println("Import notes: " + result.report().issues().size()

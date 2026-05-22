@@ -32,9 +32,24 @@ public final class BuildJkRenderer {
         Objects.requireNonNull(buildJk, "buildJk");
         StringBuilder sb = new StringBuilder();
         renderProject(sb, buildJk.project());
+        renderWorkspace(sb, buildJk);
         renderRepositories(sb, buildJk.repositories());
         renderDependencies(sb, buildJk);
         return sb.toString();
+    }
+
+    private static void renderWorkspace(StringBuilder sb, BuildJk buildJk) {
+        if (!buildJk.isWorkspaceRoot()) return;
+        sb.append('\n');
+        sb.append("workspace {\n");
+        sb.append("  members = [");
+        List<String> members = buildJk.workspace().members();
+        for (int i = 0; i < members.size(); i++) {
+            if (i > 0) sb.append(", ");
+            sb.append(quote(members.get(i)));
+        }
+        sb.append("]\n");
+        sb.append("}\n");
     }
 
     private static void renderProject(StringBuilder sb, BuildJk.Project p) {

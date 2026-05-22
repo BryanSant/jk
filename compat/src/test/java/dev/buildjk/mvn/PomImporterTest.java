@@ -5,8 +5,11 @@ import dev.buildjk.model.Dependency;
 import dev.buildjk.model.Scope;
 import dev.buildjk.model.VersionSelector;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -292,7 +295,115 @@ class PomImporterTest {
                 .anyMatch(i -> i.message().contains("jacoco-maven-plugin"));
     }
 
+    @Test
+    void workspace_import_materialises_root_and_child_build_jks(@TempDir Path tempDir) throws Exception {
+        writePom(tempDir.resolve("pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>widget-parent</artifactId>
+                  <version>1.0.0</version>
+                  <packaging>pom</packaging>
+                  <modules>
+                    <module>core</module>
+                    <module>app</module>
+                  </modules>
+                </project>
+                """);
+        writePom(tempDir.resolve("core/pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <parent>
+                    <groupId>com.example</groupId>
+                    <artifactId>widget-parent</artifactId>
+                    <version>1.0.0</version>
+                  </parent>
+                  <artifactId>widget-core</artifactId>
+                </project>
+                """);
+        writePom(tempDir.resolve("app/pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <parent>
+                    <groupId>com.example</groupId>
+                    <artifactId>widget-parent</artifactId>
+                    <version>1.0.0</version>
+                  </parent>
+                  <artifactId>widget-app</artifactId>
+                  <dependencies>
+                    <dependency>
+                      <groupId>com.example</groupId>
+                      <artifactId>widget-core</artifactId>
+                      <version>1.0.0</version>
+                    </dependency>
+                  </dependencies>
+                </project>
+                """);
+
+        var result = PomImporter.importWorkspace(tempDir.resolve("pom.xml"));
+
+        // Root carries the workspace block.
+        assertThat(result.root().isWorkspaceRoot()).isTrue();
+        assertThat(result.root().workspace().members()).containsExactly("core", "app");
+        assertThat(result.root().project().artifact()).isEqualTo("widget-parent");
+
+        // Each member is present with its own coords inherited from the parent.
+        assertThat(result.members()).containsKeys("core", "app");
+        assertThat(result.members().get("core").project().group()).isEqualTo("com.example");
+        assertThat(result.members().get("core").project().version()).isEqualTo("1.0.0");
+        assertThat(result.members().get("app").dependencies().of(Scope.MAIN))
+                .extracting(Dependency::module)
+                .containsExactly("com.example:widget-core");
+
+        // Parent-flatten warnings are suppressed when the parent IS the workspace root.
+        assertThat(result.report().issues())
+                .noneMatch(i -> i.message().contains("widget-parent")
+                        && i.message().contains("did not flatten"));
+    }
+
+    @Test
+    void workspace_import_falls_back_to_single_pom_when_no_modules(@TempDir Path tempDir) throws Exception {
+        writePom(tempDir.resolve("pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>solo</artifactId>
+                  <version>1.0</version>
+                </project>
+                """);
+
+        var result = PomImporter.importWorkspace(tempDir.resolve("pom.xml"));
+        assertThat(result.root().isWorkspaceRoot()).isFalse();
+        assertThat(result.members()).isEmpty();
+    }
+
+    @Test
+    void workspace_import_reports_missing_module(@TempDir Path tempDir) throws Exception {
+        writePom(tempDir.resolve("pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>parent</artifactId>
+                  <version>1.0</version>
+                  <packaging>pom</packaging>
+                  <modules>
+                    <module>missing</module>
+                  </modules>
+                </project>
+                """);
+
+        var result = PomImporter.importWorkspace(tempDir.resolve("pom.xml"));
+        assertThat(result.report().hasErrors()).isTrue();
+        assertThat(result.report().issues())
+                .anyMatch(i -> i.message().contains("missing"));
+    }
+
     private static PomImporter.Result importPom(String xml) {
         return PomImporter.importFromBytes(xml.getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void writePom(Path file, String xml) throws Exception {
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, xml, StandardCharsets.UTF_8);
     }
 }

@@ -99,6 +99,60 @@ class ImportCommandTest {
         assertThat(exit).isEqualTo(66); // EX_NOINPUT
     }
 
+    @Test
+    void multi_module_pom_writes_root_and_child_build_jks(@TempDir Path tempDir) throws Exception {
+        Files.writeString(tempDir.resolve("pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>widget-parent</artifactId>
+                  <version>1.0.0</version>
+                  <packaging>pom</packaging>
+                  <modules>
+                    <module>core</module>
+                    <module>app</module>
+                  </modules>
+                </project>
+                """, StandardCharsets.UTF_8);
+        Files.createDirectories(tempDir.resolve("core"));
+        Files.writeString(tempDir.resolve("core/pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <parent>
+                    <groupId>com.example</groupId>
+                    <artifactId>widget-parent</artifactId>
+                    <version>1.0.0</version>
+                  </parent>
+                  <artifactId>widget-core</artifactId>
+                </project>
+                """, StandardCharsets.UTF_8);
+        Files.createDirectories(tempDir.resolve("app"));
+        Files.writeString(tempDir.resolve("app/pom.xml"), """
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <parent>
+                    <groupId>com.example</groupId>
+                    <artifactId>widget-parent</artifactId>
+                    <version>1.0.0</version>
+                  </parent>
+                  <artifactId>widget-app</artifactId>
+                </project>
+                """, StandardCharsets.UTF_8);
+
+        int exit = run("import", tempDir.resolve("pom.xml").toString());
+        assertThat(exit).isEqualTo(0);
+
+        String root = Files.readString(tempDir.resolve("build.jk"));
+        assertThat(root).contains("artifact = \"widget-parent\"");
+        assertThat(root).contains("workspace {");
+        assertThat(root).contains("members = [\"core\", \"app\"]");
+
+        assertThat(Files.readString(tempDir.resolve("core/build.jk")))
+                .contains("artifact = \"widget-core\"");
+        assertThat(Files.readString(tempDir.resolve("app/build.jk")))
+                .contains("artifact = \"widget-app\"");
+    }
+
     private static int run(String... args) {
         CommandLine cmd = Jk.newCommandLine();
         return cmd.execute(args);

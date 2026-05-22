@@ -3,9 +3,12 @@ package dev.buildjk.mvn;
 
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Dependency;
+import dev.buildjk.model.Features;
+import dev.buildjk.model.Profiles;
 import dev.buildjk.model.RepositorySpec;
 import dev.buildjk.model.Scope;
 import dev.buildjk.model.VersionSelector;
+import dev.buildjk.model.Workspace;
 import dev.buildjk.repo.Pom;
 import dev.buildjk.repo.PomParseException;
 import dev.buildjk.repo.PomParser;
@@ -54,40 +57,125 @@ public final class PomImporter {
 
     public record Result(BuildJk buildJk, PomImportReport report) {}
 
+    /**
+     * Outcome of importing a multi-module POM tree: the root's {@link BuildJk}
+     * (carrying the workspace block), each member's {@link BuildJk} keyed by
+     * the relative module path, and one aggregated {@link PomImportReport}
+     * spanning the root + every child.
+     */
+    public record WorkspaceImportResult(
+            BuildJk root,
+            Map<String, BuildJk> members,
+            PomImportReport report) {}
+
     private PomImporter() {}
 
     public static Result importFrom(Path pomXml) throws IOException {
-        byte[] bytes = Files.readAllBytes(pomXml);
-        return importFromBytes(bytes);
+        return importFromBytes(Files.readAllBytes(pomXml));
     }
 
     public static Result importFromBytes(byte[] xml) {
+        return importFromBytes(xml, null);
+    }
+
+    private static Result importFromBytes(byte[] xml, Pom.Parent suppressParentMatching) {
         Pom pom = PomParser.parse(xml);
         Document doc = parseXml(xml);
         PomImportReport.Builder report = PomImportReport.builder();
 
-        BuildJk.Project project = mapProject(pom, doc, report);
+        BuildJk.Project project = mapProject(pom, doc, report, suppressParentMatching);
         Map<Scope, List<Dependency>> byScope = mapDependencies(pom, report);
         List<RepositorySpec> repos = mapRepositories(doc, report);
-        warnUnsupportedSections(doc, report);
+        warnUnsupportedSections(doc, report, /*isWorkspaceRoot=*/ false);
 
         BuildJk.Dependencies dependencies = new BuildJk.Dependencies(byScope);
         BuildJk buildJk = new BuildJk(project, dependencies, repos);
         return new Result(buildJk, report.build());
     }
 
+    /**
+     * Import a multi-module Maven build into a workspace-root {@code BuildJk}
+     * plus per-member {@code BuildJk}s (PRD §24.2 Tier 2 "multi-module
+     * &lt;modules&gt; → workspace"). When the root POM has no
+     * {@code <modules>}, falls back to single-POM import.
+     */
+    public static WorkspaceImportResult importWorkspace(Path rootPom) throws IOException {
+        byte[] rootXml = Files.readAllBytes(rootPom);
+        Document rootDoc = parseXml(rootXml);
+        List<String> modules = readModules(rootDoc);
+        if (modules.isEmpty()) {
+            Result single = importFromBytes(rootXml);
+            return new WorkspaceImportResult(single.buildJk(), Map.of(), single.report());
+        }
+
+        PomImportReport.Builder report = PomImportReport.builder();
+        Pom rootPomParsed = PomParser.parse(rootXml);
+        BuildJk.Project rootProject = mapProject(rootPomParsed, rootDoc, report, null);
+        // Root coords serve as the "expected parent" for children.
+        Pom.Parent expectedParent = new Pom.Parent(
+                rootProject.group(), rootPomParsed.artifactId(), rootProject.version());
+        warnUnsupportedSections(rootDoc, report, /*isWorkspaceRoot=*/ true);
+
+        Workspace workspace = new Workspace(modules);
+        // The workspace root is a coordination point — no deps of its own.
+        BuildJk rootBuildJk = new BuildJk(
+                rootProject, BuildJk.Dependencies.empty(),
+                List.of(), Profiles.empty(), Features.empty(), workspace);
+
+        Map<String, BuildJk> members = new LinkedHashMap<>();
+        Path projectDir = rootPom.toAbsolutePath().getParent();
+        for (String module : modules) {
+            Path childPom = projectDir.resolve(module).resolve("pom.xml");
+            if (!Files.exists(childPom)) {
+                report.error("workspace module `" + module + "` has no pom.xml at " + childPom);
+                continue;
+            }
+            byte[] childXml = Files.readAllBytes(childPom);
+            Result childResult = importFromBytes(childXml, expectedParent);
+            members.put(module, childResult.buildJk());
+            for (PomImportReport.Issue issue : childResult.report().issues()) {
+                String prefixed = "[" + module + "] " + issue.message();
+                if (issue.severity() == PomImportReport.Severity.ERROR) {
+                    report.error(prefixed);
+                } else {
+                    report.warning(prefixed);
+                }
+            }
+        }
+        return new WorkspaceImportResult(rootBuildJk, members, report.build());
+    }
+
+    private static List<String> readModules(Document doc) {
+        Element modules = childElement(doc.getDocumentElement(), "modules");
+        if (modules == null) return List.of();
+        List<String> result = new ArrayList<>();
+        for (Element m : childElements(modules, "module")) {
+            String text = m.getTextContent().trim();
+            if (!text.isEmpty()) result.add(text);
+        }
+        return result;
+    }
+
     // --- project ------------------------------------------------------------
 
-    private static BuildJk.Project mapProject(Pom pom, Document doc, PomImportReport.Builder report) {
+    private static BuildJk.Project mapProject(Pom pom, Document doc,
+                                              PomImportReport.Builder report,
+                                              Pom.Parent suppressParentMatching) {
         String group = pom.groupId();
         String version = pom.version();
         if (pom.parent() != null) {
             if (group == null) group = pom.parent().groupId();
             if (version == null) version = pom.parent().version();
-            report.warning("`<parent>` was referenced (" + pom.parent().groupId() + ":"
-                    + pom.parent().artifactId() + ":" + pom.parent().version()
-                    + ") but jk-import did not flatten its dependencyManagement / properties / build config."
-                    + " Run `mvn help:effective-pom` and re-import if any dependency versions are unresolved.");
+            boolean isWorkspaceParent = suppressParentMatching != null
+                    && pom.parent().groupId().equals(suppressParentMatching.groupId())
+                    && pom.parent().artifactId().equals(suppressParentMatching.artifactId())
+                    && pom.parent().version().equals(suppressParentMatching.version());
+            if (!isWorkspaceParent) {
+                report.warning("`<parent>` was referenced (" + pom.parent().groupId() + ":"
+                        + pom.parent().artifactId() + ":" + pom.parent().version()
+                        + ") but jk-import did not flatten its dependencyManagement / properties / build config."
+                        + " Run `mvn help:effective-pom` and re-import if any dependency versions are unresolved.");
+            }
         }
         if (group == null || group.isBlank()) {
             throw new PomParseException("POM has no <groupId> and no <parent><groupId>");
@@ -231,15 +319,17 @@ public final class PomImporter {
 
     // --- unsupported-section warnings ---------------------------------------
 
-    private static void warnUnsupportedSections(Document doc, PomImportReport.Builder report) {
+    private static void warnUnsupportedSections(Document doc, PomImportReport.Builder report,
+                                                boolean isWorkspaceRoot) {
         Element root = doc.getDocumentElement();
         if (childElement(root, "profiles") != null) {
-            report.warning("`<profiles>` block present — profile import lands in slice D."
+            report.warning("`<profiles>` block present — profile mapping is not yet implemented."
                     + " For now run `mvn help:effective-pom -P<profile>` and re-import per active profile.");
         }
-        if (childElement(root, "modules") != null) {
-            report.warning("`<modules>` block present — multi-module workspace import lands in slice D."
-                    + " Each child module needs its own `jk import` pass for now.");
+        if (!isWorkspaceRoot && childElement(root, "modules") != null) {
+            // The workspace-import path already converted these; warn only for the single-POM path.
+            report.warning("`<modules>` block present but this import was run in single-POM mode."
+                    + " Re-run as `jk import pom.xml` from the project root to materialise a workspace.");
         }
         Element build = childElement(root, "build");
         Element plugins = childElement(build, "plugins");

@@ -4,9 +4,12 @@ package dev.buildjk.compat;
 import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Dependency;
+import dev.buildjk.model.Features;
+import dev.buildjk.model.Profiles;
 import dev.buildjk.model.RepositorySpec;
 import dev.buildjk.model.Scope;
 import dev.buildjk.model.VersionSelector;
+import dev.buildjk.model.Workspace;
 import org.junit.jupiter.api.Test;
 
 import java.net.URI;
@@ -71,6 +74,24 @@ class BuildJkRendererTest {
         String out = BuildJkRenderer.render(model);
         assertThat(out).contains(
                 "repositories.sonatype { url = \"https://s01.oss.sonatype.org/content/repositories/snapshots/\" }");
+    }
+
+    @Test
+    void renders_workspace_block() {
+        BuildJk model = new BuildJk(
+                new BuildJk.Project("com.example", "widget-parent", "1.0.0", "21"),
+                BuildJk.Dependencies.empty(),
+                List.of(),
+                Profiles.empty(),
+                Features.empty(),
+                new Workspace(List.of("core", "app")));
+        String out = BuildJkRenderer.render(model);
+        assertThat(out).contains("workspace {");
+        assertThat(out).contains("members = [\"core\", \"app\"]");
+
+        BuildJk reparsed = BuildJkParser.parse(out);
+        assertThat(reparsed.isWorkspaceRoot()).isTrue();
+        assertThat(reparsed.workspace().members()).containsExactly("core", "app");
     }
 
     @Test
