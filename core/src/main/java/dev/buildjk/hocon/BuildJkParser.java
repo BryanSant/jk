@@ -18,6 +18,7 @@ import dev.buildjk.model.Profiles;
 import dev.buildjk.model.RepositorySpec;
 import dev.buildjk.model.Scope;
 import dev.buildjk.model.VersionSelector;
+import dev.buildjk.model.Workspace;
 
 import java.io.IOException;
 import java.net.URI;
@@ -72,7 +73,25 @@ public final class BuildJkParser {
         List<RepositorySpec> repos = parseRepositories(config);
         Profiles profiles = parseProfiles(config);
         Features features = parseFeatures(config);
-        return new BuildJk(project, deps, repos, profiles, features);
+        Workspace workspace = parseWorkspace(config);
+        return new BuildJk(project, deps, repos, profiles, features, workspace);
+    }
+
+    private static Workspace parseWorkspace(Config root) {
+        if (!root.hasPath("workspace")) return null;
+        ConfigObject workspaceObj = root.getObject("workspace");
+        ConfigValue membersValue = workspaceObj.get("members");
+        if (membersValue == null) {
+            return new Workspace(List.of());
+        }
+        if (membersValue.valueType() != ConfigValueType.LIST) {
+            throw new BuildJkParseException("workspace.members must be a list of paths");
+        }
+        List<String> members = new ArrayList<>();
+        for (Object element : (List<?>) membersValue.unwrapped()) {
+            members.add(element.toString());
+        }
+        return new Workspace(members);
     }
 
     private static Features parseFeatures(Config root) {

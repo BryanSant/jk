@@ -3,9 +3,11 @@ package dev.buildjk.cli;
 
 import dev.buildjk.cache.Cas;
 import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.hocon.WorkspaceLoader;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileWriter;
 import dev.buildjk.model.BuildJk;
+import dev.buildjk.model.WorkspaceMerge;
 import dev.buildjk.repo.RepoGroup;
 import dev.buildjk.resolver.LockOrchestrator;
 import picocli.CommandLine.Command;
@@ -74,12 +76,27 @@ public final class LockCommand implements Callable<Integer> {
             return 2;
         }
 
-        RepoGroup repos = RepoGroupBuilder.buildFor(parsed, repoUrl, new Cas(cache));
+        // Workspace: load each member's build.jk and merge deps so the
+        // workspace root produces one combined jk.lock per PRD §13.2.
+        BuildJk effective = parsed;
+        if (parsed.isWorkspaceRoot()) {
+            try {
+                var members = WorkspaceLoader.loadMembers(dir, parsed);
+                effective = WorkspaceMerge.merge(parsed, members.values());
+                System.out.println("Workspace: " + members.size() + " member"
+                        + (members.size() == 1 ? "" : "s"));
+            } catch (RuntimeException e) {
+                System.err.println("jk lock: " + e.getMessage());
+                return 2;
+            }
+        }
+
+        RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, new Cas(cache));
         LockOrchestrator orchestrator = new LockOrchestrator(repos);
 
         Lockfile lock;
         try {
-            lock = orchestrator.lock(parsed, Jk.VERSION, features, !noDefaultFeatures);
+            lock = orchestrator.lock(effective, Jk.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
             System.err.println("jk lock: " + e.getMessage());
             return 6;
