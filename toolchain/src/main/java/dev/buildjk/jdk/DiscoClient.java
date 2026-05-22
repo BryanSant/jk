@@ -122,7 +122,8 @@ public final class DiscoClient {
             String version,
             String architecture,
             String operatingSystem,
-            String archiveType) {
+            String archiveType,
+            String libCType) {
 
         public Map<String, String> parameters() {
             Map<String, String> p = new LinkedHashMap<>();
@@ -131,6 +132,7 @@ public final class DiscoClient {
             if (architecture != null) p.put("architecture", architecture);
             if (operatingSystem != null) p.put("operating_system", operatingSystem);
             if (archiveType != null) p.put("archive_type", archiveType);
+            if (libCType != null) p.put("lib_c_type", libCType);
             p.put("release_status", "ga");
             p.put("package_type", "jdk");
             p.put("bundle_type", "jdk");
@@ -149,15 +151,18 @@ public final class DiscoClient {
             private String architecture;
             private String operatingSystem;
             private String archiveType;
+            private String libCType;
 
             public Builder distribution(String v) { this.distribution = v; return this; }
             public Builder version(String v) { this.version = v; return this; }
             public Builder architecture(String v) { this.architecture = v; return this; }
             public Builder operatingSystem(String v) { this.operatingSystem = v; return this; }
             public Builder archiveType(String v) { this.archiveType = v; return this; }
+            public Builder libCType(String v) { this.libCType = v; return this; }
 
             public SearchQuery build() {
-                return new SearchQuery(distribution, version, architecture, operatingSystem, archiveType);
+                return new SearchQuery(distribution, version, architecture, operatingSystem,
+                        archiveType, libCType);
             }
         }
     }

@@ -50,6 +50,7 @@ public final class JdkInstallCommand implements Callable<Integer> {
                 .architecture(Platform.currentArchitecture())
                 .operatingSystem(Platform.currentOperatingSystem())
                 .archiveType(Platform.currentArchiveType())
+                .libCType(Platform.currentLibCType())
                 .build();
 
         DiscoClient client = discoUrl != null

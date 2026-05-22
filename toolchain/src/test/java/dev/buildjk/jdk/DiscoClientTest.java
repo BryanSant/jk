@@ -97,6 +97,7 @@ class DiscoClientTest {
                 .version("21")
                 .architecture("x64")
                 .operatingSystem("linux")
+                .libCType("glibc")
                 .build());
 
         String request = lastRequestPath.get();
@@ -104,6 +105,7 @@ class DiscoClientTest {
         assertThat(request).contains("version=21");
         assertThat(request).contains("architecture=x64");
         assertThat(request).contains("operating_system=linux");
+        assertThat(request).contains("lib_c_type=glibc");
         // Canonical defaults applied automatically.
         assertThat(request).contains("release_status=ga");
         assertThat(request).contains("package_type=jdk");

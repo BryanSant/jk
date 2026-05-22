@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.jdk;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
+
 /**
  * Maps the current JVM's {@code os.arch} / {@code os.name} properties onto
  * the strings the foojay Disco API uses. Encapsulated so the JDK
@@ -20,6 +23,42 @@ public final class Platform {
 
     public static String currentArchiveType() {
         return "windows".equals(currentOperatingSystem()) ? "zip" : "tar.gz";
+    }
+
+    /**
+     * The host's C runtime, in foojay's {@code lib_c_type} vocabulary
+     * ({@code glibc} / {@code musl} / {@code libc} / {@code c_std_lib}).
+     * Without this filter, foojay can return a musl-linked JDK to a
+     * glibc host (or vice versa); the binary then fails to exec with
+     * "no such file or directory" because the dynamic linker doesn't
+     * exist.
+     *
+     * <p>Detection is filesystem-based: on Linux, the presence of
+     * {@code /lib/ld-musl-*} marks the host as musl (Alpine and a few
+     * derivatives). Everything else under Linux is treated as glibc.
+     * macOS reports {@code libc}, Windows reports {@code c_std_lib}.
+     */
+    public static String currentLibCType() {
+        return libCTypeFor(currentOperatingSystem(), Path.of("/"));
+    }
+
+    static String libCTypeFor(String os, Path rootFs) {
+        return switch (os) {
+            case "linux" -> hasMuslLoader(rootFs) ? "musl" : "glibc";
+            case "macos" -> "libc";
+            case "windows" -> "c_std_lib";
+            default -> null;
+        };
+    }
+
+    private static boolean hasMuslLoader(Path rootFs) {
+        Path lib = rootFs.resolve("lib");
+        if (!Files.isDirectory(lib)) return false;
+        try (var stream = Files.list(lib)) {
+            return stream.anyMatch(p -> p.getFileName().toString().startsWith("ld-musl-"));
+        } catch (java.io.IOException e) {
+            return false;
+        }
     }
 
     static String mapArchitecture(String osArch) {
