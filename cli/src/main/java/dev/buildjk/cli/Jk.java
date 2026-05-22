@@ -31,6 +31,8 @@ import picocli.CommandLine.Command;
                 ExplainCommand.class,
                 WhyRebuiltCommand.class,
                 JdkCommand.class,
+                EnvCommand.class,
+                ShellCommand.class,
         })
 public final class Jk implements Runnable {
 
