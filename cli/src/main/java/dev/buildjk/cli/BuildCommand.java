@@ -11,6 +11,8 @@ import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
+import dev.buildjk.task.ActionCache;
+import dev.buildjk.task.ActionKey;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -77,17 +79,29 @@ public final class BuildCommand implements Callable<Integer> {
         int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
 
         if (!sources.isEmpty()) {
-            CompileResult result = new JavacDriver().compile(CompileRequest.builder()
+            CompileRequest request = CompileRequest.builder()
                     .sources(sources)
                     .classpath(classpath)
                     .outputDir(classes)
                     .release(release)
-                    .build());
-            for (CompileResult.Diagnostic d : result.diagnostics()) {
-                System.err.println(d.render());
-            }
-            if (!result.success() || result.hasErrors()) {
-                return 1;
+                    .build();
+            String taskId = "compile-main";
+            String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
+            ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
+
+            var cached = actionCache.lookup(actionKey);
+            if (cached.isPresent()) {
+                actionCache.restore(cached.get(), classes);
+                System.out.println("Cache hit: " + taskId + " (" + actionKey.substring(0, 8) + ")");
+            } else {
+                CompileResult result = new JavacDriver().compile(request);
+                for (CompileResult.Diagnostic d : result.diagnostics()) {
+                    System.err.println(d.render());
+                }
+                if (!result.success() || result.hasErrors()) {
+                    return 1;
+                }
+                actionCache.store(taskId, actionKey, ActionKey.snapshotInputs(request), classes);
             }
         } else {
             Files.createDirectories(classes);
