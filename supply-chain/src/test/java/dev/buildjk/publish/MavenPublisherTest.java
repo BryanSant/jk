@@ -1,0 +1,103 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.buildjk.publish;
+
+import com.sun.net.httpserver.HttpServer;
+import dev.buildjk.model.BuildJk;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+class MavenPublisherTest {
+
+    private HttpServer server;
+    private URI base;
+    private final Map<String, byte[]> received = new HashMap<>();
+    private final Map<String, String> authHeaders = new HashMap<>();
+    private volatile boolean failNext;
+
+    @BeforeEach
+    void start() throws IOException {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            if ("PUT".equals(exchange.getRequestMethod())) {
+                received.put(path, exchange.getRequestBody().readAllBytes());
+                String auth = exchange.getRequestHeaders().getFirst("Authorization");
+                if (auth != null) authHeaders.put(path, auth);
+                if (failNext) {
+                    failNext = false;
+                    exchange.sendResponseHeaders(401, -1);
+                } else {
+                    exchange.sendResponseHeaders(201, -1);
+                }
+            } else {
+                exchange.sendResponseHeaders(405, -1);
+            }
+            exchange.close();
+        });
+        server.start();
+        base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/repo/");
+    }
+
+    @AfterEach
+    void stop() { server.stop(0); }
+
+    @Test
+    void publishes_jar_pom_and_four_checksums_each() throws Exception {
+        MavenPublisher publisher = new MavenPublisher(base, null, null);
+        BuildJk.Project project = new BuildJk.Project("com.example", "widget", "1.0.0", "21");
+        byte[] jarBytes = "fake-jar".getBytes(StandardCharsets.UTF_8);
+        byte[] pomBytes = "<project/>".getBytes(StandardCharsets.UTF_8);
+        publisher.publish(project, List.of(
+                new MavenPublisher.Artifact(".jar", jarBytes),
+                new MavenPublisher.Artifact(".pom", pomBytes)));
+
+        String prefix = "/repo/com/example/widget/1.0.0/widget-1.0.0";
+        assertThat(received).containsKeys(
+                prefix + ".jar", prefix + ".jar.md5", prefix + ".jar.sha1",
+                prefix + ".jar.sha256", prefix + ".jar.sha512",
+                prefix + ".pom", prefix + ".pom.md5", prefix + ".pom.sha1",
+                prefix + ".pom.sha256", prefix + ".pom.sha512");
+        assertThat(received.get(prefix + ".jar")).isEqualTo(jarBytes);
+        assertThat(received.get(prefix + ".pom")).isEqualTo(pomBytes);
+
+        // Each checksum file is the hex digest of its sibling.
+        assertThat(new String(received.get(prefix + ".jar.sha256"), StandardCharsets.US_ASCII))
+                .isEqualTo(Checksums.sha256Hex(jarBytes));
+    }
+
+    @Test
+    void basic_auth_header_is_attached_when_credentials_provided() throws Exception {
+        MavenPublisher publisher = new MavenPublisher(base, "alice", "swordfish");
+        publisher.publish(
+                new BuildJk.Project("com.example", "widget", "1.0.0", "21"),
+                List.of(new MavenPublisher.Artifact(".jar", new byte[] {1, 2, 3})));
+
+        String expected = "Basic " + Base64.getEncoder().encodeToString(
+                "alice:swordfish".getBytes(StandardCharsets.UTF_8));
+        assertThat(authHeaders.values()).isNotEmpty().allMatch(h -> h.equals(expected));
+    }
+
+    @Test
+    void server_error_aborts_with_io_exception() {
+        MavenPublisher publisher = new MavenPublisher(base, null, null);
+        failNext = true;
+        assertThatThrownBy(() -> publisher.publish(
+                new BuildJk.Project("com.example", "widget", "1.0.0", "21"),
+                List.of(new MavenPublisher.Artifact(".jar", new byte[] {1, 2, 3}))))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("401");
+    }
+}
