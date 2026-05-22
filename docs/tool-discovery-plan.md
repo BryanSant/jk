@@ -1,6 +1,6 @@
 # Tool discovery / good-neighbor plan
 
-**Status:** draft for review
+**Status:** implemented (commits 92e1177, e1f1da6, 72d091f)
 **Scope:** `JdkRegistry` + `JdkInstaller` and `ToolRegistry` + `ToolInstaller`
 **Goal:** before downloading, look for tools the user already has — JBang
 style — and reuse them via a symlink under `~/.jk/`. Detect and repair
@@ -319,6 +319,36 @@ End-to-end:
 
 ---
 
-*Sign-off requested. Once accepted, I'll implement in this order: probes
-+ ToolHealth → ToolProvisioner → wire into JdkRegistry/ToolRegistry →
-CLI surface (list, reconcile) → tests.*
+*Sign-off granted. Decisions (commits 92e1177, e1f1da6, 72d091f):*
+
+1. *Exact version only — no fuzzy match. Implemented in `ToolHealth.isHealthy`.*
+2. *Probe `ServiceLoader`, with the acknowledged limitation that it's JVM-mode only. `Probes.defaultChain()` appends ServiceLoader-discovered entries after the built-ins.*
+3. *`--verify-linked` opt-in. Lives on `jk jdk reconcile` and `jk tool reconcile`. Default-off. Writes `.fingerprint` sidecars via `TreeFingerprint`.*
+4. *Tested. `SdkmanProbeTest.user_pinned_tool_already_in_sdkman_resolves_without_download` covers the `.jk-version`-pins-a-SDKMAN-install path.*
+5. *Containers (see §11 below).*
+6. *No. `jk install` (Maven-coord tool installer) stays as-is.*
+
+---
+
+## 11. Containers and shared SDKMAN mounts
+
+If you mount the host's `~/.sdkman` into a container (a common dev-loop
+pattern), the symlinks jk writes under `~/.jk/jdks/` and
+`~/.jk/tools/` point at host paths that only exist when the mount is in
+place. Two gotchas:
+
+- **`~/.jk/` should not be shared.** Each container gets its own
+  `~/.jk/`. Sharing it means linking to host paths that aren't
+  guaranteed to be valid inside the container, and one container's
+  reconcile can prune another's links.
+- **Mount paths must match.** A link target stored as
+  `/home/host-user/.sdkman/candidates/maven/3.9.9` doesn't resolve if
+  the container mounts the same dir at `/sdkman/`. Either mount under
+  the same absolute path the link expects, or pass `--no-discover` on
+  the first invocation and let jk download into the container's
+  `~/.jk/tools/` directly.
+
+If your container CI is sensitive to this, run `jk tool reconcile`
+once at container start — broken links get pruned and the next call
+either re-links (when the mount is visible at the expected path) or
+falls back to a download.
