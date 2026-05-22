@@ -71,15 +71,24 @@ public final class JdkInstaller {
             }
             Files.write(archive, body);
 
-            Path stagingDir = Files.createTempDirectory("jk-jdk-stage-");
+            // Stage under the jdks root so the final rename is on the same
+            // filesystem as the target. Otherwise (/tmp on tmpfs vs. $HOME on
+            // ext4/btrfs) Files.move falls into the cross-device branch and
+            // fails with DirectoryNotEmptyException on the first non-empty
+            // subdir of the JDK.
+            Path stagingDir = Files.createTempDirectory(registry.jdksRoot(), ".stage-");
             try {
                 extract(archive, stagingDir, pkg.archiveType());
                 Path effectiveRoot = flattenedRoot(stagingDir);
-                moveInto(effectiveRoot, target);
+                Files.move(effectiveRoot, target);
             } catch (IOException | RuntimeException e) {
                 deleteRecursively(stagingDir);
                 throw e;
             }
+            // Drop the (now-empty) staging wrapper when flattenedRoot hoisted
+            // a child out. If it returned stagingDir itself, the move
+            // consumed the dir and this is a no-op.
+            deleteRecursively(stagingDir);
         } finally {
             Files.deleteIfExists(archive);
         }
@@ -184,16 +193,6 @@ public final class JdkInstaller {
             return children.getFirst();
         }
         return stagingDir;
-    }
-
-    private static void moveInto(Path source, Path target) throws IOException {
-        Files.createDirectories(target);
-        try (var stream = Files.list(source)) {
-            for (Path child : (Iterable<Path>) stream::iterator) {
-                Files.move(child, target.resolve(child.getFileName()));
-            }
-        }
-        Files.deleteIfExists(source);
     }
 
     private static void deleteRecursively(Path root) {
