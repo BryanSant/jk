@@ -101,7 +101,7 @@ class UpdateCommandTest {
     // --- helpers -----------------------------------------------------------
 
     private static int run(String... args) {
-        return new CommandLine(new Jk()).execute(args);
+        return Jk.execute(args);
     }
 
     private void registerPom(String group, String artifact, String version, String body) {

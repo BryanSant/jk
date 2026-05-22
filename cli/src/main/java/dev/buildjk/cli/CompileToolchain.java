@@ -19,7 +19,7 @@ import java.util.Optional;
  * Resolves the toolchain paths the subprocess compile strategies need:
  * the JDK that hosts {@code javac} and the Kotlin distribution that
  * hosts {@code kotlinc}. Centralised so {@code BuildCommand},
- * {@code CheckCommand} and {@code TestCommand} agree on lookup order.
+ * {@code CompileCommand} and {@code TestCommand} agree on lookup order.
  *
  * <p>Java home order:
  * <ol>

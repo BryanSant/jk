@@ -91,7 +91,7 @@ public final class BuildCommand implements Callable<Integer> {
         Path target = dir.resolve("target");
         Path classes = target.resolve("classes");
 
-        List<Path> sources = CheckCommand.collectJavaSources(srcMain);
+        List<Path> sources = CompileCommand.collectJavaSources(srcMain);
         Path cache = cacheDir != null
                 ? cacheDir
                 : Path.of(System.getProperty("user.home"), ".jk", "cache");
@@ -107,12 +107,12 @@ public final class BuildCommand implements Callable<Integer> {
             }
             return 2;
         }
-        int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
+        int release = CompileCommand.parseReleaseFromJdk(project.project().jdk());
 
-        Profile profile = CheckCommand.resolveProfile(project.profiles(), profileName);
+        Profile profile = CompileCommand.resolveProfile(project.profiles(), profileName);
         List<String> javacArgs = profile == null ? List.of() : profile.javacArgs();
 
-        List<Path> ktSources = CheckCommand.collectKotlinSources(dir);
+        List<Path> ktSources = CompileCommand.collectKotlinSources(dir);
 
         java.nio.file.Path javaHome = CompileToolchain.resolveJavaHome(dir);
 
@@ -158,7 +158,7 @@ public final class BuildCommand implements Callable<Integer> {
                             .sources(ktSources)
                             .classpath(kotlincCp)
                             .outputDir(classes)
-                            .jvmTarget(CheckCommand.kotlinJvmTarget(release))
+                            .jvmTarget(CompileCommand.kotlinJvmTarget(release))
                             .kotlinHome(kotlinHome)
                             .build());
             if (!ktResult.success()) {

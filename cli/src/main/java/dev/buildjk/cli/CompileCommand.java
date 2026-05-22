@@ -27,14 +27,16 @@ import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
 /**
- * {@code jk check} — type-check sources without producing artifacts.
+ * {@code jk compile} — type-check sources without producing artifacts.
+ * Was {@code jk check} pre-v1.0; {@code check} remains a hidden alias
+ * (see {@code docs/aliases.md}).
  *
  * <p>v0.2 first slice: Java only, single source set ({@code src/main/java}),
  * Maven-resolved classpath from {@code jk.lock}. Kotlin and annotation
  * processors join in later slices.
  */
-@Command(name = "check", description = "Type-check without producing artifacts")
-public final class CheckCommand implements Callable<Integer> {
+@Command(name = "compile", description = "Type-check without producing artifacts")
+public final class CompileCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},
             description = "Project directory. Default: current directory.")
@@ -54,11 +56,11 @@ public final class CheckCommand implements Callable<Integer> {
         Path buildFile = dir.resolve("build.jk");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk check: no build.jk in " + dir);
+            System.err.println("jk compile: no build.jk in " + dir);
             return 2;
         }
         if (!Files.exists(lockFile)) {
-            System.err.println("jk check: no jk.lock in " + dir + " (run `jk lock` first)");
+            System.err.println("jk compile: no jk.lock in " + dir + " (run `jk lock` first)");
             return 2;
         }
 
@@ -66,7 +68,7 @@ public final class CheckCommand implements Callable<Integer> {
         try {
             project = BuildJkParser.parse(buildFile);
         } catch (RuntimeException e) {
-            System.err.println("jk check: " + e.getMessage());
+            System.err.println("jk compile: " + e.getMessage());
             return 2;
         }
         Lockfile lock = LockfileReader.read(lockFile);
@@ -74,7 +76,7 @@ public final class CheckCommand implements Callable<Integer> {
         List<Path> javaSources = collectJavaSources(dir.resolve("src/main/java"));
         List<Path> ktSources = collectKotlinSources(dir);
         if (javaSources.isEmpty() && ktSources.isEmpty()) {
-            System.out.println("jk check: no sources in src/main/{java,kotlin}");
+            System.out.println("jk compile: no sources in src/main/{java,kotlin}");
             return 0;
         }
 
@@ -128,7 +130,7 @@ public final class CheckCommand implements Callable<Integer> {
             deleteRecursively(scratch);
         }
         int total = javaSources.size() + ktSources.size();
-        System.out.println("jk check: ok (" + total + " source"
+        System.out.println("jk compile: ok (" + total + " source"
                 + (total == 1 ? "" : "s") + ")");
         return 0;
     }

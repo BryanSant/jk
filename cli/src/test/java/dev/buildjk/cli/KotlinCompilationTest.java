@@ -105,6 +105,6 @@ class KotlinCompilationTest {
     }
 
     private static int run(String... args) {
-        return new CommandLine(new Jk()).execute(args);
+        return Jk.execute(args);
     }
 }

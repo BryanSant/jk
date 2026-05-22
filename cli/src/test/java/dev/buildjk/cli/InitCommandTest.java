@@ -19,7 +19,7 @@ class InitCommandTest {
 
     @Test
     void writes_build_jk_and_lockfile(@TempDir Path tempDir) throws IOException {
-        int exit = new CommandLine(new Jk()).execute(
+        int exit = Jk.execute(
                 "init", "--group", "com.example", "--name", "widget", "--jdk", "25", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
@@ -42,14 +42,14 @@ class InitCommandTest {
     @Test
     void refuses_to_overwrite_existing(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("build.jk"), "# existing");
-        int exit = new CommandLine(new Jk()).execute("init", tempDir.toString());
+        int exit = Jk.execute("init", tempDir.toString());
         assertThat(exit).isEqualTo(2);
         assertThat(Files.readString(tempDir.resolve("build.jk"))).isEqualTo("# existing");
     }
 
     @Test
     void lib_and_bin_are_mutually_exclusive(@TempDir Path tempDir) {
-        int exit = new CommandLine(new Jk()).execute("init", "--lib", "--bin", tempDir.toString());
+        int exit = Jk.execute("init", "--lib", "--bin", tempDir.toString());
         assertThat(exit).isEqualTo(64);
     }
 }

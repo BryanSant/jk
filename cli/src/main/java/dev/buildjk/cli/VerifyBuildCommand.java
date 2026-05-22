@@ -91,14 +91,14 @@ public final class VerifyBuildCommand implements Callable<Integer> {
                            Path classesOut, Path jarOut) throws IOException {
         Path srcMain = projectDir.resolve("src/main/java");
         Path resMain = projectDir.resolve("src/main/resources");
-        List<Path> sources = CheckCommand.collectJavaSources(srcMain);
+        List<Path> sources = CompileCommand.collectJavaSources(srcMain);
         Path cache = cacheDir != null
                 ? cacheDir
                 : Path.of(System.getProperty("user.home"), ".jk", "cache");
         Cas cas = new Cas(cache);
         List<Path> classpath = new ClasspathResolver(cas)
                 .classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
-        int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
+        int release = CompileCommand.parseReleaseFromJdk(project.project().jdk());
 
         Files.createDirectories(classesOut);
         if (!sources.isEmpty()) {

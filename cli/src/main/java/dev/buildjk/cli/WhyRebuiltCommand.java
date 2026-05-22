@@ -128,12 +128,12 @@ public final class WhyRebuiltCommand implements Callable<Integer> {
 
         ClasspathResolver classpathResolver = new ClasspathResolver(cas);
         List<Path> lockClasspath = classpathResolver.classpathFor(lock);
-        int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
+        int release = CompileCommand.parseReleaseFromJdk(project.project().jdk());
 
         return switch (taskId) {
             case "compile-main" -> {
                 Path src = dir.resolve("src/main/java");
-                List<Path> sources = CheckCommand.collectJavaSources(src);
+                List<Path> sources = CompileCommand.collectJavaSources(src);
                 yield CompileRequest.builder()
                         .sources(sources)
                         .classpath(lockClasspath)
@@ -143,7 +143,7 @@ public final class WhyRebuiltCommand implements Callable<Integer> {
             }
             case "compile-test" -> {
                 Path src = dir.resolve("src/test/java");
-                List<Path> sources = CheckCommand.collectJavaSources(src);
+                List<Path> sources = CompileCommand.collectJavaSources(src);
                 List<Path> cp = new ArrayList<>();
                 cp.add(dir.resolve("target/classes"));
                 cp.addAll(lockClasspath);

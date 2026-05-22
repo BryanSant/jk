@@ -64,7 +64,7 @@ class BuildCacheTest {
     // --- helpers -----------------------------------------------------------
 
     private static int run(String... args) {
-        return new CommandLine(new Jk()).execute(args);
+        return Jk.execute(args);
     }
 
     private static String captureStdout(java.util.function.IntSupplier body) {

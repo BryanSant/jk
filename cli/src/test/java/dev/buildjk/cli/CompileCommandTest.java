@@ -3,7 +3,6 @@ package dev.buildjk.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -14,7 +13,7 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class CheckCommandTest {
+class CompileCommandTest {
 
     @Test
     void check_passes_for_clean_source(@TempDir Path tempDir) throws Exception {
@@ -83,6 +82,6 @@ class CheckCommandTest {
     }
 
     private static int run(String... args) {
-        return new CommandLine(new Jk()).execute(args);
+        return Jk.execute(args);
     }
 }

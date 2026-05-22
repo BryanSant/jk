@@ -122,7 +122,7 @@ class LockCommandTest {
     // --- helpers -----------------------------------------------------------
 
     private static int run(String... args) {
-        return new CommandLine(new Jk()).execute(args);
+        return Jk.execute(args);
     }
 
     private static Lockfile.Package pkg(Lockfile lock, String module) {

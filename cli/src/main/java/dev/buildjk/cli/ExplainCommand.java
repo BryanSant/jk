@@ -57,7 +57,7 @@ public final class ExplainCommand implements Callable<Integer> {
         Cas cas = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
         List<Path> lockClasspath = new ClasspathResolver(cas).classpathFor(lock);
-        int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
+        int release = CompileCommand.parseReleaseFromJdk(project.project().jdk());
 
         System.out.println("build plan for " + project.project().artifact()
                 + " v" + project.project().version() + ":");
@@ -83,7 +83,7 @@ public final class ExplainCommand implements Callable<Integer> {
             Path outputDir,
             ActionCache cache) throws IOException {
 
-        List<Path> sources = CheckCommand.collectJavaSources(srcDir);
+        List<Path> sources = CompileCommand.collectJavaSources(srcDir);
         if (sources.isEmpty()) {
             return;
         }

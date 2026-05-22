@@ -76,14 +76,14 @@ public final class TestCommand implements Callable<Integer> {
         List<Path> compileMainCp = classpathResolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
         List<Path> compileTestCp = classpathResolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST);
         List<Path> testRuntimeCp = classpathResolver.classpathFor(lock, ClasspathResolver.TEST);
-        int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
+        int release = CompileCommand.parseReleaseFromJdk(project.project().jdk());
 
         Path target = dir.resolve("target");
         Path mainClasses = target.resolve("classes");
         Path testClasses = target.resolve("test-classes");
 
         dev.buildjk.model.Profile profile =
-                CheckCommand.resolveProfile(project.profiles(), profileName);
+                CompileCommand.resolveProfile(project.profiles(), profileName);
         List<String> javacArgs = profile == null ? List.of() : profile.javacArgs();
 
         Path javaHome = CompileToolchain.resolveJavaHome(dir);
@@ -99,7 +99,7 @@ public final class TestCommand implements Callable<Integer> {
 
         // 2. Compile test sources (main classes + main + provided + test scope).
         Path srcTest = dir.resolve("src/test/java");
-        if (CheckCommand.collectJavaSources(srcTest).isEmpty()) {
+        if (CompileCommand.collectJavaSources(srcTest).isEmpty()) {
             System.out.println("jk test: no test sources in src/test/java");
             return 0;
         }
@@ -141,7 +141,7 @@ public final class TestCommand implements Callable<Integer> {
             Cas cas,
             Path cacheRoot) throws IOException {
 
-        List<Path> sources = CheckCommand.collectJavaSources(srcDir);
+        List<Path> sources = CompileCommand.collectJavaSources(srcDir);
         if (sources.isEmpty()) {
             Files.createDirectories(outputDir);
             return true;

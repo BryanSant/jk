@@ -3,7 +3,6 @@ package dev.buildjk.cli;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -124,7 +123,7 @@ class CacheCommandTest {
     }
 
     private static int run(String... args) {
-        return new CommandLine(new Jk()).execute(args);
+        return Jk.execute(args);
     }
 
     private static String capture(Runnable body) {
