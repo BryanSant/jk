@@ -16,6 +16,8 @@ import picocli.CommandLine.Command;
         description = "Single-binary build tool for Java and Kotlin.",
         subcommands = {
                 InitCommand.class,
+                AddCommand.class,
+                RemoveCommand.class,
         })
 public final class Jk implements Runnable {
 
