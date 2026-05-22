@@ -6,6 +6,7 @@
 assertj = "3.27.7"
 asm = "9.10"
 bouncycastle = "1.84"
+commons-compress = "1.27.1"
 cyclonedx-core = "12.2.0"
 graalvm-native = "0.10.4"
 jackson = "3.1.3"
@@ -31,6 +32,9 @@ jgit                   = { module = "org.eclipse.jgit:org.eclipse.jgit",        
 # build pipeline / bytecode
 asm                    = { module = "org.ow2.asm:asm",                              version.ref = "asm" }
 asm-tree               = { module = "org.ow2.asm:asm-tree",                         version.ref = "asm" }
+
+# archive formats (tar, tar.gz, future OCI layer reads)
+commons-compress       = { module = "org.apache.commons:commons-compress",          version.ref = "commons-compress" }
 
 # supply chain
 bouncycastle-bcpg      = { module = "org.bouncycastle:bcpg-jdk18on",                version.ref = "bouncycastle" }

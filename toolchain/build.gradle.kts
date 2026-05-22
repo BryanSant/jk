@@ -11,4 +11,6 @@ dependencies {
     implementation(project(":io"))
     // DiscoClient parses the foojay Disco JSON response.
     implementation(libs.jackson.databind)
+    // JdkInstaller streams tar.gz natively instead of forking `tar`.
+    implementation(libs.commons.compress)
 }

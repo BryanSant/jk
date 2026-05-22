@@ -3,31 +3,37 @@ package dev.buildjk.jdk;
 
 import dev.buildjk.http.Http;
 import dev.buildjk.util.Hashing;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 
+import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
 /**
  * Downloads a {@link JdkPackage} and extracts it under {@code ~/.jk/jdks/}.
  *
- * <p>v0.4 first iteration:
  * <ul>
- *   <li>{@code .tar.gz} archives are extracted by shelling out to the
- *       system {@code tar}. Works on Linux/macOS; native zip-streaming
- *       tar reader will replace it later.</li>
- *   <li>{@code .zip} archives use {@link ZipInputStream}.</li>
- *   <li>SHA-256 is verified against {@link JdkPackage#sha256()} when the
- *       package carries one. Mismatches abort the install with the
- *       partial output cleaned up.</li>
+ *   <li>{@code .tar.gz} / {@code .tgz} — {@link TarArchiveInputStream}
+ *       over {@link GZIPInputStream}. POSIX permissions and symlinks
+ *       preserved.</li>
+ *   <li>{@code .tar} — {@link TarArchiveInputStream} directly.</li>
+ *   <li>{@code .zip} — {@link ZipInputStream}.</li>
+ *   <li>SHA-256 verified against {@link JdkPackage#sha256()} when present;
+ *       mismatch aborts with no install dir left behind.</li>
  * </ul>
  */
 public final class JdkInstaller {
@@ -88,23 +94,60 @@ public final class JdkInstaller {
         return archiveType == null ? "tar.gz" : archiveType;
     }
 
-    private static void extract(Path archive, Path destDir, String archiveType)
-            throws IOException, InterruptedException {
+    private static void extract(Path archive, Path destDir, String archiveType) throws IOException {
         Files.createDirectories(destDir);
-        if (archiveType.equals("zip")) {
-            unzip(archive, destDir);
-            return;
+        switch (archiveType) {
+            case "zip" -> unzip(archive, destDir);
+            case "tar.gz", "tgz" -> extractTar(archive, destDir, true);
+            case "tar" -> extractTar(archive, destDir, false);
+            default -> throw new IOException("unsupported archive type: " + archiveType);
         }
-        // tar.gz / tar — shell out for now.
-        ProcessBuilder pb = new ProcessBuilder("tar", "xf", archive.toString(),
-                "-C", destDir.toString());
-        pb.redirectErrorStream(true);
-        Process process = pb.start();
-        byte[] stdout = process.getInputStream().readAllBytes();
-        int exit = process.waitFor();
-        if (exit != 0) {
-            throw new IOException("tar extraction failed (" + exit + "): "
-                    + new String(stdout));
+    }
+
+    private static void extractTar(Path archive, Path destDir, boolean gzipped) throws IOException {
+        try (InputStream fis = new BufferedInputStream(Files.newInputStream(archive));
+             InputStream inflated = gzipped ? new GZIPInputStream(fis) : fis;
+             TarArchiveInputStream tar = new TarArchiveInputStream(inflated)) {
+            TarArchiveEntry entry;
+            while ((entry = tar.getNextEntry()) != null) {
+                Path out = destDir.resolve(entry.getName()).normalize();
+                if (!out.startsWith(destDir)) {
+                    throw new IOException("tar entry escapes destination: " + entry.getName());
+                }
+                if (entry.isDirectory()) {
+                    Files.createDirectories(out);
+                } else if (entry.isSymbolicLink()) {
+                    if (out.getParent() != null) Files.createDirectories(out.getParent());
+                    Files.deleteIfExists(out);
+                    Files.createSymbolicLink(out, Path.of(entry.getLinkName()));
+                } else if (entry.isFile()) {
+                    if (out.getParent() != null) Files.createDirectories(out.getParent());
+                    Files.copy(tar, out);
+                    applyMode(out, entry.getMode());
+                }
+                // Hard links, device files, etc. — skip silently. JDK archives
+                // don't use them.
+            }
+        }
+    }
+
+    /** Apply tar entry's POSIX mode bits where the filesystem supports it. */
+    private static void applyMode(Path file, int mode) throws IOException {
+        try {
+            Set<PosixFilePermission> perms = EnumSet.noneOf(PosixFilePermission.class);
+            if ((mode & 0400) != 0) perms.add(PosixFilePermission.OWNER_READ);
+            if ((mode & 0200) != 0) perms.add(PosixFilePermission.OWNER_WRITE);
+            if ((mode & 0100) != 0) perms.add(PosixFilePermission.OWNER_EXECUTE);
+            if ((mode & 0040) != 0) perms.add(PosixFilePermission.GROUP_READ);
+            if ((mode & 0020) != 0) perms.add(PosixFilePermission.GROUP_WRITE);
+            if ((mode & 0010) != 0) perms.add(PosixFilePermission.GROUP_EXECUTE);
+            if ((mode & 0004) != 0) perms.add(PosixFilePermission.OTHERS_READ);
+            if ((mode & 0002) != 0) perms.add(PosixFilePermission.OTHERS_WRITE);
+            if ((mode & 0001) != 0) perms.add(PosixFilePermission.OTHERS_EXECUTE);
+            if (perms.isEmpty()) return; // tar entry didn't carry a mode
+            Files.setPosixFilePermissions(file, perms);
+        } catch (UnsupportedOperationException ignored) {
+            // Windows / non-POSIX filesystem — silently skip.
         }
     }
 
