@@ -1,8 +1,8 @@
 # jk — Product Requirements Document
 
-**Status:** Draft v0.1
-**Owner:** bryan.sant@modmed.com
-**Last updated:** 2026-05-21
+**Status:** Living spec. v0.1–v0.9 milestones implemented per [implementation-plan.md §5](./implementation-plan.md#5-milestone-roadmap); v1.0 (GA) is next.
+**Owner:** bryan.sant@proton.me
+**Last updated:** 2026-05-22
 
 ---
 
@@ -84,7 +84,8 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  jk (single static-linked GraalVM native binary, ~30 MB)    │
+│  jk (single static-linked GraalVM native binary)            │
+│  (~140 MB at v0.9 — trimming to ~30 MB before v1.0)         │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐    │
 │  │ CLI/TUI  │ │ Resolver │ │  Cache   │ │ Action graph │    │
 │  │ (ANSI)   │ │ (PubGrub)│ │ (CAS+AC) │ │ (DAG runner) │    │
@@ -675,7 +676,7 @@ Read-and-write interop with the SDKMAN candidate identifier scheme. When `jk jdk
 
 ### 12.7 Kotlin compiler
 
-The Kotlin compiler is a *tool*, not a JDK. `build.jk` declares `project.kotlin = "2.1.0"` and jk fetches the corresponding `kotlin-compiler-embeddable` artifact on demand into `~/.jk/cache/`. Cached and content-addressed like any dependency.
+The Kotlin compiler is a *tool*, not a JDK. `build.jk` declares `project.kotlin = "2.3.21"` and jk provisions the `kotlinc` distribution on demand: first via the good-neighbor probes (SDKMAN, JBang, asdf, jenv, Homebrew, `KOTLIN_HOME`), then by downloading into `~/.jk/tools/kotlin/<version>/` if no local install matches. Invocations go through a subprocess `CompileStrategy` so jk's own native binary doesn't embed kotlinc.
 
 ### 12.8 GraalVM as a capability
 

@@ -1,6 +1,6 @@
 # Tool discovery / good-neighbor plan
 
-**Status:** implemented (commits 92e1177, e1f1da6, 72d091f)
+**Status:** implemented as of 2026-05-22 (commits 92e1177, e1f1da6, 72d091f, d75c41b)
 **Scope:** `JdkRegistry` + `JdkInstaller` and `ToolRegistry` + `ToolInstaller`
 **Goal:** before downloading, look for tools the user already has — JBang
 style — and reuse them via a symlink under `~/.jk/`. Detect and repair

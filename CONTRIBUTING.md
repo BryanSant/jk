@@ -37,4 +37,4 @@ gradle :cli:nativeCompile
 
 ## Project layout
 
-See [`docs/jk-impl.md`](docs/jk-impl.md) for the module map and dependency tier ordering.
+See [`docs/implementation-plan.md`](docs/implementation-plan.md) for the module map and dependency tier ordering, and [`docs/requirements.md`](docs/requirements.md) for the product spec.
