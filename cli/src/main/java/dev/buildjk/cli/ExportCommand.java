@@ -25,7 +25,7 @@ import java.util.concurrent.Callable;
  * per PRD §24.4; until then the verb refuses Gradle targets with a clear
  * message.
  */
-@Command(name = "export", description = "Emit a Maven pom.xml from build.jk.")
+@Command(name = "export", description = "Emit a Maven pom.xml from build.jk")
 public final class ExportCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<file>",

@@ -30,7 +30,7 @@ import java.util.concurrent.Callable;
  * source sets, parallel workers, JUnit XML / SARIF / JaCoCo reporting,
  * and per-scope lockfile entries all land in subsequent slices.
  */
-@Command(name = "test", description = "Compile and run tests.")
+@Command(name = "test", description = "Compile and run tests")
 public final class TestCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

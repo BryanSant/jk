@@ -18,7 +18,7 @@ import java.util.concurrent.Callable;
  * falls back to {@code /bin/sh}). Windows users can read {@code jk env}
  * and apply manually; native cmd / PowerShell wiring is a follow-up.
  */
-@Command(name = "shell", description = "Spawn a subshell with the project's pinned JDK on PATH.")
+@Command(name = "shell", description = "Spawn a subshell with the project's pinned JDK on PATH")
 public final class ShellCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

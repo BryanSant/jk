@@ -19,7 +19,7 @@ import java.util.stream.Stream;
  * trees per PRD §4 / §16.1. The shared cache at {@code ~/.jk/cache/}
  * is left alone — that's per-machine state, not per-project.
  */
-@Command(name = "clean", description = "Delete generated build outputs (target/ and .jk/generated/).")
+@Command(name = "clean", description = "Delete generated build outputs (target/ and .jk/generated/)")
 public final class CleanCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

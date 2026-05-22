@@ -21,7 +21,7 @@ import java.util.concurrent.Callable;
  * with the resolver milestone. Until then the command prints a hint to
  * run {@code jk lock} (also yet to be implemented).
  */
-@Command(name = "add", description = "Add a dependency to build.jk.")
+@Command(name = "add", description = "Add a dependency to build.jk")
 public final class AddCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<coord>",

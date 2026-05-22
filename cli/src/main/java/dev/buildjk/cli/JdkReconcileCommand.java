@@ -21,7 +21,7 @@ import java.util.concurrent.Callable;
  * <p>Useful in post-checkout hooks (when the user nukes their SDKMAN and
  * jk's links go stale) and in CI fixtures.
  */
-@Command(name = "reconcile", description = "Prune broken JDK links; report state.")
+@Command(name = "reconcile", description = "Prune broken JDK links; report state")
 public final class JdkReconcileCommand implements Callable<Integer> {
 
     @Option(names = "--jdks-dir", hidden = true,

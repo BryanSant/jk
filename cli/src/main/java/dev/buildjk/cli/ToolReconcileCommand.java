@@ -22,7 +22,7 @@ import java.util.stream.Stream;
  * {@code --verify-linked}. Mirror of {@code jk jdk reconcile}.
  */
 @Command(name = "tool",
-        description = "Manage external tool installs (mvn/gradle/kotlin).",
+        description = "Manage external tool installs (mvn/gradle/kotlin)",
         subcommands = {ToolReconcileCommand.Reconcile.class})
 public final class ToolReconcileCommand implements Callable<Integer> {
 
@@ -33,7 +33,7 @@ public final class ToolReconcileCommand implements Callable<Integer> {
         return 64;
     }
 
-    @Command(name = "reconcile", description = "Prune broken tool links; report state.")
+    @Command(name = "reconcile", description = "Prune broken tool links; report state")
     public static final class Reconcile implements Callable<Integer> {
 
         @Option(names = "--tools-dir", hidden = true,

@@ -21,7 +21,7 @@ import java.util.concurrent.Callable;
  * non-zero when any finding at or above the configured severity threshold
  * is present.
  */
-@Command(name = "audit", description = "Check the locked dependencies for known vulnerabilities (OSV).")
+@Command(name = "audit", description = "Check the locked dependencies for known vulnerabilities (OSV)")
 public final class AuditCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

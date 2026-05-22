@@ -38,7 +38,7 @@ import java.util.stream.Stream;
  * <p>v0.2 first iteration: full recompile every run. Incremental
  * compilation and the action cache land in slice C.
  */
-@Command(name = "build", description = "Compile sources and package the project jar.")
+@Command(name = "build", description = "Compile sources and package the project jar")
 public final class BuildCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

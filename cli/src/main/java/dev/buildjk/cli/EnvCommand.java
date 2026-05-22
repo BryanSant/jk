@@ -17,7 +17,7 @@ import java.util.concurrent.Callable;
  * {@code jk env} — print {@code export} lines for the project's pinned JDK,
  * suitable for {@code eval "$(jk env)"}.
  */
-@Command(name = "env", description = "Print shell export lines for the project's pinned JDK.")
+@Command(name = "env", description = "Print shell export lines for the project's pinned JDK")
 public final class EnvCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

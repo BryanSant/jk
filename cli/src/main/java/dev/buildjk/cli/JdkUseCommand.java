@@ -19,7 +19,7 @@ import java.util.concurrent.Callable;
  * writing {@code .jk-version}. PRD §12.4: also keeps {@code .sdkmanrc}
  * aligned unless {@code --no-sdkman-compat}.
  */
-@Command(name = "use", description = "Pin a project to an installed JDK (writes .jk-version).")
+@Command(name = "use", description = "Pin a project to an installed JDK (writes .jk-version)")
 public final class JdkUseCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<spec>",

@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
  * Refuses to overwrite existing files. Importing from an existing pom.xml or
  * build.gradle(.kts) lands at v0.5.
  */
-@Command(name = "init", description = "Initialize a new jk project.")
+@Command(name = "init", description = "Initialize a new jk project")
 public final class InitCommand implements Callable<Integer> {
 
     @Option(names = "--lib", description = "Initialize as a library project (no application entrypoint).")

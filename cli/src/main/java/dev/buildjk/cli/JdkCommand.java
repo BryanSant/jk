@@ -10,7 +10,7 @@ import picocli.CommandLine.Command;
  */
 @Command(
         name = "jdk",
-        description = "Manage installed JDKs.",
+        description = "Manage installed JDKs",
         subcommands = {
                 JdkInstallCommand.class,
                 JdkListCommand.class,

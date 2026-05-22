@@ -15,7 +15,7 @@ import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 /** {@code jk sync} — ensure every locked package is present in the local CAS. */
-@Command(name = "sync", description = "Reconcile cache to jk.lock.")
+@Command(name = "sync", description = "Reconcile cache to jk.lock")
 public final class SyncCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

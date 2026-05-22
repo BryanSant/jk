@@ -27,7 +27,7 @@ import java.util.concurrent.Callable;
  * <p>{@code --precise &lt;coord&gt;@&lt;ver&gt;} per PRD §6 is accepted
  * but a no-op until selective resolution lands.
  */
-@Command(name = "update", description = "Re-resolve declared dependencies and rewrite jk.lock.")
+@Command(name = "update", description = "Re-resolve declared dependencies and rewrite jk.lock")
 public final class UpdateCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

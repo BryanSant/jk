@@ -19,7 +19,7 @@ import java.util.concurrent.Callable;
 /**
  * {@code jk why &lt;module&gt;} — explain why a module is in the dependency graph.
  */
-@Command(name = "why", description = "Explain why a module is in the dependency graph.")
+@Command(name = "why", description = "Explain why a module is in the dependency graph")
 public final class WhyCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<module>",

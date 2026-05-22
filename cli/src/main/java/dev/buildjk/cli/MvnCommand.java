@@ -30,7 +30,7 @@ import java.util.concurrent.Callable;
  */
 @Command(
         name = "mvn",
-        description = "Passthrough to Maven (jk manages the install).",
+        description = "Passthrough to Maven (jk manages the install)",
         mixinStandardHelpOptions = false)
 public final class MvnCommand implements Callable<Integer> {
 

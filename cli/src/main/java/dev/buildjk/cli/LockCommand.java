@@ -28,7 +28,7 @@ import java.util.concurrent.Callable;
  * declared {@code features.default}; {@code --no-default-features}
  * disables the default list entirely. Cargo semantics.
  */
-@Command(name = "lock", description = "Resolve declared dependencies and write jk.lock.")
+@Command(name = "lock", description = "Resolve declared dependencies and write jk.lock")
 public final class LockCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

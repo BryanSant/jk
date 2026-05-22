@@ -29,7 +29,7 @@ import java.util.concurrent.Callable;
  * with {@code jk image}, which builds an OCI container image.
  */
 @Command(name = "native",
-        description = "Compile a native binary with GraalVM native-image.")
+        description = "Compile a native binary with GraalVM native-image")
 public final class NativeCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

@@ -50,7 +50,7 @@ import java.util.concurrent.Callable;
  *       classpath + caller-provided {@code -- args}.</li>
  * </ol>
  */
-@Command(name = "run", description = "Run a single-file Java script.")
+@Command(name = "run", description = "Run a single-file Java script")
 public final class RunCommand implements Callable<Integer> {
 
     @Parameters(index = "0", paramLabel = "<script>",

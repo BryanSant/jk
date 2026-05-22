@@ -18,7 +18,7 @@ import java.util.concurrent.Callable;
  * with a provenance column distinguishing locally-downloaded installs from
  * symlinks into SDKMAN / JBang / etc., and flagging any broken links.
  */
-@Command(name = "list", description = "List installed JDKs.")
+@Command(name = "list", description = "List installed JDKs")
 public final class JdkListCommand implements Callable<Integer> {
 
     @Option(names = "--jdks-dir", hidden = true,

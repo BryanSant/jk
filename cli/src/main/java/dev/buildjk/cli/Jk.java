@@ -13,7 +13,7 @@ import picocli.CommandLine.Command;
         name = "jk",
         mixinStandardHelpOptions = true,
         version = "jk " + Jk.VERSION,
-        description = "Single-binary build tool for Java and Kotlin.",
+        description = "Single-binary build tool for Java and Kotlin",
         subcommands = {
                 InitCommand.class,
                 AddCommand.class,

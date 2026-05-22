@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
  * {@code group:artifact:version} (the version, if present, is ignored —
  * a module only appears once per scope).
  */
-@Command(name = "remove", description = "Remove a dependency from build.jk.")
+@Command(name = "remove", description = "Remove a dependency from build.jk")
 public final class RemoveCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<module>",

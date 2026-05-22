@@ -33,7 +33,7 @@ import java.util.concurrent.Callable;
  * two sha256s match.
  */
 @Command(name = "verify-build",
-        description = "Rebuild in scratch; diff jar vs target/.")
+        description = "Rebuild in scratch; diff jar vs target/")
 public final class VerifyBuildCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

@@ -35,7 +35,7 @@ import java.util.concurrent.Callable;
  * tasks become first-class, they can register their input-snapshot
  * builders here.
  */
-@Command(name = "why-rebuilt", description = "Diff a task's current inputs against the last recorded action.")
+@Command(name = "why-rebuilt", description = "Diff a task's current inputs against the last recorded action")
 public final class WhyRebuiltCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<task>",

@@ -31,7 +31,7 @@ import java.util.concurrent.Callable;
  * <p>Run via {@code jk jkx ...}. A standalone {@code jkx} binary that
  * dispatches to this verb is a packaging task tracked separately.
  */
-@Command(name = "jkx", description = "Ephemeral tool execution from a Maven coord.")
+@Command(name = "jkx", description = "Ephemeral tool execution from a Maven coord")
 public final class JkxCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<coord>",

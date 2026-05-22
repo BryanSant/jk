@@ -19,7 +19,7 @@ import java.util.concurrent.Callable;
  * {@code jk deny} — apply the build.jk {@code deny} policy against the
  * locked dependencies (PRD §23.6). Exits non-zero on any violation.
  */
-@Command(name = "deny", description = "Apply the project's license / source / yanked policy.")
+@Command(name = "deny", description = "Apply the project's license / source / yanked policy")
 public final class DenyCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

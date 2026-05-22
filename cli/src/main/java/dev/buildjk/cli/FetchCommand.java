@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
  * {@code jk sync}. The {@code --offline-prepare} flag is accepted today
  * but is a no-op until the offline / cache-bundle workflow lands.
  */
-@Command(name = "fetch", description = "Download all dependencies without building.")
+@Command(name = "fetch", description = "Download all dependencies without building")
 public final class FetchCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

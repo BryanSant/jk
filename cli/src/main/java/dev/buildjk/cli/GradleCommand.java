@@ -27,7 +27,7 @@ import java.util.concurrent.Callable;
  */
 @Command(
         name = "gradle",
-        description = "Passthrough to Gradle (jk manages the install).",
+        description = "Passthrough to Gradle (jk manages the install)",
         mixinStandardHelpOptions = false)
 public final class GradleCommand implements Callable<Integer> {
 

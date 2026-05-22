@@ -37,7 +37,7 @@ import java.util.concurrent.Callable;
  * follow-up sub-slices. SNAPSHOT versions are refused per PRD §21.4 unless
  * {@code --allow-snapshot} is set.
  */
-@Command(name = "publish", description = "Publish artifacts to a Maven repository.")
+@Command(name = "publish", description = "Publish artifacts to a Maven repository")
 public final class PublishCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

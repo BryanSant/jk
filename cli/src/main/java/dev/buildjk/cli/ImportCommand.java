@@ -28,7 +28,7 @@ import java.util.concurrent.Callable;
  * <p>Always writes a {@code build.jk} and a {@code jk-import-report.md} so
  * the user has the full list of constructs that didn't carry over cleanly.
  */
-@Command(name = "import", description = "Convert a Maven or Gradle build to build.jk.")
+@Command(name = "import", description = "Convert a Maven or Gradle build to build.jk")
 public final class ImportCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<file>",

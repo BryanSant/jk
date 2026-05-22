@@ -32,7 +32,7 @@ import java.util.concurrent.Callable;
  * <p>{@code --tarball <path>} writes an OCI archive locally instead of
  * pushing — useful for tests and for inspecting layers without a registry.
  */
-@Command(name = "image", description = "Build and push an OCI image for the project.")
+@Command(name = "image", description = "Build and push an OCI image for the project")
 public final class ImageCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

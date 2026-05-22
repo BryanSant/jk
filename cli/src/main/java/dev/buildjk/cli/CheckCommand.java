@@ -33,7 +33,7 @@ import java.util.stream.Stream;
  * Maven-resolved classpath from {@code jk.lock}. Kotlin and annotation
  * processors join in later slices.
  */
-@Command(name = "check", description = "Type-check without producing artifacts.")
+@Command(name = "check", description = "Type-check without producing artifacts")
 public final class CheckCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

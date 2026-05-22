@@ -10,7 +10,7 @@ import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 /** {@code jk jdk uninstall <identifier>} — remove the JDK from {@code ~/.jk/jdks/}. */
-@Command(name = "uninstall", description = "Delete an installed JDK.")
+@Command(name = "uninstall", description = "Delete an installed JDK")
 public final class JdkUninstallCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<identifier>",

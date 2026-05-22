@@ -28,7 +28,7 @@ import java.util.concurrent.Callable;
  * compile-test). Full action-graph rendering arrives once tasks
  * become first-class.
  */
-@Command(name = "explain", description = "Print the planned build with cache hit/miss.")
+@Command(name = "explain", description = "Print the planned build with cache hit/miss")
 public final class ExplainCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

@@ -15,7 +15,7 @@ import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 /** {@code jk tree} — print the resolved dependency tree. */
-@Command(name = "tree", description = "Print the resolved dependency tree.")
+@Command(name = "tree", description = "Print the resolved dependency tree")
 public final class TreeCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},

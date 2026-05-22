@@ -29,7 +29,7 @@ import java.util.concurrent.Callable;
  * <p>v0.6 first cut handles Maven coords only. {@code --git} and {@code --with}
  * land in follow-up sub-slices.
  */
-@Command(name = "install", description = "Install a tool from a Maven coordinate.")
+@Command(name = "install", description = "Install a tool from a Maven coordinate")
 public final class InstallCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<coord>",
