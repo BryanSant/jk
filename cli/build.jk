@@ -9,21 +9,21 @@ project {
 }
 
 dependencies.main {
-  "dev.buildjk:jk-core"          = "=0.6.0-SNAPSHOT"
-  "dev.buildjk:jk-io"            = "=0.6.0-SNAPSHOT"
-  "dev.buildjk:jk-resolver"      = "=0.6.0-SNAPSHOT"
-  "dev.buildjk:jk-toolchain"     = "=0.6.0-SNAPSHOT"
-  "dev.buildjk:jk-engine"        = "=0.6.0-SNAPSHOT"
-  "dev.buildjk:jk-supply-chain"  = "=0.6.0-SNAPSHOT"
-  "dev.buildjk:jk-image"         = "=0.6.0-SNAPSHOT"
-  "dev.buildjk:jk-compat"        = "=0.6.0-SNAPSHOT"
-  "info.picocli:picocli"         = "=4.7.7"
+  "dev.buildjk:jk-core"          = "0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-io"            = "0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-resolver"      = "0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-toolchain"     = "0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-engine"        = "0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-supply-chain"  = "0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-image"         = "0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-compat"        = "0.6.0-SNAPSHOT"
+  "info.picocli:picocli"         = "4.7.7"
 }
 
 dependencies.test {
-  "org.junit.jupiter:junit-jupiter"            = "=6.1.0"
-  "org.junit.platform:junit-platform-launcher" = "=6.1.0"
-  "org.assertj:assertj-core"                   = "=3.27.7"
+  "org.junit.jupiter:junit-jupiter"            = "6.1.0"
+  "org.junit.platform:junit-platform-launcher" = "6.1.0"
+  "org.assertj:assertj-core"                   = "3.27.7"
 }
 
 image {

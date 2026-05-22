@@ -1,0 +1,93 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.buildjk.hocon;
+
+import dev.buildjk.model.BuildJk;
+import dev.buildjk.model.Dependency;
+import dev.buildjk.model.Scope;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+/**
+ * Resolve workspace-internal dependency jars for a single member's build
+ * (PRD §13.3 composite-build semantics).
+ *
+ * <p>External deps come from {@code jk.lock} via {@code ClasspathResolver}.
+ * Workspace-internal coords are filtered out of the lockfile by
+ * {@code WorkspaceMerge}, so they must be re-injected here: for each
+ * sibling member whose project coord matches an entry in the current
+ * member's {@code dependencies.<scope>}, add
+ * {@code <root>/<sibling>/target/<artifact>-<version>.jar} to the
+ * classpath.
+ */
+public final class WorkspaceClasspath {
+
+    private WorkspaceClasspath() {}
+
+    /**
+     * @param member the member being built
+     * @param scopes the scopes whose deps should contribute (typically
+     *     {@code MAIN} for compile, {@code MAIN}+{@code TEST} for tests)
+     * @return absolute paths to sibling jars, in declaration order; any
+     *     missing jars are reported via the returned warning list
+     */
+    public static Result resolve(Path memberDir, BuildJk member, Set<Scope> scopes)
+            throws IOException {
+        var rootOpt = WorkspaceLocator.findRoot(memberDir);
+        if (rootOpt.isEmpty()) {
+            return new Result(List.of(), List.of());
+        }
+        Path root = rootOpt.get();
+        BuildJk rootBuildJk = BuildJkParser.parse(root.resolve("build.jk"));
+        if (!rootBuildJk.isWorkspaceRoot()) {
+            return new Result(List.of(), List.of());
+        }
+
+        // Build the module → (siblingDir, jarPath) map by walking each
+        // sibling's build.jk once.
+        Map<String, Path> siblingJarByModule = new HashMap<>();
+        for (String memberName : rootBuildJk.workspace().members()) {
+            Path siblingDir = root.resolve(memberName);
+            Path siblingBuildJk = siblingDir.resolve("build.jk");
+            if (!Files.exists(siblingBuildJk)) continue;
+            BuildJk sibling;
+            try {
+                sibling = BuildJkParser.parse(siblingBuildJk);
+            } catch (RuntimeException ignored) {
+                continue;
+            }
+            String moduleCoord = sibling.project().group() + ":" + sibling.project().artifact();
+            Path jar = siblingDir.resolve("target").resolve(
+                    sibling.project().artifact() + "-" + sibling.project().version() + ".jar");
+            siblingJarByModule.put(moduleCoord, jar);
+        }
+
+        List<Path> jars = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        for (Scope scope : scopes) {
+            for (Dependency dep : member.dependencies().of(scope)) {
+                Path siblingJar = siblingJarByModule.get(dep.module());
+                if (siblingJar == null) continue;
+                if (Files.exists(siblingJar)) {
+                    if (!jars.contains(siblingJar)) jars.add(siblingJar);
+                } else {
+                    missing.add(dep.module() + " (expected at " + siblingJar + ")");
+                }
+            }
+        }
+        return new Result(jars, missing);
+    }
+
+    public record Result(List<Path> jars, List<String> missingSiblingJars) {
+        public Result {
+            jars = List.copyOf(jars);
+            missingSiblingJars = List.copyOf(missingSiblingJars);
+        }
+    }
+}

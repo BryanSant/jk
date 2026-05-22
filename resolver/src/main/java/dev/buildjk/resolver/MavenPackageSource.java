@@ -79,9 +79,12 @@ public final class MavenPackageSource implements PackageSource {
             String scope = dep.scope();
             if (scope != null && !scope.isEmpty() && !FOLLOWED_SCOPES.contains(scope)) continue;
             if (dep.version() == null || dep.version().isBlank()) continue;
-            // Maven POM versions are (post-depMgmt) usually exact pins.
-            // Real Maven ranges are rare; parsing them is future work.
-            out.add(Term.positive(dep.module(), VersionSet.exact(dep.version())));
+            // PRD §7.4 — highest-version-wins across the transitive graph
+            // (Gradle/Cargo semantics, not Maven's nearest-wins). Treat a
+            // POM-declared dep version as a *lower bound*; a higher version
+            // brought in by another sibling satisfies it. Strict Maven
+            // ranges (rare in practice) still need their own parser.
+            out.add(Term.positive(dep.module(), VersionSet.atLeast(dep.version(), true)));
         }
         depsCache.put(key, List.copyOf(out));
         return depsCache.get(key);

@@ -4,9 +4,11 @@ package dev.buildjk.model;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Builds a synthetic {@link BuildJk} that combines a workspace root with
@@ -25,14 +27,23 @@ public final class WorkspaceMerge {
 
     public static BuildJk merge(BuildJk root, Collection<BuildJk> members) {
         if (members.isEmpty()) return root;
+        // Workspace-internal coords (each member's `<group>:<artifact>`) are
+        // satisfied locally — not from any registered repository. The resolver
+        // would 404 on them, so we drop them from the merged dep list.
+        Set<String> internal = new HashSet<>();
+        for (BuildJk member : members) {
+            internal.add(member.project().group() + ":" + member.project().artifact());
+        }
         Map<Scope, List<Dependency>> mergedByScope = new EnumMap<>(Scope.class);
         for (Scope scope : Scope.values()) {
             Map<String, Dependency> dedup = new LinkedHashMap<>();
             for (Dependency d : root.dependencies().of(scope)) {
+                if (internal.contains(d.module())) continue;
                 dedup.putIfAbsent(d.module(), d);
             }
             for (BuildJk member : members) {
                 for (Dependency d : member.dependencies().of(scope)) {
+                    if (internal.contains(d.module())) continue;
                     dedup.putIfAbsent(d.module(), d);
                 }
             }

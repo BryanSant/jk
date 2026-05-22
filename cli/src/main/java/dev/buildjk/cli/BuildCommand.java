@@ -9,6 +9,8 @@ import dev.buildjk.compile.JarPackager;
 import dev.buildjk.compile.JavacDriver;
 import dev.buildjk.compile.KotlincDriver;
 import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.hocon.WorkspaceClasspath;
+import dev.buildjk.hocon.WorkspaceLocator;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
@@ -59,6 +61,16 @@ public final class BuildCommand implements Callable<Integer> {
             return 2;
         }
         if (!Files.exists(lockFile)) {
+            // Workspace member: fall back to the root's jk.lock (PRD §13).
+            var workspaceRoot = WorkspaceLocator.findRoot(dir);
+            if (workspaceRoot.isPresent()) {
+                Path candidate = workspaceRoot.get().resolve("jk.lock");
+                if (Files.exists(candidate)) {
+                    lockFile = candidate;
+                }
+            }
+        }
+        if (!Files.exists(lockFile)) {
             System.err.println("jk build: no jk.lock in " + dir + " (run `jk lock` first)");
             return 2;
         }
@@ -82,8 +94,17 @@ public final class BuildCommand implements Callable<Integer> {
                 ? cacheDir
                 : Path.of(System.getProperty("user.home"), ".jk", "cache");
         Cas cas = new Cas(cache);
-        List<Path> classpath = new ClasspathResolver(cas)
-                .classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
+        List<Path> classpath = new ArrayList<>(new ClasspathResolver(cas)
+                .classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
+        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(dir, project,
+                java.util.Set.of(dev.buildjk.model.Scope.MAIN));
+        classpath.addAll(siblings.jars());
+        if (!siblings.missingSiblingJars().isEmpty()) {
+            for (String missing : siblings.missingSiblingJars()) {
+                System.err.println("jk build: workspace sibling not built — " + missing);
+            }
+            return 2;
+        }
         int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
 
         Profile profile = CheckCommand.resolveProfile(project.profiles(), profileName);
