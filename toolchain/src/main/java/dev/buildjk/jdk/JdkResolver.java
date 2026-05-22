@@ -25,7 +25,14 @@ public final class JdkResolver {
         this.registry = Objects.requireNonNull(registry, "registry");
     }
 
-    /** Find the pinned JDK for {@code projectDir}, if any. */
+    /**
+     * Find the pinned JDK for {@code projectDir}, if any. When the JDK
+     * isn't already under {@code ~/.jk/jdks/}, runs the discovery probe
+     * chain ({@code JAVA_HOME} / SDKMAN / JBang / asdf / jenv / Homebrew
+     * / system) and links the first match into {@code ~/.jk/jdks/}
+     * before returning. Falls through to {@code Optional.empty()} only
+     * if neither the registry nor the host has a copy.
+     */
     public Optional<InstalledJdk> resolve(Path projectDir) throws IOException {
         Path jkVersion = projectDir.resolve(".jk-version");
         if (Files.exists(jkVersion)) {
@@ -34,13 +41,24 @@ public final class JdkResolver {
                 Optional<InstalledJdk> match = registry.find(pin)
                         .or(() -> findByPrefixQuiet(pin));
                 if (match.isPresent()) return match;
+                Optional<JdkProvisioning.Result> provisioned =
+                        new JdkProvisioning(registry).resolve(pin);
+                if (provisioned.isPresent()) {
+                    return Optional.of(provisioned.get().jdk());
+                }
             }
         }
         Path sdkmanrc = projectDir.resolve(".sdkmanrc");
         if (Files.exists(sdkmanrc)) {
             String javaPin = parseSdkmanrcJavaLine(Files.readString(sdkmanrc));
             if (javaPin != null) {
-                return findByPrefixQuiet(javaPin);
+                Optional<InstalledJdk> match = findByPrefixQuiet(javaPin);
+                if (match.isPresent()) return match;
+                Optional<JdkProvisioning.Result> provisioned =
+                        new JdkProvisioning(registry).resolve(javaPin);
+                if (provisioned.isPresent()) {
+                    return Optional.of(provisioned.get().jdk());
+                }
             }
         }
         return Optional.empty();

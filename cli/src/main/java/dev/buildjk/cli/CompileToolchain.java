@@ -57,25 +57,29 @@ final class CompileToolchain {
      * @param cacheDir the {@link Cas} root (typically {@code ~/.jk/cache})
      */
     static Path resolveKotlinHome(Path cacheDir) {
-        String env = System.getenv("KOTLIN_HOME");
-        if (env != null && !env.isBlank() && Files.exists(Path.of(env))) {
-            return Path.of(env);
-        }
+        // ToolProvisioning already runs the EnvVarProbe (which reads
+        // KOTLIN_HOME), so we don't need a separate fast-path. Going
+        // through the full pipeline guarantees we leave a symlink under
+        // ~/.jk/tools/kotlin/<version>/ — subsequent invocations don't
+        // depend on the env var still being set.
         Path toolsRoot = Path.of(System.getProperty("user.home"), ".jk", "tools");
         ToolRegistry registry = new ToolRegistry(toolsRoot);
         ToolDistribution dist = KotlinResolver.defaultDistribution();
-        Optional<InstalledTool> existing = registry.find(dist.tool(), dist.version());
-        if (existing.isPresent()) return existing.get().home();
-
-        // Install on first use.
-        System.err.println("Installing Kotlin " + dist.version()
-                + " from " + dist.downloadUri() + " ...");
         try {
-            InstalledTool installed = new ToolInstaller(new Http(), registry).install(dist);
-            return installed.home();
+            dev.buildjk.compat.ToolProvisioning.Result result =
+                    dev.buildjk.compat.ToolProvisioning.provision(
+                            dist, registry, new Http(), /*noDiscover=*/ false);
+            switch (result.source()) {
+                case LINKED -> System.err.println("Linked Kotlin " + dist.version()
+                        + " from " + result.detail());
+                case DOWNLOADED -> System.err.println("Installed Kotlin " + dist.version()
+                        + " from " + result.detail());
+                case CACHED -> { /* silent */ }
+            }
+            return result.tool().home();
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            throw new RuntimeException("failed to install Kotlin " + dist.version() + ": "
+            throw new RuntimeException("failed to provision Kotlin " + dist.version() + ": "
                     + e.getMessage(), e);
         }
     }

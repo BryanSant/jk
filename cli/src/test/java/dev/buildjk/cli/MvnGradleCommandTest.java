@@ -71,7 +71,7 @@ class MvnGradleCommandTest {
 
         int exit = run("mvn",
                 "-C", projectDir.toString(),
-                "--tools-dir", tempDir.resolve("tools").toString(),
+                "--tools-dir", tempDir.resolve("tools").toString(), "--no-discover",
                 "--jdks-dir", tempDir.resolve("jdks").toString(),
                 "clean", "install", "-DskipTests=true", "-X");
         assertThat(exit).isEqualTo(0);
@@ -99,7 +99,7 @@ class MvnGradleCommandTest {
 
         int exit = run("gradle",
                 "-C", projectDir.toString(),
-                "--tools-dir", tempDir.resolve("tools").toString(),
+                "--tools-dir", tempDir.resolve("tools").toString(), "--no-discover",
                 "--jdks-dir", tempDir.resolve("jdks").toString(),
                 "build", "--no-daemon");
         assertThat(exit).isEqualTo(0);
@@ -121,7 +121,7 @@ class MvnGradleCommandTest {
                 "distributionUrl=" + base.resolve("/apache-maven-3.9.9-bin.zip") + "\n");
 
         run("mvn", "-C", projectDir.toString(),
-                "--tools-dir", tempDir.resolve("tools").toString(),
+                "--tools-dir", tempDir.resolve("tools").toString(), "--no-discover",
                 "--jdks-dir", tempDir.resolve("jdks").toString(),
                 "first");
         long firstMtime = Files.getLastModifiedTime(
@@ -130,7 +130,7 @@ class MvnGradleCommandTest {
         // Drop the served archive; second invocation must not need it.
         served.clear();
         int exit = run("mvn", "-C", projectDir.toString(),
-                "--tools-dir", tempDir.resolve("tools").toString(),
+                "--tools-dir", tempDir.resolve("tools").toString(), "--no-discover",
                 "--jdks-dir", tempDir.resolve("jdks").toString(),
                 "second");
         assertThat(exit).isEqualTo(0);

@@ -4,7 +4,7 @@ package dev.buildjk.cli;
 import dev.buildjk.compat.InstalledTool;
 import dev.buildjk.compat.PassthroughEnv;
 import dev.buildjk.compat.ToolDistribution;
-import dev.buildjk.compat.ToolInstaller;
+import dev.buildjk.compat.ToolProvisioning;
 import dev.buildjk.compat.ToolRegistry;
 import dev.buildjk.http.Http;
 import dev.buildjk.jdk.InstalledJdk;
@@ -46,6 +46,10 @@ public final class MvnCommand implements Callable<Integer> {
             description = "Override the JDK install root. Default: ~/.jk/jdks.")
     Path jdksDir;
 
+    @Option(names = "--no-discover",
+            description = "Don't probe SDKMAN / Homebrew / etc. for an existing install; always download.")
+    boolean noDiscover;
+
     @Parameters(arity = "0..*", paramLabel = "<args>",
             description = "Arguments forwarded to mvn.")
     List<String> args = new ArrayList<>();
@@ -60,11 +64,15 @@ public final class MvnCommand implements Callable<Integer> {
         ToolRegistry registry = new ToolRegistry(toolsRoot);
 
         ToolDistribution dist = new MavenResolver().resolve(projectDir);
-        InstalledTool maven = registry.find(dist.tool(), dist.version())
-                .orElse(null);
-        if (maven == null) {
-            System.err.println("Installing Maven " + dist.version() + " from " + dist.downloadUri() + " ...");
-            maven = new ToolInstaller(new Http(), registry).install(dist);
+        ToolProvisioning.Result result = ToolProvisioning.provision(
+                dist, registry, new Http(), noDiscover);
+        InstalledTool maven = result.tool();
+        switch (result.source()) {
+            case LINKED -> System.err.println("Linked Maven " + dist.version()
+                    + " from " + result.detail());
+            case DOWNLOADED -> System.err.println("Installed Maven " + dist.version()
+                    + " from " + result.detail());
+            case CACHED -> { /* silent — common case */ }
         }
 
         Optional<InstalledJdk> jdk = EnvCommand.resolvePinnedJdk(projectDir, jdksDir);

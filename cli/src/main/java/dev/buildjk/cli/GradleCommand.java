@@ -4,7 +4,7 @@ package dev.buildjk.cli;
 import dev.buildjk.compat.InstalledTool;
 import dev.buildjk.compat.PassthroughEnv;
 import dev.buildjk.compat.ToolDistribution;
-import dev.buildjk.compat.ToolInstaller;
+import dev.buildjk.compat.ToolProvisioning;
 import dev.buildjk.compat.ToolRegistry;
 import dev.buildjk.gradle.GradleResolver;
 import dev.buildjk.http.Http;
@@ -43,6 +43,10 @@ public final class GradleCommand implements Callable<Integer> {
             description = "Override the JDK install root. Default: ~/.jk/jdks.")
     Path jdksDir;
 
+    @Option(names = "--no-discover",
+            description = "Don't probe SDKMAN / Homebrew / etc. for an existing install; always download.")
+    boolean noDiscover;
+
     @Parameters(arity = "0..*", paramLabel = "<args>",
             description = "Arguments forwarded to gradle.")
     List<String> args = new ArrayList<>();
@@ -57,11 +61,15 @@ public final class GradleCommand implements Callable<Integer> {
         ToolRegistry registry = new ToolRegistry(toolsRoot);
 
         ToolDistribution dist = new GradleResolver().resolve(projectDir);
-        InstalledTool gradle = registry.find(dist.tool(), dist.version())
-                .orElse(null);
-        if (gradle == null) {
-            System.err.println("Installing Gradle " + dist.version() + " from " + dist.downloadUri() + " ...");
-            gradle = new ToolInstaller(new Http(), registry).install(dist);
+        ToolProvisioning.Result result = ToolProvisioning.provision(
+                dist, registry, new Http(), noDiscover);
+        InstalledTool gradle = result.tool();
+        switch (result.source()) {
+            case LINKED -> System.err.println("Linked Gradle " + dist.version()
+                    + " from " + result.detail());
+            case DOWNLOADED -> System.err.println("Installed Gradle " + dist.version()
+                    + " from " + result.detail());
+            case CACHED -> { /* silent — common case */ }
         }
 
         Optional<InstalledJdk> jdk = EnvCommand.resolvePinnedJdk(projectDir, jdksDir);
