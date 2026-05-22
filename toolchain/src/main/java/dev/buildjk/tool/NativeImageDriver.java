@@ -11,7 +11,7 @@ import java.util.Objects;
 
 /**
  * Thin driver over GraalVM's {@code native-image} binary (PRD §6
- * {@code jk native-image} verb). Verifies the JDK ships
+ * {@code jk native} verb). Verifies the JDK ships
  * {@code bin/native-image}, assembles the classpath argument, and execs
  * with inherited IO.
  *

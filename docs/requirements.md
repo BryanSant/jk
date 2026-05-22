@@ -234,7 +234,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk deny` | License / source / version policy enforcement. |
 | `jk publish [--repo <name>] [--dry-run]` | Sign, package, upload to a Maven-style repository. |
 | `jk image [--registry <url>] [--push]` | Build an OCI image (Jib-style). |
-| `jk native-image` | Build a GraalVM native binary from a `--bin` artifact. |
+| `jk native` | Build a GraalVM native binary from a `--bin` artifact. (Verb is `native`, not `native-image`, to keep it distinct from `jk image` which builds OCI container images.) |
 | `jk install --git ... --bin ...` or `jk install <coord> --bin <name>` | Install a JVM CLI as a tool. |
 | `jkx <coord>[@ver] [-- args...]` | Ephemeral tool execution. |
 | `jk tool {list,update,uninstall,run}` | Manage installed tools. |
@@ -680,7 +680,7 @@ The Kotlin compiler is a *tool*, not a JDK. `build.jk` declares `project.kotlin 
 
 ### 12.8 GraalVM as a capability
 
-GraalVM distributions advertise the `native-image` capability. `jk native-image` requires a GraalVM-capable JDK; if missing, jk offers to install one (`jk jdk install graalvm-21`).
+GraalVM distributions advertise the `native-image` capability. `jk native` requires a GraalVM-capable JDK; if missing, jk offers to install one (`jk jdk install graalvm-21`).
 
 ### 12.9 Garbage collection
 
@@ -810,7 +810,7 @@ Maven's phases are useful *as mental anchors* even if the underlying execution m
 | `jk test` | `build` + execute tests, emit JUnit XML + SARIF + JaCoCo coverage. |
 | `jk publish` | `build` + `test` + sign + upload. |
 | `jk image` | `build` + emit OCI image. |
-| `jk native-image` | `build` + GraalVM native compile. |
+| `jk native` | `build` + GraalVM native compile. |
 | `jk clean` | Delete `target/` and `.jk/generated/`. |
 
 ### 16.2 Task DAG

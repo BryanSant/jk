@@ -44,7 +44,7 @@ import picocli.CommandLine.Command;
                 AuditCommand.class,
                 DenyCommand.class,
                 ImageCommand.class,
-                NativeImageCommand.class,
+                NativeCommand.class,
                 VerifyBuildCommand.class,
                 ToolReconcileCommand.class,
         })

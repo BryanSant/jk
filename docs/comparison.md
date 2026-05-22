@@ -55,7 +55,7 @@ Same job, different default behaviour or filesystem layout.
 | Open a project shell | `jk shell` | `uv run -- bash` | — | — | — | Subshell with the project's pinned JDK on PATH. |
 | Build profiles | `profiles.{dev,ci,…}` block | — | `[profile.dev]` / `[profile.release]` | `gradle -PsomeProp` | `<profiles>` | jk's profiles change javac/JVM args, not deps (deps belong in features). |
 | Optional feature sets | `features { … }` block | `[project.optional-dependencies]` | `[features]` | *(no native; via separate sourceset)* | `<profile>` *(awkward)* | jk uses cargo's word "feature" deliberately — additive, named dep sets. |
-| Native compile | `jk native-image` *(GraalVM)* | — | `cargo build` *(native by default)* | *(graalvm plugin)* | *(graalvm plugin)* | jk drives the GraalVM `native-image` binary; cargo is native-by-default because Rust is AOT. |
+| Native compile | `jk native` *(GraalVM)* | — | `cargo build` *(native by default)* | *(graalvm plugin)* | *(graalvm plugin)* | jk drives the GraalVM `native-image` binary; cargo is native-by-default because Rust is AOT. |
 | Reproducibility check | `jk verify-build` | — | *(community: cargo-bisect-rustc, manual)* | — | — | jk's verb rebuilds in a scratch dir and diffs the jar's SHA-256. |
 | Action / build cache | `~/.jk/cache/actions/` *(content-addressed)* | — | `target/` *(incremental compile)* | `--build-cache` *(local + optional remote)* | *(none)* | jk caches per-task by the SHA of its inputs (Bazel-shape); gradle's build cache is the nearest analogue. |
 

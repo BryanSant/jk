@@ -20,13 +20,17 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk native-image} — build a GraalVM-compiled native binary for the
+ * {@code jk native} — build a GraalVM-compiled native binary for the
  * project. Uses the project's pinned JDK (must be a GraalVM distribution);
  * classpath comes from {@code jk.lock} + the project's main jar.
+ *
+ * <p>Drives the upstream {@code native-image} tool from GraalVM; the verb
+ * is named {@code native} (no {@code -image} suffix) to avoid colliding
+ * with {@code jk image}, which builds an OCI container image.
  */
-@Command(name = "native-image",
+@Command(name = "native",
         description = "Compile a native binary with GraalVM native-image.")
-public final class NativeImageCommand implements Callable<Integer> {
+public final class NativeCommand implements Callable<Integer> {
 
     @Option(names = {"-C", "--directory"},
             description = "Project directory. Default: current directory.")
@@ -58,7 +62,7 @@ public final class NativeImageCommand implements Callable<Integer> {
                 ? directory : Path.of(".").toAbsolutePath().normalize();
         Path buildJkPath = projectDir.resolve("build.jk");
         if (!Files.exists(buildJkPath)) {
-            System.err.println("jk native-image: " + buildJkPath + " not found.");
+            System.err.println("jk native: " + buildJkPath + " not found.");
             return 66;
         }
         BuildJk project = BuildJkParser.parse(buildJkPath);
@@ -66,7 +70,7 @@ public final class NativeImageCommand implements Callable<Integer> {
         Path mainJar = projectDir.resolve("target").resolve(
                 project.project().artifact() + "-" + project.project().version() + ".jar");
         if (!Files.exists(mainJar)) {
-            System.err.println("jk native-image: main jar not found at " + mainJar
+            System.err.println("jk native: main jar not found at " + mainJar
                     + " — run `jk build` first.");
             return 66;
         }
@@ -79,7 +83,7 @@ public final class NativeImageCommand implements Callable<Integer> {
                 ? mainClass
                 : dev.buildjk.hocon.ImageConfigParser.parse(buildJkPath).mainClass();
         if (chosenMain == null || chosenMain.isBlank()) {
-            System.err.println("jk native-image: no main class — pass --main or set image.main-class.");
+            System.err.println("jk native: no main class — pass --main or set image.main-class.");
             return 64;
         }
 

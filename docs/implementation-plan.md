@@ -81,7 +81,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 - **v0.5 — Migration.** ✅ Shipped. `jk mvn` / `jk gradle` passthroughs, three-tier `jk import pom.xml` (single + multi-module), best-effort `jk import build.gradle(.kts)`, `jk export pom.xml`.
 - **v0.6 — Publishing & scripting.** ✅ Shipped. `jk publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOMs). `jk run script.java` (JBang-compat). `jk install` / `jkx`.
 - **v0.7 — Git deps.** ✅ Shipped. JGit resolver, HOCON git-source syntax, GitFetcher + GitSource + GitUrl.
-- **v0.8 — Container & supply chain.** ✅ Shipped. `jk image` (Jib-core), `jk audit` (OSV), `jk deny`, CycloneDX + SPDX, `jk native-image`.
+- **v0.8 — Container & supply chain.** ✅ Shipped. `jk image` (Jib-core), `jk audit` (OSV), `jk deny`, CycloneDX + SPDX, `jk native` (GraalVM native-image driver).
 - **v0.9 — Self-hosting.** ✅ Shipped. `jk verify-build`, candidate self-hosting `build.jks`, jk builds itself end-to-end. Subprocess compile strategies behind a pluggable SPI (kotlin-compiler-embeddable removed). Native-image config consolidated; binary trimmed 187 MB → 138 MB. Good-neighbor tool discovery layered on after the milestone.
 - **v1.0 — GA.** Next. IntelliJ plugin (synthetic-POM bridge mode), VS Code extension shell, docs site, benchmark dashboard, `setup-jk` GitHub Action, signed v1.0.0 release.
 
