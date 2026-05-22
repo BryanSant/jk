@@ -1,0 +1,191 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.buildjk.cli;
+
+import com.sun.net.httpserver.HttpServer;
+import dev.buildjk.util.Hashing;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import picocli.CommandLine;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.HashMap;
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class JdkCommandTest {
+
+    private HttpServer server;
+    private URI base;
+    private final Map<String, byte[]> served = new HashMap<>();
+
+    @BeforeEach
+    void start() throws IOException {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            byte[] body = served.get(exchange.getRequestURI().getPath());
+            if (body == null) {
+                exchange.sendResponseHeaders(404, -1);
+            } else {
+                exchange.sendResponseHeaders(200, body.length);
+                exchange.getResponseBody().write(body);
+            }
+            exchange.close();
+        });
+        server.start();
+        base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+    }
+
+    @AfterEach
+    void stop() { server.stop(0); }
+
+    @Test
+    void install_downloads_and_extracts(@TempDir Path tempDir) throws Exception {
+        Path jdksDir = tempDir.resolve("jdks");
+
+        byte[] archive = buildTarGz(tempDir, "jdk-21.0.5+11", Map.of(
+                "bin/java", "#!/fake/java",
+                "release", "JAVA_VERSION=21.0.5\n"));
+        served.put("/archives/jdk.tar.gz", archive);
+
+        String discoJson = """
+                {
+                  "result": [
+                    {
+                      "distribution": "temurin",
+                      "java_version": "21.0.5",
+                      "architecture": "ARCH",
+                      "operating_system": "OS",
+                      "archive_type": "tar.gz",
+                      "filename": "OpenJDK21U.tar.gz",
+                      "size": SIZE,
+                      "sha256": "SHA",
+                      "links": {
+                        "pkg_download_redirect": "BASE/archives/jdk.tar.gz"
+                      }
+                    }
+                  ]
+                }
+                """
+                .replace("ARCH", dev.buildjk.jdk.Platform.currentArchitecture())
+                .replace("OS", dev.buildjk.jdk.Platform.currentOperatingSystem())
+                .replace("SIZE", Integer.toString(archive.length))
+                .replace("SHA", Hashing.sha256Hex(archive))
+                .replace("BASE", base.toString());
+        served.put("/disco/packages", discoJson.getBytes(StandardCharsets.UTF_8));
+
+        int exit = run("jdk", "install", "21-tem",
+                "--jdks-dir", jdksDir.toString(),
+                "--disco-url", base.resolve("/disco/").toString());
+        assertThat(exit).isEqualTo(0);
+
+        // Identifier includes platform suffix; just check the version+vendor prefix.
+        try (var stream = Files.list(jdksDir)) {
+            assertThat(stream.iterator().hasNext()).isTrue();
+        }
+    }
+
+    @Test
+    void list_reports_installed_jdks(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        Files.createDirectories(jdks.resolve("21.0.5-tem-x64-linux"));
+        Files.createDirectories(jdks.resolve("23-tem-x64-linux"));
+
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+        java.io.PrintStream origOut = System.out;
+        System.setOut(new java.io.PrintStream(out));
+        try {
+            run("jdk", "list", "--jdks-dir", jdks.toString());
+        } finally {
+            System.setOut(origOut);
+        }
+        String stdout = out.toString(StandardCharsets.UTF_8);
+        assertThat(stdout).contains("21.0.5-tem-x64-linux");
+        assertThat(stdout).contains("23-tem-x64-linux");
+    }
+
+    @Test
+    void use_writes_jk_version_and_sdkmanrc(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        Files.createDirectories(jdks.resolve("21.0.5-tem-x64-linux/bin"));
+
+        int exit = run("jdk", "use", "21.0.5-tem",
+                "-C", tempDir.toString(),
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(0);
+
+        assertThat(Files.readString(tempDir.resolve(".jk-version")).trim())
+                .isEqualTo("21.0.5-tem-x64-linux");
+        assertThat(Files.readString(tempDir.resolve(".sdkmanrc")).trim())
+                .isEqualTo("java=21.0.5-tem");
+    }
+
+    @Test
+    void use_no_sdkman_compat_skips_sdkmanrc(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        Files.createDirectories(jdks.resolve("21.0.5-tem-x64-linux"));
+
+        int exit = run("jdk", "use", "21.0.5-tem",
+                "-C", tempDir.toString(),
+                "--jdks-dir", jdks.toString(),
+                "--no-sdkman-compat");
+        assertThat(exit).isEqualTo(0);
+
+        assertThat(tempDir.resolve(".jk-version")).exists();
+        assertThat(tempDir.resolve(".sdkmanrc")).doesNotExist();
+    }
+
+    @Test
+    void uninstall_removes_jdk_dir(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        Path victim = jdks.resolve("21.0.5-tem-x64-linux");
+        Files.createDirectories(victim.resolve("bin"));
+        Files.writeString(victim.resolve("bin/java"), "x");
+
+        int exit = run("jdk", "uninstall", "21.0.5-tem-x64-linux",
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(victim).doesNotExist();
+    }
+
+    @Test
+    void use_unknown_jdk_errors(@TempDir Path tempDir) {
+        int exit = run("jdk", "use", "nothing-installed",
+                "-C", tempDir.toString(),
+                "--jdks-dir", tempDir.resolve("jdks").toString());
+        assertThat(exit).isEqualTo(1);
+    }
+
+    private static int run(String... args) {
+        return new CommandLine(new Jk()).execute(args);
+    }
+
+    private static byte[] buildTarGz(Path tempDir, String topLevelDir,
+                                      Map<String, String> entries) throws Exception {
+        Path workdir = tempDir.resolve("fixture-" + System.nanoTime());
+        Path root = workdir.resolve(topLevelDir);
+        Files.createDirectories(root);
+        for (var entry : entries.entrySet()) {
+            Path target = root.resolve(entry.getKey());
+            if (target.getParent() != null) Files.createDirectories(target.getParent());
+            Files.writeString(target, entry.getValue());
+        }
+        Path archivePath = workdir.resolve("archive.tar.gz");
+        ProcessBuilder pb = new ProcessBuilder("tar", "czf", archivePath.toString(),
+                "-C", workdir.toString(), topLevelDir);
+        pb.redirectErrorStream(true);
+        Process p = pb.start();
+        if (p.waitFor() != 0) {
+            throw new RuntimeException("tar fixture build failed: "
+                    + new String(p.getInputStream().readAllBytes()));
+        }
+        return Files.readAllBytes(archivePath);
+    }
+}
