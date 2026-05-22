@@ -15,11 +15,9 @@ dependencies {
     // to be on the runtime classpath, not just the test classpath.
     implementation(libs.junit.platform.launcher)
     implementation(libs.junit.jupiter)
-    // Kotlin support: kotlinc lives inside jk so .kt sources compile without
-    // an external toolchain. Hefty (~50 MB) but unavoidable for in-process
-    // compilation. ProcessBuilder fork is a future option. kotlin-stdlib is
-    // separately needed on the user-provided classpath when present —
-    // KotlincDriver locates it via reflection on kotlin.KotlinVersion.
-    implementation(libs.kotlin.compiler.embeddable)
-    implementation(libs.kotlin.stdlib)
+    // Kotlin support is now subprocess-based — SubprocessKotlincStrategy
+    // execs <kotlin-home>/bin/kotlinc from a jk-installed distribution.
+    // kotlin-compiler-embeddable (~50 MB) and kotlin-stdlib are no longer
+    // on the classpath; the user-provided classpath still gets the
+    // appropriate stdlib via the project's declared deps.
 }

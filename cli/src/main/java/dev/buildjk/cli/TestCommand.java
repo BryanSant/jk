@@ -86,13 +86,15 @@ public final class TestCommand implements Callable<Integer> {
                 CheckCommand.resolveProfile(project.profiles(), profileName);
         List<String> javacArgs = profile == null ? List.of() : profile.javacArgs();
 
+        Path javaHome = CompileToolchain.resolveJavaHome(dir);
+
         // 1. Compile main sources (main + provided scope on the classpath).
         boolean ok = compileWithCache(
                 "compile-main",
                 dir.resolve("src/main/java"),
                 mainClasses,
                 compileMainCp,
-                release, javacArgs, cas, cache);
+                release, javacArgs, javaHome, cas, cache);
         if (!ok) return 1;
 
         // 2. Compile test sources (main classes + main + provided + test scope).
@@ -108,7 +110,7 @@ public final class TestCommand implements Callable<Integer> {
                 "compile-test",
                 srcTest, testClasses,
                 compileTestFullCp,
-                release, javacArgs, cas, cache);
+                release, javacArgs, javaHome, cas, cache);
         if (!ok) return 1;
 
         // 3. Run JUnit Platform on the test-runtime classpath (main + runtime + test).
@@ -135,6 +137,7 @@ public final class TestCommand implements Callable<Integer> {
             List<Path> classpath,
             int release,
             List<String> javacArgs,
+            Path javaHome,
             Cas cas,
             Path cacheRoot) throws IOException {
 
@@ -150,6 +153,7 @@ public final class TestCommand implements Callable<Integer> {
                 .outputDir(outputDir)
                 .release(release)
                 .extraOptions(javacArgs)
+                .javaHome(javaHome)
                 .build();
         String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));

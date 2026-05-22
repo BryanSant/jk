@@ -4,13 +4,17 @@ package dev.buildjk.compat;
 import java.util.Locale;
 
 /**
- * The build tools jk knows how to download and exec on the user's behalf
- * (PRD §24.1). Each tool carries its display name and the POSIX/Windows
+ * External tools jk knows how to download and exec on the user's behalf:
+ * Maven / Gradle for the {@code jk mvn} / {@code jk gradle} passthroughs
+ * (PRD §24.1), and the Kotlin compiler distribution that
+ * {@code SubprocessKotlincStrategy} drives. Each tool carries its slug
+ * (the directory under {@code ~/.jk/tools/}) and the POSIX/Windows
  * binary names under {@code <home>/bin/}.
  */
 public enum BuildTool {
     MAVEN("maven", "mvn", "mvn.cmd"),
-    GRADLE("gradle", "gradle", "gradle.bat");
+    GRADLE("gradle", "gradle", "gradle.bat"),
+    KOTLIN("kotlin", "kotlinc", "kotlinc.bat");
 
     private final String slug;
     private final String posixBinary;

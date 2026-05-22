@@ -22,8 +22,8 @@ class KotlincDriverTest {
                 fun greet(): String = "hello"
                 """);
 
-        KotlincDriver.KotlincResult result = new KotlincDriver().compile(
-                KotlincDriver.KotlincRequest.builder()
+        KotlincResult result = new KotlincDriver().compile(
+                KotlincRequest.builder()
                         .sources(List.of(src))
                         .outputDir(tempDir.resolve("out"))
                         .jvmTarget(21)
@@ -40,8 +40,8 @@ class KotlincDriverTest {
         Path src = tempDir.resolve("Broken.kt");
         Files.writeString(src, "package example fun bad( = ");
 
-        KotlincDriver.KotlincResult result = new KotlincDriver().compile(
-                KotlincDriver.KotlincRequest.builder()
+        KotlincResult result = new KotlincDriver().compile(
+                KotlincRequest.builder()
                         .sources(List.of(src))
                         .outputDir(tempDir.resolve("out"))
                         .jvmTarget(21)
@@ -79,8 +79,8 @@ class KotlincDriverTest {
                 fun useIt(): String = Greeter.greet()
                 """);
 
-        KotlincDriver.KotlincResult result = new KotlincDriver().compile(
-                KotlincDriver.KotlincRequest.builder()
+        KotlincResult result = new KotlincDriver().compile(
+                KotlincRequest.builder()
                         .sources(List.of(consumer))
                         .classpath(List.of(libOut))
                         .outputDir(tempDir.resolve("k-out"))
@@ -94,7 +94,7 @@ class KotlincDriverTest {
 
     @Test
     void result_error_lines_collected() {
-        KotlincDriver.KotlincResult result = new KotlincDriver.KotlincResult(
+        KotlincResult result = new KotlincResult(
                 false, "error: foo\nwarning: bar\nerror: baz\n");
         assertThat(result.errorLines()).containsExactly("error: foo", "error: baz");
     }

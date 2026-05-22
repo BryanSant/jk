@@ -8,6 +8,8 @@ import dev.buildjk.compile.CompileResult;
 import dev.buildjk.compile.JarPackager;
 import dev.buildjk.compile.JavacDriver;
 import dev.buildjk.compile.KotlincDriver;
+import dev.buildjk.compile.KotlincRequest;
+import dev.buildjk.compile.KotlincResult;
 import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.hocon.WorkspaceClasspath;
 import dev.buildjk.hocon.WorkspaceLocator;
@@ -112,6 +114,8 @@ public final class BuildCommand implements Callable<Integer> {
 
         List<Path> ktSources = CheckCommand.collectKotlinSources(dir);
 
+        java.nio.file.Path javaHome = CompileToolchain.resolveJavaHome(dir);
+
         if (!sources.isEmpty()) {
             CompileRequest request = CompileRequest.builder()
                     .sources(sources)
@@ -119,6 +123,7 @@ public final class BuildCommand implements Callable<Integer> {
                     .outputDir(classes)
                     .release(release)
                     .extraOptions(javacArgs)
+                    .javaHome(javaHome)
                     .build();
             String taskId = "compile-main";
             String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
@@ -147,12 +152,14 @@ public final class BuildCommand implements Callable<Integer> {
         if (!ktSources.isEmpty()) {
             List<Path> kotlincCp = new ArrayList<>(classpath);
             kotlincCp.add(classes);
-            KotlincDriver.KotlincResult ktResult = new KotlincDriver().compile(
-                    KotlincDriver.KotlincRequest.builder()
+            java.nio.file.Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
+            KotlincResult ktResult = new KotlincDriver().compile(
+                    KotlincRequest.builder()
                             .sources(ktSources)
                             .classpath(kotlincCp)
                             .outputDir(classes)
                             .jvmTarget(CheckCommand.kotlinJvmTarget(release))
+                            .kotlinHome(kotlinHome)
                             .build());
             if (!ktResult.success()) {
                 System.err.print(ktResult.output());

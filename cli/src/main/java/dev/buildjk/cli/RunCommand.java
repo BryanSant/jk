@@ -165,6 +165,7 @@ public final class RunCommand implements Callable<Integer> {
                 .outputDir(classesDir)
                 .release(release)
                 .extraOptions(header.javacOptions())
+                .javaHome(CompileToolchain.resolveJavaHome(script.toAbsolutePath().getParent()))
                 .build();
         return new JavacDriver().compile(request);
     }

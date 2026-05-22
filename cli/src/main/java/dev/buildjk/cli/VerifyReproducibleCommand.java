@@ -107,6 +107,7 @@ public final class VerifyReproducibleCommand implements Callable<Integer> {
                     .classpath(classpath)
                     .outputDir(classesOut)
                     .release(release)
+                    .javaHome(CompileToolchain.resolveJavaHome(projectDir))
                     .build());
             if (!result.success()) {
                 throw new IOException("scratch rebuild failed: see compile diagnostics");

@@ -7,6 +7,8 @@ import dev.buildjk.compile.CompileRequest;
 import dev.buildjk.compile.CompileResult;
 import dev.buildjk.compile.JavacDriver;
 import dev.buildjk.compile.KotlincDriver;
+import dev.buildjk.compile.KotlincRequest;
+import dev.buildjk.compile.KotlincResult;
 import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
@@ -88,6 +90,7 @@ public final class CheckCommand implements Callable<Integer> {
         int release = parseReleaseFromJdk(project.project().jdk());
 
         Path scratch = Files.createTempDirectory("jk-check-");
+        Path javaHome = CompileToolchain.resolveJavaHome(dir);
         try {
             if (!javaSources.isEmpty()) {
                 CompileRequest request = CompileRequest.builder()
@@ -96,6 +99,7 @@ public final class CheckCommand implements Callable<Integer> {
                         .outputDir(scratch)
                         .release(release)
                         .extraOptions(profile == null ? List.of() : profile.javacArgs())
+                        .javaHome(javaHome)
                         .build();
                 CompileResult result = new JavacDriver().compile(request);
                 for (CompileResult.Diagnostic d : result.diagnostics()) {
@@ -106,12 +110,14 @@ public final class CheckCommand implements Callable<Integer> {
             if (!ktSources.isEmpty()) {
                 List<Path> kotlincCp = new ArrayList<>(classpath);
                 kotlincCp.add(scratch);
-                KotlincDriver.KotlincResult result = new KotlincDriver().compile(
-                        KotlincDriver.KotlincRequest.builder()
+                Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
+                KotlincResult result = new KotlincDriver().compile(
+                        KotlincRequest.builder()
                                 .sources(ktSources)
                                 .classpath(kotlincCp)
                                 .outputDir(scratch)
                                 .jvmTarget(kotlinJvmTarget(release))
+                                .kotlinHome(kotlinHome)
                                 .build());
                 if (!result.success()) {
                     System.err.print(result.output());

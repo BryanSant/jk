@@ -19,7 +19,8 @@ public record CompileRequest(
         List<Path> classpath,
         Path outputDir,
         int release,
-        List<String> extraOptions) {
+        List<String> extraOptions,
+        Path javaHome) {
 
     public CompileRequest {
         Objects.requireNonNull(sources, "sources");
@@ -31,6 +32,14 @@ public record CompileRequest(
         if (release < 8) {
             throw new IllegalArgumentException("release must be >= 8, got: " + release);
         }
+        // javaHome nullable: the subprocess strategy falls back to
+        // System.getProperty("java.home") when null.
+    }
+
+    /** Back-compat constructor (no explicit javaHome — strategy picks one). */
+    public CompileRequest(List<Path> sources, List<Path> classpath, Path outputDir,
+                          int release, List<String> extraOptions) {
+        this(sources, classpath, outputDir, release, extraOptions, null);
     }
 
     public static Builder builder() {
@@ -47,15 +56,17 @@ public record CompileRequest(
         private Path outputDir;
         private int release = 25;
         private List<String> extraOptions = List.of();
+        private Path javaHome;
 
         public Builder sources(List<Path> sources) { this.sources = sources; return this; }
         public Builder classpath(List<Path> classpath) { this.classpath = classpath; return this; }
         public Builder outputDir(Path outputDir) { this.outputDir = outputDir; return this; }
         public Builder release(int release) { this.release = release; return this; }
         public Builder extraOptions(List<String> extraOptions) { this.extraOptions = extraOptions; return this; }
+        public Builder javaHome(Path javaHome) { this.javaHome = javaHome; return this; }
 
         public CompileRequest build() {
-            return new CompileRequest(sources, classpath, outputDir, release, extraOptions);
+            return new CompileRequest(sources, classpath, outputDir, release, extraOptions, javaHome);
         }
     }
 }
