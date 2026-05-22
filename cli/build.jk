@@ -5,7 +5,7 @@ project {
   artifact = "jk-cli"
   version  = "0.6.0-SNAPSHOT"
   jdk      = "25"
-  bin      = "jk"
+  main     = "dev.buildjk.cli.Jk"
 }
 
 dependencies.main {

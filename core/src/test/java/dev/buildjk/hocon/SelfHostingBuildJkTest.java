@@ -48,9 +48,10 @@ class SelfHostingBuildJkTest {
     }
 
     @Test
-    void cli_module_declares_a_bin_and_an_image_main_class() throws Exception {
+    void cli_module_declares_a_main_class_and_image_main_class() throws Exception {
         BuildJk cli = BuildJkParser.parse(REPO.resolve("cli/build.jk"));
-        assertThat(cli.project().bin()).isEqualTo("jk");
+        assertThat(cli.project().main()).isEqualTo("dev.buildjk.cli.Jk");
+        assertThat(cli.project().isRunnable()).isTrue();
         // The cli module is the application entrypoint; it depends on every
         // other module via dependencies.main.
         List<String> mainModules = cli.dependencies().of(Scope.MAIN).stream()

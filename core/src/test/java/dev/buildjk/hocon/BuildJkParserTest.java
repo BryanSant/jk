@@ -58,4 +58,60 @@ class BuildJkParserTest {
                 .isInstanceOf(BuildJkParseException.class)
                 .hasMessageContaining("version");
     }
+
+    @Test
+    void parses_main_shadow_native_and_language() {
+        String hocon = """
+                project {
+                  group    = "com.example"
+                  artifact = "widget"
+                  version  = "0.1.0"
+                  jdk      = "25"
+                  language = "kotlin"
+                  main     = "com.example.App"
+                  shadow   = true
+                  native   = true
+                }
+                """;
+        BuildJk parsed = BuildJkParser.parse(hocon);
+        assertThat(parsed.project().main()).isEqualTo("com.example.App");
+        assertThat(parsed.project().shadow()).isTrue();
+        assertThat(parsed.project().nativeImage()).isTrue();
+        assertThat(parsed.project().language()).isEqualTo("kotlin");
+        assertThat(parsed.project().isRunnable()).isTrue();
+    }
+
+    @Test
+    void defaults_when_new_fields_absent() {
+        String hocon = """
+                project {
+                  group    = "com.example"
+                  artifact = "widget"
+                  version  = "0.1.0"
+                }
+                """;
+        BuildJk parsed = BuildJkParser.parse(hocon);
+        assertThat(parsed.project().main()).isNull();
+        assertThat(parsed.project().shadow()).isFalse();
+        assertThat(parsed.project().nativeImage()).isFalse();
+        assertThat(parsed.project().language()).isEqualTo("java");
+        assertThat(parsed.project().isRunnable()).isFalse();
+    }
+
+    @Test
+    @SuppressWarnings("deprecation")
+    void deprecated_bin_field_still_parses_and_marks_runnable() {
+        String hocon = """
+                project {
+                  group    = "com.example"
+                  artifact = "widget"
+                  version  = "0.1.0"
+                  bin      = "widget"
+                }
+                """;
+        BuildJk parsed = BuildJkParser.parse(hocon);
+        assertThat(parsed.project().bin()).isEqualTo("widget");
+        assertThat(parsed.project().main()).isNull();
+        assertThat(parsed.project().isRunnable()).isTrue();
+    }
 }

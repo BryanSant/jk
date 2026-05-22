@@ -65,7 +65,31 @@ public record BuildJk(
         return Optional.ofNullable(workspace);
     }
 
-    public record Project(String group, String artifact, String version, String jdk, String bin) {
+    /**
+     * The {@code project { ... }} block of a {@code build.jk}.
+     *
+     * <p>Fields:
+     * <ul>
+     *   <li>{@code main} — fully qualified main class of a runnable project,
+     *       or {@code null} for a library.</li>
+     *   <li>{@code shadow} — bundle an all-in-one (shadow / fat) jar.</li>
+     *   <li>{@code nativeImage} — wire a GraalVM native-image build. Stored
+     *       under HOCON key {@code native}.</li>
+     *   <li>{@code language} — primary source language; one of {@code "java"}
+     *       or {@code "kotlin"}. Defaults to {@code "java"} when absent.</li>
+     *   <li>{@code bin} — <strong>deprecated</strong> alias of {@code main}
+     *       retained only so the parser can accept legacy {@code build.jk}
+     *       files during the migration window. New code constructs a
+     *       {@code Project} via the 4-arg, 5-arg, or 8-arg constructors
+     *       (all leave {@code bin == null}); only the HOCON parser populates
+     *       it when an old-style {@code bin = ...} key is parsed. To be
+     *       removed in a future release.</li>
+     * </ul>
+     */
+    public record Project(String group, String artifact, String version, String jdk,
+                          String main, boolean shadow, boolean nativeImage, String language,
+                          @Deprecated(forRemoval = true) String bin) {
+
         public Project {
             Objects.requireNonNull(group, "group");
             Objects.requireNonNull(artifact, "artifact");
@@ -73,11 +97,44 @@ public record BuildJk(
             if (group.isBlank()) throw new IllegalArgumentException("project.group must not be blank");
             if (artifact.isBlank()) throw new IllegalArgumentException("project.artifact must not be blank");
             if (version.isBlank()) throw new IllegalArgumentException("project.version must not be blank");
+            if (language == null || language.isBlank()) language = "java";
         }
 
-        /** Back-compat constructor without {@code bin}. */
+        /** Back-compat constructor — no main, no shadow, no native, default language. */
         public Project(String group, String artifact, String version, String jdk) {
-            this(group, artifact, version, jdk, null);
+            this(group, artifact, version, jdk, null, false, false, "java", null);
+        }
+
+        /**
+         * Back-compat constructor that lets the legacy {@code bin} field through.
+         * Callers should migrate to the canonical constructor; this exists so the
+         * HOCON parser can preserve the legacy semantic during the migration window.
+         *
+         * @deprecated Use the canonical constructor and pass {@code main} instead.
+         */
+        @Deprecated(forRemoval = true)
+        public Project(String group, String artifact, String version, String jdk, String bin) {
+            this(group, artifact, version, jdk, null, false, false, "java", bin);
+        }
+
+        /**
+         * Whether this project produces an executable application. True when an
+         * explicit {@code main} class is set, or when the deprecated {@code bin}
+         * field was present in the source {@code build.jk} (legacy runnable).
+         */
+        public boolean isRunnable() {
+            return main != null || bin != null;
+        }
+
+        /**
+         * @deprecated Replaced by {@link #main()}. Returns {@code null} for any
+         *     {@code Project} not constructed from a legacy {@code build.jk} that
+         *     used the {@code bin} key. To be removed in a future release.
+         */
+        @Override
+        @Deprecated(forRemoval = true)
+        public String bin() {
+            return bin;
         }
     }
 

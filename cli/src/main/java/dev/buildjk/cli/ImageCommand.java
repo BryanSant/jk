@@ -40,7 +40,7 @@ public final class ImageCommand implements Callable<Integer> {
     Path directory;
 
     @Option(names = "--main",
-            description = "Main class to set as the image entrypoint. Default: image.main-class or project.bin.")
+            description = "Main class to set as the image entrypoint. Default: image.main-class or project.main.")
     String mainClass;
 
     @Option(names = "--registry",

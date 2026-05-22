@@ -32,6 +32,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Loads {@code build.jk} (HOCON) into a {@link BuildJk}.
@@ -51,6 +52,9 @@ public final class BuildJkParser {
     private static final ConfigParseOptions OPTIONS = ConfigParseOptions.defaults()
             .setSyntax(ConfigSyntax.CONF)
             .setAllowMissing(false);
+
+    /** Guards the one-time {@code bin}-without-{@code main} deprecation warning. */
+    private static final AtomicBoolean BIN_DEPRECATION_WARNED = new AtomicBoolean(false);
 
     private BuildJkParser() {}
 
@@ -212,8 +216,16 @@ public final class BuildJkParser {
         String artifact = requireString(project, "artifact", "project.artifact");
         String version = requireString(project, "version", "project.version");
         String jdk = project.hasPath("jdk") ? project.getString("jdk") : null;
+        String main = project.hasPath("main") ? project.getString("main") : null;
+        boolean shadow = project.hasPath("shadow") && project.getBoolean("shadow");
+        boolean nativeImage = project.hasPath("native") && project.getBoolean("native");
+        String language = project.hasPath("language") ? project.getString("language") : "java";
         String bin = project.hasPath("bin") ? project.getString("bin") : null;
-        return new BuildJk.Project(group, artifact, version, jdk, bin);
+        if (bin != null && main == null && BIN_DEPRECATION_WARNED.compareAndSet(false, true)) {
+            System.err.println("warning: build.jk uses deprecated 'bin' field; rename to 'main'");
+        }
+        return new BuildJk.Project(group, artifact, version, jdk,
+                main, shadow, nativeImage, language, bin);
     }
 
     private static BuildJk.Dependencies parseDependencies(Config root) {

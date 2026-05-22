@@ -58,6 +58,16 @@ public final class BuildJkRenderer {
         sb.append("  artifact = ").append(quote(p.artifact())).append('\n');
         sb.append("  version  = ").append(quote(p.version())).append('\n');
         sb.append("  jdk      = ").append(quote(p.jdk())).append('\n');
+        sb.append("  language = ").append(quote(p.language())).append('\n');
+        if (p.main() != null) {
+            sb.append("  main     = ").append(quote(p.main())).append('\n');
+        }
+        if (p.shadow()) {
+            sb.append("  shadow   = true\n");
+        }
+        if (p.nativeImage()) {
+            sb.append("  native   = true\n");
+        }
         sb.append("}\n");
     }
 

@@ -33,8 +33,34 @@ class BuildJkRendererTest {
                   artifact = "widget"
                   version  = "1.0.0"
                   jdk      = "21"
+                  language = "java"
                 }
                 """);
+    }
+
+    @Test
+    void renders_main_shadow_and_native_when_set() {
+        BuildJk model = new BuildJk(
+                new BuildJk.Project("com.example", "widget", "1.0.0", "21",
+                        "com.example.App", true, true, "kotlin", null),
+                BuildJk.Dependencies.empty());
+        String out = BuildJkRenderer.render(model);
+        assertThat(out).contains("language = \"kotlin\"");
+        assertThat(out).contains("main     = \"com.example.App\"");
+        assertThat(out).contains("shadow   = true");
+        assertThat(out).contains("native   = true");
+        assertThat(out).doesNotContain("bin");
+    }
+
+    @Test
+    void renderer_never_emits_deprecated_bin_field() {
+        // Construct via the deprecated 5-arg ctor (mimicking what the parser
+        // does when an old build.jk uses `bin = ...`). The renderer must not
+        // round-trip it back out — `bin` is dead from the writer's POV.
+        @SuppressWarnings("deprecation")
+        var project = new BuildJk.Project("com.example", "widget", "1.0.0", "21", "jk");
+        String out = BuildJkRenderer.render(new BuildJk(project, BuildJk.Dependencies.empty()));
+        assertThat(out).doesNotContain("bin");
     }
 
     @Test
