@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.lock;
 
+import dev.buildjk.model.Scope;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -46,6 +48,16 @@ public final class LockfileWriter {
             }
             if (pkg.path() != null) {
                 out.append("path     = ").append(quote(pkg.path())).append('\n');
+            }
+            if (!pkg.scopes().isEmpty()) {
+                List<Scope> sortedScopes = new ArrayList<>(pkg.scopes());
+                sortedScopes.sort(Comparator.naturalOrder());
+                out.append("scopes   = [");
+                for (int i = 0; i < sortedScopes.size(); i++) {
+                    if (i > 0) out.append(", ");
+                    out.append(quote(sortedScopes.get(i).canonical()));
+                }
+                out.append("]\n");
             }
             if (!pkg.deps().isEmpty()) {
                 List<String> deps = new ArrayList<>(pkg.deps());

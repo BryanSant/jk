@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.lock;
 
+import dev.buildjk.model.Scope;
 import org.tomlj.Toml;
 import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
@@ -43,9 +44,10 @@ public final class LockfileReader {
             throw new IllegalArgumentException("jk.lock is missing required key `version`");
         }
         int lockVersion = lockVersionLong.intValue();
-        if (lockVersion != Lockfile.CURRENT_VERSION) {
+        if (lockVersion < Lockfile.MIN_SUPPORTED_VERSION || lockVersion > Lockfile.CURRENT_VERSION) {
             throw new IllegalArgumentException(
-                    "jk.lock schema version " + lockVersion + " is not supported (this jk reads v" + Lockfile.CURRENT_VERSION + ")");
+                    "jk.lock schema version " + lockVersion + " is not supported (this jk reads v"
+                            + Lockfile.MIN_SUPPORTED_VERSION + "-v" + Lockfile.CURRENT_VERSION + ")");
         }
         String generatedBy = requireString(result, "generated-by");
         String resolutionAlgorithm = requireString(result, "resolution-algorithm");
@@ -67,6 +69,20 @@ public final class LockfileReader {
         String source = requireString(table, "source");
         String checksum = table.getString("checksum");
         String path = table.getString("path");
+
+        List<Scope> scopes = new ArrayList<>();
+        TomlArray scopesArray = table.getArray("scopes");
+        if (scopesArray != null) {
+            for (int i = 0; i < scopesArray.size(); i++) {
+                String name2 = scopesArray.getString(i);
+                scopes.add(Scope.valueOf(name2.toUpperCase()));
+            }
+        }
+        if (scopes.isEmpty()) {
+            // v4 compatibility: untagged packages default to MAIN.
+            scopes.add(Scope.MAIN);
+        }
+
         List<String> deps = new ArrayList<>();
         TomlArray depsArray = table.getArray("deps");
         if (depsArray != null) {
@@ -74,7 +90,7 @@ public final class LockfileReader {
                 deps.add(depsArray.getString(i));
             }
         }
-        return new Lockfile.Package(name, version, source, checksum, path, deps);
+        return new Lockfile.Package(name, version, source, checksum, path, scopes, deps);
     }
 
     private static String requireString(TomlParseResult result, String key) {

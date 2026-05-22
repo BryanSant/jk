@@ -68,42 +68,45 @@ public final class TestCommand implements Callable<Integer> {
                 ? cacheDir
                 : Path.of(System.getProperty("user.home"), ".jk", "cache");
         Cas cas = new Cas(cache);
-        List<Path> lockClasspath = new ClasspathResolver(cas).classpathFor(lock);
+        ClasspathResolver classpathResolver = new ClasspathResolver(cas);
+        List<Path> compileMainCp = classpathResolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
+        List<Path> compileTestCp = classpathResolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST);
+        List<Path> testRuntimeCp = classpathResolver.classpathFor(lock, ClasspathResolver.TEST);
         int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
 
         Path target = dir.resolve("target");
         Path mainClasses = target.resolve("classes");
         Path testClasses = target.resolve("test-classes");
 
-        // 1. Compile main sources.
+        // 1. Compile main sources (main + provided scope on the classpath).
         boolean ok = compileWithCache(
                 "compile-main",
                 dir.resolve("src/main/java"),
                 mainClasses,
-                lockClasspath,
+                compileMainCp,
                 release, cas, cache);
         if (!ok) return 1;
 
-        // 2. Compile test sources. Classpath = main classes + lockfile deps.
+        // 2. Compile test sources (main classes + main + provided + test scope).
         Path srcTest = dir.resolve("src/test/java");
         if (CheckCommand.collectJavaSources(srcTest).isEmpty()) {
             System.out.println("jk test: no test sources in src/test/java");
             return 0;
         }
-        List<Path> testCompileClasspath = new ArrayList<>();
-        testCompileClasspath.add(mainClasses);
-        testCompileClasspath.addAll(lockClasspath);
+        List<Path> compileTestFullCp = new ArrayList<>();
+        compileTestFullCp.add(mainClasses);
+        compileTestFullCp.addAll(compileTestCp);
         ok = compileWithCache(
                 "compile-test",
                 srcTest, testClasses,
-                testCompileClasspath,
+                compileTestFullCp,
                 release, cas, cache);
         if (!ok) return 1;
 
-        // 3. Run JUnit Platform.
+        // 3. Run JUnit Platform on the test-runtime classpath (main + runtime + test).
         List<Path> runtimeClasspath = new ArrayList<>();
         runtimeClasspath.add(mainClasses);
-        runtimeClasspath.addAll(lockClasspath);
+        runtimeClasspath.addAll(testRuntimeCp);
         JUnitLauncher.Result result = new JUnitLauncher().run(testClasses, runtimeClasspath);
 
         System.out.println("Tests: " + result.succeeded() + " passed, "

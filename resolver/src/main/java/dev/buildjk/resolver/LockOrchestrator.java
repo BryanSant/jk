@@ -11,25 +11,31 @@ import dev.buildjk.repo.RepoGroup;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * Composes the resolver pipeline end-to-end: parsed {@link BuildJk} ->
  * {@link Resolution} -> artifact downloads -> {@link Lockfile}.
  *
- * <p>v0.1 scope: resolves the {@link Scope#MAIN} declared deps only.
- * Test / runtime / provided scopes get their own resolution passes once
- * we wire {@code jk test} and the runtime-classpath story. POM-only
- * artifacts (parents declared as deps, BOMs at compile scope) leave
- * {@code checksum} {@code null} rather than fail the lock.
- *
- * <p>Multi-repo first-hit-wins per PRD §7.5: artifacts are fetched from
- * declared repos in order, and the lockfile's {@code source} field
- * records the repo that actually served the artifact.
+ * <p>One resolution pass over the union of all scope roots. After the
+ * solver returns, BFS the resolved graph from each scope's declared
+ * roots independently to tag every package with the scopes whose roots
+ * reach it. Downstream {@link dev.buildjk.compile.ClasspathResolver}
+ * filters by scope so test deps don't pollute the main classpath.
  */
 public final class LockOrchestrator {
+
+    private static final List<Scope> SCOPES =
+            List.of(Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST);
 
     private final RepoGroup repos;
     private final Resolver resolver;
@@ -50,12 +56,9 @@ public final class LockOrchestrator {
     }
 
     public Lockfile lock(BuildJk project, String jkVersion) throws IOException, InterruptedException {
-        // Lock main + runtime + provided + test deps in a single pass. v0.2's
-        // jk.lock doesn't yet track scope per package, so jk test pulls
-        // junit-jupiter from the same lock the runtime classpath uses.
-        // Per-scope tagging lands with the v0.3 lockfile schema bump.
+        // Single resolution over the union of all declared scopes.
         LinkedHashMap<String, Dependency> deduped = new LinkedHashMap<>();
-        for (Scope scope : List.of(Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST)) {
+        for (Scope scope : SCOPES) {
             for (Dependency dep : project.dependencies().of(scope)) {
                 deduped.putIfAbsent(dep.module(), dep);
             }
@@ -63,7 +66,20 @@ public final class LockOrchestrator {
         List<Dependency> declared = new ArrayList<>(deduped.values());
         Resolution resolution = resolver.resolve(declared);
 
-        // Fallback source string used when no repo could serve the artifact.
+        // For each scope, BFS the resolution graph from that scope's declared
+        // roots to figure out which packages it actually drags in.
+        Map<String, EnumSet<Scope>> tagsByModule = new HashMap<>();
+        for (Scope scope : SCOPES) {
+            Set<String> rootModules = new HashSet<>();
+            for (Dependency d : project.dependencies().of(scope)) {
+                rootModules.add(d.module());
+            }
+            if (rootModules.isEmpty()) continue;
+            for (String module : reachableFrom(rootModules, resolution)) {
+                tagsByModule.computeIfAbsent(module, k -> EnumSet.noneOf(Scope.class)).add(scope);
+            }
+        }
+
         MavenRepo first = repos.repos().getFirst();
         String fallbackSource = first.name() + "+" + first.baseUrl();
 
@@ -83,12 +99,15 @@ public final class LockOrchestrator {
                 checksum = "sha256:" + hit.fetched().sha256();
             }
 
+            EnumSet<Scope> tags = tagsByModule.getOrDefault(mod.module(), EnumSet.of(Scope.MAIN));
+
             packages.add(new Lockfile.Package(
                     mod.module(),
                     mod.version(),
                     source,
                     checksum,
                     null,
+                    new ArrayList<>(tags),
                     mod.deps()));
         }
 
@@ -97,5 +116,22 @@ public final class LockOrchestrator {
                 "jk " + jkVersion,
                 Lockfile.RESOLUTION_ALGORITHM,
                 packages);
+    }
+
+    /** BFS through the resolved graph starting from {@code roots}. */
+    private static Set<String> reachableFrom(Set<String> roots, Resolution resolution) {
+        Set<String> visited = new HashSet<>();
+        Deque<String> queue = new ArrayDeque<>(roots);
+        while (!queue.isEmpty()) {
+            String module = queue.poll();
+            if (!visited.add(module)) continue;
+            Resolution.ResolvedModule resolved = resolution.modules().get(module);
+            if (resolved == null) continue;
+            for (String depRef : resolved.deps()) {
+                int at = depRef.indexOf('@');
+                queue.add(at > 0 ? depRef.substring(0, at) : depRef);
+            }
+        }
+        return visited;
     }
 }

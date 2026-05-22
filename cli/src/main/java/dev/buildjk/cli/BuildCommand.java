@@ -75,7 +75,8 @@ public final class BuildCommand implements Callable<Integer> {
                 ? cacheDir
                 : Path.of(System.getProperty("user.home"), ".jk", "cache");
         Cas cas = new Cas(cache);
-        List<Path> classpath = new ClasspathResolver(cas).classpathFor(lock);
+        List<Path> classpath = new ClasspathResolver(cas)
+                .classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
         int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
 
         if (!sources.isEmpty()) {
