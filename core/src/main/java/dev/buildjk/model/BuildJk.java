@@ -65,7 +65,7 @@ public record BuildJk(
         return Optional.ofNullable(workspace);
     }
 
-    public record Project(String group, String artifact, String version, String jdk) {
+    public record Project(String group, String artifact, String version, String jdk, String bin) {
         public Project {
             Objects.requireNonNull(group, "group");
             Objects.requireNonNull(artifact, "artifact");
@@ -73,6 +73,11 @@ public record BuildJk(
             if (group.isBlank()) throw new IllegalArgumentException("project.group must not be blank");
             if (artifact.isBlank()) throw new IllegalArgumentException("project.artifact must not be blank");
             if (version.isBlank()) throw new IllegalArgumentException("project.version must not be blank");
+        }
+
+        /** Back-compat constructor without {@code bin}. */
+        public Project(String group, String artifact, String version, String jdk) {
+            this(group, artifact, version, jdk, null);
         }
     }
 

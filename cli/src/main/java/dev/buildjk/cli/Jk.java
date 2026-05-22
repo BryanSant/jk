@@ -45,6 +45,7 @@ import picocli.CommandLine.Command;
                 DenyCommand.class,
                 ImageCommand.class,
                 NativeImageCommand.class,
+                VerifyReproducibleCommand.class,
         })
 public final class Jk implements Runnable {
 

@@ -212,7 +212,8 @@ public final class BuildJkParser {
         String artifact = requireString(project, "artifact", "project.artifact");
         String version = requireString(project, "version", "project.version");
         String jdk = project.hasPath("jdk") ? project.getString("jdk") : null;
-        return new BuildJk.Project(group, artifact, version, jdk);
+        String bin = project.hasPath("bin") ? project.getString("bin") : null;
+        return new BuildJk.Project(group, artifact, version, jdk, bin);
     }
 
     private static BuildJk.Dependencies parseDependencies(Config root) {

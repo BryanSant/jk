@@ -1,0 +1,25 @@
+# Candidate root build.jk for the jk project (PRD §13, impl-plan §7).
+# Generated as part of v0.9 self-hosting preparation; Gradle (build.gradle.kts,
+# settings.gradle.kts) remains the canonical build through v1.1 per impl-plan
+# §7 step 4.
+
+project {
+  group    = "dev.buildjk"
+  artifact = "jk"
+  version  = "0.6.0-SNAPSHOT"
+  jdk      = "25"
+}
+
+workspace {
+  members = [
+    "core",
+    "io",
+    "resolver",
+    "toolchain",
+    "engine",
+    "supply-chain",
+    "image",
+    "compat",
+    "cli"
+  ]
+}

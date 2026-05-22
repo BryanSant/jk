@@ -1,0 +1,19 @@
+# Candidate v0.9 self-hosting manifest for :resolver.
+
+project {
+  group    = "dev.buildjk"
+  artifact = "jk-resolver"
+  version  = "0.6.0-SNAPSHOT"
+  jdk      = "25"
+}
+
+dependencies.main {
+  "dev.buildjk:jk-core" = "=0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-io"   = "=0.6.0-SNAPSHOT"
+}
+
+dependencies.test {
+  "org.junit.jupiter:junit-jupiter"            = "=6.1.0"
+  "org.junit.platform:junit-platform-launcher" = "=6.1.0"
+  "org.assertj:assertj-core"                   = "=3.27.7"
+}

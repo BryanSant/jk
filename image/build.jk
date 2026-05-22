@@ -1,0 +1,20 @@
+# Candidate v0.9 self-hosting manifest for :image.
+
+project {
+  group    = "dev.buildjk"
+  artifact = "jk-image"
+  version  = "0.6.0-SNAPSHOT"
+  jdk      = "25"
+}
+
+dependencies.main {
+  "dev.buildjk:jk-core"                  = "=0.6.0-SNAPSHOT"
+  "dev.buildjk:jk-io"                    = "=0.6.0-SNAPSHOT"
+  "com.google.cloud.tools:jib-core"      = "=0.28.1"
+}
+
+dependencies.test {
+  "org.junit.jupiter:junit-jupiter"            = "=6.1.0"
+  "org.junit.platform:junit-platform-launcher" = "=6.1.0"
+  "org.assertj:assertj-core"                   = "=3.27.7"
+}
