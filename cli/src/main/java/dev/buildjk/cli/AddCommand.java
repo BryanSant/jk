@@ -4,7 +4,6 @@ package dev.buildjk.cli;
 import dev.buildjk.hocon.BuildJkEditor;
 import dev.buildjk.model.Coordinate;
 import dev.buildjk.model.Scope;
-import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -29,8 +28,18 @@ public final class AddCommand implements Callable<Integer> {
             description = "group:artifact:version (or group:artifact -- version required in v0.1)")
     String coord;
 
-    @ArgGroup
-    ScopeFlags scopeFlags;
+    // Mutually-exclusive scope flags. Default (no flag) = main.
+    // Inlined rather than wrapped in @ArgGroup because picocli-codegen 4.7.7
+    // can't generate native-image reflection config for that pattern; we
+    // enforce exclusivity by hand below.
+    @Option(names = "--test",      description = "Test scope.")
+    boolean test;
+    @Option(names = "--runtime",   description = "Runtime scope.")
+    boolean runtime;
+    @Option(names = "--provided",  description = "Provided scope.")
+    boolean provided;
+    @Option(names = "--processor", description = "Annotation processor scope.")
+    boolean processor;
 
     @Option(names = {"-C", "--directory"},
             description = "Project directory. Default: current directory.")
@@ -51,7 +60,17 @@ public final class AddCommand implements Callable<Integer> {
             System.err.println("jk add: " + e.getMessage());
             return 64; // EX_USAGE
         }
-        Scope scope = scopeFlags != null ? scopeFlags.scope() : Scope.MAIN;
+        int selected = (test ? 1 : 0) + (runtime ? 1 : 0)
+                + (provided ? 1 : 0) + (processor ? 1 : 0);
+        if (selected > 1) {
+            System.err.println("jk add: --test / --runtime / --provided / --processor are mutually exclusive");
+            return 64;
+        }
+        Scope scope = test ? Scope.TEST
+                : runtime ? Scope.RUNTIME
+                : provided ? Scope.PROVIDED
+                : processor ? Scope.PROCESSOR
+                : Scope.MAIN;
         String original = Files.readString(file);
         String updated;
         try {
@@ -71,19 +90,4 @@ public final class AddCommand implements Callable<Integer> {
         return 0;
     }
 
-    /** Mutually-exclusive scope flags. Default (no flag) = main. */
-    static final class ScopeFlags {
-        @Option(names = "--test",      description = "Test scope.")      boolean test;
-        @Option(names = "--runtime",   description = "Runtime scope.")   boolean runtime;
-        @Option(names = "--provided",  description = "Provided scope.")  boolean provided;
-        @Option(names = "--processor", description = "Annotation processor scope.") boolean processor;
-
-        Scope scope() {
-            if (test) return Scope.TEST;
-            if (runtime) return Scope.RUNTIME;
-            if (provided) return Scope.PROVIDED;
-            if (processor) return Scope.PROCESSOR;
-            return Scope.MAIN;
-        }
-    }
 }

@@ -3,7 +3,6 @@ package dev.buildjk.cli;
 
 import dev.buildjk.hocon.BuildJkEditor;
 import dev.buildjk.model.Scope;
-import picocli.CommandLine.ArgGroup;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -28,8 +27,15 @@ public final class RemoveCommand implements Callable<Integer> {
             description = "group:artifact (or group:artifact:version; the version is ignored)")
     String moduleArg;
 
-    @ArgGroup
-    AddCommand.ScopeFlags scopeFlags;
+    // Inlined scope flags (see AddCommand for the picocli-codegen rationale).
+    @Option(names = "--test",      description = "Test scope.")
+    boolean test;
+    @Option(names = "--runtime",   description = "Runtime scope.")
+    boolean runtime;
+    @Option(names = "--provided",  description = "Provided scope.")
+    boolean provided;
+    @Option(names = "--processor", description = "Annotation processor scope.")
+    boolean processor;
 
     @Option(names = {"-C", "--directory"},
             description = "Project directory. Default: current directory.")
@@ -44,7 +50,17 @@ public final class RemoveCommand implements Callable<Integer> {
             return 2;
         }
         String module = moduleOnly(moduleArg);
-        Scope scope = scopeFlags != null ? scopeFlags.scope() : Scope.MAIN;
+        int selected = (test ? 1 : 0) + (runtime ? 1 : 0)
+                + (provided ? 1 : 0) + (processor ? 1 : 0);
+        if (selected > 1) {
+            System.err.println("jk remove: --test / --runtime / --provided / --processor are mutually exclusive");
+            return 64;
+        }
+        Scope scope = test ? Scope.TEST
+                : runtime ? Scope.RUNTIME
+                : provided ? Scope.PROVIDED
+                : processor ? Scope.PROCESSOR
+                : Scope.MAIN;
         String original = Files.readString(file);
         String updated;
         try {
