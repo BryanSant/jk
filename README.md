@@ -1,4 +1,5 @@
-<img width="850" height="280" alt="jk" src="https://github.com/user-attachments/assets/2c31f675-7fbf-4326-aa73-93d8fa05a9d5" />
+<img width="1024" height="274" alt="jk" src="https://github.com/user-attachments/assets/5cf7e056-1eed-43f7-9c6f-67bbb8d1e807" />
+
 
 # jk
 
