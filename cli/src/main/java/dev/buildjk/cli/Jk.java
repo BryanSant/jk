@@ -33,13 +33,30 @@ import picocli.CommandLine.Command;
                 JdkCommand.class,
                 EnvCommand.class,
                 ShellCommand.class,
+                MvnCommand.class,
+                GradleCommand.class,
         })
 public final class Jk implements Runnable {
 
     public static final String VERSION = "0.1.0-SNAPSHOT";
 
     public static void main(String[] args) {
-        System.exit(new CommandLine(new Jk()).execute(args));
+        System.exit(newCommandLine().execute(args));
+    }
+
+    /** Picocli root, configured for jk's passthrough semantics. */
+    public static CommandLine newCommandLine() {
+        CommandLine cmd = new CommandLine(new Jk());
+        // mvn/gradle are passthroughs: jk owns flags listed before the tool's
+        // own args, everything else (including unknown `-X` style flags) gets
+        // forwarded as positional to the child process.
+        for (String name : new String[] {"mvn", "gradle"}) {
+            CommandLine sub = cmd.getSubcommands().get(name);
+            if (sub != null) {
+                sub.setUnmatchedOptionsArePositionalParams(true);
+            }
+        }
+        return cmd;
     }
 
     @Override
