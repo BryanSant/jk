@@ -11,6 +11,7 @@ import dev.buildjk.repo.RepoGroup;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 
@@ -49,7 +50,17 @@ public final class LockOrchestrator {
     }
 
     public Lockfile lock(BuildJk project, String jkVersion) throws IOException, InterruptedException {
-        List<Dependency> declared = project.dependencies().of(Scope.MAIN);
+        // Lock main + runtime + provided + test deps in a single pass. v0.2's
+        // jk.lock doesn't yet track scope per package, so jk test pulls
+        // junit-jupiter from the same lock the runtime classpath uses.
+        // Per-scope tagging lands with the v0.3 lockfile schema bump.
+        LinkedHashMap<String, Dependency> deduped = new LinkedHashMap<>();
+        for (Scope scope : List.of(Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST)) {
+            for (Dependency dep : project.dependencies().of(scope)) {
+                deduped.putIfAbsent(dep.module(), dep);
+            }
+        }
+        List<Dependency> declared = new ArrayList<>(deduped.values());
         Resolution resolution = resolver.resolve(declared);
 
         // Fallback source string used when no repo could serve the artifact.
