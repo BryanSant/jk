@@ -28,6 +28,7 @@ public class PubGrubSolver {
     protected final PackageSource source;
     protected final PartialSolution solution = new PartialSolution();
     protected final List<Incompatibility> incompatibilities = new ArrayList<>();
+    protected String rootPkg;
 
     public PubGrubSolver(PackageSource source) {
         this.source = Objects.requireNonNull(source, "source");
@@ -40,6 +41,7 @@ public class PubGrubSolver {
      */
     public Map<String, String> solve(String rootPkg, String rootVersion, List<Term> rootDeps)
             throws IOException, InterruptedException {
+        this.rootPkg = rootPkg;
         Term rootTerm = Term.positive(rootPkg, VersionSet.exact(rootVersion));
 
         // Each declared dep becomes inco [+root@v, ¬dep] — "if root@v then dep must
@@ -90,11 +92,113 @@ public class PubGrubSolver {
     }
 
     /**
-     * Stage 2 stub: throw on first real conflict. Stage 3 replaces this
-     * with the PubGrub conflict-resolution + backtracking algorithm.
+     * Conflict resolution + backtracking, per PubGrub paper §6.
+     *
+     * <p>Walks back through the partial solution to find the assignment that
+     * "caused" the conflict, derives a new incompatibility by resolving the
+     * conflict against that assignment's cause, and repeats until either the
+     * new incompatibility is unresolvable (failure) or has only one term at
+     * the current decision level. In the latter case we backtrack to the
+     * decision level at which the new incompatibility becomes almost-
+     * satisfied, then propagation on it derives the saved constraint.
      */
     protected void handleConflict(Incompatibility inco) {
-        throw new UnsatisfiableException(inco);
+        Incompatibility current = inco;
+        while (true) {
+            if (isFailure(current)) {
+                throw new UnsatisfiableException(current);
+            }
+
+            ResolutionStep step = computeResolutionStep(current);
+
+            if (step.mostRecent instanceof PartialSolution.Assignment.Decision
+                    || step.previousLevel < step.mostRecent.decisionLevel()) {
+                solution.backtrack(step.previousLevel);
+                addIncompatibility(current);
+                return;
+            }
+
+            Incompatibility prior =
+                    ((PartialSolution.Assignment.Derivation) step.mostRecent).cause();
+            current = resolveIncompatibilities(current, prior, step.mostRecentTerm);
+        }
+    }
+
+    /** Located the most-recent assignment that satisfies any term in {@code inco}. */
+    private record ResolutionStep(
+            Term mostRecentTerm,
+            PartialSolution.Assignment mostRecent,
+            int previousLevel) {}
+
+    private ResolutionStep computeResolutionStep(Incompatibility inco) {
+        PartialSolution.Assignment mostRecent = null;
+        Term mostRecentTerm = null;
+        int previousLevel = 1;
+        for (Term term : inco.terms()) {
+            PartialSolution.Assignment satisfier = findSatisfier(term);
+            if (mostRecent == null || satisfier.globalIndex() > mostRecent.globalIndex()) {
+                if (mostRecent != null) {
+                    previousLevel = Math.max(previousLevel, mostRecent.decisionLevel());
+                }
+                mostRecent = satisfier;
+                mostRecentTerm = term;
+            } else if (satisfier.decisionLevel() != mostRecent.decisionLevel()) {
+                previousLevel = Math.max(previousLevel, satisfier.decisionLevel());
+            }
+        }
+        return new ResolutionStep(mostRecentTerm, mostRecent, previousLevel);
+    }
+
+    /**
+     * Earliest assignment that, together with strictly-earlier assignments
+     * about the same package, forces {@code term}'s effective version set
+     * to be a superset of the current allowed range. Throws if {@code term}
+     * isn't actually satisfied by the current solution (a programmer error).
+     */
+    private PartialSolution.Assignment findSatisfier(Term term) {
+        VersionSet accumulated = VersionSet.ALL;
+        for (PartialSolution.Assignment a : solution.assignments()) {
+            if (!a.term().pkg().equals(term.pkg())) continue;
+            accumulated = accumulated.intersect(a.term().effectiveVersions());
+            if (accumulated.subsetOf(term.effectiveVersions())) {
+                return a;
+            }
+        }
+        throw new IllegalStateException(
+                "term not actually satisfied: " + term + " in " + solution.assignments());
+    }
+
+    /**
+     * Standard CDCL resolution: remove the shared {@code pivot} term from
+     * both incompatibilities, take the (deduplicated, intersected) union of
+     * the remaining terms, and record the derivation in the new
+     * incompatibility's cause.
+     */
+    private Incompatibility resolveIncompatibilities(
+            Incompatibility a, Incompatibility b, Term pivot) {
+        java.util.LinkedHashMap<String, Term> merged = new java.util.LinkedHashMap<>();
+        for (Incompatibility source : List.of(a, b)) {
+            for (Term term : source.terms()) {
+                if (term.pkg().equals(pivot.pkg())) continue;
+                merged.merge(term.pkg(), term, Term::intersect);
+            }
+        }
+        List<Term> survivors = new ArrayList<>();
+        for (Term t : merged.values()) {
+            if (!t.effectiveVersions().isEmpty()) survivors.add(t);
+        }
+        if (survivors.isEmpty()) {
+            // Resolved everything → root failure. Encode as a single
+            // unsatisfiable term so isFailure() recognizes it.
+            survivors = List.of(Term.positive(rootPkg, VersionSet.EMPTY));
+        }
+        return new Incompatibility(survivors, new Incompatibility.Cause.Derived(a, b));
+    }
+
+    private boolean isFailure(Incompatibility inco) {
+        if (inco.terms().isEmpty()) return true;
+        return inco.terms().size() == 1
+                && inco.terms().getFirst().pkg().equals(rootPkg);
     }
 
     // --- decisions ---------------------------------------------------------
