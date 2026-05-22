@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.buildjk.model;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class VersionSelectorTest {
+
+    @Test
+    void plain_version_is_caret_by_default() {
+        VersionSelector s = VersionSelector.parse("2.18.2");
+        assertThat(s).isInstanceOf(VersionSelector.Caret.class);
+        assertThat(((VersionSelector.Caret) s).version()).isEqualTo("2.18.2");
+    }
+
+    @Test
+    void equals_prefix_is_exact() {
+        VersionSelector s = VersionSelector.parse("=2.18.2");
+        assertThat(s).isInstanceOf(VersionSelector.Exact.class);
+        assertThat(((VersionSelector.Exact) s).version()).isEqualTo("2.18.2");
+    }
+
+    @Test
+    void tilde_prefix_is_tilde() {
+        VersionSelector s = VersionSelector.parse("~2.18.2");
+        assertThat(s).isInstanceOf(VersionSelector.Tilde.class);
+        assertThat(((VersionSelector.Tilde) s).version()).isEqualTo("2.18.2");
+    }
+
+    @Test
+    void range_with_comparators_is_range() {
+        VersionSelector s = VersionSelector.parse(">=2.18, <3");
+        assertThat(s).isInstanceOf(VersionSelector.Range.class);
+        assertThat(s.raw()).isEqualTo(">=2.18, <3");
+    }
+
+    @Test
+    void latest_keyword() {
+        VersionSelector s = VersionSelector.parse("latest");
+        assertThat(s).isInstanceOf(VersionSelector.Latest.class);
+    }
+}
