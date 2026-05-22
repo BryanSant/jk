@@ -65,9 +65,21 @@ public final class MavenPublisher {
     /**
      * Upload the artifact bundle for {@code project}. {@code artifacts}
      * carries the per-file payload — typically the main jar, the POM, and
-     * a sources jar. Each is sent alongside its four checksum files.
+     * a sources jar. Each is sent alongside its four checksum files. With
+     * no GPG signer, see {@link #publish(BuildJk.Project, Iterable, GpgSigner)}.
      */
     public Result publish(BuildJk.Project project, Iterable<Artifact> artifacts)
+            throws IOException, InterruptedException {
+        return publish(project, artifacts, null);
+    }
+
+    /**
+     * Same as {@link #publish(BuildJk.Project, Iterable)} but also emits a
+     * detached ASCII-armored {@code .asc} signature for every artifact
+     * when {@code signer} is non-null (PRD §21.2). The {@code .asc} file
+     * gets its own checksum quartet so verifiers can detect tampering.
+     */
+    public Result publish(BuildJk.Project project, Iterable<Artifact> artifacts, GpgSigner signer)
             throws IOException, InterruptedException {
         Map<String, Integer> results = new LinkedHashMap<>();
         String groupPath = project.group().replace('.', '/');
@@ -76,19 +88,25 @@ public final class MavenPublisher {
 
         for (Artifact a : artifacts) {
             String relPath = prefix + stem + a.filenameSuffix();
-            put(relPath, a.body(), contentType(a.filenameSuffix()), results);
+            putWithChecksums(relPath, a.body(), contentType(a.filenameSuffix()), results);
 
-            Checksums.Set sums = Checksums.of(a.body());
-            put(relPath + ".md5",    sums.md5().getBytes(StandardCharsets.US_ASCII),
-                    "text/plain", results);
-            put(relPath + ".sha1",   sums.sha1().getBytes(StandardCharsets.US_ASCII),
-                    "text/plain", results);
-            put(relPath + ".sha256", sums.sha256().getBytes(StandardCharsets.US_ASCII),
-                    "text/plain", results);
-            put(relPath + ".sha512", sums.sha512().getBytes(StandardCharsets.US_ASCII),
-                    "text/plain", results);
+            if (signer != null) {
+                byte[] asc = signer.signArmored(a.body());
+                putWithChecksums(relPath + ".asc", asc, contentType(".asc"), results);
+            }
         }
         return new Result(results);
+    }
+
+    private void putWithChecksums(String relPath, byte[] body, String contentType,
+                                  Map<String, Integer> results)
+            throws IOException, InterruptedException {
+        put(relPath, body, contentType, results);
+        Checksums.Set sums = Checksums.of(body);
+        put(relPath + ".md5",    sums.md5().getBytes(StandardCharsets.US_ASCII),    "text/plain", results);
+        put(relPath + ".sha1",   sums.sha1().getBytes(StandardCharsets.US_ASCII),   "text/plain", results);
+        put(relPath + ".sha256", sums.sha256().getBytes(StandardCharsets.US_ASCII), "text/plain", results);
+        put(relPath + ".sha512", sums.sha512().getBytes(StandardCharsets.US_ASCII), "text/plain", results);
     }
 
     private void put(String relPath, byte[] body, String contentType, Map<String, Integer> out)

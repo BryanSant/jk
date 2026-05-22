@@ -133,6 +133,42 @@ class PublishCommandTest {
     }
 
     @Test
+    void signed_publish_uploads_asc_files(@TempDir Path tempDir) throws Exception {
+        // Generate a throwaway secret key via the supply-chain test fixture.
+        var key = dev.buildjk.publish.GpgTestFixture.generate(tempDir, "pass");
+
+        writeBuildJk(tempDir);
+        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+
+        int exit = run("publish",
+                "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--no-sources",
+                "--sign",
+                "--key-file", key.secretKeyFile().toString(),
+                "--key-passphrase", "pass");
+        assertThat(exit).isEqualTo(0);
+
+        String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
+        assertThat(received).containsKeys(stem + ".jar.asc", stem + ".pom.asc");
+        assertThat(new String(received.get(stem + ".jar.asc"), StandardCharsets.UTF_8))
+                .startsWith("-----BEGIN PGP SIGNATURE-----");
+    }
+
+    @Test
+    void sign_without_key_file_errors(@TempDir Path tempDir) throws Exception {
+        writeBuildJk(tempDir);
+        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+        int exit = run("publish",
+                "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--no-sources",
+                "--sign");
+        // CommandLine propagates the runtime error as a non-zero exit.
+        assertThat(exit).isNotZero();
+    }
+
+    @Test
     void dry_run_makes_no_http_requests(@TempDir Path tempDir) throws Exception {
         writeBuildJk(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));

@@ -3,6 +3,7 @@ package dev.buildjk.cli;
 
 import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.model.BuildJk;
+import dev.buildjk.publish.GpgSigner;
 import dev.buildjk.publish.MavenPublisher;
 import dev.buildjk.publish.PublishablePom;
 import dev.buildjk.publish.SourcesJar;
@@ -61,6 +62,17 @@ public final class PublishCommand implements Callable<Integer> {
             description = "Assemble and print the upload plan without making HTTP requests.")
     boolean dryRun;
 
+    @Option(names = "--sign", description = "Emit a detached .asc GPG signature for every artifact.")
+    boolean sign;
+
+    @Option(names = "--key-file",
+            description = "Path to the GPG secret key (armored or binary). Required with --sign.")
+    Path keyFile;
+
+    @Option(names = "--key-passphrase",
+            description = "Passphrase for the secret key, or via JK_GPG_PASSPHRASE env.")
+    String keyPassphrase;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
         Path projectDir = directory != null
@@ -104,6 +116,8 @@ public final class PublishCommand implements Callable<Integer> {
         String user = username != null ? username : System.getenv("PUBLISH_USER");
         String pass = password != null ? password : System.getenv("PUBLISH_PASSWORD");
 
+        GpgSigner signer = loadSignerIfRequested();
+
         if (dryRun) {
             String groupPath = project.project().group().replace('.', '/');
             String prefix = repoUrl + (repoUrl.toString().endsWith("/") ? "" : "/")
@@ -115,16 +129,30 @@ public final class PublishCommand implements Callable<Integer> {
                         + project.project().version() + a.filenameSuffix();
                 System.out.println("  " + name + " (" + a.body().length + " bytes)");
                 System.out.println("  " + name + ".md5 / .sha1 / .sha256 / .sha512");
+                if (signer != null) {
+                    System.out.println("  " + name + ".asc + four checksums");
+                }
             }
             return 0;
         }
 
         MavenPublisher publisher = new MavenPublisher(repoUrl, user, pass);
-        MavenPublisher.Result result = publisher.publish(project.project(), artifacts);
+        MavenPublisher.Result result = publisher.publish(project.project(), artifacts, signer);
 
         System.out.println("Published " + project.project().group() + ":"
                 + project.project().artifact() + ":" + project.project().version()
-                + " (" + result.statusByPath().size() + " files)");
+                + " (" + result.statusByPath().size() + " files"
+                + (signer != null ? ", signed" : "") + ")");
         return result.allOk() ? 0 : 1;
+    }
+
+    private GpgSigner loadSignerIfRequested() throws IOException {
+        if (!sign) return null;
+        if (keyFile == null) {
+            throw new IllegalArgumentException(
+                    "jk publish --sign requires --key-file <path>.");
+        }
+        String pass = keyPassphrase != null ? keyPassphrase : System.getenv("JK_GPG_PASSPHRASE");
+        return GpgSigner.fromKeyFile(keyFile, pass == null ? new char[0] : pass.toCharArray());
     }
 }

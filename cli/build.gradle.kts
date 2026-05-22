@@ -19,6 +19,8 @@ dependencies {
     implementation(project(":compat"))
 
     implementation(libs.picocli)
+
+    testImplementation(testFixtures(project(":supply-chain")))
 }
 
 application {

@@ -91,6 +91,29 @@ class MavenPublisherTest {
     }
 
     @Test
+    void signed_publish_emits_asc_files_with_checksums(@org.junit.jupiter.api.io.TempDir
+                                                       java.nio.file.Path tempDir) throws Exception {
+        var key = GpgTestFixture.generate(tempDir, "test-pass");
+        GpgSigner signer = GpgSigner.fromKeyFile(key.secretKeyFile(), "test-pass".toCharArray());
+
+        MavenPublisher publisher = new MavenPublisher(base, null, null);
+        BuildJk.Project project = new BuildJk.Project("com.example", "widget", "1.0.0", "21");
+        byte[] jarBytes = "fake-jar".getBytes(StandardCharsets.UTF_8);
+        publisher.publish(project, List.of(
+                new MavenPublisher.Artifact(".jar", jarBytes)), signer);
+
+        String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
+        assertThat(received).containsKeys(
+                stem + ".jar", stem + ".jar.asc",
+                stem + ".jar.asc.md5", stem + ".jar.asc.sha1",
+                stem + ".jar.asc.sha256", stem + ".jar.asc.sha512");
+
+        // The .asc file is a valid PGP signature over the jar bytes.
+        byte[] sig = received.get(stem + ".jar.asc");
+        GpgTestFixture.verifyDetached(jarBytes, sig, key.publicRing());
+    }
+
+    @Test
     void server_error_aborts_with_io_exception() {
         MavenPublisher publisher = new MavenPublisher(base, null, null);
         failNext = true;
