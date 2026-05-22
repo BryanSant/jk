@@ -52,8 +52,10 @@ class ReadSideIntegrationTest {
 
     @Test
     void full_pipeline_init_add_lock_tree_why_sync(@TempDir Path tempDir) throws Exception {
+        registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         registerJar("com.foo", "leaf", "1.0", "leaf-jar".getBytes(StandardCharsets.UTF_8));
+        registerMetadata("com.foo", "root", "1.0");
         registerPom("com.foo", "root", "1.0", pom("com.foo", "root", "1.0", """
                 <dependency>
                   <groupId>com.foo</groupId>
@@ -115,6 +117,7 @@ class ReadSideIntegrationTest {
 
     @Test
     void fetch_accepts_offline_prepare_flag(@TempDir Path tempDir) throws Exception {
+        registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
 
@@ -159,6 +162,16 @@ class ReadSideIntegrationTest {
         String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
                 + "/" + artifact + "-" + version + ".jar";
         served.put(path, bytes);
+    }
+
+    private void registerMetadata(String group, String artifact, String... versions) {
+        StringBuilder xml = new StringBuilder("<metadata><groupId>").append(group)
+                .append("</groupId><artifactId>").append(artifact)
+                .append("</artifactId><versioning><versions>");
+        for (String v : versions) xml.append("<version>").append(v).append("</version>");
+        xml.append("</versions></versioning></metadata>");
+        served.put("/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
+                xml.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     private static String pom(String group, String artifact, String version, String depBlock) {

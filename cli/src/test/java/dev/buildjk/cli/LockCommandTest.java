@@ -52,10 +52,12 @@ class LockCommandTest {
     @Test
     void init_add_lock_full_pipeline(@TempDir Path tempDir) throws Exception {
         // Set up a tiny graph: root -> leaf.
+        registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         byte[] leafJar = "leaf-jar-bytes".getBytes(StandardCharsets.UTF_8);
         registerJar("com.foo", "leaf", "1.0", leafJar);
 
+        registerMetadata("com.foo", "root", "1.0");
         registerPom("com.foo", "root", "1.0", pom("com.foo", "root", "1.0", """
                 <dependency>
                   <groupId>com.foo</groupId>
@@ -139,6 +141,16 @@ class LockCommandTest {
         String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
                 + "/" + artifact + "-" + version + ".jar";
         served.put(path, bytes);
+    }
+
+    private void registerMetadata(String group, String artifact, String... versions) {
+        StringBuilder xml = new StringBuilder("<metadata><groupId>").append(group)
+                .append("</groupId><artifactId>").append(artifact)
+                .append("</artifactId><versioning><versions>");
+        for (String v : versions) xml.append("<version>").append(v).append("</version>");
+        xml.append("</versions></versioning></metadata>");
+        served.put("/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
+                xml.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     private static String pom(String group, String artifact, String version, String depBlock) {

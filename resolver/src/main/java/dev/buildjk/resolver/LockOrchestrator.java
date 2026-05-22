@@ -6,7 +6,6 @@ import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Coordinate;
 import dev.buildjk.model.Dependency;
 import dev.buildjk.model.Scope;
-import dev.buildjk.repo.EffectivePomBuilder;
 import dev.buildjk.repo.MavenRepo;
 
 import java.io.IOException;
@@ -31,8 +30,13 @@ public final class LockOrchestrator {
 
     public LockOrchestrator(MavenRepo repo) {
         this.repo = Objects.requireNonNull(repo, "repo");
-        EffectivePomBuilder pomBuilder = new EffectivePomBuilder(repo);
-        this.resolver = new NaiveResolver(pomBuilder);
+        this.resolver = new PubGrubResolver(repo);
+    }
+
+    /** Test seam: lets tests inject a different resolver (e.g. NaiveResolver). */
+    LockOrchestrator(MavenRepo repo, Resolver resolver) {
+        this.repo = Objects.requireNonNull(repo, "repo");
+        this.resolver = Objects.requireNonNull(resolver, "resolver");
     }
 
     public Lockfile lock(BuildJk project, String jkVersion) throws IOException, InterruptedException {
