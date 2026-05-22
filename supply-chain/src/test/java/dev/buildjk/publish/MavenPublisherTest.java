@@ -100,7 +100,7 @@ class MavenPublisherTest {
         BuildJk.Project project = new BuildJk.Project("com.example", "widget", "1.0.0", "21");
         byte[] jarBytes = "fake-jar".getBytes(StandardCharsets.UTF_8);
         publisher.publish(project, List.of(
-                new MavenPublisher.Artifact(".jar", jarBytes)), signer);
+                new MavenPublisher.Artifact(".jar", jarBytes)), SigningOptions.of(signer));
 
         String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
         assertThat(received).containsKeys(
@@ -111,6 +111,45 @@ class MavenPublisherTest {
         // The .asc file is a valid PGP signature over the jar bytes.
         byte[] sig = received.get(stem + ".jar.asc");
         GpgTestFixture.verifyDetached(jarBytes, sig, key.publicRing());
+    }
+
+    @Test
+    void sigstore_signer_emits_sigstore_bundle_files() throws Exception {
+        // Fake sigstore signer returns a deterministic bundle for unit testing.
+        SigstoreSigner fake = bytes -> ("{\"fake-bundle-over-" + new String(bytes,
+                StandardCharsets.UTF_8) + "\"}").getBytes(StandardCharsets.UTF_8);
+
+        MavenPublisher publisher = new MavenPublisher(base, null, null);
+        BuildJk.Project project = new BuildJk.Project("com.example", "widget", "1.0.0", "21");
+        byte[] jarBytes = "fake-jar".getBytes(StandardCharsets.UTF_8);
+        publisher.publish(project,
+                List.of(new MavenPublisher.Artifact(".jar", jarBytes)),
+                new SigningOptions(null, fake));
+
+        String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
+        assertThat(received).containsKeys(
+                stem + ".jar.sigstore",
+                stem + ".jar.sigstore.md5", stem + ".jar.sigstore.sha1",
+                stem + ".jar.sigstore.sha256", stem + ".jar.sigstore.sha512");
+        assertThat(new String(received.get(stem + ".jar.sigstore"), StandardCharsets.UTF_8))
+                .isEqualTo("{\"fake-bundle-over-fake-jar\"}");
+    }
+
+    @Test
+    void both_gpg_and_sigstore_emit_both_sidecars(@org.junit.jupiter.api.io.TempDir
+                                                  java.nio.file.Path tempDir) throws Exception {
+        var key = GpgTestFixture.generate(tempDir, "p");
+        GpgSigner gpg = GpgSigner.fromKeyFile(key.secretKeyFile(), "p".toCharArray());
+        SigstoreSigner fake = bytes -> "{}".getBytes(StandardCharsets.UTF_8);
+
+        MavenPublisher publisher = new MavenPublisher(base, null, null);
+        publisher.publish(
+                new BuildJk.Project("com.example", "widget", "1.0.0", "21"),
+                List.of(new MavenPublisher.Artifact(".jar", new byte[] {1, 2, 3})),
+                new SigningOptions(gpg, fake));
+
+        String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
+        assertThat(received).containsKeys(stem + ".jar.asc", stem + ".jar.sigstore");
     }
 
     @Test

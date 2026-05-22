@@ -181,6 +181,23 @@ class PublishCommandTest {
         assertThat(received).isEmpty();
     }
 
+    @Test
+    void sigstore_dry_run_does_not_call_fulcio(@TempDir Path tempDir) throws Exception {
+        // --dry-run must not attempt to initialise the keyless signer, which
+        // would otherwise need network + OIDC. Same goes for --sign without a
+        // key file — dry-run is the path users hit while exploring the verb.
+        writeBuildJk(tempDir);
+        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+
+        int exit = run("publish",
+                "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--sigstore",
+                "--dry-run");
+        assertThat(exit).isEqualTo(0);
+        assertThat(received).isEmpty();
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static void writeBuildJk(Path projectDir) throws IOException {

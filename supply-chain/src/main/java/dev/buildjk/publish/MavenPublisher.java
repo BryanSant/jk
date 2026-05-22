@@ -63,24 +63,32 @@ public final class MavenPublisher {
     }
 
     /**
-     * Upload the artifact bundle for {@code project}. {@code artifacts}
-     * carries the per-file payload — typically the main jar, the POM, and
-     * a sources jar. Each is sent alongside its four checksum files. With
-     * no GPG signer, see {@link #publish(BuildJk.Project, Iterable, GpgSigner)}.
+     * Upload {@code artifacts} for {@code project} with no signing — every
+     * artifact gets its four checksum files but no {@code .asc} or
+     * {@code .sigstore} sidecar. See
+     * {@link #publish(BuildJk.Project, Iterable, SigningOptions)} for the
+     * signed variant.
      */
     public Result publish(BuildJk.Project project, Iterable<Artifact> artifacts)
             throws IOException, InterruptedException {
-        return publish(project, artifacts, null);
+        return publish(project, artifacts, SigningOptions.none());
     }
 
     /**
-     * Same as {@link #publish(BuildJk.Project, Iterable)} but also emits a
-     * detached ASCII-armored {@code .asc} signature for every artifact
-     * when {@code signer} is non-null (PRD §21.2). The {@code .asc} file
-     * gets its own checksum quartet so verifiers can detect tampering.
+     * Upload {@code artifacts} for {@code project}. Per artifact:
+     * <ul>
+     *   <li>the artifact itself + four checksum files;</li>
+     *   <li>if {@link SigningOptions#gpg()} is set, a detached
+     *       ASCII-armored {@code .asc} signature + its four checksum files
+     *       (PRD §21.2);</li>
+     *   <li>if {@link SigningOptions#sigstore()} is set, a Sigstore Bundle
+     *       JSON {@code .sigstore} file + its four checksum files
+     *       (PRD §23.3).</li>
+     * </ul>
      */
-    public Result publish(BuildJk.Project project, Iterable<Artifact> artifacts, GpgSigner signer)
+    public Result publish(BuildJk.Project project, Iterable<Artifact> artifacts, SigningOptions signing)
             throws IOException, InterruptedException {
+        if (signing == null) signing = SigningOptions.none();
         Map<String, Integer> results = new LinkedHashMap<>();
         String groupPath = project.group().replace('.', '/');
         String prefix = groupPath + "/" + project.artifact() + "/" + project.version() + "/";
@@ -90,9 +98,13 @@ public final class MavenPublisher {
             String relPath = prefix + stem + a.filenameSuffix();
             putWithChecksums(relPath, a.body(), contentType(a.filenameSuffix()), results);
 
-            if (signer != null) {
-                byte[] asc = signer.signArmored(a.body());
+            if (signing.gpg() != null) {
+                byte[] asc = signing.gpg().signArmored(a.body());
                 putWithChecksums(relPath + ".asc", asc, contentType(".asc"), results);
+            }
+            if (signing.sigstore() != null) {
+                byte[] bundle = signing.sigstore().signBundle(a.body());
+                putWithChecksums(relPath + ".sigstore", bundle, contentType(".sigstore"), results);
             }
         }
         return new Result(results);
@@ -131,6 +143,7 @@ public final class MavenPublisher {
         if (suffix.endsWith(".jar")) return "application/java-archive";
         if (suffix.endsWith(".pom") || suffix.endsWith(".xml")) return "application/xml";
         if (suffix.endsWith(".asc")) return "application/pgp-signature";
+        if (suffix.endsWith(".sigstore") || suffix.endsWith(".json")) return "application/json";
         return "application/octet-stream";
     }
 

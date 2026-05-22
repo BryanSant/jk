@@ -4,8 +4,11 @@ package dev.buildjk.cli;
 import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.publish.GpgSigner;
+import dev.buildjk.publish.KeylessSigstoreSigner;
 import dev.buildjk.publish.MavenPublisher;
 import dev.buildjk.publish.PublishablePom;
+import dev.buildjk.publish.SigningOptions;
+import dev.buildjk.publish.SigstoreSigner;
 import dev.buildjk.publish.SourcesJar;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -73,6 +76,10 @@ public final class PublishCommand implements Callable<Integer> {
             description = "Passphrase for the secret key, or via JK_GPG_PASSPHRASE env.")
     String keyPassphrase;
 
+    @Option(names = "--sigstore",
+            description = "Sign each artifact with Sigstore keyless OIDC (.sigstore file).")
+    boolean sigstore;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
         Path projectDir = directory != null
@@ -116,8 +123,6 @@ public final class PublishCommand implements Callable<Integer> {
         String user = username != null ? username : System.getenv("PUBLISH_USER");
         String pass = password != null ? password : System.getenv("PUBLISH_PASSWORD");
 
-        GpgSigner signer = loadSignerIfRequested();
-
         if (dryRun) {
             String groupPath = project.project().group().replace('.', '/');
             String prefix = repoUrl + (repoUrl.toString().endsWith("/") ? "" : "/")
@@ -129,24 +134,33 @@ public final class PublishCommand implements Callable<Integer> {
                         + project.project().version() + a.filenameSuffix();
                 System.out.println("  " + name + " (" + a.body().length + " bytes)");
                 System.out.println("  " + name + ".md5 / .sha1 / .sha256 / .sha512");
-                if (signer != null) {
-                    System.out.println("  " + name + ".asc + four checksums");
-                }
+                if (sign) System.out.println("  " + name + ".asc + four checksums");
+                if (sigstore) System.out.println("  " + name + ".sigstore + four checksums");
             }
             return 0;
         }
 
-        MavenPublisher publisher = new MavenPublisher(repoUrl, user, pass);
-        MavenPublisher.Result result = publisher.publish(project.project(), artifacts, signer);
-
-        System.out.println("Published " + project.project().group() + ":"
-                + project.project().artifact() + ":" + project.project().version()
-                + " (" + result.statusByPath().size() + " files"
-                + (signer != null ? ", signed" : "") + ")");
-        return result.allOk() ? 0 : 1;
+        SigningOptions signing = buildSigningOptions();
+        try {
+            MavenPublisher publisher = new MavenPublisher(repoUrl, user, pass);
+            MavenPublisher.Result result = publisher.publish(project.project(), artifacts, signing);
+            System.out.println("Published " + project.project().group() + ":"
+                    + project.project().artifact() + ":" + project.project().version()
+                    + " (" + result.statusByPath().size() + " files"
+                    + (signing.isNoop() ? "" : ", signed") + ")");
+            return result.allOk() ? 0 : 1;
+        } finally {
+            closeSigningOptions(signing);
+        }
     }
 
-    private GpgSigner loadSignerIfRequested() throws IOException {
+    private SigningOptions buildSigningOptions() throws IOException {
+        GpgSigner gpg = loadGpgIfRequested();
+        SigstoreSigner sigstoreSigner = sigstore ? KeylessSigstoreSigner.sigstorePublic() : null;
+        return new SigningOptions(gpg, sigstoreSigner);
+    }
+
+    private GpgSigner loadGpgIfRequested() throws IOException {
         if (!sign) return null;
         if (keyFile == null) {
             throw new IllegalArgumentException(
@@ -154,5 +168,11 @@ public final class PublishCommand implements Callable<Integer> {
         }
         String pass = keyPassphrase != null ? keyPassphrase : System.getenv("JK_GPG_PASSPHRASE");
         return GpgSigner.fromKeyFile(keyFile, pass == null ? new char[0] : pass.toCharArray());
+    }
+
+    private static void closeSigningOptions(SigningOptions signing) {
+        if (signing.sigstore() instanceof AutoCloseable c) {
+            try { c.close(); } catch (Exception ignored) { /* best effort */ }
+        }
     }
 }
