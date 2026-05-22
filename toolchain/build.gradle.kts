@@ -9,6 +9,8 @@ description = "jk toolchain: JDK manager, scripts, tool envs"
 dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
+    // ToolResolver leans on NaiveResolver + EffectivePomBuilder for transitive deps.
+    implementation(project(":resolver"))
     // DiscoClient parses the foojay Disco JSON response.
     implementation(libs.jackson.databind)
     // JdkInstaller streams tar.gz natively instead of forking `tar`.
