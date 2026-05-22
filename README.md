@@ -1,9 +1,7 @@
 <img width="1024" height="274" alt="jk" src="https://github.com/user-attachments/assets/5cf7e056-1eed-43f7-9c6f-67bbb8d1e807" />
 
 
-# jk
-
-A modern build tool for Java and Kotlin.
+# jk - A modern build tool for Java and Kotlin.
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Java](https://img.shields.io/badge/Java-25-orange.svg)](https://openjdk.org/projects/jdk/25/)
