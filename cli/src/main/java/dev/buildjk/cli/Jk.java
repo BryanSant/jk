@@ -42,6 +42,7 @@ import picocli.CommandLine.Command;
                 RunCommand.class,
                 PublishCommand.class,
                 AuditCommand.class,
+                DenyCommand.class,
         })
 public final class Jk implements Runnable {
 
