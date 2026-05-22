@@ -11,6 +11,8 @@ import com.typesafe.config.ConfigValue;
 import com.typesafe.config.ConfigValueType;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Dependency;
+import dev.buildjk.model.GitRefSpec;
+import dev.buildjk.model.GitSource;
 import dev.buildjk.model.Feature;
 import dev.buildjk.model.Features;
 import dev.buildjk.model.Profile;
@@ -235,10 +237,65 @@ public final class BuildJkParser {
         for (Map.Entry<String, ConfigValue> entry : block.entrySet()) {
             String module = entry.getKey();
             ConfigValue value = entry.getValue();
-            VersionSelector selector = parseVersion(module, value, scope);
-            result.add(new Dependency(module, selector));
+            if (value.valueType() == ConfigValueType.OBJECT
+                    && ((ConfigObject) value).get("git") != null) {
+                result.add(parseGitDependency(module, (ConfigObject) value, scope));
+            } else {
+                VersionSelector selector = parseVersion(module, value, scope);
+                result.add(new Dependency(module, selector));
+            }
         }
         return result;
+    }
+
+    private static Dependency parseGitDependency(String module, ConfigObject obj, Scope scope) {
+        String urlRaw = stringField(obj, module, scope, "git");
+        String canonical = dev.buildjk.util.GitUrl.canonicalize(urlRaw);
+        GitRefSpec ref = parseGitRefSpec(obj, module, scope);
+        String path = optionalString(obj, "path");
+        boolean submodules = optionalBoolean(obj, "submodules", true);
+        boolean verifySigned = optionalBoolean(obj, "verify-signed", false);
+        GitSource source = new GitSource(canonical, urlRaw, ref, path, submodules, verifySigned);
+        return Dependency.git(module, source);
+    }
+
+    private static GitRefSpec parseGitRefSpec(ConfigObject obj, String module, Scope scope) {
+        String tag = optionalString(obj, "tag");
+        String branch = optionalString(obj, "branch");
+        String rev = optionalString(obj, "rev");
+        int set = (tag != null ? 1 : 0) + (branch != null ? 1 : 0) + (rev != null ? 1 : 0);
+        if (set == 0) {
+            throw new BuildJkParseException(
+                    "dependencies." + scope.canonical() + ".\"" + module
+                            + "\" git declaration must set one of `tag`, `branch`, or `rev`");
+        }
+        if (set > 1) {
+            throw new BuildJkParseException(
+                    "dependencies." + scope.canonical() + ".\"" + module
+                            + "\" git declaration must set exactly one of `tag`, `branch`, or `rev`");
+        }
+        if (tag != null) return new GitRefSpec.Tag(tag);
+        if (branch != null) return new GitRefSpec.Branch(branch);
+        return new GitRefSpec.Rev(rev);
+    }
+
+    private static String stringField(ConfigObject obj, String module, Scope scope, String field) {
+        ConfigValue v = obj.get(field);
+        if (v == null || v.valueType() != ConfigValueType.STRING) {
+            throw new BuildJkParseException(
+                    "dependencies." + scope.canonical() + ".\"" + module
+                            + "\" requires a string `" + field + "` field");
+        }
+        return (String) v.unwrapped();
+    }
+
+    private static boolean optionalBoolean(ConfigObject obj, String key, boolean defaultValue) {
+        ConfigValue v = obj.get(key);
+        if (v == null) return defaultValue;
+        if (v.valueType() != ConfigValueType.BOOLEAN) {
+            throw new BuildJkParseException("expected `" + key + "` to be a boolean");
+        }
+        return (Boolean) v.unwrapped();
     }
 
     private static VersionSelector parseVersion(String module, ConfigValue value, Scope scope) {

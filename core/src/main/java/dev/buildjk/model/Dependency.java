@@ -4,13 +4,15 @@ package dev.buildjk.model;
 import java.util.Objects;
 
 /**
- * A declared dependency in {@code build.jk}. v0.1 shape: module
- * ({@code group:artifact}) plus version selector.
+ * A declared dependency in {@code build.jk}. Either a Maven coord
+ * (module + version selector) or a git-sourced one (module + git source;
+ * the version is filled at resolve time from the repo's own build.jk).
  *
- * <p>Future fields (from-repo pin, classifier, features, target predicate,
- * git source) join as their respective subsystems come online.
+ * <p>For git deps the version field carries the synthetic marker
+ * {@code "git"} so the record's non-null invariant holds; consumers
+ * gate on {@link #isGit()} rather than reading the marker.
  */
-public record Dependency(String module, VersionSelector version) {
+public record Dependency(String module, VersionSelector version, GitSource gitSource) {
 
     public Dependency {
         Objects.requireNonNull(module, "module");
@@ -19,6 +21,20 @@ public record Dependency(String module, VersionSelector version) {
             throw new IllegalArgumentException(
                     "dependency module must be 'group:artifact' (got: " + module + ")");
         }
+    }
+
+    /** Maven-coord constructor (no git source). */
+    public Dependency(String module, VersionSelector version) {
+        this(module, version, null);
+    }
+
+    /** Git-sourced constructor; version is a synthetic marker. */
+    public static Dependency git(String module, GitSource source) {
+        return new Dependency(module, VersionSelector.parse("=git"), source);
+    }
+
+    public boolean isGit() {
+        return gitSource != null;
     }
 
     public String group() {
