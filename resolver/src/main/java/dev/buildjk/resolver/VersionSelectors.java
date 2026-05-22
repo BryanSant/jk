@@ -21,9 +21,62 @@ public final class VersionSelectors {
             case VersionSelector.Caret c -> caretRange(c.version());
             case VersionSelector.Exact e -> VersionSet.exact(e.version());
             case VersionSelector.Tilde t -> tildeRange(t.version());
-            case VersionSelector.Range r -> VersionSet.ALL; // TODO: parse Maven-style ranges
+            case VersionSelector.Range r -> parseRange(r.raw());
             case VersionSelector.Latest l -> VersionSet.ALL;
         };
+    }
+
+    /**
+     * Parse a range expression. Accepts both Maven-bracket syntax
+     * ({@code [1.0,2.0)}, {@code [1.0]}, {@code (,2.0]}) and a
+     * comma-separated comparator list ({@code ">=1.0, <2.0"}).
+     */
+    public static VersionSet parseRange(String spec) {
+        String trimmed = spec.trim();
+        if (trimmed.startsWith("[") || trimmed.startsWith("(")) {
+            return parseMavenBracketRange(trimmed);
+        }
+        VersionSet result = VersionSet.ALL;
+        for (String part : trimmed.split(",")) {
+            String token = part.trim();
+            if (token.isEmpty()) continue;
+            result = result.intersect(parseComparator(token));
+        }
+        return result;
+    }
+
+    static VersionSet parseMavenBracketRange(String spec) {
+        char open = spec.charAt(0);
+        char close = spec.charAt(spec.length() - 1);
+        if ((open != '[' && open != '(') || (close != ']' && close != ')')) {
+            throw new IllegalArgumentException("malformed Maven range: " + spec);
+        }
+        boolean minInclusive = open == '[';
+        boolean maxInclusive = close == ']';
+        String inner = spec.substring(1, spec.length() - 1);
+        int comma = inner.indexOf(',');
+        if (comma < 0) {
+            String only = inner.trim();
+            if (only.isEmpty()) return VersionSet.ALL;
+            return VersionSet.exact(only);
+        }
+        String minStr = inner.substring(0, comma).trim();
+        String maxStr = inner.substring(comma + 1).trim();
+        String min = minStr.isEmpty() ? null : minStr;
+        String max = maxStr.isEmpty() ? null : maxStr;
+        if (min == null && max == null) return VersionSet.ALL;
+        if (min == null) return VersionSet.lessThan(max, maxInclusive);
+        if (max == null) return VersionSet.atLeast(min, minInclusive);
+        return VersionSet.between(min, minInclusive, max, maxInclusive);
+    }
+
+    static VersionSet parseComparator(String spec) {
+        if (spec.startsWith(">=")) return VersionSet.atLeast(spec.substring(2).trim(), true);
+        if (spec.startsWith(">"))  return VersionSet.atLeast(spec.substring(1).trim(), false);
+        if (spec.startsWith("<=")) return VersionSet.lessThan(spec.substring(2).trim(), true);
+        if (spec.startsWith("<"))  return VersionSet.lessThan(spec.substring(1).trim(), false);
+        if (spec.startsWith("=")) return VersionSet.exact(spec.substring(1).trim());
+        return VersionSet.exact(spec);
     }
 
     /**

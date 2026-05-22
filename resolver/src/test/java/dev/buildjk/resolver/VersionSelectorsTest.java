@@ -52,4 +52,51 @@ class VersionSelectorsTest {
         VersionSet set = VersionSelectors.toVersionSet(new VersionSelector.Latest("latest"));
         assertThat(set.isAll()).isTrue();
     }
+
+    @Test
+    void parses_maven_bracket_range_inclusive_inclusive() {
+        VersionSet set = VersionSelectors.parseRange("[1.0,2.0]");
+        assertThat(set.contains("1.0")).isTrue();
+        assertThat(set.contains("1.5")).isTrue();
+        assertThat(set.contains("2.0")).isTrue();
+        assertThat(set.contains("2.1")).isFalse();
+    }
+
+    @Test
+    void parses_maven_bracket_range_exclusive_upper() {
+        VersionSet set = VersionSelectors.parseRange("[1.0,2.0)");
+        assertThat(set.contains("2.0")).isFalse();
+        assertThat(set.contains("1.9")).isTrue();
+    }
+
+    @Test
+    void parses_maven_bracket_exact() {
+        VersionSet set = VersionSelectors.parseRange("[1.0]");
+        assertThat(set.contains("1.0")).isTrue();
+        assertThat(set.contains("1.1")).isFalse();
+    }
+
+    @Test
+    void parses_open_lower_bound() {
+        VersionSet set = VersionSelectors.parseRange("(,2.0)");
+        assertThat(set.contains("0.1")).isTrue();
+        assertThat(set.contains("1.99")).isTrue();
+        assertThat(set.contains("2.0")).isFalse();
+    }
+
+    @Test
+    void parses_comparator_list() {
+        VersionSet set = VersionSelectors.parseRange(">=1.0, <2.0");
+        assertThat(set.contains("1.0")).isTrue();
+        assertThat(set.contains("1.5")).isTrue();
+        assertThat(set.contains("2.0")).isFalse();
+        assertThat(set.contains("0.9")).isFalse();
+    }
+
+    @Test
+    void range_selector_maps_to_parsed_versionset() {
+        VersionSet set = VersionSelectors.toVersionSet(new VersionSelector.Range(">=1.0, <2.0"));
+        assertThat(set.contains("1.5")).isTrue();
+        assertThat(set.contains("2.5")).isFalse();
+    }
 }
