@@ -3,12 +3,17 @@ package dev.buildjk.cli;
 
 import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.model.BuildJk;
+import dev.buildjk.publish.Checksums;
 import dev.buildjk.publish.GpgSigner;
 import dev.buildjk.publish.KeylessSigstoreSigner;
 import dev.buildjk.publish.MavenPublisher;
 import dev.buildjk.publish.PublishablePom;
 import dev.buildjk.publish.SigningOptions;
 import dev.buildjk.publish.SigstoreSigner;
+import dev.buildjk.lock.Lockfile;
+import dev.buildjk.lock.LockfileReader;
+import dev.buildjk.publish.Sbom;
+import dev.buildjk.publish.SlsaProvenance;
 import dev.buildjk.publish.SourcesJar;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -80,6 +85,14 @@ public final class PublishCommand implements Callable<Integer> {
             description = "Sign each artifact with Sigstore keyless OIDC (.sigstore file).")
     boolean sigstore;
 
+    @Option(names = "--slsa",
+            description = "Emit a SLSA v1 in-toto provenance statement (.intoto.json) for the main jar.")
+    boolean slsa;
+
+    @Option(names = "--sbom",
+            description = "Emit CycloneDX 1.6 (-cyclonedx.json) and SPDX 2.3 (-spdx.json) SBOMs.")
+    boolean sbom;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
         Path projectDir = directory != null
@@ -107,8 +120,9 @@ public final class PublishCommand implements Callable<Integer> {
             return 66;
         }
 
+        byte[] jarBytes = Files.readAllBytes(jar);
         List<MavenPublisher.Artifact> artifacts = new ArrayList<>();
-        artifacts.add(new MavenPublisher.Artifact(".jar", Files.readAllBytes(jar)));
+        artifacts.add(new MavenPublisher.Artifact(".jar", jarBytes));
 
         PublishablePom.Pom pom = PublishablePom.render(project, PublishablePom.Metadata.empty());
         artifacts.add(new MavenPublisher.Artifact(".pom",
@@ -118,6 +132,19 @@ public final class PublishCommand implements Callable<Integer> {
             Path srcRoot = projectDir.resolve("src/main/java");
             byte[] sourcesJar = SourcesJar.build(List.of(srcRoot));
             artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesJar));
+        }
+
+        if (slsa) {
+            artifacts.add(new MavenPublisher.Artifact(".intoto.json",
+                    buildSlsaProvenance(project.project(), jar.getFileName().toString(), jarBytes)));
+        }
+
+        if (sbom) {
+            Lockfile lock = loadLockfileIfPresent(projectDir);
+            artifacts.add(new MavenPublisher.Artifact("-cyclonedx.json",
+                    Sbom.cyclonedx(project, lock)));
+            artifacts.add(new MavenPublisher.Artifact("-spdx.json",
+                    Sbom.spdx(project, lock)));
         }
 
         String user = username != null ? username : System.getenv("PUBLISH_USER");
@@ -136,6 +163,10 @@ public final class PublishCommand implements Callable<Integer> {
                 System.out.println("  " + name + ".md5 / .sha1 / .sha256 / .sha512");
                 if (sign) System.out.println("  " + name + ".asc + four checksums");
                 if (sigstore) System.out.println("  " + name + ".sigstore + four checksums");
+                if (slsa && a.filenameSuffix().equals(".jar")) {
+                    System.out.println("  " + project.project().artifact() + "-"
+                            + project.project().version() + ".intoto.json + four checksums");
+                }
             }
             return 0;
         }
@@ -168,6 +199,30 @@ public final class PublishCommand implements Callable<Integer> {
         }
         String pass = keyPassphrase != null ? keyPassphrase : System.getenv("JK_GPG_PASSPHRASE");
         return GpgSigner.fromKeyFile(keyFile, pass == null ? new char[0] : pass.toCharArray());
+    }
+
+    private static Lockfile loadLockfileIfPresent(Path projectDir) throws IOException {
+        Path lockPath = projectDir.resolve("jk.lock");
+        return Files.exists(lockPath) ? LockfileReader.read(lockPath) : null;
+    }
+
+    private static byte[] buildSlsaProvenance(BuildJk.Project project, String jarFilename, byte[] jarBytes) {
+        java.time.Instant now = java.time.Instant.now();
+        SlsaProvenance.BuildContext ctx = new SlsaProvenance.BuildContext(
+                "https://github.com/buildjk/jk",
+                "https://buildjk.dev/jk-build/v1",
+                java.util.UUID.randomUUID().toString(),
+                now,
+                now,
+                java.util.Map.of("configRef", "build.jk"),
+                java.util.Map.of(
+                        "group", project.group(),
+                        "artifact", project.artifact(),
+                        "version", project.version(),
+                        "jdk", project.jdk()));
+        return SlsaProvenance.generate(
+                List.of(new SlsaProvenance.Subject(jarFilename, Checksums.sha256Hex(jarBytes))),
+                ctx);
     }
 
     private static void closeSigningOptions(SigningOptions signing) {

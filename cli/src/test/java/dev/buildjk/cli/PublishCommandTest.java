@@ -182,6 +182,52 @@ class PublishCommandTest {
     }
 
     @Test
+    void slsa_emits_intoto_provenance_for_the_main_jar(@TempDir Path tempDir) throws Exception {
+        writeBuildJk(tempDir);
+        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+
+        int exit = run("publish",
+                "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--no-sources",
+                "--slsa");
+        assertThat(exit).isEqualTo(0);
+
+        String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
+        assertThat(received).containsKey(stem + ".intoto.json");
+        String provenance = new String(received.get(stem + ".intoto.json"), StandardCharsets.UTF_8);
+        assertThat(provenance).contains("\"_type\":\"https://in-toto.io/Statement/v1\"");
+        assertThat(provenance).contains("\"predicateType\":\"https://slsa.dev/provenance/v1\"");
+        assertThat(provenance).contains("\"name\":\"widget-1.0.0.jar\"");
+    }
+
+    @Test
+    void sbom_emits_cyclonedx_and_spdx_sidecars(@TempDir Path tempDir) throws Exception {
+        writeBuildJk(tempDir);
+        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+
+        int exit = run("publish",
+                "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--no-sources",
+                "--sbom");
+        assertThat(exit).isEqualTo(0);
+
+        String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
+        assertThat(received).containsKeys(
+                stem + "-cyclonedx.json",
+                stem + "-cyclonedx.json.sha256",
+                stem + "-spdx.json",
+                stem + "-spdx.json.sha256");
+        assertThat(new String(received.get(stem + "-cyclonedx.json"), StandardCharsets.UTF_8))
+                .contains("\"bomFormat\":\"CycloneDX\"")
+                .contains("pkg:maven/com.example/widget@1.0.0");
+        assertThat(new String(received.get(stem + "-spdx.json"), StandardCharsets.UTF_8))
+                .contains("\"spdxVersion\":\"SPDX-2.3\"")
+                .contains("\"documentDescribes\":[\"SPDXRef-Package-Root\"]");
+    }
+
+    @Test
     void sigstore_dry_run_does_not_call_fulcio(@TempDir Path tempDir) throws Exception {
         // --dry-run must not attempt to initialise the keyless signer, which
         // would otherwise need network + OIDC. Same goes for --sign without a
