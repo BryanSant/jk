@@ -15,6 +15,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
@@ -36,6 +37,14 @@ public final class UpdateCommand implements Callable<Integer> {
     @Option(names = "--precise", paramLabel = "<coord>@<ver>",
             description = "Pin a single coord to a version for this update (not yet implemented).")
     String precise;
+
+    @Option(names = "--features", paramLabel = "<a,b,...>", split = ",",
+            description = "Activate the listed features in addition to defaults.")
+    List<String> features = List.of();
+
+    @Option(names = "--no-default-features",
+            description = "Don't activate the project's default features.")
+    boolean noDefaultFeatures;
 
     @Option(names = "--repo-url",
             description = "Override declared repos with a single URL.",
@@ -82,7 +91,7 @@ public final class UpdateCommand implements Callable<Integer> {
 
         Lockfile lock;
         try {
-            lock = orchestrator.lock(parsed, Jk.VERSION);
+            lock = orchestrator.lock(parsed, Jk.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
             System.err.println("jk update: " + e.getMessage());
             return 6;

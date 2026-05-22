@@ -11,6 +11,8 @@ import com.typesafe.config.ConfigValue;
 import com.typesafe.config.ConfigValueType;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Dependency;
+import dev.buildjk.model.Feature;
+import dev.buildjk.model.Features;
 import dev.buildjk.model.Profile;
 import dev.buildjk.model.Profiles;
 import dev.buildjk.model.RepositorySpec;
@@ -69,7 +71,40 @@ public final class BuildJkParser {
         BuildJk.Dependencies deps = parseDependencies(config);
         List<RepositorySpec> repos = parseRepositories(config);
         Profiles profiles = parseProfiles(config);
-        return new BuildJk(project, deps, repos, profiles);
+        Features features = parseFeatures(config);
+        return new BuildJk(project, deps, repos, profiles, features);
+    }
+
+    private static Features parseFeatures(Config root) {
+        if (!root.hasPath("features")) return Features.empty();
+        ConfigObject featuresObject = root.getObject("features");
+        Map<String, Feature> byName = new LinkedHashMap<>();
+        List<String> defaults = List.of();
+        for (Map.Entry<String, ConfigValue> entry : featuresObject.entrySet()) {
+            String name = entry.getKey();
+            ConfigValue value = entry.getValue();
+            if (name.equals("default")) {
+                if (value.valueType() != ConfigValueType.LIST) {
+                    throw new BuildJkParseException(
+                            "features.default must be a list of feature names");
+                }
+                List<String> result = new ArrayList<>();
+                for (Object element : (List<?>) value.unwrapped()) {
+                    result.add(element.toString());
+                }
+                defaults = result;
+                continue;
+            }
+            if (value.valueType() != ConfigValueType.OBJECT) {
+                throw new BuildJkParseException(
+                        "features." + name + " must be an object with `deps` and/or `features`");
+            }
+            ConfigObject body = (ConfigObject) value;
+            List<String> deps = optionalStringList(body, "deps");
+            List<String> nested = optionalStringList(body, "features");
+            byName.put(name, new Feature(name, deps, nested));
+        }
+        return new Features(byName, defaults);
     }
 
     private static Profiles parseProfiles(Config root) {

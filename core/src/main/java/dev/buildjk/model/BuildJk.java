@@ -8,35 +8,44 @@ import java.util.Objects;
 
 /**
  * The parsed contents of a project's {@code build.jk}. Each new top-level
- * block (project, dependencies, repositories, profiles, ...) shows up as
- * a field as its subsystem comes online.
+ * block (project, dependencies, repositories, profiles, features, ...)
+ * shows up as a field as its subsystem comes online.
  */
 public record BuildJk(
         Project project,
         Dependencies dependencies,
         List<RepositorySpec> repositories,
-        Profiles profiles) {
+        Profiles profiles,
+        Features features) {
 
     public BuildJk {
         Objects.requireNonNull(project, "project");
         Objects.requireNonNull(dependencies, "dependencies");
         Objects.requireNonNull(repositories, "repositories");
         Objects.requireNonNull(profiles, "profiles");
+        Objects.requireNonNull(features, "features");
         repositories = List.copyOf(repositories);
     }
 
-    /** Convenience constructor with empty profiles. */
+    /** Convenience constructor with no profiles + no features. */
     public BuildJk(Project project, Dependencies dependencies, List<RepositorySpec> repositories) {
-        this(project, dependencies, repositories, Profiles.empty());
+        this(project, dependencies, repositories, Profiles.empty(), Features.empty());
     }
 
-    /** Convenience constructor: empty repositories and profiles. */
+    /** Convenience constructor: project + deps only. */
     public BuildJk(Project project, Dependencies dependencies) {
-        this(project, dependencies, List.of(), Profiles.empty());
+        this(project, dependencies, List.of(), Profiles.empty(), Features.empty());
+    }
+
+    /** Backwards-compat constructor: explicit profiles, default-empty features. */
+    public BuildJk(Project project, Dependencies dependencies,
+                   List<RepositorySpec> repositories, Profiles profiles) {
+        this(project, dependencies, repositories, profiles, Features.empty());
     }
 
     public static BuildJk of(Project project) {
-        return new BuildJk(project, Dependencies.empty(), List.of(), Profiles.empty());
+        return new BuildJk(project, Dependencies.empty(), List.of(),
+                Profiles.empty(), Features.empty());
     }
 
     public record Project(String group, String artifact, String version, String jdk) {

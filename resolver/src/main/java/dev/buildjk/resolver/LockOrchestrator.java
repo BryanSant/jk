@@ -12,11 +12,13 @@ import dev.buildjk.repo.RepoGroup;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.Collection;
 import java.util.Deque;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -26,11 +28,12 @@ import java.util.Set;
  * Composes the resolver pipeline end-to-end: parsed {@link BuildJk} ->
  * {@link Resolution} -> artifact downloads -> {@link Lockfile}.
  *
- * <p>One resolution pass over the union of all scope roots. After the
- * solver returns, BFS the resolved graph from each scope's declared
- * roots independently to tag every package with the scopes whose roots
- * reach it. Downstream {@link dev.buildjk.compile.ClasspathResolver}
- * filters by scope so test deps don't pollute the main classpath.
+ * <p>One resolution pass over the union of all scope roots (plus any
+ * deps contributed by activated features). After the solver returns,
+ * BFS the resolved graph from each scope's declared roots independently
+ * to tag every package with the scopes whose roots reach it.
+ * Downstream {@link dev.buildjk.compile.ClasspathResolver} filters by
+ * scope so test deps don't pollute the main classpath.
  */
 public final class LockOrchestrator {
 
@@ -55,24 +58,50 @@ public final class LockOrchestrator {
         this.resolver = Objects.requireNonNull(resolver, "resolver");
     }
 
+    /** Lock with the project's default feature selection. */
     public Lockfile lock(BuildJk project, String jkVersion) throws IOException, InterruptedException {
-        // Single resolution over the union of all declared scopes.
+        return lock(project, jkVersion, List.of(), true);
+    }
+
+    /**
+     * Lock with an explicit feature selection. {@code featuresRequested}
+     * are added on top of the project's default feature list (gated by
+     * {@code withDefaults}). The expanded feature deps fold into the
+     * MAIN scope's roots.
+     */
+    public Lockfile lock(
+            BuildJk project,
+            String jkVersion,
+            Collection<String> featuresRequested,
+            boolean withDefaults) throws IOException, InterruptedException {
+
+        Set<String> activated = project.features().activate(
+                new LinkedHashSet<>(featuresRequested), withDefaults);
+        List<Dependency> featureDeps = project.features().resolveDeps(activated);
+
+        // Union of declared-scope roots + feature deps (deduped — declared wins).
         LinkedHashMap<String, Dependency> deduped = new LinkedHashMap<>();
         for (Scope scope : SCOPES) {
             for (Dependency dep : project.dependencies().of(scope)) {
                 deduped.putIfAbsent(dep.module(), dep);
             }
         }
+        for (Dependency featureDep : featureDeps) {
+            deduped.putIfAbsent(featureDep.module(), featureDep);
+        }
         List<Dependency> declared = new ArrayList<>(deduped.values());
         Resolution resolution = resolver.resolve(declared);
 
-        // For each scope, BFS the resolution graph from that scope's declared
-        // roots to figure out which packages it actually drags in.
+        // For each scope, BFS the resolution graph from that scope's roots
+        // (feature deps act as additional main-scope roots).
         Map<String, EnumSet<Scope>> tagsByModule = new HashMap<>();
         for (Scope scope : SCOPES) {
             Set<String> rootModules = new HashSet<>();
             for (Dependency d : project.dependencies().of(scope)) {
                 rootModules.add(d.module());
+            }
+            if (scope == Scope.MAIN) {
+                for (Dependency d : featureDeps) rootModules.add(d.module());
             }
             if (rootModules.isEmpty()) continue;
             for (String module : reachableFrom(rootModules, resolution)) {
