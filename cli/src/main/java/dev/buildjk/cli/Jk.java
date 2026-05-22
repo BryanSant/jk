@@ -25,6 +25,7 @@ import picocli.CommandLine.Command;
                 SyncCommand.class,
                 FetchCommand.class,
                 CheckCommand.class,
+                BuildCommand.class,
         })
 public final class Jk implements Runnable {
 
