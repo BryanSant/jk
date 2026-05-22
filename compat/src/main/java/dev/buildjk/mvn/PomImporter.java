@@ -322,9 +322,11 @@ public final class PomImporter {
     private static void warnUnsupportedSections(Document doc, PomImportReport.Builder report,
                                                 boolean isWorkspaceRoot) {
         Element root = doc.getDocumentElement();
-        if (childElement(root, "profiles") != null) {
-            report.warning("`<profiles>` block present — profile mapping is not yet implemented."
-                    + " For now run `mvn help:effective-pom -P<profile>` and re-import per active profile.");
+        Element profiles = childElement(root, "profiles");
+        if (profiles != null) {
+            for (Element profile : childElements(profiles, "profile")) {
+                analyzeProfile(profile, report);
+            }
         }
         if (!isWorkspaceRoot && childElement(root, "modules") != null) {
             // The workspace-import path already converted these; warn only for the single-POM path.
@@ -346,6 +348,100 @@ public final class PomImporter {
             report.error("`<build><extensions>` is not supported. Move build extensions to a custom"
                     + " jk task once tasks land (PRD §17).");
         }
+    }
+
+    // --- profile analysis ---------------------------------------------------
+
+    /**
+     * Emits per-profile diagnostics describing what was inside a Maven
+     * {@code <profile>}. jk's current Profile model carries only javac/JVM
+     * args, so faithful mapping of property/dep/plugin profiles is not yet
+     * possible — instead we give the user a precise checklist of items to
+     * port by hand.
+     */
+    private static void analyzeProfile(Element profile, PomImportReport.Builder report) {
+        String id = childText(profile, "id");
+        String label = id == null || id.isBlank() ? "<unnamed>" : id;
+        StringBuilder summary = new StringBuilder("Maven profile `").append(label).append("`: ");
+        List<String> parts = new ArrayList<>();
+
+        String activation = describeActivation(childElement(profile, "activation"));
+        if (activation != null) parts.add(activation);
+
+        Element deps = childElement(profile, "dependencies");
+        if (deps != null) {
+            int count = childElements(deps, "dependency").size();
+            if (count > 0) {
+                parts.add(count + " dependenc" + (count == 1 ? "y" : "ies")
+                        + " (convert to a jk feature `" + label + "` if opt-in, or move into the main deps list)");
+            }
+        }
+        Element managed = childElement(childElement(profile, "dependencyManagement"), "dependencies");
+        if (managed != null && !childElements(managed, "dependency").isEmpty()) {
+            int count = childElements(managed, "dependency").size();
+            parts.add(count + " dependencyManagement entr" + (count == 1 ? "y" : "ies")
+                    + " (inline versions on the matching `<dependency>` or use a BOM import)");
+        }
+        Element properties = childElement(profile, "properties");
+        if (properties != null) {
+            List<Element> propEntries = childElements(properties);
+            if (!propEntries.isEmpty()) {
+                List<String> names = new ArrayList<>();
+                for (Element p : propEntries) names.add(p.getNodeName());
+                parts.add("properties=[" + String.join(",", names) + "]"
+                        + " (no jk equivalent — fold maven.compiler.* into project.jdk; drop the rest)");
+            }
+        }
+        Element buildPlugins = childElement(childElement(profile, "build"), "plugins");
+        if (buildPlugins != null) {
+            List<String> pluginIds = new ArrayList<>();
+            for (Element plugin : childElements(buildPlugins, "plugin")) {
+                String artifactId = childText(plugin, "artifactId");
+                if (artifactId != null && !artifactId.isBlank()) pluginIds.add(artifactId);
+            }
+            if (!pluginIds.isEmpty()) {
+                parts.add("plugins=[" + String.join(",", pluginIds) + "] (plugin mapping is not yet implemented)");
+            }
+        }
+        Element repos = childElement(profile, "repositories");
+        if (repos != null && !childElements(repos, "repository").isEmpty()) {
+            parts.add("repositories declared (move into the top-level `repositories` block)");
+        }
+
+        if (parts.isEmpty()) {
+            // Profile with only an activation — name it so the user knows it's gone.
+            parts.add("contained no convertible payload; dropped");
+        }
+        summary.append(String.join("; ", parts)).append('.');
+        report.warning(summary.toString());
+    }
+
+    private static String describeActivation(Element activation) {
+        if (activation == null) return null;
+        List<String> kinds = new ArrayList<>();
+        if ("true".equalsIgnoreCase(childText(activation, "activeByDefault"))) {
+            kinds.add("activeByDefault");
+        }
+        String jdk = childText(activation, "jdk");
+        if (jdk != null && !jdk.isBlank()) kinds.add("jdk=" + jdk);
+        Element os = childElement(activation, "os");
+        if (os != null) {
+            String family = childText(os, "family");
+            String name = childText(os, "name");
+            kinds.add("os=" + (family != null ? family : name != null ? name : "?")
+                    + " (use jk target predicates per dep)");
+        }
+        Element property = childElement(activation, "property");
+        if (property != null) {
+            String name = childText(property, "name");
+            kinds.add("property=" + (name != null ? name : "?")
+                    + " (no jk equivalent — replace with an explicit jk profile or feature)");
+        }
+        Element file = childElement(activation, "file");
+        if (file != null) {
+            kinds.add("file-existence (jk has no equivalent — refactor to a jk profile)");
+        }
+        return kinds.isEmpty() ? null : "activation=" + String.join("+", kinds);
     }
 
     // --- XML helpers --------------------------------------------------------

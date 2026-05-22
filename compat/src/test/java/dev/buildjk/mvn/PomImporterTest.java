@@ -265,7 +265,7 @@ class PomImporterTest {
     }
 
     @Test
-    void warns_on_profiles_modules_and_unknown_plugins() {
+    void warns_on_modules_in_single_pom_mode_and_unknown_plugins() {
         var result = importPom("""
                 <project>
                   <modelVersion>4.0.0</modelVersion>
@@ -276,9 +276,6 @@ class PomImporterTest {
                     <module>core</module>
                     <module>app</module>
                   </modules>
-                  <profiles>
-                    <profile><id>dev</id></profile>
-                  </profiles>
                   <build>
                     <plugins>
                       <plugin>
@@ -290,9 +287,69 @@ class PomImporterTest {
                 """);
 
         assertThat(result.report().issues())
-                .anyMatch(i -> i.message().contains("profiles"))
-                .anyMatch(i -> i.message().contains("modules"))
+                .anyMatch(i -> i.message().contains("`<modules>`"))
                 .anyMatch(i -> i.message().contains("jacoco-maven-plugin"));
+    }
+
+    @Test
+    void profile_with_deps_and_properties_reports_a_porting_checklist() {
+        var result = importPom("""
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>widget</artifactId>
+                  <version>1.0</version>
+                  <profiles>
+                    <profile>
+                      <id>postgres</id>
+                      <activation><activeByDefault>true</activeByDefault></activation>
+                      <properties>
+                        <db.url>jdbc:postgresql://localhost/db</db.url>
+                      </properties>
+                      <dependencies>
+                        <dependency>
+                          <groupId>org.postgresql</groupId>
+                          <artifactId>postgresql</artifactId>
+                          <version>42.7.4</version>
+                        </dependency>
+                      </dependencies>
+                    </profile>
+                  </profiles>
+                </project>
+                """);
+
+        // The profile-scoped dep should NOT have leaked into the main deps.
+        assertThat(result.buildJk().dependencies().of(Scope.MAIN)).isEmpty();
+        assertThat(result.report().issues())
+                .anyMatch(i -> i.message().contains("`postgres`")
+                        && i.message().contains("activeByDefault")
+                        && i.message().contains("1 dependency")
+                        && i.message().contains("properties=[db.url]"));
+    }
+
+    @Test
+    void profile_with_os_activation_is_flagged_with_target_predicate_hint() {
+        var result = importPom("""
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>widget</artifactId>
+                  <version>1.0</version>
+                  <profiles>
+                    <profile>
+                      <id>mac-only</id>
+                      <activation>
+                        <os><family>mac</family></os>
+                      </activation>
+                    </profile>
+                  </profiles>
+                </project>
+                """);
+
+        assertThat(result.report().issues())
+                .anyMatch(i -> i.message().contains("`mac-only`")
+                        && i.message().contains("os=mac")
+                        && i.message().contains("target predicates"));
     }
 
     @Test
