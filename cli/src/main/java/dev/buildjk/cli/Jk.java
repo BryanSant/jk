@@ -19,6 +19,7 @@ import picocli.CommandLine.Command;
                 AddCommand.class,
                 RemoveCommand.class,
                 LockCommand.class,
+                UpdateCommand.class,
                 TreeCommand.class,
                 WhyCommand.class,
                 SyncCommand.class,
