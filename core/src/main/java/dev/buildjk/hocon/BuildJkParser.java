@@ -11,10 +11,12 @@ import com.typesafe.config.ConfigValue;
 import com.typesafe.config.ConfigValueType;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Dependency;
+import dev.buildjk.model.RepositorySpec;
 import dev.buildjk.model.Scope;
 import dev.buildjk.model.VersionSelector;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -62,7 +64,40 @@ public final class BuildJkParser {
         }
         BuildJk.Project project = parseProject(config);
         BuildJk.Dependencies deps = parseDependencies(config);
-        return new BuildJk(project, deps);
+        List<RepositorySpec> repos = parseRepositories(config);
+        return new BuildJk(project, deps, repos);
+    }
+
+    private static List<RepositorySpec> parseRepositories(Config root) {
+        if (!root.hasPath("repositories")) return List.of();
+        ConfigObject reposObject = root.getObject("repositories");
+        List<RepositorySpec> result = new ArrayList<>(reposObject.size());
+        for (Map.Entry<String, ConfigValue> entry : reposObject.entrySet()) {
+            String name = entry.getKey();
+            ConfigValue value = entry.getValue();
+            String url;
+            if (value.valueType() == ConfigValueType.STRING) {
+                url = (String) value.unwrapped();
+            } else if (value.valueType() == ConfigValueType.OBJECT) {
+                ConfigObject obj = (ConfigObject) value;
+                ConfigValue urlValue = obj.get("url");
+                if (urlValue == null || urlValue.valueType() != ConfigValueType.STRING) {
+                    throw new BuildJkParseException(
+                            "repositories." + name + " requires a string `url` field");
+                }
+                url = (String) urlValue.unwrapped();
+            } else {
+                throw new BuildJkParseException(
+                        "repositories." + name + " must be a URL string or an object with `url`");
+            }
+            try {
+                result.add(new RepositorySpec(name, URI.create(url)));
+            } catch (IllegalArgumentException e) {
+                throw new BuildJkParseException(
+                        "repositories." + name + " has malformed URL: " + url, e);
+            }
+        }
+        return result;
     }
 
     private static BuildJk.Project parseProject(Config root) {

@@ -7,6 +7,7 @@ import dev.buildjk.repo.EffectivePomBuilder;
 import dev.buildjk.repo.MavenMetadata;
 import dev.buildjk.repo.MavenRepo;
 import dev.buildjk.repo.Pom;
+import dev.buildjk.repo.RepoGroup;
 import dev.buildjk.resolver.pubgrub.PackageSource;
 import dev.buildjk.resolver.pubgrub.Term;
 import dev.buildjk.resolver.pubgrub.VersionSet;
@@ -31,13 +32,17 @@ public final class MavenPackageSource implements PackageSource {
 
     private static final Set<String> FOLLOWED_SCOPES = Set.of("compile", "runtime");
 
-    private final MavenRepo repo;
+    private final RepoGroup repos;
     private final EffectivePomBuilder pomBuilder;
     private final Map<String, List<String>> versionCache = new HashMap<>();
     private final Map<String, List<Term>> depsCache = new HashMap<>();
 
     public MavenPackageSource(MavenRepo repo, EffectivePomBuilder pomBuilder) {
-        this.repo = Objects.requireNonNull(repo, "repo");
+        this(RepoGroup.of(repo), pomBuilder);
+    }
+
+    public MavenPackageSource(RepoGroup repos, EffectivePomBuilder pomBuilder) {
+        this.repos = Objects.requireNonNull(repos, "repos");
         this.pomBuilder = Objects.requireNonNull(pomBuilder, "pomBuilder");
     }
 
@@ -46,8 +51,12 @@ public final class MavenPackageSource implements PackageSource {
         List<String> cached = versionCache.get(pkg);
         if (cached != null) return cached;
         Coordinate metadataCoord = withVersion(pkg, "any");
-        MavenMetadata metadata = MavenMetadata.parse(
-                Files.readAllBytes(repo.fetchMetadata(metadataCoord).cachePath()));
+        RepoGroup.RepoFetched hit = repos.tryFetchMetadata(metadataCoord).orElse(null);
+        if (hit == null) {
+            versionCache.put(pkg, List.of());
+            return List.of();
+        }
+        MavenMetadata metadata = MavenMetadata.parse(Files.readAllBytes(hit.fetched().cachePath()));
         // PubGrub picks the first version that satisfies — order highest first.
         List<String> sorted = new ArrayList<>(metadata.versions());
         sorted.sort((a, b) -> Versions.compare(b, a));

@@ -11,15 +11,24 @@ import java.util.Objects;
  * project block + declared dependencies). Repositories, profiles,
  * workspaces, and features will be added as their subsystems come online.
  */
-public record BuildJk(Project project, Dependencies dependencies) {
+public record BuildJk(
+        Project project,
+        Dependencies dependencies,
+        List<RepositorySpec> repositories) {
 
     public BuildJk {
         Objects.requireNonNull(project, "project");
         Objects.requireNonNull(dependencies, "dependencies");
+        Objects.requireNonNull(repositories, "repositories");
+        repositories = List.copyOf(repositories);
+    }
+
+    public BuildJk(Project project, Dependencies dependencies) {
+        this(project, dependencies, List.of());
     }
 
     public static BuildJk of(Project project) {
-        return new BuildJk(project, Dependencies.empty());
+        return new BuildJk(project, Dependencies.empty(), List.of());
     }
 
     public record Project(String group, String artifact, String version, String jdk) {

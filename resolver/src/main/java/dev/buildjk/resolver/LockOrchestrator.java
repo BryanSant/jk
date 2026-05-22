@@ -7,6 +7,7 @@ import dev.buildjk.model.Coordinate;
 import dev.buildjk.model.Dependency;
 import dev.buildjk.model.Scope;
 import dev.buildjk.repo.MavenRepo;
+import dev.buildjk.repo.RepoGroup;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -22,20 +23,28 @@ import java.util.Objects;
  * we wire {@code jk test} and the runtime-classpath story. POM-only
  * artifacts (parents declared as deps, BOMs at compile scope) leave
  * {@code checksum} {@code null} rather than fail the lock.
+ *
+ * <p>Multi-repo first-hit-wins per PRD §7.5: artifacts are fetched from
+ * declared repos in order, and the lockfile's {@code source} field
+ * records the repo that actually served the artifact.
  */
 public final class LockOrchestrator {
 
-    private final MavenRepo repo;
+    private final RepoGroup repos;
     private final Resolver resolver;
 
     public LockOrchestrator(MavenRepo repo) {
-        this.repo = Objects.requireNonNull(repo, "repo");
-        this.resolver = new PubGrubResolver(repo);
+        this(RepoGroup.of(repo));
+    }
+
+    public LockOrchestrator(RepoGroup repos) {
+        this.repos = Objects.requireNonNull(repos, "repos");
+        this.resolver = new PubGrubResolver(repos);
     }
 
     /** Test seam: lets tests inject a different resolver (e.g. NaiveResolver). */
-    LockOrchestrator(MavenRepo repo, Resolver resolver) {
-        this.repo = Objects.requireNonNull(repo, "repo");
+    LockOrchestrator(RepoGroup repos, Resolver resolver) {
+        this.repos = Objects.requireNonNull(repos, "repos");
         this.resolver = Objects.requireNonNull(resolver, "resolver");
     }
 
@@ -43,9 +52,11 @@ public final class LockOrchestrator {
         List<Dependency> declared = project.dependencies().of(Scope.MAIN);
         Resolution resolution = resolver.resolve(declared);
 
-        String source = repo.name() + "+" + repo.baseUrl();
-        List<Lockfile.Package> packages = new ArrayList<>(resolution.modules().size());
+        // Fallback source string used when no repo could serve the artifact.
+        MavenRepo first = repos.repos().getFirst();
+        String fallbackSource = first.name() + "+" + first.baseUrl();
 
+        List<Lockfile.Package> packages = new ArrayList<>(resolution.modules().size());
         for (Resolution.ResolvedModule mod : resolution.modules().values()) {
             int colon = mod.module().indexOf(':');
             Coordinate coord = Coordinate.of(
@@ -53,16 +64,12 @@ public final class LockOrchestrator {
                     mod.module().substring(colon + 1),
                     mod.version());
 
+            String source = fallbackSource;
             String checksum = null;
-            try {
-                MavenRepo.Fetched fetched = repo.fetchArtifact(coord);
-                checksum = "sha256:" + fetched.sha256();
-            } catch (MavenRepo.ArtifactNotFoundException ignored) {
-                // POM-only artifact; leave checksum null. Real Maven Central
-                // never serves jars for <packaging>pom</packaging>, and the
-                // dep walker shouldn't drag those in directly — but if it
-                // does, we lock the version without a jar checksum rather
-                // than blow up.
+            RepoGroup.RepoFetched hit = repos.tryFetchArtifact(coord).orElse(null);
+            if (hit != null) {
+                source = hit.repo().name() + "+" + hit.repo().baseUrl();
+                checksum = "sha256:" + hit.fetched().sha256();
             }
 
             packages.add(new Lockfile.Package(

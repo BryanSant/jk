@@ -45,11 +45,15 @@ public final class EffectivePomBuilder {
     static final int MAX_DEPTH = 16;
     private static final Pattern PROPERTY_REF = Pattern.compile("\\$\\{([^}]+)\\}");
 
-    private final MavenRepo repo;
+    private final RepoGroup repos;
     private final Map<String, EffectivePom> cache = new HashMap<>();
 
     public EffectivePomBuilder(MavenRepo repo) {
-        this.repo = Objects.requireNonNull(repo, "repo");
+        this(RepoGroup.of(repo));
+    }
+
+    public EffectivePomBuilder(RepoGroup repos) {
+        this.repos = Objects.requireNonNull(repos, "repos");
     }
 
     public EffectivePom build(Coordinate coord) throws IOException, InterruptedException {
@@ -68,7 +72,10 @@ public final class EffectivePomBuilder {
                     + " (already visiting: " + visiting + ")");
         }
         try {
-            Pom raw = PomParser.parse(Files.readAllBytes(repo.fetchPom(coord).cachePath()));
+            RepoGroup.RepoFetched hit = repos.tryFetchPom(coord)
+                    .orElseThrow(() -> new MavenRepo.ArtifactNotFoundException(
+                            "POM not found in any declared repo: " + coord));
+            Pom raw = PomParser.parse(Files.readAllBytes(hit.fetched().cachePath()));
             EffectivePom effective = merge(raw, visiting, depth);
             cache.put(key, effective);
             return effective;

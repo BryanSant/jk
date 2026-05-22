@@ -6,6 +6,7 @@ import dev.buildjk.repo.EffectivePom;
 import dev.buildjk.repo.EffectivePomBuilder;
 import dev.buildjk.repo.MavenRepo;
 import dev.buildjk.repo.Pom;
+import dev.buildjk.repo.RepoGroup;
 import dev.buildjk.resolver.pubgrub.Diagnostics;
 import dev.buildjk.resolver.pubgrub.PackageSource;
 import dev.buildjk.resolver.pubgrub.PubGrubSolver;
@@ -36,13 +37,13 @@ public final class PubGrubResolver implements Resolver {
     private final EffectivePomBuilder pomBuilder;
 
     public PubGrubResolver(MavenRepo repo) {
-        this(repo, new EffectivePomBuilder(repo));
+        this(RepoGroup.of(repo));
     }
 
-    PubGrubResolver(MavenRepo repo, EffectivePomBuilder pomBuilder) {
-        Objects.requireNonNull(repo, "repo");
-        this.pomBuilder = Objects.requireNonNull(pomBuilder, "pomBuilder");
-        this.source = new MavenPackageSource(repo, pomBuilder);
+    public PubGrubResolver(RepoGroup repos) {
+        EffectivePomBuilder builder = new EffectivePomBuilder(repos);
+        this.pomBuilder = builder;
+        this.source = new MavenPackageSource(repos, builder);
     }
 
     /** Test seam: lets unit tests inject an in-memory {@link PackageSource}. */
