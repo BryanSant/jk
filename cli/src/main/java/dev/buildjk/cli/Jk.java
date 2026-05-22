@@ -36,6 +36,7 @@ import picocli.CommandLine.Command;
                 MvnCommand.class,
                 GradleCommand.class,
                 ImportCommand.class,
+                ExportCommand.class,
         })
 public final class Jk implements Runnable {
 
