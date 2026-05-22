@@ -119,6 +119,11 @@ public final class JdkInstaller {
              TarArchiveInputStream tar = new TarArchiveInputStream(inflated)) {
             TarArchiveEntry entry;
             while ((entry = tar.getNextEntry()) != null) {
+                // Drop macOS AppleDouble sidecars (`._foo`) anywhere in the tree.
+                // They leak in when a tarball is built on macOS with xattrs on
+                // the source files, and a single ._<topdir> entry at the root
+                // breaks flattenedRoot()'s single-top-level detection.
+                if (isAppleDoubleSidecar(entry.getName())) continue;
                 Path out = destDir.resolve(entry.getName()).normalize();
                 if (!out.startsWith(destDir)) {
                     throw new IOException("tar entry escapes destination: " + entry.getName());
@@ -138,6 +143,13 @@ public final class JdkInstaller {
                 // don't use them.
             }
         }
+    }
+
+    private static boolean isAppleDoubleSidecar(String entryName) {
+        int end = entryName.endsWith("/") ? entryName.length() - 1 : entryName.length();
+        int slash = entryName.lastIndexOf('/', end - 1);
+        String basename = entryName.substring(slash + 1, end);
+        return basename.startsWith("._");
     }
 
     /** Apply tar entry's POSIX mode bits where the filesystem supports it. */

@@ -26,6 +26,12 @@ dependencies {
     // throws "AutoHelpMixin is not a command" on first call.
     annotationProcessor("info.picocli:picocli-codegen:4.7.7")
 
+    // JLine 4 FFM terminal provider for raw-mode TUI (jk init wizard).
+    // FFM backend requires JDK 22+; the GraalVM-compiled binary embeds the
+    // FFM downcalls natively. Reflection/resource hints live under
+    // src/main/resources/META-INF/native-image/org.jline/jline-terminal-ffm/.
+    implementation(libs.jline.terminal.ffm)
+
     testImplementation(testFixtures(project(":supply-chain")))
 }
 
@@ -66,6 +72,12 @@ graalvmNative {
         buildArgs.add("-Ob")
         buildArgs.add("-march=compatibility")
         buildArgs.add("--gc=epsilon")
+        // JLine 4 FFM's signal handler uses Arena.ofShared(), gated behind this
+        // flag in GraalVM 25. Without it the wizard crashes on Signal.INT setup.
+        buildArgs.add("-H:+SharedArenaSupport")
+        // Silence the FFM "restricted method" runtime warning. Without this,
+        // every wizard invocation prints a 4-line WARNING block before the UI.
+        buildArgs.add("--enable-native-access=ALL-UNNAMED")
         // Push every heavy dep to lazy init. Build-time <clinit> is faster
         // at runtime but blows up .svm_heap with cached objects we may never
         // touch. Each package below is a known large contributor.
@@ -78,14 +90,13 @@ graalvmNative {
             "org.spdx",                    // SPDX SBOM
             "org.eclipse.jgit",            // git client
             "io.netty",                    // pulled in by sigstore-java
-            "io.grpc"                      // gRPC client (sigstore-java)
+            "io.grpc",                     // gRPC client (sigstore-java)
+            "org.jline"                    // FFM Linker/Arena lookups must run at image-runtime
         ).joinToString(","))
     }
 }
 
-// kotlin-compiler-embeddable (pulled in via :engine for the KotlincDriver)
-// ships shaded JLine classes plus META-INF/native-image/org.jline/<mod>/
-// native-image.properties files that reference reflection-config.json /
-// resource-config.json — but those JSON files aren't shaded in. Without
-// them, native-image bails. jk never invokes JLine, so we provide empty
-// stubs under cli/src/main/resources/META-INF/native-image/org.jline/.
+// JLine 4 FFM terminal provider ships native-image hints; we supplement them
+// at src/main/resources/META-INF/native-image/org.jline/jline-terminal-ffm/
+// with reflection-config.json and resource-config.json bootstrapped via the
+// GraalVM tracing agent against the JVM wizard (see plan §8d).

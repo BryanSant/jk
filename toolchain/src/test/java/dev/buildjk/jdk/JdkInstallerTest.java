@@ -4,18 +4,22 @@ package dev.buildjk.jdk;
 import com.sun.net.httpserver.HttpServer;
 import dev.buildjk.http.Http;
 import dev.buildjk.util.Hashing;
+import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
+import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.nio.file.Files;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.zip.GZIPOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -48,7 +52,7 @@ class JdkInstallerTest {
 
     @Test
     void installs_tar_gz_archive(@TempDir Path tempDir) throws Exception {
-        byte[] archive = buildTarGz(tempDir, "jdk-21.0.5+11", Map.of(
+        byte[] archive = buildTarGz("jdk-21.0.5+11", Map.of(
                 "bin/java", "#!/fake/java",
                 "release", "JAVA_VERSION=21.0.5\n"));
 
@@ -71,7 +75,7 @@ class JdkInstallerTest {
 
     @Test
     void sha256_mismatch_aborts_install(@TempDir Path tempDir) throws Exception {
-        byte[] archive = buildTarGz(tempDir, "jdk", Map.of("bin/java", "#!/fake"));
+        byte[] archive = buildTarGz("jdk", Map.of("bin/java", "#!/fake"));
         served.put("/jdk.tar.gz", archive);
 
         JdkInstaller installer = new JdkInstaller(new Http(),
@@ -89,8 +93,42 @@ class JdkInstallerTest {
     }
 
     @Test
+    void appledouble_sidecars_are_skipped(@TempDir Path tempDir) throws Exception {
+        // A macOS-built tarball can carry ._<name> sidecars next to real
+        // entries. Installer must drop them so single-top-level flattening
+        // still triggers and no junk lands in $HOME/.jk/jdks/<id>/.
+        byte[] archive = buildTarGzRaw(new String[][] {
+                {"jdk-21.0.5+11/",            null},
+                {"._jdk-21.0.5+11",           "applesidecar"},
+                {"jdk-21.0.5+11/bin/",        null},
+                {"jdk-21.0.5+11/._bin",       "applesidecar"},
+                {"jdk-21.0.5+11/bin/java",    "#!/fake/java"},
+                {"jdk-21.0.5+11/bin/._java",  "applesidecar"},
+                {"jdk-21.0.5+11/release",     "JAVA_VERSION=21.0.5\n"},
+                {"jdk-21.0.5+11/._release",   "applesidecar"},
+        });
+        served.put("/jdk.tar.gz", archive);
+
+        JdkInstaller installer = new JdkInstaller(new Http(),
+                new JdkRegistry(tempDir.resolve("jdks")));
+        JdkPackage pkg = new JdkPackage(
+                "temurin", "21.0.5", "x64", "linux", "tar.gz",
+                "OpenJDK21U.tar.gz",
+                base.resolve("/jdk.tar.gz"),
+                Hashing.sha256Hex(archive),
+                archive.length);
+
+        InstalledJdk installed = installer.install(pkg);
+        assertThat(installed.home().resolve("bin/java")).exists();
+        assertThat(installed.home().resolve("release")).exists();
+        assertThat(installed.home().resolve("._bin")).doesNotExist();
+        assertThat(installed.home().resolve("._release")).doesNotExist();
+        assertThat(installed.home().resolve("bin/._java")).doesNotExist();
+    }
+
+    @Test
     void second_install_is_idempotent(@TempDir Path tempDir) throws Exception {
-        byte[] archive = buildTarGz(tempDir, "jdk", Map.of("bin/java", "x"));
+        byte[] archive = buildTarGz("jdk", Map.of("bin/java", "x"));
         served.put("/jdk.tar.gz", archive);
         JdkInstaller installer = new JdkInstaller(new Http(),
                 new JdkRegistry(tempDir.resolve("jdks")));
@@ -106,29 +144,47 @@ class JdkInstallerTest {
     }
 
     /**
-     * Build a tar.gz on disk using the system {@code tar} so the test
-     * fixture matches what foojay actually serves. Returns the archive
-     * bytes.
+     * Build a gzipped tar in-memory using Commons Compress — same library
+     * the installer reads with — so the fixture matches what foojay serves
+     * without depending on a system {@code tar} binary (or its
+     * platform-specific quirks, e.g. macOS AppleDouble sidecars).
      */
-    private static byte[] buildTarGz(Path tempDir, String topLevelDir,
-                                      Map<String, String> entries) throws Exception {
-        Path workdir = tempDir.resolve("fixture-" + System.nanoTime());
-        Path root = workdir.resolve(topLevelDir);
-        Files.createDirectories(root);
-        for (var entry : entries.entrySet()) {
-            Path target = root.resolve(entry.getKey());
-            if (target.getParent() != null) Files.createDirectories(target.getParent());
-            Files.writeString(target, entry.getValue());
+    private static byte[] buildTarGz(String topLevelDir,
+                                     Map<String, String> entries) throws IOException {
+        String[][] raw = new String[entries.size() + 1][];
+        raw[0] = new String[] {topLevelDir + "/", null};
+        int i = 1;
+        for (var e : entries.entrySet()) {
+            raw[i++] = new String[] {topLevelDir + "/" + e.getKey(), e.getValue()};
         }
-        Path archivePath = workdir.resolve("archive.tar.gz");
-        ProcessBuilder pb = new ProcessBuilder("tar", "czf", archivePath.toString(),
-                "-C", workdir.toString(), topLevelDir);
-        pb.redirectErrorStream(true);
-        Process p = pb.start();
-        if (p.waitFor() != 0) {
-            throw new RuntimeException("tar fixture build failed: "
-                    + new String(p.getInputStream().readAllBytes()));
+        return buildTarGzRaw(raw);
+    }
+
+    /**
+     * Build a tar.gz with entries written verbatim — no implicit top-level
+     * dir wrapping. Entry value {@code null} means a directory entry.
+     */
+    private static byte[] buildTarGzRaw(String[][] rawEntries) throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (GZIPOutputStream gz = new GZIPOutputStream(bytes);
+             TarArchiveOutputStream tar = new TarArchiveOutputStream(gz)) {
+            tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
+            for (String[] e : rawEntries) {
+                String name = e[0];
+                String body = e[1];
+                if (body == null) {
+                    tar.putArchiveEntry(new TarArchiveEntry(name));
+                    tar.closeArchiveEntry();
+                } else {
+                    byte[] data = body.getBytes(StandardCharsets.UTF_8);
+                    TarArchiveEntry entry = new TarArchiveEntry(name);
+                    entry.setSize(data.length);
+                    tar.putArchiveEntry(entry);
+                    tar.write(data);
+                    tar.closeArchiveEntry();
+                }
+            }
         }
-        return Files.readAllBytes(archivePath);
+        return bytes.toByteArray();
     }
 }
