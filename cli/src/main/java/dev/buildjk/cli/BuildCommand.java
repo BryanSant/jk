@@ -7,6 +7,7 @@ import dev.buildjk.compile.CompileRequest;
 import dev.buildjk.compile.CompileResult;
 import dev.buildjk.compile.JarPackager;
 import dev.buildjk.compile.JavacDriver;
+import dev.buildjk.compile.KotlincDriver;
 import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
@@ -21,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.stream.Stream;
@@ -87,6 +89,8 @@ public final class BuildCommand implements Callable<Integer> {
         Profile profile = CheckCommand.resolveProfile(project.profiles(), profileName);
         List<String> javacArgs = profile == null ? List.of() : profile.javacArgs();
 
+        List<Path> ktSources = CheckCommand.collectKotlinSources(dir);
+
         if (!sources.isEmpty()) {
             CompileRequest request = CompileRequest.builder()
                     .sources(sources)
@@ -117,14 +121,33 @@ public final class BuildCommand implements Callable<Integer> {
             Files.createDirectories(classes);
         }
 
+        // Kotlin: second pass. Caching for the Kotlin step lands in a follow-up;
+        // for now kotlinc runs every build when .kt sources exist.
+        if (!ktSources.isEmpty()) {
+            List<Path> kotlincCp = new ArrayList<>(classpath);
+            kotlincCp.add(classes);
+            KotlincDriver.KotlincResult ktResult = new KotlincDriver().compile(
+                    KotlincDriver.KotlincRequest.builder()
+                            .sources(ktSources)
+                            .classpath(kotlincCp)
+                            .outputDir(classes)
+                            .jvmTarget(CheckCommand.kotlinJvmTarget(release))
+                            .build());
+            if (!ktResult.success()) {
+                System.err.print(ktResult.output());
+                return 1;
+            }
+        }
+
         copyResources(resMain, classes);
 
         Path jarPath = target.resolve(
                 project.project().artifact() + "-" + project.project().version() + ".jar");
         new JarPackager().packageJar(JarPackager.JarRequest.of(classes, jarPath));
 
-        System.out.println("Built " + jarPath + " (" + sources.size() + " source"
-                + (sources.size() == 1 ? "" : "s") + ")");
+        int totalSources = sources.size() + ktSources.size();
+        System.out.println("Built " + jarPath + " (" + totalSources + " source"
+                + (totalSources == 1 ? "" : "s") + ")");
         return 0;
     }
 
