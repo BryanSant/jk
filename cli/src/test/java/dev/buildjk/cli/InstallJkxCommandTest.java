@@ -8,8 +8,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -53,11 +51,11 @@ class InstallJkxCommandTest {
     void stop() { server.stop(0); }
 
     @Test
-    void install_writes_launcher_and_env_json(@TempDir Path tempDir) throws Exception {
+    void tool_install_writes_launcher_and_env_json(@TempDir Path tempDir) throws Exception {
         servePom("com.example", "widget-cli", "1.0.0");
         serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
 
-        int exit = run("install",
+        int exit = run("tool", "install",
                 "--home", tempDir.toString(),
                 "--repo-url", base.toString(),
                 "com.example:widget-cli:1.0.0");
@@ -80,11 +78,27 @@ class InstallJkxCommandTest {
     }
 
     @Test
-    void install_with_custom_bin_name(@TempDir Path tempDir) throws Exception {
+    void install_alias_routes_to_tool_install(@TempDir Path tempDir) throws Exception {
+        // `jk install <coord>` must still work — it expands to `tool install <coord>`
+        // via the alias rewrite. Same end state as the canonical path.
         servePom("com.example", "widget-cli", "1.0.0");
         serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
 
         int exit = run("install",
+                "--home", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "com.example:widget-cli:1.0.0");
+        assertThat(exit).isEqualTo(0);
+        assertThat(tempDir.resolve("bin/widget-cli")).exists();
+        assertThat(tempDir.resolve("tools/envs/widget-cli/env.json")).exists();
+    }
+
+    @Test
+    void tool_install_with_custom_bin_name(@TempDir Path tempDir) throws Exception {
+        servePom("com.example", "widget-cli", "1.0.0");
+        serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
+
+        int exit = run("tool", "install",
                 "--home", tempDir.toString(),
                 "--repo-url", base.toString(),
                 "--bin", "widget",
@@ -95,11 +109,11 @@ class InstallJkxCommandTest {
     }
 
     @Test
-    void install_with_main_override(@TempDir Path tempDir) throws Exception {
+    void tool_install_with_main_override(@TempDir Path tempDir) throws Exception {
         servePom("com.example", "lib", "1.0.0");
         serveJar("com.example", "lib", "1.0.0", null); // no Main-Class
 
-        int exit = run("install",
+        int exit = run("tool", "install",
                 "--home", tempDir.toString(),
                 "--repo-url", base.toString(),
                 "--main", "com.example.Alt",
@@ -121,6 +135,19 @@ class InstallJkxCommandTest {
                 "--repo-url", base.toString(),
                 "com.example:tool:1.0.0");
         // The synthetic ToolMain is a no-op; exit code is whatever it returns.
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
+    void tool_run_is_jkx_under_the_canonical_name(@TempDir Path tempDir) throws Exception {
+        Path realJar = buildRealRunnableJar(tempDir, "ToolMain");
+        servePom("com.example", "tool", "1.0.0");
+        served.put(mavenPath("com.example", "tool", "1.0.0", "jar"), Files.readAllBytes(realJar));
+
+        int exit = run("tool", "run",
+                "--home", tempDir.resolve("home").toString(),
+                "--repo-url", base.toString(),
+                "com.example:tool:1.0.0");
         assertThat(exit).isEqualTo(0);
     }
 
@@ -188,7 +215,6 @@ class InstallJkxCommandTest {
     }
 
     private static int run(String... args) {
-        CommandLine cmd = Jk.newCommandLine();
-        return cmd.execute(args);
+        return Jk.execute(args);
     }
 }

@@ -4,6 +4,7 @@ package dev.buildjk.cli;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -39,7 +40,6 @@ import java.util.Map;
                 GradleCommand.class,
                 ImportCommand.class,
                 ExportCommand.class,
-                InstallCommand.class,
                 JkxCommand.class,
                 RunCommand.class,
                 PublishCommand.class,
@@ -48,7 +48,8 @@ import java.util.Map;
                 ImageCommand.class,
                 NativeCommand.class,
                 VerifyBuildCommand.class,
-                ToolReconcileCommand.class,
+                ToolCommand.class,
+                DoctorCommand.class,
                 CacheCommand.class,
         })
 public final class Jk implements Runnable {
@@ -58,21 +59,24 @@ public final class Jk implements Runnable {
     /**
      * Hidden verb aliases for ergonomic migration from other build tools.
      * Documented in {@code docs/aliases.md}. Keys are alias names; values
-     * are the canonical jk verb. We don't register these with picocli (so
-     * they stay out of {@code --help} and shell completion); instead we
-     * rewrite the first positional arg before parsing.
+     * are the canonical verb path (one or more positionals). We don't
+     * register these with picocli (so they stay out of {@code --help} and
+     * shell completion); instead we rewrite the first positional arg
+     * before parsing — possibly expanding it into multiple positionals
+     * (e.g. {@code install} → {@code tool install}).
      */
-    static final Map<String, String> VERB_ALIASES = Map.ofEntries(
-            Map.entry("generate", "init"),         // Maven mvn archetype:generate
-            Map.entry("dependencies", "tree"),     // Gradle gradle dependencies
-            Map.entry("package", "build"),         // Maven mvn package
-            Map.entry("deploy", "publish"),        // Maven mvn deploy
-            Map.entry("upgrade", "update"),        // npm/yarn/apt vocabulary
-            Map.entry("sh", "shell"),
-            Map.entry("bash", "shell"),
-            Map.entry("nativeCompile", "native"),  // Gradle :nativeCompile task
-            Map.entry("verify-target", "verify-build"),
-            Map.entry("check", "compile"));        // renamed verb; check kept for back-compat
+    static final Map<String, List<String>> VERB_ALIASES = Map.ofEntries(
+            Map.entry("generate", List.of("init")),           // Maven mvn archetype:generate
+            Map.entry("dependencies", List.of("tree")),       // Gradle gradle dependencies
+            Map.entry("package", List.of("build")),           // Maven mvn package
+            Map.entry("deploy", List.of("publish")),          // Maven mvn deploy
+            Map.entry("upgrade", List.of("update")),          // npm/yarn/apt vocabulary
+            Map.entry("sh", List.of("shell")),
+            Map.entry("bash", List.of("shell")),
+            Map.entry("nativeCompile", List.of("native")),    // Gradle :nativeCompile task
+            Map.entry("verify-target", List.of("verify-build")),
+            Map.entry("check", List.of("compile")),           // renamed verb; check kept for back-compat
+            Map.entry("install", List.of("tool", "install"))); // jk install moved under tool
 
     public static void main(String[] args) {
         System.exit(execute(args));
@@ -85,10 +89,11 @@ public final class Jk implements Runnable {
 
     static String[] rewriteAlias(String[] args) {
         if (args.length == 0) return args;
-        String mapped = VERB_ALIASES.get(args[0]);
+        List<String> mapped = VERB_ALIASES.get(args[0]);
         if (mapped == null) return args;
-        String[] out = args.clone();
-        out[0] = mapped;
+        String[] out = new String[mapped.size() + args.length - 1];
+        for (int i = 0; i < mapped.size(); i++) out[i] = mapped.get(i);
+        System.arraycopy(args, 1, out, mapped.size(), args.length - 1);
         return out;
     }
 

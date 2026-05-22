@@ -39,7 +39,7 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 - Best-effort import of `pom.xml` (Tier 1 lossless, Tier 2 best-effort, Tier 3 stub-with-diagnostic).
 - Generate `pom.xml` on publish so jk-built jars are first-class on Maven Central.
 - Subsume JBang's single-file scripting role (`jk run script.java` with header-comment deps).
-- `jk install` / `jkx` for installing and ephemerally running JVM CLIs as tools.
+- `jk tool install` / `jkx` for installing and ephemerally running JVM CLIs as tools.
 - Built-in `jk audit` (OSV database) and `jk image` (Jib-style daemonless OCI images, distroless, multi-arch).
 - SLSA L3 provenance and Sigstore keyless signing by default for `jk publish` from CI.
 - SBOM emission (CycloneDX + SPDX) on every build.
@@ -235,7 +235,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk publish [--repo <name>] [--dry-run]` | Sign, package, upload to a Maven-style repository. |
 | `jk image [--registry <url>] [--push]` | Build an OCI image (Jib-style). |
 | `jk native` | Build a GraalVM native binary from a `--bin` artifact. (Verb is `native`, not `native-image`, to keep it distinct from `jk image` which builds OCI container images.) |
-| `jk install --git ... --bin ...` or `jk install <coord> --bin <name>` | Install a JVM CLI as a tool. |
+| `jk tool install --git ... --bin ...` or `jk tool install <coord> --bin <name>` | Install a JVM CLI as a tool. (`jk install <coord>` is a hidden alias.) |
 | `jkx <coord>[@ver] [-- args...]` | Ephemeral tool execution. |
 | `jk tool {list,update,uninstall,run}` | Manage installed tools. |
 | `jk jdk {install,list,use,uninstall,pin,gc,import-sdkman}` | JDK management. |
@@ -945,14 +945,14 @@ Java 25 (with unnamed-class / instance-main / JEP 512). Kotlin (`.kts` with jk-s
 
 ---
 
-## 20. Tools (`jk install` / `jkx`)
+## 20. Tools (`jk tool install` / `jkx`)
 
 ### 20.1 Install
 
 ```
-jk install com.diffplug.spotless:spotless-cli:2.45.0 --bin spotless
-jk install --git https://github.com/foo/bar --tag v1.2.0 --bin bar
-jk install com.foo:bar --with com.baz:extra:1.0   # inject deps into env
+jk tool install com.diffplug.spotless:spotless-cli:2.45.0 --bin spotless
+jk tool install --git https://github.com/foo/bar --tag v1.2.0 --bin bar
+jk tool install com.foo:bar --with com.baz:extra:1.0   # inject deps into env
 ```
 
 ### 20.2 Layout
@@ -962,7 +962,7 @@ jk install com.foo:bar --with com.baz:extra:1.0   # inject deps into env
 ~/.jk/bin/<launcher>            # user-PATH entry, shell wrapper or native binary
 ```
 
-`jk install` prints the `export PATH=...` line for `~/.jk/bin`; it does not mutate dotfiles. `jk tool update-shell` writes it with explicit user confirmation.
+`jk tool install` prints the `export PATH=...` line for `~/.jk/bin`; it does not mutate dotfiles. `jk tool update-shell` writes it with explicit user confirmation.
 
 ### 20.3 Ephemeral execution: `jkx`
 

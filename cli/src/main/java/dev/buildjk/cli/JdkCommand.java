@@ -17,6 +17,7 @@ import picocli.CommandLine.Command;
                 JdkUseCommand.class,
                 JdkUninstallCommand.class,
                 JdkReconcileCommand.class,
+                JdkDirCommand.class,
         })
 public final class JdkCommand implements Runnable {
 

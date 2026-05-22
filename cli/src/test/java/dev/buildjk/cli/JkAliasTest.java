@@ -26,6 +26,13 @@ class JkAliasTest {
     }
 
     @Test
+    void rewrite_can_expand_an_alias_into_multiple_positionals() {
+        // `install <coord>` → `tool install <coord>` (added in Option 1 reorg).
+        String[] out = Jk.rewriteAlias(new String[] {"install", "com.example:foo:1.0"});
+        assertThat(out).containsExactly("tool", "install", "com.example:foo:1.0");
+    }
+
+    @Test
     void rewrite_only_touches_the_first_positional() {
         // "package" is an alias only as the first positional. Later occurrences pass through.
         String[] in = {"add", "package", "com.example:foo:1.0"};

@@ -32,8 +32,9 @@ These commands map directly across all five tools. Differences shown in the
 | Run tests | `jk test` | — | `cargo test` | `gradle test` | `mvn test` | uv defers to `pytest` / `unittest`. jk emits Surefire-shaped XML so existing CI test reporters work. |
 | Clean build outputs | `jk clean` | — | `cargo clean` | `gradle clean` | `mvn clean` | jk wipes `target/` and `.jk/generated/`; the others wipe their own conventional dirs. |
 | Publish artifacts | `jk publish` | `uv publish` | `cargo publish` | `gradle publish` | `mvn deploy` | jk publishes a Maven-Central-grade POM + jar by default; signing, Sigstore, SLSA and SBOM are flags on the same verb (see §3 below). |
-| Install a tool globally | `jk install <coord>` | `uv tool install <pkg>` | `cargo install <crate>` | — | — | jk and cargo install the artifact's own launcher under `~/.jk/bin/` / `~/.cargo/bin/`; uv creates a per-tool venv. |
-| Ephemeral tool exec | `jk jkx <coord>` | `uvx <pkg>` | — | — | — | "Resolve, cache, run, evict LRU." uv and jk both ship this; cargo doesn't (but `cargo run` from a checkout is close). |
+| Install a tool globally | `jk tool install <coord>` | `uv tool install <pkg>` | `cargo install <crate>` | — | — | jk and cargo install the artifact's own launcher under `~/.jk/bin/` / `~/.cargo/bin/`; uv creates a per-tool venv. `jk install <coord>` is a hidden alias for back-compat. |
+| Ephemeral tool exec | `jk jkx <coord>` (or `jk tool run <coord>`) | `uvx <pkg>` | — | — | — | "Resolve, cache, run, evict LRU." `jkx` is the top-level shorthand, parallel to `uvx`. |
+| Repair discovered build tools | `jk doctor` | — | — | — | — | Prunes broken mvn/gradle/kotlin symlinks under `~/.jk/tools/`. |
 | Single-file scripts | `jk run script.java` | `uv run script.py` | — | — | — | jk's header (`//jk dep …`) is also JBang-compatible. uv reads PEP 723 inline metadata. |
 
 ---
