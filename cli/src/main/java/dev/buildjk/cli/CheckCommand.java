@@ -1,0 +1,127 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.buildjk.cli;
+
+import dev.buildjk.cache.Cas;
+import dev.buildjk.compile.ClasspathResolver;
+import dev.buildjk.compile.CompileRequest;
+import dev.buildjk.compile.CompileResult;
+import dev.buildjk.compile.JavacDriver;
+import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.lock.Lockfile;
+import dev.buildjk.lock.LockfileReader;
+import dev.buildjk.model.BuildJk;
+import picocli.CommandLine.Command;
+import picocli.CommandLine.Option;
+
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.stream.Stream;
+
+/**
+ * {@code jk check} — type-check sources without producing artifacts.
+ *
+ * <p>v0.2 first slice: Java only, single source set ({@code src/main/java}),
+ * Maven-resolved classpath from {@code jk.lock}. Kotlin and annotation
+ * processors join in later slices.
+ */
+@Command(name = "check", description = "Type-check without producing artifacts.")
+public final class CheckCommand implements Callable<Integer> {
+
+    @Option(names = {"-C", "--directory"},
+            description = "Project directory. Default: current directory.")
+    Path directory;
+
+    @Option(names = "--cache-dir", hidden = true,
+            description = "Override the CAS cache directory. Default: ~/.jk/cache.")
+    Path cacheDir;
+
+    @Override
+    public Integer call() throws IOException {
+        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path buildFile = dir.resolve("build.jk");
+        Path lockFile = dir.resolve("jk.lock");
+        if (!Files.exists(buildFile)) {
+            System.err.println("jk check: no build.jk in " + dir);
+            return 2;
+        }
+        if (!Files.exists(lockFile)) {
+            System.err.println("jk check: no jk.lock in " + dir + " (run `jk lock` first)");
+            return 2;
+        }
+
+        BuildJk project;
+        try {
+            project = BuildJkParser.parse(buildFile);
+        } catch (RuntimeException e) {
+            System.err.println("jk check: " + e.getMessage());
+            return 2;
+        }
+        Lockfile lock = LockfileReader.read(lockFile);
+
+        List<Path> sources = collectJavaSources(dir.resolve("src/main/java"));
+        if (sources.isEmpty()) {
+            System.out.println("jk check: no Java sources in src/main/java");
+            return 0;
+        }
+
+        Path cache = cacheDir != null
+                ? cacheDir
+                : Path.of(System.getProperty("user.home"), ".jk", "cache");
+        Cas cas = new Cas(cache);
+        List<Path> classpath = new ClasspathResolver(cas).classpathFor(lock);
+
+        int release = parseReleaseFromJdk(project.project().jdk());
+        CompileRequest request = CompileRequest.builder()
+                .sources(sources)
+                .classpath(classpath)
+                .release(release)
+                .build();
+
+        CompileResult result = new JavacDriver().compile(request);
+        for (CompileResult.Diagnostic d : result.diagnostics()) {
+            System.err.println(d.render());
+        }
+        if (!result.success() || result.hasErrors()) {
+            return 1;
+        }
+        System.out.println("jk check: ok (" + sources.size() + " source"
+                + (sources.size() == 1 ? "" : "s") + ")");
+        return 0;
+    }
+
+    static List<Path> collectJavaSources(Path root) throws IOException {
+        if (!Files.exists(root)) return List.of();
+        List<Path> sources = new ArrayList<>();
+        try (Stream<Path> stream = Files.walk(root)) {
+            stream.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".java"))
+                    .forEach(sources::add);
+        }
+        return sources;
+    }
+
+    /**
+     * Parse a release number from the {@code project.jdk} pin. Accepts
+     * {@code "25"} or SDKMAN-style {@code "25.0.3-tem"}. Defaults to 25
+     * if absent or unparseable.
+     */
+    static int parseReleaseFromJdk(String jdk) {
+        if (jdk == null || jdk.isBlank()) return 25;
+        StringBuilder digits = new StringBuilder();
+        for (int i = 0; i < jdk.length(); i++) {
+            char c = jdk.charAt(i);
+            if (Character.isDigit(c)) digits.append(c);
+            else break;
+        }
+        if (digits.length() == 0) return 25;
+        try {
+            return Integer.parseInt(digits.toString());
+        } catch (NumberFormatException e) {
+            return 25;
+        }
+    }
+}
