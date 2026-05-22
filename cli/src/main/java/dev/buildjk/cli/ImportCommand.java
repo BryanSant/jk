@@ -2,6 +2,9 @@
 package dev.buildjk.cli;
 
 import dev.buildjk.compat.BuildJkRenderer;
+import dev.buildjk.compat.ImportReport;
+import dev.buildjk.gradle.GradleImporter;
+import dev.buildjk.model.BuildJk;
 import dev.buildjk.mvn.PomImporter;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -11,17 +14,19 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
 import java.util.Locale;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
  * {@code jk import <file>} — convert a Maven or Gradle build to {@code build.jk}
- * (PRD §24.2 / §24.3). Slice C wires up the Maven side; Gradle imports land
- * in slice E.
+ * (PRD §24.2 / §24.3). Dispatches by filename:
+ * {@code pom.xml} → {@link PomImporter} (with multi-module → workspace);
+ * {@code build.gradle(.kts)} → {@link GradleImporter} (best-effort declarative).
  *
- * <p>The verb always writes two files: {@code build.jk} and
- * {@code jk-import-report.md}. The latter lists every construct the importer
- * could not carry over perfectly so the user can review the result.
+ * <p>Always writes a {@code build.jk} and a {@code jk-import-report.md} so
+ * the user has the full list of constructs that didn't carry over cleanly.
  */
 @Command(name = "import", description = "Convert a Maven or Gradle build to build.jk.")
 public final class ImportCommand implements Callable<Integer> {
@@ -47,18 +52,7 @@ public final class ImportCommand implements Callable<Integer> {
             return 66; // EX_NOINPUT
         }
 
-        String lower = source.getFileName().toString().toLowerCase(Locale.ROOT);
-        if (!lower.endsWith("pom.xml")) {
-            if (lower.endsWith("build.gradle") || lower.endsWith("build.gradle.kts")) {
-                System.err.println("jk import: Gradle import lands in v0.5 slice E. "
-                        + "Use `jk import pom.xml` for now.");
-            } else {
-                System.err.println("jk import: unrecognised source — expected pom.xml, build.gradle, "
-                        + "or build.gradle.kts (got " + source.getFileName() + ").");
-            }
-            return 64; // EX_USAGE
-        }
-
+        String filename = source.getFileName().toString().toLowerCase(Locale.ROOT);
         Path projectDir = source.toAbsolutePath().getParent();
         Path target = out != null ? out : projectDir.resolve("build.jk");
         Path reportTarget = reportPath != null ? reportPath : projectDir.resolve("jk-import-report.md");
@@ -69,11 +63,24 @@ public final class ImportCommand implements Callable<Integer> {
             return 73; // EX_CANTCREAT
         }
 
-        PomImporter.WorkspaceImportResult result = PomImporter.importWorkspace(source);
-        Files.writeString(target, BuildJkRenderer.render(result.root()), StandardCharsets.UTF_8);
+        Importable importable;
+        if (filename.endsWith("pom.xml")) {
+            PomImporter.WorkspaceImportResult result = PomImporter.importWorkspace(source);
+            Map<String, BuildJk> members = new LinkedHashMap<>(result.members());
+            importable = new Importable(result.root(), members, result.report());
+        } else if (filename.equals("build.gradle") || filename.equals("build.gradle.kts")) {
+            GradleImporter.Result result = GradleImporter.importFrom(source);
+            importable = new Importable(result.buildJk(), Map.of(), result.report());
+        } else {
+            System.err.println("jk import: unrecognised source — expected pom.xml, build.gradle, "
+                    + "or build.gradle.kts (got " + source.getFileName() + ").");
+            return 64; // EX_USAGE
+        }
+
+        Files.writeString(target, BuildJkRenderer.render(importable.root), StandardCharsets.UTF_8);
         System.out.println("Wrote " + target);
 
-        for (var entry : result.members().entrySet()) {
+        for (var entry : importable.members.entrySet()) {
             Path memberBuildJk = projectDir.resolve(entry.getKey()).resolve("build.jk");
             if (Files.exists(memberBuildJk) && !force) {
                 System.err.println("jk import: refusing to overwrite existing " + memberBuildJk
@@ -86,13 +93,15 @@ public final class ImportCommand implements Callable<Integer> {
         }
 
         Files.writeString(reportTarget,
-                result.report().renderMarkdown(source.toString()),
+                importable.report.renderMarkdown(source.toString()),
                 StandardCharsets.UTF_8);
         System.out.println("Wrote " + reportTarget);
-        if (!result.report().isEmpty()) {
-            System.out.println("Import notes: " + result.report().issues().size()
-                    + (result.report().hasErrors() ? " (includes Tier 3 errors)" : ""));
+        if (!importable.report.isEmpty()) {
+            System.out.println("Import notes: " + importable.report.issues().size()
+                    + (importable.report.hasErrors() ? " (includes Tier 3 errors)" : ""));
         }
         return 0;
     }
+
+    private record Importable(BuildJk root, Map<String, BuildJk> members, ImportReport report) {}
 }

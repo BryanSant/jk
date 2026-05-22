@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.mvn;
 
+import dev.buildjk.compat.ImportReport;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Dependency;
 import dev.buildjk.model.Features;
@@ -35,7 +36,7 @@ import java.util.Map;
 
 /**
  * Converts a Maven {@code pom.xml} into a {@link BuildJk} model plus a
- * {@link PomImportReport} of constructs that were not perfectly faithful
+ * {@link ImportReport} of constructs that were not perfectly faithful
  * (PRD §24.2 three-tier fidelity).
  *
  * <p>Slice C scope — Tier 1 (lossless) for single-module POMs:
@@ -55,18 +56,18 @@ import java.util.Map;
  */
 public final class PomImporter {
 
-    public record Result(BuildJk buildJk, PomImportReport report) {}
+    public record Result(BuildJk buildJk, ImportReport report) {}
 
     /**
      * Outcome of importing a multi-module POM tree: the root's {@link BuildJk}
      * (carrying the workspace block), each member's {@link BuildJk} keyed by
-     * the relative module path, and one aggregated {@link PomImportReport}
+     * the relative module path, and one aggregated {@link ImportReport}
      * spanning the root + every child.
      */
     public record WorkspaceImportResult(
             BuildJk root,
             Map<String, BuildJk> members,
-            PomImportReport report) {}
+            ImportReport report) {}
 
     private PomImporter() {}
 
@@ -81,7 +82,7 @@ public final class PomImporter {
     private static Result importFromBytes(byte[] xml, Pom.Parent suppressParentMatching) {
         Pom pom = PomParser.parse(xml);
         Document doc = parseXml(xml);
-        PomImportReport.Builder report = PomImportReport.builder();
+        ImportReport.Builder report = ImportReport.builder();
 
         BuildJk.Project project = mapProject(pom, doc, report, suppressParentMatching);
         Map<Scope, List<Dependency>> byScope = mapDependencies(pom, report);
@@ -108,7 +109,7 @@ public final class PomImporter {
             return new WorkspaceImportResult(single.buildJk(), Map.of(), single.report());
         }
 
-        PomImportReport.Builder report = PomImportReport.builder();
+        ImportReport.Builder report = ImportReport.builder();
         Pom rootPomParsed = PomParser.parse(rootXml);
         BuildJk.Project rootProject = mapProject(rootPomParsed, rootDoc, report, null);
         // Root coords serve as the "expected parent" for children.
@@ -133,9 +134,9 @@ public final class PomImporter {
             byte[] childXml = Files.readAllBytes(childPom);
             Result childResult = importFromBytes(childXml, expectedParent);
             members.put(module, childResult.buildJk());
-            for (PomImportReport.Issue issue : childResult.report().issues()) {
+            for (ImportReport.Issue issue : childResult.report().issues()) {
                 String prefixed = "[" + module + "] " + issue.message();
-                if (issue.severity() == PomImportReport.Severity.ERROR) {
+                if (issue.severity() == ImportReport.Severity.ERROR) {
                     report.error(prefixed);
                 } else {
                     report.warning(prefixed);
@@ -159,7 +160,7 @@ public final class PomImporter {
     // --- project ------------------------------------------------------------
 
     private static BuildJk.Project mapProject(Pom pom, Document doc,
-                                              PomImportReport.Builder report,
+                                              ImportReport.Builder report,
                                               Pom.Parent suppressParentMatching) {
         String group = pom.groupId();
         String version = pom.version();
@@ -218,7 +219,7 @@ public final class PomImporter {
 
     // --- dependencies -------------------------------------------------------
 
-    private static Map<Scope, List<Dependency>> mapDependencies(Pom pom, PomImportReport.Builder report) {
+    private static Map<Scope, List<Dependency>> mapDependencies(Pom pom, ImportReport.Builder report) {
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         // Standard scopes.
         for (Pom.Dep dep : pom.dependencies()) {
@@ -290,7 +291,7 @@ public final class PomImporter {
 
     // --- repositories -------------------------------------------------------
 
-    private static List<RepositorySpec> mapRepositories(Document doc, PomImportReport.Builder report) {
+    private static List<RepositorySpec> mapRepositories(Document doc, ImportReport.Builder report) {
         Element root = doc.getDocumentElement();
         Element repos = childElement(root, "repositories");
         if (repos == null) return List.of();
@@ -319,7 +320,7 @@ public final class PomImporter {
 
     // --- unsupported-section warnings ---------------------------------------
 
-    private static void warnUnsupportedSections(Document doc, PomImportReport.Builder report,
+    private static void warnUnsupportedSections(Document doc, ImportReport.Builder report,
                                                 boolean isWorkspaceRoot) {
         Element root = doc.getDocumentElement();
         Element profiles = childElement(root, "profiles");
@@ -359,7 +360,7 @@ public final class PomImporter {
      * possible — instead we give the user a precise checklist of items to
      * port by hand.
      */
-    private static void analyzeProfile(Element profile, PomImportReport.Builder report) {
+    private static void analyzeProfile(Element profile, ImportReport.Builder report) {
         String id = childText(profile, "id");
         String label = id == null || id.isBlank() ? "<unnamed>" : id;
         StringBuilder summary = new StringBuilder("Maven profile `").append(label).append("`: ");

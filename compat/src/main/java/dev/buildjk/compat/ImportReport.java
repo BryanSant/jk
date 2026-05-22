@@ -1,19 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.buildjk.mvn;
+package dev.buildjk.compat;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Per-import diagnostics emitted by {@link PomImporter} (PRD §24.2 three-tier
- * fidelity). {@code WARNING} entries correspond to Tier 2 (best-effort
- * mapping); {@code ERROR} entries correspond to Tier 3 (construct could not
- * be carried over and the import emitted a stub or skipped it).
+ * Per-import diagnostics shared by Maven and Gradle importers (PRD §24.2 /
+ * §24.3 three-tier fidelity). {@code WARNING} entries correspond to Tier 2
+ * (best-effort mapping); {@code ERROR} entries correspond to Tier 3
+ * (construct could not be carried over and the import emitted a stub or
+ * skipped it).
  *
  * <p>Renders as {@code jk-import-report.md} so contributors can review what
  * survived the conversion.
  */
-public final class PomImportReport {
+public final class ImportReport {
 
     public enum Severity { WARNING, ERROR }
 
@@ -21,7 +22,7 @@ public final class PomImportReport {
 
     private final List<Issue> issues;
 
-    private PomImportReport(List<Issue> issues) {
+    private ImportReport(List<Issue> issues) {
         this.issues = List.copyOf(issues);
     }
 
@@ -84,8 +85,8 @@ public final class PomImportReport {
             return this;
         }
 
-        public PomImportReport build() {
-            return new PomImportReport(issues);
+        public ImportReport build() {
+            return new ImportReport(issues);
         }
     }
 }

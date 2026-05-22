@@ -85,12 +85,39 @@ class ImportCommandTest {
     }
 
     @Test
-    void gradle_source_emits_friendly_not_yet_message(@TempDir Path tempDir) throws Exception {
+    void gradle_kts_source_imports_and_writes_build_jk(@TempDir Path tempDir) throws Exception {
         Path gradle = tempDir.resolve("build.gradle.kts");
-        Files.writeString(gradle, "// placeholder\n");
+        Files.writeString(gradle, """
+                plugins { id("java") }
+
+                group = "com.example"
+                version = "1.0.0"
+
+                java { sourceCompatibility = JavaVersion.VERSION_21 }
+
+                dependencies {
+                    implementation("com.fasterxml.jackson.core:jackson-databind:2.18.2")
+                }
+                """, StandardCharsets.UTF_8);
 
         int exit = run("import", gradle.toString());
-        assertThat(exit).isEqualTo(64); // EX_USAGE
+        assertThat(exit).isEqualTo(0);
+
+        String buildJk = Files.readString(tempDir.resolve("build.jk"));
+        assertThat(buildJk).contains("group    = \"com.example\"");
+        assertThat(buildJk).contains("jdk      = \"21\"");
+        assertThat(buildJk).contains("\"com.fasterxml.jackson.core:jackson-databind\" = \"=2.18.2\"");
+
+        assertThat(Files.readString(tempDir.resolve("jk-import-report.md")))
+                .contains("# jk import report");
+    }
+
+    @Test
+    void unrecognised_source_returns_usage_error(@TempDir Path tempDir) throws Exception {
+        Path foo = tempDir.resolve("foo.txt");
+        Files.writeString(foo, "x");
+        int exit = run("import", foo.toString());
+        assertThat(exit).isEqualTo(64);
     }
 
     @Test
