@@ -47,6 +47,7 @@ import picocli.CommandLine.Command;
                 NativeCommand.class,
                 VerifyBuildCommand.class,
                 ToolReconcileCommand.class,
+                CacheCommand.class,
         })
 public final class Jk implements Runnable {
 
