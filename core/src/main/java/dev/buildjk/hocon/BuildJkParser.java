@@ -11,6 +11,8 @@ import com.typesafe.config.ConfigValue;
 import com.typesafe.config.ConfigValueType;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Dependency;
+import dev.buildjk.model.Profile;
+import dev.buildjk.model.Profiles;
 import dev.buildjk.model.RepositorySpec;
 import dev.buildjk.model.Scope;
 import dev.buildjk.model.VersionSelector;
@@ -21,6 +23,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -65,7 +68,51 @@ public final class BuildJkParser {
         BuildJk.Project project = parseProject(config);
         BuildJk.Dependencies deps = parseDependencies(config);
         List<RepositorySpec> repos = parseRepositories(config);
-        return new BuildJk(project, deps, repos);
+        Profiles profiles = parseProfiles(config);
+        return new BuildJk(project, deps, repos, profiles);
+    }
+
+    private static Profiles parseProfiles(Config root) {
+        if (!root.hasPath("profiles")) return Profiles.empty();
+        ConfigObject profilesObject = root.getObject("profiles");
+        Map<String, Profile> byName = new LinkedHashMap<>();
+        for (Map.Entry<String, ConfigValue> entry : profilesObject.entrySet()) {
+            String name = entry.getKey();
+            if (entry.getValue().valueType() != ConfigValueType.OBJECT) {
+                throw new BuildJkParseException(
+                        "profiles." + name + " must be an object");
+            }
+            ConfigObject body = (ConfigObject) entry.getValue();
+            String inherits = optionalString(body, "inherits");
+            List<String> javacArgs = optionalStringList(body, "javac");
+            List<String> jvmArgs = optionalStringList(body, "jvm-args");
+            byName.put(name, new Profile(name, inherits, javacArgs, jvmArgs));
+        }
+        return new Profiles(byName);
+    }
+
+    private static String optionalString(ConfigObject obj, String key) {
+        ConfigValue value = obj.get(key);
+        if (value == null) return null;
+        if (value.valueType() != ConfigValueType.STRING) {
+            throw new BuildJkParseException(
+                    "expected `" + key + "` to be a string");
+        }
+        return (String) value.unwrapped();
+    }
+
+    private static List<String> optionalStringList(ConfigObject obj, String key) {
+        ConfigValue value = obj.get(key);
+        if (value == null) return List.of();
+        if (value.valueType() != ConfigValueType.LIST) {
+            throw new BuildJkParseException(
+                    "expected `" + key + "` to be a list of strings");
+        }
+        List<String> result = new ArrayList<>();
+        for (Object element : (List<?>) value.unwrapped()) {
+            result.add(element.toString());
+        }
+        return result;
     }
 
     private static List<RepositorySpec> parseRepositories(Config root) {

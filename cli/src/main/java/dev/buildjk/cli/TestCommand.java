@@ -37,6 +37,10 @@ public final class TestCommand implements Callable<Integer> {
             description = "Project directory. Default: current directory.")
     Path directory;
 
+    @Option(names = "--profile", paramLabel = "<name>",
+            description = "Build profile to apply.")
+    String profileName;
+
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the CAS cache directory. Default: ~/.jk/cache.")
     Path cacheDir;
@@ -78,13 +82,17 @@ public final class TestCommand implements Callable<Integer> {
         Path mainClasses = target.resolve("classes");
         Path testClasses = target.resolve("test-classes");
 
+        dev.buildjk.model.Profile profile =
+                CheckCommand.resolveProfile(project.profiles(), profileName);
+        List<String> javacArgs = profile == null ? List.of() : profile.javacArgs();
+
         // 1. Compile main sources (main + provided scope on the classpath).
         boolean ok = compileWithCache(
                 "compile-main",
                 dir.resolve("src/main/java"),
                 mainClasses,
                 compileMainCp,
-                release, cas, cache);
+                release, javacArgs, cas, cache);
         if (!ok) return 1;
 
         // 2. Compile test sources (main classes + main + provided + test scope).
@@ -100,7 +108,7 @@ public final class TestCommand implements Callable<Integer> {
                 "compile-test",
                 srcTest, testClasses,
                 compileTestFullCp,
-                release, cas, cache);
+                release, javacArgs, cas, cache);
         if (!ok) return 1;
 
         // 3. Run JUnit Platform on the test-runtime classpath (main + runtime + test).
@@ -126,6 +134,7 @@ public final class TestCommand implements Callable<Integer> {
             Path outputDir,
             List<Path> classpath,
             int release,
+            List<String> javacArgs,
             Cas cas,
             Path cacheRoot) throws IOException {
 
@@ -140,6 +149,7 @@ public final class TestCommand implements Callable<Integer> {
                 .classpath(classpath)
                 .outputDir(outputDir)
                 .release(release)
+                .extraOptions(javacArgs)
                 .build();
         String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));

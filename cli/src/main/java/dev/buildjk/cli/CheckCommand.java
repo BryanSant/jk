@@ -10,6 +10,8 @@ import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
+import dev.buildjk.model.Profile;
+import dev.buildjk.model.Profiles;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -34,6 +36,10 @@ public final class CheckCommand implements Callable<Integer> {
     @Option(names = {"-C", "--directory"},
             description = "Project directory. Default: current directory.")
     Path directory;
+
+    @Option(names = "--profile", paramLabel = "<name>",
+            description = "Build profile to apply. Default: auto (ci if CI=true, else none).")
+    String profileName;
 
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the CAS cache directory. Default: ~/.jk/cache.")
@@ -72,13 +78,17 @@ public final class CheckCommand implements Callable<Integer> {
                 ? cacheDir
                 : Path.of(System.getProperty("user.home"), ".jk", "cache");
         Cas cas = new Cas(cache);
-        List<Path> classpath = new ClasspathResolver(cas).classpathFor(lock);
+        List<Path> classpath = new ClasspathResolver(cas)
+                .classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
+
+        Profile profile = resolveProfile(project.profiles(), profileName);
 
         int release = parseReleaseFromJdk(project.project().jdk());
         CompileRequest request = CompileRequest.builder()
                 .sources(sources)
                 .classpath(classpath)
                 .release(release)
+                .extraOptions(profile == null ? List.of() : profile.javacArgs())
                 .build();
 
         CompileResult result = new JavacDriver().compile(request);
@@ -102,6 +112,21 @@ public final class CheckCommand implements Callable<Integer> {
                     .forEach(sources::add);
         }
         return sources;
+    }
+
+    /**
+     * Pick the active profile. Explicit {@code --profile} wins. Otherwise
+     * the {@code ci} profile is auto-selected when running on CI.
+     */
+    static Profile resolveProfile(Profiles profiles, String explicitName) {
+        if (explicitName != null && !explicitName.isBlank()) {
+            return profiles.resolve(explicitName);
+        }
+        String auto = Profiles.autoSelect(System.getenv());
+        if (auto != null && profiles.contains(auto)) {
+            return profiles.resolve(auto);
+        }
+        return null;
     }
 
     /**

@@ -11,6 +11,7 @@ import dev.buildjk.hocon.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
+import dev.buildjk.model.Profile;
 import dev.buildjk.task.ActionCache;
 import dev.buildjk.task.ActionKey;
 import picocli.CommandLine.Command;
@@ -37,6 +38,10 @@ public final class BuildCommand implements Callable<Integer> {
     @Option(names = {"-C", "--directory"},
             description = "Project directory. Default: current directory.")
     Path directory;
+
+    @Option(names = "--profile", paramLabel = "<name>",
+            description = "Build profile to apply. Default: auto (ci if CI=true, else none).")
+    String profileName;
 
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the CAS cache directory. Default: ~/.jk/cache.")
@@ -79,12 +84,16 @@ public final class BuildCommand implements Callable<Integer> {
                 .classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
         int release = CheckCommand.parseReleaseFromJdk(project.project().jdk());
 
+        Profile profile = CheckCommand.resolveProfile(project.profiles(), profileName);
+        List<String> javacArgs = profile == null ? List.of() : profile.javacArgs();
+
         if (!sources.isEmpty()) {
             CompileRequest request = CompileRequest.builder()
                     .sources(sources)
                     .classpath(classpath)
                     .outputDir(classes)
                     .release(release)
+                    .extraOptions(javacArgs)
                     .build();
             String taskId = "compile-main";
             String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
