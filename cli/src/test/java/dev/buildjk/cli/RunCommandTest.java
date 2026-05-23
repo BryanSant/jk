@@ -190,6 +190,57 @@ class RunCommandTest {
         assertThat(exit).isEqualTo(1);
     }
 
+    @Test
+    void runs_current_project_when_no_script_given(@TempDir Path tempDir) throws Exception {
+        // Scaffold a runnable project, write source that exits with code 7.
+        run("init",
+                "--group", "com.example",
+                "--name", "widget",
+                "--main", "com.example.App",
+                tempDir.toString());
+        Path src = tempDir.resolve("src/main/java/com/example/App.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package com.example;
+                public final class App {
+                    public static void main(String[] args) {
+                        // Echo args count back as the exit code.
+                        System.exit(args.length);
+                    }
+                }
+                """);
+
+        // No script positional, no jar yet — `jk run` should auto-build then exec.
+        int exit = run("run", "-C", tempDir.toString(),
+                "--home", tempDir.resolve("home").toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(tempDir.resolve("target/widget-0.1.0.jar")).exists();
+
+        // Args after `--` reach the main method.
+        int withArgs = run("run", "-C", tempDir.toString(),
+                "--home", tempDir.resolve("home").toString(),
+                "--", "a", "b", "c");
+        assertThat(withArgs).isEqualTo(3);
+    }
+
+    @Test
+    void project_mode_without_main_returns_usage_error(@TempDir Path tempDir) throws Exception {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "lib-only"
+                version  = "0.1.0"
+                """);
+        int exit = run("run", "-C", tempDir.toString());
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
+    void no_script_and_no_jk_toml_returns_usage_error(@TempDir Path tempDir) {
+        int exit = run("run", "-C", tempDir.toString());
+        assertThat(exit).isEqualTo(64);
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private void servePom(String group, String artifact, String version) {

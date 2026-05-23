@@ -2,13 +2,21 @@
 package dev.buildjk.cli;
 
 import dev.buildjk.cache.Cas;
+import dev.buildjk.compile.ClasspathResolver;
 import dev.buildjk.compile.CompileRequest;
 import dev.buildjk.compile.CompileResult;
 import dev.buildjk.compile.JavacDriver;
+import dev.buildjk.config.BuildJkParser;
+import dev.buildjk.config.WorkspaceClasspath;
+import dev.buildjk.config.WorkspaceLocator;
 import dev.buildjk.http.Http;
+import dev.buildjk.lock.Lockfile;
+import dev.buildjk.lock.LockfileReader;
+import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Coordinate;
 import dev.buildjk.model.Dependency;
 import dev.buildjk.model.RepositorySpec;
+import dev.buildjk.model.Scope;
 import dev.buildjk.repo.EffectivePomBuilder;
 import dev.buildjk.repo.MavenRepo;
 import dev.buildjk.repo.RepoGroup;
@@ -27,39 +35,43 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk run <script.java> [-- <args>...]} — JBang-compat single-file
- * script runner (PRD §19).
+ * {@code jk run [<script.java>] [-- <args>...]} — runs either a single-file
+ * Java script (JBang-compat, PRD §19) or the current project's main class.
  *
- * <p>Pipeline:
- * <ol>
- *   <li>Hash the script's bytes for the cache key (SHA-256).</li>
- *   <li>Parse {@code //jk dep}/{@code //jk jdk}/{@code //jk repo} +
- *       JBang {@code //DEPS}/{@code //JAVA}/etc. directives.</li>
- *   <li>Resolve declared deps transitively via {@link NaiveResolver};
- *       fetch jars into the shared CAS.</li>
- *   <li>Compile the script via {@link JavacDriver} into
- *       {@code ~/.jk/script-cache/<hash>/classes/} — skipped if the cache
- *       already has the classes.</li>
- *   <li>Exec a child {@code java} with the compiled class + resolved
- *       classpath + caller-provided {@code -- args}.</li>
- * </ol>
+ * <p>Modes:
+ * <ul>
+ *   <li><b>Script:</b> {@code jk run script.java [args...]} — compile the
+ *       {@code .java} file with {@link JavacDriver}, cache classes, exec with
+ *       the script-declared classpath.</li>
+ *   <li><b>Project:</b> {@code jk run [args...]} with a {@code jk.toml} in
+ *       cwd. Builds the project jar if missing, then exec'es the configured
+ *       {@code project.main} class against the lockfile's runtime classpath.
+ *       If a native binary is present at {@code target/<artifact>}, that wins
+ *       and is exec'd directly.</li>
+ * </ul>
+ *
+ * <p>Disambiguation: the first positional is treated as a script when it
+ * names an existing {@code .java} file; otherwise all positionals forward
+ * to the project's main class.
  */
-@Command(name = "run", description = "Run a single-file Java script")
+@Command(name = "run", description = "Run a single-file Java script or the current project")
 public final class RunCommand implements Callable<Integer> {
 
-    @Parameters(index = "0", paramLabel = "<script>",
-            description = "Path to a .java script.")
-    Path script;
+    @Parameters(arity = "0..*", paramLabel = "<args>",
+            description = "Either a .java script path (then args after it) or "
+                    + "arguments forwarded to the project's main class.")
+    List<String> positional = new ArrayList<>();
 
-    @Parameters(index = "1..*", paramLabel = "<args>",
-            description = "Arguments forwarded to the script.")
-    List<String> args = new ArrayList<>();
+    @Option(names = {"-C", "--directory"},
+            description = "Project directory for project-mode runs. Default: current directory.")
+    Path directory;
 
     @Option(names = "--home", hidden = true,
             description = "Override the jk home root. Default: ~/.jk.")
@@ -70,11 +82,121 @@ public final class RunCommand implements Callable<Integer> {
     URI repoUrl;
 
     @Option(names = "--force-recompile",
-            description = "Ignore cached classes and recompile.")
+            description = "Ignore cached classes and recompile (script mode).")
     boolean forceRecompile;
 
     @Override
     public Integer call() throws IOException, InterruptedException {
+        Path scriptPath = detectScript();
+        if (scriptPath != null) {
+            List<String> scriptArgs = positional.subList(1, positional.size());
+            return runScript(scriptPath, scriptArgs);
+        }
+        Path projectDir = directory != null
+                ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path manifest = projectDir.resolve("jk.toml");
+        if (!Files.exists(manifest)) {
+            System.err.println("jk run: no script given and no jk.toml in " + projectDir);
+            return 64; // EX_USAGE
+        }
+        return runProject(projectDir, positional);
+    }
+
+    /**
+     * If the first positional looks like a script ({@code .java} suffix),
+     * treat as script mode — even if the file is missing, so the user gets
+     * the "script not found" error instead of falling through to project mode.
+     */
+    private Path detectScript() {
+        if (positional.isEmpty()) return null;
+        String first = positional.getFirst();
+        return first.endsWith(".java") ? Path.of(first) : null;
+    }
+
+    // --- project mode -----------------------------------------------------
+
+    private int runProject(Path projectDir, List<String> appArgs)
+            throws IOException, InterruptedException {
+        BuildJk project = BuildJkParser.parse(projectDir.resolve("jk.toml"));
+        if (project.project().main() == null) {
+            System.err.println("jk run: no `main` class set in [project] for "
+                    + projectDir + " — set `main = \"<fqcn>\"` or pass a script.");
+            return 64;
+        }
+        String artifact = project.project().artifact();
+        String version = project.project().version();
+        Path target = projectDir.resolve("target");
+
+        // Native binary wins if present.
+        Path nativeBin = target.resolve(artifact);
+        if (Files.isRegularFile(nativeBin) && Files.isExecutable(nativeBin)) {
+            List<String> command = new ArrayList<>();
+            command.add(nativeBin.toAbsolutePath().toString());
+            command.addAll(appArgs);
+            return new ProcessBuilder(command).inheritIO().start().waitFor();
+        }
+
+        // Build the jar if missing.
+        Path jar = target.resolve(artifact + "-" + version + ".jar");
+        if (!Files.exists(jar)) {
+            int rc = Jk.execute("build", "-C", projectDir.toString());
+            if (rc != 0) return rc;
+        }
+        if (!Files.exists(jar)) {
+            System.err.println("jk run: expected jar at " + jar + " but build did not produce it.");
+            return 70; // EX_SOFTWARE
+        }
+
+        List<Path> classpath = assembleRuntimeClasspath(projectDir, project, jar);
+
+        Path java = CompileToolchain.runningJavaHome().resolve("bin").resolve(
+                System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
+        StringBuilder cp = new StringBuilder();
+        String sep = System.getProperty("path.separator");
+        for (int i = 0; i < classpath.size(); i++) {
+            if (i > 0) cp.append(sep);
+            cp.append(classpath.get(i).toAbsolutePath());
+        }
+        List<String> command = new ArrayList<>();
+        command.add(java.toString());
+        command.add("-cp");
+        command.add(cp.toString());
+        command.add(project.project().main());
+        command.addAll(appArgs);
+        return new ProcessBuilder(command).inheritIO().start().waitFor();
+    }
+
+    private List<Path> assembleRuntimeClasspath(Path projectDir, BuildJk project, Path projectJar)
+            throws IOException {
+        List<Path> classpath = new ArrayList<>();
+        classpath.add(projectJar);
+
+        Path lockFile = projectDir.resolve("jk.lock");
+        if (!Files.exists(lockFile)) {
+            var rootOpt = WorkspaceLocator.findRoot(projectDir);
+            if (rootOpt.isPresent()) {
+                Path candidate = rootOpt.get().resolve("jk.lock");
+                if (Files.exists(candidate)) lockFile = candidate;
+            }
+        }
+        Path jkHome = home != null
+                ? home : Path.of(System.getProperty("user.home"), ".jk");
+        Cas cas = new Cas(jkHome.resolve("cache"));
+        if (Files.exists(lockFile)) {
+            Lockfile lock = LockfileReader.read(lockFile);
+            classpath.addAll(new ClasspathResolver(cas).classpathFor(lock,
+                    EnumSet.of(Scope.MAIN, Scope.RUNTIME)));
+        }
+        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project,
+                EnumSet.of(Scope.MAIN, Scope.RUNTIME));
+        classpath.addAll(siblings.jars());
+        return classpath;
+    }
+
+    // --- script mode ------------------------------------------------------
+
+    private int runScript(Path script, List<String> scriptArgs)
+            throws IOException, InterruptedException {
         if (!Files.isRegularFile(script)) {
             System.err.println("jk run: script not found: " + script);
             return 66; // EX_NOINPUT
@@ -98,7 +220,7 @@ public final class RunCommand implements Callable<Integer> {
         List<Path> classpath = resolveClasspath(header.deps(), repos);
 
         if (forceRecompile || !Files.exists(classesDir.resolve(mainClassName(script) + ".class"))) {
-            CompileResult result = compile(header, classesDir, classpath);
+            CompileResult result = compile(script, header, classesDir, classpath);
             if (!result.success()) {
                 for (var d : result.diagnostics()) {
                     System.err.println(d.severity() + " "
@@ -109,7 +231,7 @@ public final class RunCommand implements Callable<Integer> {
             }
         }
 
-        return exec(header, classesDir, classpath);
+        return execScript(script, header, classesDir, classpath, scriptArgs);
     }
 
     private RepoGroup buildRepos(ScriptHeader header, Http http, Cas cas) {
@@ -154,8 +276,8 @@ public final class RunCommand implements Callable<Integer> {
         return jars;
     }
 
-    private CompileResult compile(ScriptHeader header, Path classesDir, List<Path> classpath)
-            throws IOException {
+    private CompileResult compile(Path script, ScriptHeader header,
+                                  Path classesDir, List<Path> classpath) throws IOException {
         Files.createDirectories(classesDir);
         int release = header.release() != null
                 ? header.release() : Runtime.version().feature();
@@ -170,7 +292,8 @@ public final class RunCommand implements Callable<Integer> {
         return new JavacDriver().compile(request);
     }
 
-    private int exec(ScriptHeader header, Path classesDir, List<Path> classpath)
+    private int execScript(Path script, ScriptHeader header, Path classesDir,
+                           List<Path> classpath, List<String> scriptArgs)
             throws IOException, InterruptedException {
         Path java = CompileToolchain.runningJavaHome().resolve("bin").resolve(
                 System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
@@ -185,7 +308,7 @@ public final class RunCommand implements Callable<Integer> {
         command.add("-cp");
         command.add(cp.toString());
         command.add(mainClassName(script));
-        command.addAll(args);
+        command.addAll(scriptArgs);
 
         return new ProcessBuilder(command).inheritIO().start().waitFor();
     }
