@@ -11,7 +11,7 @@ import java.util.concurrent.Callable;
  * {@code jk jdk dir} — print the JDK install root (parallel to
  * {@code jk cache dir} and {@code jk tool dir}).
  */
-@Command(name = "dir", description = "Print the JDK install root")
+@Command(name = "dir", description = "Show the JDK install directory")
 public final class JdkDirCommand implements Callable<Integer> {
 
     @Option(names = "--jdks-dir", hidden = true,

@@ -5,19 +5,20 @@ import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 /**
- * {@code jk jdk} — JDK management subcommands. Parent for install / list /
- * use / uninstall. Maps to PRD §12.
+ * {@code jk jdk} — JDK management subcommands. Maps to PRD §12.
  */
 @Command(
         name = "jdk",
-        description = "Manage installed JDKs",
+        description = "Manage JDK versions and installations",
         subcommands = {
-                JdkInstallCommand.class,
                 JdkListCommand.class,
-                JdkUseCommand.class,
+                JdkInstallCommand.class,
+                JdkPinCommand.class,
+                JdkDirCommand.class,
+                JdkHomeCommand.class,
                 JdkUninstallCommand.class,
                 JdkReconcileCommand.class,
-                JdkDirCommand.class,
+                JdkUpdateShellCommand.class,
         })
 public final class JdkCommand implements Runnable {
 

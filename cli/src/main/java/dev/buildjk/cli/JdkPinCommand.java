@@ -15,12 +15,12 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk jdk use <spec>} — pin the project to an installed JDK by
+ * {@code jk jdk pin <spec>} — pin the project to an installed JDK by
  * writing {@code .jk-version}. PRD §12.4: also keeps {@code .sdkmanrc}
  * aligned unless {@code --no-sdkman-compat}.
  */
-@Command(name = "use", description = "Pin a project to an installed JDK (writes .jk-version)")
-public final class JdkUseCommand implements Callable<Integer> {
+@Command(name = "pin", description = "Pin to a specific JDK version")
+public final class JdkPinCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<spec>",
             description = "Installed JDK identifier or prefix (e.g. 21.0.5-tem).")
@@ -52,7 +52,7 @@ public final class JdkUseCommand implements Callable<Integer> {
                     catch (IOException e) { throw new RuntimeException(e); }
                 });
         if (jdk.isEmpty()) {
-            System.err.println("jk jdk use: no installed JDK matches `" + spec
+            System.err.println("jk jdk pin: no installed JDK matches `" + spec
                     + "` (try `jk jdk list`)");
             return 1;
         }

@@ -25,7 +25,7 @@ import java.util.concurrent.Callable;
  * vendor = Temurin) and {@code <version>-<vendor>} (SDKMAN-style suffix).
  * Range / "lts" / "latest" tokens land later.
  */
-@Command(name = "install", description = "Download and install a JDK")
+@Command(name = "install", description = "Download and install JDK versions")
 public final class JdkInstallCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<spec>",

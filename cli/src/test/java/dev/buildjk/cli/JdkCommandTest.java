@@ -115,11 +115,11 @@ class JdkCommandTest {
     }
 
     @Test
-    void use_writes_jk_version_and_sdkmanrc(@TempDir Path tempDir) throws Exception {
+    void pin_writes_jk_version_and_sdkmanrc(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         Files.createDirectories(jdks.resolve("21.0.5-tem-x64-linux/bin"));
 
-        int exit = run("jdk", "use", "21.0.5-tem",
+        int exit = run("jdk", "pin", "21.0.5-tem",
                 "-C", tempDir.toString(),
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
@@ -131,11 +131,11 @@ class JdkCommandTest {
     }
 
     @Test
-    void use_no_sdkman_compat_skips_sdkmanrc(@TempDir Path tempDir) throws Exception {
+    void pin_no_sdkman_compat_skips_sdkmanrc(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         Files.createDirectories(jdks.resolve("21.0.5-tem-x64-linux"));
 
-        int exit = run("jdk", "use", "21.0.5-tem",
+        int exit = run("jdk", "pin", "21.0.5-tem",
                 "-C", tempDir.toString(),
                 "--jdks-dir", jdks.toString(),
                 "--no-sdkman-compat");
@@ -159,11 +159,104 @@ class JdkCommandTest {
     }
 
     @Test
-    void use_unknown_jdk_errors(@TempDir Path tempDir) {
-        int exit = run("jdk", "use", "nothing-installed",
+    void pin_unknown_jdk_errors(@TempDir Path tempDir) {
+        int exit = run("jdk", "pin", "nothing-installed",
                 "-C", tempDir.toString(),
                 "--jdks-dir", tempDir.resolve("jdks").toString());
         assertThat(exit).isEqualTo(1);
+    }
+
+    @Test
+    void home_prints_export_java_home_for_pinned_jdk(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        Path jdkHome = jdks.resolve("21.0.5-tem-x64-linux");
+        Files.createDirectories(jdkHome.resolve("bin"));
+        Files.writeString(tempDir.resolve(".jk-version"), "21.0.5-tem-x64-linux\n");
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        PrintStream origOut = System.out;
+        System.setOut(new PrintStream(out));
+        int exit;
+        try {
+            exit = run("jdk", "home",
+                    "-C", tempDir.toString(),
+                    "--jdks-dir", jdks.toString());
+        } finally {
+            System.setOut(origOut);
+        }
+        assertThat(exit).isEqualTo(0);
+        String stdout = out.toString(StandardCharsets.UTF_8).trim();
+        assertThat(stdout).isEqualTo("export JAVA_HOME=" + jdkHome);
+    }
+
+    @Test
+    void home_errors_when_no_pinned_jdk(@TempDir Path tempDir) {
+        int exit = run("jdk", "home",
+                "-C", tempDir.toString(),
+                "--jdks-dir", tempDir.resolve("jdks").toString());
+        assertThat(exit).isEqualTo(2);
+    }
+
+    @Test
+    void update_shell_appends_path_export_to_bashrc(@TempDir Path tempDir) throws IOException {
+        Path rc = tempDir.resolve(".bashrc");
+        Files.writeString(rc, "# user content\n");
+
+        int exit = run("jdk", "update-shell",
+                "--shell", "bash",
+                "--home", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+
+        String body = Files.readString(rc);
+        assertThat(body).contains("# user content");
+        assertThat(body).contains(JdkUpdateShellCommand.MARKER);
+        assertThat(body).contains("export PATH=\"" + tempDir + "/.jk/bin:$PATH\"");
+    }
+
+    @Test
+    void update_shell_writes_zshenv_not_zshrc(@TempDir Path tempDir) throws IOException {
+        int exit = run("jdk", "update-shell",
+                "--shell", "zsh",
+                "--home", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(tempDir.resolve(".zshenv")).exists();
+        assertThat(tempDir.resolve(".zshrc")).doesNotExist();
+    }
+
+    @Test
+    void update_shell_uses_fish_add_path_for_fish(@TempDir Path tempDir) throws IOException {
+        int exit = run("jdk", "update-shell",
+                "--shell", "fish",
+                "--home", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+        Path fishConf = tempDir.resolve(".config/fish/conf.d/jk.fish");
+        assertThat(fishConf).exists();
+        assertThat(Files.readString(fishConf))
+                .contains("fish_add_path \"" + tempDir + "/.jk/bin\"");
+    }
+
+    @Test
+    void update_shell_is_idempotent(@TempDir Path tempDir) throws IOException {
+        int first = run("jdk", "update-shell",
+                "--shell", "bash",
+                "--home", tempDir.toString());
+        assertThat(first).isEqualTo(0);
+        String afterFirst = Files.readString(tempDir.resolve(".bashrc"));
+
+        int second = run("jdk", "update-shell",
+                "--shell", "bash",
+                "--home", tempDir.toString());
+        assertThat(second).isEqualTo(0);
+        assertThat(Files.readString(tempDir.resolve(".bashrc")))
+                .isEqualTo(afterFirst);  // unchanged
+    }
+
+    @Test
+    void update_shell_unknown_shell_returns_usage_error(@TempDir Path tempDir) {
+        int exit = run("jdk", "update-shell",
+                "--shell", "tcsh",
+                "--home", tempDir.toString());
+        assertThat(exit).isEqualTo(64);
     }
 
     private static int run(String... args) {
