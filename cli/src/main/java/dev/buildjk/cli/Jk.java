@@ -41,6 +41,7 @@ import java.util.Map;
                 ImportCommand.class,
                 ExportCommand.class,
                 JkxCommand.class,
+                InstallCommand.class,
                 RunCommand.class,
                 PublishCommand.class,
                 AuditCommand.class,
@@ -75,8 +76,7 @@ public final class Jk implements Runnable {
             Map.entry("bash", List.of("shell")),
             Map.entry("nativeCompile", List.of("native")),    // Gradle :nativeCompile task
             Map.entry("verify-target", List.of("verify-build")),
-            Map.entry("check", List.of("compile")),           // renamed verb; check kept for back-compat
-            Map.entry("install", List.of("tool", "install"))); // jk install moved under tool
+            Map.entry("check", List.of("compile")));          // renamed verb; check kept for back-compat
 
     public static void main(String[] args) {
         System.exit(execute(args));

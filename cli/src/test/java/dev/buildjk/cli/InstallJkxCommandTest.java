@@ -78,9 +78,9 @@ class InstallJkxCommandTest {
     }
 
     @Test
-    void install_alias_routes_to_tool_install(@TempDir Path tempDir) throws Exception {
-        // `jk install <coord>` must still work — it expands to `tool install <coord>`
-        // via the alias rewrite. Same end state as the canonical path.
+    void top_level_install_handles_a_maven_coord(@TempDir Path tempDir) throws Exception {
+        // `jk install <coord>` is a first-class verb that produces the same
+        // launcher + env layout as `jk tool install <coord>`.
         servePom("com.example", "widget-cli", "1.0.0");
         serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
 
