@@ -109,6 +109,23 @@ class BuildJkRendererTest {
     }
 
     @Test
+    void floating_deps_render_with_at_separator() {
+        Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
+        byScope.put(Scope.MAIN, List.of(
+                new Dependency("com.example:pinned", VersionSelector.parse("1.0.0"), true),
+                new Dependency("com.example:floating",
+                        VersionSelector.parseFloating("^2.0.0"), false)));
+
+        BuildJk model = new BuildJk(
+                new BuildJk.Project("com.example", "widget", "1.0.0", "21"),
+                new BuildJk.Dependencies(byScope));
+        String out = BuildJkRenderer.render(model);
+
+        assertThat(out).contains("\"com.example:pinned:1.0.0\"");
+        assertThat(out).contains("\"com.example:floating@^2.0.0\"");
+    }
+
+    @Test
     void output_round_trips_through_the_parser() {
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         byScope.put(Scope.MAIN, List.of(

@@ -4,13 +4,24 @@ package dev.buildjk.model;
 import java.util.Objects;
 
 /**
- * Version selector per PRD §7.3. Pinned-by-default (Maven/Gradle muscle memory);
- * caret, tilde, and range syntax are opt-in decorations.
+ * Version selector per PRD §7.3. Two parse modes for the two manifest forms:
  *
  * <ul>
- *   <li>{@code "2.18.2"}  → {@link Exact}  (exactly {@code 2.18.2})</li>
+ *   <li><b>{@code parse}</b> — {@code group:artifact:version} ({@code :} form,
+ *       pinned). Bare versions are {@link Exact}; decorations
+ *       ({@code ^}, {@code ~}, ranges, {@code latest}) are still accepted on
+ *       the existing grammar but the {@code :} separator itself signals
+ *       "pinned" at the {@code Dependency} level.</li>
+ *   <li><b>{@code parseFloating}</b> — {@code group:artifact@version} ({@code @}
+ *       form, floating, Cargo-style). Bare versions default to {@link Caret}
+ *       (e.g., {@code 2.18.2} → {@code ^2.18.2}). Pin via {@code =2.18.2}.</li>
+ * </ul>
+ *
+ * Decoration grammar (applies to both):
+ * <ul>
  *   <li>{@code "^2.18.2"} → {@link Caret}  ({@code >=2.18.2, <3.0.0})</li>
  *   <li>{@code "~2.18.2"} → {@link Tilde}  (patch-only, {@code >=2.18.2, <2.19.0})</li>
+ *   <li>{@code "=2.18.2"} → {@link Exact}  (exact pin)</li>
  *   <li>{@code ">=2.18, <3"} → {@link Range}</li>
  *   <li>{@code "latest"}  → {@link Latest}</li>
  * </ul>
@@ -31,6 +42,19 @@ public sealed interface VersionSelector {
     record Latest(String raw) implements VersionSelector {}
 
     static VersionSelector parse(String spec) {
+        return parse(spec, /* bareIsCaret */ false);
+    }
+
+    /**
+     * Parse with caret-default semantics. Used for the {@code @}-form
+     * ({@code group:artifact@version}) so that bare {@code 2.18.2} reads
+     * as {@code ^2.18.2}. Cargo-style.
+     */
+    public static VersionSelector parseFloating(String spec) {
+        return parse(spec, /* bareIsCaret */ true);
+    }
+
+    private static VersionSelector parse(String spec, boolean bareIsCaret) {
         Objects.requireNonNull(spec, "spec");
         String trimmed = spec.trim();
         if (trimmed.isEmpty()) {
@@ -48,11 +72,13 @@ public sealed interface VersionSelector {
         if (trimmed.startsWith(">") || trimmed.startsWith("<") || trimmed.contains(",")) {
             return new Range(spec);
         }
-        // Backward-compatible: leading `=` still parses to Exact, since some
-        // older lockfiles and tests may carry it. Bare versions are also Exact.
+        // Leading `=` is always Exact (back-compat with older lockfiles and an
+        // explicit pin under the @-form).
         if (trimmed.startsWith("=")) {
             return new Exact(spec, trimmed.substring(1).trim());
         }
-        return new Exact(spec, trimmed);
+        return bareIsCaret
+                ? new Caret(spec, trimmed)
+                : new Exact(spec, trimmed);
     }
 }

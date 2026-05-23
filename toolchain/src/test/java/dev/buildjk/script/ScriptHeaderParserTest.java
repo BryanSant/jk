@@ -126,4 +126,44 @@ class ScriptHeaderParserTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScriptHeaderParser.parse("//jk dep not-a-coord"));
     }
+
+    @Test
+    void at_form_is_floating_with_caret_default() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //jk dep com.example:lib@1.2.3
+                """);
+        Dependency d = h.deps().getFirst();
+        assertThat(d.module()).isEqualTo("com.example:lib");
+        assertThat(d.pinned()).isFalse();
+        assertThat(d.version())
+                .isInstanceOf(dev.buildjk.model.VersionSelector.Caret.class);
+    }
+
+    @Test
+    void at_form_with_explicit_decoration() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //jk dep com.example:lib@~1.2.3
+                //jk dep com.example:tool@latest
+                """);
+        assertThat(h.deps().get(0).version())
+                .isInstanceOf(dev.buildjk.model.VersionSelector.Tilde.class);
+        assertThat(h.deps().get(1).version())
+                .isInstanceOf(dev.buildjk.model.VersionSelector.Latest.class);
+    }
+
+    @Test
+    void deps_directive_accepts_mixed_forms() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //DEPS com.example:pinned:1.0.0 com.example:floating@^2.0.0
+                """);
+        assertThat(h.deps()).hasSize(2);
+        assertThat(h.deps().get(0).pinned()).isTrue();
+        assertThat(h.deps().get(1).pinned()).isFalse();
+    }
+
+    @Test
+    void colon_form_with_decorations_is_rejected() {
+        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+                () -> ScriptHeaderParser.parse("//jk dep com.example:lib:^1.0"));
+    }
 }

@@ -174,9 +174,15 @@ public final class BuildJkParser {
     /**
      * Parse a single dep string. Forms:
      * <ul>
-     *   <li>{@code "group:artifact:version"} — Maven coord, version passed to
-     *       {@link VersionSelector#parse}. May still be overlaid with a source.</li>
-     *   <li>{@code "group:artifact"} — source-only; must appear in {@code [sources]}.</li>
+     *   <li>{@code "group:artifact:version"} — pinned. Version must be a
+     *       bare literal ({@code 1.2.3}) or a plain {@code =1.2.3}.
+     *       Decorations ({@code ^}, {@code ~}, ranges, {@code latest}) are
+     *       rejected — they belong on the {@code @} form.</li>
+     *   <li>{@code "group:artifact@version"} — floating (preferred).
+     *       Version is parsed via {@link VersionSelector#parseFloating};
+     *       bare versions default to caret.</li>
+     *   <li>{@code "group:artifact"} — source-only; must appear in
+     *       {@code [sources]}.</li>
      * </ul>
      */
     private static Dependency parseDepSpec(String spec, Scope scope, Map<String, GitSource> sources) {
@@ -188,19 +194,35 @@ public final class BuildJkParser {
         if (firstColon < 0) {
             throw new BuildJkParseException(
                     "dependencies." + scope.canonical() + ".\"" + spec
-                            + "\" must be \"group:artifact[:version]\"");
+                            + "\" must be \"group:artifact[:version]\" or \"group:artifact@version\"");
         }
-        int secondColon = spec.indexOf(':', firstColon + 1);
+        // Look for the next `:` or `@` after the group/artifact separator;
+        // whichever comes first determines the form.
+        int nextColon = spec.indexOf(':', firstColon + 1);
+        int atSign = spec.indexOf('@', firstColon + 1);
+
         String module;
         String versionPart;
-        if (secondColon < 0) {
+        boolean floating;
+
+        if (nextColon < 0 && atSign < 0) {
+            // Source-only: "group:artifact" with no version.
             module = spec;
             versionPart = null;
+            floating = false;
+        } else if (atSign >= 0 && (nextColon < 0 || atSign < nextColon)) {
+            // @-form: group:artifact@version
+            module = spec.substring(0, atSign);
+            versionPart = spec.substring(atSign + 1);
+            floating = true;
         } else {
-            module = spec.substring(0, secondColon);
-            versionPart = spec.substring(secondColon + 1);
+            // :-form: group:artifact:version
+            module = spec.substring(0, nextColon);
+            versionPart = spec.substring(nextColon + 1);
+            floating = false;
         }
-        if (module.endsWith(":")) {
+
+        if (module.endsWith(":") || module.endsWith("@")) {
             throw new BuildJkParseException(
                     "dependencies." + scope.canonical() + ".\"" + spec + "\" has empty artifact");
         }
@@ -217,13 +239,32 @@ public final class BuildJkParser {
             throw new BuildJkParseException(
                     "dependencies." + scope.canonical() + ".\"" + spec + "\" has empty version");
         }
-        VersionSelector selector = VersionSelector.parse(versionPart);
+
+        VersionSelector selector;
+        if (floating) {
+            selector = VersionSelector.parseFloating(versionPart);
+        } else {
+            // :-form: forbid decorations. Allow plain `=1.2.3` for symmetry
+            // with the lockfile-emitted form.
+            String trimmed = versionPart.trim();
+            if (trimmed.startsWith("^") || trimmed.startsWith("~")
+                    || trimmed.startsWith(">") || trimmed.startsWith("<")
+                    || trimmed.contains(",") || "latest".equalsIgnoreCase(trimmed)) {
+                throw new BuildJkParseException(
+                        "dependencies." + scope.canonical() + ".\"" + spec
+                                + "\" — the `:` form is for pinned versions only. "
+                                + "Use \"" + module + "@" + versionPart
+                                + "\" to declare a floating constraint.");
+            }
+            selector = VersionSelector.parse(versionPart);
+        }
+
         if (source != null) {
             // Coord listed in deps AND sources — emit as git-sourced; the
             // version is informational only for git deps.
             return Dependency.git(module, source);
         }
-        return new Dependency(module, selector);
+        return new Dependency(module, selector, /* pinned */ !floating);
     }
 
     private static List<RepositorySpec> parseRepositories(TomlTable root) {

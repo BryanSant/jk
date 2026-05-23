@@ -15,12 +15,16 @@ import java.util.regex.Pattern;
  *
  * <p>Recognised forms:
  * <ul>
- *   <li>{@code //jk dep group:artifact:version} — single coord per line.</li>
+ *   <li>{@code //jk dep group:artifact:version} — pinned, single coord per line.</li>
+ *   <li>{@code //jk dep group:artifact@version} — floating constraint
+ *       (preferred); decorations like {@code @^1.2}, {@code @~1.2.3},
+ *       {@code @>=1,<2}, {@code @latest} are honored.</li>
  *   <li>{@code //jk jdk N} — JDK release (e.g. {@code //jk jdk 21}).</li>
  *   <li>{@code //jk repo https://...} — add a Maven repository.</li>
  *   <li>{@code //jk feature name} — enable a feature.</li>
  *   <li>{@code //jk javac-options ...} / {@code //jk java-options ...}.</li>
- *   <li>{@code //DEPS g:a:v g2:a2:v2 ...} — JBang multi-dep line.</li>
+ *   <li>{@code //DEPS g:a:v g2:a2@v2 ...} — JBang multi-dep line; both
+ *       separators accepted.</li>
  *   <li>{@code //JAVA 21} — JBang JDK selector.</li>
  *   <li>{@code //JAVAC_OPTIONS -parameters --enable-preview}.</li>
  *   <li>{@code //JAVA_OPTIONS -Xmx512m}.</li>
@@ -104,14 +108,53 @@ public final class ScriptHeaderParser {
     }
 
     private static Dependency parseDep(String coord) {
-        String[] parts = coord.trim().split(":");
-        if (parts.length < 3) {
+        String spec = coord.trim();
+        int firstColon = spec.indexOf(':');
+        if (firstColon < 0) {
             throw new IllegalArgumentException(
-                    "script dependency must be `group:artifact:version`, got: " + coord);
+                    "script dependency must be `group:artifact:version` or "
+                            + "`group:artifact@version`, got: " + coord);
         }
-        String module = parts[0] + ":" + parts[1];
-        VersionSelector selector = VersionSelector.parse("=" + parts[2]);
-        return new Dependency(module, selector);
+        int nextColon = spec.indexOf(':', firstColon + 1);
+        int atSign = spec.indexOf('@', firstColon + 1);
+
+        String module;
+        String versionPart;
+        boolean floating;
+
+        if (nextColon < 0 && atSign < 0) {
+            throw new IllegalArgumentException(
+                    "script dependency must include a version, got: " + coord);
+        } else if (atSign >= 0 && (nextColon < 0 || atSign < nextColon)) {
+            module = spec.substring(0, atSign);
+            versionPart = spec.substring(atSign + 1);
+            floating = true;
+        } else {
+            module = spec.substring(0, nextColon);
+            versionPart = spec.substring(nextColon + 1);
+            floating = false;
+        }
+
+        if (versionPart.isBlank()) {
+            throw new IllegalArgumentException(
+                    "script dependency has empty version: " + coord);
+        }
+
+        VersionSelector selector;
+        if (floating) {
+            selector = VersionSelector.parseFloating(versionPart);
+        } else {
+            String trimmed = versionPart.trim();
+            if (trimmed.startsWith("^") || trimmed.startsWith("~")
+                    || trimmed.startsWith(">") || trimmed.startsWith("<")
+                    || trimmed.contains(",") || "latest".equalsIgnoreCase(trimmed)) {
+                throw new IllegalArgumentException(
+                        coord + " — the `:` form is for pinned versions only. "
+                                + "Use `" + module + "@" + versionPart + "` for a floating constraint.");
+            }
+            selector = VersionSelector.parse(versionPart);
+        }
+        return new Dependency(module, selector, !floating);
     }
 
     private static Integer parseJdk(String raw, Integer existing) {

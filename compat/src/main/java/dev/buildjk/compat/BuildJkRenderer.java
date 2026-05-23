@@ -118,7 +118,9 @@ public final class BuildJkRenderer {
             // in [sources].
             return d.module();
         }
-        return d.module() + ":" + d.version().raw();
+        // Pinned → `:` form; floating → `@` form.
+        String sep = d.pinned() ? ":" : "@";
+        return d.module() + sep + d.version().raw();
     }
 
     private static void renderSources(StringBuilder sb, BuildJk buildJk) {

@@ -52,33 +52,78 @@ class BuildJkParserTest {
     }
 
     @Test
-    void parses_dependencies_as_g_a_v_strings() {
+    void parses_pinned_and_floating_dep_forms() {
         BuildJk parsed = BuildJkParser.parse(PROJECT + """
                 [dependencies]
-                main = ["org.slf4j:slf4j-api:2.0.16", "info.picocli:picocli:^4.7.7"]
-                test = ["org.junit.jupiter:junit-jupiter:>=5.10,<6"]
+                main = ["org.slf4j:slf4j-api:2.0.16", "info.picocli:picocli@^4.7.7"]
+                test = ["org.junit.jupiter:junit-jupiter@>=5.10,<6"]
                 """);
 
         var mainDeps = parsed.dependencies().of(Scope.MAIN);
         assertThat(mainDeps).hasSize(2);
+
+        // `:` form → pinned Exact
         assertThat(mainDeps.get(0).module()).isEqualTo("org.slf4j:slf4j-api");
+        assertThat(mainDeps.get(0).pinned()).isTrue();
         assertThat(mainDeps.get(0).version()).isInstanceOf(VersionSelector.Exact.class);
+
+        // `@` form → floating, Caret here
+        assertThat(mainDeps.get(1).module()).isEqualTo("info.picocli:picocli");
+        assertThat(mainDeps.get(1).pinned()).isFalse();
         assertThat(mainDeps.get(1).version()).isInstanceOf(VersionSelector.Caret.class);
 
         var testDeps = parsed.dependencies().of(Scope.TEST);
         assertThat(testDeps).hasSize(1);
+        assertThat(testDeps.get(0).pinned()).isFalse();
         assertThat(testDeps.get(0).version()).isInstanceOf(VersionSelector.Range.class);
     }
 
     @Test
-    void bare_version_is_exact_by_default() {
+    void colon_form_bare_version_is_exact_and_pinned() {
         BuildJk parsed = BuildJkParser.parse(PROJECT + """
                 [dependencies]
                 main = ["com.example:lib:1.2.3"]
                 """);
-        var v = parsed.dependencies().of(Scope.MAIN).getFirst().version();
-        assertThat(v).isInstanceOf(VersionSelector.Exact.class);
-        assertThat(((VersionSelector.Exact) v).version()).isEqualTo("1.2.3");
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.version()).isInstanceOf(VersionSelector.Exact.class);
+        assertThat(((VersionSelector.Exact) dep.version()).version()).isEqualTo("1.2.3");
+        assertThat(dep.pinned()).isTrue();
+    }
+
+    @Test
+    void at_form_bare_version_defaults_to_caret() {
+        // Cargo-style: `@1.2.3` means "compatible with 1.2.3" → Caret.
+        BuildJk parsed = BuildJkParser.parse(PROJECT + """
+                [dependencies]
+                main = ["com.example:lib@1.2.3"]
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.version()).isInstanceOf(VersionSelector.Caret.class);
+        assertThat(((VersionSelector.Caret) dep.version()).version()).isEqualTo("1.2.3");
+        assertThat(dep.pinned()).isFalse();
+    }
+
+    @Test
+    void at_form_with_equals_pins_to_exact() {
+        BuildJk parsed = BuildJkParser.parse(PROJECT + """
+                [dependencies]
+                main = ["com.example:lib@=1.2.3"]
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.version()).isInstanceOf(VersionSelector.Exact.class);
+        // The `@` form is still considered "floating" at the manifest level —
+        // `jk update` may revisit it, even though the current constraint is Exact.
+        assertThat(dep.pinned()).isFalse();
+    }
+
+    @Test
+    void colon_form_rejects_decorations() {
+        assertThatThrownBy(() -> BuildJkParser.parse(PROJECT + """
+                [dependencies]
+                main = ["com.example:lib:^1.2.3"]
+                """))
+                .isInstanceOf(BuildJkParseException.class)
+                .hasMessageContaining("the `:` form is for pinned versions only");
     }
 
     @Test
