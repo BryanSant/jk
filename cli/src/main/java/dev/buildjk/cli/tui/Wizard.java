@@ -5,7 +5,9 @@ import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
+import org.jline.utils.NonBlockingReader;
 
+import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -70,6 +72,16 @@ public final class Wizard {
     }
 
     public Optional<Answers> run(Terminal terminal) {
+        return run(terminal, Answers.of(Map.of()));
+    }
+
+    /**
+     * Run with pre-seeded answers. Each step whose {@code key()} is present
+     * in {@code preset} is skipped interactively but rendered as completed,
+     * so the user can see what was inferred. Useful when {@code jk init
+     * my-project} has supplied the "Project name" answer up front.
+     */
+    public Optional<Answers> run(Terminal terminal, Answers preset) {
         var saved = terminal.enterRawMode();
         // TerminalBuilder.build() probes the terminal with capability queries
         // (DA, DECRQM, etc.); the responses arrive in stdin and get echoed to
@@ -92,7 +104,7 @@ public final class Wizard {
         try {
             writer.print(HIDE_CURSOR);
             writer.flush();
-            return Optional.of(loop(terminal));
+            return Optional.of(loop(terminal, preset));
         } catch (WizardCancelled e) {
             return Optional.empty();
         } finally {
@@ -121,30 +133,38 @@ public final class Wizard {
         }
     }
 
-    private static void drainInput(org.jline.utils.NonBlockingReader reader, long maxWaitMs) {
+    private static void drainInput(NonBlockingReader reader, long maxWaitMs) {
         try {
             var deadline = System.currentTimeMillis() + maxWaitMs;
             while (System.currentTimeMillis() < deadline) {
                 var c = reader.read(5L);
-                if (c == org.jline.utils.NonBlockingReader.READ_EXPIRED || c < 0) {
+                if (c == NonBlockingReader.READ_EXPIRED || c < 0) {
                     return;
                 }
             }
-        } catch (java.io.IOException ignored) {
+        } catch (IOException ignored) {
             // best-effort drain
         }
     }
 
-    private Answers loop(Terminal terminal) {
+    private Answers loop(Terminal terminal, Answers preset) {
         var writer = terminal.writer();
         var reader = terminal.reader();
-        var answers = new LinkedHashMap<String, Object>();
+        var answers = new LinkedHashMap<String, Object>(preset.asMap());
 
         writer.println();
         writer.println(headerLine().toAnsi(terminal));
         writer.flush();
 
         for (var step : steps) {
+            // Pre-seeded answers skip the interactive prompt but still render
+            // as settled so the user can see what was inferred up front.
+            if (answers.containsKey(step.key()) && preset.has(step.key())) {
+                writer.println(Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
+                renderSettledRegion(terminal, step, answers);
+                writer.flush();
+                continue;
+            }
             if (!step.shouldRun().test(Answers.of(answers))) {
                 continue;
             }
@@ -363,6 +383,16 @@ public final class Wizard {
                     input.append(value);
                     error = "";
                     yield true;
+                }
+                case KeyReader.Key.Right r -> {
+                    // Realize the placeholder as if the user typed it. The
+                    // text picks up the normal "user input" styling — there's
+                    // no visual distinction between typed-and-accepted text.
+                    if (input.length() == 0 && !is.placeholder().isEmpty()) {
+                        input.append(is.placeholder());
+                        error = "";
+                    }
+                    yield false;
                 }
                 case KeyReader.Key.Backspace b -> {
                     if (input.length() > 0) {

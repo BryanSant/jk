@@ -2,11 +2,13 @@
 package dev.buildjk.cli;
 
 import dev.buildjk.cli.tui.Answers;
+import dev.buildjk.cli.tui.Rail;
 import dev.buildjk.cli.tui.Theme;
 import dev.buildjk.cli.tui.Wizard;
 import dev.buildjk.cli.tui.WizardStep;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
+import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
 import picocli.CommandLine.Command;
@@ -20,6 +22,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
@@ -71,18 +74,18 @@ public final class InitCommand implements Callable<Integer> {
             return 64; // EX_USAGE
         }
 
-        Path target = resolveDirectory();
-        Files.createDirectories(target);
+        Path cwd = Path.of(".").toAbsolutePath().normalize();
 
-        Path buildFile = target.resolve("jk.toml");
-        Path lockFile = target.resolve("jk.lock");
-        if (Files.exists(buildFile)) {
-            System.err.println("jk init: refusing to overwrite existing build.jk at " + buildFile);
+        // Fail-fast for `jk init .` when the cwd already has a project.
+        // For any other invocation we defer the existing-manifest check to
+        // after the target is fully resolved (the project name may come from
+        // the wizard or from `--name`).
+        if (directory != null && isCurrentDirArg(directory)
+                && Files.exists(cwd.resolve("jk.toml"))) {
+            String existing = wizardPresetName(directory, cwd).orElseGet(
+                    () -> cwd.getFileName() != null ? cwd.getFileName().toString() : "this directory");
+            emitProjectExistsError(existing);
             return 2; // EX_CONFIG
-        }
-        if (Files.exists(lockFile)) {
-            System.err.println("jk init: refusing to overwrite existing jk.lock at " + lockFile);
-            return 2;
         }
 
         if (shouldRunWizard()) {
@@ -92,10 +95,22 @@ public final class InitCommand implements Callable<Integer> {
             } catch (IOException e) {
                 throw new RuntimeException("failed to open terminal: " + e.getMessage(), e);
             }
-            var wizardResult = buildWizard(target).run(terminal);
+            // Pre-seed the "name" answer when the user already supplied one
+            // via the positional arg. Skipped steps render as settled.
+            Answers preset = wizardPresetName(directory, cwd)
+                    .map(n -> Answers.of(Map.of("name", (Object) n)))
+                    .orElseGet(() -> Answers.of(Map.of()));
+
+            var wizardResult = buildWizard().run(terminal, preset);
             if (wizardResult.isEmpty()) {
-                System.err.print("\n\033[31m✖ canceled ✖\033[0m\n");
-                System.err.flush();
+                // Cancelled via Ctrl-C. The wizard already rendered the active
+                // step but didn't close its rail; emit a final closer line in
+                // red so the user sees a coherent terminal state.
+                var red = AttributedStyle.DEFAULT.foreground(0xef, 0x44, 0x44);
+                var line = Rail.closer("𝘅 Project creation canceled", red);
+                terminal.writer().print(line.toAnsi(terminal));
+                terminal.writer().println();
+                terminal.writer().flush();
                 // Runtime.halt() instead of System.exit(): halt skips shutdown
                 // hooks, which is what we want here because JLine registers a
                 // terminal-cleanup hook that calls Terminal.close() -> blocks on
@@ -105,7 +120,12 @@ public final class InitCommand implements Callable<Integer> {
                 Runtime.getRuntime().halt(130); // 128 + SIGINT
             }
             try (terminal) {
-                var inputs = fromAnswers(wizardResult.get(), target);
+                var inputs = fromAnswers(wizardResult.get(), cwd);
+                if (Files.exists(inputs.directory().resolve("jk.toml"))) {
+                    emitProjectExistsError(inputs.name());
+                    return 2;
+                }
+                Files.createDirectories(inputs.directory());
                 InitScaffolder.write(inputs);
                 emitSuccessOnTerminal(inputs, terminal);
             } catch (IOException e) {
@@ -114,25 +134,21 @@ public final class InitCommand implements Callable<Integer> {
             return 0;
         }
 
-        var inputs = fromFlags(target);
+        var inputs = fromFlags(cwd);
+        if (Files.exists(inputs.directory().resolve("jk.toml"))) {
+            emitProjectExistsError(inputs.name());
+            return 2;
+        }
+        Files.createDirectories(inputs.directory());
         InitScaffolder.write(inputs);
         emitSuccessPlain(inputs);
         return 0;
     }
 
-    private Path resolveDirectory() {
-        if (directory != null) {
-            return directory;
-        }
-        if (name != null && !name.isBlank()) {
-            return Path.of(name);
-        }
-        return Path.of(".").toAbsolutePath().normalize();
-    }
-
     /**
-     * TTY + no flags + no positional. Tests typically have no console, so
-     * this returns false there.
+     * TTY + no real flags. A bare positional ({@code jk init my-project} or
+     * {@code jk init .}) still runs the wizard — the positional only
+     * pre-seeds the name.
      */
     private boolean shouldRunWizard() {
         if (!isInteractiveTerminal()) {
@@ -156,33 +172,94 @@ public final class InitCommand implements Callable<Integer> {
                 || shadow
                 || nativeImage
                 || depsCsv != null
-                || sample != null
-                || directory != null;
+                || sample != null;
     }
 
-    private InitInputs fromFlags(Path target) {
+    private InitInputs fromFlags(Path cwd) {
+        var presetName = wizardPresetName(directory, cwd);
         var resolvedName = (name != null && !name.isBlank())
                 ? name
-                : defaultName(target);
+                : presetName.orElse("untitled");
         var resolvedGroup = (group != null && !group.isBlank()) ? group : "com.example";
         var resolvedJdk = (jdk != null && !jdk.isBlank()) ? jdk : "25";
         var resolvedLang = parseLanguage(lang);
         var resolvedMain = (main != null && !main.isBlank()) ? Optional.of(main) : Optional.<String>empty();
         var resolvedDeps = parseDeps(depsCsv);
         var resolvedSample = sample == null || sample;
+        Path target = resolveTarget(directory, cwd, resolvedName);
         return new InitInputs(
                 resolvedGroup, resolvedName, resolvedJdk,
                 resolvedMain, shadow, nativeImage,
                 resolvedLang, resolvedDeps, resolvedSample, target);
     }
 
-    private static String defaultName(Path target) {
-        var leaf = target.toAbsolutePath().normalize().getFileName();
-        if (leaf == null) {
-            return "app";
+    /**
+     * The wizard's pre-seed value for the "Project name" answer when the
+     * user already supplied the answer via the positional arg.
+     * <ul>
+     *   <li>{@code "."} → cwd's leaf name.</li>
+     *   <li>{@code "my-project"} → {@code "my-project"} (the file-name of
+     *       the path, in case the user typed a relative/absolute path).</li>
+     *   <li>{@code null} (no positional) → empty — wizard asks the user,
+     *       defaulting to {@code "untitled"}.</li>
+     * </ul>
+     * Package-private for unit testing.
+     */
+    static Optional<String> wizardPresetName(Path directoryArg, Path cwd) {
+        if (directoryArg == null) return Optional.empty();
+        if (isCurrentDirArg(directoryArg)) {
+            var leaf = cwd.getFileName();
+            if (leaf == null) return Optional.empty();
+            var s = leaf.toString();
+            return (s.isBlank() || s.equals(".")) ? Optional.empty() : Optional.of(s);
         }
+        var leaf = directoryArg.getFileName();
+        if (leaf == null) return Optional.empty();
         var s = leaf.toString();
-        return (s.isBlank() || s.equals(".")) ? "app" : s;
+        return (s.isBlank() || s.equals(".")) ? Optional.empty() : Optional.of(s);
+    }
+
+    /**
+     * Final target directory, given the positional arg, the cwd, and the
+     * resolved project name. Package-private for unit testing.
+     */
+    static Path resolveTarget(Path directoryArg, Path cwd, String projectName) {
+        if (directoryArg != null) {
+            if (isCurrentDirArg(directoryArg)) return cwd;
+            return cwd.resolve(directoryArg).normalize();
+        }
+        // No positional → create a subdir under cwd named after the project.
+        return cwd.resolve(projectName);
+    }
+
+    /** Match the literal {@code "."} forms the user might type. */
+    private static boolean isCurrentDirArg(Path arg) {
+        var raw = arg.toString();
+        return raw.equals(".") || raw.equals("./") || raw.equals(".\\");
+    }
+
+    /**
+     * Styled "project already exists" error.
+     * <pre>
+     *   ⚠ Jk: Failed to initialize a new project. Project &lt;name&gt; already exists.
+     * </pre>
+     * Yellow for {@code ⚠} and the project name, hot pink for "Jk", soft
+     * gray for the rest.
+     */
+    private static void emitProjectExistsError(String projectName) {
+        // 24-bit ANSI. Terminals that ignore CSI escapes will see literal text;
+        // terminals that don't speak TrueColor degrade to the nearest indexed
+        // color (JLine policy elsewhere in the CLI).
+        final String yellow  = "\033[38;2;234;179;8m";   // #eab308
+        final String hotPink = "\033[38;2;255;105;180m"; // #ff69b4
+        final String gray    = "\033[38;2;156;163;175m"; // #9ca3af
+        final String reset   = "\033[0m";
+        System.err.println(
+                yellow + "⚠" + reset
+                        + " " + hotPink + "Jk" + reset
+                        + gray + ": Failed to initialize a new project. Project " + reset
+                        + yellow + projectName + reset
+                        + gray + " already exists." + reset);
     }
 
     private static InitInputs.Language parseLanguage(String value) {
@@ -211,12 +288,12 @@ public final class InitCommand implements Callable<Integer> {
         return out;
     }
 
-    private static Wizard buildWizard(Path target) {
+    private static Wizard buildWizard() {
         return Wizard.builder()
                 .title("JK - Create a New Project")
                 .step(WizardStep.InputStep.of("name", "Project name (target directory):")
-                        .placeholder(target.getFileName() != null ? target.getFileName().toString() : "my-project")
-                        .defaultValue(target.getFileName() != null ? target.getFileName().toString() : "my-project")
+                        .placeholder("untitled")
+                        .defaultValue("untitled")
                         .build())
                 .step(WizardStep.InputStep.of("group", "Maven groupId:")
                         .placeholder("com.example")
@@ -259,8 +336,10 @@ public final class InitCommand implements Callable<Integer> {
                 .build();
     }
 
-    private InitInputs fromAnswers(Answers answers, Path target) {
-        var resolvedName = answers.has("name") ? answers.get("name") : defaultName(target);
+    private InitInputs fromAnswers(Answers answers, Path cwd) {
+        var resolvedName = answers.has("name") && !answers.get("name").isBlank()
+                ? answers.get("name")
+                : wizardPresetName(directory, cwd).orElse("untitled");
         var resolvedGroup = answers.has("group") ? answers.get("group") : "com.example";
         var resolvedJdk = answers.has("jdk") ? answers.get("jdk") : "25";
         var resolvedLang = "kotlin".equalsIgnoreCase(answers.get("lang"))
@@ -271,14 +350,11 @@ public final class InitCommand implements Callable<Integer> {
         var resolvedNative = "yes".equals(answers.get("native"));
         var resolvedSample = !"no".equals(answers.get("sample"));
         var resolvedDeps = answers.getList("deps");
-        // Wizard mode resolves directory to --name if user typed one.
-        var finalDir = (directory == null && !resolvedName.isBlank())
-                ? Path.of(resolvedName)
-                : target;
+        Path target = resolveTarget(directory, cwd, resolvedName);
         return new InitInputs(
                 resolvedGroup, resolvedName, resolvedJdk,
                 resolvedMain, resolvedShadow, resolvedNative,
-                resolvedLang, resolvedDeps, resolvedSample, finalDir);
+                resolvedLang, resolvedDeps, resolvedSample, target);
     }
 
     private static void emitSuccessOnTerminal(InitInputs inputs, Terminal terminal) {
@@ -304,7 +380,7 @@ public final class InitCommand implements Callable<Integer> {
         }
     }
 
-    private static org.jline.utils.AttributedString headline(String text) {
+    private static AttributedString headline(String text) {
         return new AttributedStringBuilder()
                 .append(text, AttributedStyle.DEFAULT.bold().foreground(0x22, 0xc5, 0x5e))
                 .toAttributedString();

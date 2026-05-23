@@ -89,8 +89,10 @@ graalvmNative {
             "org.cyclonedx",               // CycloneDX SBOM
             "org.spdx",                    // SPDX SBOM
             "org.eclipse.jgit",            // git client
-            "io.netty",                    // pulled in by sigstore-java
-            "io.grpc",                     // gRPC client (sigstore-java)
+            // gRPC client (sigstore-java). Pulls in netty via grpc-netty-shaded,
+            // whose classes live under io.grpc.netty.shaded.io.netty.* — so the
+            // `io.grpc` prefix here also covers the bundled netty.
+            "io.grpc",
             "org.jline"                    // FFM Linker/Arena lookups must run at image-runtime
         ).joinToString(","))
     }

@@ -285,4 +285,81 @@ class WizardTest {
             h.terminal().close();
         }
     }
+
+    @Test
+    void right_arrow_realizes_placeholder_into_input() throws Exception {
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.InputStep.of("name", "Name")
+                        .placeholder("widget")
+                        .build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Right-arrow then Enter → placeholder becomes the answer.
+            write(h.input(), (byte) 0x1B, (byte) '[', (byte) 'C');
+            Thread.sleep(STEP_TIMEOUT_MS);
+            write(h.input(), (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.get("name")).isEqualTo("widget");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
+
+    @Test
+    void right_arrow_realized_text_can_be_edited_further() throws Exception {
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.InputStep.of("name", "Name")
+                        .placeholder("widget")
+                        .build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Realize "widget", then append "-2" → final = "widget-2".
+            write(h.input(), (byte) 0x1B, (byte) '[', (byte) 'C');
+            Thread.sleep(STEP_TIMEOUT_MS);
+            write(h.input(), (byte) '-', (byte) '2', (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.get("name")).isEqualTo("widget-2");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
+
+    @Test
+    void right_arrow_is_a_noop_when_placeholder_is_empty() throws Exception {
+        // No placeholder → Right is ignored (Enter falls through to default
+        // value, which here is also empty, so input is just "").
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.InputStep.of("name", "Name").build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            write(h.input(), (byte) 0x1B, (byte) '[', (byte) 'C');
+            Thread.sleep(STEP_TIMEOUT_MS);
+            write(h.input(), (byte) 'h', (byte) 'i', (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.get("name")).isEqualTo("hi");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
 }
