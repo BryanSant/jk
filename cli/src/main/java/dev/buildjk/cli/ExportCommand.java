@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.cli;
 
-import dev.buildjk.hocon.BuildJkParser;
-import dev.buildjk.hocon.WorkspaceLoader;
+import dev.buildjk.config.BuildJkParser;
+import dev.buildjk.config.WorkspaceLoader;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.mvn.PomExporter;
 import picocli.CommandLine.Command;
@@ -56,7 +56,7 @@ public final class ExportCommand implements Callable<Integer> {
         Path projectDir = directory != null
                 ? directory.toAbsolutePath().normalize()
                 : Path.of(".").toAbsolutePath().normalize();
-        Path buildJkPath = projectDir.resolve("build.jk");
+        Path buildJkPath = projectDir.resolve("jk.toml");
         if (!Files.exists(buildJkPath)) {
             System.err.println("jk export: " + buildJkPath + " not found.");
             return 66; // EX_NOINPUT

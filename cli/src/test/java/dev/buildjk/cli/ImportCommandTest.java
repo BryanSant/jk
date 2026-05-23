@@ -35,9 +35,9 @@ class ImportCommandTest {
         int exit = run("import", pom.toString());
         assertThat(exit).isEqualTo(0);
 
-        String buildJk = Files.readString(tempDir.resolve("build.jk"));
+        String buildJk = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(buildJk).contains("artifact = \"widget\"");
-        assertThat(buildJk).contains("\"com.fasterxml.jackson.core:jackson-databind\" = \"=2.18.2\"");
+        assertThat(buildJk).contains("\"com.fasterxml.jackson.core:jackson-databind:2.18.2\"");
 
         String report = Files.readString(tempDir.resolve("jk-import-report.md"));
         assertThat(report).contains("# jk import report");
@@ -56,8 +56,8 @@ class ImportCommandTest {
                 </project>
                 """, StandardCharsets.UTF_8);
 
-        Path existing = tempDir.resolve("build.jk");
-        Files.writeString(existing, "project { group = \"prior\" }\n");
+        Path existing = tempDir.resolve("jk.toml");
+        Files.writeString(existing, "[project]\ngroup = \"prior\"\n");
 
         int exit = run("import", pom.toString());
         assertThat(exit).isEqualTo(73); // EX_CANTCREAT
@@ -75,11 +75,11 @@ class ImportCommandTest {
                   <version>1.0</version>
                 </project>
                 """, StandardCharsets.UTF_8);
-        Files.writeString(tempDir.resolve("build.jk"), "project { group = \"prior\" }\n");
+        Files.writeString(tempDir.resolve("jk.toml"), "[project]\ngroup = \"prior\"\n");
 
         int exit = run("import", "--force", pom.toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(Files.readString(tempDir.resolve("build.jk")))
+        assertThat(Files.readString(tempDir.resolve("jk.toml")))
                 .contains("artifact = \"widget\"")
                 .doesNotContain("\"prior\"");
     }
@@ -103,10 +103,10 @@ class ImportCommandTest {
         int exit = run("import", gradle.toString());
         assertThat(exit).isEqualTo(0);
 
-        String buildJk = Files.readString(tempDir.resolve("build.jk"));
+        String buildJk = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(buildJk).contains("group    = \"com.example\"");
         assertThat(buildJk).contains("jdk      = \"21\"");
-        assertThat(buildJk).contains("\"com.fasterxml.jackson.core:jackson-databind\" = \"=2.18.2\"");
+        assertThat(buildJk).contains("\"com.fasterxml.jackson.core:jackson-databind:2.18.2\"");
 
         assertThat(Files.readString(tempDir.resolve("jk-import-report.md")))
                 .contains("# jk import report");
@@ -169,14 +169,14 @@ class ImportCommandTest {
         int exit = run("import", tempDir.resolve("pom.xml").toString());
         assertThat(exit).isEqualTo(0);
 
-        String root = Files.readString(tempDir.resolve("build.jk"));
+        String root = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(root).contains("artifact = \"widget-parent\"");
-        assertThat(root).contains("workspace {");
+        assertThat(root).contains("[workspace]");
         assertThat(root).contains("members = [\"core\", \"app\"]");
 
-        assertThat(Files.readString(tempDir.resolve("core/build.jk")))
+        assertThat(Files.readString(tempDir.resolve("core/jk.toml")))
                 .contains("artifact = \"widget-core\"");
-        assertThat(Files.readString(tempDir.resolve("app/build.jk")))
+        assertThat(Files.readString(tempDir.resolve("app/jk.toml")))
                 .contains("artifact = \"widget-app\"");
     }
 

@@ -45,8 +45,25 @@ final class CompileToolchain {
         } catch (IOException e) {
             pinned = Optional.empty();
         }
-        return pinned.map(InstalledJdk::home)
-                .orElse(Path.of(System.getProperty("java.home")));
+        return pinned.map(InstalledJdk::home).orElseGet(CompileToolchain::runningJavaHome);
+    }
+
+    /**
+     * The JDK that's hosting the current jk process, or {@code $JAVA_HOME}
+     * when running under GraalVM native-image (which doesn't expose
+     * {@code java.home}). Used as the last-resort fallback when no project
+     * JDK is pinned; throws an explanatory error if neither is available.
+     */
+    static Path runningJavaHome() {
+        String home = System.getProperty("java.home");
+        if (home == null || home.isBlank()) home = System.getenv("JAVA_HOME");
+        if (home == null || home.isBlank()) {
+            throw new IllegalStateException(
+                    "Cannot resolve a JDK: no project pin (`.jk-version` or `.sdkmanrc`), "
+                    + "no `java.home` (running under native-image?), and `JAVA_HOME` is unset. "
+                    + "Pin a JDK with a `.jk-version` file, set `JAVA_HOME`, or run jk on a JVM.");
+        }
+        return Path.of(home);
     }
 
     /**

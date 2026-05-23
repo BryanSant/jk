@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.buildjk.hocon;
+package dev.buildjk.config;
 
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Dependency;
@@ -31,11 +31,10 @@ public final class WorkspaceClasspath {
     private WorkspaceClasspath() {}
 
     /**
-     * @param member the member being built
+     * @param memberDir the member being built
+     * @param member the parsed manifest of {@code memberDir}
      * @param scopes the scopes whose deps should contribute (typically
      *     {@code MAIN} for compile, {@code MAIN}+{@code TEST} for tests)
-     * @return absolute paths to sibling jars, in declaration order; any
-     *     missing jars are reported via the returned warning list
      */
     public static Result resolve(Path memberDir, BuildJk member, Set<Scope> scopes)
             throws IOException {
@@ -44,21 +43,19 @@ public final class WorkspaceClasspath {
             return new Result(List.of(), List.of());
         }
         Path root = rootOpt.get();
-        BuildJk rootBuildJk = BuildJkParser.parse(root.resolve("build.jk"));
-        if (!rootBuildJk.isWorkspaceRoot()) {
+        BuildJk rootManifest = BuildJkParser.parse(root.resolve("jk.toml"));
+        if (!rootManifest.isWorkspaceRoot()) {
             return new Result(List.of(), List.of());
         }
 
-        // Build the module → (siblingDir, jarPath) map by walking each
-        // sibling's build.jk once.
         Map<String, Path> siblingJarByModule = new HashMap<>();
-        for (String memberName : rootBuildJk.workspace().members()) {
+        for (String memberName : rootManifest.workspace().members()) {
             Path siblingDir = root.resolve(memberName);
-            Path siblingBuildJk = siblingDir.resolve("build.jk");
-            if (!Files.exists(siblingBuildJk)) continue;
+            Path siblingManifest = siblingDir.resolve("jk.toml");
+            if (!Files.exists(siblingManifest)) continue;
             BuildJk sibling;
             try {
-                sibling = BuildJkParser.parse(siblingBuildJk);
+                sibling = BuildJkParser.parse(siblingManifest);
             } catch (RuntimeException ignored) {
                 continue;
             }

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.cli;
 
-import dev.buildjk.hocon.BuildJkEditor;
+import dev.buildjk.config.BuildJkEditor;
 import dev.buildjk.model.Coordinate;
 import dev.buildjk.model.Scope;
 import picocli.CommandLine.Command;
@@ -48,7 +48,7 @@ public final class AddCommand implements Callable<Integer> {
     @Override
     public Integer call() throws IOException {
         Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path file = dir.resolve("build.jk");
+        Path file = dir.resolve("jk.toml");
         if (!Files.exists(file)) {
             System.err.println("jk add: no build.jk in current directory");
             return 2; // EX_CONFIG

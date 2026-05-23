@@ -15,6 +15,7 @@ java {
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release.set(25)
+    options.compilerArgs.add("-Xlint:deprecation")
 }
 
 // Reach the version catalog from a convention plugin without the buildSrc

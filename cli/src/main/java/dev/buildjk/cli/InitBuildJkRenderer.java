@@ -6,9 +6,9 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Emits a {@code build.jk} (HOCON) document from {@link InitInputs}. The shape
- * matches the new schema (Task 1): {@code main}/{@code shadow}/{@code native}/
- * {@code language} on the {@code project} block, no {@code bin} key.
+ * Emits a {@code jk.toml} document from {@link InitInputs}. The shape mirrors
+ * the canonical TOML schema: {@code [project]}, then {@code [dependencies]}
+ * with arrays of {@code "group:artifact:version"} strings per scope.
  */
 public final class InitBuildJkRenderer {
 
@@ -16,50 +16,39 @@ public final class InitBuildJkRenderer {
 
     public static String render(InitInputs inputs) {
         var sb = new StringBuilder();
-        sb.append("project {\n");
-        sb.append("  group    = \"").append(inputs.group()).append("\"\n");
-        sb.append("  artifact = \"").append(inputs.name()).append("\"\n");
-        sb.append("  version  = \"0.1.0\"\n");
-        sb.append("  jdk      = \"").append(inputs.jdk()).append("\"\n");
-        sb.append("  language = \"").append(inputs.lang().hoconValue()).append("\"\n");
+        sb.append("[project]\n");
+        sb.append("group    = \"").append(inputs.group()).append("\"\n");
+        sb.append("artifact = \"").append(inputs.name()).append("\"\n");
+        sb.append("version  = \"0.1.0\"\n");
+        sb.append("jdk      = \"").append(inputs.jdk()).append("\"\n");
+        sb.append("language = \"").append(inputs.lang().hoconValue()).append("\"\n");
         if (inputs.main().isPresent()) {
-            sb.append("  main     = \"").append(inputs.main().get()).append("\"\n");
+            sb.append("main     = \"").append(inputs.main().get()).append("\"\n");
         }
         if (inputs.shadow()) {
-            sb.append("  shadow   = true\n");
+            sb.append("shadow   = true\n");
         }
         if (inputs.nativeImage()) {
-            sb.append("  native   = true\n");
+            sb.append("native   = true\n");
         }
-        sb.append("}\n");
 
         var picks = resolvePicks(inputs.deps());
-        var mainScope = picks.getOrDefault("main", Map.of());
-        var processorScope = picks.getOrDefault("processor", Map.of());
-        var providedScope = picks.getOrDefault("provided", Map.of());
+        if (picks.isEmpty()) return sb.toString();
 
-        if (!mainScope.isEmpty()) {
-            sb.append('\n');
-            sb.append("dependencies.main {\n");
-            mainScope.forEach((coord, version) ->
-                    sb.append("  \"").append(coord).append("\" = \"").append(version).append("\"\n"));
-            sb.append("}\n");
-        }
-        if (!processorScope.isEmpty()) {
-            sb.append('\n');
-            sb.append("dependencies.processor {\n");
-            processorScope.forEach((coord, version) ->
-                    sb.append("  \"").append(coord).append("\" = \"").append(version).append("\"\n"));
-            sb.append("}\n");
-        }
-        if (!providedScope.isEmpty()) {
-            sb.append('\n');
-            sb.append("dependencies.provided {\n");
-            providedScope.forEach((coord, version) ->
-                    sb.append("  \"").append(coord).append("\" = \"").append(version).append("\"\n"));
-            sb.append("}\n");
-        }
+        sb.append('\n');
+        sb.append("[dependencies]\n");
+        renderScope(sb, "main", picks.getOrDefault("main", Map.of()));
+        renderScope(sb, "processor", picks.getOrDefault("processor", Map.of()));
+        renderScope(sb, "provided", picks.getOrDefault("provided", Map.of()));
         return sb.toString();
+    }
+
+    private static void renderScope(StringBuilder sb, String scope, Map<String, String> entries) {
+        if (entries.isEmpty()) return;
+        sb.append(scope).append(" = [\n");
+        entries.forEach((coord, version) ->
+                sb.append("  \"").append(coord).append(':').append(version).append("\",\n"));
+        sb.append("]\n");
     }
 
     /**

@@ -19,11 +19,9 @@ picocli = "4.7.7"
 sigstore = "2.1.0"
 spdx-java = "2.0.3"
 tomlj = "1.1.1"
-typesafe-config = "1.4.8"
 
 [libraries]
 # foundations
-typesafe-config        = { module = "com.typesafe:config",                          version.ref = "typesafe-config" }
 tomlj                  = { module = "org.tomlj:tomlj",                              version.ref = "tomlj" }
 jackson-databind       = { module = "tools.jackson.core:jackson-databind",          version.ref = "jackson" }
 

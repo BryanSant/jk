@@ -18,7 +18,7 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 
 ### Design tenets
 
-1. **Declarative core, code at the edges.** `build.jk` is data. Custom logic lives in single-file Java 25 task scripts with declared inputs and outputs.
+1. **Declarative core, code at the edges.** `jk.toml` is data. Custom logic lives in single-file Java 25 task scripts with declared inputs and outputs.
 2. **Native binary, no daemon.** Sub-50ms startup, parallel HTTP/2 everything, no JVM warmup tax.
 3. **Reproducibility is a default, not a flag.** Locked deps, locked toolchain, scrubbed env, sorted jar entries, deterministic timestamps. Bit-identical artifacts on every box.
 4. **Diagnostics are a product, not infrastructure.** PubGrub-style English error messages, `jk why`, `jk explain`, `jk why-rebuilt`, all offline.
@@ -70,7 +70,7 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 
 - **Maven veteran (Mira).** Tenured backend engineer, large enterprise. Has `~/.m2/settings.xml` with corporate mirror. Cares about CVE patches, lockable builds, Central publishing fidelity, and not being told to rewrite her POMs by Tuesday. Migration cost is everything. **jk wins her by:** `jk mvn` passthrough, `jk import pom.xml`, round-trip POM export, and a 10x faster developer-machine experience without her giving up Maven.
 
-- **Gradle/Kotlin developer (Greg).** Ships a Spring Boot service in Kotlin. Loves the Kotlin DSL but resents the daemon, configuration-cache breakage, and uninspectable resolution. **jk wins him by:** type-checked HOCON in IntelliJ, `jk why-rebuilt :foo:compile`, native binary speed, and first-class Kotlin (K2 + KSP + Spring/JPA compiler plugins).
+- **Gradle/Kotlin developer (Greg).** Ships a Spring Boot service in Kotlin. Loves the Kotlin DSL but resents the daemon, configuration-cache breakage, and uninspectable resolution. **jk wins him by:** TOML with schema validation in IntelliJ, `jk why-rebuilt :foo:compile`, native binary speed, and first-class Kotlin (K2 + KSP + Spring/JPA compiler plugins).
 
 - **Polyglot adopter (Pria).** Heavy `uv` and `cargo` user, occasional Java contributor to a backend service. Wants the JVM to feel like the rest of her toolchain. **jk wins her by:** `jk init`, `jk add`, `jk sync`, `jk lock`, `jk tool install`, `jkx`, `jk audit`, and a 5-second `cargo new`-equivalent.
 
@@ -135,8 +135,7 @@ $HOME/.jk/
   projects.toml                 # registry of known projects for `jk jdk gc`
 
 <project>/
-  build.jk                      # canonical, HOCON
-  build.toml                    # optional companion, TOML; build.jk overrides on conflict
+  jk.toml                       # canonical manifest, TOML
   jk.lock                       # TOML, sorted, committed
   .jk-version                   # optional, single-line JDK pin (sdkman scheme)
   .sdkmanrc                     # honored; jk reads it, may write it
@@ -168,39 +167,30 @@ $HOME/.jk/
 
 ## 5. File Formats
 
-### 5.1 `build.jk` (canonical)
+### 5.1 `jk.toml` (canonical)
 
-HOCON. Always parsed first; values override `build.toml`. Reasons for HOCON:
+TOML. The single source of truth for project manifests. Reasons:
 
-- Native `include` and substitution (`${versions.spring-boot}`) without inventing a syntax.
-- Comments, multi-line strings, optional commas — friendly to humans.
-- A JSON superset, so machine-emission and tool-editing are trivial.
-- One ecosystem (Lightbend Config) jk can embed without re-implementing the parser.
+- Familiar to anyone who's edited a `Cargo.toml`, `pyproject.toml`, or `uv.lock`.
+- Strict, declarative, no substitution / no includes / no surprises — the manifest is data.
+- Dependabot, Renovate, GitHub's dependency graph all speak TOML fluently.
+- Already in the toolchain — `jk.lock` uses TOML, so there's no second parser to maintain.
 
 Conventions:
 
-- File extension `.jk` (custom; not `.conf`) so editors/IDEs can target it for syntax highlighting and JSON-Schema-driven completion.
+- All top-level tables are optional. A `jk.toml` with only `[project]` (`group`, `artifact`, `version`) is a valid project.
 - A JSON Schema is published alongside the binary; IntelliJ/VS Code/Helix can autocomplete and validate.
-- All top-level sections are optional. A `build.jk` with only `project { group, artifact, version, jdk }` is a valid project.
+- Dependencies are arrays of `"group:artifact:version"` strings per scope under `[dependencies]`. Non-registry overrides (git, path, URL) live in a parallel `[sources]` table keyed by `"group:artifact"`.
 
-### 5.2 `build.toml` (optional companion)
-
-A lossless TOML mirror of `build.jk`. Exists for:
-
-- Dependabot, Renovate, GitHub's dependency graph — all of which speak TOML fluently and stumble on HOCON.
-- Teams that prefer TOML's familiarity.
-
-**Conflict resolution:** if both files exist and a key disagrees, `build.jk` wins. `jk fmt` keeps the two in sync when both are present. New projects ship `build.jk` only by default.
-
-### 5.3 `jk.lock`
+### 5.2 `jk.lock`
 
 TOML. Sorted, deterministic (LF, terminal newline, two-space indent), no comments. Always committed to VCS. See §9.
 
-### 5.4 `.jk-version`
+### 5.3 `.jk-version`
 
-Single line. SDKMAN candidate identifier (e.g., `21.0.5-tem`). Read on every `jk` invocation. If `build.jk.project.jdk` is set, it takes precedence and `jk sync` regenerates `.jk-version`.
+Single line. SDKMAN candidate identifier (e.g., `21.0.5-tem`). Read on every `jk` invocation. If `jk.toml`'s `[project].jdk` is set, it takes precedence and `jk sync` regenerates `.jk-version`.
 
-### 5.5 `.sdkmanrc`
+### 5.4 `.sdkmanrc`
 
 Read, honored, optionally written. If both `.sdkmanrc` and `.jk-version` exist and disagree, `.jk-version` wins; jk warns once and offers `jk jdk sync-sdkmanrc` to reconcile.
 
@@ -223,7 +213,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk test [-p <member>] [--filter=...]` | Run tests. |
 | `jk run [<bin>] [--with <coord>] [-- args...]` | Run a binary artifact or an inline script. |
 | `jk check` | Type-check without producing artifacts (Kotlin/Java compile to in-memory). |
-| `jk fmt` | Format `build.jk`/`build.toml`/`jk.lock` and (optionally) source via plugged-in formatter. |
+| `jk fmt` | Format `jk.toml`/`build.toml`/`jk.lock` and (optionally) source via plugged-in formatter. |
 | `jk lint` | Run blessed linters (Checkstyle/ktlint/Spotless) emitting SARIF. |
 | `jk tree [-i <coord>] [-e features] [--duplicates] [--depth N]` | Print resolved dependency tree. |
 | `jk why <coord>` | Explain why a dependency is in the graph. |
@@ -242,7 +232,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk shell` / `jk env` | Spawn subshell or print env exports for the project's JDK. |
 | `jk mvn ...` | Passthrough to Maven (jk downloads/manages Maven). |
 | `jk gradle ...` | Passthrough to Gradle (jk downloads/manages Gradle). |
-| `jk import {pom.xml\|build.gradle\|build.gradle.kts}` | Best-effort convert to `build.jk`. |
+| `jk import {pom.xml\|build.gradle\|build.gradle.kts}` | Best-effort convert to `jk.toml`. |
 | `jk export {pom.xml}` | Emit a publishable POM (Gradle export is v1.1+). |
 | `jk scan` | Write a local HTML/JSON build scan report. |
 | `jk fetch [--offline-prepare]` | Download all dependencies without building (CI-friendly). |
@@ -251,7 +241,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 Common flags:
 
 - `--output {pretty,json,jsonl}` — every command supports machine-readable JSON.
-- `--profile <name>` — selects from `profiles.*` in `build.jk`. `ci` is auto-selected when `CI=true`.
+- `--profile <name>` — selects from `profiles.*` in `jk.toml`. `ci` is auto-selected when `CI=true`.
 - `--offline` — fail rather than touch the network.
 - `--locked` — fail if `jk.lock` would change.
 - `--frozen` — `--locked` + `--offline`.
@@ -265,7 +255,7 @@ Exit codes follow `sysexits.h` conventions:
 |---|---|
 | 0 | Success |
 | 1 | Build failure |
-| 2 | Configuration error (invalid `build.jk`) |
+| 2 | Configuration error (invalid `jk.toml`) |
 | 3 | Resolution failure |
 | 4 | Test failure |
 | 5 | Lock drift (`--locked` violation) |
@@ -283,7 +273,7 @@ Gradle convention: `groupId:artifactId:version` (e.g., `com.fasterxml.jackson.co
 
 ### 7.2 Scopes (Maven names retained)
 
-| Scope | `build.jk` section | Compile classpath | Runtime classpath | Test classpath | Published `<scope>` |
+| Scope | `jk.toml` section | Compile classpath | Runtime classpath | Test classpath | Published `<scope>` |
 |---|---|---|---|---|---|
 | Main | `dependencies.main` | yes | yes | yes | `compile` |
 | Provided | `dependencies.provided` | yes | no | yes | `provided` |
@@ -319,37 +309,47 @@ Conflicts are resolved by:
 1. Strict requirements (`=` exact) always win and conflict with overlapping ranges.
 2. Among compatible ranges, the highest version satisfying all is selected.
 3. If no version satisfies all constraints, the resolver fails with a PubGrub-style explanation (see §8.2).
-4. User overrides via `[patch]` or `forceVersion` in `build.jk` are honored last and noted in `jk.lock` with `source = "user-override"`.
+4. User overrides via `[patch]` or `forceVersion` in `jk.toml` are honored last and noted in `jk.lock` with `source = "user-override"`.
 
 ### 7.5 Repository pinning per package (dependency confusion defense)
 
 By default, a coordinate is resolved by walking declared repositories in declared order; the first hit wins. **A package can be pinned to a specific repository** with `from = "internal"`:
 
-```hocon
-dependencies.main {
-  "com.acme:internal-lib" = { version = "1.0", from = "internal" }
-}
+```toml
+[dependencies]
+main = ["com.acme:internal-lib:1.0"]
+
+[sources]
+"com.acme:internal-lib" = { from = "internal" }
 ```
 
 When pinned, jk will *refuse* to fetch the package from any other repo even at a higher version. This closes the dependency-confusion attack class.
 
 ### 7.6 Platform / BOM imports
 
-```hocon
-dependencies.platform = [
-  { module = "org.springframework.boot:spring-boot-dependencies", version = "3.4.0", type = "platform" }
-]
+```toml
+[dependencies]
+platform = ["org.springframework.boot:spring-boot-dependencies:3.4.0"]
 ```
 
 Imported `<dependencyManagement>` constraints apply to all other scopes in the project (and, in a workspace root, to all members).
 
 ### 7.7 Target-conditional dependencies
 
-```hocon
-dependencies.main {
-  "io.netty:netty-transport-native-epoll" = { version = "4.1.115", classifier = "linux-x86_64", target = "os(linux)" }
-  "io.netty:netty-transport-native-kqueue" = { version = "4.1.115", classifier = "osx-aarch64", target = "os(darwin) && arch(aarch64)" }
-}
+```toml
+[dependencies]
+main = [
+  "io.netty:netty-transport-native-epoll:4.1.115",
+  "io.netty:netty-transport-native-kqueue:4.1.115",
+]
+
+[sources."io.netty:netty-transport-native-epoll"]
+classifier = "linux-x86_64"
+target     = "os(linux)"
+
+[sources."io.netty:netty-transport-native-kqueue"]
+classifier = "osx-aarch64"
+target     = "os(darwin) && arch(aarch64)"
 ```
 
 Supported target predicates in v1: `os(linux|darwin|windows)`, `arch(x86_64|aarch64)`, `jdk(>=N)`. User-defined attributes are not in scope (avoiding Gradle's variant-attribute complexity).
@@ -358,48 +358,56 @@ Supported target predicates in v1: `os(linux|darwin|windows)`, `arch(x86_64|aarc
 
 Named, additive dependency sets. Solve real JVM problems (driver/parser/logger selection) without conditional source compilation.
 
-```hocon
-features {
-  default = [ "postgres", "jackson" ]
+```toml
+[features]
+default = ["postgres", "jackson"]
 
-  postgres = { deps = [ "org.postgresql:postgresql:42.7.4" ] }
-  mysql    = { deps = [ "com.mysql:mysql-connector-j:9.0.0" ] }
-  jackson  = { deps = [ "com.fasterxml.jackson.core:jackson-databind:2.18.2" ] }
-  gson     = { deps = [ "com.google.code.gson:gson:2.11.0" ] }
-  metrics  = { deps = [ "io.micrometer:micrometer-core:1.13.6" ] }
+[features.postgres]
+deps = ["org.postgresql:postgresql:42.7.4"]
 
-  full     = { features = [ "postgres", "jackson", "metrics" ] }
-}
+[features.mysql]
+deps = ["com.mysql:mysql-connector-j:9.0.0"]
+
+[features.jackson]
+deps = ["com.fasterxml.jackson.core:jackson-databind:2.18.2"]
+
+[features.gson]
+deps = ["com.google.code.gson:gson:2.11.0"]
+
+[features.metrics]
+deps = ["io.micrometer:micrometer-core:1.13.6"]
+
+[features.full]
+features = ["postgres", "jackson", "metrics"]
 ```
 
-Consumer side:
+Consumer side — request specific features from a dependency via the `[sources]` override:
 
-```hocon
-dependencies.main {
-  "com.example:widget" = { version = "0.3.1", features = [ "mysql", "gson" ], default-features = false }
-}
+```toml
+[dependencies]
+main = ["com.example:widget:0.3.1"]
+
+[sources."com.example:widget"]
+features         = ["mysql", "gson"]
+default-features = false
 ```
 
 Features differ from profiles (see §14): features change *what* is compiled; profiles change *how*.
 
 ### 7.9 Patches and substitutions
 
-```hocon
-patch {
-  "central" {
-    "org.example:flaky-lib" = { version = "1.2.3-fork.1", from = "internal" }
-  }
-  "git:github.com/foo/bar" {
-    "com.foo:bar" = { path = "../local-bar" }
-  }
-}
+```toml
+[patch.central]
+"org.example:flaky-lib" = { version = "1.2.3-fork.1", from = "internal" }
 
-workspace.substitute {
-  "com.acme:auth-client" = projects.libs.auth
-}
+[patch."git:github.com/foo/bar"]
+"com.foo:bar" = { path = "../local-bar" }
+
+[workspace.substitute]
+"com.acme:auth-client" = "projects.libs.auth"
 ```
 
-`patch` overrides resolution transitively. `substitute` swaps a binary dep for a local source path (composite-build semantics). Path substitutions outside the workspace require `allow-path-deps = true` in `project` and are rejected on `jk publish`.
+`[patch]` overrides resolution transitively. `[workspace.substitute]` swaps a binary dep for a local source path (composite-build semantics). Path substitutions outside the workspace require `allow-path-deps = true` in `[project]` and are rejected on `jk publish`.
 
 ---
 
@@ -517,17 +525,16 @@ lockfile-checksum = "sha256:..."   # of everything above
 
 ### 10.1 Defaults
 
-Maven Central (`https://repo.maven.apache.org/maven2/`) is enabled implicitly. Override with explicit `repositories { central = { ... } }` in `build.jk` (e.g., to point at a corporate mirror).
+Maven Central (`https://repo.maven.apache.org/maven2/`) is enabled implicitly. Override with an explicit `central = { ... }` entry under `[repositories]` in `jk.toml` (e.g., to point at a corporate mirror).
 
 ### 10.2 Configuration
 
-```hocon
-repositories {
-  central  = { url = "https://repo.maven.apache.org/maven2/", default = true }
-  sonatype = { url = "https://s01.oss.sonatype.org/content/repositories/snapshots/", snapshots = true }
-  internal = { url = "https://nexus.example/repository/maven-releases/", auth = "env:NEXUS_TOKEN" }
-  gh-pkgs  = { url = "https://maven.pkg.github.com/acme/", auth = "gh-token" }
-}
+```toml
+[repositories]
+central  = { url = "https://repo.maven.apache.org/maven2/", default = true }
+sonatype = { url = "https://s01.oss.sonatype.org/content/repositories/snapshots/", snapshots = true }
+internal = { url = "https://nexus.example/repository/maven-releases/", auth = "env:NEXUS_TOKEN" }
+gh-pkgs  = { url = "https://maven.pkg.github.com/acme/", auth = "gh-token" }
 ```
 
 ### 10.3 Authentication
@@ -541,11 +548,11 @@ Resolved in this order:
 5. `~/.m2/settings.xml` `<servers>` for back-compat.
 6. macOS Keychain / freedesktop secret service / Windows Credential Manager.
 
-Credentials are *never* in `build.jk`.
+Credentials are *never* in `jk.toml`.
 
 ### 10.4 Mirror / replacement
 
-```hocon
+```toml
 repositories.central.mirror = "https://repo.corp.example.com/central"
 ```
 
@@ -570,23 +577,26 @@ The headline new feature. Inspired by Cargo, with JVM-shaped extensions.
 
 ### 11.1 Declaration
 
-```hocon
-dependencies.main {
-  # Long form
-  "com.foo:bar" = {
-    git    = "https://github.com/foo/bar"
-    tag    = "v1.2.3"            # or branch = "main", or rev = "a1b2c3d4"
-    path   = "modules/bar"        # optional subdirectory in a monorepo
-    submodules = true             # default true; opt-out per dep
-  }
+A git dep appears as a bare `"group:artifact"` (no version) in the `[dependencies]` array, and the override lives in `[sources]` — the uv pattern:
 
-  # Host shorthands (gh, gl, bb, sr — for github, gitlab, bitbucket, sourcehut)
-  "com.foo:baz" = { git = "gh:foo/baz", tag = "v0.5.0" }
+```toml
+[dependencies]
+main = [
+  "com.foo:bar",
+  "com.foo:baz",
+  "com.foo:qux",
+]
 
-  # SSH form
-  "com.foo:qux" = { git = "git@github.com:foo/qux.git", branch = "main" }
-}
+[sources]
+# Long form
+"com.foo:bar" = { git = "https://github.com/foo/bar", tag = "v1.2.3", path = "modules/bar", submodules = true }
+# Host shorthands (gh, gl, bb, sr — for github, gitlab, bitbucket, sourcehut)
+"com.foo:baz" = { git = "gh:foo/baz", tag = "v0.5.0" }
+# SSH form
+"com.foo:qux" = { git = "git@github.com:foo/qux.git", branch = "main" }
 ```
+
+The ref selector is exactly one of `tag`, `branch`, or `rev`. `submodules` defaults to `true`; set `false` to opt out per dep.
 
 ### 11.2 Pinning model
 
@@ -610,7 +620,7 @@ A git tag is mutable. A Maven Central artifact, by repo policy, is immutable. jk
 
 The git repo (at the requested path/ref) must contain one of:
 
-1. `build.jk` — preferred. Resolved with the same rules as a local project.
+1. `jk.toml` — preferred. Resolved with the same rules as a local project.
 2. `pom.xml` — Tier-1 best-effort import in-flight, with warnings.
 3. Neither — jk refuses to resolve (no inference from raw `src/main/java`).
 
@@ -676,7 +686,7 @@ Read-and-write interop with the SDKMAN candidate identifier scheme. When `jk jdk
 
 ### 12.7 Kotlin compiler
 
-The Kotlin compiler is a *tool*, not a JDK. `build.jk` declares `project.kotlin = "2.3.21"` and jk provisions the `kotlinc` distribution on demand: first via the good-neighbor probes (SDKMAN, JBang, asdf, jenv, Homebrew, `KOTLIN_HOME`), then by downloading into `~/.jk/tools/kotlin/<version>/` if no local install matches. Invocations go through a subprocess `CompileStrategy` so jk's own native binary doesn't embed kotlinc.
+The Kotlin compiler is a *tool*, not a JDK. `jk.toml` declares `project.kotlin = "2.3.21"` and jk provisions the `kotlinc` distribution on demand: first via the good-neighbor probes (SDKMAN, JBang, asdf, jenv, Homebrew, `KOTLIN_HOME`), then by downloading into `~/.jk/tools/kotlin/<version>/` if no local install matches. Invocations go through a subprocess `CompileStrategy` so jk's own native binary doesn't embed kotlinc.
 
 ### 12.8 GraalVM as a capability
 
@@ -692,42 +702,44 @@ GraalVM distributions advertise the `native-image` capability. `jk native` requi
 
 ### 13.1 Model
 
-Cargo + Nx hybrid. One root `build.jk` declares members. Members are themselves valid `build.jk` projects.
+Cargo + Nx hybrid. One root `jk.toml` declares members. Members are themselves valid `jk.toml` projects.
 
-```hocon
-# workspace root build.jk
-workspace {
-  members         = [ "libs/*", "services/*" ]
-  exclude         = [ "libs/legacy-shim" ]
-  default-members = [ "services/api", "services/web" ]
-  resolver        = 2                              # one resolver only; this field exists for future-proofing
-}
+```toml
+# workspace root jk.toml
+[workspace]
+members         = ["libs/*", "services/*"]
+exclude         = ["libs/legacy-shim"]
+default-members = ["services/api", "services/web"]
+resolver        = 2                              # one resolver only; this field exists for future-proofing
 
-toolchain {
-  jdk    = "21.0.5-tem"
-  kotlin = "2.1.0"
-}
+[toolchain]
+jdk    = "21.0.5-tem"
+kotlin = "2.1.0"
 
-repositories { /* shared */ }
+[repositories]
+# shared
 
-dependencies.workspace {
-  "com.fasterxml.jackson.core:jackson-databind" = "2.18.2"
-  "io.projectreactor:reactor-core"              = "3.6.10"
-}
+[workspace.dependencies]
+"com.fasterxml.jackson.core:jackson-databind" = "2.18.2"
+"io.projectreactor:reactor-core"              = "3.6.10"
 ```
 
-Member `services/api/build.jk`:
+Member `services/api/jk.toml`:
 
-```hocon
-project {
-  artifact = "api"
-  version  = "$workspace"
-}
+```toml
+[project]
+group    = "com.example"
+artifact = "api"
+version  = "$workspace"
 
-dependencies.main {
-  "com.fasterxml.jackson.core:jackson-databind" = "$workspace"
-  "com.example:widget-core"                     = { path = "../../libs/core" }
-}
+[dependencies]
+main = [
+  "com.fasterxml.jackson.core:jackson-databind:$workspace",
+  "com.example:widget-core",
+]
+
+[sources]
+"com.example:widget-core" = { path = "../../libs/core" }
 ```
 
 ### 13.2 Properties
@@ -736,18 +748,17 @@ dependencies.main {
 - **Shared `target/`** under workspace root. Incremental compilation reuses across members.
 - **Workspace-level dep version pinning** (`dependencies.workspace.*`) — members reference via `$workspace`.
 - **`jk -p <member> <cmd>`** scopes a command.
-- **Virtual workspaces** supported — a root `build.jk` with `workspace { }` but no `project { }` is valid.
+- **Virtual workspaces** supported — a root `jk.toml` with `workspace { }` but no `project { }` is valid.
 - **Glob members** (`libs/*`) to avoid hand-listing.
 - **Affected-by-change**: `jk build --affected-since=origin/main` computes the changed set via git + reverse dep graph.
 
 ### 13.3 Composite-build semantics
 
-`workspace.substitute` lets a workspace member replace any binary dep (including a git dep) at build time:
+`[workspace.substitute]` lets a workspace member replace any binary dep (including a git dep) at build time:
 
-```hocon
-workspace.substitute {
-  "com.acme:auth-client" = projects.libs.auth
-}
+```toml
+[workspace.substitute]
+"com.acme:auth-client" = "projects.libs.auth"
 ```
 
 This unifies three Gradle features (classpath BOMs, composite builds, git deps) into one substitution mechanism.
@@ -758,33 +769,27 @@ This unifies three Gradle features (classpath BOMs, composite builds, git deps) 
 
 Cargo-style. Profiles change *how* code is compiled, not *what*.
 
-```hocon
-profiles {
-  dev = {
-    javac     = [ "-g", "-parameters" ]
-    jvm-args  = [ "-Xshare:auto" ]
-    optimize  = false
-  }
+```toml
+[profiles.dev]
+javac    = ["-g", "-parameters"]
+jvm-args = ["-Xshare:auto"]
+optimize = false
 
-  release = {
-    javac     = [ "-g:none", "-parameters" ]
-    jvm-args  = [ "-XX:+UseZGC", "-XX:+ZGenerational" ]
-    optimize  = true
-    native    = { enabled = false }
-  }
+[profiles.release]
+javac    = ["-g:none", "-parameters"]
+jvm-args = ["-XX:+UseZGC", "-XX:+ZGenerational"]
+optimize = true
+native   = { enabled = false }
 
-  bench = {
-    javac     = [ "-g:none", "-parameters" ]
-    optimize  = true
-  }
+[profiles.bench]
+javac    = ["-g:none", "-parameters"]
+optimize = true
 
-  ci = {
-    inherits  = "dev"
-    parallelism = "min(cores, 4)"
-    tui       = false                 # plain text output
-    daemon    = false                 # always
-  }
-}
+[profiles.ci]
+inherits    = "dev"
+parallelism = "min(cores, 4)"
+tui         = false                 # plain text output
+daemon      = false                 # always
 ```
 
 `ci` is auto-selected when the standard CI env vars are present (`CI`, `GITHUB_ACTIONS`, `GITLAB_CI`, etc.). Explicit `--profile=...` overrides.
@@ -826,19 +831,16 @@ Internally, each verb expands to a graph of tasks. Tasks declare typed inputs an
 
 No plugin API in v1. The escape hatch is a **single-file Java 25 task script** referenced by path:
 
-```hocon
-tasks {
-  generate-sql-models = {
-    script    = "scripts/GenerateSqlModels.java"
-    inputs    = [ "src/main/resources/schema.sql" ]
-    outputs   = [ "build/generated/sql-models" ]
-    cacheable = true
-    runs-before = [ "compile-main" ]
-  }
-}
+```toml
+[tasks.generate-sql-models]
+script      = "scripts/GenerateSqlModels.java"
+inputs      = ["src/main/resources/schema.sql"]
+outputs     = ["build/generated/sql-models"]
+cacheable   = true
+runs-before = ["compile-main"]
 ```
 
-The script is a normal Java 25 file (unnamed-class style supported) with declared `main`. jk invokes it in a forked JVM with `JK_INPUTS`/`JK_OUTPUTS` env vars pointing at staged directories. Inputs/outputs are declared in HOCON (data), so caching, parallelism, and `jk why-rebuilt` all work.
+The script is a normal Java 25 file (unnamed-class style supported) with declared `main`. jk invokes it in a forked JVM with `JK_INPUTS`/`JK_OUTPUTS` env vars pointing at staged directories. Inputs/outputs are declared in TOML (data), so caching, parallelism, and `jk why-rebuilt` all work.
 
 This satisfies extensibility for known v1 needs (codegen, custom packaging steps) without inventing a plugin SDK.
 
@@ -888,11 +890,13 @@ JUnit Platform (JUnit 5). Auto-detected; no configuration. Other frameworks (Tes
 
 `src/test/{java,kotlin,resources}` is the default test source set. Custom sets:
 
-```hocon
-test-sets {
-  integration = { path = "src/integrationTest", deps.test += [ "org.testcontainers:testcontainers:1.20.4" ] }
-  smoke       = { path = "src/smoke" }
-}
+```toml
+[test-sets.integration]
+path = "src/integrationTest"
+deps = ["org.testcontainers:testcontainers:1.20.4"]    # appended to dependencies.test
+
+[test-sets.smoke]
+path = "src/smoke"
 ```
 
 `jk test --set integration` runs only that set.
@@ -983,23 +987,22 @@ A GraalVM native binary published as a Maven artifact (the `<classifier>=native-
 
 ### 21.1 Targets
 
-```hocon
-publish {
-  default-repo = "central"
+```toml
+[publish]
+default-repo = "central"
 
-  repositories {
-    central = { type = "maven-central", staging = "ossrh" }
-    github  = { type = "maven", url = "https://maven.pkg.github.com/acme/internal", auth = "env:GITHUB_TOKEN" }
-    nexus   = { type = "maven", url = "https://nexus.example/repository/releases", auth = "env:NEXUS_TOKEN" }
-  }
+[publish.repositories]
+central = { type = "maven-central", staging = "ossrh" }
+github  = { type = "maven", url = "https://maven.pkg.github.com/acme/internal", auth = "env:GITHUB_TOKEN" }
+nexus   = { type = "maven", url = "https://nexus.example/repository/releases", auth = "env:NEXUS_TOKEN" }
 
-  pom {
-    licenses    = [ { name = "Apache-2.0", url = "https://www.apache.org/licenses/LICENSE-2.0" } ]
-    developers  = [ { id = "bsant", name = "Bryan Sant", email = "bryan.sant@modmed.com" } ]
-    scm.url     = "https://github.com/modmed/widget"
-    description = "..."
-  }
-}
+[publish.pom]
+licenses    = [{ name = "Apache-2.0", url = "https://www.apache.org/licenses/LICENSE-2.0" }]
+developers  = [{ id = "bsant", name = "Bryan Sant", email = "bryan.sant@modmed.com" }]
+description = "..."
+
+[publish.pom.scm]
+url = "https://github.com/modmed/widget"
 ```
 
 ### 21.2 What gets published
@@ -1042,17 +1045,16 @@ Refused unless `--allow-snapshot`. Recommend `-dev.N` / `-rc.N` qualifiers in `j
 
 ### 22.2 Config
 
-```hocon
-image {
-  base       = "gcr.io/distroless/java21-debian12:nonroot"
-  user       = "nonroot"
-  ports      = [ 8080 ]
-  env.JAVA_OPTS = "-XX:+UseZGC -XX:+ZGenerational"
-  labels     = { "org.opencontainers.image.source" = "https://github.com/modmed/widget" }
-  registry   = "ghcr.io/modmed"
-  tag        = "${project.version}"
-  platforms  = [ "linux/amd64", "linux/arm64" ]
-}
+```toml
+[image]
+base      = "gcr.io/distroless/java21-debian12:nonroot"
+user      = "nonroot"
+ports     = [8080]
+env       = { JAVA_OPTS = "-XX:+UseZGC -XX:+ZGenerational" }
+labels    = { "org.opencontainers.image.source" = "https://github.com/modmed/widget" }
+registry  = "ghcr.io/modmed"
+tag       = "${project.version}"
+platforms = ["linux/amd64", "linux/arm64"]
 ```
 
 Buildpacks-based emission is not in v1.0 (CNCF spec churn, large surface area).
@@ -1069,11 +1071,12 @@ Every downloaded artifact's SHA-256 must match the lockfile. No escape hatch. Mi
 
 Maven Central artifacts ship `.asc` signatures. jk verifies them by default; allow keyring pinning per `groupId`:
 
-```hocon
-verification {
-  gpg.required-for-groups = [ "org.springframework.*", "com.fasterxml.jackson.*" ]
-  gpg.allowed-keys.org.springframework = [ "0x...", "0x..." ]
-}
+```toml
+[verification.gpg]
+required-for-groups = ["org.springframework.*", "com.fasterxml.jackson.*"]
+
+[verification.gpg.allowed-keys]
+"org.springframework" = ["0x...", "0x..."]
 ```
 
 ### 23.3 Sigstore / cosign
@@ -1105,13 +1108,16 @@ jk audit --output=sarif > out.sarif
 
 License / source / version policy gate:
 
-```hocon
-deny {
-  licenses.deny  = [ "GPL-3.0", "AGPL-3.0" ]
-  licenses.allow = [ "Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "EPL-2.0" ]
-  sources.deny   = [ "jcenter.bintray.com" ]
-  yanked         = "deny"           # cargo-style yanked-version policy
-}
+```toml
+[deny]
+yanked = "deny"                                       # cargo-style yanked-version policy
+
+[deny.licenses]
+deny  = ["GPL-3.0", "AGPL-3.0"]
+allow = ["Apache-2.0", "MIT", "BSD-2-Clause", "BSD-3-Clause", "EPL-2.0"]
+
+[deny.sources]
+deny = ["jcenter.bintray.com"]
 ```
 
 ### 23.7 Hermeticity (Cargo-plus)
@@ -1173,7 +1179,7 @@ Three-tier fidelity:
 
 **Tier 3 (unsupported, emit diagnostic + stub):** maven-antrun-plugin, custom in-house plugins, profiles with non-trivial activation, `<extensions>`, `<distributionManagement><site>`, `system`-scope deps.
 
-Output: a fresh `build.jk` *and* a `jk-import-report.md` listing every unsupported construct with original line numbers. Never fail silently.
+Output: a fresh `jk.toml` *and* a `jk-import-report.md` listing every unsupported construct with original line numbers. Never fail silently.
 
 ### 24.3 `jk import build.gradle(.kts)`
 
@@ -1181,7 +1187,7 @@ Best-effort for declarative-style Gradle scripts. Anything that *executes Groovy
 
 ### 24.4 `jk export pom.xml`
 
-Round-trip publishing — see §21. Generates a Maven-Central-grade POM from `build.jk`.
+Round-trip publishing — see §21. Generates a Maven-Central-grade POM from `jk.toml`.
 
 `jk export build.gradle.kts` is v1.1+.
 
@@ -1189,7 +1195,7 @@ Round-trip publishing — see §21. Generates a Maven-Central-grade POM from `bu
 
 IntelliJ plugin is critical and on the v1.0 timeline as a parallel effort. Strategy: in early versions, the plugin generates a synthetic `pom.xml` for IntelliJ's Maven importer to consume, so users get IDE features without IntelliJ needing native jk knowledge. Native jk support follows once we have install base.
 
-VS Code support via a `vscode-jk` extension (JSON Schema for `build.jk`, command palette wrappers, problem matchers).
+VS Code support via a `vscode-jk` extension (JSON Schema for `jk.toml`, command palette wrappers, problem matchers).
 
 ---
 
@@ -1354,7 +1360,7 @@ mode = "auto"
 
 ### 28.2 Project-level overrides
 
-Anything in `~/.jk/config.toml` is overridable in `build.jk`'s top-level scope. Workspaces override per-member.
+Anything in `~/.jk/config.toml` is overridable in `jk.toml`'s top-level scope. Workspaces override per-member.
 
 ### 28.3 Environment variables
 
@@ -1428,7 +1434,7 @@ Explicit non-goals at v1.0 (most have a future-phase home, see §30):
 
 1. **IntelliJ plugin staffing** — without a credible plugin, jk is dead in the water for the enterprise audience. Who builds it?
 2. **`jk fmt` source-formatting scope** — does jk ship google-java-format / ktlint blessed, or stay out of source-style entirely? Recommend: ship blessed defaults but allow override.
-3. **HOCON syntax-error UX** — HOCON's diagnostics are mediocre. jk must wrap the parser with line-precise error rendering.
+3. **TOML syntax-error UX** — TOML's diagnostics are mediocre. jk must wrap the parser with line-precise error rendering.
 4. **`~/.m2`-cache sharing safety** — reading existing `~/.m2/repository` entries means trusting a cache jk didn't populate. Mitigate via SHA-256 verification against the Maven Central metadata; refuse on mismatch.
 5. **`gh auth token` reuse trust boundary** — automatically reusing the `gh` CLI's token is convenient but security-flavored. Should it require explicit opt-in?
 6. **Workspace member discovery cost** — glob-based `members = [ "libs/*" ]` requires filesystem walks. On huge monorepos this can be slow. Cache the resolved list and invalidate on directory mtime.
@@ -1450,7 +1456,7 @@ Explicit non-goals at v1.0 (most have a future-phase home, see §30):
 - **CAS** (Content-Addressed Store) — blob storage keyed by content hash.
 - **Coord** (Coordinate) — `groupId:artifactId:version[:classifier@type]`.
 - **Disco API** — foojay.io's JDK discovery REST API. The de facto JDK index.
-- **HOCON** (Human-Optimized Config Object Notation) — Lightbend's JSON superset.
+- **TOML** (Human-Optimized Config Object Notation) — Lightbend's JSON superset.
 - **PubGrub** — the dependency-resolution algorithm behind `pub`, `uv`, and modern Cargo.
 - **REAPI** — Bazel's Remote Execution API; the lingua franca of remote build caching/execution.
 - **SBOM** — Software Bill of Materials (CycloneDX or SPDX format).

@@ -54,7 +54,7 @@ public final class ImportCommand implements Callable<Integer> {
 
         String filename = source.getFileName().toString().toLowerCase(Locale.ROOT);
         Path projectDir = source.toAbsolutePath().getParent();
-        Path target = out != null ? out : projectDir.resolve("build.jk");
+        Path target = out != null ? out : projectDir.resolve("jk.toml");
         Path reportTarget = reportPath != null ? reportPath : projectDir.resolve("jk-import-report.md");
 
         if (Files.exists(target) && !force) {
@@ -81,7 +81,7 @@ public final class ImportCommand implements Callable<Integer> {
         System.out.println("Wrote " + target);
 
         for (var entry : importable.members.entrySet()) {
-            Path memberBuildJk = projectDir.resolve(entry.getKey()).resolve("build.jk");
+            Path memberBuildJk = projectDir.resolve(entry.getKey()).resolve("jk.toml");
             if (Files.exists(memberBuildJk) && !force) {
                 System.err.println("jk import: refusing to overwrite existing " + memberBuildJk
                         + " (use --force to replace).");

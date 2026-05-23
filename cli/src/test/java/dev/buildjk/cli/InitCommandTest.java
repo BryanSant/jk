@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.cli;
 
-import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
@@ -25,7 +25,7 @@ class InitCommandTest {
                 "init", "--group", "com.example", "--name", "widget", "--jdk", "25", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
-        Path buildFile = tempDir.resolve("build.jk");
+        Path buildFile = tempDir.resolve("jk.toml");
         Path lockFile = tempDir.resolve("jk.lock");
         assertThat(buildFile).exists();
         assertThat(lockFile).exists();
@@ -44,10 +44,10 @@ class InitCommandTest {
 
     @Test
     void refuses_to_overwrite_existing(@TempDir Path tempDir) throws IOException {
-        Files.writeString(tempDir.resolve("build.jk"), "# existing");
+        Files.writeString(tempDir.resolve("jk.toml"), "# existing");
         int exit = Jk.execute("init", tempDir.toString());
         assertThat(exit).isEqualTo(2);
-        assertThat(Files.readString(tempDir.resolve("build.jk"))).isEqualTo("# existing");
+        assertThat(Files.readString(tempDir.resolve("jk.toml"))).isEqualTo("# existing");
     }
 
     @Test
@@ -66,7 +66,7 @@ class InitCommandTest {
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
-        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("build.jk"));
+        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.project().main()).isEqualTo("com.example.App");
         assertThat(parsed.project().isRunnable()).isTrue();
     }
@@ -80,7 +80,7 @@ class InitCommandTest {
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
-        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("build.jk"));
+        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.project().main()).isNull();
         assertThat(parsed.project().isRunnable()).isFalse();
     }
@@ -113,7 +113,7 @@ class InitCommandTest {
             System.setOut(prevOut);
         }
         assertThat(exit).isEqualTo(0);
-        assertThat(tempDir.resolve("build.jk")).exists();
+        assertThat(tempDir.resolve("jk.toml")).exists();
         // No JLine raw-mode escape sequences should appear on stdout in flag mode.
         var output = captured.toString(StandardCharsets.UTF_8);
         assertThat(output).doesNotContain("[?1049h"); // alt-screen toggle

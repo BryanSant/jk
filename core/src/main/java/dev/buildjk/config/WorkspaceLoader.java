@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.buildjk.hocon;
+package dev.buildjk.config;
 
 import dev.buildjk.model.BuildJk;
 
@@ -13,12 +13,11 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Loads every member's {@code build.jk} for a workspace root.
+ * Loads every member's {@code jk.toml} for a workspace root.
  *
- * <p>v0.3 first iteration: literal member paths only (no globs).
- * Each entry in {@code workspace.members} must resolve to a directory
- * containing a {@code build.jk}. Missing members raise
- * {@link BuildJkParseException}.
+ * <p>Literal member paths only (no globs). Each entry in
+ * {@code workspace.members} must resolve to a directory containing a
+ * {@code jk.toml}. Missing members raise {@link BuildJkParseException}.
  */
 public final class WorkspaceLoader {
 
@@ -33,16 +32,16 @@ public final class WorkspaceLoader {
         List<String> bad = new ArrayList<>();
         for (String member : root.workspace().members()) {
             Path memberDir = workspaceRoot.resolve(member).normalize();
-            Path memberBuildJk = memberDir.resolve("build.jk");
-            if (!Files.exists(memberBuildJk)) {
+            Path memberJkToml = memberDir.resolve("jk.toml");
+            if (!Files.exists(memberJkToml)) {
                 bad.add(member);
                 continue;
             }
-            members.put(memberDir, BuildJkParser.parse(memberBuildJk));
+            members.put(memberDir, BuildJkParser.parse(memberJkToml));
         }
         if (!bad.isEmpty()) {
             throw new BuildJkParseException(
-                    "workspace members missing build.jk: " + bad);
+                    "workspace members missing jk.toml: " + bad);
         }
         return members;
     }

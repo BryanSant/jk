@@ -9,7 +9,7 @@ import dev.buildjk.compile.JavacDriver;
 import dev.buildjk.compile.KotlincDriver;
 import dev.buildjk.compile.KotlincRequest;
 import dev.buildjk.compile.KotlincResult;
-import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
@@ -53,7 +53,7 @@ public final class CompileCommand implements Callable<Integer> {
     @Override
     public Integer call() throws IOException {
         Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path buildFile = dir.resolve("build.jk");
+        Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
             System.err.println("jk compile: no build.jk in " + dir);

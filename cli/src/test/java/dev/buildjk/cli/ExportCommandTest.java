@@ -15,17 +15,15 @@ class ExportCommandTest {
 
     @Test
     void writes_pom_xml_from_build_jk(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget"
-                  version  = "1.0.0"
-                  jdk      = "21"
-                }
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "1.0.0"
+                jdk      = "21"
 
-                dependencies.main {
-                  "com.fasterxml.jackson.core:jackson-databind" = "=2.18.2"
-                }
+                [dependencies]
+                main = ["com.fasterxml.jackson.core:jackson-databind:2.18.2"]
                 """, StandardCharsets.UTF_8);
 
         int exit = run("export", "-C", tempDir.toString(), "pom.xml");
@@ -39,13 +37,12 @@ class ExportCommandTest {
 
     @Test
     void refuses_to_overwrite_without_force(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget"
-                  version  = "1.0.0"
-                  jdk      = "21"
-                }
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "1.0.0"
+                jdk      = "21"
                 """, StandardCharsets.UTF_8);
         Files.writeString(tempDir.resolve("pom.xml"), "<existing/>\n");
 
@@ -56,35 +53,31 @@ class ExportCommandTest {
 
     @Test
     void workspace_root_export_also_writes_each_member(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget-parent"
-                  version  = "1.0.0"
-                  jdk      = "21"
-                }
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget-parent"
+                version  = "1.0.0"
+                jdk      = "21"
 
-                workspace {
-                  members = ["core", "app"]
-                }
+                [workspace]
+                members = ["core", "app"]
                 """, StandardCharsets.UTF_8);
         Files.createDirectories(tempDir.resolve("core"));
-        Files.writeString(tempDir.resolve("core/build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget-core"
-                  version  = "1.0.0"
-                  jdk      = "21"
-                }
+        Files.writeString(tempDir.resolve("core/jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget-core"
+                version  = "1.0.0"
+                jdk      = "21"
                 """, StandardCharsets.UTF_8);
         Files.createDirectories(tempDir.resolve("app"));
-        Files.writeString(tempDir.resolve("app/build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget-app"
-                  version  = "1.0.0"
-                  jdk      = "21"
-                }
+        Files.writeString(tempDir.resolve("app/jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget-app"
+                version  = "1.0.0"
+                jdk      = "21"
                 """, StandardCharsets.UTF_8);
 
         int exit = run("export", "-C", tempDir.toString(), "pom.xml");
@@ -110,13 +103,12 @@ class ExportCommandTest {
 
     @Test
     void gradle_target_emits_friendly_v1_1_message(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget"
-                  version  = "1.0.0"
-                  jdk      = "21"
-                }
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "1.0.0"
+                jdk      = "21"
                 """, StandardCharsets.UTF_8);
 
         int exit = run("export", "-C", tempDir.toString(), "build.gradle.kts");

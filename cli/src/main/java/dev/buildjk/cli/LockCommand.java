@@ -2,8 +2,8 @@
 package dev.buildjk.cli;
 
 import dev.buildjk.cache.Cas;
-import dev.buildjk.hocon.BuildJkParser;
-import dev.buildjk.hocon.WorkspaceLoader;
+import dev.buildjk.config.BuildJkParser;
+import dev.buildjk.config.WorkspaceLoader;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileWriter;
 import dev.buildjk.model.BuildJk;
@@ -56,7 +56,7 @@ public final class LockCommand implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path buildFile = dir.resolve("build.jk");
+        Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
             System.err.println("jk lock: no build.jk in " + dir);

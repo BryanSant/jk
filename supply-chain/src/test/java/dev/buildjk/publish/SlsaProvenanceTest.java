@@ -22,7 +22,7 @@ class SlsaProvenanceTest {
                 "00000000-0000-0000-0000-000000000000",
                 Instant.parse("2026-05-22T12:00:00Z"),
                 Instant.parse("2026-05-22T12:00:01Z"),
-                Map.of("configRef", "build.jk"),
+                Map.of("configRef", "jk.toml"),
                 Map.of("jdk", "21"));
 
         String json = new String(SlsaProvenance.generate(List.of(subject), ctx), StandardCharsets.UTF_8);
@@ -35,7 +35,7 @@ class SlsaProvenanceTest {
         assertThat(json).contains("\"id\":\"https://github.com/buildjk/jk\"");
         assertThat(json).contains("\"invocationId\":\"00000000-0000-0000-0000-000000000000\"");
         assertThat(json).contains("\"startedOn\":\"2026-05-22T12:00:00Z\"");
-        assertThat(json).contains("\"configRef\":\"build.jk\"");
+        assertThat(json).contains("\"configRef\":\"jk.toml\"");
         assertThat(json).contains("\"jdk\":\"21\"");
     }
 

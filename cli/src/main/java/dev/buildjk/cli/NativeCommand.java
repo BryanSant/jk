@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.cli;
 
-import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.jdk.InstalledJdk;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
@@ -60,7 +60,7 @@ public final class NativeCommand implements Callable<Integer> {
     public Integer call() throws IOException, InterruptedException {
         Path projectDir = directory != null
                 ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path buildJkPath = projectDir.resolve("build.jk");
+        Path buildJkPath = projectDir.resolve("jk.toml");
         if (!Files.exists(buildJkPath)) {
             System.err.println("jk native: " + buildJkPath + " not found.");
             return 66;
@@ -76,12 +76,11 @@ public final class NativeCommand implements Callable<Integer> {
         }
 
         Optional<InstalledJdk> jdk = EnvCommand.resolvePinnedJdk(projectDir, jdksDir);
-        Path javaHome = jdk.map(InstalledJdk::home)
-                .orElse(Path.of(System.getProperty("java.home")));
+        Path javaHome = jdk.map(InstalledJdk::home).orElseGet(CompileToolchain::runningJavaHome);
 
         String chosenMain = mainClass != null
                 ? mainClass
-                : dev.buildjk.hocon.ImageConfigParser.parse(buildJkPath).mainClass();
+                : dev.buildjk.config.ImageConfigParser.parse(buildJkPath).mainClass();
         if (chosenMain == null || chosenMain.isBlank()) {
             System.err.println("jk native: no main class — pass --main or set image.main-class.");
             return 64;

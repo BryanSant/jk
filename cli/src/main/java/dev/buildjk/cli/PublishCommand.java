@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.cli;
 
-import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.publish.Checksums;
 import dev.buildjk.publish.GpgSigner;
@@ -98,7 +98,7 @@ public final class PublishCommand implements Callable<Integer> {
         Path projectDir = directory != null
                 ? directory.toAbsolutePath().normalize()
                 : Path.of(".").toAbsolutePath().normalize();
-        Path buildJkPath = projectDir.resolve("build.jk");
+        Path buildJkPath = projectDir.resolve("jk.toml");
         if (!Files.exists(buildJkPath)) {
             System.err.println("jk publish: " + buildJkPath + " not found.");
             return 66; // EX_NOINPUT
@@ -214,7 +214,7 @@ public final class PublishCommand implements Callable<Integer> {
                 java.util.UUID.randomUUID().toString(),
                 now,
                 now,
-                java.util.Map.of("configRef", "build.jk"),
+                java.util.Map.of("configRef", "jk.toml"),
                 java.util.Map.of(
                         "group", project.group(),
                         "artifact", project.artifact(),

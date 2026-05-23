@@ -109,8 +109,8 @@ class ReadSideIntegrationTest {
     @Test
     void tree_without_lockfile_errors(@TempDir Path tempDir) throws IOException {
         // Write a build.jk by hand so no jk.lock is created.
-        Files.writeString(tempDir.resolve("build.jk"),
-                "project { group = \"com.example\" artifact = \"a\" version = \"0.1.0\" }\n");
+        Files.writeString(tempDir.resolve("jk.toml"),
+                "[project]\ngroup = \"com.example\"\nartifact = \"a\"\nversion = \"0.1.0\"\n");
         int exit = run("tree", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(2);
     }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.buildjk.hocon;
+package dev.buildjk.config;
 
 import dev.buildjk.model.BuildJk;
 
@@ -14,7 +14,7 @@ import java.nio.file.Path;
  *
  * <p>Search policy: starting from {@code memberDir}, walk up the
  * parent chain (capped at a reasonable depth) looking for a
- * {@code build.jk} whose {@code workspace.members} contains the relative
+ * {@code jk.toml} whose {@code workspace.members} contains the relative
  * path from that parent down to {@code memberDir}.
  */
 public final class WorkspaceLocator {
@@ -33,11 +33,11 @@ public final class WorkspaceLocator {
         for (int depth = 0; depth < MAX_DEPTH; depth++) {
             Path parent = candidate.getParent();
             if (parent == null) break;
-            Path rootBuildJk = parent.resolve("build.jk");
-            if (Files.exists(rootBuildJk)) {
+            Path rootJkToml = parent.resolve("jk.toml");
+            if (Files.exists(rootJkToml)) {
                 BuildJk root;
                 try {
-                    root = BuildJkParser.parse(rootBuildJk);
+                    root = BuildJkParser.parse(rootJkToml);
                 } catch (RuntimeException ignored) {
                     candidate = parent;
                     continue;

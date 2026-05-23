@@ -6,7 +6,7 @@ import dev.buildjk.compile.ClasspathResolver;
 import dev.buildjk.compile.CompileRequest;
 import dev.buildjk.compile.CompileResult;
 import dev.buildjk.compile.JavacDriver;
-import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
@@ -48,7 +48,7 @@ public final class TestCommand implements Callable<Integer> {
     @Override
     public Integer call() throws IOException {
         Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path buildFile = dir.resolve("build.jk");
+        Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
             System.err.println("jk test: no build.jk in " + dir);

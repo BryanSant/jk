@@ -67,12 +67,13 @@ class InitScaffolderTest {
                 false, tempDir);
         InitScaffolder.write(inputs);
 
-        var build = Files.readString(tempDir.resolve("build.jk"));
-        assertThat(build).contains("dependencies.main {");
-        assertThat(build).contains("\"commons-io:commons-io\" = \"2.16.1\"");
-        assertThat(build).contains("\"com.google.guava:guava\" = \"33.4.0-jre\"");
-        assertThat(build).doesNotContain("dependencies.processor");
-        assertThat(build).doesNotContain("dependencies.provided");
+        var build = Files.readString(tempDir.resolve("jk.toml"));
+        assertThat(build).contains("[dependencies]");
+        assertThat(build).contains("main = [");
+        assertThat(build).contains("\"commons-io:commons-io:2.16.1\"");
+        assertThat(build).contains("\"com.google.guava:guava:33.4.0-jre\"");
+        assertThat(build).doesNotContain("processor =");
+        assertThat(build).doesNotContain("provided =");
     }
 
     @Test
@@ -85,11 +86,11 @@ class InitScaffolderTest {
                 false, tempDir);
         InitScaffolder.write(inputs);
 
-        var build = Files.readString(tempDir.resolve("build.jk"));
-        assertThat(build).doesNotContain("dependencies.main {");
-        assertThat(build).contains("dependencies.processor {");
-        assertThat(build).contains("dependencies.provided {");
-        assertThat(build).contains("\"org.projectlombok:lombok\" = \"1.18.34\"");
+        var build = Files.readString(tempDir.resolve("jk.toml"));
+        assertThat(build).doesNotContain("main = [");
+        assertThat(build).contains("processor = [");
+        assertThat(build).contains("provided = [");
+        assertThat(build).contains("\"org.projectlombok:lombok:1.18.34\"");
     }
 
     @Test
@@ -99,7 +100,7 @@ class InitScaffolderTest {
                 Optional.of("com.example.App"), false, false,
                 InitInputs.Language.JAVA, List.of(), false, tempDir);
         InitScaffolder.write(off);
-        assertThat(Files.readString(tempDir.resolve("build.jk"))).doesNotContain("shadow");
+        assertThat(Files.readString(tempDir.resolve("jk.toml"))).doesNotContain("shadow");
 
         var sub = Files.createDirectories(tempDir.resolve("on"));
         var on = new InitInputs(
@@ -107,7 +108,7 @@ class InitScaffolderTest {
                 Optional.of("com.example.App"), true, false,
                 InitInputs.Language.JAVA, List.of(), false, sub);
         InitScaffolder.write(on);
-        assertThat(Files.readString(sub.resolve("build.jk"))).contains("shadow   = true");
+        assertThat(Files.readString(sub.resolve("jk.toml"))).contains("shadow   = true");
     }
 
     @Test
@@ -117,7 +118,7 @@ class InitScaffolderTest {
                 Optional.empty(), false, false,
                 InitInputs.Language.JAVA, List.of(), false, tempDir);
         InitScaffolder.write(off);
-        assertThat(Files.readString(tempDir.resolve("build.jk"))).doesNotContain("native");
+        assertThat(Files.readString(tempDir.resolve("jk.toml"))).doesNotContain("native");
 
         var sub = Files.createDirectories(tempDir.resolve("on"));
         var on = new InitInputs(
@@ -125,14 +126,14 @@ class InitScaffolderTest {
                 Optional.empty(), false, true,
                 InitInputs.Language.JAVA, List.of(), false, sub);
         InitScaffolder.write(on);
-        assertThat(Files.readString(sub.resolve("build.jk"))).contains("native   = true");
+        assertThat(Files.readString(sub.resolve("jk.toml"))).contains("native   = true");
     }
 
     @Test
     void no_sample_skips_source_tree(@TempDir Path tempDir) throws IOException {
         InitScaffolder.write(library(tempDir, InitInputs.Language.JAVA, false));
 
-        assertThat(tempDir.resolve("build.jk")).exists();
+        assertThat(tempDir.resolve("jk.toml")).exists();
         assertThat(tempDir.resolve("jk.lock")).exists();
         assertThat(tempDir.resolve("src")).doesNotExist();
     }

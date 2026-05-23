@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.cli;
 
-import dev.buildjk.hocon.BuildJkParser;
-import dev.buildjk.hocon.ImageConfigParser;
+import dev.buildjk.config.BuildJkParser;
+import dev.buildjk.config.ImageConfigParser;
 import dev.buildjk.image.ImageBuilder;
 import dev.buildjk.image.ImageConfig;
 import dev.buildjk.lock.Lockfile;
@@ -63,7 +63,7 @@ public final class ImageCommand implements Callable<Integer> {
     public Integer call() throws IOException, InterruptedException {
         Path projectDir = directory != null
                 ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path buildJkPath = projectDir.resolve("build.jk");
+        Path buildJkPath = projectDir.resolve("jk.toml");
         if (!Files.exists(buildJkPath)) {
             System.err.println("jk image: " + buildJkPath + " not found.");
             return 66;

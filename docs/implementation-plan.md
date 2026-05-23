@@ -32,7 +32,7 @@ Listed in dependency order — foundations first, the native binary last.
 
 | Module | Packages | Responsibility |
 |---|---|---|
-| `:core` | `dev.buildjk.{util, event, model, hocon, lock}` | Foundations. Hashing/paths/ANSI/env-scrubbing, JSONL event log + chrome://tracing emitter, `build.jk` model + coordinate types, HOCON parser wrapper (line-precise diagnostics for PRD §31 #3), `jk.lock` read/write/merge. Zero network, zero process spawning. |
+| `:core` | `dev.buildjk.{util, event, model, config, lock}` | Foundations. Hashing/paths/ANSI/env-scrubbing, JSONL event log + chrome://tracing emitter, `jk.toml` model + coordinate types, TOML parser wrapper (line-precise diagnostics for PRD §31 #3), `jk.lock` read/write/merge. Zero network, zero process spawning. |
 | `:io` | `dev.buildjk.{http, cache, git, repo}` | All fetches and on-disk artifact storage. HTTP/2 client wrapper, CAS + action cache + `~/.m2` view, JGit-backed git resolver (sparse checkout, URL canonicalization, tag-rewrite detection), Maven repo client (sparse-index, mirror, auth, normalization). |
 | `:resolver` | `dev.buildjk.resolver` | PubGrub solver, version selectors, prose conflict diagnostics. Depends on `:io` for POM fetch, `:core` for types. |
 | `:toolchain` | `dev.buildjk.{jdk, script, tool, discovery}` | Anything that manages a JVM, kotlinc, mvn, or gradle on disk. JDK manager (Disco API, install/use/pin, `.sdkmanrc` interop, `jk shell`/`jk env`), JBang-compatible single-file Java 25 scripts, `jk tool install` / `jkx` tool envs with LRU eviction, and the good-neighbor `discovery` package (probes for SDKMAN/JBang/asdf/jenv/Homebrew + symlink provisioner). |
@@ -48,7 +48,7 @@ Listed in dependency order — foundations first, the native binary last.
 
 | Slot | Pick | Rationale |
 |---|---|---|
-| HOCON parser | **Lightbend Config** (`com.typesafe:config`) | Canonical reference impl; PRD §5.1 specifies. Wrapped with a line-precise diagnostic decorator to fix PRD §31 #3. |
+| TOML parser | **Lightbend Config** (`com.typesafe:config`) | Canonical reference impl; PRD §5.1 specifies. Wrapped with a line-precise diagnostic decorator to fix PRD §31 #3. |
 | TOML parser | **tomlj** | Pure Java, TOML 1.0 conformant, GraalVM-friendly, no transitive Jackson. |
 | CLI parsing | **picocli** | GraalVM-first design (used by Quarkus). Minimal reflection footprint, completion-script generation, mature subcommand support. |
 | HTTP/2 client | **`java.net.http.HttpClient`** (JDK built-in) | Zero added dep, HTTP/2 native, virtual-thread friendly, GraalVM-safe. Avoids Netty's binary-size cost. |
@@ -74,15 +74,15 @@ Listed in dependency order — foundations first, the native binary last.
 
 Logical sequencing, dependency-driven, no calendar estimates. Each milestone is a tagged release.
 
-- **v0.1 — Resolver MVP.** ✅ Shipped. HOCON `build.jk` parse, `jk.lock` read/write, Maven Central HTTP fetch, PubGrub solver with prose diagnostics. Commands: `jk init`, `jk add`, `jk remove`, `jk lock`, `jk sync`, `jk update`, `jk tree`, `jk why`, `jk fetch`.
+- **v0.1 — Resolver MVP.** ✅ Shipped. TOML `jk.toml` parse, `jk.lock` read/write, Maven Central HTTP fetch, PubGrub solver with prose diagnostics. Commands: `jk init`, `jk add`, `jk remove`, `jk lock`, `jk sync`, `jk update`, `jk tree`, `jk why`, `jk fetch`.
 - **v0.2 — Builder.** ✅ Shipped. javac driver, action graph + CAS + action cache, per-file incremental, JUnit Platform tests. Commands: `jk check`, `jk build`, `jk test`, `jk clean`, `jk explain`, `jk why-rebuilt`.
-- **v0.3 — Kotlin & workspaces.** ✅ Shipped. kotlinc subprocess strategy, KSP, user-facing multi-module workspaces (in `build.jk`), features, profiles.
+- **v0.3 — Kotlin & workspaces.** ✅ Shipped. kotlinc subprocess strategy, KSP, user-facing multi-module workspaces (in `jk.toml`), features, profiles.
 - **v0.4 — Toolchain.** ✅ Shipped. JDK manager (Disco), `.sdkmanrc` interop, `jk shell` / `jk env`, project-level JDK pinning.
 - **v0.5 — Migration.** ✅ Shipped. `jk mvn` / `jk gradle` passthroughs, three-tier `jk import pom.xml` (single + multi-module), best-effort `jk import build.gradle(.kts)`, `jk export pom.xml`.
 - **v0.6 — Publishing & scripting.** ✅ Shipped. `jk publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOMs). `jk run script.java` (JBang-compat). `jk tool install` / `jkx` (was `jk install` / `jkx` pre-Option-1).
-- **v0.7 — Git deps.** ✅ Shipped. JGit resolver, HOCON git-source syntax, GitFetcher + GitSource + GitUrl.
+- **v0.7 — Git deps.** ✅ Shipped. JGit resolver, TOML git-source syntax, GitFetcher + GitSource + GitUrl.
 - **v0.8 — Container & supply chain.** ✅ Shipped. `jk image` (Jib-core), `jk audit` (OSV), `jk deny`, CycloneDX + SPDX, `jk native` (GraalVM native-image driver).
-- **v0.9 — Self-hosting.** ✅ Shipped. `jk verify-build`, candidate self-hosting `build.jks`, jk builds itself end-to-end. Subprocess compile strategies behind a pluggable SPI (kotlin-compiler-embeddable removed). Native-image config consolidated; binary trimmed 187 MB → 138 MB. Good-neighbor tool discovery layered on after the milestone.
+- **v0.9 — Self-hosting.** ✅ Shipped. `jk verify-build`, candidate self-hosting `jk.tomls`, jk builds itself end-to-end. Subprocess compile strategies behind a pluggable SPI (kotlin-compiler-embeddable removed). Native-image config consolidated; binary trimmed 187 MB → 138 MB. Good-neighbor tool discovery layered on after the milestone.
 - **v1.0 — GA.** Next. IntelliJ plugin (synthetic-POM bridge mode), VS Code extension shell, docs site, benchmark dashboard, `setup-jk` GitHub Action, signed v1.0.0 release.
 
 ---
@@ -100,7 +100,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 ## 7. Self-hosting transition (v0.8 → v0.9) — done
 
 1. ✅ Every feature the jk-build itself depends on shipped in a tagged release before the flip.
-2. ✅ Candidate `build.jks` files committed in v0.9 slice A; multi-module workspace derived from the existing Gradle build.
+2. ✅ Candidate `jk.tomls` files committed in v0.9 slice A; multi-module workspace derived from the existing Gradle build.
 3. ✅ Parity via `jk verify-build` (byte-identical jar across boxes).
 4. ✅ jk builds itself end-to-end as of commit `88c2fdf`. Gradle build retained at the repo root as the bootstrap path through at least v1.1.
 
@@ -127,7 +127,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 
 1. **GraalVM compat of JGit & Lightbend Config.** *Mitigation:* pin versions known to work, vendor upstream `META-INF/native-image/` config, run a nightly native-binary smoke job against a corpus of real repos. (Resolved through v0.9; carry-forward for v1.0.)
 2. **PubGrub on Maven's wild west.** *Mitigation:* fixture corpus + a defensive normalization layer in `dev.buildjk.repo.normalize` before constraints reach the solver.
-3. **HOCON diagnostics.** *Mitigation:* the `dev.buildjk.hocon` wrapper maps `com.typesafe.config.ConfigException` positions to source lines and renders Rust-style carets. Required to close requirements.md §31 #3.
+3. **TOML diagnostics.** *Mitigation:* the `dev.buildjk.config` wrapper maps `com.typesafe.config.ConfigException` positions to source lines and renders Rust-style carets. Required to close requirements.md §31 #3.
 4. **Self-hosting chicken-and-egg.** *Mitigation:* the Gradle bootstrap build is kept at the repo root through v1.1 as an escape hatch; parity CI runs per §7.
 5. **IntelliJ plugin staffing (requirements.md §31 #1).** Out of scope for this document; flagged as a v1.0 blocker that requires a separate effort and is not on the critical path of the binary itself.
 6. **Discovery-link rot.** *Mitigation:* `jk jdk reconcile` prunes broken JDK symlinks; `jk doctor` does the same for the mvn/gradle/kotlin build-tool tree. `--verify-linked` opt-in fingerprints linked installs for stricter reproducibility tracking. See [tool-discovery-plan.md](./tool-discovery-plan.md).
@@ -144,7 +144,7 @@ jk/
 ├── .sdkmanrc                        # java=25.0.3-graal, gradle=9.5.1
 ├── settings.gradle.kts              # include(":core", ":io", ":resolver", ...)
 ├── build.gradle.kts                 # root: applies convention plugins to subprojects
-├── build.jk                         # candidate self-hosting build (v0.9 — jk builds itself)
+├── jk.toml                         # candidate self-hosting build (v0.9 — jk builds itself)
 ├── buildSrc/                        # Gradle convention plugins
 │   └── src/main/kotlin/             # jk.java-conventions.gradle.kts, jk.spdx-header.gradle.kts, ...
 ├── gradle/
@@ -154,7 +154,7 @@ jk/
 │   ├── implementation-plan.md       # this document
 │   ├── comparison.md                # jk vs uv / Cargo / Gradle / Maven
 │   └── tool-discovery-plan.md       # good-neighbor symlink discovery (shipped)
-├── core/   src/{main,test}/java/dev/buildjk/{util,event,model,hocon,lock}/
+├── core/   src/{main,test}/java/dev/buildjk/{util,event,model,config,lock}/
 ├── io/     src/{main,test}/java/dev/buildjk/{http,cache,git,repo}/
 ├── resolver/   src/{main,test}/java/dev/buildjk/resolver/
 ├── toolchain/  src/{main,test}/java/dev/buildjk/{jdk,script,tool,discovery}/

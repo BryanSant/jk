@@ -69,7 +69,7 @@ jk mvn package
 - **Native binary, no daemon.** `jk --help` is a sub-50ms cold start. No JVM warmup tax, no daemon to restart when configuration cache breaks.
 - **Reproducibility is the default.** Locked deps, locked toolchain, scrubbed environment, sorted jar entries, deterministic timestamps. `jk verify-build` re-builds in a scratch dir and diffs SHA-256.
 - **Diagnostics are a product.** PubGrub-style English error messages, `jk why`, `jk explain`, `jk why-rebuilt`, all offline.
-- **Adoption first.** `jk mvn` and `jk gradle` work day one. `jk import pom.xml` produces a `build.jk`; `jk export pom.xml` keeps Maven Central publishing fidelity.
+- **Adoption first.** `jk mvn` and `jk gradle` work day one. `jk import pom.xml` produces a `jk.toml`; `jk export pom.xml` keeps Maven Central publishing fidelity.
 - **Supply chain is built-in.** GPG, Sigstore, SLSA v1 provenance, CycloneDX, SPDX, OSV vulnerability scanning, dependency-confusion defense — all first-party verbs, not plugins.
 
 ## Status

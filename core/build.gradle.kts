@@ -4,10 +4,9 @@ plugins {
     id("jk.java-conventions")
 }
 
-description = "jk core foundations: util, event, model, hocon, lock"
+description = "jk core foundations: util, event, model, config, lock"
 
 dependencies {
-    api(libs.typesafe.config)
     api(libs.tomlj)
     implementation(libs.jackson.databind)
 }

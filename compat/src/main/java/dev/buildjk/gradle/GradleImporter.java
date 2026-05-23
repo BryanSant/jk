@@ -215,9 +215,9 @@ public final class GradleImporter {
         }
         if (versionToken.contains("$")) {
             report.warning("dependency `" + coord + "` uses a Gradle variable for its version;"
-                    + " jk wrote `=" + versionToken + "` verbatim — resolve the variable manually.");
+                    + " jk wrote `" + versionToken + "` verbatim — resolve the variable manually.");
         }
-        VersionSelector selector = VersionSelector.parse("=" + versionToken);
+        VersionSelector selector = VersionSelector.parse(versionToken);
         byScope.computeIfAbsent(scope, s -> new ArrayList<>()).add(new Dependency(module, selector));
     }
 

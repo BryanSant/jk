@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.cli;
 
-import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
@@ -33,7 +33,7 @@ public final class WhyCommand implements Callable<Integer> {
     @Override
     public Integer call() throws IOException {
         Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path buildFile = dir.resolve("build.jk");
+        Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
             System.err.println("jk why: project must have build.jk and jk.lock (run `jk lock` first)");

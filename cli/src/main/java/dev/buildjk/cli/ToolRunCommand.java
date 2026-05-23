@@ -73,7 +73,7 @@ public final class ToolRunCommand implements Callable<Integer> {
             ToolResolver toolResolver = new ToolResolver(repos);
 
             ToolEnv env = toolResolver.resolve(primary, primary.artifact(), mainClass);
-            Path javaHome = Path.of(System.getProperty("java.home"));
+            Path javaHome = CompileToolchain.runningJavaHome();
             return ToolLauncher.execEphemeral(javaHome, env, toolArgs);
         }
     }

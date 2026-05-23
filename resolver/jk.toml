@@ -1,0 +1,17 @@
+[project]
+group    = "dev.buildjk"
+artifact = "jk-resolver"
+version  = "0.6.0-SNAPSHOT"
+jdk      = "25"
+language = "java"
+
+[dependencies]
+main = [
+  "dev.buildjk:jk-core:0.6.0-SNAPSHOT",
+  "dev.buildjk:jk-io:0.6.0-SNAPSHOT",
+]
+test = [
+  "org.assertj:assertj-core:3.27.7",
+  "org.junit.jupiter:junit-jupiter:6.1.0",
+  "org.junit.platform:junit-platform-launcher:6.1.0",
+]

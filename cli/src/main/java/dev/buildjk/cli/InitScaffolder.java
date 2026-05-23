@@ -49,7 +49,7 @@ public final class InitScaffolder {
         var dir = inputs.directory();
         Files.createDirectories(dir);
 
-        var buildFile = dir.resolve("build.jk");
+        var buildFile = dir.resolve("jk.toml");
         Files.writeString(buildFile, InitBuildJkRenderer.render(inputs), StandardCharsets.UTF_8);
 
         var lockFile = dir.resolve("jk.lock");

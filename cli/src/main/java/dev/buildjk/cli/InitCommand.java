@@ -74,7 +74,7 @@ public final class InitCommand implements Callable<Integer> {
         Path target = resolveDirectory();
         Files.createDirectories(target);
 
-        Path buildFile = target.resolve("build.jk");
+        Path buildFile = target.resolve("jk.toml");
         Path lockFile = target.resolve("jk.lock");
         if (Files.exists(buildFile)) {
             System.err.println("jk init: refusing to overwrite existing build.jk at " + buildFile);
@@ -295,7 +295,7 @@ public final class InitCommand implements Callable<Integer> {
     }
 
     private static void emitSuccessPlain(InitInputs inputs) {
-        System.out.println("Created " + inputs.directory().resolve("build.jk"));
+        System.out.println("Created " + inputs.directory().resolve("jk.toml"));
         System.out.println("Created " + inputs.directory().resolve("jk.lock"));
         System.out.println();
         System.out.println("Done. Next:");

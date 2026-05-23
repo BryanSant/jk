@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.deny;
 
-import dev.buildjk.hocon.DenyPolicyParser;
+import dev.buildjk.config.DenyPolicyParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.model.DenyPolicy;
 import dev.buildjk.model.Scope;
@@ -49,15 +49,23 @@ class PolicyCheckerTest {
     }
 
     @Test
-    void hocon_parser_extracts_the_deny_block() {
+    void toml_parser_extracts_the_deny_block() {
         DenyPolicy policy = DenyPolicyParser.parse("""
-                project { group = "g", artifact = "a", version = "1", jdk = "21" }
-                deny {
-                  licenses.deny  = [ "GPL-3.0", "AGPL-3.0" ]
-                  licenses.allow = [ "Apache-2.0", "MIT" ]
-                  sources.deny   = [ "jcenter.bintray.com" ]
-                  yanked         = "warn"
-                }
+                [project]
+                group    = "g"
+                artifact = "a"
+                version  = "1"
+                jdk      = "21"
+
+                [deny]
+                yanked = "warn"
+
+                [deny.licenses]
+                deny  = ["GPL-3.0", "AGPL-3.0"]
+                allow = ["Apache-2.0", "MIT"]
+
+                [deny.sources]
+                deny = ["jcenter.bintray.com"]
                 """);
         assertThat(policy.deniedLicenses()).containsExactly("GPL-3.0", "AGPL-3.0");
         assertThat(policy.allowedLicenses()).containsExactly("Apache-2.0", "MIT");
@@ -66,9 +74,13 @@ class PolicyCheckerTest {
     }
 
     @Test
-    void hocon_parser_returns_permissive_when_block_absent() {
+    void toml_parser_returns_permissive_when_block_absent() {
         DenyPolicy policy = DenyPolicyParser.parse("""
-                project { group = "g", artifact = "a", version = "1", jdk = "21" }
+                [project]
+                group    = "g"
+                artifact = "a"
+                version  = "1"
+                jdk      = "21"
                 """);
         assertThat(policy.isEmpty()).isTrue();
     }

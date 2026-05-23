@@ -172,7 +172,7 @@ public final class RunCommand implements Callable<Integer> {
 
     private int exec(ScriptHeader header, Path classesDir, List<Path> classpath)
             throws IOException, InterruptedException {
-        Path java = Path.of(System.getProperty("java.home"), "bin",
+        Path java = CompileToolchain.runningJavaHome().resolve("bin").resolve(
                 System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
 
         StringBuilder cp = new StringBuilder(classesDir.toAbsolutePath().toString());

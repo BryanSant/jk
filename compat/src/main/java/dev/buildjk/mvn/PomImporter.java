@@ -284,8 +284,8 @@ public final class PomImporter {
             // still parses round-tripped.
             version = "unresolved";
         }
-        // PRD §7.3: imported POMs translated to exact pins to preserve Maven semantics.
-        VersionSelector selector = VersionSelector.parse("=" + version);
+        // PRD §7.3: jk's bare-version default is Exact, matching Maven semantics.
+        VersionSelector selector = VersionSelector.parse(version);
         return new Dependency(dep.module(), selector);
     }
 

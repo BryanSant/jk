@@ -68,7 +68,7 @@ public final class ToolInstallCommand implements Callable<Integer> {
 
         System.out.println("Resolving " + primary.toGav() + " ...");
         ToolEnv env = toolResolver.resolve(primary, bin, mainClass);
-        Path javaHome = Path.of(System.getProperty("java.home"));
+        Path javaHome = CompileToolchain.runningJavaHome();
         Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, env);
 
         System.out.println("Installed " + primary.toGav() + " → " + launcher);

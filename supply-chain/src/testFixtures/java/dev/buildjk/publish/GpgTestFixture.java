@@ -4,6 +4,7 @@ package dev.buildjk.publish;
 import org.bouncycastle.bcpg.ArmoredOutputStream;
 import org.bouncycastle.bcpg.HashAlgorithmTags;
 import org.bouncycastle.bcpg.PublicKeyAlgorithmTags;
+import org.bouncycastle.bcpg.PublicKeyPacket;
 import org.bouncycastle.bcpg.SymmetricKeyAlgorithmTags;
 import org.bouncycastle.crypto.AsymmetricCipherKeyPair;
 import org.bouncycastle.crypto.generators.RSAKeyPairGenerator;
@@ -45,7 +46,7 @@ public final class GpgTestFixture {
                 BigInteger.valueOf(0x10001), new SecureRandom(), 1024, 12));
         AsymmetricCipherKeyPair pair = rsa.generateKeyPair();
         PGPKeyPair pgpPair = new BcPGPKeyPair(
-                PublicKeyAlgorithmTags.RSA_GENERAL, pair, new Date());
+                PublicKeyPacket.VERSION_4, PublicKeyAlgorithmTags.RSA_GENERAL, pair, new Date());
 
         var sha1Calc = new BcPGPDigestCalculatorProvider().get(HashAlgorithmTags.SHA1);
         PGPKeyRingGenerator gen = new PGPKeyRingGenerator(

@@ -8,14 +8,21 @@ import static org.assertj.core.api.Assertions.assertThat;
 class VersionSelectorTest {
 
     @Test
-    void plain_version_is_caret_by_default() {
+    void plain_version_is_exact_by_default() {
         VersionSelector s = VersionSelector.parse("2.18.2");
+        assertThat(s).isInstanceOf(VersionSelector.Exact.class);
+        assertThat(((VersionSelector.Exact) s).version()).isEqualTo("2.18.2");
+    }
+
+    @Test
+    void caret_prefix_is_caret() {
+        VersionSelector s = VersionSelector.parse("^2.18.2");
         assertThat(s).isInstanceOf(VersionSelector.Caret.class);
         assertThat(((VersionSelector.Caret) s).version()).isEqualTo("2.18.2");
     }
 
     @Test
-    void equals_prefix_is_exact() {
+    void equals_prefix_is_still_exact_for_back_compat() {
         VersionSelector s = VersionSelector.parse("=2.18.2");
         assertThat(s).isInstanceOf(VersionSelector.Exact.class);
         assertThat(((VersionSelector.Exact) s).version()).isEqualTo("2.18.2");

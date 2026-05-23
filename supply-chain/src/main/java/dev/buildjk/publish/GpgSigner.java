@@ -37,11 +37,11 @@ import java.util.Objects;
 public final class GpgSigner {
 
     private final PGPPrivateKey privateKey;
-    private final int publicKeyAlgorithm;
+    private final PGPPublicKey publicKey;
 
-    private GpgSigner(PGPPrivateKey privateKey, int publicKeyAlgorithm) {
+    private GpgSigner(PGPPrivateKey privateKey, PGPPublicKey publicKey) {
         this.privateKey = Objects.requireNonNull(privateKey, "privateKey");
-        this.publicKeyAlgorithm = publicKeyAlgorithm;
+        this.publicKey = Objects.requireNonNull(publicKey, "publicKey");
     }
 
     /** Load a signer from a secret-key file (armored or binary). */
@@ -59,8 +59,7 @@ public final class GpgSigner {
                     PGPPrivateKey priv = key.extractPrivateKey(
                             new BcPBESecretKeyDecryptorBuilder(new BcPGPDigestCalculatorProvider())
                                     .build(passphrase == null ? new char[0] : passphrase));
-                    PGPPublicKey pub = key.getPublicKey();
-                    return new GpgSigner(priv, pub.getAlgorithm());
+                    return new GpgSigner(priv, key.getPublicKey());
                 }
             }
         } catch (PGPException e) {
@@ -71,10 +70,10 @@ public final class GpgSigner {
 
     /**
      * For programmatic use (e.g. tests): wrap an already-extracted
-     * {@link PGPPrivateKey} + the public key's algorithm id.
+     * {@link PGPPrivateKey} together with its matching {@link PGPPublicKey}.
      */
-    public static GpgSigner of(PGPPrivateKey privateKey, int publicKeyAlgorithm) {
-        return new GpgSigner(privateKey, publicKeyAlgorithm);
+    public static GpgSigner of(PGPPrivateKey privateKey, PGPPublicKey publicKey) {
+        return new GpgSigner(privateKey, publicKey);
     }
 
     /**
@@ -84,7 +83,8 @@ public final class GpgSigner {
     public byte[] signArmored(byte[] data) throws IOException {
         try {
             PGPSignatureGenerator gen = new PGPSignatureGenerator(
-                    new BcPGPContentSignerBuilder(publicKeyAlgorithm, HashAlgorithmTags.SHA256));
+                    new BcPGPContentSignerBuilder(publicKey.getAlgorithm(), HashAlgorithmTags.SHA256),
+                    publicKey);
             gen.init(PGPSignature.BINARY_DOCUMENT, privateKey);
             gen.update(data);
             PGPSignature sig = gen.generate();

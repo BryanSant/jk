@@ -2,7 +2,7 @@
 package dev.buildjk.cli;
 
 import dev.buildjk.deny.PolicyChecker;
-import dev.buildjk.hocon.DenyPolicyParser;
+import dev.buildjk.config.DenyPolicyParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.DenyPolicy;
@@ -30,7 +30,7 @@ public final class DenyCommand implements Callable<Integer> {
     public Integer call() throws IOException {
         Path projectDir = directory != null
                 ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path buildJk = projectDir.resolve("build.jk");
+        Path buildJk = projectDir.resolve("jk.toml");
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(buildJk)) {
             System.err.println("jk deny: " + buildJk + " not found.");

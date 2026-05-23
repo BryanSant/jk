@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.cli;
 
-import dev.buildjk.hocon.BuildJkParser;
+import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Scope;
 import org.junit.jupiter.api.Test;
@@ -21,7 +21,7 @@ class AddRemoveCommandTest {
                 "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
-        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("build.jk"));
+        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.dependencies().of(Scope.MAIN))
                 .singleElement()
                 .satisfies(d -> assertThat(d.module())
@@ -35,7 +35,7 @@ class AddRemoveCommandTest {
                 "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
-        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("build.jk"));
+        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.dependencies().of(Scope.TEST)).hasSize(1);
         assertThat(parsed.dependencies().of(Scope.MAIN)).isEmpty();
     }
@@ -47,7 +47,7 @@ class AddRemoveCommandTest {
         int exit = run("remove", "com.foo:bar", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
-        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("build.jk"));
+        BuildJk parsed = BuildJkParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.dependencies().of(Scope.MAIN)).isEmpty();
     }
 

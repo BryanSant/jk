@@ -134,7 +134,7 @@ class PomExporterTest {
     void caret_selector_emits_fidelity_warning_but_pins_to_version() {
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         byScope.put(Scope.MAIN, List.of(
-                new Dependency("com.example:lib", VersionSelector.parse("2.0.0"))));
+                new Dependency("com.example:lib", VersionSelector.parse("^2.0.0"))));
 
         var result = PomExporter.export(new BuildJk(
                 new BuildJk.Project("com.example", "widget", "1.0.0", "21"),

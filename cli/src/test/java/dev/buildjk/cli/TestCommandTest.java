@@ -55,8 +55,8 @@ class TestCommandTest {
 
     @Test
     void test_without_lockfile_errors(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("build.jk"),
-                "project { group = \"com.example\" artifact = \"x\" version = \"0.1\" }\n");
+        Files.writeString(tempDir.resolve("jk.toml"),
+                "[project]\ngroup = \"com.example\"\nartifact = \"x\"\nversion = \"0.1\"\n");
         int exit = run("test", "-C", tempDir.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(2);

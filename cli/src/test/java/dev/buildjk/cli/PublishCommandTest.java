@@ -73,13 +73,12 @@ class PublishCommandTest {
 
     @Test
     void snapshot_version_refused_by_default(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget"
-                  version  = "1.0.0-SNAPSHOT"
-                  jdk      = "21"
-                }
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "1.0.0-SNAPSHOT"
+                jdk      = "21"
                 """);
         writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
 
@@ -92,13 +91,12 @@ class PublishCommandTest {
 
     @Test
     void snapshot_version_allowed_with_flag(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget"
-                  version  = "1.0.0-SNAPSHOT"
-                  jdk      = "21"
-                }
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "1.0.0-SNAPSHOT"
+                jdk      = "21"
                 """);
         writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
 
@@ -247,13 +245,12 @@ class PublishCommandTest {
     // --- helpers -----------------------------------------------------------
 
     private static void writeBuildJk(Path projectDir) throws IOException {
-        Files.writeString(projectDir.resolve("build.jk"), """
-                project {
-                  group    = "com.example"
-                  artifact = "widget"
-                  version  = "1.0.0"
-                  jdk      = "21"
-                }
+        Files.writeString(projectDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "1.0.0"
+                jdk      = "21"
                 """);
     }
 
