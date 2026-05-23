@@ -1,10 +1,17 @@
 # Tool discovery / good-neighbor plan
 
-**Status:** implemented as of 2026-05-22 (commits 92e1177, e1f1da6, 72d091f, d75c41b)
-**Scope:** `JdkRegistry` + `JdkInstaller` and `ToolRegistry` + `ToolInstaller`
+**Status:** implemented as of 2026-05-22 (commits 92e1177, e1f1da6, 72d091f, d75c41b).
+**JDK flow retargeted 2026-05-23:** JDK discovery now goes through the
+JetBrains JDK feed and IntelliJ's JDK directory directly — *not* through
+the probe chain documented here. The chain and its probe classes remain
+in the tree, applied to Maven / Gradle / Kotlin only. See
+[requirements.md §12](./requirements.md#12-jdk-and-toolchain-management)
+for the JDK story.
+
+**Scope:** `ToolRegistry` + `ToolInstaller` (build tools).
 **Goal:** before downloading, look for tools the user already has — JBang
-style — and reuse them via a symlink under `~/.jk/`. Detect and repair
-broken links automatically. Never symlink on Windows.
+style — and reuse them via a symlink under `$JK_CACHE_DIR/tools/`. Detect
+and repair broken links automatically. Never symlink on Windows.
 
 ---
 
@@ -15,14 +22,14 @@ broken links automatically. Never symlink on Windows.
 - When a `jk` verb needs a tool (a JDK, kotlinc, mvn, gradle), discover
   existing installs in standard locations *before* downloading.
 - If a discovered install matches the requested version, materialise it
-  under `~/.jk/` as a symlink so subsequent runs hit the same code path
-  as a fresh download.
+  under `$JK_CACHE_DIR/tools/` as a symlink so subsequent runs hit the
+  same code path as a fresh download.
 - Detect broken links (the source got uninstalled, deleted, or moved)
   and treat them as if the tool were missing — re-probe, re-install if
   needed.
 - One probe-and-link pattern, applied uniformly to JDKs, Kotlin, Maven,
   Gradle, and any future tool (`scala`, `clojure`, etc.).
-- Windows: skip symlinking entirely. Always download to `~/.jk/`.
+- Windows: skip symlinking entirely. Always download to `$JK_CACHE_DIR/tools/`.
 
 **Non-goals**
 
@@ -60,7 +67,7 @@ ordering is *deliberate* — earlier probes win on ties:
 
 | Order | Probe | What it inspects |
 |---|---|---|
-| 1 | `JkInstallProbe` | `~/.jk/jdks/<id>/` and `~/.jk/tools/<slug>/<version>/` — already-cached jk downloads or prior links. |
+| 1 | `JkInstallProbe` | `$JK_JDKS_DIR/<id>/` and `$JK_CACHE_DIR/tools/<slug>/<version>/` — already-cached jk downloads or prior links. |
 | 2 | `EnvVarProbe` | `JAVA_HOME` / `KOTLIN_HOME` / `M2_HOME` / `GRADLE_HOME`. Used only when the version we extract matches the query. |
 | 3 | `SdkmanProbe` | `~/.sdkman/candidates/<slug>/<version>/`. The most common case for JVM developers. |
 | 4 | `JbangProbe` | `~/.jbang/cache/jdks/<version>/`. JDKs only. |
@@ -166,10 +173,10 @@ no longer matches the directory name. Detected on next run.
 Two registries, same shape:
 
 ```
-~/.jk/jdks/<sdkman-id>-<arch>-<os>/    -> ~/.sdkman/candidates/java/<sdkman-id>/  (when linked)
-                                       -> real dir                                (when downloaded)
-~/.jk/tools/<slug>/<version>/          -> ~/.sdkman/candidates/<slug>/<version>/  (when linked)
-                                       -> real dir                                (when downloaded)
+$JK_JDKS_DIR/<sdkman-id>-<arch>-<os>/         -> ~/.sdkman/candidates/java/<sdkman-id>/  (when linked)
+                                              -> real dir                                (when downloaded)
+$JK_CACHE_DIR/tools/<slug>/<version>/         -> ~/.sdkman/candidates/<slug>/<version>/  (when linked)
+                                              -> real dir                                (when downloaded)
 ```
 
 No sidecar metadata file. `Files.isSymbolicLink(path)` plus
@@ -216,7 +223,7 @@ the user passes `--copy-instead-of-link` or similar.
 ```
 
 Add `jk jdk reconcile` (and `jk tool reconcile`) — a no-op verb that
-walks every entry under `~/.jk/jdks/` and `~/.jk/tools/`, runs the
+walks every entry under `$JK_JDKS_DIR/` and `$JK_CACHE_DIR/tools/`, runs the
 healthiness check, prunes broken links, and reports. Useful in
 post-checkout hooks and CI fixtures.
 
@@ -228,7 +235,7 @@ who hit a probe bug or want isolated jk-owned installs.
 
 ## 8. Code changes
 
-**New** — in `:toolchain/dev.buildjk.tool/`:
+**New** — in `:toolchain/dev.jkbuild.tool/`:
 
 - `LocalToolProbe.java` — SPI interface.
 - `DiscoveredTool.java`, `ToolQuery.java` — data records.
@@ -302,16 +309,16 @@ End-to-end:
 4. **What about user-pinned tools.** `.jk-version` / `.sdkmanrc` pin the
    project to a JDK. If the user *already* has that JDK on SDKMAN, we
    should prefer linking over downloading even when nothing's in
-   `~/.jk/jdks/`. The plan covers this implicitly via step 4 of
+   `$JK_JDKS_DIR/`. The plan covers this implicitly via step 4 of
    provisioning; called out here so we don't forget to test the path.
 
 5. **Sharing the cache across machines / containers.** Containers often
-   mount `~/.sdkman` from the host. The link from `~/.jk/jdks/` to
+   mount `~/.sdkman` from the host. The link from `$JK_JDKS_DIR/` to
    `~/.sdkman/…/` works inside the container only if the host's SDKMAN
    path is the same. Worth a docs note; no code impact.
 
 6. **Should `jk install` (the per-Maven-coord tool installer) also
-   discover?** It currently writes a launcher under `~/.jk/bin/`
+   discover?** It currently writes a launcher under `$JK_BIN_DIR/`
    pointing at the coord's main jar. The discovery model doesn't fit
    that pattern (no canonical location for arbitrary Maven-coord
    tools). Leave as-is — the new probe pipeline only applies to the
@@ -333,12 +340,13 @@ End-to-end:
 ## 11. Containers and shared SDKMAN mounts
 
 If you mount the host's `~/.sdkman` into a container (a common dev-loop
-pattern), the symlinks jk writes under `~/.jk/jdks/` and
-`~/.jk/tools/` point at host paths that only exist when the mount is in
-place. Two gotchas:
+pattern), the symlinks jk writes under `$JK_JDKS_DIR/` and
+`$JK_CACHE_DIR/tools/` point at host paths that only exist when the
+mount is in place. Two gotchas:
 
-- **`~/.jk/` should not be shared.** Each container gets its own
-  `~/.jk/`. Sharing it means linking to host paths that aren't
+- **jk's cache / state / JDKs dirs should not be shared.** Each
+  container gets its own `$JK_CACHE_DIR`, `$JK_STATE_DIR`, and
+  `$JK_JDKS_DIR`. Sharing them means linking to host paths that aren't
   guaranteed to be valid inside the container, and one container's
   reconcile can prune another's links.
 - **Mount paths must match.** A link target stored as
@@ -346,7 +354,7 @@ place. Two gotchas:
   the container mounts the same dir at `/sdkman/`. Either mount under
   the same absolute path the link expects, or pass `--no-discover` on
   the first invocation and let jk download into the container's
-  `~/.jk/tools/` directly.
+  `$JK_CACHE_DIR/tools/` directly.
 
 If your container CI is sensitive to this, run `jk tool reconcile`
 once at container start — broken links get pruned and the next call

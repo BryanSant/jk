@@ -15,11 +15,11 @@ jline = "4.1.2"
 jib-core = "0.28.1"
 junit = "6.1.0"
 maven-artifact = "3.9.16"
-kotlin = "2.3.21"
 picocli = "4.7.7"
 sigstore = "2.1.0"
 spdx-java = "2.0.3"
 tomlj = "1.1.1"
+xz = "1.10"
 
 [libraries]
 # foundations
@@ -36,8 +36,9 @@ jgit                   = { module = "org.eclipse.jgit:org.eclipse.jgit",        
 asm                    = { module = "org.ow2.asm:asm",                              version.ref = "asm" }
 asm-tree               = { module = "org.ow2.asm:asm-tree",                         version.ref = "asm" }
 
-# archive formats (tar, tar.gz, future OCI layer reads)
+# archive formats (tar, tar.gz, xz, future OCI layer reads)
 commons-compress       = { module = "org.apache.commons:commons-compress",          version.ref = "commons-compress" }
+tukaani-xz             = { module = "org.tukaani:xz",                               version.ref = "xz" }
 
 # supply chain
 bouncycastle-bcpg      = { module = "org.bouncycastle:bcpg-jdk18on",                version.ref = "bouncycastle" }
@@ -47,10 +48,6 @@ spdx-java-library      = { module = "org.spdx:java-spdx-library",               
 
 # OCI image
 jib-core               = { module = "com.google.cloud.tools:jib-core",              version.ref = "jib-core" }
-
-# build pipeline / kotlin
-kotlin-compiler-embeddable = { module = "org.jetbrains.kotlin:kotlin-compiler-embeddable", version.ref = "kotlin" }
-kotlin-stdlib              = { module = "org.jetbrains.kotlin:kotlin-stdlib",              version.ref = "kotlin" }
 
 # CLI
 picocli                = { module = "info.picocli:picocli",                         version.ref = "picocli" }

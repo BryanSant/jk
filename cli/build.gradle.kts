@@ -33,29 +33,30 @@ dependencies {
     implementation(libs.jline.terminal.ffm)
 
     testImplementation(testFixtures(project(":supply-chain")))
+    // JdkCommandTest builds xz-compressed feed fixtures via XZCompressorOutputStream.
+    testImplementation(libs.commons.compress)
+    testImplementation(libs.tukaani.xz)
 }
 
 tasks.withType<JavaCompile>().configureEach {
-    options.compilerArgs.add("-Aproject=dev.buildjk.cli")
+    options.compilerArgs.add("-Aproject=dev.jkbuild.cli")
 }
 
 application {
-    mainClass.set("dev.buildjk.cli.Jk")
+    mainClass.set("dev.jkbuild.cli.Jk")
     applicationName = "jk"
 }
 
 graalvmNative {
     binaries.named("main") {
         imageName.set("jk")
-        mainClass.set("dev.buildjk.cli.Jk")
+        mainClass.set("dev.jkbuild.cli.Jk")
         // The plugin's "main" binary is supposed to default to executable,
         // but the 0.10.4 / GraalVM 25 combination defaults to shared library
         // on this host. Force the executable mode explicitly.
         sharedLibrary.set(false)
 
-        // Size-focused build args. A default build was ~187 MB
-        // (.text 110 MB compiled code + .svm_heap 85 MB build-time
-        // initialised state from kotlin-compiler-embeddable).
+        // Size-focused build args.
         //
         // -Ob       Optimise for build time = smaller .text than -O2 (default).
         //           We give up some runtime perf; for a short-lived CLI the
@@ -65,10 +66,6 @@ graalvmNative {
         // --gc=epsilon
         //           No-op GC. Safe for short verbs; long-running ones leak
         //           until process exit but jk is single-shot.
-        // --initialize-at-run-time=org.jetbrains.kotlin
-        //           Don't snapshot Kotlin compiler's static state into the
-        //           image heap; let it bootstrap lazily when KotlincDriver
-        //           is actually invoked. The largest .svm_heap saver.
         buildArgs.add("-Ob")
         buildArgs.add("-march=compatibility")
         buildArgs.add("--gc=epsilon")
@@ -82,7 +79,6 @@ graalvmNative {
         // at runtime but blows up .svm_heap with cached objects we may never
         // touch. Each package below is a known large contributor.
         buildArgs.add("--initialize-at-run-time=" + listOf(
-            "org.jetbrains.kotlin",        // kotlin-compiler-embeddable (huge)
             "org.bouncycastle",            // crypto (GPG signing)
             "dev.sigstore",                // sigstore-java + transitives
             "com.google",                  // Jib-core + Guava + Protobuf

@@ -1,5 +1,5 @@
 [project]
-group    = "dev.buildjk"
+group    = "dev.jkbuild"
 artifact = "jk-core"
 version  = "0.6.0-SNAPSHOT"
 jdk      = "25"

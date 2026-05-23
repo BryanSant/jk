@@ -88,7 +88,7 @@ JVM-mode entry point ships as `./gradlew :cli:run`.
 - [Product requirements](docs/requirements.md) — the PRD
 - [Implementation plan](docs/implementation-plan.md) — module map, library picks, milestone roadmap
 - [Comparison with uv / Cargo / Gradle / Maven](docs/comparison.md)
-- [Tool discovery design](docs/tool-discovery-plan.md) — the good-neighbor SDKMAN/JBang/asdf/jenv/Homebrew probing
+- [Tool discovery design](docs/tool-discovery-plan.md) — good-neighbor probing for Maven/Gradle/Kotlin (JDKs are sourced directly from IntelliJ's JDK directory and the JetBrains feed)
 - [Verb aliases](docs/aliases.md) — migration shortcuts from Maven/Gradle/npm
 
 ## License

@@ -1,5 +1,5 @@
 [project]
-group    = "dev.buildjk"
+group    = "dev.jkbuild"
 artifact = "jk-engine"
 version  = "0.6.0-SNAPSHOT"
 jdk      = "25"
@@ -7,10 +7,8 @@ language = "java"
 
 [dependencies]
 main = [
-  "dev.buildjk:jk-core:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-io:0.6.0-SNAPSHOT",
-  "org.jetbrains.kotlin:kotlin-compiler-embeddable:2.3.21",
-  "org.jetbrains.kotlin:kotlin-stdlib:2.3.21",
+  "dev.jkbuild:jk-core:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-io:0.6.0-SNAPSHOT",
   "org.junit.jupiter:junit-jupiter:6.1.0",
   "org.junit.platform:junit-platform-launcher:6.1.0",
   "org.ow2.asm:asm:9.10",

@@ -1,21 +1,21 @@
 [project]
-group    = "dev.buildjk"
+group    = "dev.jkbuild"
 artifact = "jk-cli"
 version  = "0.6.0-SNAPSHOT"
 jdk      = "25"
 language = "java"
-main     = "dev.buildjk.cli.Jk"
+main     = "dev.jkbuild.cli.Jk"
 
 [dependencies]
 main = [
-  "dev.buildjk:jk-compat:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-core:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-engine:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-image:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-io:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-resolver:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-supply-chain:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-toolchain:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-compat:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-core:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-engine:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-image:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-io:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-resolver:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-supply-chain:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-toolchain:0.6.0-SNAPSHOT",
   "info.picocli:picocli:4.7.7",
 ]
 test = [
@@ -25,4 +25,4 @@ test = [
 ]
 
 [image]
-main-class = "dev.buildjk.cli.Jk"
+main-class = "dev.jkbuild.cli.Jk"

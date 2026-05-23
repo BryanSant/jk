@@ -1,0 +1,593 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.jkbuild.cli.tui;
+
+import org.jline.terminal.Terminal;
+import org.jline.utils.AttributedString;
+import org.jline.utils.AttributedStringBuilder;
+import org.jline.utils.AttributedStyle;
+import org.jline.utils.NonBlockingReader;
+
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Wizard orchestrator. Sets up raw mode + a shutdown hook + a SIGINT handler,
+ * then drives a frame loop over its sealed {@link WizardStep} list.
+ *
+ * <p>Rendering is incremental: the header line and each settled step are
+ * printed exactly once. Only the active step's region (its bullet line plus
+ * the interactive UI below it) is erased and redrawn on each keystroke, so
+ * the screen doesn't flash.
+ *
+ * <p>The cursor is hidden for the wizard's lifetime, except during an input
+ * step where it is shown and positioned at the end of the typed buffer. On
+ * cancellation (Ctrl+C) the SGR state is reset, the cursor restored, and a
+ * newline emitted so the shell prompt lands on a fresh line.
+ *
+ * <p>The alt-screen buffer is intentionally NOT used: the locked-in transcript
+ * stays visible after exit, so users can scroll back and review their answers.
+ */
+public final class Wizard {
+
+    private static final String HIDE_CURSOR = "\033[?25l";
+    private static final String SHOW_CURSOR = "\033[?25h";
+    private static final String RESET_SGR = "\033[0m";
+    private static final String CLEAR_TO_END = "\033[0J";
+
+    /** Display width of the rail prefix "│  " in columns. */
+    private static final int RAIL_PREFIX_WIDTH = 3;
+
+    /** Poll interval for keys; lets the loop observe async cancellation flag. */
+    private static final long KEY_POLL_MS = 75L;
+
+    private final String title;
+    private final List<WizardStep> steps;
+    private volatile boolean cancelled;
+
+    Wizard(String title, List<WizardStep> steps) {
+        this.title = title;
+        this.steps = steps;
+    }
+
+    public static WizardBuilder builder() {
+        return new WizardBuilder();
+    }
+
+    public List<WizardStep> steps() {
+        return steps;
+    }
+
+    public String title() {
+        return title;
+    }
+
+    public void cancel() {
+        this.cancelled = true;
+    }
+
+    public Optional<Answers> run(Terminal terminal) {
+        return run(terminal, Answers.of(Map.of()));
+    }
+
+    /**
+     * Run with pre-seeded answers. Each step whose {@code key()} is present
+     * in {@code preset} is skipped interactively but rendered as completed,
+     * so the user can see what was inferred. Useful when {@code jk init
+     * my-project} has supplied the "Project name" answer up front.
+     */
+    public Optional<Answers> run(Terminal terminal, Answers preset) {
+        var saved = terminal.enterRawMode();
+        // TerminalBuilder.build() probes the terminal with capability queries
+        // (DA, DECRQM, etc.); the responses arrive in stdin and get echoed to
+        // the screen because echo is still on at that moment. Drain the bytes
+        // so KeyReader doesn't later see them as user keystrokes, then clear
+        // the current line so their visual residue doesn't precede the header.
+        drainInput(terminal.reader(), 40L);
+        var prevHandler = terminal.handle(Terminal.Signal.INT, sig -> cancel());
+        var writer = terminal.writer();
+        writer.print("\r" + CLEAR_TO_END);
+        // Belt-and-suspenders for crashes that bypass the finally block.
+        var restoreHook = new Thread(() -> {
+            writer.print(SHOW_CURSOR);
+            writer.print(RESET_SGR);
+            writer.flush();
+            terminal.setAttributes(saved);
+            terminal.flush();
+        });
+        Runtime.getRuntime().addShutdownHook(restoreHook);
+        try {
+            writer.print(HIDE_CURSOR);
+            writer.flush();
+            return Optional.of(loop(terminal, preset));
+        } catch (WizardCancelled e) {
+            return Optional.empty();
+        } finally {
+            // Reset SGR + show cursor BEFORE restoring attributes so the wizard's
+            // last frame stops bleeding styles, then restore canonical/echo mode
+            // so the explicit \r\n lands on its own line and the parent shell's
+            // prompt isn't stranded mid-line (which manifests as "press enter
+            // to get my prompt back" after Ctrl+C).
+            writer.print(RESET_SGR);
+            writer.print(SHOW_CURSOR);
+            writer.flush();
+            terminal.handle(Terminal.Signal.INT, prevHandler);
+            terminal.setAttributes(saved);
+            writer.print("\r\n");
+            writer.flush();
+            terminal.flush();
+            tryRemoveHook(restoreHook);
+        }
+    }
+
+    private static void tryRemoveHook(Thread hook) {
+        try {
+            Runtime.getRuntime().removeShutdownHook(hook);
+        } catch (IllegalStateException ignored) {
+            // shutdown in progress; nothing to do
+        }
+    }
+
+    private static void drainInput(NonBlockingReader reader, long maxWaitMs) {
+        try {
+            var deadline = System.currentTimeMillis() + maxWaitMs;
+            while (System.currentTimeMillis() < deadline) {
+                var c = reader.read(5L);
+                if (c == NonBlockingReader.READ_EXPIRED || c < 0) {
+                    return;
+                }
+            }
+        } catch (IOException ignored) {
+            // best-effort drain
+        }
+    }
+
+    private Answers loop(Terminal terminal, Answers preset) {
+        var writer = terminal.writer();
+        var reader = terminal.reader();
+        var answers = new LinkedHashMap<String, Object>(preset.asMap());
+
+        writer.println();
+        writer.println(headerLine().toAnsi(terminal));
+        writer.flush();
+
+        for (var step : steps) {
+            // Pre-seeded answers skip the interactive prompt but still render
+            // as settled so the user can see what was inferred up front.
+            if (answers.containsKey(step.key()) && preset.has(step.key())) {
+                writer.println(Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
+                renderSettledRegion(terminal, step, answers);
+                writer.flush();
+                continue;
+            }
+            if (!step.shouldRun().test(Answers.of(answers))) {
+                continue;
+            }
+            writer.println(Rail.midBlank(Rail.StepState.COMPLETED).toAnsi(terminal));
+
+            var state = new ActiveState(step, answers);
+            var regionLines = renderActiveRegion(terminal, step, state);
+            var cursorOffset = positionInputCursor(writer, step, state, regionLines);
+            writer.flush();
+
+            while (true) {
+                if (cancelled) {
+                    throw new WizardCancelled();
+                }
+                var key = KeyReader.readOrNull(reader, KEY_POLL_MS);
+                if (key == null) {
+                    continue;
+                }
+                if (key instanceof KeyReader.Key.CtrlC) {
+                    throw new WizardCancelled();
+                }
+                var done = state.handle(key);
+
+                writer.print(HIDE_CURSOR);
+                eraseLines(writer, cursorOffset);
+
+                if (done) {
+                    state.commit(answers);
+                    renderSettledRegion(terminal, step, answers);
+                    writer.flush();
+                    break;
+                }
+
+                regionLines = renderActiveRegion(terminal, step, state);
+                cursorOffset = positionInputCursor(writer, step, state, regionLines);
+                writer.flush();
+            }
+        }
+
+        writer.println(Rail.closer("", Theme.dim()).toAnsi(terminal));
+        writer.flush();
+        return Answers.of(Map.copyOf(answers));
+    }
+
+    private int renderActiveRegion(Terminal terminal, WizardStep step, ActiveState state) {
+        var writer = terminal.writer();
+        writer.println(Rail.stepBullet(Rail.StepState.ACTIVE, step.prompt()).toAnsi(terminal));
+        var interactive = state.render();
+        for (var line : interactive) {
+            writer.println(Rail.mid(line, Rail.StepState.ACTIVE).toAnsi(terminal));
+        }
+        // └ hook one line below the interactive content; gets erased on commit
+        // and re-emitted (with the next step's content above it) on each step.
+        // Cyan matches the active rail above it.
+        writer.println(Rail.closer("", Theme.dim(), Rail.StepState.ACTIVE).toAnsi(terminal));
+        return 1 + interactive.size() + 1;
+    }
+
+    private void renderSettledRegion(Terminal terminal, WizardStep step, Map<String, Object> answers) {
+        var writer = terminal.writer();
+        writer.println(Rail.stepBullet(Rail.StepState.COMPLETED, step.prompt()).toAnsi(terminal));
+        for (var line : summarize(step, answers)) {
+            writer.println(Rail.mid(line, Rail.StepState.COMPLETED).toAnsi(terminal));
+        }
+    }
+
+    private void eraseLines(PrintWriter writer, int rows) {
+        if (rows <= 0) {
+            // Still need to return to column 0 so the redraw doesn't prepend onto
+            // whatever was to the left of the cursor (e.g., an input buffer).
+            writer.print("\r");
+            writer.print(CLEAR_TO_END);
+            return;
+        }
+        // ESC[<n>F = cursor previous line: moves up n lines AND to column 0.
+        // (ESC[<n>A only moves up, preserving column — that left the redraw
+        // starting mid-line and pasting the new bullet onto the old text.)
+        writer.print("\033[" + rows + "F");
+        writer.print(CLEAR_TO_END);
+    }
+
+    /**
+     * Positions the cursor for input steps and returns the cursor's offset
+     * (in lines) from the top of the active region. The caller must pass this
+     * value back to {@link #eraseLines} so the redraw moves up by the correct
+     * amount instead of climbing past the region origin and eating prior
+     * terminal content.
+     */
+    private int positionInputCursor(PrintWriter writer, WizardStep step, ActiveState state, int regionLines) {
+        if (!(step instanceof WizardStep.InputStep)) {
+            // Cursor sits below the region after the final println.
+            return regionLines;
+        }
+        // After emitting (bullet + interactive) lines, the cursor sits at the start
+        // of the line BELOW the region. The input buffer line is the second line of
+        // the region (line index 1: bullet is line 0). Move the cursor up to that
+        // line, then to the column just past the last typed character.
+        var linesUp = regionLines - 1;
+        if (linesUp > 0) {
+            writer.print("\033[" + linesUp + "A");
+        }
+        var col = RAIL_PREFIX_WIDTH + state.input.length() + 1;
+        writer.print("\033[" + col + "G");
+        writer.print(SHOW_CURSOR);
+        return 1;
+    }
+
+    private AttributedString headerLine() {
+        var gradient = Theme.gradientHeader(title.isEmpty() ? "Wizard" : title);
+        return Rail.opener(gradient, Rail.StepState.INACTIVE);
+    }
+
+    private static List<AttributedString> summarize(WizardStep step, Map<String, Object> answers) {
+        return switch (step) {
+            case WizardStep.InputStep is -> List.of(
+                    plain(answers.getOrDefault(is.key(), "").toString(), Theme.dim()));
+            case WizardStep.RadioStep rs -> List.of(plain(labelFor(rs, answers), Theme.dim()));
+            case WizardStep.MultiSelectStep ms -> {
+                @SuppressWarnings("unchecked")
+                var selected = (List<String>) answers.getOrDefault(ms.key(), List.<String>of());
+                if (selected.isEmpty()) {
+                    yield List.of(plain("(none selected)", Theme.dim()));
+                }
+                var labels = new ArrayList<AttributedString>();
+                for (var c : ms.choices()) {
+                    if (selected.contains(c.id())) {
+                        labels.add(plain(c.label(), Theme.dim()));
+                    }
+                }
+                yield labels;
+            }
+            case WizardStep.OutputStep os -> os.render().apply(Answers.of(answers)).stream()
+                    .map(s -> plain(s, Theme.dim()))
+                    .toList();
+        };
+    }
+
+    private static String labelFor(WizardStep.RadioStep step, Map<String, Object> answers) {
+        var id = answers.getOrDefault(step.key(), step.defaultChoice()).toString();
+        for (var c : step.choices()) {
+            if (c.id().equals(id)) {
+                return c.label();
+            }
+        }
+        return id;
+    }
+
+    private static AttributedString plain(String text, AttributedStyle style) {
+        return new AttributedStringBuilder().append(text, style).toAttributedString();
+    }
+
+    /**
+     * Per-step interactive state. Created at the start of each step iteration
+     * and torn down once {@link #handle(KeyReader.Key)} reports completion.
+     */
+    private static final class ActiveState {
+
+        private final WizardStep step;
+        private final StringBuilder input;
+        private int focus;
+        private final LinkedHashSet<String> selected;
+        private String error = "";
+
+        ActiveState(WizardStep step, Map<String, Object> existing) {
+            this.step = step;
+            this.input = new StringBuilder();
+            this.selected = new LinkedHashSet<>();
+            switch (step) {
+                case WizardStep.InputStep is -> {
+                    var prior = existing.get(is.key());
+                    if (prior != null) {
+                        this.input.append(prior);
+                    }
+                }
+                case WizardStep.RadioStep rs -> {
+                    var idx = indexOf(rs.choices(), rs.defaultChoice());
+                    this.focus = Math.max(0, idx);
+                }
+                case WizardStep.MultiSelectStep ms -> {
+                    this.focus = 0;
+                    this.selected.addAll(ms.defaults());
+                }
+                case WizardStep.OutputStep os -> {}
+            }
+        }
+
+        private static int indexOf(List<Choice> choices, String id) {
+            for (var i = 0; i < choices.size(); i++) {
+                if (choices.get(i).id().equals(id)) {
+                    return i;
+                }
+            }
+            return -1;
+        }
+
+        /** Returns true when the step is complete and Wizard should advance. */
+        boolean handle(KeyReader.Key key) {
+            return switch (step) {
+                case WizardStep.InputStep is -> handleInput(is, key);
+                case WizardStep.RadioStep rs -> handleRadio(rs, key);
+                case WizardStep.MultiSelectStep ms -> handleMulti(ms, key);
+                case WizardStep.OutputStep os -> key instanceof KeyReader.Key.Enter;
+            };
+        }
+
+        private boolean handleInput(WizardStep.InputStep is, KeyReader.Key key) {
+            return switch (key) {
+                case KeyReader.Key.Enter e -> {
+                    var value = input.length() == 0 ? is.defaultValue() : input.toString();
+                    var result = is.validator().apply(value);
+                    if (result instanceof ValidationResult.Error err) {
+                        error = err.message();
+                        yield false;
+                    }
+                    input.setLength(0);
+                    input.append(value);
+                    error = "";
+                    yield true;
+                }
+                case KeyReader.Key.Right r -> {
+                    // Realize the placeholder as if the user typed it. The
+                    // text picks up the normal "user input" styling — there's
+                    // no visual distinction between typed-and-accepted text.
+                    if (input.length() == 0 && !is.placeholder().isEmpty()) {
+                        input.append(is.placeholder());
+                        error = "";
+                    }
+                    yield false;
+                }
+                case KeyReader.Key.Backspace b -> {
+                    if (input.length() > 0) {
+                        input.deleteCharAt(input.length() - 1);
+                    }
+                    error = "";
+                    yield false;
+                }
+                case KeyReader.Key.Space s -> {
+                    input.append(' ');
+                    error = "";
+                    yield false;
+                }
+                case KeyReader.Key.Char(char c) -> {
+                    input.append(c);
+                    error = "";
+                    yield false;
+                }
+                default -> false;
+            };
+        }
+
+        private boolean handleRadio(WizardStep.RadioStep rs, KeyReader.Key key) {
+            return switch (key) {
+                case KeyReader.Key.Enter e -> true;
+                case KeyReader.Key.Up u -> moveFocus(-1, rs.choices().size(), rs.orientation() == Orientation.VERTICAL);
+                case KeyReader.Key.Down d -> moveFocus(1, rs.choices().size(), rs.orientation() == Orientation.VERTICAL);
+                case KeyReader.Key.Left l -> moveFocus(-1, rs.choices().size(), rs.orientation() == Orientation.HORIZONTAL);
+                case KeyReader.Key.Right r -> moveFocus(1, rs.choices().size(), rs.orientation() == Orientation.HORIZONTAL);
+                default -> false;
+            };
+        }
+
+        private boolean moveFocus(int delta, int size, boolean enabled) {
+            if (!enabled || size == 0) {
+                return false;
+            }
+            focus = ((focus + delta) % size + size) % size;
+            return false;
+        }
+
+        private boolean handleMulti(WizardStep.MultiSelectStep ms, KeyReader.Key key) {
+            var size = ms.choices().size();
+            return switch (key) {
+                case KeyReader.Key.Enter e -> true;
+                case KeyReader.Key.Space s -> {
+                    var c = ms.choices().get(focus);
+                    if (!selected.add(c.id())) {
+                        selected.remove(c.id());
+                    }
+                    yield false;
+                }
+                case KeyReader.Key.Char(char ch) when ch == 'a' -> {
+                    if (selected.size() == size) {
+                        selected.clear();
+                    } else {
+                        for (var c : ms.choices()) {
+                            selected.add(c.id());
+                        }
+                    }
+                    yield false;
+                }
+                case KeyReader.Key.Up u -> moveFocus(-1, size, ms.orientation() == Orientation.VERTICAL);
+                case KeyReader.Key.Down d -> moveFocus(1, size, ms.orientation() == Orientation.VERTICAL);
+                case KeyReader.Key.Left l -> moveFocus(-1, size, ms.orientation() == Orientation.HORIZONTAL);
+                case KeyReader.Key.Right r -> moveFocus(1, size, ms.orientation() == Orientation.HORIZONTAL);
+                default -> false;
+            };
+        }
+
+        void commit(Map<String, Object> answers) {
+            switch (step) {
+                case WizardStep.InputStep is -> answers.put(is.key(), input.toString());
+                case WizardStep.RadioStep rs -> answers.put(rs.key(), rs.choices().get(focus).id());
+                case WizardStep.MultiSelectStep ms -> {
+                    var ordered = new ArrayList<String>();
+                    for (var c : ms.choices()) {
+                        if (selected.contains(c.id())) {
+                            ordered.add(c.id());
+                        }
+                    }
+                    answers.put(ms.key(), List.copyOf(ordered));
+                }
+                case WizardStep.OutputStep os -> {
+                    // Output steps have no answer; they only gate progression.
+                }
+            }
+        }
+
+        List<AttributedString> render() {
+            return switch (step) {
+                case WizardStep.InputStep is -> renderInput(is);
+                case WizardStep.RadioStep rs -> renderRadio(rs);
+                case WizardStep.MultiSelectStep ms -> renderMulti(ms);
+                case WizardStep.OutputStep os -> renderOutput(os);
+            };
+        }
+
+        private List<AttributedString> renderInput(WizardStep.InputStep is) {
+            var sb = new AttributedStringBuilder();
+            if (input.length() == 0) {
+                if (!is.placeholder().isEmpty()) {
+                    sb.append(is.placeholder(), Theme.dim().italic());
+                }
+            } else {
+                sb.append(input.toString(), Theme.focused());
+            }
+            var lines = new ArrayList<AttributedString>();
+            lines.add(sb.toAttributedString());
+            if (!error.isEmpty()) {
+                lines.add(new AttributedStringBuilder()
+                        .append(error, AttributedStyle.DEFAULT.foreground(0xef, 0x44, 0x44))
+                        .toAttributedString());
+            }
+            return lines;
+        }
+
+        private List<AttributedString> renderRadio(WizardStep.RadioStep rs) {
+            var lines = new ArrayList<AttributedString>();
+            if (rs.orientation() == Orientation.HORIZONTAL) {
+                var sb = new AttributedStringBuilder();
+                for (var i = 0; i < rs.choices().size(); i++) {
+                    var c = rs.choices().get(i);
+                    var isFocused = i == focus;
+                    sb.append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
+                            isFocused ? Theme.completedStep() : Theme.dim());
+                    sb.append(" ");
+                    sb.append(c.label(), isFocused ? Theme.focused() : Theme.dim());
+                    if (i < rs.choices().size() - 1) {
+                        sb.append("  ");
+                    }
+                }
+                lines.add(sb.toAttributedString());
+            } else {
+                for (var i = 0; i < rs.choices().size(); i++) {
+                    var c = rs.choices().get(i);
+                    var isFocused = i == focus;
+                    lines.add(new AttributedStringBuilder()
+                            .append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
+                                    isFocused ? Theme.completedStep() : Theme.dim())
+                            .append(" ")
+                            .append(c.label(), isFocused ? Theme.focused() : Theme.dim())
+                            .toAttributedString());
+                }
+            }
+            return lines;
+        }
+
+        private List<AttributedString> renderMulti(WizardStep.MultiSelectStep ms) {
+            var lines = new ArrayList<AttributedString>();
+            if (ms.orientation() == Orientation.VERTICAL) {
+                for (var i = 0; i < ms.choices().size(); i++) {
+                    var c = ms.choices().get(i);
+                    var isFocused = i == focus;
+                    var isChecked = selected.contains(c.id());
+                    var glyph = isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF;
+                    var glyphStyle = isChecked
+                            ? Theme.completedStep()
+                            : (isFocused ? Theme.activeStep() : Theme.dim());
+                    var labelStyle = isFocused ? Theme.focused() : Theme.dim();
+                    lines.add(new AttributedStringBuilder()
+                            .append(glyph, glyphStyle)
+                            .append(" ")
+                            .append(c.label(), labelStyle)
+                            .toAttributedString());
+                }
+            } else {
+                var sb = new AttributedStringBuilder();
+                for (var i = 0; i < ms.choices().size(); i++) {
+                    var c = ms.choices().get(i);
+                    var isFocused = i == focus;
+                    var isChecked = selected.contains(c.id());
+                    var glyphStyle = isChecked
+                            ? Theme.completedStep()
+                            : (isFocused ? Theme.activeStep() : Theme.dim());
+                    var labelStyle = isFocused ? Theme.focused() : Theme.dim();
+                    sb.append(isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF, glyphStyle);
+                    sb.append(" ");
+                    sb.append(c.label(), labelStyle);
+                    if (i < ms.choices().size() - 1) {
+                        sb.append("  ");
+                    }
+                }
+                lines.add(sb.toAttributedString());
+            }
+            return lines;
+        }
+
+        private List<AttributedString> renderOutput(WizardStep.OutputStep os) {
+            var pieces = os.render().apply(Answers.of(Map.of()));
+            var lines = new ArrayList<AttributedString>();
+            for (var s : pieces) {
+                lines.add(plain(s, Theme.dim()));
+            }
+            return lines;
+        }
+    }
+}

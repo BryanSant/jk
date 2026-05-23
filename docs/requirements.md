@@ -33,7 +33,7 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 ### v1.0 Goals
 
 - Build, test, run, package, and publish Java and Kotlin projects (single-module and multi-module workspaces).
-- Manage JDK installations (install/list/use/uninstall), compatible with `.sdkmanrc` and the SDKMAN candidate scheme (`21.0.5-tem`).
+- Manage JDK installations (install/list/use/uninstall) sourced from the JetBrains JDK feed, sharing the IntelliJ JDK directory so IntelliJ users see jk-installed JDKs (and vice versa) automatically.
 - Resolve dependencies from Maven-Central-style repositories and from git URLs (GitHub, GitLab, BitKeeper, Gitea).
 - Produce and consume `jk.lock` with full transitive closure, checksums, and source provenance.
 - Best-effort import of `pom.xml` (Tier 1 lossless, Tier 2 best-effort, Tier 3 stub-with-diagnostic).
@@ -92,14 +92,14 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 │  └──────────┘ └──────────┘ └──────────┘ └──────────────┘    │
 │  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────────┐    │
 │  │ HTTP/2   │ │ Git      │ │ JDK mgr  │ │ Compiler glue│    │
-│  │ client   │ │ client   │ │ (Disco)  │ │ (javac/kotlinc)│  │
+│  │ client   │ │ client   │ │ (JB feed)│ │ (javac/kotlinc)│  │
 │  └──────────┘ └──────────┘ └──────────┘ └──────────────┘    │
 └─────────────────────────────────────────────────────────────┘
         │            │            │              │
         │            │            │              │
         ▼            ▼            ▼              ▼
- ~/.jk/cache  ~/.jk/git     ~/.jk/jdks    ./target ./.jk
- (content-addr) (git CAS)   (vendor/ver)   (build out)
+ $JK_CACHE_DIR  $JK_CACHE_DIR/git   $JK_JDKS_DIR    ./target ./.jk
+ (content-addr) (git CAS)          (vendor/ver)    (build out)
 ```
 
 ### Implementation language
@@ -110,38 +110,59 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 
 ### Filesystem layout
 
+jk follows the XDG Base Directory Specification on Linux and macOS, with
+JDK installs sharing the IntelliJ neighbor location. Each root is
+overridable via a `JK_*_DIR` env var (which takes precedence over the
+XDG variable when set):
+
+| Role   | Default (Linux / macOS)                                | XDG override                     | jk override     |
+| ------ | ------------------------------------------------------ | -------------------------------- | --------------- |
+| config | `~/.config/jk/`                                        | `$XDG_CONFIG_HOME/jk/`           | `JK_CONFIG_DIR` |
+| cache  | `~/.cache/jk/`                                         | `$XDG_CACHE_HOME/jk/`            | `JK_CACHE_DIR`  |
+| state  | `~/.local/state/jk/`                                   | `$XDG_STATE_HOME/jk/`            | `JK_STATE_DIR`  |
+| bin    | `~/.local/bin/`                                        | `$XDG_BIN_HOME`                  | `JK_BIN_DIR`    |
+| JDKs   | Linux: `~/.jdks/` &nbsp; macOS: `~/Library/Java/JavaVirtualMachines/` | —                  | `JK_JDKS_DIR`   |
+
 ```
-$HOME/.jk/
-  bin/                          # user-PATH entry; tool launchers and native-installed binaries
-  libexec/                      # actual jars/classpaths backing the launchers in bin/
-  jdks/                         # installed JDKs, content-addressed by (vendor, version, arch, os)
-    21.0.5-tem-aarch64-darwin/
-    graalvm-jdk-21-aarch64-darwin/
-  cache/
-    sha256/                     # content-addressed blob store; jars, source jars, javadoc jars, metadata
-      ab/cd/ef.../artifact.jar
-    actions/                    # action cache: hash(action) -> hash(outputs)
-    metadata/                   # cached maven-metadata.xml, repo index entries
-    jkx/                        # ephemeral tool environments (LRU-evicted)
+$JK_CONFIG_DIR/                 # config (default: ~/.config/jk/)
+  config.toml                   # user-global config (default vendor, parallelism, etc.)
+  credentials.toml              # per-host secrets (0600), or delegated to keychain/.netrc
+
+$JK_CACHE_DIR/                  # cache (default: ~/.cache/jk/)
+  sha256/                       # content-addressed blob store; jars, source jars, javadoc jars, metadata
+    ab/cd/ef.../artifact.jar
+  actions/                      # action cache: hash(action) -> hash(outputs)
+  metadata/                     # cached maven-metadata.xml, repo index entries
+  jkx/                          # ephemeral tool environments (LRU-evicted)
+  jdks.json.xz                  # cached JetBrains JDK feed (24h TTL, conditional-GET revalidation)
+  tools/                        # downloaded mvn/gradle/kotlin distributions (or symlinks to SDKMAN, etc.)
+    maven/<version>/
+    gradle/<version>/
+    kotlin/<version>/
   git/
     db/<sha256(url)>/           # bare repo per canonical URL
     co/<sha256(url)>/<sha>/     # checkout per resolved SHA
     sparse/<sha256(url)>/<sha>/<path-hash>/   # sparse checkouts for monorepo sub-paths
-  tools/
-    bin -> ../bin
-    envs/                       # one resolved env per installed tool
-  credentials.toml              # per-host secrets (0600), or delegated to keychain/.netrc
-  config.toml                   # user-global config (default vendor, parallelism, etc.)
+
+$JK_STATE_DIR/                  # state (default: ~/.local/state/jk/)
   projects.toml                 # registry of known projects for `jk jdk gc`
+  tools/
+    envs/                       # one resolved env per installed CLI tool (env.json with bin/classpath/main)
+
+$JK_BIN_DIR/                    # launchers on the user's PATH (default: ~/.local/bin/)
+  <tool>                        # POSIX shell wrapper (or .cmd on Windows) emitted by `jk install` / `jk tool install`
+
+$JK_JDKS_DIR/                   # installed JDKs (default: IntelliJ neighbor location)
+  21.0.5-tem-aarch64-darwin/    # content-addressed by (vendor, version, arch, os)
+  graalvm-jdk-21-aarch64-darwin/
 
 <project>/
   jk.toml                       # canonical manifest, TOML
   jk.lock                       # TOML, sorted, committed
-  .jk-version                   # optional, single-line JDK pin (sdkman scheme)
-  .sdkmanrc                     # honored; jk reads it, may write it
+  .jk-version                   # optional, single-line JDK pin (feed vocabulary, e.g. `temurin-21`)
   .jk/                          # generated, gitignored
     classpath.txt
-    jdk -> ~/.jk/jdks/...
+    jdk -> $JK_JDKS_DIR/...
     generated/                  # KSP/annotation-processor outputs
     sync.json                   # last-sync state
   target/                       # generated, gitignored
@@ -188,11 +209,7 @@ TOML. Sorted, deterministic (LF, terminal newline, two-space indent), no comment
 
 ### 5.3 `.jk-version`
 
-Single line. SDKMAN candidate identifier (e.g., `21.0.5-tem`). Read on every `jk` invocation. If `jk.toml`'s `[project].jdk` is set, it takes precedence and `jk sync` regenerates `.jk-version`.
-
-### 5.4 `.sdkmanrc`
-
-Read, honored, optionally written. If both `.sdkmanrc` and `.jk-version` exist and disagree, `.jk-version` wins; jk warns once and offers `jk jdk sync-sdkmanrc` to reconcile.
+Single line. JetBrains feed identifier — typically a `suggested_sdk_name` like `temurin-21`, or a bare version like `21` / `21.0.5`. Read on every `jk` invocation. If `jk.toml`'s `[project].jdk` is set, it takes precedence and `jk sync` regenerates `.jk-version`.
 
 ---
 
@@ -207,7 +224,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk add <coord> [--test] [--processor] [--runtime] [--provided] [--features=...]` | Add a dependency. |
 | `jk remove <coord>` | Remove a dependency. |
 | `jk lock` | Re-resolve and write `jk.lock`. |
-| `jk sync [--locked\|--frozen]` | Reconcile cache/`.jk/` to the lockfile. |
+| `jk sync [--locked\|--frozen] [--offline-prepare]` | Reconcile cache/`.jk/` to the lockfile. `--offline-prepare` downloads everything without building (CI-friendly). |
 | `jk update [--precise <coord>@<ver>]` | Re-resolve deps, updating `jk.lock`. |
 | `jk build [-p <member>] [--profile=...] [--features=...]` | Compile and package. |
 | `jk test [-p <member>] [--filter=...]` | Run tests. |
@@ -228,14 +245,13 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk tool install --git ... --bin ...` or `jk tool install <coord> --bin <name>` | Install a JVM CLI as a tool. (`jk install <coord>` is a hidden alias.) |
 | `jkx <coord>[@ver] [-- args...]` | Ephemeral tool execution. |
 | `jk tool {list,update,uninstall,run}` | Manage installed tools. |
-| `jk jdk {install,list,use,uninstall,pin,gc,import-sdkman}` | JDK management. |
+| `jk jdk {install,list,use,uninstall,pin,gc}` | JDK management. |
 | `jk shell` / `jk env` | Spawn subshell or print env exports for the project's JDK. |
 | `jk mvn ...` | Passthrough to Maven (jk downloads/manages Maven). |
 | `jk gradle ...` | Passthrough to Gradle (jk downloads/manages Gradle). |
 | `jk import {pom.xml\|build.gradle\|build.gradle.kts}` | Best-effort convert to `jk.toml`. |
 | `jk export {pom.xml}` | Emit a publishable POM (Gradle export is v1.1+). |
 | `jk scan` | Write a local HTML/JSON build scan report. |
-| `jk fetch [--offline-prepare]` | Download all dependencies without building (CI-friendly). |
 | `jk verify-build` | Rebuild in a clean directory and diff outputs. |
 
 Common flags:
@@ -543,7 +559,7 @@ Resolved in this order:
 
 1. `auth = "env:NAME"` — environment variable bearer token.
 2. `auth = "gh-token"` — uses `gh auth token` when present (developer machines).
-3. `~/.jk/credentials.toml` (chmod 600).
+3. `$JK_CONFIG_DIR/credentials.toml` (chmod 600).
 4. `.netrc` for HTTP basic.
 5. `~/.m2/settings.xml` `<servers>` for back-compat.
 6. macOS Keychain / freedesktop secret service / Windows Credential Manager.
@@ -567,7 +583,7 @@ A clean replacement for Maven's `<mirrorOf>` machinery.
 
 ### 10.6 Cache layout interoperability
 
-jk's cache (`~/.jk/cache/sha256/...`) is content-addressed. A *view* is maintained at `~/.jk/cache/m2/` mirroring the Maven `groupId/artifactId/version/` layout (via hardlinks or copies, OS-dependent), so existing Maven and Gradle invocations can use the cache. jk also reads `~/.m2/repository` as a fallback source on cache miss, with full SHA-256 verification.
+jk's cache (`$JK_CACHE_DIR/sha256/...`) is content-addressed. A *view* is maintained at `$JK_CACHE_DIR/m2/` mirroring the Maven `groupId/artifactId/version/` layout (via hardlinks or copies, OS-dependent), so existing Maven and Gradle invocations can use the cache. jk also reads `~/.m2/repository` as a fallback source on cache miss, with full SHA-256 verification.
 
 ---
 
@@ -626,7 +642,7 @@ The git repo (at the requested path/ref) must contain one of:
 
 ### 11.5 Caching and sparse checkout
 
-`~/.jk/git/` is content-addressed:
+`$JK_CACHE_DIR/git/` is content-addressed:
 
 - `db/<sha256(canonical-url)>/` — bare clone per URL, fetched once.
 - `co/<sha256(canonical-url)>/<sha>/` — checked-out working tree per resolved SHA.
@@ -636,7 +652,7 @@ URL canonicalization (lowercase host, strip `.git`, drop default port) prevents 
 
 ### 11.6 Authentication
 
-- HTTPS basic: `~/.jk/credentials.toml`, `git credential` helper protocol.
+- HTTPS basic: `$JK_CONFIG_DIR/credentials.toml`, `git credential` helper protocol.
 - SSH: `ssh-agent` + `~/.ssh/config`. jk never touches keys directly.
 - GitHub developer: `gh auth token` reused transparently.
 - CI: `GH_APP_INSTALLATION_TOKEN`, `CI_JOB_TOKEN`, generic `JK_GIT_TOKEN_<HOST>`.
@@ -647,36 +663,45 @@ URL canonicalization (lowercase host, strip `.git`, drop default port) prevents 
 
 ### 12.1 Goals
 
-End the SDKMAN/jenv/asdf/jabba/Homebrew/sdkman/manual-tarball sprawl. Make `jk` the obvious single tool that installs JDKs, manages per-project pinning, and exports `JAVA_HOME` to child processes.
+One JDK source, one install root. `jk` shares the directory IntelliJ already uses, so a JDK installed via either tool is visible to the other — no parallel install trees, no symlink farms, no SDKMAN/jenv/asdf juggling.
 
 ### 12.2 Vendor support (v1)
 
-Temurin (Adoptium), GraalVM CE, GraalVM Oracle, Liberica, Azul Zulu, Amazon Corretto, Oracle JDK, IBM Semeru, SapMachine, Microsoft OpenJDK.
+Whatever the JetBrains JDK feed publishes: Oracle OpenJDK, Eclipse Temurin, Amazon Corretto, BellSoft Liberica, Azul Zulu, SAP SapMachine, IBM Semeru, Microsoft OpenJDK, Alibaba Dragonwell, GraalVM (CE + Oracle), JetBrains Runtime.
 
-Upstream metadata: the **Disco API** (foojay.io). SDKMAN uses the same source.
+Upstream metadata: `https://download.jetbrains.com/jdk/feed/v1/jdks.json.xz` — the same feed IntelliJ consumes. Cached on disk at `$JK_CACHE_DIR/jdks.json.xz` with a 24-hour TTL and conditional-GET revalidation.
 
 ### 12.3 Version grammar
 
+The CLI accepts the feed's own identifier vocabulary (`suggested_sdk_name` and `shared_index_aliases`):
+
 ```
-jk jdk install 21                  # latest LTS 21.x from default vendor (Temurin)
-jk jdk install 21-tem              # explicit vendor suffix (sdkman-compatible)
-jk jdk install 21.0.5-tem          # exact
-jk jdk install lts                 # latest LTS overall
-jk jdk install latest              # latest GA
-jk jdk install '>=21,<25'          # range
-jk jdk install graalvm-21          # GraalVM CE 21
-jk jdk install graalvm-jdk-21      # GraalVM Oracle
+jk jdk install 21              # whichever entry the feed marks `default: true` for major 21
+jk jdk install 21.0.5          # exact version, default vendor
+jk jdk install temurin-21      # explicit suggested-SDK-name
+jk jdk install openjdk-26      # Oracle OpenJDK 26
+jk jdk install temurin-21.0.5  # vendor + exact version
 ```
 
-### 12.4 `.sdkmanrc` compatibility
+Older SDKMAN-style strings (`21-tem`, `21.0.5-tem`) are no longer accepted; migrate `.jk-version` pins to the new vocabulary.
 
-Read-and-write interop with the SDKMAN candidate identifier scheme. When `jk jdk pin 21.0.5-tem` is run, jk writes both `.jk-version` and `.sdkmanrc` (unless `--no-sdkman-compat`).
+### 12.4 Install location
 
-### 12.5 Install location
+The IntelliJ JDK directory:
 
-`~/.jk/jdks/<vendor>-<version>-<arch>-<os>/`. jk owns this tree.
+- Linux / Windows: `~/.jdks/<install_folder_name>/`
+- macOS: `~/Library/Java/JavaVirtualMachines/<install_folder_name>/Contents/Home/`
 
-`jk jdk import-sdkman` scans `~/.sdkman/candidates/java/` and symlinks pre-installed JDKs into `~/.jk/jdks/`. The user opts in explicitly; jk does not auto-trust SDKMAN's installs (no integrity record).
+`install_folder_name` comes from the feed (e.g. `temurin-21.0.5`, `openjdk-26.0.1`). `JAVA_HOME` resolves through the macOS `Contents/Home` subpath automatically.
+
+### 12.5 Discovery before download
+
+Before fetching, `jk` consults:
+
+1. The IntelliJ JDK directory itself (same root jk installs to — so an IntelliJ-installed JDK is reused with zero ceremony).
+2. `JAVA_HOME` — accepted when its `release` file matches the requested spec.
+
+No probing of SDKMAN, JBang, asdf, jenv, Homebrew, or `/usr/lib/jvm`. Users who keep JDKs in those locations can set `JAVA_HOME` explicitly.
 
 ### 12.6 Activation
 
@@ -686,7 +711,7 @@ Read-and-write interop with the SDKMAN candidate identifier scheme. When `jk jdk
 
 ### 12.7 Kotlin compiler
 
-The Kotlin compiler is a *tool*, not a JDK. `jk.toml` declares `project.kotlin = "2.3.21"` and jk provisions the `kotlinc` distribution on demand: first via the good-neighbor probes (SDKMAN, JBang, asdf, jenv, Homebrew, `KOTLIN_HOME`), then by downloading into `~/.jk/tools/kotlin/<version>/` if no local install matches. Invocations go through a subprocess `CompileStrategy` so jk's own native binary doesn't embed kotlinc.
+The Kotlin compiler is a *tool*, not a JDK. `jk.toml` declares `project.kotlin = "2.3.21"` and jk provisions the `kotlinc` distribution on demand: first via the good-neighbor probes (SDKMAN, JBang, asdf, jenv, Homebrew, `KOTLIN_HOME`), then by downloading into `$JK_CACHE_DIR/tools/kotlin/<version>/` if no local install matches. Invocations go through a subprocess `CompileStrategy` so jk's own native binary doesn't embed kotlinc. (The probe chain stays in place for build tools; only JDK discovery bypasses it.)
 
 ### 12.8 GraalVM as a capability
 
@@ -694,7 +719,7 @@ GraalVM distributions advertise the `native-image` capability. `jk native` requi
 
 ### 12.9 Garbage collection
 
-`jk jdk gc` removes JDKs not referenced by any project in `~/.jk/projects.toml` (a registry jk maintains as projects are discovered). Skips JDKs marked `--keep`.
+`jk jdk gc` removes JDKs not referenced by any project in `$JK_STATE_DIR/projects.toml` (a registry jk maintains as projects are discovered). Skips JDKs marked `--keep`. Note that this removes files from the IntelliJ JDK directory — IntelliJ-installed JDKs that are unused will also be cleaned up.
 
 ---
 
@@ -852,8 +877,8 @@ This satisfies extensibility for known v1 needs (codegen, custom packaging steps
 
 Two stores, both content-addressed:
 
-- **CAS** (`~/.jk/cache/sha256/`) — blobs (jars, .class files, generated sources).
-- **Action cache** (`~/.jk/cache/actions/`) — `hash(action) → hash(outputs)`. The action hash is `SHA-256(task_type + sorted_input_hashes + classpath_abi + parameters + toolchain + jk_version + os/arch_if_relevant)`.
+- **CAS** (`$JK_CACHE_DIR/sha256/`) — blobs (jars, .class files, generated sources).
+- **Action cache** (`$JK_CACHE_DIR/actions/`) — `hash(action) → hash(outputs)`. The action hash is `SHA-256(task_type + sorted_input_hashes + classpath_abi + parameters + toolchain + jk_version + os/arch_if_relevant)`.
 
 ### 17.2 Incremental compilation
 
@@ -962,11 +987,11 @@ jk tool install com.foo:bar --with com.baz:extra:1.0   # inject deps into env
 ### 20.2 Layout
 
 ```
-~/.jk/tools/envs/<tool>/        # resolved env per tool, with pinned JDK
-~/.jk/bin/<launcher>            # user-PATH entry, shell wrapper or native binary
+$JK_STATE_DIR/tools/envs/<tool>/  # resolved env per tool, with pinned JDK
+$JK_BIN_DIR/<launcher>            # user-PATH entry, shell wrapper or native binary
 ```
 
-`jk tool install` prints the `export PATH=...` line for `~/.jk/bin`; it does not mutate dotfiles. `jk tool update-shell` writes it with explicit user confirmation.
+`jk tool install` prints the `export PATH=...` line for `$JK_BIN_DIR`; it does not mutate dotfiles. `jk tool update-shell` writes it with explicit user confirmation.
 
 ### 20.3 Ephemeral execution: `jkx`
 
@@ -975,7 +1000,7 @@ jkx com.diffplug.spotless:spotless-cli:2.45.0 -- check
 jkx --from com.foo:bar --bin baz -- arg1 arg2
 ```
 
-Resolves, caches in `~/.jk/cache/jkx/`, executes. LRU-evicted. Subsequent runs of the same coord+version are near-instant.
+Resolves, caches in `$JK_CACHE_DIR/jkx/`, executes. LRU-evicted. Subsequent runs of the same coord+version are near-instant.
 
 ### 20.4 Native-image tools
 
@@ -1163,7 +1188,7 @@ jk gradle build
 jk downloads and runs the real Maven or Gradle (pinned via `.mvn/wrapper/maven-wrapper.properties` or `gradle/wrapper/gradle-wrapper.properties` if present, otherwise jk picks a sane version). Adds value via:
 
 - Faster JDK switch via jk's toolchain manager.
-- Shared `~/.jk/cache/` for downloads.
+- Shared `$JK_CACHE_DIR` for downloads.
 - Prettier output (ANSI, grouped sections in CI).
 - `--offline` / `--locked` semantics layered on top.
 
@@ -1344,7 +1369,7 @@ The aspirational comparison is uv. uv is fast because it's Rust + opinionated + 
 
 ### 28.1 User-global config
 
-`~/.jk/config.toml`:
+`$JK_CONFIG_DIR/config.toml`:
 
 ```toml
 [default]
@@ -1360,19 +1385,25 @@ mode = "auto"
 
 ### 28.2 Project-level overrides
 
-Anything in `~/.jk/config.toml` is overridable in `jk.toml`'s top-level scope. Workspaces override per-member.
+Anything in `$JK_CONFIG_DIR/config.toml` is overridable in `jk.toml`'s top-level scope. Workspaces override per-member.
 
 ### 28.3 Environment variables
 
 | Variable | Effect |
 |---|---|
-| `JK_CACHE_DIR` | Override `~/.jk/cache/`. |
-| `JK_JDK_DIR` | Override `~/.jk/jdks/`. |
+| `JK_CONFIG_DIR` | Override the config dir (default: `$XDG_CONFIG_HOME/jk` or `~/.config/jk`). |
+| `JK_CACHE_DIR` | Override the cache dir (default: `$XDG_CACHE_HOME/jk` or `~/.cache/jk`). |
+| `JK_STATE_DIR` | Override the state dir (default: `$XDG_STATE_HOME/jk` or `~/.local/state/jk`). |
+| `JK_BIN_DIR` | Override where tool launchers are written (default: `$XDG_BIN_HOME` or `~/.local/bin`). |
+| `JK_JDKS_DIR` | Override the JDK install dir (default: IntelliJ neighbor location — `~/Library/Java/JavaVirtualMachines` on macOS, `~/.jdks` elsewhere). |
 | `JK_OFFLINE` | Same as `--offline`. |
 | `JK_LOG` | Log level (`error`, `warn`, `info`, `debug`, `trace`). |
 | `JK_NO_COLOR` / `NO_COLOR` | Disable ANSI. |
 | `CI` (and friends) | Auto-select `profile=ci`. |
 | `JK_GIT_TOKEN_<HOST>` | Bearer token for a git host. |
+
+`XDG_CONFIG_HOME` / `XDG_CACHE_HOME` / `XDG_STATE_HOME` / `XDG_BIN_HOME` are
+honored when set; `JK_*_DIR` overrides take precedence.
 
 ---
 
@@ -1465,7 +1496,7 @@ Explicit non-goals at v1.0 (most have a future-phase home, see §30):
 - **BOM** (Bill of Materials) — a Maven POM with `<dependencyManagement>` only, declaring versions to be inherited.
 - **CAS** (Content-Addressed Store) — blob storage keyed by content hash.
 - **Coord** (Coordinate) — `groupId:artifactId:version[:classifier@type]`.
-- **Disco API** — foojay.io's JDK discovery REST API. The de facto JDK index.
+- **JetBrains JDK feed** — `https://download.jetbrains.com/jdk/feed/v1/jdks.json.xz`. The xz-compressed JSON catalog IntelliJ consumes; jk uses the same source so both tools share a single JDK pool.
 - **TOML** (Human-Optimized Config Object Notation) — Lightbend's JSON superset.
 - **PubGrub** — the dependency-resolution algorithm behind `pub`, `uv`, and modern Cargo.
 - **REAPI** — Bazel's Remote Execution API; the lingua franca of remote build caching/execution.

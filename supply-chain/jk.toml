@@ -1,5 +1,5 @@
 [project]
-group    = "dev.buildjk"
+group    = "dev.jkbuild"
 artifact = "jk-supply-chain"
 version  = "0.6.0-SNAPSHOT"
 jdk      = "25"
@@ -7,8 +7,8 @@ language = "java"
 
 [dependencies]
 main = [
-  "dev.buildjk:jk-core:0.6.0-SNAPSHOT",
-  "dev.buildjk:jk-io:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-core:0.6.0-SNAPSHOT",
+  "dev.jkbuild:jk-io:0.6.0-SNAPSHOT",
   "dev.sigstore:sigstore-java:2.1.0",
   "org.bouncycastle:bcpg-jdk18on:1.84",
   "org.cyclonedx:cyclonedx-core-java:12.2.0",

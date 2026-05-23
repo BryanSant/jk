@@ -32,9 +32,9 @@ These commands map directly across all five tools. Differences shown in the
 | Run tests | `jk test` | — | `cargo test` | `gradle test` | `mvn test` | uv defers to `pytest` / `unittest`. jk emits Surefire-shaped XML so existing CI test reporters work. |
 | Clean build outputs | `jk clean` | — | `cargo clean` | `gradle clean` | `mvn clean` | jk wipes `target/` and `.jk/generated/`; the others wipe their own conventional dirs. |
 | Publish artifacts | `jk publish` | `uv publish` | `cargo publish` | `gradle publish` | `mvn deploy` | jk publishes a Maven-Central-grade POM + jar by default; signing, Sigstore, SLSA and SBOM are flags on the same verb (see §3 below). |
-| Install a tool globally | `jk tool install <coord>` | `uv tool install <pkg>` | `cargo install <crate>` | — | — | jk and cargo install the artifact's own launcher under `~/.jk/bin/` / `~/.cargo/bin/`; uv creates a per-tool venv. `jk install <coord>` is a hidden alias for back-compat. |
+| Install a tool globally | `jk tool install <coord>` | `uv tool install <pkg>` | `cargo install <crate>` | — | — | jk and cargo install the artifact's own launcher; jk writes to `$JK_BIN_DIR` (`~/.local/bin` by default), cargo to `~/.cargo/bin/`. uv creates a per-tool venv. `jk install <coord>` is a hidden alias for back-compat. |
 | Ephemeral tool exec | `jk jkx <coord>` (or `jk tool run <coord>`) | `uvx <pkg>` | — | — | — | "Resolve, cache, run, evict LRU." `jkx` is the top-level shorthand, parallel to `uvx`. |
-| Repair discovered build tools | `jk doctor` | — | — | — | — | Prunes broken mvn/gradle/kotlin symlinks under `~/.jk/tools/`. |
+| Repair discovered build tools | `jk doctor` | — | — | — | — | Prunes broken mvn/gradle/kotlin symlinks under `$JK_CACHE_DIR/tools/`. |
 | Single-file scripts | `jk run script.java` | `uv run script.py` | — | — | — | jk's header (`//jk dep …`) is also JBang-compatible. uv reads PEP 723 inline metadata. |
 
 ---
@@ -47,18 +47,17 @@ Same job, different default behaviour or filesystem layout.
 |---|---|---|---|---|---|---|
 | Lockfile | `jk.lock` (TOML, written by `jk lock`) | `uv.lock` | `Cargo.lock` | *(implicit; `--write-locks` for verification)* | — | jk, uv, cargo treat the lockfile as canonical. Gradle treats it as optional verification; maven has none — every build re-resolves. |
 | Lockfile refresh | `jk update` | `uv lock --upgrade` | `cargo update` | `gradle --refresh-dependencies` | — | jk and uv re-resolve from declared constraints; cargo same; gradle's flag drops caches but doesn't pin. |
-| Offline preparation | `jk fetch` | `uv sync --no-install` | `cargo fetch` | `gradle --offline` *(with prior populate)* | `mvn dependency:go-offline` | jk's `fetch` is the CI-friendly "download everything, build nothing" entry point. |
-| Materialise the cache | `jk sync` | `uv sync` | — *(implicit in any build)* | *(implicit)* | *(implicit)* | jk and uv have an explicit "make the workspace match the lock" verb. |
+| Materialise the cache / offline prep | `jk sync` *(`--offline-prepare` for CI)* | `uv sync` | `cargo fetch` | `gradle --offline` *(with prior populate)* | `mvn dependency:go-offline` | jk and uv have an explicit "make the workspace match the lock" verb; jk's `sync` doubles as the CI "download everything, build nothing" entry point. |
 | Workspace / multi-module | `workspace { members = [...] }` in `jk.toml` | `[tool.uv.workspace]` | `[workspace]` in `Cargo.toml` | `include(":a", ":b")` in `settings.gradle.kts` | `<modules>` in `pom.xml` | All five have multi-package support; jk's root-aggregated lockfile mirrors Cargo's, not Maven's per-module model. |
 | Toolchain manager | `jk jdk install / use / list` | `uv python install / pin / list` | `rustup toolchain` (separate binary) | `java { toolchain }` *(auto-download)* | toolchains.xml *(manual)* | jk treats JDK management as a first-class command; uv recently shipped the equivalent for Python interpreters. |
-| Per-project pin | `.jk-version` (or `.sdkmanrc`) | `.python-version` | `rust-toolchain.toml` | *(in build.gradle.kts)* | *(in pom.xml `<requireJavaVersion>`)* | jk reads `.sdkmanrc` for free so existing JVM users don't re-learn anything. |
+| Per-project pin | `.jk-version` | `.python-version` | `rust-toolchain.toml` | *(in build.gradle.kts)* | *(in pom.xml `<requireJavaVersion>`)* | Single-line file with the JetBrains feed identifier (e.g. `temurin-21`). |
 | Environment export | `jk env` | *(via `uv run`)* | *(via `rustup which`)* | — | — | jk emits `export JAVA_HOME=…; export PATH=…` lines for `eval $(jk env)`. |
 | Open a project shell | `jk shell` | `uv run -- bash` | — | — | — | Subshell with the project's pinned JDK on PATH. |
 | Build profiles | `profiles.{dev,ci,…}` block | — | `[profile.dev]` / `[profile.release]` | `gradle -PsomeProp` | `<profiles>` | jk's profiles change javac/JVM args, not deps (deps belong in features). |
 | Optional feature sets | `features { … }` block | `[project.optional-dependencies]` | `[features]` | *(no native; via separate sourceset)* | `<profile>` *(awkward)* | jk uses cargo's word "feature" deliberately — additive, named dep sets. |
 | Native compile | `jk native` *(GraalVM)* | — | `cargo build` *(native by default)* | *(graalvm plugin)* | *(graalvm plugin)* | jk drives the GraalVM `native-image` binary; cargo is native-by-default because Rust is AOT. |
 | Reproducibility check | `jk verify-build` | — | *(community: cargo-bisect-rustc, manual)* | — | — | jk's verb rebuilds in a scratch dir and diffs the jar's SHA-256. |
-| Action / build cache | `~/.jk/cache/actions/` *(content-addressed)* | — | `target/` *(incremental compile)* | `--build-cache` *(local + optional remote)* | *(none)* | jk caches per-task by the SHA of its inputs (Bazel-shape); gradle's build cache is the nearest analogue. |
+| Action / build cache | `$JK_CACHE_DIR/actions/` *(content-addressed)* | — | `target/` *(incremental compile)* | `--build-cache` *(local + optional remote)* | *(none)* | jk caches per-task by the SHA of its inputs (Bazel-shape); gradle's build cache is the nearest analogue. |
 
 ---
 
