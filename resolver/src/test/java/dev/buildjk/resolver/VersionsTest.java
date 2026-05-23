@@ -66,4 +66,39 @@ class VersionsTest {
         assertThat(Versions.compare("1.0-Alpha", "1.0-ALPHA")).isZero();
         assertThat(Versions.compare("1.0-SNAPSHOT", "1.0-snapshot")).isZero();
     }
+
+    @Test
+    void maven_timestamped_snapshot_ordering() {
+        // Maven's publisher generates `<baseVersion>-<yyyyMMdd.HHmmss>-<buildNumber>`
+        // for deployed snapshots; later timestamps compare greater.
+        assertThat(Versions.compare(
+                "1.0-20260520.123456-7",
+                "1.0-20260519.000000-1")).isPositive();
+        // ComparableVersion tokenises the timestamp as numeric segments rather
+        // than recognising the snapshot pattern, so a timestamped snapshot
+        // actually sorts ABOVE the bare `1.0` release. This is Maven's
+        // documented behavior — code that needs to filter snapshots should
+        // string-match `-SNAPSHOT` or the timestamp regex, not rely on order.
+        assertThat(Versions.compare(
+                "1.0-20260520.123456-7",
+                "1.0")).isPositive();
+        // The bare `-SNAPSHOT` qualifier IS recognised and sorts below release.
+        assertThat(Versions.compare(
+                "1.0-SNAPSHOT",
+                "1.0")).isNegative();
+    }
+
+    @Test
+    void four_segment_versions() {
+        // Jib, JBoss, and friends ship 4-segment versions.
+        assertThat(Versions.compare("3.0.4.1", "3.0.4")).isPositive();
+        assertThat(Versions.compare("3.0.4.1", "3.0.4.2")).isNegative();
+    }
+
+    @Test
+    void numeric_qualifier_components_are_numeric() {
+        // -rc10 vs -rc2 — numeric tail compares numerically.
+        assertThat(Versions.compare("1.0-rc10", "1.0-rc2")).isPositive();
+        assertThat(Versions.compare("1.0-alpha10", "1.0-alpha2")).isPositive();
+    }
 }

@@ -11,9 +11,10 @@ cyclonedx-core = "12.2.0"
 graalvm-native = "0.10.4"
 jackson = "3.1.3"
 jgit = "7.6.0.202603022253-r"
-jline = "4.1.1"
+jline = "4.1.2"
 jib-core = "0.28.1"
 junit = "6.1.0"
+maven-artifact = "3.9.16"
 kotlin = "2.3.21"
 picocli = "4.7.7"
 sigstore = "2.1.0"
@@ -24,6 +25,9 @@ tomlj = "1.1.1"
 # foundations
 tomlj                  = { module = "org.tomlj:tomlj",                              version.ref = "tomlj" }
 jackson-databind       = { module = "tools.jackson.core:jackson-databind",          version.ref = "jackson" }
+
+# resolver
+maven-artifact         = { module = "org.apache.maven:maven-artifact",              version.ref = "maven-artifact" }
 
 # I/O
 jgit                   = { module = "org.eclipse.jgit:org.eclipse.jgit",            version.ref = "jgit" }
