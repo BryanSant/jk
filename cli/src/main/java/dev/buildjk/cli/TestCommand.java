@@ -10,6 +10,7 @@ import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
+import dev.buildjk.model.Profile;
 import dev.buildjk.task.ActionCache;
 import dev.buildjk.task.ActionKey;
 import dev.buildjk.test.JUnitLauncher;
@@ -82,7 +83,7 @@ public final class TestCommand implements Callable<Integer> {
         Path mainClasses = target.resolve("classes");
         Path testClasses = target.resolve("test-classes");
 
-        dev.buildjk.model.Profile profile =
+        Profile profile =
                 CompileCommand.resolveProfile(project.profiles(), profileName);
         List<String> javacArgs = profile == null ? List.of() : profile.javacArgs();
 

@@ -3,6 +3,7 @@ package dev.buildjk.resolver.pubgrub;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -176,7 +177,7 @@ public class PubGrubSolver {
      */
     private Incompatibility resolveIncompatibilities(
             Incompatibility a, Incompatibility b, Term pivot) {
-        java.util.LinkedHashMap<String, Term> merged = new java.util.LinkedHashMap<>();
+        LinkedHashMap<String, Term> merged = new LinkedHashMap<>();
         for (Incompatibility source : List.of(a, b)) {
             for (Term term : source.terms()) {
                 if (term.pkg().equals(pivot.pkg())) continue;

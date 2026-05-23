@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.stream.Stream;
@@ -167,7 +168,7 @@ public final class CompileCommand implements Callable<Integer> {
     private static void deleteRecursively(Path target) throws IOException {
         if (!Files.exists(target)) return;
         try (Stream<Path> stream = Files.walk(target)) {
-            stream.sorted(java.util.Comparator.reverseOrder()).forEach(p -> {
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try { Files.deleteIfExists(p); } catch (IOException ignored) {}
             });
         }

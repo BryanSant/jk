@@ -6,11 +6,13 @@ import dev.buildjk.model.BuildJk;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.util.Base64;
 import java.util.HashMap;
 import java.util.List;
@@ -91,8 +93,8 @@ class MavenPublisherTest {
     }
 
     @Test
-    void signed_publish_emits_asc_files_with_checksums(@org.junit.jupiter.api.io.TempDir
-                                                       java.nio.file.Path tempDir) throws Exception {
+    void signed_publish_emits_asc_files_with_checksums(@TempDir
+                                                       Path tempDir) throws Exception {
         var key = GpgTestFixture.generate(tempDir, "test-pass");
         GpgSigner signer = GpgSigner.fromKeyFile(key.secretKeyFile(), "test-pass".toCharArray());
 
@@ -136,8 +138,8 @@ class MavenPublisherTest {
     }
 
     @Test
-    void both_gpg_and_sigstore_emit_both_sidecars(@org.junit.jupiter.api.io.TempDir
-                                                  java.nio.file.Path tempDir) throws Exception {
+    void both_gpg_and_sigstore_emit_both_sidecars(@TempDir
+                                                  Path tempDir) throws Exception {
         var key = GpgTestFixture.generate(tempDir, "p");
         GpgSigner gpg = GpgSigner.fromKeyFile(key.secretKeyFile(), "p".toCharArray());
         SigstoreSigner fake = bytes -> "{}".getBytes(StandardCharsets.UTF_8);

@@ -2,6 +2,7 @@
 package dev.buildjk.cli;
 
 import dev.buildjk.config.BuildJkParser;
+import dev.buildjk.config.ImageConfigParser;
 import dev.buildjk.jdk.InstalledJdk;
 import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
@@ -80,7 +81,7 @@ public final class NativeCommand implements Callable<Integer> {
 
         String chosenMain = mainClass != null
                 ? mainClass
-                : dev.buildjk.config.ImageConfigParser.parse(buildJkPath).mainClass();
+                : ImageConfigParser.parse(buildJkPath).mainClass();
         if (chosenMain == null || chosenMain.isBlank()) {
             System.err.println("jk native: no main class — pass --main or set image.main-class.");
             return 64;

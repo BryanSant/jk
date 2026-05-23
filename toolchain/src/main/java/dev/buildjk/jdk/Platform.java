@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.jdk;
 
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -56,7 +57,7 @@ public final class Platform {
         if (!Files.isDirectory(lib)) return false;
         try (var stream = Files.list(lib)) {
             return stream.anyMatch(p -> p.getFileName().toString().startsWith("ld-musl-"));
-        } catch (java.io.IOException e) {
+        } catch (IOException e) {
             return false;
         }
     }

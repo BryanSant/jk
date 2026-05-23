@@ -19,6 +19,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -260,18 +261,18 @@ public final class GradleImporter {
 
     // --- java / kotlin toolchain --------------------------------------------
 
-    private static java.util.Optional<String> detectJdk(String text) {
+    private static Optional<String> detectJdk(String text) {
         Matcher m = JAVA_VERSION_TOKEN.matcher(text);
-        if (!m.find()) return java.util.Optional.empty();
+        if (!m.find()) return Optional.empty();
         String raw = firstNonNull(m.group(1), m.group(2), m.group(3), m.group(4));
-        if (raw == null || raw.isBlank()) return java.util.Optional.empty();
+        if (raw == null || raw.isBlank()) return Optional.empty();
         // VERSION_21 / VERSION_1_8 → "21" / "1.8"
         String normalized = raw.replace('_', '.');
         if (normalized.startsWith("1.")) {
-            return java.util.Optional.of(normalized);
+            return Optional.of(normalized);
         }
         // Strip a leading "1." vestige if present.
-        return java.util.Optional.of(normalized);
+        return Optional.of(normalized);
     }
 
     // --- catch-all tier 3 warnings ------------------------------------------
@@ -359,18 +360,18 @@ public final class GradleImporter {
         return out.toString();
     }
 
-    private static java.util.Optional<String> firstString(Pattern pattern, String text) {
+    private static Optional<String> firstString(Pattern pattern, String text) {
         Matcher m = pattern.matcher(text);
-        if (!m.find()) return java.util.Optional.empty();
+        if (!m.find()) return Optional.empty();
         String s = firstNonNull(m.group(1), m.group(2));
-        return s == null ? java.util.Optional.empty() : java.util.Optional.of(s);
+        return s == null ? Optional.empty() : Optional.of(s);
     }
 
     /** Extract the contents of the first top-level {@code name { ... }} block by brace matching. */
-    private static java.util.Optional<String> extractBlock(String text, String name) {
+    private static Optional<String> extractBlock(String text, String name) {
         Pattern header = Pattern.compile("(?m)^\\s*" + Pattern.quote(name) + "\\s*\\{");
         Matcher m = header.matcher(text);
-        if (!m.find()) return java.util.Optional.empty();
+        if (!m.find()) return Optional.empty();
         int open = m.end() - 1; // position of the '{'
         int depth = 0;
         for (int i = open; i < text.length(); i++) {
@@ -379,11 +380,11 @@ public final class GradleImporter {
             else if (c == '}') {
                 depth--;
                 if (depth == 0) {
-                    return java.util.Optional.of(text.substring(open + 1, i));
+                    return Optional.of(text.substring(open + 1, i));
                 }
             }
         }
-        return java.util.Optional.empty();
+        return Optional.empty();
     }
 
     private static String firstNonNull(String... values) {
@@ -394,8 +395,8 @@ public final class GradleImporter {
     }
 
     /** Read {@code rootProject.name} from a {@code settings.gradle(.kts)} if present. */
-    public static java.util.Optional<String> readRootProjectName(Path settings) throws IOException {
-        if (!Files.exists(settings)) return java.util.Optional.empty();
+    public static Optional<String> readRootProjectName(Path settings) throws IOException {
+        if (!Files.exists(settings)) return Optional.empty();
         return firstString(ROOT_NAME, stripComments(Files.readString(settings)));
     }
 

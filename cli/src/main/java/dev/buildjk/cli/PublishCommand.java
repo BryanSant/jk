@@ -23,8 +23,11 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 
 /**
@@ -207,15 +210,15 @@ public final class PublishCommand implements Callable<Integer> {
     }
 
     private static byte[] buildSlsaProvenance(BuildJk.Project project, String jarFilename, byte[] jarBytes) {
-        java.time.Instant now = java.time.Instant.now();
+        Instant now = Instant.now();
         SlsaProvenance.BuildContext ctx = new SlsaProvenance.BuildContext(
                 "https://github.com/buildjk/jk",
                 "https://buildjk.dev/jk-build/v1",
-                java.util.UUID.randomUUID().toString(),
+                UUID.randomUUID().toString(),
                 now,
                 now,
-                java.util.Map.of("configRef", "jk.toml"),
-                java.util.Map.of(
+                Map.of("configRef", "jk.toml"),
+                Map.of(
                         "group", project.group(),
                         "artifact", project.artifact(),
                         "version", project.version(),

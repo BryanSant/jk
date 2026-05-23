@@ -3,6 +3,7 @@ package dev.buildjk.script;
 
 import dev.buildjk.model.Dependency;
 import dev.buildjk.model.VersionSelector;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -123,7 +124,7 @@ class ScriptHeaderParserTest {
 
     @Test
     void invalid_dep_is_rejected() {
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+        Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScriptHeaderParser.parse("//jk dep not-a-coord"));
     }
 
@@ -136,7 +137,7 @@ class ScriptHeaderParserTest {
         assertThat(d.module()).isEqualTo("com.example:lib");
         assertThat(d.pinned()).isFalse();
         assertThat(d.version())
-                .isInstanceOf(dev.buildjk.model.VersionSelector.Caret.class);
+                .isInstanceOf(VersionSelector.Caret.class);
     }
 
     @Test
@@ -146,9 +147,9 @@ class ScriptHeaderParserTest {
                 //jk dep com.example:tool@latest
                 """);
         assertThat(h.deps().get(0).version())
-                .isInstanceOf(dev.buildjk.model.VersionSelector.Tilde.class);
+                .isInstanceOf(VersionSelector.Tilde.class);
         assertThat(h.deps().get(1).version())
-                .isInstanceOf(dev.buildjk.model.VersionSelector.Latest.class);
+                .isInstanceOf(VersionSelector.Latest.class);
     }
 
     @Test
@@ -163,7 +164,7 @@ class ScriptHeaderParserTest {
 
     @Test
     void colon_form_with_decorations_is_rejected() {
-        org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
+        Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScriptHeaderParser.parse("//jk dep com.example:lib:^1.0"));
     }
 

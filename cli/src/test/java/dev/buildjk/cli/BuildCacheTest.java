@@ -10,6 +10,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.function.IntSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -67,7 +68,7 @@ class BuildCacheTest {
         return Jk.execute(args);
     }
 
-    private static String captureStdout(java.util.function.IntSupplier body) {
+    private static String captureStdout(IntSupplier body) {
         PrintStream original = System.out;
         ByteArrayOutputStream buffer = new ByteArrayOutputStream();
         System.setOut(new PrintStream(buffer));

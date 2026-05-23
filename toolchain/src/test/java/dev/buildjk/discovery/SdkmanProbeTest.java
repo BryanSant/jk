@@ -6,6 +6,8 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -65,7 +67,7 @@ class SdkmanProbeTest {
         moveContents(candidate.getParent().resolve("jdk-21.0.5"), candidate);
 
         Optional<DiscoveredTool> hit = new ToolProvisioner(
-                java.util.List.of(new SdkmanProbe(sdkman)))
+                List.of(new SdkmanProbe(sdkman)))
                 .discover(ToolSpec.jdk("21.0.5", "tem"));
         assertThat(hit).isPresent();
     }
@@ -85,7 +87,7 @@ class SdkmanProbeTest {
             }
         }
         try (var stream = Files.walk(src)) {
-            stream.sorted(java.util.Comparator.reverseOrder())
+            stream.sorted(Comparator.reverseOrder())
                     .forEach(p -> { try { Files.deleteIfExists(p); } catch (Exception ignored) {} });
         }
     }

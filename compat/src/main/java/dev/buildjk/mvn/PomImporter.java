@@ -33,6 +33,7 @@ import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * Converts a Maven {@code pom.xml} into a {@link BuildJk} model plus a
@@ -188,7 +189,7 @@ public final class PomImporter {
         return new BuildJk.Project(group, pom.artifactId(), version, jdk);
     }
 
-    private static java.util.Optional<String> jdkFromCompilerPlugin(Document doc) {
+    private static Optional<String> jdkFromCompilerPlugin(Document doc) {
         Element root = doc.getDocumentElement();
         // First check properties: maven.compiler.release / .source / .target.
         Element properties = childElement(root, "properties");
@@ -196,7 +197,7 @@ public final class PomImporter {
             for (String key : new String[] {
                     "maven.compiler.release", "maven.compiler.target", "maven.compiler.source"}) {
                 String value = childText(properties, key);
-                if (value != null && !value.isBlank()) return java.util.Optional.of(value.trim());
+                if (value != null && !value.isBlank()) return Optional.of(value.trim());
             }
         }
         // Then check the maven-compiler-plugin <configuration>.
@@ -210,11 +211,11 @@ public final class PomImporter {
                 if (config == null) continue;
                 for (String key : new String[] {"release", "target", "source"}) {
                     String value = childText(config, key);
-                    if (value != null && !value.isBlank()) return java.util.Optional.of(value.trim());
+                    if (value != null && !value.isBlank()) return Optional.of(value.trim());
                 }
             }
         }
-        return java.util.Optional.empty();
+        return Optional.empty();
     }
 
     // --- dependencies -------------------------------------------------------

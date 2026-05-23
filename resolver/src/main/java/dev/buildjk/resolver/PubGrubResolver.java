@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.resolver;
 
+import dev.buildjk.model.Coordinate;
 import dev.buildjk.model.Dependency;
 import dev.buildjk.repo.EffectivePom;
 import dev.buildjk.repo.EffectivePomBuilder;
@@ -97,9 +98,9 @@ public final class PubGrubResolver implements Resolver {
         return new Resolution(out);
     }
 
-    private static dev.buildjk.model.Coordinate toCoord(String module, String version) {
+    private static Coordinate toCoord(String module, String version) {
         int colon = module.indexOf(':');
-        return dev.buildjk.model.Coordinate.of(
+        return Coordinate.of(
                 module.substring(0, colon), module.substring(colon + 1), version);
     }
 }

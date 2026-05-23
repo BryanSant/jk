@@ -11,6 +11,7 @@ import dev.buildjk.http.Http;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Optional;
 
 /**
@@ -118,7 +119,7 @@ public final class ToolProvisioning {
     private static void deleteRecursively(Path root) throws IOException {
         if (!Files.exists(root)) return;
         try (var stream = Files.walk(root)) {
-            stream.sorted(java.util.Comparator.reverseOrder())
+            stream.sorted(Comparator.reverseOrder())
                     .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
         }
     }

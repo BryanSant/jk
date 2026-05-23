@@ -17,6 +17,7 @@ import dev.buildjk.lock.Lockfile;
 import dev.buildjk.lock.LockfileReader;
 import dev.buildjk.model.BuildJk;
 import dev.buildjk.model.Profile;
+import dev.buildjk.model.Scope;
 import dev.buildjk.task.ActionCache;
 import dev.buildjk.task.ActionKey;
 import picocli.CommandLine.Command;
@@ -28,6 +29,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
@@ -99,7 +101,7 @@ public final class BuildCommand implements Callable<Integer> {
         List<Path> classpath = new ArrayList<>(new ClasspathResolver(cas)
                 .classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(dir, project,
-                java.util.Set.of(dev.buildjk.model.Scope.MAIN));
+                Set.of(Scope.MAIN));
         classpath.addAll(siblings.jars());
         if (!siblings.missingSiblingJars().isEmpty()) {
             for (String missing : siblings.missingSiblingJars()) {
@@ -114,7 +116,7 @@ public final class BuildCommand implements Callable<Integer> {
 
         List<Path> ktSources = CompileCommand.collectKotlinSources(dir);
 
-        java.nio.file.Path javaHome = CompileToolchain.resolveJavaHome(dir);
+        Path javaHome = CompileToolchain.resolveJavaHome(dir);
 
         if (!sources.isEmpty()) {
             CompileRequest request = CompileRequest.builder()
@@ -152,7 +154,7 @@ public final class BuildCommand implements Callable<Integer> {
         if (!ktSources.isEmpty()) {
             List<Path> kotlincCp = new ArrayList<>(classpath);
             kotlincCp.add(classes);
-            java.nio.file.Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
+            Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
             KotlincResult ktResult = new KotlincDriver().compile(
                     KotlincRequest.builder()
                             .sources(ktSources)

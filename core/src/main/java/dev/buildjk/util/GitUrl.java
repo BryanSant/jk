@@ -2,6 +2,7 @@
 package dev.buildjk.util;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import java.util.Map;
 
@@ -85,7 +86,7 @@ public final class GitUrl {
 
     /** SHA-256 of the canonical URL — the cache key for {@code ~/.jk/git/db/<hash>/}. */
     public static String canonicalHash(String input) {
-        return Hashing.sha256Hex(canonicalize(input).getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return Hashing.sha256Hex(canonicalize(input).getBytes(StandardCharsets.UTF_8));
     }
 
     private static int defaultPort(String scheme) {

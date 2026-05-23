@@ -8,6 +8,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.Properties;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -63,10 +64,10 @@ public final class GradleResolver {
                 sha256 == null || sha256.isBlank() ? null : sha256.trim());
     }
 
-    static java.util.Optional<String> parseVersion(URI uri) {
+    static Optional<String> parseVersion(URI uri) {
         String path = uri.getPath();
-        if (path == null) return java.util.Optional.empty();
+        if (path == null) return Optional.empty();
         Matcher m = FILENAME_VERSION.matcher(path);
-        return m.find() ? java.util.Optional.of(m.group("v")) : java.util.Optional.empty();
+        return m.find() ? Optional.of(m.group("v")) : Optional.empty();
     }
 }

@@ -8,6 +8,7 @@ import dev.buildjk.model.Scope;
 import dev.buildjk.model.VersionSelector;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -71,7 +72,7 @@ class DependencyTreeTest {
     // --- helpers -----------------------------------------------------------
 
     private static BuildJk projectWithMainDeps(String... modules) {
-        var deps = new java.util.ArrayList<Dependency>();
+        var deps = new ArrayList<Dependency>();
         for (String m : modules) {
             deps.add(new Dependency(m, new VersionSelector.Exact("=1.0", "1.0")));
         }

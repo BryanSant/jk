@@ -2,6 +2,7 @@
 package dev.buildjk.cli;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.buildjk.publish.GpgTestFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -133,7 +134,7 @@ class PublishCommandTest {
     @Test
     void signed_publish_uploads_asc_files(@TempDir Path tempDir) throws Exception {
         // Generate a throwaway secret key via the supply-chain test fixture.
-        var key = dev.buildjk.publish.GpgTestFixture.generate(tempDir, "pass");
+        var key = GpgTestFixture.generate(tempDir, "pass");
 
         writeBuildJk(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));

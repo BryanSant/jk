@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.Attributes;
@@ -49,7 +50,7 @@ class JarPackagerTest {
         // Bump mtime of source files between runs to make sure the packager
         // doesn't pick up wall-clock timestamps.
         Files.setLastModifiedTime(input.resolve("Hello.class"),
-                java.nio.file.attribute.FileTime.fromMillis(System.currentTimeMillis() + 60_000));
+                FileTime.fromMillis(System.currentTimeMillis() + 60_000));
         new JarPackager().packageJar(JarPackager.JarRequest.of(input, jarB));
 
         assertThat(Files.readAllBytes(jarA)).isEqualTo(Files.readAllBytes(jarB));

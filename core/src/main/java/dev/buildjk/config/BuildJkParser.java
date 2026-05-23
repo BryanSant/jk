@@ -13,6 +13,7 @@ import dev.buildjk.model.RepositorySpec;
 import dev.buildjk.model.Scope;
 import dev.buildjk.model.VersionSelector;
 import dev.buildjk.model.Workspace;
+import dev.buildjk.util.GitUrl;
 import org.tomlj.Toml;
 import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
@@ -104,7 +105,7 @@ public final class BuildJkParser {
         // Source keys are coords like "com.foo:bar" — colon isn't legal in
         // tomlj's dotted-key parser, so look up by literal-key path.
         for (String key : sources.keySet()) {
-            Object value = sources.get(java.util.List.of(key));
+            Object value = sources.get(List.of(key));
             if (!(value instanceof TomlTable entry)) {
                 throw new BuildJkParseException(
                         "sources.\"" + key + "\" must be an inline table");
@@ -119,7 +120,7 @@ public final class BuildJkParser {
         if (urlRaw == null) {
             throw new BuildJkParseException(displayPath + " requires a `git` URL");
         }
-        String canonical = dev.buildjk.util.GitUrl.canonicalize(urlRaw);
+        String canonical = GitUrl.canonicalize(urlRaw);
         String tag = obj.getString("tag");
         String branch = obj.getString("branch");
         String rev = obj.getString("rev");

@@ -15,6 +15,7 @@ import org.bouncycastle.openpgp.PGPUtil;
 import org.bouncycastle.openpgp.operator.bc.BcPBESecretKeyDecryptorBuilder;
 import org.bouncycastle.openpgp.operator.bc.BcPGPContentSignerBuilder;
 import org.bouncycastle.openpgp.operator.bc.BcPGPDigestCalculatorProvider;
+import org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -50,7 +51,7 @@ public final class GpgSigner {
         try (InputStream raw = Files.newInputStream(keyFile);
              InputStream decoded = PGPUtil.getDecoderStream(raw)) {
             PGPSecretKeyRingCollection rings = new PGPSecretKeyRingCollection(
-                    decoded, new org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator());
+                    decoded, new JcaKeyFingerprintCalculator());
             for (Iterator<PGPSecretKeyRing> rIter = rings.getKeyRings(); rIter.hasNext(); ) {
                 PGPSecretKeyRing ring = rIter.next();
                 for (Iterator<PGPSecretKey> kIter = ring.getSecretKeys(); kIter.hasNext(); ) {

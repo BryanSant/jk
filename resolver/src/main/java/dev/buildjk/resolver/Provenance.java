@@ -5,6 +5,7 @@ import dev.buildjk.lock.Lockfile;
 import dev.buildjk.model.BuildJk;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -70,7 +71,7 @@ public final class Provenance {
             if (declaredRoots.contains(current)) {
                 // Reverse for display: declared root first, target last.
                 List<Step> path = new ArrayList<>(stack);
-                java.util.Collections.reverse(path);
+                Collections.reverse(path);
                 out.add(new Path(List.copyOf(path)));
                 return;
             }

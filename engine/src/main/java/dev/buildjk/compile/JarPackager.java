@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.compile;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -47,9 +50,9 @@ public final class JarPackager {
                 String name = normalize(request.inputDir(), file);
                 if (name.equals("META-INF/MANIFEST.MF")) continue; // already written
                 JarEntry entry = new JarEntry(name);
-                entry.setTimeLocal(java.time.LocalDateTime.ofEpochSecond(
+                entry.setTimeLocal(LocalDateTime.ofEpochSecond(
                         request.timestampEpochSeconds(), 0,
-                        java.time.ZoneOffset.UTC));
+                        ZoneOffset.UTC));
                 jos.putNextEntry(entry);
                 Files.copy(file, jos);
                 jos.closeEntry();
@@ -78,7 +81,7 @@ public final class JarPackager {
     }
 
     private static String normalize(Path root, Path file) {
-        return root.relativize(file).toString().replace(java.io.File.separatorChar, '/');
+        return root.relativize(file).toString().replace(File.separatorChar, '/');
     }
 
     /** Input to {@link JarPackager#packageJar(JarRequest)}. */

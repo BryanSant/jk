@@ -8,6 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * In-memory {@link PackageSource} for solver tests. Pure data; no I/O.
@@ -59,7 +60,7 @@ public final class InMemoryPackageSource implements PackageSource {
             return version(pkg, version, deps -> {});
         }
 
-        public Builder version(String pkg, String version, java.util.function.Consumer<Deps> deps) {
+        public Builder version(String pkg, String version, Consumer<Deps> deps) {
             Objects.requireNonNull(pkg, "pkg");
             Objects.requireNonNull(version, "version");
             versionsByPackage.computeIfAbsent(pkg, k -> new ArrayList<>()).add(version);

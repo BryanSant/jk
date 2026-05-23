@@ -2,15 +2,18 @@
 package dev.buildjk.cli;
 
 import dev.buildjk.cache.Cas;
+import dev.buildjk.compat.BuildTool;
 import dev.buildjk.compat.InstalledTool;
 import dev.buildjk.compat.ToolDistribution;
 import dev.buildjk.compat.ToolInstaller;
+import dev.buildjk.compat.ToolProvisioning;
 import dev.buildjk.compat.ToolRegistry;
 import dev.buildjk.http.Http;
 import dev.buildjk.jdk.InstalledJdk;
 import dev.buildjk.kotlin.KotlinResolver;
 
 import java.io.IOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -94,16 +97,14 @@ final class CompileToolchain {
         if (versionOverride == null || versionOverride.isBlank()) {
             dist = KotlinResolver.defaultDistribution();
         } else {
-            java.net.URI uri = java.net.URI.create(
+            URI uri = URI.create(
                     "https://github.com/JetBrains/kotlin/releases/download/v" + versionOverride
                             + "/kotlin-compiler-" + versionOverride + ".zip");
-            dist = new ToolDistribution(
-                    dev.buildjk.compat.BuildTool.KOTLIN, versionOverride, uri, "zip");
+            dist = new ToolDistribution(BuildTool.KOTLIN, versionOverride, uri, "zip");
         }
         try {
-            dev.buildjk.compat.ToolProvisioning.Result result =
-                    dev.buildjk.compat.ToolProvisioning.provision(
-                            dist, registry, new Http(), /*noDiscover=*/ false);
+            ToolProvisioning.Result result = ToolProvisioning.provision(
+                    dist, registry, new Http(), /*noDiscover=*/ false);
             switch (result.source()) {
                 case LINKED -> System.err.println("Linked Kotlin " + dist.version()
                         + " from " + result.detail());

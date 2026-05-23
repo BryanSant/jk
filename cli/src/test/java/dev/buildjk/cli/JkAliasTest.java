@@ -6,6 +6,7 @@ import org.junit.jupiter.api.Test;
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -49,7 +50,7 @@ class JkAliasTest {
     void help_screen_does_not_list_any_aliases() {
         // Pull the lines that picocli emits under "Commands:" — each is
         // "  <name>   <description>" so the name is the first word.
-        java.util.List<String> verbNames = renderHelp().lines()
+        List<String> verbNames = renderHelp().lines()
                 .dropWhile(line -> !line.startsWith("Commands:"))
                 .skip(1)
                 .filter(line -> line.startsWith("  ") && !line.startsWith("    "))

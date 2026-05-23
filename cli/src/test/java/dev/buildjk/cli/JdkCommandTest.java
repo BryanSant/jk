@@ -2,6 +2,7 @@
 package dev.buildjk.cli;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.buildjk.jdk.Platform;
 import dev.buildjk.util.Hashing;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -9,7 +10,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -74,8 +77,8 @@ class JdkCommandTest {
                   ]
                 }
                 """
-                .replace("ARCH", dev.buildjk.jdk.Platform.currentArchitecture())
-                .replace("OS", dev.buildjk.jdk.Platform.currentOperatingSystem())
+                .replace("ARCH", Platform.currentArchitecture())
+                .replace("OS", Platform.currentOperatingSystem())
                 .replace("SIZE", Integer.toString(archive.length))
                 .replace("SHA", Hashing.sha256Hex(archive))
                 .replace("BASE", base.toString());
@@ -98,9 +101,9 @@ class JdkCommandTest {
         Files.createDirectories(jdks.resolve("21.0.5-tem-x64-linux"));
         Files.createDirectories(jdks.resolve("23-tem-x64-linux"));
 
-        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
-        java.io.PrintStream origOut = System.out;
-        System.setOut(new java.io.PrintStream(out));
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        PrintStream origOut = System.out;
+        System.setOut(new PrintStream(out));
         try {
             run("jdk", "list", "--jdks-dir", jdks.toString());
         } finally {

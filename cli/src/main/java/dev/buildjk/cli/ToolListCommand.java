@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
@@ -60,19 +61,19 @@ public final class ToolListCommand implements Callable<Integer> {
     }
 
     /** Tiny inline reader: pull the "primary" field out of env.json without a JSON dep. */
-    private static java.util.Optional<String> readCoord(Path envJson) {
-        if (!Files.exists(envJson)) return java.util.Optional.empty();
+    private static Optional<String> readCoord(Path envJson) {
+        if (!Files.exists(envJson)) return Optional.empty();
         try {
             String body = Files.readString(envJson);
             int i = body.indexOf("\"primary\"");
-            if (i < 0) return java.util.Optional.empty();
+            if (i < 0) return Optional.empty();
             int colon = body.indexOf(':', i);
             int q1 = body.indexOf('"', colon + 1);
             int q2 = body.indexOf('"', q1 + 1);
-            if (q1 < 0 || q2 < 0) return java.util.Optional.empty();
-            return java.util.Optional.of(body.substring(q1 + 1, q2));
+            if (q1 < 0 || q2 < 0) return Optional.empty();
+            return Optional.of(body.substring(q1 + 1, q2));
         } catch (IOException e) {
-            return java.util.Optional.empty();
+            return Optional.empty();
         }
     }
 }

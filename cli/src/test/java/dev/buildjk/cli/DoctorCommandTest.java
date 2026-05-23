@@ -10,6 +10,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -28,7 +29,7 @@ class DoctorCommandTest {
         String stdout = capture(() -> Jk.execute("doctor", "--tools-dir", tempDir.toString()));
         assertThat(stdout).contains("pruned: maven 3.9.9");
         assertThat(stdout).contains("1 pruned");
-        assertThat(Files.exists(link, java.nio.file.LinkOption.NOFOLLOW_LINKS)).isFalse();
+        assertThat(Files.exists(link, LinkOption.NOFOLLOW_LINKS)).isFalse();
     }
 
     @Test

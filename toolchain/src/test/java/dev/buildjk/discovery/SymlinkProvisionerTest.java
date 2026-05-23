@@ -8,6 +8,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -69,7 +70,7 @@ class SymlinkProvisionerTest {
         SymlinkProvisioner.link(link, source);
         SymlinkProvisioner.unlink(link);
 
-        assertThat(Files.exists(link, java.nio.file.LinkOption.NOFOLLOW_LINKS)).isFalse();
+        assertThat(Files.exists(link, LinkOption.NOFOLLOW_LINKS)).isFalse();
         assertThat(Files.exists(source)).isTrue();
         assertThat(Files.readString(source.resolve("file.txt"))).isEqualTo("preserve me");
     }

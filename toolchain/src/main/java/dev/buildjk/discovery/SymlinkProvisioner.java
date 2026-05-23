@@ -3,7 +3,9 @@ package dev.buildjk.discovery;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.Locale;
 
 /**
@@ -36,7 +38,7 @@ public final class SymlinkProvisioner {
         }
         Path parent = target.getParent();
         if (parent != null) Files.createDirectories(parent);
-        if (Files.exists(target, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
+        if (Files.exists(target, LinkOption.NOFOLLOW_LINKS)) {
             removeRecursivelyOrUnlink(target);
         }
         Files.createSymbolicLink(target, source);
@@ -73,7 +75,7 @@ public final class SymlinkProvisioner {
         }
         if (Files.isDirectory(path)) {
             try (var stream = Files.walk(path)) {
-                stream.sorted(java.util.Comparator.reverseOrder())
+                stream.sorted(Comparator.reverseOrder())
                         .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
             }
             return;

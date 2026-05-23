@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.discovery;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
@@ -158,7 +159,7 @@ public final class ToolHealth {
             while ((entry = zis.getNextEntry()) != null) {
                 if (!entry.getName().equalsIgnoreCase("META-INF/MANIFEST.MF")) continue;
                 Manifest mf = new Manifest();
-                mf.read(new java.io.ByteArrayInputStream(zis.readAllBytes()));
+                mf.read(new ByteArrayInputStream(zis.readAllBytes()));
                 Attributes attrs = mf.getMainAttributes();
                 String v = attrs.getValue(Attributes.Name.IMPLEMENTATION_VERSION);
                 if (v == null) return Optional.empty();

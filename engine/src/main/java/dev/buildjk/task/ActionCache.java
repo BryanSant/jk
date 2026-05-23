@@ -4,10 +4,12 @@ package dev.buildjk.task;
 import dev.buildjk.cache.Cas;
 import dev.buildjk.util.Hashing;
 
+import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -74,7 +76,7 @@ public final class ActionCache {
                     byte[] bytes = Files.readAllBytes(file);
                     cas.put(bytes);
                     String relPath = outputDir.relativize(file).toString()
-                            .replace(java.io.File.separatorChar, '/');
+                            .replace(File.separatorChar, '/');
                     outputs.put(relPath, Hashing.sha256Hex(bytes));
                 }
             }
@@ -168,7 +170,7 @@ public final class ActionCache {
 
     private static void deleteRecursively(Path target) throws IOException {
         try (Stream<Path> stream = Files.walk(target)) {
-            List<Path> paths = stream.sorted(java.util.Comparator.reverseOrder()).toList();
+            List<Path> paths = stream.sorted(Comparator.reverseOrder()).toList();
             for (Path p : paths) Files.deleteIfExists(p);
         }
     }

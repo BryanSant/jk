@@ -12,14 +12,20 @@ import org.bouncycastle.crypto.params.RSAKeyGenerationParameters;
 import org.bouncycastle.openpgp.PGPException;
 import org.bouncycastle.openpgp.PGPKeyPair;
 import org.bouncycastle.openpgp.PGPKeyRingGenerator;
+import org.bouncycastle.openpgp.PGPObjectFactory;
 import org.bouncycastle.openpgp.PGPPublicKeyRing;
 import org.bouncycastle.openpgp.PGPSecretKeyRing;
 import org.bouncycastle.openpgp.PGPSignature;
+import org.bouncycastle.openpgp.PGPSignatureList;
+import org.bouncycastle.openpgp.PGPUtil;
 import org.bouncycastle.openpgp.operator.bc.BcPGPContentSignerBuilder;
+import org.bouncycastle.openpgp.operator.bc.BcPGPContentVerifierBuilderProvider;
 import org.bouncycastle.openpgp.operator.bc.BcPGPDigestCalculatorProvider;
 import org.bouncycastle.openpgp.operator.bc.BcPGPKeyPair;
 import org.bouncycastle.openpgp.operator.bc.BcPBESecretKeyEncryptorBuilder;
+import org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Files;
@@ -75,16 +81,15 @@ public final class GpgTestFixture {
 
     public static void verifyDetached(byte[] data, byte[] armoredSignature, PGPPublicKeyRing publicRing)
             throws IOException, PGPException {
-        var decoded = org.bouncycastle.openpgp.PGPUtil.getDecoderStream(
-                new java.io.ByteArrayInputStream(armoredSignature));
-        var fact = new org.bouncycastle.openpgp.PGPObjectFactory(decoded,
-                new org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator());
+        var decoded = PGPUtil.getDecoderStream(
+                new ByteArrayInputStream(armoredSignature));
+        var fact = new PGPObjectFactory(decoded, new JcaKeyFingerprintCalculator());
         Object obj = fact.nextObject();
-        if (!(obj instanceof org.bouncycastle.openpgp.PGPSignatureList list)) {
+        if (!(obj instanceof PGPSignatureList list)) {
             throw new IllegalStateException("expected PGPSignatureList, got " + obj);
         }
         PGPSignature sig = list.get(0);
-        sig.init(new org.bouncycastle.openpgp.operator.bc.BcPGPContentVerifierBuilderProvider(),
+        sig.init(new BcPGPContentVerifierBuilderProvider(),
                 publicRing.getPublicKey(sig.getKeyID()));
         sig.update(data);
         if (!sig.verify()) {

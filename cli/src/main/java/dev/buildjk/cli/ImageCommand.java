@@ -15,6 +15,7 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -146,7 +147,7 @@ public final class ImageCommand implements Callable<Integer> {
 
     @SuppressWarnings("unused")
     private static String hashSource(String url) {
-        return Hashing.sha256Hex(url.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        return Hashing.sha256Hex(url.getBytes(StandardCharsets.UTF_8));
     }
 
     @SuppressWarnings("unused")

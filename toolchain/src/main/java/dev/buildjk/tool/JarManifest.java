@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.buildjk.tool;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -33,7 +35,7 @@ public final class JarManifest {
                 if (!entry.getName().equalsIgnoreCase("META-INF/MANIFEST.MF")) continue;
                 byte[] body = zis.readAllBytes();
                 Manifest mf = new Manifest();
-                mf.read(new java.io.ByteArrayInputStream(body));
+                mf.read(new ByteArrayInputStream(body));
                 Attributes main = mf.getMainAttributes();
                 String value = main.getValue(Attributes.Name.MAIN_CLASS);
                 return value == null || value.isBlank()
@@ -67,7 +69,7 @@ public final class JarManifest {
     public static List<EmbeddedPom> scanEmbeddedPoms(Path jar) throws IOException {
         Objects.requireNonNull(jar, "jar");
         // group:artifact → builder
-        var byCoord = new java.util.LinkedHashMap<String, EmbeddedPom.Builder>();
+        var byCoord = new LinkedHashMap<String, EmbeddedPom.Builder>();
         try (InputStream in = Files.newInputStream(jar);
              ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
