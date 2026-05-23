@@ -1409,6 +1409,16 @@ Explicit non-goals at v1.0 (most have a future-phase home, see §30):
 
 - **ABI-fingerprint compile avoidance** (Gradle-tier).
 - **Android (AAR) build support.** AGP-comparable functionality: R8/D8, resources, manifest merging. This is a significant scope addition and may slip to v1.3+ depending on community demand and engineering capacity.
+- **JPMS module-aware lockfile and launcher.** Record each resolved package's
+  module name (read from `module-info.class` or `Automatic-Module-Name` in the
+  jar's manifest) alongside its SHA in `jk.lock`. Then `jk run` can opt into
+  `--module-path` launch — currently detected and logged but executed from the
+  classpath — without re-cracking every jar at launch time, and conflict
+  diagnostics (missing modules, split packages) can point at Maven coords.
+  Neither Maven nor Gradle persists module identity in their dependency model
+  today; jk's lockfile schema is new enough to add it cheaply. Deferred until
+  there's real demand — most JVM apps still ship classpath fat jars even when
+  individual deps are modular.
 
 ### v1.5
 
