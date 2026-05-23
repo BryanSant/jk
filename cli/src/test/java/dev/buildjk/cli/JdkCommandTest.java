@@ -20,6 +20,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.function.IntSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -96,22 +97,87 @@ class JdkCommandTest {
     }
 
     @Test
-    void list_reports_installed_jdks(@TempDir Path tempDir) throws Exception {
+    void list_reports_installed_jdks_offline(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         Files.createDirectories(jdks.resolve("21.0.5-tem-x64-linux"));
         Files.createDirectories(jdks.resolve("23-tem-x64-linux"));
 
+        String stdout = captureStdout(() -> run("jdk", "list",
+                "--offline",
+                "--jdks-dir", jdks.toString()));
+        // Both installed, newest first.
+        int idx23 = stdout.indexOf("23-tem-x64-linux");
+        int idx21 = stdout.indexOf("21.0.5-tem-x64-linux");
+        assertThat(idx23).isGreaterThanOrEqualTo(0);
+        assertThat(idx21).isGreaterThan(idx23);
+    }
+
+    @Test
+    void list_combines_installed_then_remote_with_versions_descending(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        Files.createDirectories(jdks.resolve("21.0.5-tem-x64-linux"));
+
+        // Disco returns four packages on this OS/arch: a 25, a 23, a 21.0.5
+        // (already installed, should be filtered out), and a 17.
+        String discoJson = """
+                {
+                  "result": [
+                    {"distribution": "temurin", "java_version": "23",
+                     "architecture": "ARCH", "operating_system": "OS",
+                     "archive_type": "tar.gz", "filename": "a.tar.gz",
+                     "links": {"pkg_download_redirect": "BASE/a.tar.gz"}},
+                    {"distribution": "temurin", "java_version": "21.0.5",
+                     "architecture": "ARCH", "operating_system": "OS",
+                     "archive_type": "tar.gz", "filename": "b.tar.gz",
+                     "links": {"pkg_download_redirect": "BASE/b.tar.gz"}},
+                    {"distribution": "temurin", "java_version": "25.0.1",
+                     "architecture": "ARCH", "operating_system": "OS",
+                     "archive_type": "tar.gz", "filename": "c.tar.gz",
+                     "links": {"pkg_download_redirect": "BASE/c.tar.gz"}},
+                    {"distribution": "temurin", "java_version": "17.0.13",
+                     "architecture": "ARCH", "operating_system": "OS",
+                     "archive_type": "tar.gz", "filename": "d.tar.gz",
+                     "links": {"pkg_download_redirect": "BASE/d.tar.gz"}}
+                  ]
+                }
+                """
+                .replace("ARCH", Platform.currentArchitecture())
+                .replace("OS", Platform.currentOperatingSystem())
+                .replace("BASE", base.toString());
+        served.put("/disco/packages", discoJson.getBytes(StandardCharsets.UTF_8));
+
+        String stdout = captureStdout(() -> run("jdk", "list",
+                "--jdks-dir", jdks.toString(),
+                "--disco-url", base.resolve("/disco/").toString()));
+
+        // Installed first.
+        int idxInstalled = stdout.indexOf("21.0.5-tem-x64-linux");
+        assertThat(idxInstalled).isGreaterThanOrEqualTo(0);
+        assertThat(stdout.substring(idxInstalled)).contains(jdks.resolve("21.0.5-tem-x64-linux").toString());
+
+        // Remote-only ordered newest first: 25 → 23 → 17 (21.0.5 was installed).
+        int idx25 = stdout.indexOf("25.0.1-tem-");
+        int idx23 = stdout.indexOf("23-tem-");
+        int idx17 = stdout.indexOf("17.0.13-tem-");
+        assertThat(idx25).isGreaterThan(idxInstalled);
+        assertThat(idx23).isGreaterThan(idx25);
+        assertThat(idx17).isGreaterThan(idx23);
+
+        // The 21.0.5 remote entry doesn't get a duplicate <download available> line.
+        assertThat(stdout).doesNotContain("21.0.5-tem-x64-linux  <download available>");
+        assertThat(stdout).contains("<download available>");
+    }
+
+    private static String captureStdout(IntSupplier body) {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream origOut = System.out;
         System.setOut(new PrintStream(out));
         try {
-            run("jdk", "list", "--jdks-dir", jdks.toString());
+            body.getAsInt();
         } finally {
             System.setOut(origOut);
         }
-        String stdout = out.toString(StandardCharsets.UTF_8);
-        assertThat(stdout).contains("21.0.5-tem-x64-linux");
-        assertThat(stdout).contains("23-tem-x64-linux");
+        return out.toString(StandardCharsets.UTF_8);
     }
 
     @Test

@@ -96,7 +96,7 @@ public final class JdkInstaller {
     }
 
     private static String installIdentifier(JdkPackage pkg) {
-        return pkg.sdkmanIdentifier() + "-" + pkg.architecture() + "-" + pkg.operatingSystem();
+        return pkg.installIdentifier();
     }
 
     private static String extensionFor(String archiveType) {

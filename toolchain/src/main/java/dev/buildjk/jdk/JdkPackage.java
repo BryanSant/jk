@@ -37,6 +37,16 @@ public record JdkPackage(
         return version + "-" + distributionAbbreviation();
     }
 
+    /**
+     * The jk-style identifier this package would be installed as under
+     * {@code ~/.jk/jdks/}: {@code 21.0.5-tem-x64-linux}. Matches the
+     * directory name {@link InstalledJdk#identifier()} carries, so the
+     * list / install / uninstall verbs can address the same string.
+     */
+    public String installIdentifier() {
+        return sdkmanIdentifier() + "-" + architecture + "-" + operatingSystem;
+    }
+
     private String distributionAbbreviation() {
         return switch (distribution.toLowerCase()) {
             case "temurin" -> "tem";
