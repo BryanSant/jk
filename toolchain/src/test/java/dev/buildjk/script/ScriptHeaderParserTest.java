@@ -166,4 +166,30 @@ class ScriptHeaderParserTest {
         org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class,
                 () -> ScriptHeaderParser.parse("//jk dep com.example:lib:^1.0"));
     }
+
+    @Test
+    void kotlin_directive_records_version() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //KOTLIN 2.1.0
+                fun main() {}
+                """);
+        assertThat(h.kotlinVersion()).isEqualTo("2.1.0");
+    }
+
+    @Test
+    void jk_kotlin_directive_also_recognized() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //jk kotlin 2.2.0
+                fun main() {}
+                """);
+        assertThat(h.kotlinVersion()).isEqualTo("2.2.0");
+    }
+
+    @Test
+    void absent_kotlin_directive_leaves_version_null() {
+        ScriptHeader h = ScriptHeaderParser.parse("""
+                //jk dep com.example:lib:1.0
+                """);
+        assertThat(h.kotlinVersion()).isNull();
+    }
 }

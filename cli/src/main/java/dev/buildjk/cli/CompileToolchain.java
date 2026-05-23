@@ -74,6 +74,15 @@ final class CompileToolchain {
      * @param cacheDir the {@link Cas} root (typically {@code ~/.jk/cache})
      */
     static Path resolveKotlinHome(Path cacheDir) {
+        return resolveKotlinHome(cacheDir, null);
+    }
+
+    /**
+     * Resolve a Kotlin installation pinned to a specific version (e.g. from
+     * a script's {@code //KOTLIN 2.1.0} directive). Passes {@code null} to
+     * fall back to the bundled default distribution.
+     */
+    static Path resolveKotlinHome(Path cacheDir, String versionOverride) {
         // ToolProvisioning already runs the EnvVarProbe (which reads
         // KOTLIN_HOME), so we don't need a separate fast-path. Going
         // through the full pipeline guarantees we leave a symlink under
@@ -81,7 +90,16 @@ final class CompileToolchain {
         // depend on the env var still being set.
         Path toolsRoot = Path.of(System.getProperty("user.home"), ".jk", "tools");
         ToolRegistry registry = new ToolRegistry(toolsRoot);
-        ToolDistribution dist = KotlinResolver.defaultDistribution();
+        ToolDistribution dist;
+        if (versionOverride == null || versionOverride.isBlank()) {
+            dist = KotlinResolver.defaultDistribution();
+        } else {
+            java.net.URI uri = java.net.URI.create(
+                    "https://github.com/JetBrains/kotlin/releases/download/v" + versionOverride
+                            + "/kotlin-compiler-" + versionOverride + ".zip");
+            dist = new ToolDistribution(
+                    dev.buildjk.compat.BuildTool.KOTLIN, versionOverride, uri, "zip");
+        }
         try {
             dev.buildjk.compat.ToolProvisioning.Result result =
                     dev.buildjk.compat.ToolProvisioning.provision(

@@ -6,6 +6,9 @@ import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.jar.Attributes;
 import java.util.jar.Manifest;
@@ -52,5 +55,83 @@ public final class JarManifest {
             }
         }
         return Optional.empty();
+    }
+
+    /**
+     * Scan {@code META-INF/maven/&lt;group&gt;/&lt;artifact&gt;/} for embedded
+     * Maven metadata. Returns one entry per group:artifact pair found,
+     * carrying the {@code pom.xml} bytes (if present) and the
+     * {@code pom.properties} content (if present). Shaded ("uber") jars use
+     * this layout to record what they bundled.
+     */
+    public static List<EmbeddedPom> scanEmbeddedPoms(Path jar) throws IOException {
+        Objects.requireNonNull(jar, "jar");
+        // group:artifact → builder
+        var byCoord = new java.util.LinkedHashMap<String, EmbeddedPom.Builder>();
+        try (InputStream in = Files.newInputStream(jar);
+             ZipInputStream zis = new ZipInputStream(in)) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                String name = entry.getName();
+                if (!name.startsWith("META-INF/maven/")) continue;
+                String tail = name.substring("META-INF/maven/".length());
+                int slash = tail.lastIndexOf('/');
+                if (slash < 0) continue;
+                String dir = tail.substring(0, slash);
+                String file = tail.substring(slash + 1);
+                int dirSlash = dir.lastIndexOf('/');
+                if (dirSlash < 0) continue;
+                String group = dir.substring(0, dirSlash);
+                String artifact = dir.substring(dirSlash + 1);
+                String coord = group + ":" + artifact;
+                EmbeddedPom.Builder b = byCoord.computeIfAbsent(coord,
+                        k -> new EmbeddedPom.Builder(group, artifact));
+                if (file.equals("pom.xml")) {
+                    b.pomXml = zis.readAllBytes();
+                } else if (file.equals("pom.properties")) {
+                    String props = new String(zis.readAllBytes(), StandardCharsets.UTF_8);
+                    b.pomProperties = props;
+                }
+            }
+        }
+        List<EmbeddedPom> out = new ArrayList<>(byCoord.size());
+        for (EmbeddedPom.Builder b : byCoord.values()) out.add(b.build());
+        return out;
+    }
+
+    /** Whether the jar contains a top-level {@code module-info.class} (a real Java module). */
+    public static boolean hasModuleInfo(Path jar) throws IOException {
+        try (InputStream in = Files.newInputStream(jar);
+             ZipInputStream zis = new ZipInputStream(in)) {
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (entry.getName().equals("module-info.class")) return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * One {@code META-INF/maven/<g>/<a>/} folder's contents. {@code pomXml}
+     * is the raw bytes of {@code pom.xml} (suitable for
+     * {@code PomImporter.importFromBytes}); {@code pomProperties} is the raw
+     * key-value text of {@code pom.properties}.
+     */
+    public record EmbeddedPom(String group, String artifact,
+                              byte[] pomXml, String pomProperties) {
+        public boolean hasPomXml() { return pomXml != null && pomXml.length > 0; }
+        public String coord() { return group + ":" + artifact; }
+
+        static final class Builder {
+            final String group;
+            final String artifact;
+            byte[] pomXml;
+            String pomProperties;
+            Builder(String group, String artifact) {
+                this.group = group;
+                this.artifact = artifact;
+            }
+            EmbeddedPom build() { return new EmbeddedPom(group, artifact, pomXml, pomProperties); }
+        }
     }
 }

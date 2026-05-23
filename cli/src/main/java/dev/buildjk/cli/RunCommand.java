@@ -6,6 +6,9 @@ import dev.buildjk.compile.ClasspathResolver;
 import dev.buildjk.compile.CompileRequest;
 import dev.buildjk.compile.CompileResult;
 import dev.buildjk.compile.JavacDriver;
+import dev.buildjk.compile.KotlincDriver;
+import dev.buildjk.compile.KotlincRequest;
+import dev.buildjk.compile.KotlincResult;
 import dev.buildjk.config.BuildJkParser;
 import dev.buildjk.config.WorkspaceClasspath;
 import dev.buildjk.config.WorkspaceLocator;
@@ -17,6 +20,7 @@ import dev.buildjk.model.Coordinate;
 import dev.buildjk.model.Dependency;
 import dev.buildjk.model.RepositorySpec;
 import dev.buildjk.model.Scope;
+import dev.buildjk.mvn.PomImporter;
 import dev.buildjk.repo.EffectivePomBuilder;
 import dev.buildjk.repo.MavenRepo;
 import dev.buildjk.repo.RepoGroup;
@@ -24,6 +28,7 @@ import dev.buildjk.resolver.NaiveResolver;
 import dev.buildjk.resolver.Resolution;
 import dev.buildjk.script.ScriptHeader;
 import dev.buildjk.script.ScriptHeaderParser;
+import dev.buildjk.tool.JarManifest;
 import dev.buildjk.util.Hashing;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -38,35 +43,38 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk run [<script.java>] [-- <args>...]} — runs either a single-file
- * Java script (JBang-compat, PRD §19) or the current project's main class.
- *
- * <p>Modes:
+ * {@code jk run [<file>] [-- <args>...]} — runs one of:
  * <ul>
- *   <li><b>Script:</b> {@code jk run script.java [args...]} — compile the
- *       {@code .java} file with {@link JavacDriver}, cache classes, exec with
- *       the script-declared classpath.</li>
- *   <li><b>Project:</b> {@code jk run [args...]} with a {@code jk.toml} in
- *       cwd. Builds the project jar if missing, then exec'es the configured
- *       {@code project.main} class against the lockfile's runtime classpath.
- *       If a native binary is present at {@code target/<artifact>}, that wins
- *       and is exec'd directly.</li>
+ *   <li><b>{@code .java}</b> script (JBang-compatible, PRD §19).</li>
+ *   <li><b>{@code .kt}</b> Kotlin script (JBang-compatible, with
+ *       {@code //KOTLIN <version>} support).</li>
+ *   <li><b>{@code .kts}</b> Kotlin Script — delegated to {@code kotlinc -script}.
+ *       {@code //jk} directives are NOT honored here; the file is given to
+ *       the Kotlin compiler as-is.</li>
+ *   <li><b>{@code .jar}</b> already-built artifact. Reads the
+ *       {@code Main-Class} manifest attribute (fails if missing), scans
+ *       {@code META-INF/maven/&lt;g&gt;/&lt;a&gt;/pom.xml} for transitive deps,
+ *       and exec'es with the assembled classpath.</li>
+ *   <li><b>(no arg)</b> in a directory with {@code jk.toml}: builds the project
+ *       if needed, then exec'es the configured {@code project.main}.</li>
  * </ul>
  *
- * <p>Disambiguation: the first positional is treated as a script when it
- * names an existing {@code .java} file; otherwise all positionals forward
- * to the project's main class.
+ * <p>Every mode auto-provisions missing tooling: kotlinc downloads via the
+ * tool mechanism, transitive deps fetch into the CAS, etc.
  */
-@Command(name = "run", description = "Run a single-file Java script or the current project")
+@Command(name = "run",
+        description = "Run a script (.java/.kt/.kts), a jar, or the current project")
 public final class RunCommand implements Callable<Integer> {
 
     @Parameters(arity = "0..*", paramLabel = "<args>",
-            description = "Either a .java script path (then args after it) or "
-                    + "arguments forwarded to the project's main class.")
+            description = "Either a .java/.kt/.kts/.jar file (then args after it) "
+                    + "or arguments forwarded to the project's main class.")
     List<String> positional = new ArrayList<>();
 
     @Option(names = {"-C", "--directory"},
@@ -82,38 +90,259 @@ public final class RunCommand implements Callable<Integer> {
     URI repoUrl;
 
     @Option(names = "--force-recompile",
-            description = "Ignore cached classes and recompile (script mode).")
+            description = "Ignore cached classes and recompile (script modes).")
     boolean forceRecompile;
 
     @Override
     public Integer call() throws IOException, InterruptedException {
         Path scriptPath = detectScript();
         if (scriptPath != null) {
-            List<String> scriptArgs = positional.subList(1, positional.size());
-            return runScript(scriptPath, scriptArgs);
+            List<String> args = positional.subList(1, positional.size());
+            String name = scriptPath.getFileName().toString().toLowerCase(Locale.ROOT);
+            if (name.endsWith(".java")) return runJavaScript(scriptPath, args);
+            if (name.endsWith(".kts"))  return runKtsScript(scriptPath, args);
+            if (name.endsWith(".kt"))   return runKotlinScript(scriptPath, args);
+            if (name.endsWith(".jar"))  return runJar(scriptPath, args);
         }
         Path projectDir = directory != null
                 ? directory : Path.of(".").toAbsolutePath().normalize();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
-            System.err.println("jk run: no script given and no jk.toml in " + projectDir);
+            System.err.println("jk run: no recognized file argument and no jk.toml in " + projectDir);
             return 64; // EX_USAGE
         }
         return runProject(projectDir, positional);
     }
 
     /**
-     * If the first positional looks like a script ({@code .java} suffix),
-     * treat as script mode — even if the file is missing, so the user gets
-     * the "script not found" error instead of falling through to project mode.
+     * If the first positional ends in a known file extension we treat it as
+     * the run target — even if the file is missing, so the user gets a
+     * proper "not found" error from the matching mode handler.
      */
     private Path detectScript() {
         if (positional.isEmpty()) return null;
-        String first = positional.getFirst();
-        return first.endsWith(".java") ? Path.of(first) : null;
+        String first = positional.getFirst().toLowerCase(Locale.ROOT);
+        if (first.endsWith(".java") || first.endsWith(".kt")
+                || first.endsWith(".kts") || first.endsWith(".jar")) {
+            return Path.of(positional.getFirst());
+        }
+        return null;
     }
 
-    // --- project mode -----------------------------------------------------
+    // --- .java -----------------------------------------------------------
+
+    private int runJavaScript(Path script, List<String> args)
+            throws IOException, InterruptedException {
+        if (!Files.isRegularFile(script)) {
+            System.err.println("jk run: script not found: " + script);
+            return 66;
+        }
+        byte[] bytes = Files.readAllBytes(script);
+        String source = new String(bytes, StandardCharsets.UTF_8);
+        ScriptHeader header = ScriptHeaderParser.parse(source);
+
+        Paths paths = scriptPaths(bytes);
+        Files.createDirectories(paths.cacheDir);
+
+        Cas cas = new Cas(paths.cacheDir);
+        Http http = new Http();
+        RepoGroup repos = buildRepos(header, http, cas);
+        List<Path> classpath = resolveClasspath(header.deps(), repos);
+
+        String mainClass = simpleMainClassName(script, ".java");
+        if (forceRecompile
+                || !Files.exists(paths.classesDir.resolve(mainClass + ".class"))) {
+            Files.createDirectories(paths.classesDir);
+            CompileResult result = compileJava(script, header, paths.classesDir, classpath);
+            if (!result.success()) {
+                for (var d : result.diagnostics()) {
+                    System.err.println(d.severity() + " "
+                            + (d.source() != null ? d.source().getFileName() : "<unknown>")
+                            + ":" + d.line() + ": " + d.message());
+                }
+                return 1;
+            }
+        }
+        return execJava(paths.classesDir, classpath, header.javaOptions(), mainClass, args);
+    }
+
+    private CompileResult compileJava(Path script, ScriptHeader header,
+                                      Path classesDir, List<Path> classpath) throws IOException {
+        int release = header.release() != null
+                ? header.release() : Runtime.version().feature();
+        CompileRequest request = CompileRequest.builder()
+                .sources(List.of(script.toAbsolutePath()))
+                .classpath(classpath)
+                .outputDir(classesDir)
+                .release(release)
+                .extraOptions(header.javacOptions())
+                .javaHome(CompileToolchain.resolveJavaHome(script.toAbsolutePath().getParent()))
+                .build();
+        return new JavacDriver().compile(request);
+    }
+
+    // --- .kt -------------------------------------------------------------
+
+    private int runKotlinScript(Path script, List<String> args)
+            throws IOException, InterruptedException {
+        if (!Files.isRegularFile(script)) {
+            System.err.println("jk run: script not found: " + script);
+            return 66;
+        }
+        byte[] bytes = Files.readAllBytes(script);
+        String source = new String(bytes, StandardCharsets.UTF_8);
+        ScriptHeader header = ScriptHeaderParser.parse(source);
+
+        Paths paths = scriptPaths(bytes);
+        Files.createDirectories(paths.cacheDir);
+
+        Cas cas = new Cas(paths.cacheDir);
+        Http http = new Http();
+        RepoGroup repos = buildRepos(header, http, cas);
+        List<Path> depsClasspath = resolveClasspath(header.deps(), repos);
+
+        // Provision kotlinc — honors `//KOTLIN <version>` if present.
+        Path kotlinHome = CompileToolchain.resolveKotlinHome(paths.cacheDir, header.kotlinVersion());
+
+        String mainClass = kotlinMainClassName(script);
+        if (forceRecompile
+                || !Files.exists(paths.classesDir.resolve(mainClass + ".class"))) {
+            Files.createDirectories(paths.classesDir);
+            int jvmTarget = header.release() != null
+                    ? header.release() : Runtime.version().feature();
+            KotlincRequest req = KotlincRequest.builder()
+                    .sources(List.of(script.toAbsolutePath()))
+                    .classpath(depsClasspath)
+                    .outputDir(paths.classesDir)
+                    .jvmTarget(CompileCommand.kotlinJvmTarget(jvmTarget))
+                    .kotlinHome(kotlinHome)
+                    .build();
+            KotlincResult result = new KotlincDriver().compile(req);
+            if (!result.success()) {
+                System.err.print(result.output());
+                return 1;
+            }
+        }
+
+        // At runtime, the Kotlin stdlib must be on the classpath.
+        List<Path> runtime = new ArrayList<>();
+        runtime.addAll(depsClasspath);
+        Path stdlib = kotlinHome.resolve("lib").resolve("kotlin-stdlib.jar");
+        if (Files.exists(stdlib)) runtime.add(stdlib);
+
+        return execJava(paths.classesDir, runtime, header.javaOptions(), mainClass, args);
+    }
+
+    /** Kotlin's convention for top-level {@code main()}: {@code Foo.kt} → {@code FooKt}. */
+    private static String kotlinMainClassName(Path script) {
+        String name = script.getFileName().toString();
+        if (name.toLowerCase(Locale.ROOT).endsWith(".kt")) {
+            name = name.substring(0, name.length() - 3);
+        }
+        if (name.isEmpty()) return "Kt";
+        return Character.toUpperCase(name.charAt(0)) + name.substring(1) + "Kt";
+    }
+
+    // --- .kts ------------------------------------------------------------
+
+    private int runKtsScript(Path script, List<String> args)
+            throws IOException, InterruptedException {
+        if (!Files.isRegularFile(script)) {
+            System.err.println("jk run: script not found: " + script);
+            return 66;
+        }
+        Path jkHome = jkHomePath();
+        Path cacheDir = jkHome.resolve("cache");
+        Files.createDirectories(cacheDir);
+
+        Path kotlinHome = CompileToolchain.resolveKotlinHome(cacheDir, null);
+        Path kotlinc = kotlinHome.resolve("bin").resolve(isWindows() ? "kotlinc.bat" : "kotlinc");
+        if (!Files.exists(kotlinc)) {
+            System.err.println("jk run: kotlinc not found at " + kotlinc);
+            return 70;
+        }
+
+        List<String> command = new ArrayList<>();
+        command.add(kotlinc.toString());
+        command.add("-script");
+        command.add(script.toAbsolutePath().toString());
+        if (!args.isEmpty()) {
+            command.add("--");
+            command.addAll(args);
+        }
+        return new ProcessBuilder(command).inheritIO().start().waitFor();
+    }
+
+    // --- .jar ------------------------------------------------------------
+
+    private int runJar(Path jar, List<String> args)
+            throws IOException, InterruptedException {
+        if (!Files.isRegularFile(jar)) {
+            System.err.println("jk run: jar not found: " + jar);
+            return 66;
+        }
+        Optional<String> mainClass = JarManifest.mainClass(jar);
+        if (mainClass.isEmpty()) {
+            System.err.println("jk run: " + jar + " has no Main-Class in its MANIFEST.MF");
+            return 65; // EX_DATAERR
+        }
+
+        // Inspect embedded poms for transitive deps (shaded jars carry these
+        // under META-INF/maven/<g>/<a>/pom.xml).
+        List<Dependency> declaredDeps = new ArrayList<>();
+        List<JarManifest.EmbeddedPom> poms = JarManifest.scanEmbeddedPoms(jar);
+        for (JarManifest.EmbeddedPom p : poms) {
+            if (!p.hasPomXml()) continue;
+            try {
+                var imported = PomImporter.importFromBytes(p.pomXml());
+                var byScope = imported.buildJk().dependencies().byScope();
+                for (Scope scope : EnumSet.of(Scope.MAIN, Scope.RUNTIME)) {
+                    List<Dependency> scoped = byScope.get(scope);
+                    if (scoped != null) declaredDeps.addAll(scoped);
+                }
+            } catch (RuntimeException e) {
+                System.err.println("jk run: warning: failed to parse embedded pom for "
+                        + p.coord() + ": " + e.getMessage());
+            }
+        }
+        if (JarManifest.hasModuleInfo(jar)) {
+            System.err.println("Note: " + jar.getFileName()
+                    + " ships a module-info.class (JPMS module); running it from the classpath.");
+        }
+
+        List<Path> classpath = new ArrayList<>();
+        classpath.add(jar);
+        if (!declaredDeps.isEmpty()) {
+            Path jkHome = jkHomePath();
+            Path cacheDir = jkHome.resolve("cache");
+            Files.createDirectories(cacheDir);
+            Cas cas = new Cas(cacheDir);
+            Http http = new Http();
+            RepoGroup repos = new RepoGroup(List.of(new MavenRepo(
+                    "central",
+                    repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url(),
+                    http, cas)));
+            classpath.addAll(resolveClasspath(declaredDeps, repos));
+        }
+
+        Path java = CompileToolchain.runningJavaHome().resolve("bin")
+                .resolve(isWindows() ? "java.exe" : "java");
+        List<String> command = new ArrayList<>();
+        command.add(java.toString());
+        if (classpath.size() == 1) {
+            // No extra deps — `java -jar` is cleaner and honors the jar's Class-Path attribute.
+            command.add("-jar");
+            command.add(jar.toAbsolutePath().toString());
+        } else {
+            command.add("-cp");
+            command.add(joinClasspath(classpath));
+            command.add(mainClass.get());
+        }
+        command.addAll(args);
+        return new ProcessBuilder(command).inheritIO().start().waitFor();
+    }
+
+    // --- project mode (unchanged from prior commit) ----------------------
 
     private int runProject(Path projectDir, List<String> appArgs)
             throws IOException, InterruptedException {
@@ -127,7 +356,6 @@ public final class RunCommand implements Callable<Integer> {
         String version = project.project().version();
         Path target = projectDir.resolve("target");
 
-        // Native binary wins if present.
         Path nativeBin = target.resolve(artifact);
         if (Files.isRegularFile(nativeBin) && Files.isExecutable(nativeBin)) {
             List<String> command = new ArrayList<>();
@@ -136,7 +364,6 @@ public final class RunCommand implements Callable<Integer> {
             return new ProcessBuilder(command).inheritIO().start().waitFor();
         }
 
-        // Build the jar if missing.
         Path jar = target.resolve(artifact + "-" + version + ".jar");
         if (!Files.exists(jar)) {
             int rc = Jk.execute("build", "-C", projectDir.toString());
@@ -144,23 +371,17 @@ public final class RunCommand implements Callable<Integer> {
         }
         if (!Files.exists(jar)) {
             System.err.println("jk run: expected jar at " + jar + " but build did not produce it.");
-            return 70; // EX_SOFTWARE
+            return 70;
         }
 
         List<Path> classpath = assembleRuntimeClasspath(projectDir, project, jar);
 
-        Path java = CompileToolchain.runningJavaHome().resolve("bin").resolve(
-                System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
-        StringBuilder cp = new StringBuilder();
-        String sep = System.getProperty("path.separator");
-        for (int i = 0; i < classpath.size(); i++) {
-            if (i > 0) cp.append(sep);
-            cp.append(classpath.get(i).toAbsolutePath());
-        }
+        Path java = CompileToolchain.runningJavaHome().resolve("bin")
+                .resolve(isWindows() ? "java.exe" : "java");
         List<String> command = new ArrayList<>();
         command.add(java.toString());
         command.add("-cp");
-        command.add(cp.toString());
+        command.add(joinClasspath(classpath));
         command.add(project.project().main());
         command.addAll(appArgs);
         return new ProcessBuilder(command).inheritIO().start().waitFor();
@@ -179,9 +400,7 @@ public final class RunCommand implements Callable<Integer> {
                 if (Files.exists(candidate)) lockFile = candidate;
             }
         }
-        Path jkHome = home != null
-                ? home : Path.of(System.getProperty("user.home"), ".jk");
-        Cas cas = new Cas(jkHome.resolve("cache"));
+        Cas cas = new Cas(jkHomePath().resolve("cache"));
         if (Files.exists(lockFile)) {
             Lockfile lock = LockfileReader.read(lockFile);
             classpath.addAll(new ClasspathResolver(cas).classpathFor(lock,
@@ -193,45 +412,20 @@ public final class RunCommand implements Callable<Integer> {
         return classpath;
     }
 
-    // --- script mode ------------------------------------------------------
+    // --- shared helpers --------------------------------------------------
 
-    private int runScript(Path script, List<String> scriptArgs)
-            throws IOException, InterruptedException {
-        if (!Files.isRegularFile(script)) {
-            System.err.println("jk run: script not found: " + script);
-            return 66; // EX_NOINPUT
-        }
-        byte[] bytes = Files.readAllBytes(script);
-        String source = new String(bytes, StandardCharsets.UTF_8);
-        ScriptHeader header = ScriptHeaderParser.parse(source);
+    /** {@code classes/} for compiled output + {@code cache/} for the shared CAS. */
+    private record Paths(Path cacheDir, Path classesDir) {}
 
-        String hash = Hashing.sha256Hex(bytes);
-        Path jkHome = home != null
-                ? home : Path.of(System.getProperty("user.home"), ".jk");
-        Path cacheDir = jkHome.resolve("cache");
-        Path scriptCacheDir = jkHome.resolve("script-cache").resolve(hash);
-        Path classesDir = scriptCacheDir.resolve("classes");
-        Files.createDirectories(cacheDir);
+    private Paths scriptPaths(byte[] sourceBytes) {
+        String hash = Hashing.sha256Hex(sourceBytes);
+        Path jkHome = jkHomePath();
+        return new Paths(jkHome.resolve("cache"),
+                jkHome.resolve("script-cache").resolve(hash).resolve("classes"));
+    }
 
-        Cas cas = new Cas(cacheDir);
-        Http http = new Http();
-        RepoGroup repos = buildRepos(header, http, cas);
-
-        List<Path> classpath = resolveClasspath(header.deps(), repos);
-
-        if (forceRecompile || !Files.exists(classesDir.resolve(mainClassName(script) + ".class"))) {
-            CompileResult result = compile(script, header, classesDir, classpath);
-            if (!result.success()) {
-                for (var d : result.diagnostics()) {
-                    System.err.println(d.severity() + " "
-                            + (d.source() != null ? d.source().getFileName() : "<unknown>")
-                            + ":" + d.line() + ": " + d.message());
-                }
-                return 1;
-            }
-        }
-
-        return execScript(script, header, classesDir, classpath, scriptArgs);
+    private Path jkHomePath() {
+        return home != null ? home : Path.of(System.getProperty("user.home"), ".jk");
     }
 
     private RepoGroup buildRepos(ScriptHeader header, Http http, Cas cas) {
@@ -254,7 +448,6 @@ public final class RunCommand implements Callable<Integer> {
             throws IOException, InterruptedException {
         if (deps.isEmpty()) return List.of();
         Resolution resolution = new NaiveResolver(new EffectivePomBuilder(repos)).resolve(deps);
-        // Preserve declaration order of roots first, then transitives.
         Set<String> ordered = new LinkedHashSet<>();
         for (Dependency d : deps) ordered.add(d.module());
         for (Resolution.ResolvedModule m : resolution.modules().values()) ordered.add(m.module());
@@ -276,45 +469,44 @@ public final class RunCommand implements Callable<Integer> {
         return jars;
     }
 
-    private CompileResult compile(Path script, ScriptHeader header,
-                                  Path classesDir, List<Path> classpath) throws IOException {
-        Files.createDirectories(classesDir);
-        int release = header.release() != null
-                ? header.release() : Runtime.version().feature();
-        CompileRequest request = CompileRequest.builder()
-                .sources(List.of(script.toAbsolutePath()))
-                .classpath(classpath)
-                .outputDir(classesDir)
-                .release(release)
-                .extraOptions(header.javacOptions())
-                .javaHome(CompileToolchain.resolveJavaHome(script.toAbsolutePath().getParent()))
-                .build();
-        return new JavacDriver().compile(request);
-    }
-
-    private int execScript(Path script, ScriptHeader header, Path classesDir,
-                           List<Path> classpath, List<String> scriptArgs)
+    private int execJava(Path classesDir, List<Path> classpath, List<String> jvmArgs,
+                         String mainClass, List<String> args)
             throws IOException, InterruptedException {
-        Path java = CompileToolchain.runningJavaHome().resolve("bin").resolve(
-                System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
-
-        StringBuilder cp = new StringBuilder(classesDir.toAbsolutePath().toString());
-        String sep = System.getProperty("path.separator");
-        for (Path jar : classpath) cp.append(sep).append(jar.toAbsolutePath());
+        Path java = CompileToolchain.runningJavaHome().resolve("bin")
+                .resolve(isWindows() ? "java.exe" : "java");
+        List<Path> full = new ArrayList<>();
+        full.add(classesDir);
+        full.addAll(classpath);
 
         List<String> command = new ArrayList<>();
         command.add(java.toString());
-        command.addAll(header.javaOptions());
+        command.addAll(jvmArgs);
         command.add("-cp");
-        command.add(cp.toString());
-        command.add(mainClassName(script));
-        command.addAll(scriptArgs);
-
+        command.add(joinClasspath(full));
+        command.add(mainClass);
+        command.addAll(args);
         return new ProcessBuilder(command).inheritIO().start().waitFor();
     }
 
-    private static String mainClassName(Path script) {
+    private static String joinClasspath(List<Path> paths) {
+        String sep = System.getProperty("path.separator");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < paths.size(); i++) {
+            if (i > 0) sb.append(sep);
+            sb.append(paths.get(i).toAbsolutePath());
+        }
+        return sb.toString();
+    }
+
+    /** {@code Foo.java} → {@code Foo}. (Matches the existing convention.) */
+    private static String simpleMainClassName(Path script, String suffix) {
         String name = script.getFileName().toString();
-        return name.endsWith(".java") ? name.substring(0, name.length() - 5) : name;
+        return name.toLowerCase(Locale.ROOT).endsWith(suffix)
+                ? name.substring(0, name.length() - suffix.length())
+                : name;
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 }

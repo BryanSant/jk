@@ -50,6 +50,7 @@ public final class ScriptHeaderParser {
         List<String> javaOptions = new ArrayList<>();
         List<String> sources = new ArrayList<>();
         Integer release = null;
+        String kotlinVersion = null;
 
         for (String rawLine : script.split("\\R", -1)) {
             String line = rawLine.strip();
@@ -74,6 +75,10 @@ public final class ScriptHeaderParser {
                         }
                         case "javac_options" -> javacOptions.addAll(splitArgs(d.value));
                         case "java_options" -> javaOptions.addAll(splitArgs(d.value));
+                        case "kotlin" -> {
+                            String v = d.value.trim();
+                            if (!v.isEmpty()) kotlinVersion = v;
+                        }
                         default -> { /* unknown directive — ignore for forward-compat */ }
                     }
                 }
@@ -84,7 +89,7 @@ public final class ScriptHeaderParser {
         }
 
         return new ScriptHeader(deps, release, repos, features,
-                javacOptions, javaOptions, sources);
+                javacOptions, javaOptions, sources, kotlinVersion);
     }
 
     private static ParsedDirective parseDirective(String line) {
