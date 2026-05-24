@@ -7,7 +7,7 @@ import java.io.PrintStream;
 
 /**
  * Single-line animated spinner widget for indeterminate-progress CLI
- * operations. Cycles through {@code · ✷ ✹ ✺ ✹ ✸ ·} on a daemon thread,
+ * operations. Cycles through {@code · ✢ ✳ ✶ ✻ ✽} on a daemon thread,
  * one frame every {@value #FRAME_MS} ms. Each frame is rendered in its
  * own color along a blue → magenta gradient (the reverse of the
  * {@code jk init} title gradient).
@@ -23,7 +23,7 @@ import java.io.PrintStream;
 public final class Spinner implements AutoCloseable {
 
     /** Animation frames, cycled in order. */
-    static final String[] FRAMES = {"·", "✷", "✹", "✺", "✹", "✸", "·"};
+    static final String[] FRAMES = {"·", "✢", "✳", "✶", "✻", "✽"};
 
     /** Interval between frames. */
     static final long FRAME_MS = 120L;
