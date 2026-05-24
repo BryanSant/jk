@@ -36,6 +36,13 @@ public final class Spinner implements AutoCloseable {
     private static final String SHOW_CURSOR = "\033[?25h";
     private static final String CLEAR_LINE = "\r\033[K";
 
+    // OSC 9;4 — taskbar/tab status indicator (ConEmu, Windows Terminal,
+    // WezTerm, ghostty, kitty ≥0.31, etc.). State 3 = indeterminate; the
+    // host can show a pulsing/marquee animation while we spin. State 0
+    // clears the indicator. Unsupported terminals swallow the sequence.
+    static final String OSC_INDETERMINATE = "\033]9;4;3\007";
+    static final String OSC_CLEAR = "\033]9;4;0\007";
+
     private final PrintStream out;
     private final AttributedStyle[] frameColors;
     private final Object lock = new Object();
@@ -61,6 +68,7 @@ public final class Spinner implements AutoCloseable {
 
     private void start() {
         out.print(HIDE_CURSOR);
+        out.print(OSC_INDETERMINATE);
         out.flush();
         animator = new Thread(this::loop, "jk-spinner");
         animator.setDaemon(true);
@@ -88,6 +96,10 @@ public final class Spinner implements AutoCloseable {
         synchronized (lock) {
             if (closed) return;
             String currentMsg = message;
+            // Re-assert the indeterminate state on every tick — some hosts
+            // (and tab-switch / focus events) drop the indicator otherwise.
+            // Unsupported terminals swallow the OSC silently.
+            out.print(OSC_INDETERMINATE);
             out.print("\r");
             out.print(Theme.colorize(FRAMES[frame], frameColors[frame]));
             out.print(" ");
@@ -108,6 +120,7 @@ public final class Spinner implements AutoCloseable {
         synchronized (lock) {
             // Clear the spinner line so it doesn't linger in the transcript.
             out.print(CLEAR_LINE);
+            out.print(OSC_CLEAR);
             out.print(SHOW_CURSOR);
             out.flush();
         }

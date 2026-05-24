@@ -29,8 +29,8 @@ class ProgressBarTest {
             pb.update(60, "Downloading");
         }
         String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
-        // 60% → 12 filled out of 20.
-        assertThat(visible).contains("▰".repeat(12) + "▱".repeat(8));
+        // 60% → 24 filled out of 40.
+        assertThat(visible).contains("▰".repeat(24) + "▱".repeat(16));
         assertThat(visible).contains(" 60%: Downloading");
     }
 
@@ -38,16 +38,16 @@ class ProgressBarTest {
     void diff_only_repaints_changed_segment_range() {
         var buf = new ByteArrayOutputStream();
         try (var pb = ProgressBar.show(stream(buf))) {
-            pb.update(50, "step");   // 10 filled
+            pb.update(50, "step");   // 20 filled (out of 40)
             buf.reset();
-            pb.update(60, "step");   // 12 filled — only segments 10..11 should flip
+            pb.update(60, "step");   // 24 filled — segments 20..23 should flip
         }
         String diff = stripAnsi(buf.toString(StandardCharsets.UTF_8));
-        // The second update should print exactly two ▰ chars (the two
+        // The second update should print exactly four ▰ chars (the four
         // segments that just flipped) and not redraw any ▱ segments.
         long filled = diff.chars().filter(c -> c == '▰').count();
         long empty = diff.chars().filter(c -> c == '▱').count();
-        assertThat(filled).isEqualTo(2);
+        assertThat(filled).isEqualTo(4);
         assertThat(empty).isZero();
     }
 
@@ -85,6 +85,57 @@ class ProgressBarTest {
         String trailing = diff.substring(idx + shortStatus.length());
         long spaces = trailing.chars().takeWhile(c -> c == ' ').count();
         assertThat(spaces).isEqualTo(expectedShrink);
+    }
+
+    @Test
+    void update_emits_osc94_progress_indicator() {
+        var buf = new ByteArrayOutputStream();
+        try (var pb = ProgressBar.show(stream(buf))) {
+            pb.update(0, "starting");
+            pb.update(42, "downloading");
+            pb.update(100, "done");
+        }
+        String all = buf.toString(StandardCharsets.UTF_8);
+        // BEL-terminated ConEmu OSC 9;4;1;<n> on every update.
+        assertThat(all).contains("\033]9;4;1;0\007");
+        assertThat(all).contains("\033]9;4;1;42\007");
+        assertThat(all).contains("\033]9;4;1;100\007");
+    }
+
+    @Test
+    void finish_clears_line_and_writes_replacement_message() {
+        var buf = new ByteArrayOutputStream();
+        var pb = ProgressBar.show(stream(buf));
+        pb.update(100, "downloading");
+        buf.reset();
+        pb.finish("✓ Download finished for Eclipse Temurin 21");
+
+        String all = buf.toString(StandardCharsets.UTF_8);
+        // CR + clear-to-end-of-line wipes the bar.
+        assertThat(all).contains("\r\033[K");
+        // OSC 9;4 cleared and cursor restored.
+        assertThat(all).contains("\033]9;4;0\007");
+        assertThat(all).contains("\033[?25h");
+        // Replacement message lands on the same row.
+        assertThat(stripAnsi(all)).contains("✓ Download finished for Eclipse Temurin 21");
+        // Subsequent close() is a no-op.
+        buf.reset();
+        pb.close();
+        assertThat(buf.toString(StandardCharsets.UTF_8)).isEmpty();
+    }
+
+    @Test
+    void close_emits_osc94_clear() {
+        var buf = new ByteArrayOutputStream();
+        try (var pb = ProgressBar.show(stream(buf))) {
+            pb.update(50, "halfway");
+        }
+        String all = buf.toString(StandardCharsets.UTF_8);
+        // Clear (state 0) appears once we close out of the bar.
+        assertThat(all).contains("\033]9;4;0\007");
+        // And it precedes the cursor-restore on the close path.
+        assertThat(all.indexOf("\033]9;4;0\007"))
+                .isLessThan(all.indexOf("\033[?25h"));
     }
 
     @Test

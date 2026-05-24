@@ -146,15 +146,18 @@ public final class JdkInstallCommand implements Callable<Integer> {
         InstalledJdk already = installer.alreadyInstalled(entry);
         String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
         if (already != null) {
-            System.out.println(Theme.colorize("✓", Theme.completedStep())
-                    + " " + label + " already installed at " + already.home());
+            System.out.println(doneLine(label, already.home(), "is already installed at"));
             return already;
         }
 
         String hostLabel = entry.os() + "/" + entry.arch();
         String downloading = "Downloading " + label + " (" + hostLabel + ")";
-        String downloaded = "Done downloading " + label;
-        String installing = "Installing " + label + "...";
+        // Spinner prints its message raw (unlike the bar, whose status is
+        // wrapped in Theme.dim()), so we can splice bold-white ANSI around
+        // the JDK label to make it pop on the active install line.
+        String installing = "Installing "
+                + Theme.colorize(label, Theme.focused())
+                + "...";
         long total = entry.archiveSize();
 
         JdkInstaller.DownloadedArchive dl;
@@ -166,7 +169,9 @@ public final class JdkInstallCommand implements Callable<Integer> {
                         : 0;
                 pb.update(pct, downloading);
             });
-            pb.update(100, downloaded);
+            pb.finish(Theme.colorize("✓", Theme.completedStep())
+                    + " " + Theme.colorize("Download finished for ", Theme.normalGray())
+                    + Theme.colorize(label, Theme.focused()));
         }
 
         InstalledJdk installed;
@@ -174,9 +179,36 @@ public final class JdkInstallCommand implements Callable<Integer> {
             installed = installer.extractInstalled(entry, dl);
         }
         // Spinner.close() cleared its line; replace it with the done line.
-        System.out.println(Theme.colorize("✓", Theme.completedStep())
-                + " " + installing + " Done.");
+        // Bold-white label sits between normal-gray connective tissue, with
+        // a yellow tilde-collapsed install path as the closing anchor.
+        System.out.println(doneLine(label, installed.home(), "has been installed to"));
         return installed;
+    }
+
+    /**
+     * Render the post-install summary line:
+     * <pre>
+     *   ✓ &lt;label&gt; &lt;verb&gt; &lt;~/path&gt;
+     * </pre>
+     * with the {@code ✓} in green, {@code label} bold-white, {@code verb}
+     * normal-gray, and the install path yellow with {@code ~} collapsed
+     * for the user's home dir.
+     */
+    private static String doneLine(String label, Path home, String verb) {
+        return Theme.colorize("✓", Theme.completedStep())
+                + " " + Theme.colorize(label, Theme.focused())
+                + " " + Theme.colorize(verb, Theme.normalGray())
+                + " " + Theme.colorize(tildeCollapse(home), Theme.warning());
+    }
+
+    /** Render an absolute path with {@code $HOME} collapsed to {@code ~}. */
+    private static String tildeCollapse(Path path) {
+        String home = System.getProperty("user.home");
+        String abs = path.toAbsolutePath().toString();
+        if (home != null && !home.isBlank() && abs.startsWith(home)) {
+            return "~" + abs.substring(home.length());
+        }
+        return abs;
     }
 
     private static JdkInstallWizard.Result runWizard(

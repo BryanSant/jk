@@ -32,7 +32,7 @@ public final class Rail {
     private static final String MID_CHAR = "│";
     private static final String CLOSE_CHAR = "╰";
     private static final String COMPLETED_BULLET_CHAR = "✓";
-    private static final String ACTIVE_BULLET_CHAR = "◆";
+    private static final String ACTIVE_BULLET_CHAR = "■";
 
     public static final String CHECKBOX_OFF = "◻";
     public static final String CHECKBOX_ON = "◼";
@@ -95,12 +95,12 @@ public final class Rail {
                 .toAttributedString();
     }
 
-    /** Step header bullet: {@code ✓} (completed) or {@code ◆} (active). */
+    /** Step header bullet: {@code ✓} (completed) or {@code ■} (active). */
     public static AttributedString stepBullet(StepState state, String prompt) {
         var sb = new AttributedStringBuilder();
         var promptStyle = switch (state) {
             case ACTIVE -> Theme.focused();
-            case COMPLETED -> Theme.settled();
+            case COMPLETED -> Theme.completedPrompt();
             case INACTIVE -> Theme.dim();
         };
         return switch (state) {

@@ -31,7 +31,7 @@ import java.io.PrintStream;
  */
 public final class ProgressBar implements AutoCloseable {
 
-    static final int SEGMENTS = 20;
+    static final int SEGMENTS = 40;
     static final char FILLED_CHAR = '▰';
     static final char EMPTY_CHAR = '▱';
 
@@ -46,6 +46,17 @@ public final class ProgressBar implements AutoCloseable {
 
     private static final String HIDE_CURSOR = "\033[?25l";
     private static final String SHOW_CURSOR = "\033[?25h";
+
+    // OSC 9;4 — ConEmu-introduced taskbar/tab progress indicator, now
+    // supported by Windows Terminal, WezTerm, ghostty, kitty (≥0.31),
+    // and others. Format: ESC ] 9 ; 4 ; <state> [ ; <percent> ] BEL.
+    // States: 0 = clear, 1 = normal, 2 = error, 3 = indeterminate,
+    // 4 = warning. We use 1 (normal) while the bar advances and 0
+    // (clear) on close. BEL terminator is more universally honored
+    // than ST in OSC handling. Terminals that don't recognise OSC 9;4
+    // silently swallow the sequence in their OSC parser.
+    static final String OSC_CLEAR = "\033]9;4;0\007";
+    static final String OSC_PROGRESS_FMT = "\033]9;4;1;%d\007";
 
     private final PrintStream out;
     private final AttributedStyle[] segmentColors;
@@ -81,6 +92,7 @@ public final class ProgressBar implements AutoCloseable {
         String percentStr = String.format("%3d%%", clamped);
         String statusStr = status == null ? "" : status;
 
+        out.printf(OSC_PROGRESS_FMT, clamped);
         if (!drawn) {
             renderInitial(filled, percentStr, statusStr);
         } else {
@@ -97,8 +109,25 @@ public final class ProgressBar implements AutoCloseable {
     public synchronized void close() {
         if (closed) return;
         closed = true;
+        out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.println();
+        out.flush();
+    }
+
+    /**
+     * Wipe the progress-bar line and replace it with {@code message} on
+     * the same row, then close the bar. Use this when the bar shouldn't
+     * linger in the transcript — e.g., a "Download finished" line takes
+     * its place. Subsequent {@link #close()} calls are no-ops.
+     */
+    public synchronized void finish(String message) {
+        if (closed) return;
+        closed = true;
+        out.print("\r\033[K");      // clear the bar line
+        out.print(OSC_CLEAR);
+        out.print(SHOW_CURSOR);
+        out.println(message);
         out.flush();
     }
 

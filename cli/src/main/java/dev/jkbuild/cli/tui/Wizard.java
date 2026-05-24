@@ -204,7 +204,11 @@ public final class Wizard {
             }
         }
 
-        writer.println(Rail.closer("", Theme.dim()).toAnsi(terminal));
+        // Print without a trailing newline — the `finally` block writes
+        // `\r\n` to land the shell prompt on a fresh line, so a println here
+        // would leave a blank gap between the wizard and whatever the caller
+        // emits next (e.g. a progress bar).
+        writer.print(Rail.closer("", Theme.dim()).toAnsi(terminal));
         writer.flush();
         return Answers.of(Map.copyOf(answers));
     }
@@ -305,7 +309,7 @@ public final class Wizard {
 
     private static AttributedString answerLine(String text, AttributedStyle textStyle) {
         return new AttributedStringBuilder()
-                .append("➜ ", Theme.completedStep())
+                .append("➜ ", Theme.blue())
                 .append(text, textStyle)
                 .toAttributedString();
     }

@@ -69,6 +69,11 @@ public final class Theme {
         return withColor(AttributedStyle.DEFAULT, 0x4b, 0x55, 0x63);
     }
 
+    /** Normal gray #9ca3af; used for de-emphasised body text adjacent to bright labels. */
+    public static AttributedStyle normalGray() {
+        return withColor(AttributedStyle.DEFAULT, 0x9c, 0xa3, 0xaf);
+    }
+
     public static AttributedStyle activeStep() {
         return withColor(AttributedStyle.DEFAULT, ACTIVE_R, ACTIVE_G, ACTIVE_B);
     }
@@ -87,6 +92,16 @@ public final class Theme {
         return withColor(AttributedStyle.DEFAULT, 0xff, 0xff, 0xff);
     }
 
+    /**
+     * Normal gray #9ca3af + strikethrough. Used for the prompt line of a
+     * step once it has been settled — the gray de-emphasises the question
+     * and the strikethrough signals "done", complementing the {@code ✓}
+     * bullet to its left.
+     */
+    public static AttributedStyle completedPrompt() {
+        return normalGray().crossedOut();
+    }
+
     /** Red; used for inline error messages and cancellation closers. */
     public static AttributedStyle error() {
         return withColor(AttributedStyle.DEFAULT, ERR_R, ERR_G, ERR_B);
@@ -100,6 +115,11 @@ public final class Theme {
     /** Yellow; used to call attention to state like "default" / current selection. */
     public static AttributedStyle warning() {
         return withColor(AttributedStyle.DEFAULT, WARN_R, WARN_G, WARN_B);
+    }
+
+    /** Blue #3b82f6 — the title-gradient end color; used for the settled-answer arrow. */
+    public static AttributedStyle blue() {
+        return withColor(AttributedStyle.DEFAULT, 0x3b, 0x82, 0xf6);
     }
 
     public static AttributedStyle bright(int r, int g, int b) {
