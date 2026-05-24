@@ -18,6 +18,7 @@ import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.jdk.JdkSpec;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
+import org.jline.utils.AttributedStyle;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -121,8 +122,10 @@ public final class JdkInstallCommand implements Callable<Integer> {
         if (wantDefault) {
             GlobalDefaultJdk.current().set(installed);
             System.out.println();
-            System.out.println("Set " + installed.identifier()
-                    + " as the system-wide default JDK.");
+            // Blue ➜ (matches the spinner gradient's endpoint) + bold id.
+            System.out.println(Theme.colorize("➜", Theme.bright(0x3b, 0x82, 0xf6))
+                    + " " + Theme.colorize(installed.identifier(), AttributedStyle.DEFAULT.bold())
+                    + " is now the default JDK");
             Optional<Shell> shell = Shell.detect();
             if (shell.isPresent()) {
                 System.out.println("Add `" + shell.get().hookInstallCommand()
@@ -202,7 +205,7 @@ public final class JdkInstallCommand implements Callable<Integer> {
     }
 
     /** Render an absolute path with {@code $HOME} collapsed to {@code ~}. */
-    private static String tildeCollapse(Path path) {
+    static String tildeCollapse(Path path) {
         String home = System.getProperty("user.home");
         String abs = path.toAbsolutePath().toString();
         if (home != null && !home.isBlank() && abs.startsWith(home)) {

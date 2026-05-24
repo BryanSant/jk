@@ -315,8 +315,9 @@ public final class Wizard {
     }
 
     private static String labelFor(WizardStep.RadioStep step, Map<String, Object> answers) {
+        var snapshot = Answers.of(answers);
         var id = answers.getOrDefault(step.key(), step.defaultChoice()).toString();
-        for (var c : step.choices()) {
+        for (var c : step.choicesFor(snapshot)) {
             if (c.id().equals(id)) {
                 return c.label();
             }
@@ -357,7 +358,7 @@ public final class Wizard {
                     }
                 }
                 case WizardStep.RadioStep rs -> {
-                    var idx = indexOf(rs.choices(), rs.defaultChoice());
+                    var idx = indexOf(rs.choicesFor(snapshot), rs.defaultChoice());
                     this.focus = Math.max(0, idx);
                 }
                 case WizardStep.MultiSelectStep ms -> {
@@ -433,12 +434,13 @@ public final class Wizard {
         }
 
         private boolean handleRadio(WizardStep.RadioStep rs, KeyReader.Key key) {
+            int size = rs.choicesFor(snapshot).size();
             return switch (key) {
                 case KeyReader.Key.Enter e -> true;
-                case KeyReader.Key.Up u -> moveFocus(-1, rs.choices().size(), rs.orientation() == Orientation.VERTICAL);
-                case KeyReader.Key.Down d -> moveFocus(1, rs.choices().size(), rs.orientation() == Orientation.VERTICAL);
-                case KeyReader.Key.Left l -> moveFocus(-1, rs.choices().size(), rs.orientation() == Orientation.HORIZONTAL);
-                case KeyReader.Key.Right r -> moveFocus(1, rs.choices().size(), rs.orientation() == Orientation.HORIZONTAL);
+                case KeyReader.Key.Up u -> moveFocus(-1, size, rs.orientation() == Orientation.VERTICAL);
+                case KeyReader.Key.Down d -> moveFocus(1, size, rs.orientation() == Orientation.VERTICAL);
+                case KeyReader.Key.Left l -> moveFocus(-1, size, rs.orientation() == Orientation.HORIZONTAL);
+                case KeyReader.Key.Right r -> moveFocus(1, size, rs.orientation() == Orientation.HORIZONTAL);
                 default -> false;
             };
         }
@@ -483,7 +485,7 @@ public final class Wizard {
         void commit(Map<String, Object> answers) {
             switch (step) {
                 case WizardStep.InputStep is -> answers.put(is.key(), input.toString());
-                case WizardStep.RadioStep rs -> answers.put(rs.key(), rs.choices().get(focus).id());
+                case WizardStep.RadioStep rs -> answers.put(rs.key(), rs.choicesFor(snapshot).get(focus).id());
                 case WizardStep.MultiSelectStep ms -> {
                     var ordered = new ArrayList<String>();
                     for (var c : ms.choices()) {
@@ -528,25 +530,26 @@ public final class Wizard {
         }
 
         private List<AttributedString> renderRadio(WizardStep.RadioStep rs) {
+            var choices = rs.choicesFor(snapshot);
             var lines = new ArrayList<AttributedString>();
             if (rs.orientation() == Orientation.HORIZONTAL) {
                 var sb = new AttributedStringBuilder();
-                for (var i = 0; i < rs.choices().size(); i++) {
-                    var c = rs.choices().get(i);
+                for (var i = 0; i < choices.size(); i++) {
+                    var c = choices.get(i);
                     var isFocused = i == focus;
                     sb.append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                             isFocused ? Theme.completedStep() : Theme.dim());
                     sb.append(" ");
                     sb.append(c.label(), isFocused ? Theme.focused() : Theme.dim());
                     appendHint(sb, c.hintFor(snapshot));
-                    if (i < rs.choices().size() - 1) {
+                    if (i < choices.size() - 1) {
                         sb.append("  ");
                     }
                 }
                 lines.add(sb.toAttributedString());
             } else {
-                for (var i = 0; i < rs.choices().size(); i++) {
-                    var c = rs.choices().get(i);
+                for (var i = 0; i < choices.size(); i++) {
+                    var c = choices.get(i);
                     var isFocused = i == focus;
                     var sb = new AttributedStringBuilder()
                             .append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,

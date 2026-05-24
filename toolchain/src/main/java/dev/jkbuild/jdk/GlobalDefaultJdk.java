@@ -94,6 +94,28 @@ public final class GlobalDefaultJdk {
         writeSymlink(currentSymlink, jdk.home());
     }
 
+    /**
+     * Drop the system-wide default pointer entirely. Removes both symlinks
+     * (best-effort) and strips the {@code default-jdk} line from the config
+     * file. Other keys in the config file are preserved. Used by
+     * {@code jk jdk uninstall} when the user removes the JDK that was the
+     * default and no survivors remain (or by future {@code jk jdk default
+     * --unset}).
+     */
+    public void clear() throws IOException {
+        Files.deleteIfExists(defaultSymlink);
+        Files.deleteIfExists(currentSymlink);
+        if (!Files.exists(configFile)) return;
+        String existing = Files.readString(configFile, StandardCharsets.UTF_8);
+        Matcher m = DEFAULT_JDK_LINE.matcher(existing);
+        if (!m.find()) return;
+        String updated = m.replaceFirst("");
+        // Collapse the blank line we may have left behind so consecutive
+        // edits don't accumulate empty lines.
+        updated = updated.replaceAll("(?m)^\\s*\\R", "");
+        Files.writeString(configFile, updated, StandardCharsets.UTF_8);
+    }
+
     /** Identifier stored under {@code default-jdk}, if any. */
     public Optional<String> currentIdentifier() throws IOException {
         if (!Files.exists(configFile)) return Optional.empty();

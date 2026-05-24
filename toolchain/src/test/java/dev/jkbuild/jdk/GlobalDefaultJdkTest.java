@@ -96,6 +96,47 @@ class GlobalDefaultJdkTest {
     }
 
     @Test
+    void clear_removes_symlinks_and_default_jdk_line(@TempDir Path tempDir) throws IOException {
+        Path defaultSymlink = tempDir.resolve("share/jk/default-jdk");
+        Path currentSymlink = tempDir.resolve("share/jk/current-jdk");
+        Path configFile = tempDir.resolve("config/jk.toml");
+        Path jdkHome = Files.createDirectories(tempDir.resolve("jdks/temurin-21"));
+
+        GlobalDefaultJdk gdj = new GlobalDefaultJdk(defaultSymlink, currentSymlink, configFile);
+        gdj.set(new InstalledJdk("temurin-21", jdkHome));
+        assertThat(Files.isSymbolicLink(defaultSymlink)).isTrue();
+        assertThat(Files.isSymbolicLink(currentSymlink)).isTrue();
+
+        gdj.clear();
+
+        assertThat(Files.exists(defaultSymlink)).isFalse();
+        assertThat(Files.exists(currentSymlink)).isFalse();
+        assertThat(Files.readString(configFile)).doesNotContain("default-jdk");
+        assertThat(gdj.currentIdentifier()).isEmpty();
+    }
+
+    @Test
+    void clear_preserves_other_config_keys(@TempDir Path tempDir) throws IOException {
+        Path defaultSymlink = tempDir.resolve("share/jk/default-jdk");
+        Path currentSymlink = tempDir.resolve("share/jk/current-jdk");
+        Path configFile = tempDir.resolve("config/jk.toml");
+
+        Files.createDirectories(configFile.getParent());
+        Files.writeString(configFile, """
+                color = "auto"
+                default-jdk = "temurin-21"
+                cache-dir = "/var/cache/jk"
+                """, StandardCharsets.UTF_8);
+
+        new GlobalDefaultJdk(defaultSymlink, currentSymlink, configFile).clear();
+
+        String contents = Files.readString(configFile);
+        assertThat(contents).contains("color = \"auto\"");
+        assertThat(contents).contains("cache-dir");
+        assertThat(contents).doesNotContain("default-jdk");
+    }
+
+    @Test
     void current_identifier_reads_from_config(@TempDir Path tempDir) throws IOException {
         Path defaultSymlink = tempDir.resolve("share/jk/default-jdk");
         Path currentSymlink = tempDir.resolve("share/jk/current-jdk");

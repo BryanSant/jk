@@ -109,6 +109,25 @@ class JdkCommandTest {
     }
 
     @Test
+    void installed_drops_catalog_only_rows(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+
+        byte[] dummyArchive = "stub".getBytes(StandardCharsets.UTF_8);
+        served.put("/feed/jdks.json.xz", xz(multiEntryFeedJson(dummyArchive.length,
+                Hashing.sha256Hex(dummyArchive), base.toString())));
+
+        String stdout = captureStdout(() -> run("jdk", "installed",
+                "--jdks-dir", jdks.toString(),
+                "--feed-url", base.resolve("/feed/jdks.json.xz").toString()));
+
+        // Installed row is present; the catalog-only "temurin-25" row is filtered out.
+        assertThat(stdout).contains("temurin-21.0.5");
+        assertThat(stdout).contains("installed");
+        assertThat(stdout).doesNotContain("temurin-25");
+    }
+
+    @Test
     void pin_writes_jk_version(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));

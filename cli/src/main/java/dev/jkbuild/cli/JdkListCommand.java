@@ -58,6 +58,13 @@ public final class JdkListCommand implements Callable<Integer> {
             description = "Override the catalog cache path (for tests).")
     Path cacheFile;
 
+    /**
+     * When true, AVAILABLE (catalog-only) rows are filtered out so the
+     * table shows only DEFAULT + INSTALLED rows. Set programmatically by
+     * {@link JdkInstalledCommand}; not exposed as a flag on {@code list}.
+     */
+    boolean installedOnly;
+
     enum Status {
         DEFAULT("default"),
         INSTALLED("installed"),
@@ -82,9 +89,14 @@ public final class JdkListCommand implements Callable<Integer> {
         String arch = HostPlatform.currentArch();
 
         List<Row> rows = buildRows(installed, defaultId.orElse(null), catalog, os, arch);
+        if (installedOnly) {
+            rows = rows.stream()
+                    .filter(r -> r.status() != Status.AVAILABLE)
+                    .toList();
+        }
         if (rows.isEmpty()) {
-            System.out.println("(no JDKs installed under " + jdksRoot
-                    + (offline ? "" : ", no remote JDKs found") + ")");
+            String suffix = (installedOnly || offline) ? "" : ", no remote JDKs found";
+            System.out.println("(no JDKs installed under " + jdksRoot + suffix + ")");
             return 0;
         }
 
