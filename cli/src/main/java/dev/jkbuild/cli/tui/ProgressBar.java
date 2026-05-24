@@ -4,6 +4,7 @@ package dev.jkbuild.cli.tui;
 import org.jline.utils.AttributedStyle;
 
 import java.io.PrintStream;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Single-line progress bar widget for long-running CLI operations
@@ -58,6 +59,18 @@ public final class ProgressBar implements AutoCloseable {
     static final String OSC_CLEAR = "\033]9;4;0\007";
     static final String OSC_PROGRESS_FMT = "\033]9;4;1;%d\007";
 
+    /**
+     * The bar currently on screen, if any. Read by the global Ctrl-C handler
+     * (in {@link GlobalCancel}) so a cancellation can repaint the bar before
+     * halting the process.
+     */
+    private static final AtomicReference<ProgressBar> ACTIVE = new AtomicReference<>();
+
+    /** @return the visible bar, or {@code null} if none is active. */
+    public static ProgressBar active() {
+        return ACTIVE.get();
+    }
+
     private final PrintStream out;
     private final AttributedStyle[] segmentColors;
     private final AttributedStyle emptyStyle = Theme.dim();
@@ -76,6 +89,7 @@ public final class ProgressBar implements AutoCloseable {
     /** Start a new bar on the caller's current line, hiding the cursor. */
     public static ProgressBar show(PrintStream out) {
         ProgressBar pb = new ProgressBar(out);
+        ACTIVE.set(pb);
         out.print(HIDE_CURSOR);
         out.flush();
         return pb;
@@ -109,6 +123,7 @@ public final class ProgressBar implements AutoCloseable {
     public synchronized void close() {
         if (closed) return;
         closed = true;
+        ACTIVE.compareAndSet(this, null);
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.println();
@@ -124,10 +139,38 @@ public final class ProgressBar implements AutoCloseable {
     public synchronized void finish(String message) {
         if (closed) return;
         closed = true;
+        ACTIVE.compareAndSet(this, null);
         out.print("\r\033[K");      // clear the bar line
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.println(message);
+        out.flush();
+    }
+
+    /**
+     * Repaint the bar as canceled: every segment in bright red, status struck
+     * through. Used by the global SIGINT handler to mark the in-flight work
+     * before the process halts. Leaves the cursor at the end of the bar line
+     * with no trailing newline so the caller can emit a follow-up line.
+     */
+    public synchronized void renderCanceled() {
+        if (closed) return;
+        closed = true;
+        ACTIVE.compareAndSet(this, null);
+        AttributedStyle redStyle = Theme.error();
+        AttributedStyle strikeStyle = Theme.dim().crossedOut();
+        out.print("\r");
+        for (int i = 0; i < SEGMENTS; i++) {
+            char c = i < lastFilled ? FILLED_CHAR : EMPTY_CHAR;
+            out.print(Theme.colorize(String.valueOf(c), redStyle));
+        }
+        out.print(GAP);
+        out.print(Theme.colorize(lastPercent, Theme.settled()));
+        out.print(SEPARATOR);
+        out.print(Theme.colorize(lastStatus, strikeStyle));
+        out.print("\033[K"); // wipe any residue past the (shorter) cancel status
+        out.print(OSC_CLEAR);
+        out.print(SHOW_CURSOR);
         out.flush();
     }
 

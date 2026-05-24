@@ -52,7 +52,9 @@ class JkAliasTest {
         // headings. Within a section, each row is "  <name>   <description>".
         List<String> verbNames = new java.util.ArrayList<>();
         boolean inSection = false;
-        for (String line : renderHelp().split("\\R")) {
+        for (String raw : renderHelp().split("\\R")) {
+            // Section headings are rendered in bright green; strip SGR codes before parsing.
+            String line = raw.replaceAll("\\u001b\\[[0-9;]*m", "");
             if (line.matches("[A-Z].* commands:")) {
                 inSection = true;
                 continue;

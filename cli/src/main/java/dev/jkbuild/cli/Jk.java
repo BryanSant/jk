@@ -6,8 +6,12 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Help;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Model.UsageMessageSpec;
+import picocli.CommandLine.ParameterException;
 import picocli.CommandLine.Spec;
+import picocli.CommandLine.UnmatchedArgumentException;
 
+import java.io.PrintWriter;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -23,7 +27,7 @@ import java.util.Set;
         name = "jk",
         mixinStandardHelpOptions = true,
         version = "jk " + Jk.VERSION,
-        description = "Single-binary build tool for Java and Kotlin",
+        description = "A fast build tool and package manager for Java/Kotlin",
         subcommands = {
                 InitCommand.class,
                 AddCommand.class,
@@ -86,6 +90,7 @@ public final class Jk implements Runnable {
             Map.entry("check", List.of("compile")));          // renamed verb; check kept for back-compat
 
     public static void main(String[] args) {
+        dev.jkbuild.cli.tui.GlobalCancel.install();
         System.exit(execute(args));
     }
 
@@ -104,33 +109,109 @@ public final class Jk implements Runnable {
         return out;
     }
 
+    /** Subcommands whose unmatched options forward to a wrapped tool — `--help` must pass through. */
+    private static final Set<String> PASSTHROUGH_COMMANDS = Set.of("mvn", "gradle");
+
+    /** Picocli's default section order — used to restore leaf commands after the parent layout leaks via spec inheritance. */
+    private static final List<String> DEFAULT_SECTION_KEYS = List.of(
+            UsageMessageSpec.SECTION_KEY_HEADER_HEADING,
+            UsageMessageSpec.SECTION_KEY_HEADER,
+            UsageMessageSpec.SECTION_KEY_SYNOPSIS_HEADING,
+            UsageMessageSpec.SECTION_KEY_SYNOPSIS,
+            UsageMessageSpec.SECTION_KEY_DESCRIPTION_HEADING,
+            UsageMessageSpec.SECTION_KEY_DESCRIPTION,
+            UsageMessageSpec.SECTION_KEY_PARAMETER_LIST_HEADING,
+            UsageMessageSpec.SECTION_KEY_AT_FILE_PARAMETER,
+            UsageMessageSpec.SECTION_KEY_PARAMETER_LIST,
+            UsageMessageSpec.SECTION_KEY_OPTION_LIST_HEADING,
+            UsageMessageSpec.SECTION_KEY_OPTION_LIST,
+            UsageMessageSpec.SECTION_KEY_END_OF_OPTIONS,
+            UsageMessageSpec.SECTION_KEY_COMMAND_LIST_HEADING,
+            UsageMessageSpec.SECTION_KEY_COMMAND_LIST,
+            UsageMessageSpec.SECTION_KEY_EXIT_CODE_LIST_HEADING,
+            UsageMessageSpec.SECTION_KEY_EXIT_CODE_LIST,
+            UsageMessageSpec.SECTION_KEY_FOOTER_HEADING,
+            UsageMessageSpec.SECTION_KEY_FOOTER);
+
     /** Picocli root, configured for jk's passthrough semantics. */
     public static CommandLine newCommandLine() {
         CommandLine cmd = new CommandLine(new Jk());
         // mvn/gradle are passthroughs: jk owns flags listed before the tool's
         // own args, everything else (including unknown `-X` style flags) gets
         // forwarded as positional to the child process.
-        for (String name : new String[] {"mvn", "gradle"}) {
+        for (String name : PASSTHROUGH_COMMANDS) {
             CommandLine sub = cmd.getSubcommands().get(name);
             if (sub != null) {
                 sub.setUnmatchedOptionsArePositionalParams(true);
             }
         }
-        // Render --help with verbs partitioned into named sections (see
-        // COMMAND_GROUPS) instead of one flat "Commands:" list.
-        cmd.getHelpSectionMap().remove(UsageMessageSpec.SECTION_KEY_COMMAND_LIST_HEADING);
-        cmd.getHelpSectionMap().put(UsageMessageSpec.SECTION_KEY_COMMAND_LIST, Jk::renderGroupedSubcommands);
-        // Nested subcommands (`jk jdk --help`, etc.) use picocli's default
-        // renderer which prints "name, alias" for aliased verbs. Strip aliases
-        // there too — they remain functional, just hidden from --help.
-        installAliasFreeRenderer(cmd);
+        // Enable `-h` / `--help` on every command at every depth. Skip mvn/gradle so their
+        // `--help` continues to forward to the wrapped tool. (The top-level Jk already
+        // declares `mixinStandardHelpOptions = true`; the call is idempotent.)
+        enableHelpEverywhere(cmd);
+        // Apply the custom "description / Usage / commands" layout to every command that
+        // has subcommands — top-level `jk` plus nested parents like `jk jdk`, `jk tool`,
+        // `jk cache`. Leaf commands keep picocli's default formatting so their option /
+        // parameter lists stay visible.
+        applyParentLayout(cmd);
+        applyParentLayoutRecursively(cmd);
+        // Replace picocli's default "Unmatched argument …" error with a cargo-style
+        // "error: / tip: / Usage: / For more information" block. Propagates to subcommands.
+        cmd.setParameterExceptionHandler(Jk::handleParameterException);
         return cmd;
     }
 
-    private static void installAliasFreeRenderer(CommandLine parent) {
+    private static void enableHelpEverywhere(CommandLine cmd) {
+        if (!PASSTHROUGH_COMMANDS.contains(cmd.getCommandName())) {
+            cmd.getCommandSpec().mixinStandardHelpOptions(true);
+        }
+        for (CommandLine sub : cmd.getSubcommands().values()) {
+            enableHelpEverywhere(sub);
+        }
+    }
+
+    private static void applyParentLayoutRecursively(CommandLine parent) {
         for (CommandLine sub : parent.getSubcommands().values()) {
-            sub.getHelpSectionMap().put(UsageMessageSpec.SECTION_KEY_COMMAND_LIST, Jk::renderFlatSubcommands);
-            installAliasFreeRenderer(sub);
+            if (!sub.getSubcommands().isEmpty()) {
+                applyParentLayout(sub);
+            } else {
+                // Picocli's UsageMessageSpec inherits sectionKeys from the parent's spec, so
+                // our parent layout would otherwise leak into leaf commands. Reset to defaults
+                // so leaves still surface their option / parameter lists.
+                sub.setHelpSectionKeys(DEFAULT_SECTION_KEYS);
+            }
+            applyParentLayoutRecursively(sub);
+        }
+    }
+
+    /**
+     * Layout for any command that has subcommands. Reorders sections to
+     * {description, Usage line, command list}, drops the option list, and wires
+     * in bright-green / bright-cyan renderers. The top-level uses the
+     * verb-grouped subcommand list (Project / Toolchain / …); nested parents
+     * use a single "Commands:" heading over a flat list.
+     */
+    private static void applyParentLayout(CommandLine cmd) {
+        boolean topLevel = cmd.getCommandSpec().parent() == null;
+        List<String> keys = new ArrayList<>(List.of(
+                UsageMessageSpec.SECTION_KEY_DESCRIPTION,
+                UsageMessageSpec.SECTION_KEY_SYNOPSIS_HEADING,
+                UsageMessageSpec.SECTION_KEY_SYNOPSIS));
+        if (!topLevel) {
+            keys.add(UsageMessageSpec.SECTION_KEY_COMMAND_LIST_HEADING);
+        }
+        keys.add(UsageMessageSpec.SECTION_KEY_COMMAND_LIST);
+        cmd.setHelpSectionKeys(keys);
+
+        Map<String, CommandLine.IHelpSectionRenderer> sections = cmd.getHelpSectionMap();
+        sections.put(UsageMessageSpec.SECTION_KEY_DESCRIPTION, Jk::renderDescription);
+        sections.put(UsageMessageSpec.SECTION_KEY_SYNOPSIS_HEADING, Jk::renderSynopsisHeading);
+        sections.put(UsageMessageSpec.SECTION_KEY_SYNOPSIS, Jk::renderSynopsis);
+        if (topLevel) {
+            sections.put(UsageMessageSpec.SECTION_KEY_COMMAND_LIST, Jk::renderGroupedSubcommands);
+        } else {
+            sections.put(UsageMessageSpec.SECTION_KEY_COMMAND_LIST_HEADING, Jk::renderCommandsHeading);
+            sections.put(UsageMessageSpec.SECTION_KEY_COMMAND_LIST, Jk::renderFlatSubcommands);
         }
     }
 
@@ -173,6 +254,7 @@ public final class Jk implements Runnable {
         }
         width += 2;
 
+        boolean ansi = help.colorScheme().ansi().enabled();
         Set<String> placed = new LinkedHashSet<>();
         StringBuilder out = new StringBuilder();
         String nl = System.lineSeparator();
@@ -186,9 +268,9 @@ public final class Jk implements Runnable {
             if (visible.isEmpty()) continue;
             if (!first) out.append(nl);
             first = false;
-            out.append(group.heading()).append(nl);
+            out.append(brightGreen(group.heading(), ansi)).append(nl);
             for (String name : visible) {
-                appendCommandRow(out, name, byName.get(name), width);
+                appendCommandRow(out, name, byName.get(name), width, ansi);
                 placed.add(name);
             }
         }
@@ -199,12 +281,130 @@ public final class Jk implements Runnable {
                 .toList();
         if (!leftover.isEmpty()) {
             if (!first) out.append(nl);
-            out.append("Other commands:").append(nl);
+            out.append(brightGreen("Other commands:", ansi)).append(nl);
             for (String name : leftover) {
-                appendCommandRow(out, name, byName.get(name), width);
+                appendCommandRow(out, name, byName.get(name), width, ansi);
             }
         }
         return out.toString();
+    }
+
+    private static String renderDescription(Help help) {
+        String[] desc = help.commandSpec().usageMessage().description();
+        if (desc.length == 0) return "";
+        StringBuilder out = new StringBuilder();
+        String nl = System.lineSeparator();
+        for (String line : desc) {
+            out.append(line).append(nl);
+        }
+        // Blank line separating description from the "Usage:" line below.
+        out.append(nl);
+        return out.toString();
+    }
+
+    private static String renderSynopsisHeading(Help help) {
+        return brightGreen("Usage:", help.colorScheme().ansi().enabled()) + " ";
+    }
+
+    /**
+     * "{@code <name> <COMMAND> [OPTIONS]}" — name is bold+bright-cyan, the rest is plain
+     * bright-cyan. Replaces picocli's auto-generated synopsis (which would list every
+     * registered flag) with a fixed, abstract form.
+     */
+    private static String renderSynopsis(Help help) {
+        boolean ansi = help.colorScheme().ansi().enabled();
+        String name = help.commandSpec().qualifiedName();
+        String suffix = " <COMMAND> [OPTIONS]";
+        String nl = System.lineSeparator();
+        if (ansi) {
+            return "\033[1;96m" + name + "\033[0m\033[96m" + suffix + "\033[0m" + nl;
+        }
+        return name + suffix + nl;
+    }
+
+    private static String renderCommandsHeading(Help help) {
+        String nl = System.lineSeparator();
+        return nl + brightGreen("Commands:", help.colorScheme().ansi().enabled()) + nl;
+    }
+
+    private static String brightGreen(String text, boolean ansi) {
+        return ansi ? "\033[1;92m" + text + "\033[0m" : text;
+    }
+
+    private static String brightCyan(String text, boolean ansi) {
+        return ansi ? "\033[1;96m" + text + "\033[0m" : text;
+    }
+
+    /**
+     * Render parameter-parse failures in a cargo-style block: a bold red
+     * {@code error:} line, an optional bright-green {@code tip:} suggestion,
+     * a colored {@code Usage:} line for the command where parsing failed, and
+     * a {@code --help} hint. Returns picocli's
+     * {@link CommandSpec#exitCodeOnInvalidInput} as the exit code.
+     */
+    private static int handleParameterException(ParameterException ex, String[] args) {
+        CommandLine cmd = ex.getCommandLine();
+        PrintWriter err = cmd.getErr();
+        boolean ansi = cmd.getColorScheme().ansi().enabled();
+
+        String wrong = null;
+        String suggestion = null;
+        if (ex instanceof UnmatchedArgumentException uae && !uae.getUnmatched().isEmpty()) {
+            wrong = uae.getUnmatched().get(0);
+            List<String> suggestions = uae.getSuggestions();
+            if (!suggestions.isEmpty()) {
+                String prefix = cmd.getCommandSpec().qualifiedName() + " ";
+                suggestion = suggestions.get(0);
+                if (suggestion.startsWith(prefix)) suggestion = suggestion.substring(prefix.length());
+            }
+        }
+
+        if (wrong != null) {
+            boolean isOption = wrong.startsWith("-");
+            String label = isOption ? "unrecognized option" : "unrecognized subcommand";
+            err.println(formatErrorLine(ansi, label, wrong));
+        } else {
+            err.println(formatErrorLine(ansi, "error", ex.getMessage()));
+        }
+        err.println();
+        if (suggestion != null) {
+            err.println(formatTipLine(ansi, suggestion));
+            err.println();
+        }
+        err.println(formatUsageLine(ansi, cmd.getCommandSpec().qualifiedName()));
+        err.println();
+        err.println(formatHelpHint(ansi));
+        err.flush();
+        return cmd.getCommandSpec().exitCodeOnInvalidInput();
+    }
+
+    private static String formatErrorLine(boolean ansi, String label, String value) {
+        if (ansi) {
+            return "\033[1;91merror:\033[0m " + label + " '\033[33m" + value + "\033[0m'";
+        }
+        return "error: " + label + " '" + value + "'";
+    }
+
+    private static String formatTipLine(boolean ansi, String suggestion) {
+        if (ansi) {
+            return "  \033[92mtip:\033[0m did you mean '\033[92m" + suggestion + "\033[0m'?";
+        }
+        return "  tip: did you mean '" + suggestion + "'?";
+    }
+
+    private static String formatUsageLine(boolean ansi, String name) {
+        String suffix = " <COMMAND> [OPTIONS]";
+        if (ansi) {
+            return "\033[1;92mUsage:\033[0m \033[1;96m" + name + "\033[0m\033[96m" + suffix + "\033[0m";
+        }
+        return "Usage: " + name + suffix;
+    }
+
+    private static String formatHelpHint(boolean ansi) {
+        if (ansi) {
+            return "For more information, try '\033[1;96m--help\033[0m'";
+        }
+        return "For more information, try '--help'";
     }
 
     /** Flat command list (canonical names only, registration order) for nested subcommand help. */
@@ -218,17 +418,21 @@ public final class Jk implements Runnable {
             width = Math.max(width, name.length());
         }
         width += 2;
+        boolean ansi = help.colorScheme().ansi().enabled();
         StringBuilder out = new StringBuilder();
         for (Map.Entry<String, Help> e : byName.entrySet()) {
-            appendCommandRow(out, e.getKey(), e.getValue(), width);
+            appendCommandRow(out, e.getKey(), e.getValue(), width, ansi);
         }
         return out.toString();
     }
 
-    private static void appendCommandRow(StringBuilder out, String name, Help sub, int width) {
+    private static void appendCommandRow(StringBuilder out, String name, Help sub, int width, boolean ansi) {
         String[] desc = sub.commandSpec().usageMessage().description();
         String firstLine = desc.length > 0 ? desc[0] : "";
-        out.append(String.format("  %-" + width + "s%s%n", name, firstLine));
+        // Pad after the colorized name based on the plain length — ANSI codes
+        // are zero-width on screen but counted by String.format width specifiers.
+        String padding = " ".repeat(width - name.length());
+        out.append("  ").append(brightCyan(name, ansi)).append(padding).append(firstLine).append(System.lineSeparator());
     }
 
     @Spec CommandSpec spec;

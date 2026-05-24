@@ -122,7 +122,50 @@ public final class Wizard {
             writer.flush();
             terminal.flush();
             tryRemoveHook(restoreHook);
+            // JLine's `prevHandler` round-trip doesn't restore our app-level
+            // sun.misc.Signal handler, so re-install it explicitly. Without
+            // this, Ctrl-C after a wizard would fall back to the JVM default.
+            GlobalCancel.install();
         }
+    }
+
+    /**
+     * Render a Ctrl-C cancellation closer on top of the wizard's active rail:
+     * step the cursor back up to the active {@code ╰} row, preserve the existing
+     * {@code ╰  } prefix (which the active region already drew in cyan), and
+     * append the red {@code <message>} starting at the column where the closer's
+     * text would normally begin.
+     *
+     * <p>Assumes the wizard has just returned {@link Optional#empty()} and that
+     * the in-loop cancel path called {@link #moveBelowCloser} — so {@link #run}'s
+     * trailing {@code \r\n} places the cursor two lines below the active closer.
+     */
+    public static void printCancellation(Terminal terminal, String message) {
+        var writer = terminal.writer();
+        writer.print("\033[2F"); // up 2 lines, col 1 — lands at the active ╰
+        writer.print("\033[" + RAIL_PREFIX_WIDTH + "C"); // skip past "╰  "
+        writer.print("\033[0J"); // erase residue beyond
+        var line = new AttributedStringBuilder()
+                .append(message, Theme.error())
+                .toAttributedString();
+        writer.print(line.toAnsi(terminal));
+        writer.println();
+        writer.flush();
+    }
+
+    /**
+     * Reposition the cursor one row below the active closer so cancellation
+     * handlers can rely on a fixed cursor position regardless of step type.
+     * Input steps leave the cursor mid-region (on the input buffer line); other
+     * step types leave it already below the closer.
+     */
+    private static void moveBelowCloser(PrintWriter writer, int regionLines, int cursorOffset) {
+        int linesDown = regionLines - cursorOffset;
+        if (linesDown > 0) {
+            writer.print("\033[" + linesDown + "B");
+        }
+        writer.print("\r");
+        writer.flush();
     }
 
     private static void tryRemoveHook(Thread hook) {
@@ -177,6 +220,7 @@ public final class Wizard {
 
             while (true) {
                 if (cancelled) {
+                    moveBelowCloser(writer, regionLines, cursorOffset);
                     throw new WizardCancelled();
                 }
                 var key = KeyReader.readOrNull(reader, KEY_POLL_MS);
@@ -184,6 +228,7 @@ public final class Wizard {
                     continue;
                 }
                 if (key instanceof KeyReader.Key.CtrlC) {
+                    moveBelowCloser(writer, regionLines, cursorOffset);
                     throw new WizardCancelled();
                 }
                 var done = state.handle(key);

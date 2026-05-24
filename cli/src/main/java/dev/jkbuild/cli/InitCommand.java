@@ -2,7 +2,6 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.tui.Answers;
-import dev.jkbuild.cli.tui.Rail;
 import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
@@ -102,19 +101,16 @@ public final class InitCommand implements Callable<Integer> {
 
             var wizardResult = buildWizard().run(terminal, preset);
             if (wizardResult.isEmpty()) {
-                // Cancelled via Ctrl-C. The wizard already rendered the active
-                // step but didn't close its rail; emit a final closer line in
-                // red so the user sees a coherent terminal state.
-                var line = Rail.closer("𝘅 Project creation canceled", Theme.error());
-                terminal.writer().print(line.toAnsi(terminal));
-                terminal.writer().println();
-                terminal.writer().flush();
+                // Cancelled via Ctrl-C. Wizard.printCancellation preserves the
+                // cyan active-rail closer and prints the red marker beside it.
+                //
                 // Runtime.halt() instead of System.exit(): halt skips shutdown
                 // hooks, which is what we want here because JLine registers a
                 // terminal-cleanup hook that calls Terminal.close() -> blocks on
                 // the NonBlockingReader background thread that's blocked on a
                 // stdin read() macOS won't let us interrupt. Our wizard's finally
                 // already restored terminal attributes, cursor, and SGR.
+                Wizard.printCancellation(terminal, "𝘅 Project creation canceled");
                 Runtime.getRuntime().halt(130); // 128 + SIGINT
             }
             try (terminal) {

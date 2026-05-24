@@ -2,9 +2,9 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.tui.ProgressBar;
-import dev.jkbuild.cli.tui.Rail;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.tui.Theme;
+import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
@@ -225,19 +225,10 @@ public final class JdkInstallCommand implements Callable<Integer> {
         Optional<JdkInstallWizard.Result> result =
                 JdkInstallWizard.run(catalog, os, arch, showAll, terminal);
         if (result.isEmpty()) {
-            // Ctrl-C cancellation. The active region ended with `╰\n` and the
-            // wizard's finally wrote `\r\n`, so the cursor sits two lines below
-            // the trailing rail closer. Move up over both, clear to end of
-            // screen, then redraw the closer in red with the cancel message —
-            // this replaces the active-state closer rather than printing a
-            // second one below it. See InitCommand for the Runtime.halt()
-            // rationale.
-            var line = Rail.closer("𝘅 JDK installation canceled", Theme.error());
-            terminal.writer().print("\033[2F"); // cursor up 2 lines, col 0
-            terminal.writer().print("\033[0J"); // clear to end of screen
-            terminal.writer().print(line.toAnsi(terminal));
-            terminal.writer().println();
-            terminal.writer().flush();
+            // Ctrl-C cancellation. Wizard.printCancellation preserves the cyan
+            // active-rail closer and prints the red marker beside it. See
+            // InitCommand for the Runtime.halt() rationale.
+            Wizard.printCancellation(terminal, "𝘅 JDK installation canceled");
             Runtime.getRuntime().halt(130); // 128 + SIGINT
             throw new AssertionError("unreachable");
         }
