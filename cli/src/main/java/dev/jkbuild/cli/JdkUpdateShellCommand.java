@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
-import java.util.Locale;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
@@ -57,15 +57,17 @@ public final class JdkUpdateShellCommand implements Callable<Integer> {
         Path home = homeOverride != null
                 ? homeOverride : Path.of(System.getProperty("user.home"));
         Path binDir = binDirOverride != null ? binDirOverride : JkDirs.binDir();
-        Shell shell = detectShell(shellOverride);
-        if (shell == null) {
+        Optional<Shell> detected = shellOverride != null
+                ? Shell.detect(shellOverride) : Shell.detect();
+        if (detected.isEmpty()) {
             System.err.println("jk jdk update-shell: could not detect shell (set --shell, "
                     + "or add `" + bashLine(binDir) + "` to your rc file manually).");
             return 64; // EX_USAGE
         }
+        Shell shell = detected.get();
 
         Path rcFile = shell.rcFile(home);
-        String addition = shell.exportLine(binDir);
+        String addition = exportLine(shell, binDir);
         // Already present? Match either the export line or our marker so the
         // user's hand-edits don't get duplicated.
         if (Files.exists(rcFile)) {
@@ -87,55 +89,13 @@ public final class JdkUpdateShellCommand implements Callable<Integer> {
         return 0;
     }
 
-    static Shell detectShell(String override) {
-        String raw = override != null ? override : System.getenv("SHELL");
-        if (raw == null || raw.isBlank()) return null;
-        // Strip path: /bin/bash → bash.
-        int slash = raw.lastIndexOf('/');
-        String name = (slash >= 0 ? raw.substring(slash + 1) : raw).toLowerCase(Locale.ROOT);
-        return switch (name) {
-            case "bash" -> Shell.BASH;
-            case "zsh" -> Shell.ZSH;
-            case "fish" -> Shell.FISH;
-            default -> null;
-        };
+    private static String exportLine(Shell shell, Path binDir) {
+        return shell == Shell.FISH
+                ? "fish_add_path \"" + binDir + "\""
+                : bashLine(binDir);
     }
 
     private static String bashLine(Path binDir) {
         return "export PATH=\"" + binDir + ":$PATH\"";
-    }
-
-    enum Shell {
-        BASH {
-            @Override
-            Path rcFile(Path home) { return home.resolve(".bashrc"); }
-            @Override
-            String exportLine(Path binDir) { return bashLine(binDir); }
-        },
-        ZSH {
-            @Override
-            // .zshenv is loaded for every zsh shell, not just interactive
-            // ones — so non-interactive subprocesses also see the PATH.
-            Path rcFile(Path home) { return home.resolve(".zshenv"); }
-            @Override
-            String exportLine(Path binDir) { return bashLine(binDir); }
-        },
-        FISH {
-            @Override
-            Path rcFile(Path home) {
-                return home.resolve(".config").resolve("fish").resolve("conf.d").resolve("jk.fish");
-            }
-            @Override
-            String exportLine(Path binDir) {
-                return "fish_add_path \"" + binDir + "\"";
-            }
-        };
-
-        abstract Path rcFile(Path home);
-        abstract String exportLine(Path binDir);
-
-        private static String bashLine(Path binDir) {
-            return "export PATH=\"" + binDir + ":$PATH\"";
-        }
     }
 }

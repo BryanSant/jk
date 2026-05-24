@@ -66,7 +66,7 @@ public final class JdkSelector {
      * {@code -}, pads numeric parts to a fixed width so lexicographic
      * comparison agrees with numeric ordering ({@code 21.0.9} &lt; {@code 21.0.10}).
      */
-    static String versionKey(String version) {
+    public static String versionKey(String version) {
         if (version == null) return "";
         StringBuilder sb = new StringBuilder();
         StringBuilder run = new StringBuilder();

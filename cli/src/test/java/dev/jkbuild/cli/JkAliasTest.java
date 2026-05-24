@@ -48,14 +48,23 @@ class JkAliasTest {
 
     @Test
     void help_screen_does_not_list_any_aliases() {
-        // Pull the lines that picocli emits under "Commands:" — each is
-        // "  <name>   <description>" so the name is the first word.
-        List<String> verbNames = renderHelp().lines()
-                .dropWhile(line -> !line.startsWith("Commands:"))
-                .skip(1)
-                .filter(line -> line.startsWith("  ") && !line.startsWith("    "))
-                .map(line -> line.trim().split("\\s+", 2)[0])
-                .toList();
+        // Verbs in --help are listed under one or more "<Section> commands:"
+        // headings. Within a section, each row is "  <name>   <description>".
+        List<String> verbNames = new java.util.ArrayList<>();
+        boolean inSection = false;
+        for (String line : renderHelp().split("\\R")) {
+            if (line.matches("[A-Z].* commands:")) {
+                inSection = true;
+                continue;
+            }
+            if (line.isBlank()) {
+                inSection = false;
+                continue;
+            }
+            if (inSection && line.startsWith("  ")) {
+                verbNames.add(line.trim().split("\\s+", 2)[0]);
+            }
+        }
 
         assertThat(verbNames).contains("compile");
         for (String alias : Jk.VERB_ALIASES.keySet()) {

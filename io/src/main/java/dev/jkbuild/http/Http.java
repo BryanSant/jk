@@ -2,6 +2,7 @@
 package dev.jkbuild.http;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -83,6 +84,52 @@ public final class Http {
         }
         if (lastIo != null) {
             throw new IOException("GET " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
+        }
+        throw new IOException("GET " + uri + " returned " + lastStatus
+                + " after " + (backoffs.length + 1) + " attempts");
+    }
+
+    /**
+     * Streaming GET — returns the response with the body as an
+     * {@link InputStream} so the caller can pump bytes through a hash /
+     * progress / file sink without buffering the whole payload in memory.
+     * Same retry policy as {@link #get(URI)} for connect failures and
+     * 5xx; mid-stream failures propagate to the caller (no resume).
+     *
+     * <p>The per-request timeout is generous (15 min) because JDK archives
+     * commonly run 100–250 MB and the standard {@code .get()} 60s ceiling
+     * would cut them off on slow links.
+     */
+    public HttpResponse<InputStream> getStream(URI uri) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .GET()
+                .timeout(Duration.ofMinutes(15))
+                .build();
+        IOException lastIo = null;
+        int lastStatus = -1;
+        for (int attempt = 0; attempt < backoffs.length + 1; attempt++) {
+            if (attempt > 0) {
+                Thread.sleep(jittered(backoffs[attempt - 1]));
+            }
+            try {
+                HttpResponse<InputStream> response =
+                        client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                int status = response.statusCode();
+                if (status < 500) {
+                    return response;
+                }
+                // Drain the body before retrying so the connection can be reused.
+                try (var body = response.body()) {
+                    body.transferTo(java.io.OutputStream.nullOutputStream());
+                }
+                lastStatus = status;
+            } catch (IOException e) {
+                lastIo = e;
+            }
+        }
+        if (lastIo != null) {
+            throw new IOException("GET " + uri + " failed after "
+                    + (backoffs.length + 1) + " attempts", lastIo);
         }
         throw new IOException("GET " + uri + " returned " + lastStatus
                 + " after " + (backoffs.length + 1) + " attempts");

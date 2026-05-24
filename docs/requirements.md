@@ -39,7 +39,7 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 - Best-effort import of `pom.xml` (Tier 1 lossless, Tier 2 best-effort, Tier 3 stub-with-diagnostic).
 - Generate `pom.xml` on publish so jk-built jars are first-class on Maven Central.
 - Subsume JBang's single-file scripting role (`jk run script.java` with header-comment deps).
-- `jk tool install` / `jkx` for installing and ephemerally running JVM CLIs as tools.
+- `jk tool install` / `jk exec` for installing and ephemerally running JVM CLIs as tools.
 - Built-in `jk audit` (OSV database) and `jk image` (Jib-style daemonless OCI images, distroless, multi-arch).
 - SLSA L3 provenance and Sigstore keyless signing by default for `jk publish` from CI.
 - SBOM emission (CycloneDX + SPDX) on every build.
@@ -72,7 +72,7 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 
 - **Gradle/Kotlin developer (Greg).** Ships a Spring Boot service in Kotlin. Loves the Kotlin DSL but resents the daemon, configuration-cache breakage, and uninspectable resolution. **jk wins him by:** TOML with schema validation in IntelliJ, `jk why-rebuilt :foo:compile`, native binary speed, and first-class Kotlin (K2 + KSP + Spring/JPA compiler plugins).
 
-- **Polyglot adopter (Pria).** Heavy `uv` and `cargo` user, occasional Java contributor to a backend service. Wants the JVM to feel like the rest of her toolchain. **jk wins her by:** `jk init`, `jk add`, `jk sync`, `jk lock`, `jk tool install`, `jkx`, `jk audit`, and a 5-second `cargo new`-equivalent.
+- **Polyglot adopter (Pria).** Heavy `uv` and `cargo` user, occasional Java contributor to a backend service. Wants the JVM to feel like the rest of her toolchain. **jk wins her by:** `jk init`, `jk add`, `jk sync`, `jk lock`, `jk tool install`, `jk exec`, `jk audit`, and a 5-second `cargo new`-equivalent.
 
 - **Library author (Liam).** Publishes an OSS Java library to Maven Central. Needs sources/javadoc jars, GPG signatures, valid POM with licenses/SCM/developers, Sigstore attestations, SLSA provenance. **jk wins him by:** one-command `jk publish` from CI with all of the above, no `nexus-staging-maven-plugin` rituals.
 
@@ -133,7 +133,7 @@ $JK_CACHE_DIR/                  # cache (default: ~/.cache/jk/)
     ab/cd/ef.../artifact.jar
   actions/                      # action cache: hash(action) -> hash(outputs)
   metadata/                     # cached maven-metadata.xml, repo index entries
-  jkx/                          # ephemeral tool environments (LRU-evicted)
+  exec/                         # ephemeral tool environments (LRU-evicted)
   jdks.json.xz                  # cached JetBrains JDK feed (24h TTL, conditional-GET revalidation)
   tools/                        # downloaded mvn/gradle/kotlin distributions (or symlinks to SDKMAN, etc.)
     maven/<version>/
@@ -243,7 +243,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk image [--registry <url>] [--push]` | Build an OCI image (Jib-style). |
 | `jk native` | Build a GraalVM native binary from a `--bin` artifact. (Verb is `native`, not `native-image`, to keep it distinct from `jk image` which builds OCI container images.) |
 | `jk tool install --git ... --bin ...` or `jk tool install <coord> --bin <name>` | Install a JVM CLI as a tool. (`jk install <coord>` is a hidden alias.) |
-| `jkx <coord>[@ver] [-- args...]` | Ephemeral tool execution. |
+| `jk exec <coord>[@ver] [-- args...]` | Ephemeral tool execution. (`jk jkx` is a kept alias.) |
 | `jk tool {list,update,uninstall,run}` | Manage installed tools. |
 | `jk jdk {install,list,use,uninstall,pin,gc}` | JDK management. |
 | `jk shell` / `jk env` | Spawn subshell or print env exports for the project's JDK. |
@@ -974,7 +974,7 @@ Java 25 (with unnamed-class / instance-main / JEP 512). Kotlin (`.kts` with jk-s
 
 ---
 
-## 20. Tools (`jk tool install` / `jkx`)
+## 20. Tools (`jk tool install` / `jk exec`)
 
 ### 20.1 Install
 
@@ -993,14 +993,14 @@ $JK_BIN_DIR/<launcher>            # user-PATH entry, shell wrapper or native bin
 
 `jk tool install` prints the `export PATH=...` line for `$JK_BIN_DIR`; it does not mutate dotfiles. `jk tool update-shell` writes it with explicit user confirmation.
 
-### 20.3 Ephemeral execution: `jkx`
+### 20.3 Ephemeral execution: `jk exec`
 
 ```
-jkx com.diffplug.spotless:spotless-cli:2.45.0 -- check
-jkx --from com.foo:bar --bin baz -- arg1 arg2
+jk exec com.diffplug.spotless:spotless-cli:2.45.0 -- check
+jk exec --from com.foo:bar --bin baz -- arg1 arg2
 ```
 
-Resolves, caches in `$JK_CACHE_DIR/jkx/`, executes. LRU-evicted. Subsequent runs of the same coord+version are near-instant.
+Resolves, caches under `$JK_CACHE_DIR`, executes. LRU-evicted. Subsequent runs of the same coord+version are near-instant. `jk jkx` is retained as an alias for muscle-memory continuity with `uvx`.
 
 ### 20.4 Native-image tools
 

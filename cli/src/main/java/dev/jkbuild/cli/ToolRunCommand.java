@@ -25,8 +25,8 @@ import java.util.concurrent.Callable;
 
 /**
  * {@code jk tool run <coord> -- <args>} — ephemeral exec from a Maven coord
- * (PRD §20.3). Same code path as {@code jkx}; {@code jkx} stays as a
- * top-level shorthand for the most-typed ergonomic case.
+ * (PRD §20.3). Same code path as {@code jk exec} (aliased {@code jkx});
+ * {@code exec} is the top-level shorthand for the most-typed ergonomic case.
  */
 @Command(name = "run", description = "Ephemerally run a tool from a Maven coord")
 public final class ToolRunCommand implements Callable<Integer> {
@@ -56,7 +56,7 @@ public final class ToolRunCommand implements Callable<Integer> {
         return Ephemeral.run(coord, mainClass, cacheDirOverride, repoUrl, toolArgs);
     }
 
-    /** Shared implementation used by {@code jk tool run} and {@code jkx}. */
+    /** Shared implementation used by {@code jk tool run} and {@code jk exec}. */
     static final class Ephemeral {
         static int run(String coord, String mainClass, Path cacheDirOverride, URI repoUrl,
                        List<String> toolArgs)

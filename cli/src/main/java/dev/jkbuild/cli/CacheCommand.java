@@ -3,7 +3,9 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Spec;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,9 +34,11 @@ import java.util.concurrent.Callable;
         })
 public final class CacheCommand implements Callable<Integer> {
 
+    @Spec CommandSpec spec;
+
     @Override
     public Integer call() {
-        new picocli.CommandLine(this).usage(System.out);
+        spec.commandLine().usage(System.out);
         return 64;
     }
 

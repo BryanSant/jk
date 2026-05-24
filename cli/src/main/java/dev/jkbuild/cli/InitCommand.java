@@ -10,7 +10,6 @@ import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
-import org.jline.utils.AttributedStyle;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -106,8 +105,7 @@ public final class InitCommand implements Callable<Integer> {
                 // Cancelled via Ctrl-C. The wizard already rendered the active
                 // step but didn't close its rail; emit a final closer line in
                 // red so the user sees a coherent terminal state.
-                var red = AttributedStyle.DEFAULT.foreground(0xef, 0x44, 0x44);
-                var line = Rail.closer("𝘅 Project creation canceled", red);
+                var line = Rail.closer("𝘅 Project creation canceled", Theme.error());
                 terminal.writer().print(line.toAnsi(terminal));
                 terminal.writer().println();
                 terminal.writer().flush();
@@ -382,7 +380,7 @@ public final class InitCommand implements Callable<Integer> {
 
     private static AttributedString headline(String text) {
         return new AttributedStringBuilder()
-                .append(text, AttributedStyle.DEFAULT.bold().foreground(0x22, 0xc5, 0x5e))
+                .append(text, Theme.success())
                 .toAttributedString();
     }
 

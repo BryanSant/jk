@@ -24,7 +24,7 @@ import java.util.zip.ZipEntry;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @DisabledOnOs(OS.WINDOWS) // POSIX launcher only.
-class InstallJkxCommandTest {
+class InstallExecCommandTest {
 
     private HttpServer server;
     private URI base;
@@ -136,13 +136,13 @@ class InstallJkxCommandTest {
     }
 
     @Test
-    void jkx_resolves_and_returns_tool_exit_code(@TempDir Path tempDir) throws Exception {
+    void exec_resolves_and_returns_tool_exit_code(@TempDir Path tempDir) throws Exception {
         // A jar carrying a real Main that exits 0.
         Path realJar = buildRealRunnableJar(tempDir, "ToolMain");
         servePom("com.example", "tool", "1.0.0");
         served.put(mavenPath("com.example", "tool", "1.0.0", "jar"), Files.readAllBytes(realJar));
 
-        int exit = run("jkx",
+        int exit = run("exec",
                 "--cache-dir", tempDir.resolve("cache").toString(),
                 "--repo-url", base.toString(),
                 "com.example:tool:1.0.0");
@@ -151,7 +151,20 @@ class InstallJkxCommandTest {
     }
 
     @Test
-    void tool_run_is_jkx_under_the_canonical_name(@TempDir Path tempDir) throws Exception {
+    void jkx_alias_dispatches_to_exec(@TempDir Path tempDir) throws Exception {
+        Path realJar = buildRealRunnableJar(tempDir, "ToolMain");
+        servePom("com.example", "tool", "1.0.0");
+        served.put(mavenPath("com.example", "tool", "1.0.0", "jar"), Files.readAllBytes(realJar));
+
+        int exit = run("jkx",
+                "--cache-dir", tempDir.resolve("cache").toString(),
+                "--repo-url", base.toString(),
+                "com.example:tool:1.0.0");
+        assertThat(exit).isEqualTo(0);
+    }
+
+    @Test
+    void tool_run_shares_exec_implementation(@TempDir Path tempDir) throws Exception {
         Path realJar = buildRealRunnableJar(tempDir, "ToolMain");
         servePom("com.example", "tool", "1.0.0");
         served.put(mavenPath("com.example", "tool", "1.0.0", "jar"), Files.readAllBytes(realJar));
@@ -196,7 +209,7 @@ class InstallJkxCommandTest {
 
     /**
      * Compile a tiny "main returns 0" class on the fly and wrap it in a jar
-     * with the right MANIFEST.MF Main-Class. Used by the jkx exec test so
+     * with the right MANIFEST.MF Main-Class. Used by the exec tests so
      * the spawned JVM has something real to run.
      */
     private static Path buildRealRunnableJar(Path tempDir, String className) throws Exception {

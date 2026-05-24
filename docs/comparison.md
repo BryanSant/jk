@@ -33,7 +33,7 @@ These commands map directly across all five tools. Differences shown in the
 | Clean build outputs | `jk clean` | — | `cargo clean` | `gradle clean` | `mvn clean` | jk wipes `target/` and `.jk/generated/`; the others wipe their own conventional dirs. |
 | Publish artifacts | `jk publish` | `uv publish` | `cargo publish` | `gradle publish` | `mvn deploy` | jk publishes a Maven-Central-grade POM + jar by default; signing, Sigstore, SLSA and SBOM are flags on the same verb (see §3 below). |
 | Install a tool globally | `jk tool install <coord>` | `uv tool install <pkg>` | `cargo install <crate>` | — | — | jk and cargo install the artifact's own launcher; jk writes to `$JK_BIN_DIR` (`~/.local/bin` by default), cargo to `~/.cargo/bin/`. uv creates a per-tool venv. `jk install <coord>` is a hidden alias for back-compat. |
-| Ephemeral tool exec | `jk jkx <coord>` (or `jk tool run <coord>`) | `uvx <pkg>` | — | — | — | "Resolve, cache, run, evict LRU." `jkx` is the top-level shorthand, parallel to `uvx`. |
+| Ephemeral tool exec | `jk exec <coord>` (alias: `jk jkx`; underlying: `jk tool run <coord>`) | `uvx <pkg>` | — | — | — | "Resolve, cache, run, evict LRU." `exec` is the top-level shorthand, parallel to `uvx`; `jkx` is kept as an alias for muscle-memory continuity. |
 | Repair discovered build tools | `jk doctor` | — | — | — | — | Prunes broken mvn/gradle/kotlin symlinks under `$JK_CACHE_DIR/tools/`. |
 | Single-file scripts | `jk run script.java` | `uv run script.py` | — | — | — | jk's header (`//jk dep …`) is also JBang-compatible. uv reads PEP 723 inline metadata. |
 
@@ -94,7 +94,7 @@ the rows above hide more than they reveal.
 
 * **From Cargo:** caret defaults, highest-wins resolution, lockfile discipline,
   workspaces, `cargo install` shape, prose conflict diagnostics.
-* **From uv:** the `jkx` ephemeral-exec UX, integrated Python/JDK toolchain
+* **From uv:** the `uvx`-style ephemeral-exec UX (`jk exec`, aliased `jkx`), integrated Python/JDK toolchain
   management, the "fast native binary" delivery.
 * **From Gradle:** workspaces, multi-module composite-build semantics,
   build cache (jk's action cache is the equivalent), Kotlin support.

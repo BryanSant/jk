@@ -9,16 +9,22 @@ import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.URI;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFilePermission;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.LongConsumer;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
@@ -36,8 +42,19 @@ import java.util.zip.ZipInputStream;
  *   <li>SHA-256 verified against {@link JdkPackage#sha256()} when present;
  *       mismatch aborts with no install dir left behind.</li>
  * </ul>
+ *
+ * <p>The {@link JdkCatalog.Entry} path is split into {@link #download} and
+ * {@link #extractInstalled} so callers can wrap each phase with their own
+ * UI (e.g. a progress bar during the download, a spinner during extract).
+ * {@link #install(JdkCatalog.Entry)} stitches them together for the
+ * no-progress case.
  */
 public final class JdkInstaller {
+
+    /** Local archive file produced by {@link #download}. */
+    public record DownloadedArchive(Path path, long bytes) {}
+
+    private static final int DOWNLOAD_BUFFER = 64 * 1024;
 
     private final Http http;
     private final JdkRegistry registry;
@@ -48,12 +65,12 @@ public final class JdkInstaller {
     }
 
     public InstalledJdk install(JdkPackage pkg) throws IOException, InterruptedException {
-        String identifier = installIdentifier(pkg);
+        String identifier = pkg.installIdentifier();
         Path target = registry.jdksRoot().resolve(identifier);
         if (Files.exists(target)) {
             return new InstalledJdk(identifier, target);
         }
-        downloadAndExtract(
+        downloadAndExtractBuffered(
                 pkg.downloadUri(),
                 pkg.sha256(),
                 pkg.filename(),
@@ -70,24 +87,100 @@ public final class JdkInstaller {
      * {@link InstalledJdk#home()}.
      */
     public InstalledJdk install(JdkCatalog.Entry entry) throws IOException, InterruptedException {
+        return install(entry, b -> {});
+    }
+
+    /**
+     * Same as {@link #install(JdkCatalog.Entry)} but emits cumulative
+     * bytes-read to {@code onBytesRead} as the download streams. Total
+     * size is available on the entry itself ({@link JdkCatalog.Entry#archiveSize()}).
+     */
+    public InstalledJdk install(JdkCatalog.Entry entry, LongConsumer onBytesRead)
+            throws IOException, InterruptedException {
+        InstalledJdk already = alreadyInstalled(entry);
+        if (already != null) return already;
+        DownloadedArchive dl = download(entry, onBytesRead);
+        return extractInstalled(entry, dl);
+    }
+
+    /**
+     * Fast path: if the target directory already exists, return the
+     * existing install descriptor without touching the network or disk.
+     * Returns {@code null} when nothing's installed yet.
+     */
+    public InstalledJdk alreadyInstalled(JdkCatalog.Entry entry) {
         Path target = registry.jdksRoot().resolve(entry.installFolderName());
-        Path javaHome = entry.javaHomeSubpath().isEmpty()
-                ? target
-                : target.resolve(entry.javaHomeSubpath());
-        if (Files.exists(target)) {
-            return new InstalledJdk(entry.installFolderName(), javaHome);
+        if (!Files.exists(target)) return null;
+        return new InstalledJdk(entry.installFolderName(), javaHomeFor(entry, target));
+    }
+
+    /**
+     * Stream the JDK archive to a temp file, verifying SHA-256 incrementally.
+     * {@code onBytesRead} receives the cumulative byte count after every
+     * chunk; the total is on {@link JdkCatalog.Entry#archiveSize()}.
+     */
+    public DownloadedArchive download(JdkCatalog.Entry entry, LongConsumer onBytesRead)
+            throws IOException, InterruptedException {
+        Files.createDirectories(registry.jdksRoot());
+        Path archive = Files.createTempFile("jk-jdk-",
+                "-" + extensionFor(entry.packageType()));
+        boolean keep = false;
+        try {
+            long bytes = streamingDownload(
+                    entry.url(),
+                    entry.sha256(),
+                    entry.installFolderName(),
+                    archive,
+                    onBytesRead);
+            keep = true;
+            return new DownloadedArchive(archive, bytes);
+        } finally {
+            if (!keep) Files.deleteIfExists(archive);
         }
-        downloadAndExtract(
-                entry.url(),
-                entry.sha256(),
-                entry.installFolderName() + "." + extensionFor(entry.packageType()),
-                entry.packageType(),
-                target);
+    }
+
+    /**
+     * Extract a {@link DownloadedArchive} into the JDK root and return the
+     * resulting {@link InstalledJdk}. The temp archive is deleted on
+     * success or failure — the caller does not need to clean it up.
+     */
+    public InstalledJdk extractInstalled(JdkCatalog.Entry entry, DownloadedArchive dl)
+            throws IOException {
+        Path target = registry.jdksRoot().resolve(entry.installFolderName());
+        Path javaHome = javaHomeFor(entry, target);
+        try {
+            Path stagingDir = Files.createTempDirectory(registry.jdksRoot(), ".stage-");
+            try {
+                extract(dl.path(), stagingDir, entry.packageType());
+                Path effectiveRoot = flattenedRoot(stagingDir);
+                Files.move(effectiveRoot, target);
+            } catch (IOException | RuntimeException e) {
+                deleteRecursively(stagingDir);
+                throw e;
+            }
+            // Drop the (now-empty) staging wrapper when flattenedRoot hoisted
+            // a child out. If it returned stagingDir itself, the move
+            // consumed the dir and this is a no-op.
+            deleteRecursively(stagingDir);
+        } finally {
+            Files.deleteIfExists(dl.path());
+        }
         return new InstalledJdk(entry.installFolderName(), javaHome);
     }
 
-    private void downloadAndExtract(
-            java.net.URI uri,
+    private static Path javaHomeFor(JdkCatalog.Entry entry, Path target) {
+        return entry.javaHomeSubpath().isEmpty()
+                ? target
+                : target.resolve(entry.javaHomeSubpath());
+    }
+
+    /**
+     * Buffered download path used by the {@link JdkPackage} flow.
+     * Smaller scope (no progress, no streaming) — kept for the test
+     * fixtures that go through the {@link JdkPackage} API.
+     */
+    private void downloadAndExtractBuffered(
+            URI uri,
             String sha256,
             String displayName,
             String archiveType,
@@ -124,17 +217,57 @@ public final class JdkInstaller {
                 deleteRecursively(stagingDir);
                 throw e;
             }
-            // Drop the (now-empty) staging wrapper when flattenedRoot hoisted
-            // a child out. If it returned stagingDir itself, the move
-            // consumed the dir and this is a no-op.
             deleteRecursively(stagingDir);
         } finally {
             Files.deleteIfExists(archive);
         }
     }
 
-    private static String installIdentifier(JdkPackage pkg) {
-        return pkg.installIdentifier();
+    /**
+     * Stream {@code uri} into {@code archive} while updating a SHA-256 digest
+     * and forwarding cumulative byte counts to {@code onBytesRead}. Verifies
+     * the digest against {@code expectedSha256} on completion (when set).
+     */
+    private long streamingDownload(
+            URI uri,
+            String expectedSha256,
+            String displayName,
+            Path archive,
+            LongConsumer onBytesRead) throws IOException, InterruptedException {
+        HttpResponse<InputStream> response = http.getStream(uri);
+        if (response.statusCode() != 200) {
+            try (var body = response.body()) {
+                body.transferTo(OutputStream.nullOutputStream());
+            }
+            throw new IOException("JDK download " + uri
+                    + " returned " + response.statusCode());
+        }
+        MessageDigest sha;
+        try {
+            sha = MessageDigest.getInstance("SHA-256");
+        } catch (NoSuchAlgorithmException e) {
+            throw new AssertionError("SHA-256 is required on every JVM", e);
+        }
+        long total = 0;
+        try (InputStream body = response.body();
+             OutputStream sink = Files.newOutputStream(archive)) {
+            byte[] buf = new byte[DOWNLOAD_BUFFER];
+            int n;
+            while ((n = body.read(buf)) > 0) {
+                sha.update(buf, 0, n);
+                sink.write(buf, 0, n);
+                total += n;
+                onBytesRead.accept(total);
+            }
+        }
+        if (expectedSha256 != null && !expectedSha256.isEmpty()) {
+            String actual = HexFormat.of().formatHex(sha.digest());
+            if (!actual.equalsIgnoreCase(expectedSha256)) {
+                throw new IOException("sha256 mismatch for " + displayName
+                        + " — expected " + expectedSha256 + ", got " + actual);
+            }
+        }
+        return total;
     }
 
     private static String extensionFor(String archiveType) {

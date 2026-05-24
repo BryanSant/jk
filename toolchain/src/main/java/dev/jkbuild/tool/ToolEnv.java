@@ -13,8 +13,8 @@ import java.util.Objects;
  * the CAS).
  *
  * <p>Produced by {@link ToolResolver}, consumed by {@link ToolLauncher}
- * for both {@code jk install} (persistent launcher) and {@code jkx}
- * (one-shot exec).
+ * for both {@code jk install} (persistent launcher) and {@code jk exec}
+ * (one-shot ephemeral exec).
  */
 public record ToolEnv(
         String binName,

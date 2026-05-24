@@ -278,20 +278,21 @@ public final class Wizard {
     }
 
     private static List<AttributedString> summarize(WizardStep step, Map<String, Object> answers) {
+        var answerStyle = Theme.settled().italic();
         return switch (step) {
             case WizardStep.InputStep is -> List.of(
-                    plain(answers.getOrDefault(is.key(), "").toString(), Theme.dim()));
-            case WizardStep.RadioStep rs -> List.of(plain(labelFor(rs, answers), Theme.dim()));
+                    answerLine(answers.getOrDefault(is.key(), "").toString(), answerStyle));
+            case WizardStep.RadioStep rs -> List.of(answerLine(labelFor(rs, answers), answerStyle));
             case WizardStep.MultiSelectStep ms -> {
                 @SuppressWarnings("unchecked")
                 var selected = (List<String>) answers.getOrDefault(ms.key(), List.<String>of());
                 if (selected.isEmpty()) {
-                    yield List.of(plain("(none selected)", Theme.dim()));
+                    yield List.of(answerLine("(none selected)", answerStyle));
                 }
                 var labels = new ArrayList<AttributedString>();
                 for (var c : ms.choices()) {
                     if (selected.contains(c.id())) {
-                        labels.add(plain(c.label(), Theme.dim()));
+                        labels.add(answerLine(c.label(), answerStyle));
                     }
                 }
                 yield labels;
@@ -300,6 +301,13 @@ public final class Wizard {
                     .map(s -> plain(s, Theme.dim()))
                     .toList();
         };
+    }
+
+    private static AttributedString answerLine(String text, AttributedStyle textStyle) {
+        return new AttributedStringBuilder()
+                .append("➜ ", Theme.completedStep())
+                .append(text, textStyle)
+                .toAttributedString();
     }
 
     private static String labelFor(WizardStep.RadioStep step, Map<String, Object> answers) {
@@ -326,12 +334,17 @@ public final class Wizard {
         private final StringBuilder input;
         private int focus;
         private final LinkedHashSet<String> selected;
+        private final Answers snapshot;
         private String error = "";
 
         ActiveState(WizardStep step, Map<String, Object> existing) {
             this.step = step;
             this.input = new StringBuilder();
             this.selected = new LinkedHashSet<>();
+            // Snapshot answers as of step entry — used to resolve dynamic
+            // Choice hints (Choice.hintFn) so a later step's options can
+            // reflect what the user picked on an earlier step.
+            this.snapshot = Answers.of(Map.copyOf(existing));
             switch (step) {
                 case WizardStep.InputStep is -> {
                     var prior = existing.get(is.key());
@@ -504,7 +517,7 @@ public final class Wizard {
             lines.add(sb.toAttributedString());
             if (!error.isEmpty()) {
                 lines.add(new AttributedStringBuilder()
-                        .append(error, AttributedStyle.DEFAULT.foreground(0xef, 0x44, 0x44))
+                        .append(error, Theme.error())
                         .toAttributedString());
             }
             return lines;
@@ -521,6 +534,7 @@ public final class Wizard {
                             isFocused ? Theme.completedStep() : Theme.dim());
                     sb.append(" ");
                     sb.append(c.label(), isFocused ? Theme.focused() : Theme.dim());
+                    appendHint(sb, c.hintFor(snapshot));
                     if (i < rs.choices().size() - 1) {
                         sb.append("  ");
                     }
@@ -530,15 +544,22 @@ public final class Wizard {
                 for (var i = 0; i < rs.choices().size(); i++) {
                     var c = rs.choices().get(i);
                     var isFocused = i == focus;
-                    lines.add(new AttributedStringBuilder()
+                    var sb = new AttributedStringBuilder()
                             .append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
                                     isFocused ? Theme.completedStep() : Theme.dim())
                             .append(" ")
-                            .append(c.label(), isFocused ? Theme.focused() : Theme.dim())
-                            .toAttributedString());
+                            .append(c.label(), isFocused ? Theme.focused() : Theme.dim());
+                    appendHint(sb, c.hintFor(snapshot));
+                    lines.add(sb.toAttributedString());
                 }
             }
             return lines;
+        }
+
+        private static void appendHint(AttributedStringBuilder sb, String hint) {
+            if (hint == null || hint.isEmpty()) return;
+            sb.append("  ");
+            sb.append(hint, Theme.darkGray());
         }
 
         private List<AttributedString> renderMulti(WizardStep.MultiSelectStep ms) {
@@ -553,11 +574,12 @@ public final class Wizard {
                             ? Theme.completedStep()
                             : (isFocused ? Theme.activeStep() : Theme.dim());
                     var labelStyle = isFocused ? Theme.focused() : Theme.dim();
-                    lines.add(new AttributedStringBuilder()
+                    var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
                             .append(" ")
-                            .append(c.label(), labelStyle)
-                            .toAttributedString());
+                            .append(c.label(), labelStyle);
+                    appendHint(sb, c.hintFor(snapshot));
+                    lines.add(sb.toAttributedString());
                 }
             } else {
                 var sb = new AttributedStringBuilder();
@@ -572,6 +594,7 @@ public final class Wizard {
                     sb.append(isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF, glyphStyle);
                     sb.append(" ");
                     sb.append(c.label(), labelStyle);
+                    appendHint(sb, c.hintFor(snapshot));
                     if (i < ms.choices().size() - 1) {
                         sb.append("  ");
                     }

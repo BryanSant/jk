@@ -12,11 +12,13 @@ import java.util.function.Function;
  * Specification on Linux and macOS:
  *
  * <pre>
- *   config()  =  $JK_CONFIG_DIR   |  $XDG_CONFIG_HOME/jk  |  ~/.config/jk
- *   cache()   =  $JK_CACHE_DIR    |  $XDG_CACHE_HOME/jk   |  ~/.cache/jk
- *   state()   =  $JK_STATE_DIR    |  $XDG_STATE_HOME/jk   |  ~/.local/state/jk
- *   binDir()  =  $JK_BIN_DIR      |  $XDG_BIN_HOME        |  ~/.local/bin
- *   jdks()    =  $JK_JDKS_DIR     |  (macOS) ~/Library/Java/JavaVirtualMachines  |  ~/.jdks
+ *   config()         =  $JK_CONFIG_DIR   |  $XDG_CONFIG_HOME/jk  |  ~/.config/jk
+ *   userConfigFile() =  $JK_CONFIG_FILE  |  $XDG_CONFIG_HOME/jk.toml  |  ~/.config/jk.toml
+ *   cache()          =  $JK_CACHE_DIR    |  $XDG_CACHE_HOME/jk   |  ~/.cache/jk
+ *   state()          =  $JK_STATE_DIR    |  $XDG_STATE_HOME/jk   |  ~/.local/state/jk
+ *   data()           =  $JK_DATA_DIR     |  $XDG_DATA_HOME/jk    |  ~/.local/share/jk
+ *   binDir()         =  $JK_BIN_DIR      |  $XDG_BIN_HOME        |  ~/.local/bin
+ *   jdks()           =  $JK_JDKS_DIR     |  (macOS) ~/Library/Java/JavaVirtualMachines  |  ~/.jdks
  * </pre>
  *
  * <p>{@code binDir()} is shared with other user-installed launchers
@@ -49,14 +51,32 @@ public final class JkDirs {
         return new JkDirs(env, userHome, os);
     }
 
-    public static Path config()  { return current().configDir(); }
-    public static Path cache()   { return current().cacheDir(); }
-    public static Path state()   { return current().stateDir(); }
-    public static Path binDir()  { return current().binDirectory(); }
-    public static Path jdks()    { return current().jdksDir(); }
+    public static Path config()         { return current().configDir(); }
+    public static Path userConfigFile() { return current().userConfigFilePath(); }
+    public static Path cache()          { return current().cacheDir(); }
+    public static Path state()          { return current().stateDir(); }
+    public static Path data()           { return current().dataDir(); }
+    public static Path binDir()         { return current().binDirectory(); }
+    public static Path jdks()           { return current().jdksDir(); }
 
     public Path configDir() {
         return resolve("JK_CONFIG_DIR", "XDG_CONFIG_HOME", ".config");
+    }
+
+    /**
+     * Single-file user config (sibling of the per-app config dir):
+     * literal {@code ~/.config/jk.toml} on Linux/Windows, or
+     * {@code $XDG_CONFIG_HOME/jk.toml} when set. The file is not under
+     * {@link #configDir()} — it lives one level up so it's a peer of
+     * other tools' {@code <name>.toml} files. Overridable via
+     * {@code $JK_CONFIG_FILE}.
+     */
+    public Path userConfigFilePath() {
+        String override = nonBlank(env.apply("JK_CONFIG_FILE"));
+        if (override != null) return Path.of(override);
+        String xdg = nonBlank(env.apply("XDG_CONFIG_HOME"));
+        if (xdg != null) return Path.of(xdg).resolve("jk.toml");
+        return home().resolve(".config").resolve("jk.toml");
     }
 
     public Path cacheDir() {
@@ -65,6 +85,10 @@ public final class JkDirs {
 
     public Path stateDir() {
         return resolve("JK_STATE_DIR", "XDG_STATE_HOME", ".local/state");
+    }
+
+    public Path dataDir() {
+        return resolve("JK_DATA_DIR", "XDG_DATA_HOME", ".local/share");
     }
 
     /**

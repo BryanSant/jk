@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
-import picocli.CommandLine;
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Spec;
 
 /**
  * {@code jk jdk} — JDK management subcommands. Maps to PRD §12.
@@ -23,9 +24,12 @@ import picocli.CommandLine.Command;
         })
 public final class JdkCommand implements Runnable {
 
+    @Spec CommandSpec spec;
+
     @Override
     public void run() {
-        // No subcommand — print help.
-        new CommandLine(this).usage(System.out);
+        // No subcommand — print help via the active CommandLine so the
+        // alias-stripping renderer registered by Jk.newCommandLine() applies.
+        spec.commandLine().usage(System.out);
     }
 }

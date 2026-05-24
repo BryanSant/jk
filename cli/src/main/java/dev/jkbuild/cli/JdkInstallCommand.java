@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.tui.ProgressBar;
+import dev.jkbuild.cli.tui.Rail;
+import dev.jkbuild.cli.tui.Spinner;
+import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.IntellijJdkDir;
@@ -11,10 +16,13 @@ import dev.jkbuild.jdk.JdkInstaller;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.jdk.JdkSpec;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.Optional;
@@ -38,9 +46,19 @@ import java.util.concurrent.Callable;
         description = "Download and install a JDK from the JetBrains feed")
 public final class JdkInstallCommand implements Callable<Integer> {
 
-    @Parameters(arity = "1", paramLabel = "<spec>",
-            description = "Version or suggested-SDK-name (e.g. 21, 21.0.5, temurin-21, openjdk-26).")
+    @Parameters(arity = "0..1", paramLabel = "<spec>",
+            description = "Version or suggested-SDK-name (e.g. 21, 21.0.5, temurin-21, openjdk-26). "
+                    + "Omit to launch the interactive wizard.")
     String spec;
+
+    @Option(names = "--make-default",
+            description = "After install, mark this JDK as the system-wide default.")
+    boolean makeDefault;
+
+    @Option(names = "--show-all",
+            description = "In the interactive wizard, list every vendor from the JetBrains feed "
+                    + "instead of the curated default set.")
+    boolean showAll;
 
     @Option(names = "--jdks-dir", hidden = true,
             description = "Override the install root. Default: the IntelliJ JDK directory.")
@@ -63,7 +81,6 @@ public final class JdkInstallCommand implements Callable<Integer> {
             return 1;
         }
 
-        JdkSpec parsed = JdkSpec.parse(spec);
         JdkCatalogClient client = feedUrl != null
                 ? new JdkCatalogClient(new Http(), feedUrl,
                         cacheFile != null ? cacheFile : ephemeralCachePath(),
@@ -73,23 +90,130 @@ public final class JdkInstallCommand implements Callable<Integer> {
 
         String os = HostPlatform.currentOs();
         String arch = HostPlatform.currentArch();
-        Optional<JdkCatalog.Entry> entry = JdkSelector.select(catalog, parsed, os, arch);
-        if (entry.isEmpty()) {
-            System.err.println("jk jdk install: no JDK matches " + spec
-                    + " on " + os + "/" + arch);
-            return 1;
-        }
 
-        JdkCatalog.Entry e = entry.get();
-        System.out.println("Installing " + e.vendor() + " " + e.product() + " " + e.version()
-                + " (" + e.os() + "/" + e.arch() + ")...");
+        JdkCatalog.Entry entry;
+        boolean wantDefault = makeDefault;
+        if (spec == null || spec.isBlank()) {
+            if (!isInteractiveTerminal()) {
+                System.err.println("jk jdk install: stdin is not a TTY — pass <spec> "
+                        + "(e.g. `jk jdk install temurin-21`) or run interactively.");
+                return 64; // EX_USAGE
+            }
+            JdkInstallWizard.Result chosen = runWizard(catalog, os, arch, showAll);
+            entry = chosen.entry();
+            wantDefault = wantDefault || chosen.makeDefault();
+        } else {
+            JdkSpec parsed = JdkSpec.parse(spec);
+            Optional<JdkCatalog.Entry> selected = JdkSelector.select(catalog, parsed, os, arch);
+            if (selected.isEmpty()) {
+                System.err.println("jk jdk install: no JDK matches " + spec
+                        + " on " + os + "/" + arch);
+                return 1;
+            }
+            entry = selected.get();
+        }
 
         Path jdksRoot = jdksDir != null ? jdksDir : IntellijJdkDir.root();
         JdkRegistry registry = new JdkRegistry(jdksRoot);
-        InstalledJdk installed = new JdkInstaller(new Http(), registry).install(e);
+        JdkInstaller installer = new JdkInstaller(new Http(), registry);
+        InstalledJdk installed = downloadAndInstall(installer, entry);
 
-        System.out.println("Installed " + installed.identifier() + " at " + installed.home());
+        if (wantDefault) {
+            GlobalDefaultJdk.current().set(installed);
+            System.out.println();
+            System.out.println("Set " + installed.identifier()
+                    + " as the system-wide default JDK.");
+            Optional<Shell> shell = Shell.detect();
+            if (shell.isPresent()) {
+                System.out.println("Add `" + shell.get().hookInstallCommand()
+                        + "` to activate JAVA_HOME on new shells.");
+            } else {
+                System.out.println("Add `jk hook <bash|zsh|fish>` output to your shell rc "
+                        + "to activate JAVA_HOME on new shells.");
+            }
+        }
         return 0;
+    }
+
+    /**
+     * Drive the download (progress bar) → extract (spinner) sequence and
+     * print the final ✓ "Installing ... Done." line. Falls through to a
+     * one-line "Already installed" message when the target is already on
+     * disk so we don't show a 0%→0% bar for an instant.
+     */
+    private static InstalledJdk downloadAndInstall(JdkInstaller installer, JdkCatalog.Entry entry)
+            throws IOException, InterruptedException {
+        InstalledJdk already = installer.alreadyInstalled(entry);
+        String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
+        if (already != null) {
+            System.out.println(Theme.colorize("✓", Theme.completedStep())
+                    + " " + label + " already installed at " + already.home());
+            return already;
+        }
+
+        String hostLabel = entry.os() + "/" + entry.arch();
+        String downloading = "Downloading " + label + " (" + hostLabel + ")";
+        String downloaded = "Done downloading " + label;
+        String installing = "Installing " + label + "...";
+        long total = entry.archiveSize();
+
+        JdkInstaller.DownloadedArchive dl;
+        try (ProgressBar pb = ProgressBar.show(System.out)) {
+            pb.update(0, downloading);
+            dl = installer.download(entry, bytes -> {
+                int pct = total > 0
+                        ? (int) Math.min(100, bytes * 100L / total)
+                        : 0;
+                pb.update(pct, downloading);
+            });
+            pb.update(100, downloaded);
+        }
+
+        InstalledJdk installed;
+        try (Spinner sp = Spinner.show(System.out, installing)) {
+            installed = installer.extractInstalled(entry, dl);
+        }
+        // Spinner.close() cleared its line; replace it with the done line.
+        System.out.println(Theme.colorize("✓", Theme.completedStep())
+                + " " + installing + " Done.");
+        return installed;
+    }
+
+    private static JdkInstallWizard.Result runWizard(
+            JdkCatalog catalog, String os, String arch, boolean showAll) throws IOException {
+        Terminal terminal;
+        try {
+            terminal = TerminalBuilder.builder().system(true).build();
+        } catch (IOException e) {
+            throw new IOException("failed to open terminal: " + e.getMessage(), e);
+        }
+        Optional<JdkInstallWizard.Result> result =
+                JdkInstallWizard.run(catalog, os, arch, showAll, terminal);
+        if (result.isEmpty()) {
+            // Ctrl-C cancellation. The active region ended with `╰\n` and the
+            // wizard's finally wrote `\r\n`, so the cursor sits two lines below
+            // the trailing rail closer. Move up over both, clear to end of
+            // screen, then redraw the closer in red with the cancel message —
+            // this replaces the active-state closer rather than printing a
+            // second one below it. See InitCommand for the Runtime.halt()
+            // rationale.
+            var line = Rail.closer("𝘅 JDK installation canceled", Theme.error());
+            terminal.writer().print("\033[2F"); // cursor up 2 lines, col 0
+            terminal.writer().print("\033[0J"); // clear to end of screen
+            terminal.writer().print(line.toAnsi(terminal));
+            terminal.writer().println();
+            terminal.writer().flush();
+            Runtime.getRuntime().halt(130); // 128 + SIGINT
+            throw new AssertionError("unreachable");
+        }
+        terminal.close();
+        return result.get();
+    }
+
+    private static boolean isInteractiveTerminal() {
+        return System.console() != null
+                && !"dumb".equals(System.getenv("TERM"))
+                && System.getenv("CI") == null;
     }
 
     private static Path ephemeralCachePath() throws java.io.IOException {

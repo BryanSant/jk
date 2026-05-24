@@ -2,6 +2,8 @@
 package dev.jkbuild.cli;
 
 import picocli.CommandLine.Command;
+import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.Spec;
 
 import java.util.concurrent.Callable;
 
@@ -25,9 +27,11 @@ import java.util.concurrent.Callable;
         })
 public final class ToolCommand implements Callable<Integer> {
 
+    @Spec CommandSpec spec;
+
     @Override
     public Integer call() {
-        new picocli.CommandLine(this).usage(System.out);
+        spec.commandLine().usage(System.out);
         return 64;
     }
 }

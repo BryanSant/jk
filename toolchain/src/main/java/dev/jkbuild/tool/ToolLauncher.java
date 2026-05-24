@@ -15,7 +15,7 @@ import java.util.Set;
 
 /**
  * Writes a persistent launcher for {@code jk install} and runs the
- * ephemeral exec path for {@code jkx} (PRD §20).
+ * ephemeral exec path for {@code jk exec} (PRD §20).
  *
  * <p>Persistent layout per PRD §20.2 (paths resolved by the caller via
  * {@code dev.jkbuild.util.JkDirs}):
@@ -62,7 +62,7 @@ public final class ToolLauncher {
 
     /**
      * Exec the env's main class in-process via {@link ProcessBuilder}
-     * (the {@code jkx} path). Returns the child's exit code.
+     * (the {@code jk exec} path). Returns the child's exit code.
      */
     public static int execEphemeral(Path javaHome, ToolEnv env, List<String> args)
             throws IOException, InterruptedException {

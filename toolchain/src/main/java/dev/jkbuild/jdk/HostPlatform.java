@@ -30,6 +30,25 @@ public final class HostPlatform {
         return !UNSUPPORTED.equals(currentOs()) && !UNSUPPORTED.equals(currentArch());
     }
 
+    /** Friendly display name for an OS (feed vocabulary → user-facing). */
+    public static String displayOs(String os) {
+        return switch (os) {
+            case "linux" -> "Linux";
+            case "macOS" -> "macOS";
+            case "windows" -> "Windows";
+            default -> os;
+        };
+    }
+
+    /** Friendly display name for an architecture. */
+    public static String displayArch(String arch) {
+        return switch (arch) {
+            case "x86_64" -> "64-bit";
+            case "aarch64" -> "ARM 64-bit";
+            default -> arch;
+        };
+    }
+
     static String mapOs(String osName) {
         if (osName == null) return UNSUPPORTED;
         String lower = osName.toLowerCase();

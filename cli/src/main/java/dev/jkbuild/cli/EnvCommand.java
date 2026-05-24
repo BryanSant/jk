@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkRegistry;
@@ -38,6 +39,16 @@ public final class EnvCommand implements Callable<Integer> {
             return 2;
         }
         Path home = jdk.get().home();
+        // Flip the global `current-jdk` symlink to this JDK so new shells
+        // launched via `jk hook current` (or anything reading current-jdk)
+        // pick up the project's pin. Best-effort: never fail the eval just
+        // because we couldn't touch the symlink.
+        try {
+            GlobalDefaultJdk.current().setCurrent(jdk.get());
+        } catch (IOException ignored) {
+            // current-jdk update is advisory; the export lines below still
+            // give the caller a correct JAVA_HOME.
+        }
         // Posix shell only for now; %COMSPEC% on Windows is a follow-up.
         System.out.println("export JAVA_HOME=" + shellQuote(home.toString()));
         System.out.println("export PATH=" + shellQuote(home.resolve("bin").toString())

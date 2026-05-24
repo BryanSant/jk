@@ -13,13 +13,15 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk jkx <coord> -- <args>} — ephemeral exec (PRD §20.3). Same
- * code path as {@code jk tool run}; {@code jkx} is the top-level
+ * {@code jk exec <coord> -- <args>} — ephemeral exec (PRD §20.3). Same
+ * code path as {@code jk tool run}; {@code exec} is the top-level
  * shorthand, kept visible in {@code --help} as the most-typed ergonomic
- * verb (mirrors {@code uvx} from uv).
+ * verb (mirrors {@code uvx} from uv). {@code jkx} is retained as an
+ * alias for muscle-memory continuity.
  */
-@Command(name = "jkx", description = "Ephemeral tool execution from a Maven coord")
-public final class JkxCommand implements Callable<Integer> {
+@Command(name = "exec", aliases = {"jkx"},
+        description = "Ephemeral tool execution from a Maven coord")
+public final class ExecCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<coord>",
             description = "Maven coordinate (group:artifact:version).")

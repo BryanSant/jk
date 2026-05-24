@@ -124,6 +124,16 @@ public sealed interface WizardStep
                 return this;
             }
 
+            public Builder choice(String id, String label, String hint) {
+                this.choices.add(new Choice(id, label, hint));
+                return this;
+            }
+
+            public Builder choice(String id, String label, Function<Answers, String> hintFn) {
+                this.choices.add(new Choice(id, label, hintFn));
+                return this;
+            }
+
             public Builder defaultChoice(String id) {
                 this.defaultChoice = id;
                 return this;
@@ -185,6 +195,16 @@ public sealed interface WizardStep
 
             public Builder choice(String id, String label) {
                 this.choices.add(new Choice(id, label));
+                return this;
+            }
+
+            public Builder choice(String id, String label, String hint) {
+                this.choices.add(new Choice(id, label, hint));
+                return this;
+            }
+
+            public Builder choice(String id, String label, Function<Answers, String> hintFn) {
+                this.choices.add(new Choice(id, label, hintFn));
                 return this;
             }
 

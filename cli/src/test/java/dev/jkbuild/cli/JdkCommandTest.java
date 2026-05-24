@@ -77,15 +77,17 @@ class JdkCommandTest {
         String stdout = captureStdout(() -> run("jdk", "list",
                 "--offline",
                 "--jdks-dir", jdks.toString()));
-        // Reverse-sorted by identifier: temurin-23 first, then temurin-21.0.5.
+        // Grouped by major desc: 23 first, then 21.0.5.
         int idx23 = stdout.indexOf("temurin-23");
         int idx21 = stdout.indexOf("temurin-21.0.5");
         assertThat(idx23).isGreaterThanOrEqualTo(0);
         assertThat(idx21).isGreaterThan(idx23);
+        // Both are installed (no system default), so status column shows "installed".
+        assertThat(stdout).contains("installed");
     }
 
     @Test
-    void list_combines_installed_then_remote(@TempDir Path tempDir) throws Exception {
+    void list_combines_installed_and_available_from_catalog(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
 
@@ -97,12 +99,13 @@ class JdkCommandTest {
                 "--jdks-dir", jdks.toString(),
                 "--feed-url", base.resolve("/feed/jdks.json.xz").toString()));
 
-        // Installed first.
-        int idxInstalled = stdout.indexOf("temurin-21.0.5");
-        assertThat(idxInstalled).isGreaterThanOrEqualTo(0);
-        assertThat(stdout.substring(idxInstalled))
-                .contains(jdks.resolve("temurin-21.0.5").toString());
-        assertThat(stdout).contains("<download available>");
+        // Higher major (catalog-only) appears first; installed row follows.
+        int idxAvailable25 = stdout.indexOf("temurin-25");
+        int idxInstalled21 = stdout.indexOf("temurin-21.0.5");
+        assertThat(idxAvailable25).isGreaterThanOrEqualTo(0);
+        assertThat(idxInstalled21).isGreaterThan(idxAvailable25);
+        // Installed row's status column reads "installed".
+        assertThat(stdout).contains("installed");
     }
 
     @Test
