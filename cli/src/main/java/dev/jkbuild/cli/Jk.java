@@ -108,7 +108,49 @@ public final class Jk implements Runnable {
         // determines explicit flag values; defaults still need to come from the
         // env / project jk.toml / user / system layers via JkConfigLoader.
         loadAndInstallConfig(args);
+        // Fold the explicit-CLI layer in last so the rest of the runtime sees the
+        // fully-resolved JkConfig before picocli even dispatches a subcommand.
+        applyCliOverrides(args);
+        // -q/--quiet must take effect before any println happens. Apply it now
+        // based on the resolved config (which already knows about env/file/CLI layers).
+        dev.jkbuild.config.Quietable.applyIfQuiet(ActiveConfig.get());
         return newCommandLine().execute(rewriteAlias(args));
+    }
+
+    /**
+     * Argv-scan pass that folds explicit CLI flags into {@link ActiveConfig}.
+     * This is intentionally a small scan rather than reusing picocli's parser:
+     * the highest-precedence layer needs to be available <em>before</em>
+     * picocli runs (e.g. so {@link dev.jkbuild.config.Quietable} can mute
+     * stdout before the first subcommand println). Only flags that affect
+     * global behavior are read here; everything else flows through picocli.
+     */
+    private static void applyCliOverrides(String[] args) {
+        java.util.Optional<JkConfig.ColorChoice> color = java.util.Optional.empty();
+        java.util.Optional<Boolean> offline = java.util.Optional.empty();
+        java.util.Optional<Boolean> noProgress = java.util.Optional.empty();
+        java.util.Optional<Boolean> quiet = java.util.Optional.empty();
+        java.util.Optional<Boolean> verbose = java.util.Optional.empty();
+        for (int i = 0; i < args.length; i++) {
+            String a = args[i];
+            switch (a) {
+                case "-q", "--quiet" -> quiet = java.util.Optional.of(true);
+                case "-v", "--verbose" -> verbose = java.util.Optional.of(true);
+                case "--offline" -> offline = java.util.Optional.of(true);
+                case "--no-progress" -> noProgress = java.util.Optional.of(true);
+                case "--color" -> {
+                    if (i + 1 < args.length) color = JkConfig.ColorChoice.parse(args[++i]);
+                }
+                default -> {
+                    if (a.startsWith("--color=")) {
+                        color = JkConfig.ColorChoice.parse(a.substring("--color=".length()));
+                    }
+                }
+            }
+        }
+        JkConfig cli = new JkConfig(color, offline, noProgress, quiet, verbose,
+                java.util.Optional.empty());
+        ActiveConfig.install(ActiveConfig.get().mergedWith(cli));
     }
 
     /**
