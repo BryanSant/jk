@@ -11,12 +11,11 @@ dependencies {
     implementation(project(":io"))
     implementation(libs.asm)
     implementation(libs.asm.tree)
-    // jk forks a JVM child for `jk test` that runs JUnit's ConsoleLauncher;
-    // both jars need to be in the install-dist `lib/` dir so the launcher
-    // can locate them and add them to the child's classpath.
-    implementation(libs.junit.platform.launcher)
-    implementation(libs.junit.platform.console)
-    implementation(libs.junit.jupiter)
+    // JUnit Platform is no longer on engine's runtime classpath — `jk test`
+    // forks a child JVM that runs jk-test-runner with the JUnit jars
+    // sourced from the user's CAS (injected via LockOrchestrator). All
+    // engine needs is jackson for parsing the runner's NDJSON event stream.
+    implementation(libs.jackson.databind)
     // Kotlin support is now subprocess-based — SubprocessKotlincStrategy
     // execs <kotlin-home>/bin/kotlinc from a jk-installed distribution.
     // kotlin-compiler-embeddable (~50 MB) and kotlin-stdlib are no longer

@@ -6,6 +6,7 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.Scope;
+import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
 
@@ -39,6 +40,31 @@ public final class LockOrchestrator {
 
     private static final List<Scope> SCOPES =
             List.of(Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST);
+
+    /**
+     * Synthetic deps every project's TEST scope inherits. The user never
+     * mentions these in {@code jk.toml}; they're injected here so that
+     * {@code jk test} (which forks a JVM running {@code jk-test-runner}
+     * over JUnit Platform) always has the engines + launcher API on the
+     * test-runtime classpath. Pinned to the JUnit version jk itself was
+     * built against — kept here as a single source of truth.
+     *
+     * <p>{@code putIfAbsent} semantics in {@link #lock} mean a user-declared
+     * {@code junit-jupiter} (any version) wins over the synthetic pin, so
+     * teams already on a specific JUnit release are unaffected.
+     */
+    public static final String JK_TEST_JUNIT_VERSION = "6.1.0";
+
+    private static final List<Dependency> IMPLICIT_TEST_DEPS = List.of(
+            // Caret-implicit (parseFloating) — 6.x is wire-compatible with
+            // the launcher API our test-runner was built against; users on
+            // 6.1.1+ pick up patch releases automatically.
+            new Dependency(
+                    "org.junit.jupiter:junit-jupiter",
+                    VersionSelector.parseFloating(JK_TEST_JUNIT_VERSION)),
+            new Dependency(
+                    "org.junit.platform:junit-platform-launcher",
+                    VersionSelector.parseFloating(JK_TEST_JUNIT_VERSION)));
 
     private final RepoGroup repos;
     private final Resolver resolver;
@@ -89,6 +115,18 @@ public final class LockOrchestrator {
         for (Dependency featureDep : featureDeps) {
             deduped.putIfAbsent(featureDep.module(), featureDep);
         }
+        // Inject the test-runner's required JUnit Platform deps when the
+        // project actually has test-scope deps declared — a strong signal
+        // that the user runs `jk test`. Projects with an empty TEST scope
+        // (libraries-with-no-tests, scratch projects) skip the injection
+        // so their lockfile stays minimal. `putIfAbsent` keeps the user's
+        // choice when they've declared their own JUnit version.
+        boolean injectTestPlatform = !project.dependencies().of(Scope.TEST).isEmpty();
+        if (injectTestPlatform) {
+            for (Dependency implicit : IMPLICIT_TEST_DEPS) {
+                deduped.putIfAbsent(implicit.module(), implicit);
+            }
+        }
         List<Dependency> declared = new ArrayList<>(deduped.values());
         Resolution resolution = resolver.resolve(declared);
 
@@ -102,6 +140,11 @@ public final class LockOrchestrator {
             }
             if (scope == Scope.MAIN) {
                 for (Dependency d : featureDeps) rootModules.add(d.module());
+            }
+            if (scope == Scope.TEST && injectTestPlatform) {
+                // The implicit JUnit deps seed the TEST scope when injection
+                // fired — their transitive closure lands on test-runtime classpath.
+                for (Dependency d : IMPLICIT_TEST_DEPS) rootModules.add(d.module());
             }
             if (rootModules.isEmpty()) continue;
             for (String module : reachableFrom(rootModules, resolution)) {

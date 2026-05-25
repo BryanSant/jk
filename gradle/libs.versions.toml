@@ -56,7 +56,6 @@ jline-terminal-ffm     = { module = "org.jline:jline-terminal-ffm",             
 # testing (consumed by jk.java-conventions; applied to every module)
 junit-jupiter          = { module = "org.junit.jupiter:junit-jupiter",              version.ref = "junit" }
 junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher",  version.ref = "junit" }
-junit-platform-console = { module = "org.junit.platform:junit-platform-console", version.ref = "junit" }
 assertj-core           = { module = "org.assertj:assertj-core",                     version.ref = "assertj" }
 
 [plugins]

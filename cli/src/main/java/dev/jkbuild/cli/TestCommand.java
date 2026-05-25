@@ -115,18 +115,20 @@ public final class TestCommand implements Callable<Integer> {    @Option(names =
         List<Path> runtimeClasspath = new ArrayList<>();
         runtimeClasspath.add(mainClasses);
         runtimeClasspath.addAll(testRuntimeCp);
+        // jk-test-runner is extracted once per jk version into this cache
+        // dir, then reused. CAS keyed by jk version (not jar SHA) — when jk
+        // is upgraded the new resource clobbers the old extract.
+        Path runnerCacheDir = cache.resolve("test-runner");
         JUnitLauncher.Result result;
         try {
-            result = new JUnitLauncher().run(javaHome, testClasses, runtimeClasspath);
+            result = new JUnitLauncher().run(
+                    javaHome, testClasses, runtimeClasspath, runnerCacheDir, Jk.VERSION);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             System.err.println("jk test: interrupted");
             return 130;
         } catch (IOException e) {
-            // Most-common failure today: native-image build can't locate
-            // the JUnit launcher jars. The exception message is already
-            // user-friendly, so print it as-is without a stacktrace.
-            System.err.println(e.getMessage());
+            System.err.println("jk test: " + e.getMessage());
             return 1;
         }
 

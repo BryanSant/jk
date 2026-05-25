@@ -1,145 +1,117 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.test;
 
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.json.JsonMapper;
+
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.net.URISyntaxException;
-import java.net.URL;
-import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Runs a project's compiled tests by forking a child JVM and invoking
- * {@code org.junit.platform.console.ConsoleLauncher} against it.
+ * {@code dev.jkbuild.test.runner.JkRunner} (jk's tiny test-runner shim
+ * bundled as a classpath resource and extracted on first use).
  *
- * <p>Forking matters for two reasons: (1) the child uses the project's
- * pinned JDK (from {@code jk.toml} / {@code jk.lock}), not whatever jk
- * itself happens to be running under — so a test compiled for JDK 25
- * runs on JDK 25; (2) the child is a regular HotSpot JVM with unrestricted
- * reflection, sidestepping the native-image metadata gaps that broke the
- * old in-process path (JUnit Platform 6.x ships no native-image config).
+ * <p>The child JVM is the project's pinned JDK from {@code jk.toml} /
+ * {@code jk.lock}, so a test compiled for JDK 25 actually runs on JDK 25.
+ * The runner uses {@code junit-platform-launcher} + {@code junit-jupiter}
+ * — both injected into the user's TEST scope at lock time by
+ * {@code LockOrchestrator}, sourced from the CAS like any other dep.
+ *
+ * <p>Wire protocol: the child emits one NDJSON event per line on stdout,
+ * each line prefixed with {@code ##JK:}. Lines without the prefix are the
+ * user's tests printing — passed through to the parent's stdout verbatim.
  */
 public final class JUnitLauncher {
 
-    /**
-     * Launch the tests.
-     *
-     * @param javaHome       resolved JDK home (from {@code CompileToolchain.resolveJavaHome})
-     * @param testClassesDir the directory javac wrote the compiled test classes into
-     * @param runtimeClasspath project's test-runtime classpath (main classes + main/runtime/test scope jars)
-     */
-    public Result run(Path javaHome, Path testClassesDir, List<Path> runtimeClasspath)
+    /** Marker prefix every protocol line carries. Must match {@code JsonEventWriter.PREFIX} in the runner. */
+    private static final String PROTOCOL_PREFIX = "##JK:";
+
+    /** Where the embedded runner jar lives inside the cli jar / native binary. */
+    private static final String RUNNER_RESOURCE = "/dev/jkbuild/test/runner/jk-test-runner.jar";
+
+    private static final ObjectMapper JSON = JsonMapper.builder().build();
+
+    public Result run(Path javaHome, Path testClassesDir, List<Path> runtimeClasspath,
+                      Path runnerCacheDir, String jkVersion)
             throws IOException, InterruptedException {
         Objects.requireNonNull(javaHome, "javaHome");
         Objects.requireNonNull(testClassesDir, "testClassesDir");
         Objects.requireNonNull(runtimeClasspath, "runtimeClasspath");
+        Objects.requireNonNull(runnerCacheDir, "runnerCacheDir");
+        Objects.requireNonNull(jkVersion, "jkVersion");
 
-        var launcherJars = discoverConsoleLauncherJars();
-        if (launcherJars.isEmpty()) {
-            throw new IOException(
-                    "jk test: junit-platform-console-launcher not on jk's classpath. "
-                            + "Run jk via the JVM distribution (cli/build/install/jk/bin/jk) "
-                            + "until native-image bundling of the test runner lands.");
-        }
+        Path runnerJar = extractRunner(runnerCacheDir, jkVersion);
 
         var classpath = new LinkedHashSet<Path>();
         classpath.add(testClassesDir);
         classpath.addAll(runtimeClasspath);
-        classpath.addAll(launcherJars);
+        classpath.add(runnerJar);
 
-        var javaBinary = javaHome.resolve("bin").resolve(isWindows() ? "java.exe" : "java");
+        Path javaBinary = javaHome.resolve("bin").resolve(isWindows() ? "java.exe" : "java");
 
         var cmd = new ArrayList<String>();
         cmd.add(javaBinary.toString());
         cmd.add("-cp");
         cmd.add(joinClasspath(classpath));
-        cmd.add("org.junit.platform.console.ConsoleLauncher");
-        cmd.add("execute");
+        cmd.add("dev.jkbuild.test.runner.JkRunner");
         cmd.add("--scan-classpath=" + testClassesDir);
-        cmd.add("--disable-banner");
-        // Single-color sink keeps the regex-based summary parse reliable.
-        cmd.add("--disable-ansi-colors");
-        // ConsoleLauncher's default exit code is 0 even when tests fail; opt
-        // in to "fail-on-failure" so the process exit reflects test outcome.
-        cmd.add("--fail-if-no-tests");
 
         var pb = new ProcessBuilder(cmd).redirectErrorStream(true);
         var process = pb.start();
 
-        // Stream output to the user verbatim AND capture it for summary parsing.
-        var captured = new StringBuilder();
-        try (var reader = new BufferedReader(
+        var aggregator = new ResultAggregator();
+        try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                System.out.println(line);
-                captured.append(line).append('\n');
-            }
-        }
-        int exit = process.waitFor();
-        return parseSummary(captured.toString(), exit);
-    }
-
-    /**
-     * Locate the {@code junit-platform-console-launcher} jar (and its
-     * transitive {@code junit-platform-launcher} + engine jars) on jk's own
-     * classpath, so they can be added to the child JVM's classpath. Works
-     * when jk runs under a regular JVM (installDist): {@code java.class.path}
-     * lists them. Native-image binaries embed classes rather than ship jars,
-     * so this returns empty and the caller surfaces a clear error.
-     */
-    static List<Path> discoverConsoleLauncherJars() {
-        var found = new LinkedHashSet<Path>();
-        // First try walking our own classloader's URLs — works regardless of
-        // whether the user wrapped jk in a custom launcher.
-        var cl = JUnitLauncher.class.getClassLoader();
-        if (cl instanceof URLClassLoader ucl) {
-            for (URL u : ucl.getURLs()) {
-                if ("file".equals(u.getProtocol())) {
-                    try {
-                        found.add(Path.of(u.toURI()));
-                    } catch (URISyntaxException ignored) {
-                        // skip
-                    }
+                if (line.startsWith(PROTOCOL_PREFIX)) {
+                    aggregator.accept(line.substring(PROTOCOL_PREFIX.length()));
+                } else {
+                    // Plain test output — pass straight through to the user.
+                    System.out.println(line);
                 }
             }
         }
-        // Fallback: parse java.class.path. The app classloader is typically
-        // jdk.internal.loader.ClassLoaders$AppClassLoader (not a URLClassLoader),
-        // so the URL walk above misses it on modern JDKs.
-        if (found.isEmpty()) {
-            var raw = System.getProperty("java.class.path", "");
-            for (var entry : raw.split(Pattern.quote(File.pathSeparator))) {
-                if (entry.isEmpty()) continue;
-                found.add(Path.of(entry));
+        int exit = process.waitFor();
+        return aggregator.toResult(exit);
+    }
+
+    /**
+     * Copy the runner jar out of {@code /dev/jkbuild/test/runner/jk-test-runner.jar}
+     * (bundled at cli build time) into {@code <cacheDir>/<jkVersion>.jar}. The
+     * cache is keyed by jk version, not jar SHA, because the resource lives in
+     * the binary we're running — if jk gets upgraded the cache file is replaced.
+     */
+    private static Path extractRunner(Path cacheDir, String jkVersion) throws IOException {
+        Path target = cacheDir.resolve(jkVersion + ".jar");
+        if (Files.isRegularFile(target)) return target;
+        Files.createDirectories(cacheDir);
+        try (InputStream in = JUnitLauncher.class.getResourceAsStream(RUNNER_RESOURCE)) {
+            if (in == null) {
+                throw new IOException("jk test: " + RUNNER_RESOURCE + " missing from this build "
+                        + "(processResources didn't bundle it)");
             }
+            // Stage to a temp file in the same directory, then rename — keeps
+            // concurrent jk invocations from racing on a half-written jar.
+            Path tmp = Files.createTempFile(cacheDir, "jk-test-runner-", ".jar.tmp");
+            Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
+            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         }
-        // Filter to JUnit Platform + Jupiter jars only — bringing the entire
-        // jk classpath (~80 jars, including jgit, jackson, etc.) into the
-        // child would slow startup and risk version drift if the project
-        // ships incompatible copies of any of them.
-        var result = new ArrayList<Path>();
-        for (Path p : found) {
-            String name = p.getFileName() == null ? "" : p.getFileName().toString();
-            if ((name.startsWith("junit-platform-") || name.startsWith("junit-jupiter-")
-                    || name.startsWith("opentest4j-"))
-                    && name.endsWith(".jar")
-                    && Files.isRegularFile(p)) {
-                result.add(p);
-            }
-        }
-        return result;
+        return target;
     }
 
     private static String joinClasspath(Iterable<Path> entries) {
@@ -155,72 +127,74 @@ public final class JUnitLauncher {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
+    // ------------------------------------------------------------------
+    // Event-stream aggregation
+    // ------------------------------------------------------------------
+
     /**
-     * ConsoleLauncher's summary block looks like:
-     * <pre>
-     * [        16 tests successful      ]
-     * [         0 tests failed          ]
-     * </pre>
-     * We grep these lines for the counters we report back to the user.
-     * The exit code remains the source of truth for "did anything fail" —
-     * the parse is for the human-readable summary.
+     * Consumes the runner's NDJSON event stream and builds the {@link Result}
+     * we hand back to {@code TestCommand}. {@code plan_finished} provides the
+     * authoritative totals; we additionally collect per-test failure details
+     * from {@code finished} events so the parent can render a {@code FAIL: …}
+     * list without re-parsing later.
      */
-    static Result parseSummary(String output, int exitCode) {
-        long total = 0;
-        long succeeded = 0;
-        long failed = 0;
-        long skipped = 0;
-        var failures = new ArrayList<Failure>();
+    private static final class ResultAggregator {
 
-        var counter = Pattern.compile(
-                "\\[\\s*(\\d+)\\s+tests\\s+(found|successful|failed|skipped)\\s*]");
-        for (var line : output.split("\n")) {
-            Matcher m = counter.matcher(line);
-            if (!m.find()) continue;
-            long n = Long.parseLong(m.group(1));
-            switch (m.group(2)) {
-                case "found" -> total = n;
-                case "successful" -> succeeded = n;
-                case "failed" -> failed = n;
-                case "skipped" -> skipped = n;
-            }
-        }
-        // Test-failure lines: ConsoleLauncher prints `JUnit Jupiter:Class:method ...`
-        // with the exception immediately following. Quick parse for the test name
-        // — full stack traces stream to stdout already, this is for the FAIL list.
-        var failHeader = Pattern.compile("^Failures\\s*\\(\\d+\\):.*$");
-        boolean inFailures = false;
-        String pendingName = null;
-        for (var line : output.split("\n")) {
-            if (failHeader.matcher(line).matches()) {
-                inFailures = true;
-                continue;
-            }
-            if (!inFailures) continue;
-            // Each failure starts with `    JUnit Jupiter:...` and is followed
-            // by indented detail lines. Capture the first line of each failure.
-            if (line.startsWith("    ") && !line.startsWith("        ")) {
-                if (pendingName != null) failures.add(new Failure(pendingName, ""));
-                pendingName = line.trim();
-            } else if (line.isBlank()) {
-                if (pendingName != null) {
-                    failures.add(new Failure(pendingName, ""));
-                    pendingName = null;
-                }
-                inFailures = false;
-            }
-        }
-        if (pendingName != null) failures.add(new Failure(pendingName, ""));
+        private long total;
+        private long succeeded;
+        private long failed;
+        private long skipped;
+        private final List<Failure> failures = new ArrayList<>();
 
-        // The parser may not have seen anything (e.g. ConsoleLauncher banner
-        // suppression hid the summary); fall back to exit code so the caller
-        // still reports a sensible pass/fail.
-        if (total == 0 && failed == 0 && succeeded == 0 && exitCode != 0) {
-            failed = 1;
-            total = 1;
-            failures.add(new Failure("(test run)", "ConsoleLauncher exited " + exitCode));
+        void accept(String json) {
+            JsonNode node;
+            try {
+                node = JSON.readTree(json);
+            } catch (RuntimeException e) {
+                // Malformed event — surface to stderr but don't kill the run.
+                // Jackson 3 throws JacksonException (unchecked) for parse errors.
+                System.err.println("jk test: malformed protocol line: " + json);
+                return;
+            }
+            var event = node.path("e").asString();
+            switch (event) {
+                case "finished" -> onFinished(node);
+                case "plan_finished" -> onPlanFinished(node);
+                // started / skipped / dynamic_registered / report / plan_started
+                // are no-ops for the summary today — they'll feed live UI in a
+                // follow-up that wires per-test rendering.
+                default -> {}
+            }
         }
-        return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
+
+        private void onFinished(JsonNode node) {
+            var status = node.path("status").asString();
+            if (!"FAILED".equals(status)) return;
+            var id = node.path("id").asString();
+            var throwable = node.path("throwable");
+            String message = throwable.isMissingNode()
+                    ? "(no throwable)"
+                    : throwable.path("class").asString("?") + ": "
+                            + throwable.path("message").asString("");
+            failures.add(new Failure(id, message));
+        }
+
+        private void onPlanFinished(JsonNode node) {
+            total = node.path("total").asLong(0);
+            succeeded = node.path("successful").asLong(0);
+            failed = node.path("failed").asLong(0);
+            skipped = node.path("skipped").asLong(0);
+        }
+
+        Result toResult(int exitCode) {
+            // Exit code is the source of truth — if the runner died abruptly
+            // (no plan_finished event) we still report a failure.
+            if (total == 0 && failed == 0 && exitCode != 0) {
+                return new Result(1, 0, 1, 0, List.of(
+                        new Failure("(test run)", "runner exited " + exitCode)));
+            }
+            return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
+        }
     }
 
     public record Result(
