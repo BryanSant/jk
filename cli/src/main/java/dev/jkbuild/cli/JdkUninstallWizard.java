@@ -3,12 +3,16 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.tui.Choice;
+import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
-import dev.jkbuild.jdk.InstalledJdk;
+import dev.jkbuild.jdk.JdkHit;
+import dev.jkbuild.jdk.JdkRegistry;
+import dev.jkbuild.jdk.JdkVendor;
 import org.jline.terminal.Terminal;
+import org.jline.utils.AttributedString;
+import org.jline.utils.AttributedStringBuilder;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -16,116 +20,89 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * TUI for {@code jk jdk uninstall} when no {@code <identifier>} arg is
- * supplied. One wizard, two steps:
+ * TUI for {@code jk jdk uninstall} when no argument is supplied.
  *
- * <ol>
- *   <li>Vertical checkbox over the installed JDKs ("Select the JDKs to
- *       uninstall"). The current global default carries a {@code (default)}
- *       annotation so the user sees what they're about to demote.</li>
- *   <li>Vertical radio over the <em>survivors</em> ("Choose a JDK to be
- *       the default"). Only fires when (a) the current default is among
- *       the victims and (b) more than one JDK will remain. The survivor
- *       list is computed dynamically from step 1's answer via {@code
- *       choicesFn} — that's why both prompts live in the same wizard
- *       frame instead of two separate runs.</li>
- * </ol>
+ * <p>One vertical checkbox step over every installed JDK. Each row renders
+ * as:
+ * <pre>
+ *   {source}/{identifier} - {Vendor} {Product}
+ * </pre>
+ * with {@code source} in bold-yellow, {@code /identifier} in bold-white,
+ * and the trailing vendor metadata in dark gray. The currently-installed
+ * default JDK gets a {@code (default)} hint so the user sees what they're
+ * about to remove.
+ *
+ * <p>Returns the {@link JdkHit}s the user checked. The caller does the
+ * confirmation prompt + per-item deletion + default reconciliation —
+ * keeping the wizard's responsibility narrow.
  */
 final class JdkUninstallWizard {
 
     private static final String TITLE = "Jk - Uninstall Java Development Kits";
 
     static final String VICTIMS_KEY = "victims";
-    static final String NEW_DEFAULT_KEY = "newDefault";
 
     private JdkUninstallWizard() {}
 
-    public record Result(List<InstalledJdk> victims, Optional<InstalledJdk> newDefault) {}
-
     /**
-     * Run the wizard against {@code installed} and return the user's
-     * decisions. Empty {@link Optional} = wizard cancelled. The result's
-     * victim list may be empty if the user committed without checking
-     * anything (treat as no-op).
+     * Show the wizard. Empty result means the user cancelled (Esc); a result
+     * with an empty list means they committed without checking anything.
      */
-    static Optional<Result> run(
-            List<InstalledJdk> installed,
+    static Optional<List<JdkHit>> run(
+            List<JdkHit> installed,
             Optional<String> currentDefault,
             Terminal terminal) {
-        Map<String, InstalledJdk> byId = new LinkedHashMap<>();
-        for (InstalledJdk j : installed) {
-            byId.put(j.identifier(), j);
+        Map<String, JdkHit> byId = new LinkedHashMap<>();
+        for (JdkHit hit : installed) {
+            byId.put(choiceIdFor(hit), hit);
         }
 
         WizardStep.MultiSelectStep.Builder victims = WizardStep.MultiSelectStep
                 .vertical(VICTIMS_KEY, "Select the JDKs to uninstall");
-        for (InstalledJdk j : installed) {
-            victims.choice(j.identifier(), labelFor(j, currentDefault));
+        for (JdkHit hit : installed) {
+            String id = choiceIdFor(hit);
+            String identifier = JdkRegistry.identifierFor(hit.home());
+            AttributedString rich = richLabel(hit, identifier);
+            String hint = currentDefault.isPresent() && currentDefault.get().equals(identifier)
+                    ? "(default)" : "";
+            victims.choice(new Choice(id, rich.toString(), hint, null, rich));
         }
-
-        WizardStep.RadioStep newDefaultStep = WizardStep.RadioStep
-                .vertical(NEW_DEFAULT_KEY, "Choose a JDK to be the default")
-                .choicesFn(answers -> survivorChoices(installed, answers))
-                .when(answers -> shouldPromptForNewDefault(installed, currentDefault, answers))
-                .build();
 
         Wizard wizard = Wizard.builder()
                 .title(TITLE)
                 .step(victims.build())
-                .step(newDefaultStep)
                 .build();
 
         Optional<Answers> outcome = wizard.run(terminal);
         if (outcome.isEmpty()) return Optional.empty();
         Answers a = outcome.get();
 
-        List<InstalledJdk> picked = a.getList(VICTIMS_KEY).stream()
+        List<JdkHit> picked = a.getList(VICTIMS_KEY).stream()
                 .map(byId::get)
                 .filter(Objects::nonNull)
                 .toList();
-
-        Optional<InstalledJdk> chosen = a.has(NEW_DEFAULT_KEY)
-                ? Optional.ofNullable(byId.get(a.get(NEW_DEFAULT_KEY)))
-                : Optional.empty();
-
-        return Optional.of(new Result(picked, chosen));
+        return Optional.of(picked);
     }
 
     /**
-     * Show step 2 only when the current default is among the victims AND
-     * at least two JDKs would survive (one-survivor case is auto-promoted
-     * without prompting; zero survivors leaves the default cleared).
+     * Render-only: {@code source/identifier - Vendor Product} as a mixed-style
+     * {@link AttributedString}. Source bold-yellow; identifier bold-white;
+     * trailing vendor metadata dark-gray; vendor block omitted when unknown.
      */
-    static boolean shouldPromptForNewDefault(
-            List<InstalledJdk> installed,
-            Optional<String> currentDefault,
-            Answers answers) {
-        if (currentDefault.isEmpty()) return false;
-        List<String> victims = answers.getList(VICTIMS_KEY);
-        boolean defaultIsVictim = victims.contains(currentDefault.get());
-        if (!defaultIsVictim) return false;
-        long survivors = installed.stream()
-                .filter(j -> !victims.contains(j.identifier()))
-                .count();
-        return survivors > 1;
+    static AttributedString richLabel(JdkHit hit, String identifier) {
+        var sb = new AttributedStringBuilder();
+        sb.append(hit.source(), Theme.warning().bold());
+        sb.append("/", Theme.focused());
+        sb.append(identifier, Theme.focused());
+        if (hit.vendor() != null && hit.vendor() != JdkVendor.UNKNOWN) {
+            sb.append(" - ", Theme.darkGray());
+            sb.append(hit.vendor().displayName(), Theme.darkGray());
+        }
+        return sb.toAttributedString();
     }
 
-    /** Survivors derived from the step 1 multi-select, in catalog order. */
-    static List<Choice> survivorChoices(List<InstalledJdk> installed, Answers answers) {
-        List<String> victims = answers.getList(VICTIMS_KEY);
-        List<Choice> out = new ArrayList<>();
-        for (InstalledJdk j : installed) {
-            if (!victims.contains(j.identifier())) {
-                out.add(new Choice(j.identifier(), j.identifier()));
-            }
-        }
-        return out;
-    }
-
-    private static String labelFor(InstalledJdk j, Optional<String> currentDefault) {
-        if (currentDefault.isPresent() && currentDefault.get().equals(j.identifier())) {
-            return j.identifier() + "  (default)";
-        }
-        return j.identifier();
+    /** Unique key for one row: {@code <source>/<identifier>}. */
+    static String choiceIdFor(JdkHit hit) {
+        return hit.source() + "/" + JdkRegistry.identifierFor(hit.home());
     }
 }

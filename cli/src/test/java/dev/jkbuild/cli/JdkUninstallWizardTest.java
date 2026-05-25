@@ -1,81 +1,41 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
-import dev.jkbuild.cli.tui.Answers;
-import dev.jkbuild.jdk.InstalledJdk;
+import dev.jkbuild.jdk.JdkHit;
+import dev.jkbuild.jdk.JdkVendor;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 class JdkUninstallWizardTest {
 
     @Test
-    void survivor_choices_are_installed_minus_victims_in_catalog_order() {
-        List<InstalledJdk> installed = List.of(
-                jdk("temurin-21.0.5"),
-                jdk("corretto-17"),
-                jdk("liberica-25"));
-        Answers answers = Answers.of(Map.of(
-                JdkUninstallWizard.VICTIMS_KEY, List.of("corretto-17")));
+    void rich_label_format_matches_source_slash_identifier_with_vendor_trailer() {
+        JdkHit hit = new JdkHit(Path.of("/home/u/.jdks/temurin-26.0.1"),
+                "26.0.1", JdkVendor.TEMURIN, "intellij");
 
-        var survivors = JdkUninstallWizard.survivorChoices(installed, answers);
-        assertThat(survivors).extracting("id")
-                .containsExactly("temurin-21.0.5", "liberica-25");
+        var rich = JdkUninstallWizard.richLabel(hit, "temurin-26.0.1");
+        // Stringified form drops styling; check that ordering + tokens match
+        // the user's spec.
+        assertThat(rich.toString())
+                .isEqualTo("intellij/temurin-26.0.1 - Eclipse Temurin");
     }
 
     @Test
-    void prompt_for_new_default_skipped_when_default_not_among_victims() {
-        List<InstalledJdk> installed = List.of(
-                jdk("temurin-21"), jdk("corretto-17"), jdk("liberica-25"));
-        Answers answers = Answers.of(Map.of(
-                JdkUninstallWizard.VICTIMS_KEY, List.of("corretto-17")));
+    void rich_label_omits_trailer_when_vendor_unknown() {
+        JdkHit hit = new JdkHit(Path.of("/opt/custom-jdk-x"),
+                "21", JdkVendor.UNKNOWN, "system");
 
-        boolean prompt = JdkUninstallWizard.shouldPromptForNewDefault(
-                installed, Optional.of("temurin-21"), answers);
-        assertThat(prompt).isFalse();
+        var rich = JdkUninstallWizard.richLabel(hit, "custom-jdk-x");
+        assertThat(rich.toString()).isEqualTo("system/custom-jdk-x");
     }
 
     @Test
-    void prompt_for_new_default_skipped_when_only_one_survivor() {
-        List<InstalledJdk> installed = List.of(jdk("temurin-21"), jdk("corretto-17"));
-        Answers answers = Answers.of(Map.of(
-                JdkUninstallWizard.VICTIMS_KEY, List.of("temurin-21")));
-
-        // Default is being removed, but only one survivor — auto-promote, no prompt.
-        boolean prompt = JdkUninstallWizard.shouldPromptForNewDefault(
-                installed, Optional.of("temurin-21"), answers);
-        assertThat(prompt).isFalse();
-    }
-
-    @Test
-    void prompt_for_new_default_fires_when_default_removed_and_many_survivors() {
-        List<InstalledJdk> installed = List.of(
-                jdk("temurin-21"), jdk("corretto-17"), jdk("liberica-25"));
-        Answers answers = Answers.of(Map.of(
-                JdkUninstallWizard.VICTIMS_KEY, List.of("temurin-21")));
-
-        boolean prompt = JdkUninstallWizard.shouldPromptForNewDefault(
-                installed, Optional.of("temurin-21"), answers);
-        assertThat(prompt).isTrue();
-    }
-
-    @Test
-    void prompt_for_new_default_skipped_when_no_current_default() {
-        List<InstalledJdk> installed = List.of(jdk("temurin-21"), jdk("corretto-17"));
-        Answers answers = Answers.of(Map.of(
-                JdkUninstallWizard.VICTIMS_KEY, List.of("temurin-21")));
-
-        boolean prompt = JdkUninstallWizard.shouldPromptForNewDefault(
-                installed, Optional.empty(), answers);
-        assertThat(prompt).isFalse();
-    }
-
-    private static InstalledJdk jdk(String identifier) {
-        return new InstalledJdk(identifier, Path.of("/tmp/jdks", identifier));
+    void choice_id_is_source_slash_identifier() {
+        JdkHit hit = new JdkHit(Path.of("/home/u/.jdks/temurin-26.0.1"),
+                "26.0.1", JdkVendor.TEMURIN, "intellij");
+        assertThat(JdkUninstallWizard.choiceIdFor(hit)).isEqualTo("intellij/temurin-26.0.1");
     }
 }

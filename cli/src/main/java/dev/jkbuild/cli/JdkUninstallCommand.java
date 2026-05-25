@@ -5,11 +5,11 @@ import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
+import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
-import org.jline.utils.AttributedStyle;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -27,21 +27,16 @@ import java.util.concurrent.Callable;
 /**
  * {@code jk jdk uninstall <source>/<spec>} — source-qualified single-target
  * removal. Without arguments (and on a TTY) opens an interactive checkbox
- * wizard listing every install across every probe.
+ * wizard listing every install across every probe with the same
+ * {@code <source>/<spec>} contract applied per-row.
  *
- * <p>The single-target form requires <em>both</em> a source name (matching
- * one of the probe names — {@code intellij}, {@code sdkman}, {@code jbang},
- * {@code mise}, {@code asdf}, {@code jenv}, {@code homebrew}, {@code system},
- * {@code java-home}) and a full spec (not a bare major). Examples:
- * <pre>
- *   jk jdk uninstall intellij/temurin-26.0.1   # works
- *   jk jdk uninstall jbang/temurin-17.0.19     # works
- *   jk jdk uninstall sdkman/25                 # rejected — bare major
- *   jk jdk uninstall 25.0.3-tem                # rejected — no source
- * </pre>
+ * <p>Both paths funnel through the same per-victim logic:
+ * {@link #uninstallOne}. The interactive path asks for confirmation
+ * <em>once</em> with a summary of all victims rather than per row.
  *
- * <p>Confirms before deleting unless {@code --yes} is passed. Confirmation
- * defaults to "yes" on Enter; any non-{@code y} response aborts.
+ * <p>After all deletions, if the global default JDK was among the victims,
+ * delegate to {@link JdkDefaultCommand#applyLts} so the next-best LTS on
+ * disk becomes the new default automatically.
  */
 @Command(name = "uninstall", aliases = {"remove"},
         description = "Uninstall JDK versions")
@@ -81,6 +76,8 @@ public final class JdkUninstallCommand implements Callable<Integer> {
         return runWizard(registry, defaults);
     }
 
+    // --- single-target path -------------------------------------------------
+
     private Integer runSingle(JdkRegistry registry, GlobalDefaultJdk defaults) throws IOException {
         int slash = argument.indexOf('/');
         if (slash <= 0 || slash == argument.length() - 1) {
@@ -112,57 +109,22 @@ public final class JdkUninstallCommand implements Callable<Integer> {
         }
 
         JdkHit hit = match.get();
-        if (!confirmDeletion(source, spec)) {
+        if (!confirmDeletion(List.of(hit))) {
             System.out.println("Aborted.");
             return 0;
         }
 
-        Path installDir = jdkInstallDir(hit.home());
-        InstalledJdk installed = new InstalledJdk(JdkRegistry.identifierFor(hit.home()), hit.home());
-        try (var sp = Spinner.show(System.out,
-                "Deleting " + Theme.colorize(JdkInstallCommand.tildeCollapse(installDir), Theme.warning())
-                        + "...")) {
-            registry.purge(installed);
-        }
-        System.out.println(
-                Theme.colorize("✓", Theme.completedStep())
-                        + " " + Theme.colorize(spec, Theme.focused())
-                        + " from " + Theme.colorize(source, Theme.focused()));
-
-        // Maintain the legacy reconcile flow for the global default symlink.
-        reconcileDefaultAfterRemoval(registry, defaults, List.of(installed), Optional.empty());
+        uninstallOne(hit, registry);
+        reconcileDefaultAfterRemoval(registry, defaults, List.of(hit));
         return 0;
     }
 
-    /**
-     * Prompts the user with a yellow warning glyph and returns {@code true}
-     * on Enter or {@code y}/{@code Y}. {@code --yes} short-circuits the
-     * prompt; on a non-TTY without {@code --yes} we already refuse earlier,
-     * so this is only reached interactively.
-     */
-    private boolean confirmDeletion(String source, String spec) throws IOException {
-        if (assumeYes) return true;
-        System.out.print(
-                Theme.colorize("⚠", Theme.warning().bold())
-                        + " Are you sure you want to delete " + source + "/" + spec + "? [Y/n] ");
-        System.out.flush();
-        var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-        String line = reader.readLine();
-        if (line == null) return false;
-        String trimmed = line.trim();
-        if (trimmed.isEmpty()) return true; // Enter → default Y
-        return trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
-    }
-
-    /** Install directory containing the home (handles macOS {@code Contents/Home} unwrap). */
-    private static Path jdkInstallDir(Path home) {
-        return dev.jkbuild.jdk.IntellijJdkDir.installDirOf(home);
-    }
+    // --- wizard path --------------------------------------------------------
 
     private Integer runWizard(JdkRegistry registry, GlobalDefaultJdk defaults) throws IOException {
-        List<InstalledJdk> installed = registry.list();
+        List<JdkHit> installed = registry.listHits();
         if (installed.isEmpty()) {
-            System.err.println("jk jdk uninstall: no JDKs installed under " + registry.jdksRoot());
+            System.err.println("jk jdk uninstall: no JDKs installed.");
             return 0;
         }
         Optional<String> currentDefault = defaults.currentIdentifier();
@@ -173,77 +135,120 @@ public final class JdkUninstallCommand implements Callable<Integer> {
         } catch (IOException e) {
             throw new IOException("failed to open terminal: " + e.getMessage(), e);
         }
+        List<JdkHit> victims;
         try (terminal) {
-            Optional<JdkUninstallWizard.Result> outcome =
+            Optional<List<JdkHit>> outcome =
                     JdkUninstallWizard.run(installed, currentDefault, terminal);
             if (outcome.isEmpty()) {
                 return 130; // wizard cancelled
             }
-            List<InstalledJdk> victims = outcome.get().victims();
-            if (victims.isEmpty()) {
-                System.out.println("Nothing selected — no JDKs removed.");
-                return 0;
-            }
-            for (InstalledJdk v : victims) {
-                executeWizardVictim(v, registry);
-            }
-            reconcileDefaultAfterRemoval(registry, defaults, victims, outcome.get().newDefault());
+            victims = outcome.get();
+        }
+        if (victims.isEmpty()) {
+            System.out.println("Nothing selected — no JDKs removed.");
             return 0;
         }
+        if (!confirmDeletion(victims)) {
+            System.out.println("Aborted.");
+            return 0;
+        }
+        for (JdkHit v : victims) {
+            uninstallOne(v, registry);
+        }
+        reconcileDefaultAfterRemoval(registry, defaults, victims);
+        return 0;
     }
 
-    /** Wizard-path uninstaller. Same shape as the legacy executeOne. */
-    private static void executeWizardVictim(InstalledJdk jdk, JdkRegistry registry) throws IOException {
-        String label = jdk.identifier();
-        Path dir = jdk.home();
+    // --- shared mechanics ---------------------------------------------------
+
+    /**
+     * Spinner → {@link JdkRegistry#purge} → {@code "✓ <spec> from <source>"}.
+     * The single-target and wizard paths funnel through here, so output
+     * shape stays consistent.
+     */
+    private static void uninstallOne(JdkHit hit, JdkRegistry registry) throws IOException {
+        String identifier = JdkRegistry.identifierFor(hit.home());
+        Path installDir = IntellijJdkDir.installDirOf(hit.home());
+        InstalledJdk installed = new InstalledJdk(identifier, hit.home());
         try (var sp = Spinner.show(System.out,
-                Theme.colorize("Uninstalling ", Theme.normalGray())
-                        + Theme.colorize(label, Theme.focused()))) {
-            registry.remove(label);
+                "Deleting " + Theme.colorize(JdkInstallCommand.tildeCollapse(installDir), Theme.warning())
+                        + "...")) {
+            registry.purge(installed);
         }
         System.out.println(
                 Theme.colorize("✓", Theme.completedStep())
-                        + " " + Theme.colorize(label, Theme.focused())
-                        + " " + Theme.colorize("has been uninstalled from", Theme.normalGray())
-                        + " " + Theme.colorize(
-                                JdkInstallCommand.tildeCollapse(dir), Theme.warning()));
+                        + " " + Theme.colorize(identifier, Theme.focused())
+                        + " from " + Theme.colorize(hit.source(), Theme.focused()));
     }
 
     /**
-     * After uninstalls execute, fix up the global default symlink/config:
-     * <ul>
-     *   <li>Default not affected → nothing to do.</li>
-     *   <li>All JDKs removed → clear the default (best-effort).</li>
-     *   <li>One survivor → auto-promote it (no prompt was needed).</li>
-     *   <li>Multiple survivors → use the user's wizard pick.</li>
-     * </ul>
+     * Single bulk confirmation. {@code --yes} short-circuits. Returns
+     * {@code true} on Enter / {@code y} / {@code yes}; anything else aborts.
+     */
+    private boolean confirmDeletion(List<JdkHit> victims) throws IOException {
+        if (assumeYes) return true;
+        String warn = Theme.colorize("⚠", Theme.warning().bold());
+        if (victims.size() == 1) {
+            JdkHit h = victims.getFirst();
+            System.out.print(warn + " Are you sure you want to delete "
+                    + h.source() + "/" + JdkRegistry.identifierFor(h.home()) + "? [Y/n] ");
+        } else {
+            System.out.println(warn + " Are you sure you want to delete the following "
+                    + victims.size() + " JDKs?");
+            for (JdkHit h : victims) {
+                System.out.println("   " + h.source() + "/" + JdkRegistry.identifierFor(h.home()));
+            }
+            System.out.print("[Y/n] ");
+        }
+        System.out.flush();
+        var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        String line = reader.readLine();
+        if (line == null) return false;
+        String trimmed = line.trim();
+        if (trimmed.isEmpty()) return true;
+        return trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
+    }
+
+    /**
+     * If any of the victims was the system default, delegate to
+     * {@link JdkDefaultCommand#applyLts} so the next-best LTS install on
+     * disk auto-promotes. When no LTS survives we clear the default;
+     * applyLts handles the messaging in either case.
      */
     private static void reconcileDefaultAfterRemoval(
-            JdkRegistry registry, GlobalDefaultJdk defaults,
-            List<InstalledJdk> victims, Optional<InstalledJdk> userPick) throws IOException {
+            JdkRegistry registry, GlobalDefaultJdk defaults, List<JdkHit> victims) throws IOException {
         Optional<String> currentDefault = defaults.currentIdentifier();
         if (currentDefault.isEmpty()) return;
         boolean defaultRemoved = victims.stream()
-                .anyMatch(v -> v.identifier().equals(currentDefault.get()));
+                .anyMatch(v -> JdkRegistry.identifierFor(v.home()).equals(currentDefault.get()));
         if (!defaultRemoved) return;
 
-        List<InstalledJdk> survivors = registry.list();
-        if (survivors.isEmpty()) {
-            defaults.clear();
-            System.out.println(Theme.colorize(
-                    "(no remaining JDKs — global default cleared)", Theme.normalGray()));
-            return;
+        // Try latest-LTS auto-pick first; fall back to "clear default" if no
+        // LTS remains.
+        boolean repointed = JdkDefaultCommand.applyLts(registry, defaults, System.out, swallow());
+        if (!repointed) {
+            // No LTS left — at minimum clear the dangling default pointer.
+            List<InstalledJdk> survivors = registry.list();
+            if (survivors.isEmpty()) {
+                defaults.clear();
+                System.out.println(Theme.colorize(
+                        "(no remaining JDKs — global default cleared)", Theme.normalGray()));
+            } else {
+                defaults.set(survivors.getFirst());
+                System.out.println(Theme.colorize("➜", Theme.brightGreen())
+                        + " The " + Theme.colorize("default", Theme.focused())
+                        + " JDK is now set to " + Theme.colorize(survivors.getFirst().identifier(), Theme.focused())
+                        + " " + Theme.colorize("(non-LTS fallback)", Theme.darkGray()));
+            }
         }
-        InstalledJdk promote = userPick.orElseGet(() -> survivors.size() == 1
-                ? survivors.getFirst()
-                : survivors.getFirst()); // safety net; wizard branch already prompted
-        defaults.set(promote);
-        System.out.println(
-                Theme.colorize("➜ ", Theme.brightGreen())
-                        + Theme.colorize(promote.identifier(), Theme.focused())
-                        + " " + Theme.colorize("is now the ", Theme.normalGray())
-                        + Theme.colorize("default", Theme.focused())
-                        + Theme.colorize(" JDK", Theme.normalGray()));
+    }
+
+    /** Swallow stderr from {@code applyLts} when we're going to fall back ourselves. */
+    private static java.io.PrintStream swallow() {
+        return new java.io.PrintStream(new java.io.OutputStream() {
+            @Override public void write(int b) {}
+            @Override public void write(byte[] b, int off, int len) {}
+        });
     }
 
     private static boolean isInteractiveTerminal() {

@@ -255,6 +255,12 @@ public sealed interface WizardStep
                 return this;
             }
 
+            /** Add a pre-built {@link Choice} — used for rich-label rows. */
+            public Builder choice(Choice c) {
+                this.choices.add(c);
+                return this;
+            }
+
             public Builder defaults(Set<String> defaults) {
                 this.defaults.clear();
                 this.defaults.addAll(defaults);

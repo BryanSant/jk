@@ -5,6 +5,7 @@ import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkHit;
+import dev.jkbuild.jdk.JdkLts;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
 import picocli.CommandLine.Command;
@@ -12,28 +13,40 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
+import java.io.PrintStream;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk jdk default <spec>} — pick an already-installed JDK matching
- * {@code <spec>} and make it the system-wide default ({@code JAVA_HOME}
- * source). The spec parser is the same one {@code jk jdk install} uses
- * (see {@link dev.jkbuild.jdk.JdkSelector#parseFlexible}), so inputs like
- * {@code 25}, {@code temurin-25}, {@code corretto-25.0.3}, and
- * {@code 26.0.1-librca} all resolve.
+ * {@code jk jdk default [<spec> | --lts]} — promote an already-installed
+ * JDK to system-wide default ({@code JAVA_HOME} source).
  *
- * <p>Resolution walks the JDK registry in probe-chain order and returns
- * the first install satisfying every spec constraint — the "natural
- * find-the-first-one" precedence the user expects.
+ * <p>Two modes:
+ * <ul>
+ *   <li><strong>Spec mode</strong> — pass a JDK spec the same way
+ *       {@code jk jdk install} accepts it ({@code 25}, {@code temurin-25},
+ *       {@code corretto-25.0.3}, {@code 26.0.1-librca}). Walks the
+ *       registry in probe-chain order and picks the first match.</li>
+ *   <li><strong>{@code --lts} mode</strong> — auto-pick the latest LTS
+ *       installed (Eclipse Temurin preferred when multiple vendors share
+ *       the LTS major). Used both interactively and as the post-uninstall
+ *       reconciliation hook when the default is removed.</li>
+ * </ul>
  */
 @Command(name = "default", description = "Set an installed JDK as the system default")
 public final class JdkDefaultCommand implements Callable<Integer> {
 
-    @Parameters(arity = "1", paramLabel = "<spec>",
+    @Parameters(arity = "0..1", paramLabel = "<spec>",
             description = "JDK spec to resolve (e.g. 25, temurin-25, corretto-25.0.3).")
     String spec;
+
+    @Option(names = "--lts",
+            description = "Pick the latest installed LTS JDK (Temurin preferred).")
+    boolean lts;
 
     @Option(names = "--jdks-dir", hidden = true,
             description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
@@ -44,6 +57,20 @@ public final class JdkDefaultCommand implements Callable<Integer> {
     @Override
     public Integer call() throws IOException {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
+        GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
+
+        if (lts) {
+            if (spec != null && !spec.isBlank()) {
+                System.err.println("jk jdk default: --lts and <spec> are mutually exclusive.");
+                return 64;
+            }
+            return applyLts(registry, defaults, System.out, System.err) ? 0 : 1;
+        }
+        if (spec == null || spec.isBlank()) {
+            System.err.println("jk jdk default: <spec> required (or pass --lts).");
+            return 64;
+        }
+
         Optional<JdkHit> match = registry.findHitBySpec(spec);
         if (match.isEmpty()) {
             System.err.println("jk jdk default: no installed JDK matches `" + spec
@@ -52,20 +79,56 @@ public final class JdkDefaultCommand implements Callable<Integer> {
             return 1;
         }
 
-        JdkHit hit = match.get();
+        applyDefault(match.get(), defaults, System.out);
+        return 0;
+    }
+
+    /**
+     * Pick the latest-LTS installed JDK and set it as the system default.
+     * Among ties at the same LTS major, Eclipse Temurin wins; otherwise
+     * the highest version sorts first. Public so {@code jk jdk uninstall}
+     * can call into it after removing the current default.
+     *
+     * @return {@code true} when an LTS JDK was found and installed as
+     * default; {@code false} when no installed JDK is at an LTS major
+     * (caller decides whether that's an error).
+     */
+    static boolean applyLts(JdkRegistry registry, GlobalDefaultJdk defaults,
+                            PrintStream out, PrintStream err) throws IOException {
+        List<JdkHit> hits = registry.listHits();
+        List<JdkHit> ltsHits = new ArrayList<>();
+        for (JdkHit hit : hits) {
+            Integer m = majorOf(hit.version());
+            if (m != null && JdkLts.isLtsMajor(m)) ltsHits.add(hit);
+        }
+        if (ltsHits.isEmpty()) {
+            err.println("jk jdk default --lts: no LTS JDK installed "
+                    + "(try `jk jdk install --lts`).");
+            return false;
+        }
+        // Sort: highest LTS major first; Eclipse Temurin wins ties; then
+        // highest version.
+        ltsHits.sort(Comparator
+                .comparingInt((JdkHit h) -> majorOf(h.version()) == null ? 0 : majorOf(h.version()))
+                        .reversed()
+                .thenComparing(h -> h.vendor() == JdkVendor.TEMURIN ? 0 : 1)
+                .thenComparing((JdkHit h) -> h.version() == null ? "" : h.version(),
+                        Comparator.reverseOrder()));
+        JdkHit picked = ltsHits.getFirst();
+        applyDefault(picked, defaults, out);
+        return true;
+    }
+
+    private static void applyDefault(JdkHit hit, GlobalDefaultJdk defaults, PrintStream out)
+            throws IOException {
         String identifier = JdkRegistry.identifierFor(hit.home());
         InstalledJdk chosen = new InstalledJdk(identifier, hit.home());
-        GlobalDefaultJdk.current().set(chosen);
-
-        // "➜ The default JDK is now set to <Eclipse Temurin 25> (<25.0.3-tem>)"
-        // — "default" and the human-readable name in bold-white, the
-        // disambiguating registry identifier in dark gray.
+        defaults.set(chosen);
         String displayName = renderDisplayName(hit);
-        System.out.println(Theme.colorize("➜", Theme.brightGreen())
+        out.println(Theme.colorize("➜", Theme.brightGreen())
                 + " The " + Theme.colorize("default", Theme.focused())
                 + " JDK is now set to " + Theme.colorize(displayName, Theme.focused())
                 + " " + Theme.colorize("(" + identifier + ")", Theme.darkGray()));
-        return 0;
     }
 
     /**
@@ -82,7 +145,7 @@ public final class JdkDefaultCommand implements Callable<Integer> {
         return major != null ? name + " " + major : name + " " + hit.version();
     }
 
-    private static Integer majorOf(String version) {
+    static Integer majorOf(String version) {
         if (version == null || version.isEmpty()) return null;
         int end = 0;
         while (end < version.length() && Character.isDigit(version.charAt(end))) end++;

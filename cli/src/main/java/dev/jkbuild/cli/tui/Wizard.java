@@ -643,8 +643,12 @@ public final class Wizard {
                     var labelStyle = isFocused ? Theme.focused() : Theme.dim();
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
-                            .append(" ")
-                            .append(c.label(), labelStyle);
+                            .append(" ");
+                    if (c.richLabel() != null) {
+                        sb.append(c.richLabel());
+                    } else {
+                        sb.append(c.label(), labelStyle);
+                    }
                     appendHint(sb, c.hintFor(snapshot));
                     lines.add(sb.toAttributedString());
                 }
