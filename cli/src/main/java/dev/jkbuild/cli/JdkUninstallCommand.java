@@ -184,9 +184,9 @@ public final class JdkUninstallCommand implements Callable<Integer> {
     // --- shared mechanics ---------------------------------------------------
 
     /**
-     * Spinner → {@link JdkRegistry#purge} → {@code "✓ <spec> from <source>"}.
-     * The single-target and wizard paths funnel through here, so output
-     * shape stays consistent.
+     * Spinner → owning-tool uninstall (best-effort) → {@link JdkRegistry#purge}
+     * fallback → {@code "✓ <spec> from <source>"}. The single-target and
+     * wizard paths funnel through here, so output shape stays consistent.
      */
     private static void uninstallOne(JdkHit hit, JdkRegistry registry) throws IOException {
         String identifier = JdkRegistry.identifierFor(hit.home());
@@ -195,7 +195,14 @@ public final class JdkUninstallCommand implements Callable<Integer> {
         try (var sp = Spinner.show(System.out,
                 "Deleting " + Theme.colorize(JdkInstallCommand.tildeCollapse(installDir), Theme.warning())
                         + "...")) {
-            registry.purge(installed);
+            // Try the owning tool first so its manifest stays consistent
+            // (sdkman, mise, jbang, jenv, asdf, brew). Anything left on disk
+            // after — including the intellij / java-home sources, which
+            // have no owning tool — gets the direct purge.
+            var outcome = JdkToolUninstaller.tryUninstall(hit, identifier);
+            if (outcome == JdkToolUninstaller.Outcome.FALL_THROUGH) {
+                registry.purge(installed);
+            }
         }
         System.out.println(
                 Theme.colorize("✓", Theme.completedStep())
