@@ -145,12 +145,45 @@ public final class JdkRegistry {
      * without re-parsing the install's {@code release} file.
      */
     public Optional<JdkHit> findHitBySpec(String spec) {
+        return findHitBySpec(spec, null);
+    }
+
+    /**
+     * Source-scoped variant of {@link #findHitBySpec(String)} — only considers
+     * hits whose {@link JdkHit#source()} matches {@code sourceFilter}. Pass
+     * {@code null} or empty to disable the source filter. Used by
+     * {@code jk jdk uninstall} where the user must qualify which probe's
+     * copy of a JDK to remove (e.g. {@code intellij/temurin-26.0.1} vs
+     * {@code sdkman/25.0.3-tem}).
+     */
+    public Optional<JdkHit> findHitBySpec(String spec, String sourceFilter) {
         if (spec == null || spec.isBlank()) return Optional.empty();
         JdkSelector.FlexibleQuery query = JdkSelector.parseFlexible(spec);
         for (JdkHit hit : listHits()) {
+            if (sourceFilter != null && !sourceFilter.isEmpty()
+                    && !sourceFilter.equals(hit.source())) {
+                continue;
+            }
             if (matchesSpec(hit, query)) return Optional.of(hit);
         }
         return Optional.empty();
+    }
+
+    /**
+     * Delete an install regardless of where it lives. Used by
+     * {@code jk jdk uninstall <source>/<spec>}, where the user has
+     * explicitly qualified which copy to remove — so the
+     * "external installs are read-only" guard {@link #remove} applies no
+     * longer fits. {@link IntellijJdkDir#installDirOf} still handles the
+     * macOS {@code Contents/Home} unwrap. Returns {@code true} when the
+     * directory existed and was deleted.
+     */
+    public boolean purge(InstalledJdk jdk) throws IOException {
+        Objects.requireNonNull(jdk, "jdk");
+        Path installDir = IntellijJdkDir.installDirOf(jdk.home());
+        if (!Files.exists(installDir)) return false;
+        deleteRecursively(installDir);
+        return true;
     }
 
     private static boolean matchesSpec(JdkHit hit, JdkSelector.FlexibleQuery query) {

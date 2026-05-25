@@ -148,10 +148,39 @@ class JdkCommandTest {
         Path victim = jdks.resolve("temurin-21.0.5");
         makeJdkInstall(victim);
 
-        int exit = run("jdk", "uninstall", "temurin-21.0.5",
+        // The new contract requires `<source>/<spec>`; `--yes` skips the
+        // interactive confirmation prompt.
+        int exit = run("jdk", "uninstall", "intellij/temurin-21.0.5", "--yes",
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(victim).doesNotExist();
+    }
+
+    @Test
+    void uninstall_rejects_bare_spec_with_no_source(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        int exit = run("jdk", "uninstall", "temurin-21.0.5", "--yes",
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(64); // EX_USAGE
+    }
+
+    @Test
+    void uninstall_rejects_bare_major_spec(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        int exit = run("jdk", "uninstall", "intellij/21", "--yes",
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
+    void uninstall_rejects_unknown_source(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        int exit = run("jdk", "uninstall", "nosuch/temurin-21.0.5", "--yes",
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(64);
     }
 
     @Test
@@ -289,7 +318,7 @@ class JdkCommandTest {
         Path victim = jdks.resolve("temurin-21.0.5");
         makeJdkInstall(victim);
 
-        int exit = run("jdk", "remove", "temurin-21.0.5",
+        int exit = run("jdk", "remove", "intellij/temurin-21.0.5", "--yes",
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(victim).doesNotExist();
