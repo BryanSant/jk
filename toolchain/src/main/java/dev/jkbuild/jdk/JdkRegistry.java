@@ -125,6 +125,69 @@ public final class JdkRegistry {
     }
 
     /**
+     * Spec-driven lookup: parses inputs like {@code 25}, {@code temurin-25},
+     * {@code corretto-25.0.3}, or {@code 26.0.1-librca} into
+     * {@code (major, exactVersion?, hints[])} (via
+     * {@link JdkSelector#parseFlexible(String)}) and returns the first
+     * installed JDK whose version + vendor metadata satisfies every
+     * constraint. "First" is probe-chain order — the same ordering
+     * {@link #list()} uses — so callers get a deterministic
+     * "natural precedence" pick.
+     */
+    public Optional<InstalledJdk> findBySpec(String spec) {
+        if (spec == null || spec.isBlank()) return Optional.empty();
+        JdkSelector.FlexibleQuery query = JdkSelector.parseFlexible(spec);
+        for (JdkHit hit : listHits()) {
+            if (matchesSpec(hit, query)) {
+                return Optional.of(new InstalledJdk(identifierFor(hit.home()), hit.home()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean matchesSpec(JdkHit hit, JdkSelector.FlexibleQuery query) {
+        if (query.major().isPresent()) {
+            Integer hitMajor = majorOf(hit.version());
+            if (hitMajor == null || !hitMajor.equals(query.major().get())) return false;
+        }
+        if (query.exactVersion().isPresent()) {
+            if (hit.version() == null) return false;
+            String exact = query.exactVersion().get();
+            if (!hit.version().equals(exact) && !hit.version().startsWith(exact + ".")
+                    && !hit.version().startsWith(exact + "-")
+                    && !hit.version().startsWith(exact + "+")) {
+                return false;
+            }
+        }
+        if (!query.hints().isEmpty()) {
+            String haystack = hintHaystack(hit.vendor());
+            for (String hint : query.hints()) {
+                if (!haystack.contains(hint.toLowerCase(java.util.Locale.ROOT))) return false;
+            }
+        }
+        return true;
+    }
+
+    private static Integer majorOf(String version) {
+        if (version == null || version.isEmpty()) return null;
+        int end = 0;
+        while (end < version.length() && Character.isDigit(version.charAt(end))) end++;
+        if (end == 0) return null;
+        try { return Integer.parseInt(version.substring(0, end)); }
+        catch (NumberFormatException e) { return null; }
+    }
+
+    private static String hintHaystack(JdkVendor v) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(v.vendor().toLowerCase(java.util.Locale.ROOT)).append(' ');
+        sb.append(v.product().toLowerCase(java.util.Locale.ROOT)).append(' ');
+        v.jbPrefix().ifPresent(p -> sb.append(p.toLowerCase(java.util.Locale.ROOT)).append(' '));
+        v.sdkmanSuffix().ifPresent(s -> sb.append(s.toLowerCase(java.util.Locale.ROOT)).append(' '));
+        v.foojayDistro().ifPresent(f -> sb.append(f.toLowerCase(java.util.Locale.ROOT)).append(' '));
+        return sb.toString();
+    }
+
+    /**
      * Delete the install named {@code identifier}, but only when it lives
      * under {@link #jdksRoot()} — externally-managed JDKs (SDKMAN, mise,
      * system packages, …) are read-only from {@code jk}'s perspective and

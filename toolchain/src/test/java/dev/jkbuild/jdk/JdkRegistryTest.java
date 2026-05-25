@@ -77,15 +77,64 @@ class JdkRegistryTest {
         assertThat(registry.remove("not-installed")).isFalse();
     }
 
+    @Test
+    void find_by_spec_bare_major(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("temurin-21.0.5"), "21.0.5", "Eclipse Adoptium");
+        makeJdkInstall(tempDir.resolve("corretto-25.0.3"), "25.0.3", "Amazon.com Inc.");
+        JdkRegistry registry = isolatedRegistry(tempDir);
+        assertThat(registry.findBySpec("25"))
+                .isPresent()
+                .get().extracting(InstalledJdk::identifier).isEqualTo("corretto-25.0.3");
+    }
+
+    @Test
+    void find_by_spec_vendor_plus_major(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("temurin-21.0.5"), "21.0.5", "Eclipse Adoptium");
+        makeJdkInstall(tempDir.resolve("temurin-25.0.1"), "25.0.1", "Eclipse Adoptium");
+        makeJdkInstall(tempDir.resolve("corretto-25.0.3"), "25.0.3", "Amazon.com Inc.");
+        JdkRegistry registry = isolatedRegistry(tempDir);
+        assertThat(registry.findBySpec("temurin-25"))
+                .get().extracting(InstalledJdk::identifier).isEqualTo("temurin-25.0.1");
+    }
+
+    @Test
+    void find_by_spec_vendor_plus_exact_version(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("corretto-25.0.2"), "25.0.2", "Amazon.com Inc.");
+        makeJdkInstall(tempDir.resolve("corretto-25.0.3"), "25.0.3", "Amazon.com Inc.");
+        JdkRegistry registry = isolatedRegistry(tempDir);
+        assertThat(registry.findBySpec("corretto-25.0.3"))
+                .get().extracting(InstalledJdk::identifier).isEqualTo("corretto-25.0.3");
+    }
+
+    @Test
+    void find_by_spec_version_then_sdkman_suffix(@TempDir Path tempDir) throws IOException {
+        // librca = liberica's SDKMAN suffix.
+        makeJdkInstall(tempDir.resolve("liberica-26.0.1"), "26.0.1", "BellSoft");
+        makeJdkInstall(tempDir.resolve("temurin-26.0.1"), "26.0.1", "Eclipse Adoptium");
+        JdkRegistry registry = isolatedRegistry(tempDir);
+        assertThat(registry.findBySpec("26.0.1-librca"))
+                .get().extracting(InstalledJdk::identifier).isEqualTo("liberica-26.0.1");
+    }
+
+    @Test
+    void find_by_spec_returns_empty_when_no_match(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("temurin-21.0.5"), "21.0.5", "Eclipse Adoptium");
+        assertThat(isolatedRegistry(tempDir).findBySpec("corretto-25")).isEmpty();
+    }
+
     /** A {@link JdkRegistry} backed by a single {@link JetbrainsProbe} rooted at {@code root} — isolates the test from any JDKs actually installed on the host. */
     private static JdkRegistry isolatedRegistry(Path root) {
         return new JdkRegistry(root, List.of(new JetbrainsProbe(root)));
     }
 
     private static void makeJdkInstall(Path home, String version) throws IOException {
+        makeJdkInstall(home, version, "Eclipse Adoptium");
+    }
+
+    private static void makeJdkInstall(Path home, String version, String implementor) throws IOException {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
         Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"" + implementor + "\"\n");
     }
 }
