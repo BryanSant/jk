@@ -1,22 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
-import dev.jkbuild.cache.Cas;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLoader;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileWriter;
-import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.WorkspaceMerge;
-import dev.jkbuild.repo.RepoGroup;
-import dev.jkbuild.resolver.LockOrchestrator;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-import java.io.IOException;
 import java.net.URI;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -53,50 +42,16 @@ public final class LockCommand implements Callable<Integer> {    @Option(names =
     @Override
     public Integer call() throws Exception {
         Path dir = global.workingDir();
-        Path buildFile = dir.resolve("jk.toml");
-        Path lockFile = dir.resolve("jk.lock");
-        if (!Files.exists(buildFile)) {
-            System.err.println("jk lock: no jk.toml in " + dir);
-            return 2; // EX_CONFIG
-        }
-
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        Files.createDirectories(cache);
+        Path lockFile = dir.resolve("jk.lock");
 
-        JkBuild parsed;
-        try {
-            parsed = JkBuildParser.parse(buildFile);
-        } catch (RuntimeException e) {
-            System.err.println("jk lock: " + e.getMessage());
-            return 2;
+        var result = LockFlow.run(dir, cache, features, noDefaultFeatures, repoUrl, "jk lock");
+        if (result.workspaceMemberCount() > 0) {
+            System.out.println("Workspace: " + result.workspaceMemberCount() + " member"
+                    + (result.workspaceMemberCount() == 1 ? "" : "s"));
         }
-
-        // Workspace: load each member's jk.toml and merge deps so the
-        // workspace root produces one combined jk.lock per PRD §13.2.
-        JkBuild effective = parsed;
-        if (parsed.isWorkspaceRoot()) {
-            try {
-                var members = WorkspaceLoader.loadMembers(dir, parsed);
-                effective = WorkspaceMerge.merge(parsed, members.values());
-                System.out.println("Workspace: " + members.size() + " member"
-                        + (members.size() == 1 ? "" : "s"));
-            } catch (RuntimeException e) {
-                System.err.println("jk lock: " + e.getMessage());
-                return 2;
-            }
-        }
-
-        RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, new Cas(cache));
-        LockOrchestrator orchestrator = new LockOrchestrator(repos);
-
-        Lockfile lock;
-        try {
-            lock = orchestrator.lock(effective, Jk.VERSION, features, !noDefaultFeatures);
-        } catch (IOException e) {
-            System.err.println("jk lock: " + e.getMessage());
-            return 6;
-        }
-        LockfileWriter.write(lock, lockFile);
+        if (result.status() != 0) return result.status();
+        var lock = result.lockfile();
         System.out.println("Wrote " + lockFile + " (" + lock.packages().size() + " package"
                 + (lock.packages().size() == 1 ? "" : "s") + ")");
         return 0;

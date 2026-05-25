@@ -1,0 +1,94 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.jkbuild.cli;
+
+import dev.jkbuild.cache.Cas;
+import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.WorkspaceLoader;
+import dev.jkbuild.lock.Lockfile;
+import dev.jkbuild.lock.LockfileWriter;
+import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.WorkspaceMerge;
+import dev.jkbuild.repo.RepoGroup;
+import dev.jkbuild.resolver.LockOrchestrator;
+
+import java.io.IOException;
+import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+
+/**
+ * Shared "resolve jk.toml → write jk.lock" pipeline used by both
+ * {@code jk lock} and {@code jk sync} (the latter delegating here when no
+ * lockfile exists yet). Error output is written to {@code stderr} with the
+ * caller's command label so the user sees {@code "jk lock: ..."} vs
+ * {@code "jk sync: ..."}.
+ */
+final class LockFlow {
+
+    private LockFlow() {}
+
+    /**
+     * Outcome of one lock pass. {@code status == 0} means success and
+     * {@link #lockfile} / {@link #build} are populated; non-zero means the
+     * caller should return that exit code.
+     */
+    record Result(int status, Lockfile lockfile, JkBuild build, int workspaceMemberCount) {}
+
+    /**
+     * Run the lock pipeline against {@code dir}. {@code cmdLabel} is the
+     * verb prefix used in error messages (e.g. {@code "jk lock"} or
+     * {@code "jk sync"}).
+     */
+    static Result run(
+            Path dir,
+            Path cache,
+            List<String> features,
+            boolean noDefaultFeatures,
+            URI repoUrl,
+            String cmdLabel) throws Exception {
+        Path buildFile = dir.resolve("jk.toml");
+        Path lockFile = dir.resolve("jk.lock");
+        if (!Files.exists(buildFile)) {
+            System.err.println(cmdLabel + ": no jk.toml in " + dir);
+            return new Result(2, null, null, 0);
+        }
+        Files.createDirectories(cache);
+
+        JkBuild parsed;
+        try {
+            parsed = JkBuildParser.parse(buildFile);
+        } catch (RuntimeException e) {
+            System.err.println(cmdLabel + ": " + e.getMessage());
+            return new Result(2, null, null, 0);
+        }
+
+        // Workspace: load each member's jk.toml and merge deps so the
+        // workspace root produces one combined jk.lock per PRD §13.2.
+        JkBuild effective = parsed;
+        int memberCount = 0;
+        if (parsed.isWorkspaceRoot()) {
+            try {
+                var members = WorkspaceLoader.loadMembers(dir, parsed);
+                effective = WorkspaceMerge.merge(parsed, members.values());
+                memberCount = members.size();
+            } catch (RuntimeException e) {
+                System.err.println(cmdLabel + ": " + e.getMessage());
+                return new Result(2, null, null, 0);
+            }
+        }
+
+        RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, new Cas(cache));
+        LockOrchestrator orchestrator = new LockOrchestrator(repos);
+
+        Lockfile lock;
+        try {
+            lock = orchestrator.lock(effective, Jk.VERSION, features, !noDefaultFeatures);
+        } catch (IOException e) {
+            System.err.println(cmdLabel + ": " + e.getMessage());
+            return new Result(6, null, effective, memberCount);
+        }
+        LockfileWriter.write(lock, lockFile);
+        return new Result(0, lock, effective, memberCount);
+    }
+}

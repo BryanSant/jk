@@ -116,6 +116,30 @@ class ReadSideIntegrationTest {
     }
 
     @Test
+    void sync_creates_lockfile_when_missing(@TempDir Path tempDir) throws Exception {
+        registerMetadata("com.foo", "leaf", "1.0");
+        registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
+        registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
+
+        run("init", tempDir.toString());
+        run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
+        // Erase the empty lockfile that `jk init` stamps so we can verify
+        // sync creates a fresh one (with the dep we just added).
+        Path lockFile = tempDir.resolve("jk.lock");
+        Files.deleteIfExists(lockFile);
+
+        String out = captureStdout(() -> run("sync",
+                "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString(),
+                "--repo-url", base.toString()));
+
+        assertThat(lockFile).exists();
+        assertThat(out).contains("Created " + lockFile);
+        // The package we added should show up in the freshly written lock.
+        assertThat(Files.readString(lockFile)).contains("com.foo:leaf");
+    }
+
+    @Test
     void sync_accepts_offline_prepare_flag(@TempDir Path tempDir) throws Exception {
         registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
