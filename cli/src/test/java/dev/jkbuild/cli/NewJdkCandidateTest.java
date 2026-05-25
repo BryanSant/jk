@@ -38,13 +38,40 @@ class NewJdkCandidateTest {
     }
 
     @Test
-    void filter_without_native_passes_through() {
+    void filter_without_native_promotes_temurin_lts_to_top() {
+        var corretto25 = installed("corretto-25.0.3", 25, JdkVendor.CORRETTO);
         var temurin25 = installed("temurin-25.0.3", 25, JdkVendor.TEMURIN);
         var graal25 = installable("graalvm-jdk-25.0.3", 25, "Oracle", "GraalVM");
 
-        var filtered = NewJdkCandidate.filter(List.of(temurin25, graal25), false, LTS);
+        // Temurin sits in the middle of the input; filter should bubble it
+        // to position 0 and leave the rest in their original order.
+        var filtered = NewJdkCandidate.filter(List.of(corretto25, temurin25, graal25), false, LTS);
 
-        assertThat(filtered).hasSize(2);
+        assertThat(filtered).extracting(NewJdkCandidate::id)
+                .containsExactly("temurin-25.0.3", "corretto-25.0.3", "graalvm-jdk-25.0.3");
+    }
+
+    @Test
+    void filter_without_native_uses_lts_temurin_not_a_newer_one() {
+        // Temurin at a non-LTS major (e.g. 26) shouldn't get promoted —
+        // we want the latest *LTS*, which here is 25.
+        var temurin26 = installed("temurin-26.0.1", 26, JdkVendor.TEMURIN);
+        var temurin25 = installable("temurin-25.0.3", 25, "Eclipse", "Temurin");
+        var corretto25 = installed("corretto-25.0.3", 25, JdkVendor.CORRETTO);
+
+        var filtered = NewJdkCandidate.filter(List.of(temurin26, corretto25, temurin25), false, LTS);
+
+        assertThat(filtered.getFirst().id()).isEqualTo("temurin-25.0.3");
+        assertThat(filtered.getFirst().major()).isEqualTo(LTS);
+    }
+
+    @Test
+    void filter_without_native_passes_through_when_no_temurin_lts_present() {
+        var corretto25 = installed("corretto-25.0.3", 25, JdkVendor.CORRETTO);
+        var graal25 = installable("graalvm-jdk-25.0.3", 25, "Oracle", "GraalVM");
+        var filtered = NewJdkCandidate.filter(List.of(corretto25, graal25), false, LTS);
+        assertThat(filtered).extracting(NewJdkCandidate::id)
+                .containsExactly("corretto-25.0.3", "graalvm-jdk-25.0.3");
     }
 
     @Test

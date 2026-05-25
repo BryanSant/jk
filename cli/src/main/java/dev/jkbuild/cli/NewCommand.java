@@ -446,7 +446,13 @@ public final class NewCommand implements Callable<Integer> {
     }
 
     private static Wizard buildWizard(List<NewJdkCandidate> candidates, String groupGuess) {
-        var defaultJdkId = candidates.getFirst().id();
+        // The wizard opens with the "native" toggle off, so the initial radio
+        // list is whatever filter() produces for the non-native case — which
+        // promotes Temurin LTS to the top. Take the default selection from
+        // there so the preselected row matches what the user sees.
+        var initial = NewJdkCandidate.filter(candidates, false, LATEST_LTS_MAJOR);
+        if (initial.isEmpty()) initial = candidates;
+        var defaultJdkId = initial.getFirst().id();
 
         var javaOptions = WizardStep.MultiSelectStep.vertical("javaOptions", "Additional project options:")
                 .choice("lombok", "Use Lombok")

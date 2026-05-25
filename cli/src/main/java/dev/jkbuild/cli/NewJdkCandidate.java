@@ -160,19 +160,38 @@ public sealed interface NewJdkCandidate {
     }
 
     /**
-     * Filter for the radio step: when the user picked the Native build target,
-     * keep only GraalVM candidates (Oracle + CE) at {@code latestLtsMajor}; in
-     * all other cases, return {@code all} unchanged.
+     * Filter for the radio step:
+     * <ul>
+     *   <li>Native build selected — keep only GraalVM candidates (Oracle +
+     *       CE) at {@code latestLtsMajor}. GraalVM is the only thing that
+     *       can produce a native binary.</li>
+     *   <li>Anything else — promote the latest-LTS Eclipse Temurin to the
+     *       top of the list (so it's the default selection), then preserve
+     *       the existing order for everything else. The Temurin LTS is
+     *       always present because {@link #build} stamps a catalog row when
+     *       it's not already installed.</li>
+     * </ul>
      */
     static List<NewJdkCandidate> filter(List<NewJdkCandidate> all, boolean nativeSelected, int latestLtsMajor) {
-        if (!nativeSelected) return all;
-        return all.stream()
-                .filter(NewJdkCandidate::isGraalvm)
-                .filter(c -> c.major() == latestLtsMajor)
-                .sorted(Comparator
-                        .comparing(NewJdkCandidate::installed).reversed()
-                        .thenComparing(NewJdkCandidate::label))
-                .toList();
+        if (nativeSelected) {
+            return all.stream()
+                    .filter(NewJdkCandidate::isGraalvm)
+                    .filter(c -> c.major() == latestLtsMajor)
+                    .sorted(Comparator
+                            .comparing(NewJdkCandidate::installed).reversed()
+                            .thenComparing(NewJdkCandidate::label))
+                    .toList();
+        }
+        var temurinLts = all.stream()
+                .filter(c -> c.vendor() == JdkVendor.TEMURIN && c.major() == latestLtsMajor)
+                .findFirst();
+        if (temurinLts.isEmpty()) return all;
+        var reordered = new java.util.ArrayList<NewJdkCandidate>(all.size());
+        reordered.add(temurinLts.get());
+        for (var c : all) {
+            if (c != temurinLts.get()) reordered.add(c);
+        }
+        return List.copyOf(reordered);
     }
 
     /** Catalog vendors we offer as installable latest-LTS rows. */
