@@ -46,6 +46,7 @@ public final class Spinner implements AutoCloseable {
     private final PrintStream out;
     private final AttributedStyle[] frameColors;
     private final Object lock = new Object();
+    private final boolean silent;
 
     private volatile String message;
     private int frame = 0;
@@ -53,7 +54,11 @@ public final class Spinner implements AutoCloseable {
     private volatile boolean closed = false;
     private Thread animator;
 
-    /** Start a new spinner on the caller's current line, hiding the cursor. */
+    /**
+     * Start a new spinner on the caller's current line, hiding the cursor.
+     * If the resolved config has {@code --no-progress}, returns a silent
+     * spinner that emits no animation and no terminal escapes.
+     */
     public static Spinner show(PrintStream out, String message) {
         Spinner s = new Spinner(out, message);
         s.start();
@@ -64,9 +69,11 @@ public final class Spinner implements AutoCloseable {
         this.out = out;
         this.message = message == null ? "" : message;
         this.frameColors = buildGradient(FRAMES.length);
+        this.silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
     }
 
     private void start() {
+        if (silent) return;
         out.print(HIDE_CURSOR);
         out.print(OSC_INDETERMINATE);
         out.flush();
@@ -94,7 +101,7 @@ public final class Spinner implements AutoCloseable {
     /** Render the current frame and advance. Package-private for testing. */
     void step() {
         synchronized (lock) {
-            if (closed) return;
+            if (closed || silent) return;
             String currentMsg = message;
             // Re-assert the indeterminate state on every tick — some hosts
             // (and tab-switch / focus events) drop the indicator otherwise.
@@ -117,6 +124,7 @@ public final class Spinner implements AutoCloseable {
         if (closed) return;
         closed = true;
         if (animator != null) animator.interrupt();
+        if (silent) return;
         synchronized (lock) {
             // Clear the spinner line so it doesn't linger in the transcript.
             out.print(CLEAR_LINE);

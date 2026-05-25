@@ -273,7 +273,29 @@ public final class Jk implements Runnable {
         // Replace picocli's default "Unmatched argument …" error with a cargo-style
         // "error: / tip: / Usage: / For more information" block. Propagates to subcommands.
         cmd.setParameterExceptionHandler(Jk::handleParameterException);
+        // Expected runtime errors (offline gate, missing files) should print one
+        // clean stderr line instead of a Java stack trace.
+        cmd.setExecutionExceptionHandler(Jk::handleExecutionException);
         return cmd;
+    }
+
+    /**
+     * Render expected runtime errors as a single {@code error:} line rather
+     * than letting picocli print the whole stack trace. Anything we don't
+     * recognise still gets the full trace so we don't silently swallow bugs.
+     */
+    private static int handleExecutionException(
+            Exception ex,
+            CommandLine cmd,
+            picocli.CommandLine.ParseResult parseResult) throws Exception {
+        if (ex instanceof dev.jkbuild.http.OfflineException) {
+            var err = cmd.getErr();
+            boolean ansi = cmd.getColorScheme().ansi().enabled();
+            String label = ansi ? "\033[1;91merror:\033[0m " : "error: ";
+            err.println(label + ex.getMessage());
+            return cmd.getCommandSpec().exitCodeOnExecutionException();
+        }
+        throw ex;
     }
 
     /** Mixin key used to register {@link GlobalOptions} on every {@link CommandSpec}. */

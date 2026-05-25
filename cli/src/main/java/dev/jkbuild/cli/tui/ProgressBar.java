@@ -74,6 +74,7 @@ public final class ProgressBar implements AutoCloseable {
     private final PrintStream out;
     private final AttributedStyle[] segmentColors;
     private final AttributedStyle emptyStyle = Theme.dim();
+    private final boolean silent;
 
     private int lastFilled = 0;
     private String lastPercent = "";
@@ -81,17 +82,25 @@ public final class ProgressBar implements AutoCloseable {
     private boolean drawn = false;
     private boolean closed = false;
 
-    private ProgressBar(PrintStream out) {
+    private ProgressBar(PrintStream out, boolean silent) {
         this.out = out;
+        this.silent = silent;
         this.segmentColors = buildGradient(SEGMENTS);
     }
 
-    /** Start a new bar on the caller's current line, hiding the cursor. */
+    /**
+     * Start a new bar on the caller's current line, hiding the cursor.
+     * If the resolved config has {@code --no-progress}, returns a silent
+     * instance whose {@link #update} / {@link #close} are no-ops.
+     */
     public static ProgressBar show(PrintStream out) {
-        ProgressBar pb = new ProgressBar(out);
+        boolean silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
+        ProgressBar pb = new ProgressBar(out, silent);
         ACTIVE.set(pb);
-        out.print(HIDE_CURSOR);
-        out.flush();
+        if (!silent) {
+            out.print(HIDE_CURSOR);
+            out.flush();
+        }
         return pb;
     }
 
@@ -100,7 +109,7 @@ public final class ProgressBar implements AutoCloseable {
      * {@code status} is rendered after the percent, separated by {@code ": "}.
      */
     public synchronized void update(int percent, String status) {
-        if (closed) return;
+        if (closed || silent) return;
         int clamped = Math.max(0, Math.min(100, percent));
         int filled = (int) Math.round(clamped * SEGMENTS / 100.0);
         String percentStr = String.format("%3d%%", clamped);
@@ -124,6 +133,7 @@ public final class ProgressBar implements AutoCloseable {
         if (closed) return;
         closed = true;
         ACTIVE.compareAndSet(this, null);
+        if (silent) return;
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.println();
@@ -140,6 +150,14 @@ public final class ProgressBar implements AutoCloseable {
         if (closed) return;
         closed = true;
         ACTIVE.compareAndSet(this, null);
+        if (silent) {
+            // With --no-progress the bar never drew, so we don't need to wipe
+            // a line — but the final message is still useful to the user, so
+            // emit it as a plain println.
+            out.println(message);
+            out.flush();
+            return;
+        }
         out.print("\r\033[K");      // clear the bar line
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
@@ -157,6 +175,7 @@ public final class ProgressBar implements AutoCloseable {
         if (closed) return;
         closed = true;
         ACTIVE.compareAndSet(this, null);
+        if (silent) return;
         AttributedStyle redStyle = Theme.error();
         AttributedStyle strikeStyle = Theme.dim().crossedOut();
         out.print("\r");
