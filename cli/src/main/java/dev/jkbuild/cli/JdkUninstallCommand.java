@@ -42,10 +42,17 @@ import java.util.concurrent.Callable;
         description = "Uninstall JDK versions")
 public final class JdkUninstallCommand implements Callable<Integer> {
 
-    /** Probe names accepted on the left side of {@code <source>/<spec>}. */
+    /**
+     * Probe names accepted on the left side of {@code <source>/<spec>}.
+     * {@code system} is intentionally excluded — those installs are owned
+     * by the OS package manager and jk can't safely remove them.
+     */
     private static final Set<String> KNOWN_SOURCES = Set.of(
             "intellij", "sdkman", "jbang", "mise", "asdf", "jenv",
-            "homebrew", "system", "java-home");
+            "homebrew", "java-home");
+
+    /** Probe names jk refuses to uninstall from. Listed for a friendlier error. */
+    private static final Set<String> UNINSTALL_FORBIDDEN_SOURCES = Set.of("system");
 
     @Parameters(arity = "0..1", paramLabel = "<source>/<spec>",
             description = "Source-qualified install (e.g. intellij/temurin-26.0.1). "
@@ -89,6 +96,12 @@ public final class JdkUninstallCommand implements Callable<Integer> {
         String source = argument.substring(0, slash);
         String spec = argument.substring(slash + 1);
 
+        if (UNINSTALL_FORBIDDEN_SOURCES.contains(source)) {
+            System.err.println("jk jdk uninstall: refusing to remove `" + source
+                    + "` installs — they're managed by the OS package manager "
+                    + "(use your distro's tooling, e.g. apt/dnf/brew, to remove them).");
+            return 64;
+        }
         if (!KNOWN_SOURCES.contains(source)) {
             System.err.println("jk jdk uninstall: unknown source `" + source + "` "
                     + "(supported: " + String.join(", ", KNOWN_SOURCES.stream().sorted().toList()) + ")");
@@ -122,9 +135,14 @@ public final class JdkUninstallCommand implements Callable<Integer> {
     // --- wizard path --------------------------------------------------------
 
     private Integer runWizard(JdkRegistry registry, GlobalDefaultJdk defaults) throws IOException {
-        List<JdkHit> installed = registry.listHits();
+        // OS-package-manager-managed installs (probe source = "system") can't
+        // be removed by jk, so they don't belong in the checklist at all.
+        List<JdkHit> installed = registry.listHits().stream()
+                .filter(h -> !UNINSTALL_FORBIDDEN_SOURCES.contains(h.source()))
+                .toList();
         if (installed.isEmpty()) {
-            System.err.println("jk jdk uninstall: no JDKs installed.");
+            System.err.println("jk jdk uninstall: no removable JDKs installed "
+                    + "(system-managed installs aren't supported here).");
             return 0;
         }
         Optional<String> currentDefault = defaults.currentIdentifier();

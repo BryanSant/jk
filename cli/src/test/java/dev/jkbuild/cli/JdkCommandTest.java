@@ -184,6 +184,17 @@ class JdkCommandTest {
     }
 
     @Test
+    void uninstall_refuses_system_source(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        // `system` would route to a JDK owned by the OS package manager;
+        // jk can't safely remove those.
+        int exit = run("jdk", "uninstall", "system/openjdk-21", "--yes",
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
     void pin_unknown_jdk_errors(@TempDir Path tempDir) {
         int exit = run("jdk", "pin", "nothing-installed",
                 "-C", tempDir.toString(),
