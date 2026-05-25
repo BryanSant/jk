@@ -9,10 +9,10 @@ import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
-import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkCatalogClient;
 import dev.jkbuild.jdk.JdkInstaller;
+import dev.jkbuild.jdk.JdkLts;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.jdk.JdkSpec;
@@ -44,19 +44,36 @@ import java.util.concurrent.Callable;
  * </ul>
  */
 @Command(name = "install", aliases = {"add"},
-        description = "Download and install a JDK from the JetBrains feed")
+        description = "Install a Java Development Kit")
 public final class JdkInstallCommand implements Callable<Integer> {
 
-    @Parameters(arity = "0..1", paramLabel = "<spec>",
-            description = "Version or suggested-SDK-name (e.g. 21, 21.0.5, temurin-21, openjdk-26). "
+    @Parameters(arity = "0..1", paramLabel = "<version>",
+            description = "Denormalized version spec — `25`, `21.0.5`, `temurin-21`, "
+                    + "`openjdk-26`, etc. Resolved to the best-matching catalog entry. "
                     + "Omit to launch the interactive wizard.")
     String spec;
 
-    @Option(names = "--make-default",
+    @Option(names = {"-l", "--lts"},
+            description = "Install the most recent LTS major (e.g. 25 today, 29 after Sep 2027).")
+    boolean lts;
+
+    @Option(names = {"-s", "--stable"},
+            description = "Alias for --lts.")
+    boolean stable;
+
+    @Option(names = {"-L", "--latest"},
+            description = "Install the most recent JDK major (LTS or interim release).")
+    boolean latest;
+
+    @Option(names = {"-d", "--make-default"},
             description = "After install, mark this JDK as the system-wide default.")
     boolean makeDefault;
 
-    @Option(names = "--show-all",
+    /** Wired from the {@link GlobalOptions} mixin so we can gate the "resolved spec" diagnostic on -v. */
+    @picocli.CommandLine.Mixin
+    GlobalOptions global;
+
+    @Option(names = "--show-all", hidden = true,
             description = "In the interactive wizard, list every vendor from the JetBrains feed "
                     + "instead of the curated default set.")
     boolean showAll;
@@ -92,40 +109,62 @@ public final class JdkInstallCommand implements Callable<Integer> {
         String os = HostPlatform.currentOs();
         String arch = HostPlatform.currentArch();
 
+        // --lts / --stable / --latest resolve to a major-version spec by
+        // looking at what the catalog actually ships. Mutually exclusive
+        // with each other and with the positional <version>.
+        int flagsSet = (lts ? 1 : 0) + (stable ? 1 : 0) + (latest ? 1 : 0);
+        if (flagsSet > 1) {
+            System.err.println("jk jdk install: --lts, --stable, and --latest are mutually exclusive.");
+            return 64;
+        }
+        boolean haveSpec = spec != null && !spec.isBlank();
+        String resolvedSpec = resolveShortcutSpec(catalog, os, arch);
+        if (resolvedSpec != null && haveSpec) {
+            System.err.println("jk jdk install: --lts/--stable/--latest and <version> are mutually exclusive.");
+            return 64; // EX_USAGE
+        }
+        String effectiveSpec = resolvedSpec != null ? resolvedSpec : spec;
+
         JdkCatalog.Entry entry;
         boolean wantDefault = makeDefault;
-        if (spec == null || spec.isBlank()) {
+        if (effectiveSpec == null || effectiveSpec.isBlank()) {
             if (!isInteractiveTerminal()) {
-                System.err.println("jk jdk install: stdin is not a TTY — pass <spec> "
-                        + "(e.g. `jk jdk install temurin-21`) or run interactively.");
+                System.err.println("jk jdk install: stdin is not a TTY — pass --lts/--stable/--latest "
+                        + "or a <spec> (e.g. `jk jdk install temurin-21`) or run interactively.");
                 return 64; // EX_USAGE
             }
             JdkInstallWizard.Result chosen = runWizard(catalog, os, arch, showAll);
             entry = chosen.entry();
             wantDefault = wantDefault || chosen.makeDefault();
         } else {
-            JdkSpec parsed = JdkSpec.parse(spec);
+            JdkSpec parsed = JdkSpec.parse(effectiveSpec);
             Optional<JdkCatalog.Entry> selected = JdkSelector.select(catalog, parsed, os, arch);
             if (selected.isEmpty()) {
-                System.err.println("jk jdk install: no JDK matches " + spec
+                System.err.println("jk jdk install: no JDK matches " + effectiveSpec
                         + " on " + os + "/" + arch);
                 return 1;
             }
             entry = selected.get();
         }
 
-        Path jdksRoot = jdksDir != null ? jdksDir : IntellijJdkDir.root();
-        JdkRegistry registry = new JdkRegistry(jdksRoot);
+        if (global != null && global.verbose) {
+            System.err.println("jk jdk install: resolved spec='" + effectiveSpec + "' to "
+                    + entry.installFolderName() + " (" + entry.vendor() + " " + entry.product()
+                    + ", " + os + "/" + arch + ")");
+        }
+
+        JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         JdkInstaller installer = new JdkInstaller(new Http(), registry);
         InstalledJdk installed = downloadAndInstall(installer, entry);
 
         if (wantDefault) {
             GlobalDefaultJdk.current().set(installed);
             System.out.println();
-            // Blue ➜ (matches the spinner gradient's endpoint) + bold id.
-            System.out.println(Theme.colorize("➜", Theme.bright(0x3b, 0x82, 0xf6))
+            // Bright-green ➜ + bold id + emphasized "default".
+            System.out.println(Theme.colorize("➜", Theme.brightGreen())
                     + " " + Theme.colorize(installed.identifier(), AttributedStyle.DEFAULT.bold())
-                    + " is now the default JDK");
+                    + " is now the " + Theme.colorize("default", Theme.focused())
+                    + " JDK");
             Optional<Shell> shell = Shell.detect();
             if (shell.isPresent()) {
                 System.out.println("Add `" + shell.get().hookInstallCommand()
@@ -136,6 +175,34 @@ public final class JdkInstallCommand implements Callable<Integer> {
             }
         }
         return 0;
+    }
+
+    /**
+     * Translate the shortcut flags ({@code --lts}, {@code --stable},
+     * {@code --latest}) into a major-version spec string, or {@code null}
+     * when no shortcut is set. Mutual-exclusion check happens in
+     * {@link #call} before this is called.
+     */
+    private String resolveShortcutSpec(JdkCatalog catalog, String os, String arch) {
+        if (!lts && !stable && !latest) return null;
+        var majors = new java.util.TreeSet<Integer>();
+        for (JdkCatalog.Entry e : catalog.entries()) {
+            if (e.preview()) continue;
+            if (!e.os().equals(os) || !e.arch().equals(arch)) continue;
+            majors.add(e.majorVersion());
+        }
+        if (majors.isEmpty()) return null; // selector will then complain
+        if (latest) {
+            return String.valueOf(majors.last());
+        }
+        // --lts / --stable
+        var picked = JdkLts.latestLtsIn(majors);
+        if (picked.isEmpty()) {
+            System.err.println("jk jdk install: no LTS major present in the feed for "
+                    + os + "/" + arch + ".");
+            return null;
+        }
+        return String.valueOf(picked.getAsInt());
     }
 
     /**
@@ -194,14 +261,34 @@ public final class JdkInstallCommand implements Callable<Integer> {
      *   ✓ &lt;label&gt; &lt;verb&gt; &lt;~/path&gt;
      * </pre>
      * with the {@code ✓} in green, {@code label} bold-white, {@code verb}
-     * normal-gray, and the install path yellow with {@code ~} collapsed
+     * normal-gray (with the word "installed" lifted to bold-white for
+     * emphasis), and the install path yellow with {@code ~} collapsed
      * for the user's home dir.
      */
     private static String doneLine(String label, Path home, String verb) {
         return Theme.colorize("✓", Theme.completedStep())
                 + " " + Theme.colorize(label, Theme.focused())
-                + " " + Theme.colorize(verb, Theme.normalGray())
+                + " " + emphasizeInstalled(verb)
                 + " " + Theme.colorize(tildeCollapse(home), Theme.warning());
+    }
+
+    /** Render {@code verb} in normal-gray with the word "installed" promoted to bold-white. */
+    private static String emphasizeInstalled(String verb) {
+        String key = "installed";
+        int idx = verb.indexOf(key);
+        if (idx < 0) {
+            return Theme.colorize(verb, Theme.normalGray());
+        }
+        var sb = new StringBuilder();
+        if (idx > 0) {
+            sb.append(Theme.colorize(verb.substring(0, idx), Theme.normalGray()));
+        }
+        sb.append(Theme.colorize(key, Theme.focused()));
+        int end = idx + key.length();
+        if (end < verb.length()) {
+            sb.append(Theme.colorize(verb.substring(end), Theme.normalGray()));
+        }
+        return sb.toString();
     }
 
     /** Render an absolute path with {@code $HOME} collapsed to {@code ~}. */
@@ -227,7 +314,7 @@ public final class JdkInstallCommand implements Callable<Integer> {
         if (result.isEmpty()) {
             // Ctrl-C cancellation. Wizard.printCancellation preserves the cyan
             // active-rail closer and prints the red marker beside it. See
-            // InitCommand for the Runtime.halt() rationale.
+            // NewCommand for the Runtime.halt() rationale.
             Wizard.printCancellation(terminal, "𝘅 JDK installation canceled");
             Runtime.getRuntime().halt(130); // 128 + SIGINT
             throw new AssertionError("unreachable");

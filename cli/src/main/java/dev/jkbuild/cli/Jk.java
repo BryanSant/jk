@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.config.ActiveConfig;
+import dev.jkbuild.config.JkConfig;
+import dev.jkbuild.config.JkConfigLoader;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Help;
@@ -25,11 +28,12 @@ import java.util.Set;
  */
 @Command(
         name = "jk",
-        mixinStandardHelpOptions = true,
+        // -h/--help and -V/--version come from GlobalOptions; mixinStandardHelpOptions stays off
+        // so picocli doesn't try to register them twice.
         version = "jk " + Jk.VERSION,
-        description = "A fast build tool and package manager for Java/Kotlin",
+        description = "A fast build tool and package manager for Java & Kotlin",
         subcommands = {
-                InitCommand.class,
+                NewCommand.class,
                 AddCommand.class,
                 RemoveCommand.class,
                 LockCommand.class,
@@ -46,6 +50,9 @@ import java.util.Set;
                 JdkCommand.class,
                 EnvCommand.class,
                 HookCommand.class,
+                dev.jkbuild.cli.activate.ActivateCommand.class,
+                dev.jkbuild.cli.activate.HookEnvCommand.class,
+                dev.jkbuild.cli.activate.DeactivateCommand.class,
                 ShellCommand.class,
                 MvnCommand.class,
                 GradleCommand.class,
@@ -78,7 +85,8 @@ public final class Jk implements Runnable {
      * (e.g. {@code install} → {@code tool install}).
      */
     static final Map<String, List<String>> VERB_ALIASES = Map.ofEntries(
-            Map.entry("generate", List.of("init")),           // Maven mvn archetype:generate
+            Map.entry("generate", List.of("new")),            // Maven mvn archetype:generate
+            Map.entry("init", List.of("new")),                // old `jk init` muscle memory
             Map.entry("dependencies", List.of("tree")),       // Gradle gradle dependencies
             Map.entry("package", List.of("build")),           // Maven mvn package
             Map.entry("deploy", List.of("publish")),          // Maven mvn deploy
@@ -96,7 +104,44 @@ public final class Jk implements Runnable {
 
     /** Run jk with the given argv. The first positional is rewritten if it's a known alias. */
     public static int execute(String... args) {
+        // Resolve configuration first — picocli's subsequent option parsing only
+        // determines explicit flag values; defaults still need to come from the
+        // env / project jk.toml / user / system layers via JkConfigLoader.
+        loadAndInstallConfig(args);
         return newCommandLine().execute(rewriteAlias(args));
+    }
+
+    /**
+     * Read {@code --config-file} / {@code --no-config} out of raw argv with a
+     * cheap linear scan, then ask {@link JkConfigLoader} to build the merged
+     * {@link JkConfig} and stash it in {@link ActiveConfig}. This runs before
+     * picocli parsing so the rest of the CLI sees an already-resolved config.
+     *
+     * <p>CLI flag values (the highest layer) are folded in lazily as each
+     * command's {@link GlobalOptions} mixin reads them after parsing.
+     */
+    private static void loadAndInstallConfig(String[] args) {
+        boolean noConfig = false;
+        java.util.Optional<java.nio.file.Path> explicit = java.util.Optional.empty();
+        for (int i = 0; i < args.length; i++) {
+            String a = args[i];
+            if ("--no-config".equals(a)) {
+                noConfig = true;
+            } else if ("--config-file".equals(a) && i + 1 < args.length) {
+                explicit = java.util.Optional.of(java.nio.file.Path.of(args[++i]));
+            } else if (a.startsWith("--config-file=")) {
+                explicit = java.util.Optional.of(java.nio.file.Path.of(a.substring("--config-file=".length())));
+            }
+        }
+        try {
+            JkConfig resolved = JkConfigLoader.load(
+                    java.nio.file.Path.of("").toAbsolutePath(), noConfig, explicit);
+            ActiveConfig.install(resolved);
+        } catch (java.io.IOException e) {
+            // Best-effort — a broken user/system config shouldn't kill the CLI.
+            System.err.println("jk: warning: could not load config (" + e.getMessage() + "); using defaults.");
+            ActiveConfig.install(JkConfig.empty());
+        }
     }
 
     static String[] rewriteAlias(String[] args) {
@@ -145,10 +190,10 @@ public final class Jk implements Runnable {
                 sub.setUnmatchedOptionsArePositionalParams(true);
             }
         }
-        // Enable `-h` / `--help` on every command at every depth. Skip mvn/gradle so their
-        // `--help` continues to forward to the wrapped tool. (The top-level Jk already
-        // declares `mixinStandardHelpOptions = true`; the call is idempotent.)
-        enableHelpEverywhere(cmd);
+        // Inject GlobalOptions (-q, -v, --color, --offline, --no-progress, --config-file,
+        // --no-config, -h, -V) as a mixin on every command at every depth. mvn/gradle
+        // skip the mixin so their `--help` keeps forwarding to the wrapped tool.
+        installGlobalOptionsEverywhere(cmd);
         // Apply the custom "description / Usage / commands" layout to every command that
         // has subcommands — top-level `jk` plus nested parents like `jk jdk`, `jk tool`,
         // `jk cache`. Leaf commands keep picocli's default formatting so their option /
@@ -161,12 +206,24 @@ public final class Jk implements Runnable {
         return cmd;
     }
 
-    private static void enableHelpEverywhere(CommandLine cmd) {
+    /** Mixin key used to register {@link GlobalOptions} on every {@link CommandSpec}. */
+    private static final String GLOBAL_OPTIONS_MIXIN_KEY = "global";
+
+    private static void installGlobalOptionsEverywhere(CommandLine cmd) {
         if (!PASSTHROUGH_COMMANDS.contains(cmd.getCommandName())) {
-            cmd.getCommandSpec().mixinStandardHelpOptions(true);
+            // Skip commands that already declared `@Mixin GlobalOptions` themselves
+            // (so they can READ the values); picocli has already registered it for them.
+            boolean alreadyHas = cmd.getCommandSpec().mixins().values().stream()
+                    .anyMatch(spec -> spec.userObject() instanceof GlobalOptions);
+            if (!alreadyHas) {
+                // Fresh instance per command — picocli writes parsed values into the
+                // mixin's fields, so sharing one instance would race during parsing.
+                cmd.getCommandSpec().addMixin(GLOBAL_OPTIONS_MIXIN_KEY,
+                        CommandSpec.forAnnotatedObject(new GlobalOptions()));
+            }
         }
         for (CommandLine sub : cmd.getSubcommands().values()) {
-            enableHelpEverywhere(sub);
+            installGlobalOptionsEverywhere(sub);
         }
     }
 
@@ -174,14 +231,50 @@ public final class Jk implements Runnable {
         for (CommandLine sub : parent.getSubcommands().values()) {
             if (!sub.getSubcommands().isEmpty()) {
                 applyParentLayout(sub);
-            } else {
-                // Picocli's UsageMessageSpec inherits sectionKeys from the parent's spec, so
-                // our parent layout would otherwise leak into leaf commands. Reset to defaults
-                // so leaves still surface their option / parameter lists.
+            } else if (PASSTHROUGH_COMMANDS.contains(sub.getCommandName())) {
+                // Passthroughs (mvn, gradle) forward --help to the wrapped tool; don't
+                // intercept their help layout.
                 sub.setHelpSectionKeys(DEFAULT_SECTION_KEYS);
+            } else {
+                // Every non-passthrough leaf gets the styled "description / Usage /
+                // Arguments / Options" layout that matches the parent help screens.
+                applyLeafLayout(sub);
             }
             applyParentLayoutRecursively(sub);
         }
+    }
+
+    /** Custom section key for the global-options heading + list. */
+    private static final String SECTION_KEY_GLOBAL_OPTIONS_HEADING = "jkGlobalOptionsHeading";
+    private static final String SECTION_KEY_GLOBAL_OPTIONS = "jkGlobalOptions";
+
+    /**
+     * Layout for a styled leaf command: {description, Usage, Arguments,
+     * Options, Global options}. Mirrors {@link #applyParentLayout} but
+     * swaps the command-list section for parameter and option renderers
+     * that match the styling of parent help screens.
+     */
+    private static void applyLeafLayout(CommandLine cmd) {
+        cmd.setHelpSectionKeys(List.of(
+                UsageMessageSpec.SECTION_KEY_DESCRIPTION,
+                UsageMessageSpec.SECTION_KEY_SYNOPSIS_HEADING,
+                UsageMessageSpec.SECTION_KEY_SYNOPSIS,
+                UsageMessageSpec.SECTION_KEY_PARAMETER_LIST_HEADING,
+                UsageMessageSpec.SECTION_KEY_PARAMETER_LIST,
+                UsageMessageSpec.SECTION_KEY_OPTION_LIST_HEADING,
+                UsageMessageSpec.SECTION_KEY_OPTION_LIST,
+                SECTION_KEY_GLOBAL_OPTIONS_HEADING,
+                SECTION_KEY_GLOBAL_OPTIONS));
+        Map<String, CommandLine.IHelpSectionRenderer> sections = cmd.getHelpSectionMap();
+        sections.put(UsageMessageSpec.SECTION_KEY_DESCRIPTION, Jk::renderDescription);
+        sections.put(UsageMessageSpec.SECTION_KEY_SYNOPSIS_HEADING, Jk::renderSynopsisHeading);
+        sections.put(UsageMessageSpec.SECTION_KEY_SYNOPSIS, Jk::renderSynopsis);
+        sections.put(UsageMessageSpec.SECTION_KEY_PARAMETER_LIST_HEADING, Jk::renderArgumentsHeading);
+        sections.put(UsageMessageSpec.SECTION_KEY_PARAMETER_LIST, Jk::renderStyledParameterList);
+        sections.put(UsageMessageSpec.SECTION_KEY_OPTION_LIST_HEADING, Jk::renderOptionsHeading);
+        sections.put(UsageMessageSpec.SECTION_KEY_OPTION_LIST, Jk::renderStyledOptionList);
+        sections.put(SECTION_KEY_GLOBAL_OPTIONS_HEADING, Jk::renderGlobalOptionsHeading);
+        sections.put(SECTION_KEY_GLOBAL_OPTIONS, Jk::renderStyledGlobalOptionList);
     }
 
     /**
@@ -201,6 +294,8 @@ public final class Jk implements Runnable {
             keys.add(UsageMessageSpec.SECTION_KEY_COMMAND_LIST_HEADING);
         }
         keys.add(UsageMessageSpec.SECTION_KEY_COMMAND_LIST);
+        keys.add(SECTION_KEY_GLOBAL_OPTIONS_HEADING);
+        keys.add(SECTION_KEY_GLOBAL_OPTIONS);
         cmd.setHelpSectionKeys(keys);
 
         Map<String, CommandLine.IHelpSectionRenderer> sections = cmd.getHelpSectionMap();
@@ -213,19 +308,22 @@ public final class Jk implements Runnable {
             sections.put(UsageMessageSpec.SECTION_KEY_COMMAND_LIST_HEADING, Jk::renderCommandsHeading);
             sections.put(UsageMessageSpec.SECTION_KEY_COMMAND_LIST, Jk::renderFlatSubcommands);
         }
+        sections.put(SECTION_KEY_GLOBAL_OPTIONS_HEADING, Jk::renderGlobalOptionsHeading);
+        sections.put(SECTION_KEY_GLOBAL_OPTIONS, Jk::renderStyledGlobalOptionList);
     }
 
     /**
      * Top-level verb groupings for --help. Order within each group is rough
      * lifecycle / workflow order (create → manage → build → distribute →
      * verify), not alphabetical. Any registered subcommand that doesn't
-     * appear here is listed under "Other commands:" as a safety net.
+     * appear here is listed under "Shell integration commands:" — the
+     * leftover bucket today is {@code activate} / {@code deactivate}.
      */
     private record CommandGroup(String heading, List<String> names) {}
 
     private static final List<CommandGroup> COMMAND_GROUPS = List.of(
             new CommandGroup("Project commands:", List.of(
-                    "init",
+                    "new",
                     "add", "remove",
                     "lock", "update", "sync",
                     "tree", "why",
@@ -281,7 +379,7 @@ public final class Jk implements Runnable {
                 .toList();
         if (!leftover.isEmpty()) {
             if (!first) out.append(nl);
-            out.append(brightGreen("Other commands:", ansi)).append(nl);
+            out.append(brightGreen("Shell integration commands:", ansi)).append(nl);
             for (String name : leftover) {
                 appendCommandRow(out, name, byName.get(name), width, ansi);
             }
@@ -314,7 +412,10 @@ public final class Jk implements Runnable {
     private static String renderSynopsis(Help help) {
         boolean ansi = help.colorScheme().ansi().enabled();
         String name = help.commandSpec().qualifiedName();
-        String suffix = " <COMMAND> [OPTIONS]";
+        // Parents have subcommands → `<name> <COMMAND> [OPTIONS]`;
+        // leaves don't → `<name> [OPTIONS]`.
+        boolean isLeaf = help.commandSpec().subcommands().isEmpty();
+        String suffix = isLeaf ? " [OPTIONS]" : " <COMMAND> [OPTIONS]";
         String nl = System.lineSeparator();
         if (ansi) {
             return "\033[1;96m" + name + "\033[0m\033[96m" + suffix + "\033[0m" + nl;
@@ -325,6 +426,129 @@ public final class Jk implements Runnable {
     private static String renderCommandsHeading(Help help) {
         String nl = System.lineSeparator();
         return nl + brightGreen("Commands:", help.colorScheme().ansi().enabled()) + nl;
+    }
+
+    private static String renderOptionsHeading(Help help) {
+        boolean anyVisible = help.commandSpec().options().stream()
+                .anyMatch(o -> !o.hidden() && !isGlobal(o));
+        if (!anyVisible) return "";
+        String nl = System.lineSeparator();
+        return nl + brightGreen("Options:", help.colorScheme().ansi().enabled()) + nl;
+    }
+
+    private static String renderGlobalOptionsHeading(Help help) {
+        boolean anyVisible = help.commandSpec().options().stream()
+                .anyMatch(o -> !o.hidden() && isGlobal(o));
+        if (!anyVisible) return "";
+        String nl = System.lineSeparator();
+        return nl + brightGreen("Global options:", help.colorScheme().ansi().enabled()) + nl;
+    }
+
+    /**
+     * The long-name set every {@link GlobalOptions} option declares. Used to
+     * partition the merged option list at help-render time. Picocli stores
+     * mixin options inline with command options, so an instance check via
+     * {@code userObject()} isn't reliable across all picocli builds — a
+     * name-set check is the most portable way.
+     */
+    private static final Set<String> GLOBAL_OPTION_LONG_NAMES = Set.of(
+            "--quiet", "--verbose", "--color", "--offline", "--no-progress",
+            "--config-file", "--no-config", "--help", "--version");
+
+    /** True when this option came from the {@link GlobalOptions} mixin. */
+    private static boolean isGlobal(picocli.CommandLine.Model.OptionSpec opt) {
+        for (String name : opt.names()) {
+            if (GLOBAL_OPTION_LONG_NAMES.contains(name)) return true;
+        }
+        return false;
+    }
+
+    private static String renderArgumentsHeading(Help help) {
+        boolean anyVisible = help.commandSpec().positionalParameters().stream().anyMatch(p -> !p.hidden());
+        if (!anyVisible) return "";
+        String nl = System.lineSeparator();
+        return nl + brightGreen("Arguments:", help.colorScheme().ansi().enabled()) + nl;
+    }
+
+    /**
+     * Render visible positional parameters as `  <param>  description` rows.
+     * Param labels are plain bright-cyan (matching the synopsis's `[OPTIONS]`).
+     */
+    private static String renderStyledParameterList(Help help) {
+        boolean ansi = help.colorScheme().ansi().enabled();
+        var params = help.commandSpec().positionalParameters().stream()
+                .filter(p -> !p.hidden())
+                .toList();
+        if (params.isEmpty()) return "";
+        int width = params.stream().mapToInt(p -> p.paramLabel().length()).max().orElse(0) + 2;
+        var sb = new StringBuilder();
+        String nl = System.lineSeparator();
+        for (var p : params) {
+            String label = p.paramLabel();
+            String desc = p.description().length > 0 ? p.description()[0] : "";
+            sb.append("  ")
+                    .append(ansi ? "\033[96m" + label + "\033[0m" : label)
+                    .append(" ".repeat(width - label.length()))
+                    .append(desc)
+                    .append(nl);
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Render command-specific options (those <em>not</em> from the
+     * {@link GlobalOptions} mixin) as styled rows.
+     */
+    private static String renderStyledOptionList(Help help) {
+        var options = help.commandSpec().options().stream()
+                .filter(o -> !o.hidden() && !isGlobal(o))
+                .toList();
+        return renderOptionRows(options, help.colorScheme().ansi().enabled());
+    }
+
+    /** Render the {@link GlobalOptions} mixin's options as styled rows. */
+    private static String renderStyledGlobalOptionList(Help help) {
+        var options = help.commandSpec().options().stream()
+                .filter(o -> !o.hidden() && isGlobal(o))
+                .toList();
+        return renderOptionRows(options, help.colorScheme().ansi().enabled());
+    }
+
+    /**
+     * Format a list of options as `  -x, --xx <param>  description` rows.
+     * Name block is bold-cyan; param label (when present) is plain cyan;
+     * description is unstyled. Boolean flags (arity 0) skip the label.
+     */
+    private static String renderOptionRows(List<picocli.CommandLine.Model.OptionSpec> options, boolean ansi) {
+        if (options.isEmpty()) return "";
+        record Row(String namePart, String labelPart) {
+            int width() { return namePart.length() + (labelPart.isEmpty() ? 0 : labelPart.length() + 1); }
+        }
+        List<Row> rows = new ArrayList<>(options.size());
+        int width = 0;
+        for (var opt : options) {
+            String namePart = String.join(", ", opt.names());
+            String labelPart = (opt.arity().max() > 0 && opt.paramLabel() != null && !opt.paramLabel().isEmpty())
+                    ? opt.paramLabel()
+                    : "";
+            Row row = new Row(namePart, labelPart);
+            rows.add(row);
+            width = Math.max(width, row.width());
+        }
+        width += 2; // gutter between name/label block and description
+
+        var sb = new StringBuilder();
+        String nl = System.lineSeparator();
+        for (int i = 0; i < options.size(); i++) {
+            Row row = rows.get(i);
+            String desc = options.get(i).description().length > 0 ? options.get(i).description()[0] : "";
+            sb.append("  ").append(brightCyan(row.namePart, ansi));
+            if (!row.labelPart.isEmpty()) {
+                sb.append(" ").append(ansi ? "\033[96m" + row.labelPart + "\033[0m" : row.labelPart);
+            }
+            sb.append(" ".repeat(width - row.width())).append(desc).append(nl);
+        }
+        return sb.toString();
     }
 
     private static String brightGreen(String text, boolean ansi) {
