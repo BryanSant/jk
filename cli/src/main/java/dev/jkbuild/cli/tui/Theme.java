@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.config.ActiveConfig;
+import dev.jkbuild.config.JkConfig;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
@@ -10,21 +12,36 @@ import org.jline.utils.AttributedStyle;
  * everywhere; terminals without 24-bit color degrade to the nearest indexed
  * color via JLine's renderer.
  *
- * <p>Honors the <a href="https://no-color.org/">NO_COLOR</a> convention:
- * when the {@code NO_COLOR} environment variable is set to a non-empty
- * value, all foreground colors are stripped. Text attributes (bold,
- * italic, faint) survive — NO_COLOR is specifically about color.
+ * <p>Color emission is decided by the user's resolved {@code --color}
+ * choice in {@link ActiveConfig} (see {@link JkConfig.ColorChoice}):
+ * <ul>
+ *   <li>{@code ALWAYS} — emit color unconditionally.</li>
+ *   <li>{@code NEVER} — strip all foreground colors. Text attributes
+ *       (bold, italic, faint) survive — color choice is about color.</li>
+ *   <li>{@code AUTO} (default) — emit color unless the
+ *       <a href="https://no-color.org/">NO_COLOR</a> env var is set, or
+ *       stdout is not attached to a terminal.</li>
+ * </ul>
  */
 public final class Theme {
 
-    /** True when the user has requested colorless output via the NO_COLOR env var. */
-    private static final boolean NO_COLOR = noColorRequested();
-
     private Theme() {}
 
-    private static boolean noColorRequested() {
-        var v = System.getenv("NO_COLOR");
-        return v != null && !v.isEmpty();
+    /** True when foreground color should be emitted, given the resolved {@code --color} choice. */
+    public static boolean colorEnabled() {
+        var choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);
+        return switch (choice) {
+            case ALWAYS -> true;
+            case NEVER -> false;
+            // AUTO: emit color unless NO_COLOR is set. We don't gate on isatty —
+            // many jk consumers (CI logs, `less -R`, pipes into other formatters)
+            // benefit from preserved color, and users who want strictly plain
+            // output can pass `--color never`.
+            case AUTO -> {
+                var nc = System.getenv("NO_COLOR");
+                yield nc == null || nc.isEmpty();
+            }
+        };
     }
 
     // Gradient endpoints: coral #e3475b → violet #8150fe.
@@ -55,9 +72,9 @@ public final class Theme {
     private static final int WARN_G = 0xcc;
     private static final int WARN_B = 0x15;
 
-    /** Apply a foreground color unless NO_COLOR is set. */
+    /** Apply a foreground color unless the resolved {@code --color} choice disables it. */
     private static AttributedStyle withColor(AttributedStyle base, int r, int g, int b) {
-        return NO_COLOR ? base : base.foreground(r, g, b);
+        return colorEnabled() ? base.foreground(r, g, b) : base;
     }
 
     public static AttributedStyle dim() {
@@ -139,7 +156,7 @@ public final class Theme {
         if (n == 0) {
             return sb.toAttributedString();
         }
-        if (NO_COLOR) {
+        if (!colorEnabled()) {
             // Drop the gradient entirely; bold still distinguishes the header.
             return sb.append(text, AttributedStyle.DEFAULT.bold()).toAttributedString();
         }
@@ -163,7 +180,7 @@ public final class Theme {
      */
     public static String gradientHeaderAnsi(String text) {
         if (text.isEmpty()) return "";
-        if (NO_COLOR) return "\033[1m" + text + "\033[0m";
+        if (!colorEnabled()) return "\033[1m" + text + "\033[0m";
         var codepoints = text.codePoints().toArray();
         var n = codepoints.length;
         var sb = new StringBuilder();

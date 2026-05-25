@@ -114,7 +114,30 @@ public final class Jk implements Runnable {
         // -q/--quiet must take effect before any println happens. Apply it now
         // based on the resolved config (which already knows about env/file/CLI layers).
         dev.jkbuild.config.Quietable.applyIfQuiet(ActiveConfig.get());
-        return newCommandLine().execute(rewriteAlias(args));
+        CommandLine cmd = newCommandLine();
+        applyColorScheme(cmd);
+        return cmd.execute(rewriteAlias(args));
+    }
+
+    /**
+     * Force picocli's help renderer to honor the resolved {@code --color}
+     * choice in {@link ActiveConfig}. Without this, picocli would do its
+     * own auto-detection independently of the user's explicit flag.
+     */
+    private static void applyColorScheme(CommandLine cmd) {
+        var choice = ActiveConfig.get().colorOr(JkConfig.ColorChoice.AUTO);
+        picocli.CommandLine.Help.Ansi ansi = switch (choice) {
+            case ALWAYS -> picocli.CommandLine.Help.Ansi.ON;
+            case NEVER -> picocli.CommandLine.Help.Ansi.OFF;
+            // AUTO matches Theme.colorEnabled(): on unless NO_COLOR is set.
+            case AUTO -> {
+                var nc = System.getenv("NO_COLOR");
+                yield (nc == null || nc.isEmpty())
+                        ? picocli.CommandLine.Help.Ansi.ON
+                        : picocli.CommandLine.Help.Ansi.OFF;
+            }
+        };
+        cmd.setColorScheme(picocli.CommandLine.Help.defaultColorScheme(ansi));
     }
 
     /**
