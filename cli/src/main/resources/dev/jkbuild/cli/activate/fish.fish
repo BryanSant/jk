@@ -29,6 +29,11 @@ function jk
     end
 end
 
+# `jkx` — uvx-style ephemeral tool exec; expands to `jk tool run`.
+function jkx
+    command $__JK_EXE tool run $argv
+end
+
 function __jk_env_eval --on-event fish_prompt --description 'jk: refresh env'
     command $__JK_EXE hook-env -s fish | source
 end

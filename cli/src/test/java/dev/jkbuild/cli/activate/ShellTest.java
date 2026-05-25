@@ -100,4 +100,30 @@ class ShellTest {
         assertThat(out).contains("global:prompt");
         assertThat(out).contains("hook-env -s pwsh");
     }
+
+    @Test
+    void activate_scripts_define_jkx_as_tool_run_shorthand() {
+        // Every activate script should expose `jkx` so the uvx-style ephemeral
+        // exec UX works in any shell the user activates.
+        assertThat(new BashShell().activateScript("/opt/jk/bin/jk"))
+                .contains("jkx()")
+                .contains("tool run");
+        assertThat(new ZshShell().activateScript("/opt/jk/bin/jk"))
+                .contains("jkx()")
+                .contains("tool run");
+        assertThat(new FishShell().activateScript("/opt/jk/bin/jk"))
+                .contains("function jkx")
+                .contains("tool run");
+        assertThat(new PwshShell().activateScript("/opt/jk/bin/jk"))
+                .contains("global:jkx")
+                .contains("tool run");
+    }
+
+    @Test
+    void deactivate_scripts_remove_jkx_too() {
+        assertThat(new BashShell().deactivateScript()).contains("unset -f jkx");
+        assertThat(new ZshShell().deactivateScript()).contains("unset -f jkx");
+        assertThat(new FishShell().deactivateScript()).contains("functions --erase jkx");
+        assertThat(new PwshShell().deactivateScript()).contains("function:jkx");
+    }
 }

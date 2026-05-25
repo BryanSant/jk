@@ -41,6 +41,16 @@ function global:jk {
     }
 }
 
+# `jkx` — uvx-style ephemeral tool exec; expands to `jk tool run`.
+function global:jkx {
+    [CmdletBinding()]
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]] $arguments
+    )
+    & $env:__JK_EXE tool run @arguments
+}
+
 function global:_jk_hook {
     if ($env:__JK_SHELL -eq 'pwsh') {
         $output = & $env:__JK_EXE hook-env -s pwsh | Out-String

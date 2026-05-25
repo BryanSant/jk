@@ -29,6 +29,11 @@ jk() {
     command "$__JK_EXE" "$cmd" "$@"
 }
 
+# `jkx` — uvx-style ephemeral tool exec; expands to `jk tool run`.
+jkx() {
+    command "$__JK_EXE" tool run "$@"
+}
+
 _jk_hook() {
     local prev_status=$?
     eval "$(command "$__JK_EXE" hook-env -s bash)"

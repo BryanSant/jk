@@ -26,6 +26,11 @@ jk() {
     command "$__JK_EXE" "$cmd" "$@"
 }
 
+# `jkx` — uvx-style ephemeral tool exec; expands to `jk tool run`.
+jkx() {
+    command "$__JK_EXE" tool run "$@"
+}
+
 autoload -Uz add-zsh-hook
 
 _jk_hook_precmd() {
