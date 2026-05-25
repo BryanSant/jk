@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.compat.InstalledTool;
 import dev.jkbuild.compat.PassthroughEnv;
 import dev.jkbuild.compat.ToolDistribution;
@@ -74,7 +75,7 @@ public final class MvnCommand implements Callable<Integer> {
             case CACHED -> { /* silent — common case */ }
         }
 
-        Optional<InstalledJdk> jdk = EnvCommand.resolvePinnedJdk(projectDir, jdksDir);
+        Optional<InstalledJdk> jdk = JdkResolver.forProject(projectDir, jdksDir);
 
         List<String> command = new ArrayList<>();
         command.add(maven.binary().toString());

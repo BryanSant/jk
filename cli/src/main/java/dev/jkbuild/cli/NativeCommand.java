@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.jdk.InstalledJdk;
@@ -72,7 +73,7 @@ public final class NativeCommand implements Callable<Integer> {    @Option(names
             return 66;
         }
 
-        Optional<InstalledJdk> jdk = EnvCommand.resolvePinnedJdk(projectDir, jdksDir);
+        Optional<InstalledJdk> jdk = JdkResolver.forProject(projectDir, jdksDir);
         Path javaHome = jdk.map(InstalledJdk::home).orElseGet(CompileToolchain::runningJavaHome);
 
         String chosenMain = mainClass != null

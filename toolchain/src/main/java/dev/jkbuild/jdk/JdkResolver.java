@@ -45,4 +45,17 @@ public final class JdkResolver {
         String body = Files.readString(file).trim();
         return body.isEmpty() ? Optional.empty() : Optional.of(body);
     }
+
+    /**
+     * Convenience for CLI commands that want the project's pinned JDK with
+     * an optional {@code --jdks-dir} override. {@code jdksDirOverride} may
+     * be {@code null} to use the IntelliJ JDK directory default.
+     */
+    public static Optional<InstalledJdk> forProject(Path projectDir, Path jdksDirOverride)
+            throws IOException {
+        JdkRegistry registry = jdksDirOverride != null
+                ? new JdkRegistry(jdksDirOverride)
+                : new JdkRegistry();
+        return new JdkResolver(registry).resolve(projectDir);
+    }
 }

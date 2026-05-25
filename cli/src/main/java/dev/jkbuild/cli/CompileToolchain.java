@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.BuildTool;
 import dev.jkbuild.compat.InstalledTool;
@@ -45,7 +46,7 @@ final class CompileToolchain {
     static Path resolveJavaHome(Path projectDir) {
         Optional<InstalledJdk> pinned;
         try {
-            pinned = EnvCommand.resolvePinnedJdk(projectDir, null);
+            pinned = JdkResolver.forProject(projectDir, null);
         } catch (IOException e) {
             pinned = Optional.empty();
         }

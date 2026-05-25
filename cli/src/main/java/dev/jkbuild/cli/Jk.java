@@ -48,7 +48,6 @@ import java.util.Set;
                 ExplainCommand.class,
                 WhyRebuiltCommand.class,
                 JdkCommand.class,
-                EnvCommand.class,
                 dev.jkbuild.cli.activate.ActivateCommand.class,
                 dev.jkbuild.cli.activate.HookEnvCommand.class,
                 dev.jkbuild.cli.activate.DeactivateCommand.class,
@@ -422,7 +421,7 @@ public final class Jk implements Runnable {
                     "install", "publish", "image", "native",
                     "audit", "deny", "verify-build")),
             new CommandGroup("Toolchain commands:", List.of(
-                    "jdk", "env", "shell", "activate", "deactivate",
+                    "jdk", "shell", "activate", "deactivate",
                     "tool")),
             new CommandGroup("Interop commands:", List.of(
                     "import", "mvn", "gradle", "export")),
