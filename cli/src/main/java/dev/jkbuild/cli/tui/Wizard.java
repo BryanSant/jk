@@ -132,9 +132,8 @@ public final class Wizard {
     /**
      * Render a Ctrl-C cancellation closer on top of the wizard's active rail:
      * step the cursor back up to the active {@code ╰} row, preserve the existing
-     * {@code ╰  } prefix (which the active region already drew in cyan), and
-     * append the red {@code <message>} starting at the column where the closer's
-     * text would normally begin.
+     * {@code ╰──} prefix (which the active region already drew in cyan), and
+     * append a separator space + red {@code <message>} right after it.
      *
      * <p>Assumes the wizard has just returned {@link Optional#empty()} and that
      * the in-loop cancel path called {@link #moveBelowCloser} — so {@link #run}'s
@@ -143,10 +142,10 @@ public final class Wizard {
     public static void printCancellation(Terminal terminal, String message) {
         var writer = terminal.writer();
         writer.print("\033[2F"); // up 2 lines, col 1 — lands at the active ╰
-        writer.print("\033[" + RAIL_PREFIX_WIDTH + "C"); // skip past "╰  "
+        writer.print("\033[" + RAIL_PREFIX_WIDTH + "C"); // skip past "╰──"
         writer.print("\033[0J"); // erase residue beyond
         var line = new AttributedStringBuilder()
-                .append(message, Theme.error())
+                .append(" " + message, Theme.error()) // leading space separates from ╰──
                 .toAttributedString();
         writer.print(line.toAnsi(terminal));
         writer.println();
@@ -196,7 +195,7 @@ public final class Wizard {
         var answers = new LinkedHashMap<String, Object>(preset.asMap());
 
         writer.println();
-        writer.println(headerLine().toAnsi(terminal));
+        writer.println(headerLine(terminal));
         writer.flush();
 
         for (var step : steps) {
@@ -321,9 +320,17 @@ public final class Wizard {
         return 1;
     }
 
-    private AttributedString headerLine() {
-        var gradient = Theme.gradientHeader(title.isEmpty() ? "Wizard" : title);
-        return Rail.opener(gradient, Rail.StepState.INACTIVE);
+    /**
+     * Build the header as raw ANSI: dark-gray {@code ╭── } (via the standard
+     * Rail opener) followed by the gradient title with bold stamped on every
+     * codepoint's SGR. Bypassing {@link AttributedString#toAnsi} for the title
+     * is what keeps bold from being optimized into a single emit at the first
+     * char (and then "drifting away" on terminals that render bold-as-bright).
+     */
+    private String headerLine(Terminal terminal) {
+        var cornerWithSpace = Rail.opener("", Rail.StepState.INACTIVE).toAnsi(terminal);
+        var titleAnsi = Theme.gradientHeaderAnsi(title.isEmpty() ? "Wizard" : title);
+        return cornerWithSpace + titleAnsi;
     }
 
     private static List<AttributedString> summarize(WizardStep step, Map<String, Object> answers) {
@@ -354,7 +361,7 @@ public final class Wizard {
 
     private static AttributedString answerLine(String text, AttributedStyle textStyle) {
         return new AttributedStringBuilder()
-                .append("➜ ", Theme.blue())
+                .append("➜ ", Theme.brightGreen())
                 .append(text, textStyle)
                 .toAttributedString();
     }
@@ -400,6 +407,11 @@ public final class Wizard {
                     var prior = existing.get(is.key());
                     if (prior != null) {
                         this.input.append(prior);
+                    } else {
+                        var seed = is.initialValueFor(snapshot);
+                        if (seed != null && !seed.isEmpty()) {
+                            this.input.append(seed);
+                        }
                     }
                 }
                 case WizardStep.RadioStep rs -> {
@@ -447,16 +459,8 @@ public final class Wizard {
                     error = "";
                     yield true;
                 }
-                case KeyReader.Key.Right r -> {
-                    // Realize the placeholder as if the user typed it. The
-                    // text picks up the normal "user input" styling — there's
-                    // no visual distinction between typed-and-accepted text.
-                    if (input.length() == 0 && !is.placeholder().isEmpty()) {
-                        input.append(is.placeholder());
-                        error = "";
-                    }
-                    yield false;
-                }
+                case KeyReader.Key.Right r -> realizePlaceholder(is);
+                case KeyReader.Key.Tab t -> realizePlaceholder(is);
                 case KeyReader.Key.Backspace b -> {
                     if (input.length() > 0) {
                         input.deleteCharAt(input.length() - 1);
@@ -476,6 +480,17 @@ public final class Wizard {
                 }
                 default -> false;
             };
+        }
+
+        private boolean realizePlaceholder(WizardStep.InputStep is) {
+            // Realize the placeholder as if the user typed it. The text picks
+            // up the normal "user input" styling — there's no visual distinction
+            // between typed-and-accepted text.
+            if (input.length() == 0 && !is.placeholder().isEmpty()) {
+                input.append(is.placeholder());
+                error = "";
+            }
+            return false;
         }
 
         private boolean handleRadio(WizardStep.RadioStep rs, KeyReader.Key key) {

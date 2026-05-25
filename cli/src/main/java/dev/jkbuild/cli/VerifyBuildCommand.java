@@ -35,19 +35,15 @@ import java.util.concurrent.Callable;
  */
 @Command(name = "verify-build",
         description = "Rebuild in scratch; diff jar vs target/")
-public final class VerifyBuildCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--cache-dir", hidden = true,
+public final class VerifyBuildCommand implements Callable<Integer> {    @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
@@ -97,7 +93,7 @@ public final class VerifyBuildCommand implements Callable<Integer> {
         Cas cas = new Cas(cache);
         List<Path> classpath = new ClasspathResolver(cas)
                 .classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
-        int release = CompileCommand.parseReleaseFromJdk(project.project().jdk());
+        int release = project.project().javaRelease();
 
         Files.createDirectories(classesOut);
         if (!sources.isEmpty()) {

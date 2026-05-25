@@ -36,7 +36,7 @@ class GradleImporterTest {
         assertThat(p.group()).isEqualTo("com.example");
         assertThat(p.artifact()).isEqualTo("widget");
         assertThat(p.version()).isEqualTo("1.2.3");
-        assertThat(p.jdk()).isEqualTo("21");
+        assertThat(p.jdk()).isEqualTo(21);
 
         var deps = result.jkBuild().dependencies();
         assertThat(deps.of(Scope.MAIN))
@@ -134,7 +134,7 @@ class GradleImporterTest {
                     }
                 }
                 """, "app");
-        assertThat(result.jkBuild().project().jdk()).isEqualTo("17");
+        assertThat(result.jkBuild().project().jdk()).isEqualTo(17);
     }
 
     @Test
@@ -144,7 +144,7 @@ class GradleImporterTest {
                     jvmToolchain(21)
                 }
                 """, "app");
-        assertThat(result.jkBuild().project().jdk()).isEqualTo("21");
+        assertThat(result.jkBuild().project().jdk()).isEqualTo(21);
     }
 
     @Test

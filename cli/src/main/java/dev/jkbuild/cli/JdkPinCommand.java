@@ -2,7 +2,6 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.jdk.InstalledJdk;
-import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkRegistry;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -25,23 +24,16 @@ public final class JdkPinCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<spec>",
             description = "Installed JDK identifier or prefix (e.g. temurin-21).")
-    String spec;
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--jdks-dir", hidden = true,
+    String spec;    @Option(names = "--jdks-dir", hidden = true,
             description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException {
-        Path projectDir = directory != null
-                ? directory : Path.of(".").toAbsolutePath().normalize();
-        Path jdksRoot = jdksDir != null ? jdksDir : IntellijJdkDir.root();
-
-        JdkRegistry registry = new JdkRegistry(jdksRoot);
+        Path projectDir = global.workingDir();
+        JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         Optional<InstalledJdk> jdk = registry.find(spec)
                 .or(() -> {
                     try { return registry.findByPrefix(spec); }

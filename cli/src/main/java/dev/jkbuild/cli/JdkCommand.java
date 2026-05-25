@@ -14,7 +14,6 @@ import picocli.CommandLine.Spec;
         description = "Manage JDK versions and installations",
         subcommands = {
                 JdkListCommand.class,
-                JdkInstalledCommand.class,
                 JdkInstallCommand.class,
                 JdkPinCommand.class,
                 JdkDirCommand.class,

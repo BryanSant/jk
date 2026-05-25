@@ -32,13 +32,7 @@ import java.util.concurrent.Callable;
  */
 @Command(name = "native",
         description = "Compile a native binary with GraalVM native-image")
-public final class NativeCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--main",
+public final class NativeCommand implements Callable<Integer> {    @Option(names = "--main",
             description = "Main class to compile. Default: read from jk.toml's image.main-class.")
     String mainClass;
 
@@ -58,10 +52,11 @@ public final class NativeCommand implements Callable<Integer> {
             description = "Extra arguments forwarded to native-image (after --).")
     List<String> extra = new ArrayList<>();
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
-        Path projectDir = directory != null
-                ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
             System.err.println("jk native: " + jkBuildPath + " not found.");

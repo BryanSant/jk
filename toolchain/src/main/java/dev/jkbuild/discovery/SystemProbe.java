@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.JdkHit;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -65,5 +68,19 @@ public final class SystemProbe implements LocalToolProbe {
         Path mac = topLevel.resolve("Contents").resolve("Home");
         if (macOs && Files.isDirectory(mac)) return mac;
         return topLevel;
+    }
+
+    @Override
+    public List<JdkHit> discoverAllJdks() throws IOException {
+        List<JdkHit> hits = new ArrayList<>();
+        for (Path root : roots) {
+            if (!Files.isDirectory(root)) continue; // fail fast per root
+            try (Stream<Path> entries = Files.list(root)) {
+                entries.filter(Files::isDirectory)
+                        .map(this::asJdkHome)
+                        .forEach(p -> ProbeSupport.discoverJdk(p, name()).ifPresent(hits::add));
+            }
+        }
+        return hits;
     }
 }

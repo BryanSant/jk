@@ -3,6 +3,7 @@ package dev.jkbuild.jdk;
 
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.Hashing;
+import dev.jkbuild.util.JkThreads;
 import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
 import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 
@@ -10,6 +11,7 @@ import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
@@ -18,16 +20,19 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.EnumSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
 import java.util.function.LongConsumer;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipInputStream;
+import java.util.zip.ZipFile;
 
 /**
  * Downloads a {@link JdkPackage} and extracts it under the IntelliJ JDK
@@ -38,7 +43,7 @@ import java.util.zip.ZipInputStream;
  *       over {@link GZIPInputStream}. POSIX permissions and symlinks
  *       preserved.</li>
  *   <li>{@code .tar} — {@link TarArchiveInputStream} directly.</li>
- *   <li>{@code .zip} — {@link ZipInputStream}.</li>
+ *   <li>{@code .zip} — {@link ZipFile} (random-access; entries extract in parallel).</li>
  *   <li>SHA-256 verified against {@link JdkPackage#sha256()} when present;
  *       mismatch aborts with no install dir left behind.</li>
  * </ul>
@@ -347,23 +352,59 @@ public final class JdkInstaller {
         }
     }
 
+    /**
+     * Parallel ZIP extraction. ZIP's Central Directory lets us seek to any
+     * entry's deflate stream independently, so we fan out across
+     * {@link JkThreads#cpu()} workers — meaningful on JDK zips with several
+     * thousand entries (Windows JDK builds typically ship as zip).
+     *
+     * <p>Tar.gz can't be parallelized this way: gunzip is a single sequential
+     * stream and the tar metadata is interleaved with the file data.
+     */
     private static void unzip(Path archive, Path destDir) throws IOException {
-        try (InputStream in = Files.newInputStream(archive);
-             ZipInputStream zis = new ZipInputStream(in)) {
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
-                Path out = destDir.resolve(entry.getName()).normalize();
-                if (!out.startsWith(destDir)) {
-                    throw new IOException("zip entry escapes destination: " + entry.getName());
-                }
-                if (entry.isDirectory()) {
+        try (ZipFile zip = new ZipFile(archive.toFile())) {
+            List<? extends ZipEntry> entries = Collections.list(zip.entries());
+            // Pre-create directories in the main thread so workers don't race
+            // on createDirectories for the same parent path.
+            for (ZipEntry e : entries) {
+                if (e.isDirectory()) {
+                    Path out = safeResolve(destDir, e.getName());
                     Files.createDirectories(out);
-                } else {
-                    if (out.getParent() != null) Files.createDirectories(out.getParent());
-                    Files.copy(zis, out);
                 }
             }
+            List<CompletableFuture<Void>> futures = new ArrayList<>(entries.size());
+            for (ZipEntry entry : entries) {
+                if (entry.isDirectory()) continue;
+                futures.add(CompletableFuture.runAsync(() -> {
+                    try {
+                        Path out = safeResolve(destDir, entry.getName());
+                        if (out.getParent() != null) Files.createDirectories(out.getParent());
+                        try (InputStream in = zip.getInputStream(entry)) {
+                            Files.copy(in, out);
+                        }
+                    } catch (IOException e) {
+                        throw new UncheckedIOException(e);
+                    }
+                }, JkThreads.cpu()));
+            }
+            try {
+                CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
+            } catch (java.util.concurrent.CompletionException e) {
+                Throwable cause = e.getCause() != null ? e.getCause() : e;
+                if (cause instanceof UncheckedIOException uio) throw uio.getCause();
+                if (cause instanceof IOException io) throw io;
+                throw new IOException("zip extraction failed: " + cause.getMessage(), cause);
+            }
         }
+    }
+
+    /** Resolve a zip/tar entry path against {@code destDir} and reject zip-slip escapes. */
+    private static Path safeResolve(Path destDir, String entryName) throws IOException {
+        Path out = destDir.resolve(entryName).normalize();
+        if (!out.startsWith(destDir)) {
+            throw new IOException("zip entry escapes destination: " + entryName);
+        }
+        return out;
     }
 
     /**

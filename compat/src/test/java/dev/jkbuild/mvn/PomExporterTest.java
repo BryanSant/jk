@@ -24,7 +24,7 @@ class PomExporterTest {
     @Test
     void minimal_project_emits_a_publishable_pom() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 JkBuild.Dependencies.empty());
 
         String xml = PomExporter.export(model).xml();
@@ -51,7 +51,7 @@ class PomExporterTest {
                         VersionSelector.parse("=5.11.0"))));
 
         String xml = PomExporter.export(new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope))).xml();
 
         // Main scope has no <scope> element (Maven default == compile).
@@ -76,7 +76,7 @@ class PomExporterTest {
                         VersionSelector.parse("=3.4.0"))));
 
         String xml = PomExporter.export(new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope))).xml();
 
         assertThat(xml).contains("<dependencyManagement>");
@@ -92,7 +92,7 @@ class PomExporterTest {
                 new Dependency("org.projectlombok:lombok", VersionSelector.parse("=1.18.30"))));
 
         String xml = PomExporter.export(new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope))).xml();
 
         assertThat(xml).contains("<artifactId>maven-compiler-plugin</artifactId>");
@@ -104,7 +104,7 @@ class PomExporterTest {
     @Test
     void workspace_root_emits_pom_packaging_and_modules() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget-parent", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget-parent", "1.0.0", 21),
                 JkBuild.Dependencies.empty(),
                 List.of(),
                 Profiles.empty(),
@@ -120,7 +120,7 @@ class PomExporterTest {
     @Test
     void repositories_are_emitted_with_id_and_url() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 JkBuild.Dependencies.empty(),
                 List.of(new RepositorySpec("internal",
                         URI.create("https://nexus.example.com/repository/maven-public/"))));
@@ -137,7 +137,7 @@ class PomExporterTest {
                 new Dependency("com.example:lib", VersionSelector.parse("^2.0.0"))));
 
         var result = PomExporter.export(new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope)));
 
         assertThat(result.xml()).contains("<version>2.0.0</version>");
@@ -167,7 +167,7 @@ class PomExporterTest {
                         VersionSelector.parse("=3.4.0"))));
 
         JkBuild original = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope));
 
         String xml = PomExporter.export(original).xml();
@@ -177,7 +177,7 @@ class PomExporterTest {
         assertThat(re.project().group()).isEqualTo("com.example");
         assertThat(re.project().artifact()).isEqualTo("widget");
         assertThat(re.project().version()).isEqualTo("1.0.0");
-        assertThat(re.project().jdk()).isEqualTo("21");
+        assertThat(re.project().jdk()).isEqualTo(21);
         assertThat(re.dependencies().of(Scope.MAIN))
                 .extracting(Dependency::module)
                 .containsExactlyInAnyOrder(
@@ -200,7 +200,7 @@ class PomExporterTest {
     @Test
     void xml_escapes_special_chars_in_text() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 JkBuild.Dependencies.empty(),
                 List.of(new RepositorySpec("amp",
                         URI.create("https://example.com/path?a=1&b=2"))));

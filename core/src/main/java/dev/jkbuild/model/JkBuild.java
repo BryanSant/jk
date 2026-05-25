@@ -70,17 +70,26 @@ public record JkBuild(
      *
      * <p>Fields:
      * <ul>
+     *   <li>{@code jdk} — JDK feature release (major) the project builds against.
+     *       Resolved to a concrete install identifier (e.g. {@code temurin-25.0.3})
+     *       in {@code jk.lock}.</li>
+     *   <li>{@code java} — Java compiler language/bytecode level (major). Non-zero
+     *       only for Java projects; mutually exclusive with {@code kotlin}.</li>
+     *   <li>{@code kotlin} — Kotlin compiler major version. Non-zero only for
+     *       Kotlin projects; mutually exclusive with {@code java}.</li>
      *   <li>{@code main} — fully qualified main class of a runnable project,
      *       or {@code null} for a library.</li>
      *   <li>{@code shadow} — bundle an all-in-one (shadow / fat) jar.</li>
      *   <li>{@code nativeImage} — wire a GraalVM native-image build. Stored
      *       under TOML key {@code native}.</li>
-     *   <li>{@code language} — primary source language; one of {@code "java"}
-     *       or {@code "kotlin"}. Defaults to {@code "java"} when absent.</li>
      * </ul>
+     *
+     * <p>Exactly one of {@code java}/{@code kotlin} must be set; the parser
+     * enforces this. {@link #isKotlin()} is the cheap predicate.
      */
-    public record Project(String group, String artifact, String version, String jdk,
-                          String main, boolean shadow, boolean nativeImage, String language) {
+    public record Project(String group, String artifact, String version,
+                          int jdk, int java, int kotlin,
+                          String main, boolean shadow, boolean nativeImage) {
 
         public Project {
             Objects.requireNonNull(group, "group");
@@ -89,17 +98,38 @@ public record JkBuild(
             if (group.isBlank()) throw new IllegalArgumentException("project.group must not be blank");
             if (artifact.isBlank()) throw new IllegalArgumentException("project.artifact must not be blank");
             if (version.isBlank()) throw new IllegalArgumentException("project.version must not be blank");
-            if (language == null || language.isBlank()) language = "java";
+            if (java < 0 || kotlin < 0 || jdk < 0) {
+                throw new IllegalArgumentException("project.jdk/java/kotlin must be non-negative");
+            }
+            if (java > 0 && kotlin > 0) {
+                throw new IllegalArgumentException(
+                        "project must set exactly one of `java` or `kotlin`, not both");
+            }
         }
 
-        /** Library project — no main, no shadow, no native, default language. */
-        public Project(String group, String artifact, String version, String jdk) {
-            this(group, artifact, version, jdk, null, false, false, "java");
+        /** Library project — no main, no shadow, no native; defaults to a Java project. */
+        public Project(String group, String artifact, String version, int jdk) {
+            this(group, artifact, version, jdk, jdk, 0, null, false, false);
         }
 
         /** True when an explicit {@code main} class is set. */
         public boolean isRunnable() {
             return main != null;
+        }
+
+        /** True when this is a Kotlin project (i.e. {@code kotlin > 0}). */
+        public boolean isKotlin() {
+            return kotlin > 0;
+        }
+
+        /** The {@code java} compiler release to target. For Kotlin projects, falls back to {@code jdk}. */
+        public int javaRelease() {
+            return java > 0 ? java : jdk;
+        }
+
+        /** {@code "java"} / {@code "kotlin"} — derived from which compiler field is non-zero. */
+        public String languageName() {
+            return isKotlin() ? "kotlin" : "java";
         }
     }
 

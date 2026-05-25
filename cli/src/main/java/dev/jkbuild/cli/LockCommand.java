@@ -30,13 +30,7 @@ import java.util.concurrent.Callable;
  * disables the default list entirely. Cargo semantics.
  */
 @Command(name = "lock", description = "Resolve declared dependencies and write jk.lock")
-public final class LockCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--features", paramLabel = "<a,b,...>", split = ",",
+public final class LockCommand implements Callable<Integer> {    @Option(names = "--features", paramLabel = "<a,b,...>", split = ",",
             description = "Activate the listed features in addition to defaults.")
     List<String> features = List.of();
 
@@ -54,9 +48,11 @@ public final class LockCommand implements Callable<Integer> {
             hidden = true)
     Path cacheDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws Exception {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {

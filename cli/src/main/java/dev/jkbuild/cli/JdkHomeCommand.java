@@ -22,19 +22,15 @@ import java.util.concurrent.Callable;
  * </pre>
  */
 @Command(name = "home", description = "Print the pinned JDK's JAVA_HOME export line")
-public final class JdkHomeCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--jdks-dir", hidden = true,
+public final class JdkHomeCommand implements Callable<Integer> {    @Option(names = "--jdks-dir", hidden = true,
             description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Optional<InstalledJdk> jdk = EnvCommand.resolvePinnedJdk(dir, jdksDir);
         if (jdk.isEmpty()) {
             System.err.println("jk jdk home: no pinned JDK for " + dir

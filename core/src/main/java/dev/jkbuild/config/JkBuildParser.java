@@ -88,14 +88,30 @@ public final class JkBuildParser {
         String group = requireString(project, "group", "project.group");
         String artifact = requireString(project, "artifact", "project.artifact");
         String version = requireString(project, "version", "project.version");
-        String jdk = project.getString("jdk");
+        int jdk = intOrZero(project, "jdk", "project.jdk");
+        int java = intOrZero(project, "java", "project.java");
+        int kotlin = intOrZero(project, "kotlin", "project.kotlin");
+        if (java > 0 && kotlin > 0) {
+            throw new JkBuildParseException(
+                    "project must set exactly one of `java` or `kotlin`, not both");
+        }
         String main = project.getString("main");
         boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
         boolean nativeImage = Boolean.TRUE.equals(project.getBoolean("native"));
-        String language = project.getString("language");
-        if (language == null || language.isBlank()) language = "java";
-        return new JkBuild.Project(group, artifact, version, jdk,
-                main, shadow, nativeImage, language);
+        return new JkBuild.Project(group, artifact, version, jdk, java, kotlin,
+                main, shadow, nativeImage);
+    }
+
+    private static int intOrZero(TomlTable table, String key, String path) {
+        if (!table.contains(key)) return 0;
+        Long value = table.getLong(key);
+        if (value == null) {
+            throw new JkBuildParseException(path + " must be an integer");
+        }
+        if (value < 0 || value > Integer.MAX_VALUE) {
+            throw new JkBuildParseException(path + " out of range: " + value);
+        }
+        return value.intValue();
     }
 
     private static Map<String, GitSource> parseSources(TomlTable root) {

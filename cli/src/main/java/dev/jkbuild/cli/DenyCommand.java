@@ -22,14 +22,11 @@ import java.util.concurrent.Callable;
 @Command(name = "deny", description = "Apply the project's license / source / yanked policy")
 public final class DenyCommand implements Callable<Integer> {
 
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
+    @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Override
     public Integer call() throws IOException {
-        Path projectDir = directory != null
-                ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = global.workingDir();
         Path jkBuild = projectDir.resolve("jk.toml");
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(jkBuild)) {

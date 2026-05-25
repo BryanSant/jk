@@ -26,13 +26,11 @@ public final class WhyCommand implements Callable<Integer> {
             description = "group:artifact (without version)")
     String moduleArg;
 
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
+    @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {

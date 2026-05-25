@@ -103,6 +103,122 @@ class JdkSelectorTest {
                 .isLessThan(JdkSelector.versionKey("21.0.10"));
     }
 
+    // -- Flexible selector ---------------------------------------------------
+
+    @Test
+    void parse_flexible_extracts_major_and_hints() {
+        var q = JdkSelector.parseFlexible("25-graal");
+        assertThat(q.major()).contains(25);
+        assertThat(q.hints()).containsExactly("graal");
+        assertThat(q.exactVersion()).isEmpty();
+    }
+
+    @Test
+    void parse_flexible_drops_java_noise_word() {
+        var q = JdkSelector.parseFlexible("java-17-openjdk");
+        assertThat(q.major()).contains(17);
+        assertThat(q.hints()).containsExactly("openjdk");
+    }
+
+    @Test
+    void parse_flexible_captures_dotted_version() {
+        var q = JdkSelector.parseFlexible("17.0.19");
+        assertThat(q.major()).contains(17);
+        assertThat(q.exactVersion()).contains("17.0.19");
+        assertThat(q.hints()).isEmpty();
+    }
+
+    @Test
+    void parse_flexible_handles_vendor_prefix() {
+        var q = JdkSelector.parseFlexible("temurin-25");
+        assertThat(q.major()).contains(25);
+        assertThat(q.hints()).containsExactly("temurin");
+    }
+
+    @Test
+    void parse_flexible_handles_dropped_jdk_token() {
+        var q = JdkSelector.parseFlexible("jdk-21");
+        assertThat(q.major()).contains(21);
+        assertThat(q.hints()).isEmpty();
+    }
+
+    @Test
+    void select_flexible_finds_graal_at_major() {
+        JdkCatalog catalog = catalogOf(
+                entry("Eclipse", "Temurin", "temurin-25", 25, "25.0.3",
+                        true, false, List.of("temurin-25.0.3", "temurin-25", "25.0.3", "25"),
+                        "linux", "x86_64"),
+                entry("Oracle", "GraalVM", "graalvm-25", 25, "25.0.3",
+                        false, false, List.of("graalvm-25.0.3", "graalvm-25", "25.0.3"),
+                        "linux", "x86_64"));
+
+        var pick = JdkSelector.selectFlexible(catalog, "25-graal", "linux", "x86_64");
+        assertThat(pick).isPresent()
+                .get().extracting(JdkCatalog.Entry::product).isEqualTo("GraalVM");
+    }
+
+    @Test
+    void select_flexible_finds_openjdk_via_linux_package_form() {
+        JdkCatalog catalog = catalogOf(
+                entry("Eclipse", "Temurin", "temurin-17", 17, "17.0.13",
+                        false, false, List.of("temurin-17", "17"), "linux", "x86_64"),
+                entry("Oracle", "OpenJDK", "openjdk-17", 17, "17.0.7",
+                        true, false, List.of("openjdk-17", "17"), "linux", "x86_64"));
+
+        var pick = JdkSelector.selectFlexible(catalog, "java-17-openjdk", "linux", "x86_64");
+        assertThat(pick).isPresent()
+                .get().extracting(JdkCatalog.Entry::product).isEqualTo("OpenJDK");
+    }
+
+    @Test
+    void select_flexible_falls_through_from_strict_select() {
+        // 25-graal isn't in any alias list. Strict select returns empty, but
+        // the public select() should now find the graal entry anyway.
+        JdkCatalog catalog = catalogOf(
+                entry("Oracle", "GraalVM", "graalvm-25", 25, "25.0.3",
+                        false, false, List.of("graalvm-25.0.3", "graalvm-25", "25.0.3", "25"),
+                        "linux", "x86_64"));
+
+        var pick = JdkSelector.select(catalog, JdkSpec.parse("25-graal"), "linux", "x86_64");
+        assertThat(pick).isPresent()
+                .get().extracting(JdkCatalog.Entry::product).isEqualTo("GraalVM");
+    }
+
+    @Test
+    void select_flexible_picks_highest_version_when_hints_tied() {
+        JdkCatalog catalog = catalogOf(
+                entry("Eclipse", "Temurin", "temurin-25-old", 25, "25.0.1",
+                        false, false, List.of("temurin-25"), "linux", "x86_64"),
+                entry("Eclipse", "Temurin", "temurin-25-new", 25, "25.0.3",
+                        false, false, List.of("temurin-25"), "linux", "x86_64"));
+
+        var pick = JdkSelector.selectFlexible(catalog, "temurin-25", "linux", "x86_64");
+        assertThat(pick).isPresent()
+                .get().extracting(JdkCatalog.Entry::version).isEqualTo("25.0.3");
+    }
+
+    @Test
+    void select_flexible_returns_empty_when_no_match() {
+        JdkCatalog catalog = catalogOf(
+                entry("Eclipse", "Temurin", "temurin-21", 21, "21.0.5",
+                        true, false, List.of("temurin-21"), "linux", "x86_64"));
+        // Wrong major → no entries with majorVersion=99.
+        assertThat(JdkSelector.selectFlexible(catalog, "99", "linux", "x86_64")).isEmpty();
+    }
+
+    @Test
+    void select_flexible_filters_by_exact_version_prefix() {
+        JdkCatalog catalog = catalogOf(
+                entry("Eclipse", "Temurin", "temurin-17", 17, "17.0.19",
+                        true, false, List.of("17"), "linux", "x86_64"),
+                entry("Eclipse", "Temurin", "temurin-17-older", 17, "17.0.13",
+                        false, false, List.of("17"), "linux", "x86_64"));
+
+        var pick = JdkSelector.selectFlexible(catalog, "17.0.19", "linux", "x86_64");
+        assertThat(pick).isPresent()
+                .get().extracting(JdkCatalog.Entry::version).isEqualTo("17.0.19");
+    }
+
     private static JdkCatalog catalogOf(JdkCatalog.Entry... entries) {
         return new JdkCatalog(List.of(entries));
     }

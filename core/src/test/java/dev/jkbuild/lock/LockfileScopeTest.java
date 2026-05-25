@@ -46,9 +46,9 @@ class LockfileScopeTest {
     }
 
     @Test
-    void v4_lockfile_treats_packages_as_main() {
-        String v4 = """
-                version = 4
+    void package_without_scopes_field_defaults_to_main() {
+        String content = """
+                version = 1
                 generated-by = "jk 0.1.0"
                 resolution-algorithm = "pubgrub-v1"
 
@@ -58,7 +58,7 @@ class LockfileScopeTest {
                 source = "central+https://repo.maven.apache.org/maven2/"
                 checksum = "sha256:dead"
                 """;
-        Lockfile parsed = LockfileReader.parse(v4);
+        Lockfile parsed = LockfileReader.parse(content);
         assertThat(parsed.packages().getFirst().scopes()).containsExactly(Scope.MAIN);
     }
 

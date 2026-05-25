@@ -21,8 +21,10 @@ public final class Probes {
     public static List<LocalToolProbe> defaultChain() {
         List<LocalToolProbe> chain = new ArrayList<>();
         chain.add(new EnvVarProbe());
+        chain.add(new JetbrainsProbe());
         chain.add(new SdkmanProbe());
         chain.add(new JbangProbe());
+        chain.add(new MiseProbe());
         chain.add(new AsdfProbe());
         chain.add(new JenvProbe());
         chain.add(new HomebrewProbe());

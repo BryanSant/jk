@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.JdkHit;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 
 /**
  * {@code ~/.sdkman/candidates/<kind>/<version>/} (and, for JDKs, also
@@ -49,5 +54,19 @@ public final class SdkmanProbe implements LocalToolProbe {
         Path resolved = candidate.toRealPath();
         if (!ToolHealth.isHealthy(spec, resolved)) return Optional.empty();
         return Optional.of(new DiscoveredTool(resolved, spec.version(), name()));
+    }
+
+    @Override
+    public List<JdkHit> discoverAllJdks() throws IOException {
+        Path javaDir = sdkmanRoot.resolve("candidates").resolve("java");
+        if (!Files.isDirectory(javaDir)) return List.of(); // fail fast
+        List<JdkHit> hits = new ArrayList<>();
+        try (Stream<Path> entries = Files.list(javaDir)) {
+            entries.filter(Files::isDirectory)
+                    // Skip SDKMAN's `current` symlink so we don't double-report the active version.
+                    .filter(p -> !"current".equals(p.getFileName().toString()))
+                    .forEach(p -> ProbeSupport.discoverJdk(p, name()).ifPresent(hits::add));
+        }
+        return hits;
     }
 }

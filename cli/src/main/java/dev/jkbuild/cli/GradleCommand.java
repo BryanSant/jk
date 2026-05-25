@@ -54,8 +54,7 @@ public final class GradleCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws IOException, InterruptedException {
-        Path projectDir = directory != null
-                ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
 
         Path toolsRoot = toolsDir != null ? toolsDir : JkDirs.cache().resolve("tools");
         ToolRegistry registry = new ToolRegistry(toolsRoot);

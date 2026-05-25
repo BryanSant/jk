@@ -22,13 +22,7 @@ import java.util.concurrent.Callable;
  * is present.
  */
 @Command(name = "audit", description = "Check the locked dependencies for known vulnerabilities (OSV)")
-public final class AuditCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--severity",
+public final class AuditCommand implements Callable<Integer> {    @Option(names = "--severity",
             description = "Fail when any finding is at least this severe. "
                     + "One of CRITICAL, HIGH, MEDIUM, LOW. Default: LOW.")
     String severity = "LOW";
@@ -41,10 +35,11 @@ public final class AuditCommand implements Callable<Integer> {
             description = "Override the OSV vulnerability lookup URL (for tests).")
     URI osvVulnsUrl;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
-        Path projectDir = directory != null
-                ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = global.workingDir();
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(lockPath)) {
             System.err.println("jk audit: no jk.lock in " + projectDir

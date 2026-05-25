@@ -53,7 +53,7 @@ public final class PomExporter {
         appendRepositories(sb, jkBuild.repositories());
         appendDependencyManagement(sb, jkBuild.dependencies().of(Scope.PLATFORM), report);
         appendDependencies(sb, jkBuild.dependencies(), report);
-        appendProcessorPlugin(sb, jkBuild.dependencies().of(Scope.PROCESSOR), p.jdk(), report);
+        appendProcessorPlugin(sb, jkBuild.dependencies().of(Scope.PROCESSOR), p.javaRelease(), report);
         warnAboutDroppedConcerns(jkBuild, report);
 
         sb.append("</project>\n");
@@ -71,7 +71,7 @@ public final class PomExporter {
         sb.append('\n');
         sb.append("  <properties>\n");
         sb.append("    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>\n");
-        sb.append("    <maven.compiler.release>").append(escape(p.jdk()))
+        sb.append("    <maven.compiler.release>").append(p.javaRelease())
                 .append("</maven.compiler.release>\n");
         sb.append("  </properties>\n");
     }
@@ -154,7 +154,7 @@ public final class PomExporter {
     }
 
     private static void appendProcessorPlugin(StringBuilder sb, List<Dependency> processors,
-                                              String jdk, ImportReport.Builder report) {
+                                              int release, ImportReport.Builder report) {
         if (processors.isEmpty()) return;
         sb.append('\n');
         sb.append("  <build>\n");
@@ -163,7 +163,7 @@ public final class PomExporter {
         sb.append("        <groupId>org.apache.maven.plugins</groupId>\n");
         sb.append("        <artifactId>maven-compiler-plugin</artifactId>\n");
         sb.append("        <configuration>\n");
-        sb.append("          <release>").append(escape(jdk)).append("</release>\n");
+        sb.append("          <release>").append(release).append("</release>\n");
         sb.append("          <annotationProcessorPaths>\n");
         for (Dependency d : processors) {
             sb.append("            <path>\n");

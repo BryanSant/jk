@@ -18,7 +18,7 @@ class PublishablePomTest {
     @Test
     void minimal_publishable_pom_has_required_fields_only() {
         JkBuild project = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 JkBuild.Dependencies.empty());
         String xml = PublishablePom.render(project, null).xml();
 
@@ -41,7 +41,7 @@ class PublishablePomTest {
 
         String xml = PublishablePom.render(
                 new JkBuild(
-                        new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                        new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                         new JkBuild.Dependencies(byScope)),
                 null).xml();
 
@@ -57,7 +57,7 @@ class PublishablePomTest {
                 new Dependency("org.projectlombok:lombok", VersionSelector.parse("=1.18.30"))));
         String xml = PublishablePom.render(
                 new JkBuild(
-                        new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                        new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                         new JkBuild.Dependencies(byScope)),
                 null).xml();
         // Compile-time only; not part of the consumer-facing artifact surface.
@@ -78,7 +78,7 @@ class PublishablePomTest {
 
         String xml = PublishablePom.render(
                 new JkBuild(
-                        new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                        new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                         JkBuild.Dependencies.empty()),
                 meta).xml();
 
@@ -105,7 +105,7 @@ class PublishablePomTest {
 
         String xml = PublishablePom.render(
                 new JkBuild(
-                        new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                        new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                         new JkBuild.Dependencies(byScope)),
                 null).xml();
 

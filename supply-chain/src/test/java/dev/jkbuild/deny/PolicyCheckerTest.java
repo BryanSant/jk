@@ -55,7 +55,7 @@ class PolicyCheckerTest {
                 group    = "g"
                 artifact = "a"
                 version  = "1"
-                jdk      = "21"
+                jdk      = 21
 
                 [deny]
                 yanked = "warn"
@@ -80,7 +80,7 @@ class PolicyCheckerTest {
                 group    = "g"
                 artifact = "a"
                 version  = "1"
-                jdk      = "21"
+                jdk      = 21
                 """);
         assertThat(policy.isEmpty()).isTrue();
     }

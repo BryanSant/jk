@@ -339,6 +339,62 @@ class WizardTest {
     }
 
     @Test
+    void input_step_seeds_buffer_from_initial_value_fn() throws Exception {
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.InputStep.of("name", "Name").build())
+                .step(WizardStep.InputStep.of("artifact", "Artifact")
+                        // pre-populate with the project name from the prior step
+                        .initialValueFn(a -> a.get("name"))
+                        .build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Step 1: type "widget", Enter → name = "widget".
+            write(h.input(), (byte) 'w', (byte) 'i', (byte) 'd', (byte) 'g', (byte) 'e', (byte) 't', (byte) 0x0A);
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Step 2: just Enter → artifact buffer was pre-seeded with "widget",
+            // and Enter records the buffer contents (defaultValue stays empty).
+            write(h.input(), (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.get("artifact")).isEqualTo("widget");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
+
+    @Test
+    void tab_realizes_placeholder_into_input() throws Exception {
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.InputStep.of("name", "Name")
+                        .placeholder("widget")
+                        .build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Tab then Enter → placeholder becomes the answer.
+            write(h.input(), (byte) 0x09);
+            Thread.sleep(STEP_TIMEOUT_MS);
+            write(h.input(), (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.get("name")).isEqualTo("widget");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
+
+    @Test
     void right_arrow_is_a_noop_when_placeholder_is_empty() throws Exception {
         // No placeholder → Right is ignored (Enter falls through to default
         // value, which here is also empty, so input is just "").

@@ -89,7 +89,7 @@ public final class GradleImporter {
 
         String group = firstString(GROUP_ASSIGN, stripped).orElse("com.example");
         String version = firstString(VERSION_ASSIGN, stripped).orElse("0.1.0");
-        String jdk = detectJdk(stripped).orElse("25");
+        int jdk = detectJdk(stripped).flatMap(GradleImporter::parseInt).orElse(25);
         boolean kotlinDsl = false;
 
         // plugins block — for diagnostics only; kotlin/java/application are accepted.
@@ -358,6 +358,14 @@ public final class GradleImporter {
             i++;
         }
         return out.toString();
+    }
+
+    private static Optional<Integer> parseInt(String s) {
+        try {
+            return Optional.of(Integer.parseInt(s.trim()));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<String> firstString(Pattern pattern, String text) {

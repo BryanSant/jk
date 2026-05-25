@@ -30,7 +30,7 @@ class PomImporterTest {
         assertThat(p.group()).isEqualTo("com.example");
         assertThat(p.artifact()).isEqualTo("widget");
         assertThat(p.version()).isEqualTo("1.2.3");
-        assertThat(p.jdk()).isEqualTo("25"); // no compiler config → default
+        assertThat(p.jdk()).isEqualTo(25); // no compiler config → default
         assertThat(result.report().issues()).isEmpty();
     }
 
@@ -47,7 +47,7 @@ class PomImporterTest {
                   </properties>
                 </project>
                 """);
-        assertThat(result.jkBuild().project().jdk()).isEqualTo("21");
+        assertThat(result.jkBuild().project().jdk()).isEqualTo(21);
     }
 
     @Test
@@ -72,7 +72,7 @@ class PomImporterTest {
                   </build>
                 </project>
                 """);
-        assertThat(result.jkBuild().project().jdk()).isEqualTo("17");
+        assertThat(result.jkBuild().project().jdk()).isEqualTo(17);
     }
 
     @Test

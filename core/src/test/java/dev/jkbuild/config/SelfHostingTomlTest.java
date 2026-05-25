@@ -41,7 +41,7 @@ class SelfHostingTomlTest {
             JkBuild parsed = JkBuildParser.parse(memberManifest);
             assertThat(parsed.project().group()).isEqualTo("dev.jkbuild");
             assertThat(parsed.project().artifact()).startsWith("jk-");
-            assertThat(parsed.project().jdk()).isEqualTo("25");
+            assertThat(parsed.project().jdk()).isEqualTo(25);
         }
     }
 

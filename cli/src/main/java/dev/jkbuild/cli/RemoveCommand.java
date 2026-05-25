@@ -37,13 +37,11 @@ public final class RemoveCommand implements Callable<Integer> {
     @Option(names = "--processor", description = "Annotation processor scope.")
     boolean processor;
 
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
+    @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path file = dir.resolve("jk.toml");
         if (!Files.exists(file)) {
             System.err.println("jk remove: no jk.toml in current directory");

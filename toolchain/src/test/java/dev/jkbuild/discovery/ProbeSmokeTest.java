@@ -33,7 +33,7 @@ class ProbeSmokeTest {
         Optional<DiscoveredTool> hit = probe.find(ToolSpec.jdk(version.get(), null));
         assertThat(hit).isPresent();
         assertThat(hit.get().home()).isEqualTo(home.toAbsolutePath().normalize());
-        assertThat(hit.get().source()).startsWith("env:");
+        assertThat(hit.get().source()).startsWith("java-home:");
     }
 
     @Test

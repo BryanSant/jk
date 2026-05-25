@@ -16,19 +16,15 @@ import java.util.concurrent.Callable;
 
 /** {@code jk tree} — print the resolved dependency tree. */
 @Command(name = "tree", description = "Print the resolved dependency tree")
-public final class TreeCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--depth",
+public final class TreeCommand implements Callable<Integer> {    @Option(names = "--depth",
             description = "Maximum tree depth. Default: unlimited.")
     Integer depth;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {

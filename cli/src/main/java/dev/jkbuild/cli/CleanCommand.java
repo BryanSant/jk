@@ -22,13 +22,11 @@ import java.util.stream.Stream;
 @Command(name = "clean", description = "Delete generated build outputs (target/ and .jk/generated/)")
 public final class CleanCommand implements Callable<Integer> {
 
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
+    @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
 
         boolean removed = false;
         removed |= deleteRecursively(dir.resolve("target"));

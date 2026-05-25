@@ -15,7 +15,7 @@ class LockfileRoundTripTest {
         String rendered = LockfileWriter.render(lock);
 
         assertThat(rendered).isEqualTo("""
-                version = 5
+                version = 1
                 generated-by = "jk 0.1.0-SNAPSHOT"
                 resolution-algorithm = "pubgrub-v1"
                 """);

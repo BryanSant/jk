@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.JdkHit;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -88,5 +91,37 @@ public final class HomebrewProbe implements LocalToolProbe {
                         .resolve("Contents").resolve("Home"),
                 cellarVersionDir.resolve("libexec"),
                 cellarVersionDir);
+    }
+
+    @Override
+    public List<JdkHit> discoverAllJdks() throws IOException {
+        if (!osName.toLowerCase(Locale.ROOT).contains("mac")) return List.of();
+        // Cellar dir absent on a machine without Homebrew → fail fast on the lookup loop.
+        List<JdkHit> hits = new ArrayList<>();
+        for (Path cellar : cellars) {
+            if (!Files.isDirectory(cellar)) continue;
+            try (Stream<Path> formulae = Files.list(cellar)) {
+                formulae.filter(Files::isDirectory)
+                        .filter(p -> {
+                            String n = p.getFileName().toString();
+                            return n.equals("openjdk") || n.startsWith("openjdk@");
+                        })
+                        .forEach(formulaDir -> collectFormulaInstalls(formulaDir, hits));
+            }
+        }
+        return hits;
+    }
+
+    private void collectFormulaInstalls(Path formulaDir, List<JdkHit> out) {
+        try (Stream<Path> versionDirs = Files.list(formulaDir)) {
+            versionDirs.filter(Files::isDirectory).forEach(versionDir -> {
+                Path macHome = versionDir.resolve("libexec").resolve("openjdk.jdk")
+                        .resolve("Contents").resolve("Home");
+                Path candidate = Files.isDirectory(macHome) ? macHome : versionDir.resolve("libexec");
+                ProbeSupport.discoverJdk(candidate, name()).ifPresent(out::add);
+            });
+        } catch (IOException ignored) {
+            // skip this formula
+        }
     }
 }

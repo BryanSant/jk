@@ -14,7 +14,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class SbomTest {
 
     private static final JkBuild PROJECT = new JkBuild(
-            new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+            new JkBuild.Project("com.example", "widget", "1.0.0", 21),
             JkBuild.Dependencies.empty());
 
     @Test

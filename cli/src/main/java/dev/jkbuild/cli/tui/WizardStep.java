@@ -33,6 +33,7 @@ public sealed interface WizardStep
             String prompt,
             String placeholder,
             String defaultValue,
+            Function<Answers, String> initialValueFn,
             Predicate<Answers> shouldRun,
             Function<String, ValidationResult> validator)
             implements WizardStep {
@@ -41,11 +42,22 @@ public sealed interface WizardStep
             return new Builder(key, prompt);
         }
 
+        /**
+         * Seed value the wizard injects into the input buffer when the step
+         * opens, derived from the answers collected so far. Returns
+         * {@code ""} when no function was configured, so callers can treat
+         * the result uniformly.
+         */
+        public String initialValueFor(Answers answers) {
+            return initialValueFn != null ? initialValueFn.apply(answers) : "";
+        }
+
         public static final class Builder {
             private final String key;
             private final String prompt;
             private String placeholder = "";
             private String defaultValue = "";
+            private Function<Answers, String> initialValueFn;
             private Predicate<Answers> shouldRun = ALWAYS;
             private Function<String, ValidationResult> validator = NO_VALIDATION;
 
@@ -64,6 +76,17 @@ public sealed interface WizardStep
                 return this;
             }
 
+            /**
+             * Derive the initial input-buffer contents from earlier wizard
+             * answers (e.g., pre-populate "artifactId" with the project
+             * name). Applied only when the wizard has no prior answer for
+             * this step's key.
+             */
+            public Builder initialValueFn(Function<Answers, String> fn) {
+                this.initialValueFn = fn;
+                return this;
+            }
+
             public Builder when(Predicate<Answers> shouldRun) {
                 this.shouldRun = shouldRun;
                 return this;
@@ -75,7 +98,7 @@ public sealed interface WizardStep
             }
 
             public InputStep build() {
-                return new InputStep(key, prompt, placeholder, defaultValue, shouldRun, validator);
+                return new InputStep(key, prompt, placeholder, defaultValue, initialValueFn, shouldRun, validator);
             }
         }
     }

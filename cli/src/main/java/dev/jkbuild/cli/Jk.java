@@ -131,6 +131,7 @@ public final class Jk implements Runnable {
         java.util.Optional<Boolean> noProgress = java.util.Optional.empty();
         java.util.Optional<Boolean> quiet = java.util.Optional.empty();
         java.util.Optional<Boolean> verbose = java.util.Optional.empty();
+        java.util.Optional<java.nio.file.Path> directory = java.util.Optional.empty();
         for (int i = 0; i < args.length; i++) {
             String a = args[i];
             switch (a) {
@@ -141,15 +142,19 @@ public final class Jk implements Runnable {
                 case "--color" -> {
                     if (i + 1 < args.length) color = JkConfig.ColorChoice.parse(args[++i]);
                 }
+                case "-C", "--directory" -> {
+                    if (i + 1 < args.length) directory = java.util.Optional.of(java.nio.file.Path.of(args[++i]));
+                }
                 default -> {
                     if (a.startsWith("--color=")) {
                         color = JkConfig.ColorChoice.parse(a.substring("--color=".length()));
+                    } else if (a.startsWith("--directory=")) {
+                        directory = java.util.Optional.of(java.nio.file.Path.of(a.substring("--directory=".length())));
                     }
                 }
             }
         }
-        JkConfig cli = new JkConfig(color, offline, noProgress, quiet, verbose,
-                java.util.Optional.empty());
+        JkConfig cli = new JkConfig(color, offline, noProgress, quiet, verbose, directory);
         ActiveConfig.install(ActiveConfig.get().mergedWith(cli));
     }
 
@@ -495,7 +500,7 @@ public final class Jk implements Runnable {
      */
     private static final Set<String> GLOBAL_OPTION_LONG_NAMES = Set.of(
             "--quiet", "--verbose", "--color", "--offline", "--no-progress",
-            "--config-file", "--no-config", "--help", "--version");
+            "--config-file", "--no-config", "--directory", "--help", "--version");
 
     /** True when this option came from the {@link GlobalOptions} mixin. */
     private static boolean isGlobal(picocli.CommandLine.Model.OptionSpec opt) {

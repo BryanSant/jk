@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.JdkVendor;
+
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -64,20 +66,25 @@ public final class ToolHealth {
         };
     }
 
-    /** Read the distribution suffix for a JDK install, or empty for non-JDKs. */
+    /**
+     * Read the SDKMAN distribution suffix for a JDK install (e.g. {@code "tem"},
+     * {@code "amzn"}), or empty for non-JDKs / unknown vendors.
+     *
+     * <p>Delegates to {@link JdkVendor#fromRelease} for the IMPLEMENTOR lookup
+     * and returns its {@link JdkVendor#sdkmanSuffix()} so this method's
+     * historical contract (matching {@link ToolSpec#distribution()} on
+     * {@code find()}) is preserved.
+     */
     public static Optional<String> detectDistribution(ToolSpec spec, Path home) {
         if (!"java".equals(spec.kind())) return Optional.empty();
-        return jdkImplementor(home);
+        JdkVendor vendor = JdkVendor.fromRelease(home);
+        return vendor.sdkmanSuffix();
     }
 
     // --- JDK ----------------------------------------------------------------
 
     private static Optional<String> jdkVersion(Path home) {
         return readReleaseProperty(home, "JAVA_VERSION");
-    }
-
-    private static Optional<String> jdkImplementor(Path home) {
-        return readReleaseProperty(home, "IMPLEMENTOR").map(ToolHealth::mapImplementor);
     }
 
     private static Optional<String> readReleaseProperty(Path home, String key) {
@@ -100,22 +107,6 @@ public final class ToolHealth {
             return s.substring(1, s.length() - 1);
         }
         return s;
-    }
-
-    /** Map {@code release}'s {@code IMPLEMENTOR} string to the SDKMAN distribution suffix. */
-    private static String mapImplementor(String implementor) {
-        String lower = implementor.toLowerCase(Locale.ROOT);
-        if (lower.contains("temurin") || lower.contains("adoptium")) return "tem";
-        if (lower.contains("graalvm community")) return "graalce";
-        if (lower.contains("graalvm") || lower.contains("oracle graalvm")) return "graal";
-        if (lower.contains("liberica") || lower.contains("bellsoft")) return "librca";
-        if (lower.contains("zulu") || lower.contains("azul")) return "zulu";
-        if (lower.contains("corretto") || lower.contains("amazon")) return "amzn";
-        if (lower.contains("sapmachine")) return "sapmchn";
-        if (lower.contains("semeru")) return "sem";
-        if (lower.contains("microsoft")) return "ms";
-        if (lower.contains("openjdk")) return "open";
-        return lower.replace(' ', '-');
     }
 
     // --- Maven --------------------------------------------------------------

@@ -27,13 +27,13 @@ public final class Theme {
         return v != null && !v.isEmpty();
     }
 
-    // Gradient endpoints: magenta to blue.
-    private static final int GRAD_START_R = 0xd9;
-    private static final int GRAD_START_G = 0x46;
-    private static final int GRAD_START_B = 0xef;
-    private static final int GRAD_END_R = 0x3b;
-    private static final int GRAD_END_G = 0x82;
-    private static final int GRAD_END_B = 0xf6;
+    // Gradient endpoints: coral #e3475b → violet #8150fe.
+    private static final int GRAD_START_R = 0xe3;
+    private static final int GRAD_START_G = 0x47;
+    private static final int GRAD_START_B = 0x5b;
+    private static final int GRAD_END_R = 0x81;
+    private static final int GRAD_END_G = 0x50;
+    private static final int GRAD_END_B = 0xfe;
 
     // Active rail / bullet: cyan #22d3ee.
     private static final int ACTIVE_R = 0x22;
@@ -64,9 +64,9 @@ public final class Theme {
         return AttributedStyle.DEFAULT.faint();
     }
 
-    /** Dark gray #4b5563; used for inactive/completed rail glyphs (┌ │ └). */
+    /** Dark gray #6b7280; used for inactive/completed rail glyphs (┌ │ └) and completed step prompts. */
     public static AttributedStyle darkGray() {
-        return withColor(AttributedStyle.DEFAULT, 0x4b, 0x55, 0x63);
+        return withColor(AttributedStyle.DEFAULT, 0x6b, 0x72, 0x80);
     }
 
     /** Normal gray #9ca3af; used for de-emphasised body text adjacent to bright labels. */
@@ -93,13 +93,13 @@ public final class Theme {
     }
 
     /**
-     * Normal gray #9ca3af + strikethrough. Used for the prompt line of a
-     * step once it has been settled — the gray de-emphasises the question
-     * and the strikethrough signals "done", complementing the {@code ✓}
-     * bullet to its left.
+     * Dark gray #4b5563 (same as the inactive rail glyphs). Used for the
+     * prompt line of a step once it has been settled — the gray de-emphasises
+     * the question against the focused-white text of the active step, while
+     * matching the rail's color above and below.
      */
     public static AttributedStyle completedPrompt() {
-        return normalGray().crossedOut();
+        return darkGray();
     }
 
     /** Red; used for inline error messages and cancellation closers. */
@@ -117,16 +117,21 @@ public final class Theme {
         return withColor(AttributedStyle.DEFAULT, WARN_R, WARN_G, WARN_B);
     }
 
-    /** Blue #3b82f6 — the title-gradient end color; used for the settled-answer arrow. */
+    /** Blue #3b82f6 — used elsewhere; no longer a gradient endpoint. */
     public static AttributedStyle blue() {
         return withColor(AttributedStyle.DEFAULT, 0x3b, 0x82, 0xf6);
+    }
+
+    /** Bright green #4ade80 — used for the settled-answer arrow and "➜" prefixes. */
+    public static AttributedStyle brightGreen() {
+        return withColor(AttributedStyle.DEFAULT, 0x4a, 0xde, 0x80);
     }
 
     public static AttributedStyle bright(int r, int g, int b) {
         return withColor(AttributedStyle.DEFAULT, r, g, b);
     }
 
-    /** Per-codepoint truecolor lerp from {@code #d946ef} to {@code #3b82f6}. */
+    /** Per-codepoint truecolor lerp from {@code #e3475b} to {@code #8150fe}, bold on each char. */
     public static AttributedString gradientHeader(String text) {
         var sb = new AttributedStringBuilder();
         var codepoints = text.codePoints().toArray();
@@ -149,6 +154,32 @@ public final class Theme {
     }
 
     /**
+     * Same gradient as {@link #gradientHeader(String)} but returned as a raw
+     * ANSI string with {@code 1;38;2;R;G;B} (bold-first truecolor) in every
+     * per-codepoint SGR sequence. Use this when you need the bold attribute
+     * stamped on each char's SGR — {@link AttributedString#toAnsi} emits bold
+     * only on the first char's SGR and relies on persistence, which can look
+     * not-bold against vivid gradient colors on some terminal renderings.
+     */
+    public static String gradientHeaderAnsi(String text) {
+        if (text.isEmpty()) return "";
+        if (NO_COLOR) return "\033[1m" + text + "\033[0m";
+        var codepoints = text.codePoints().toArray();
+        var n = codepoints.length;
+        var sb = new StringBuilder();
+        for (var i = 0; i < n; i++) {
+            var t = n == 1 ? 0.0 : (double) i / (n - 1);
+            var r = (int) Math.round(GRAD_START_R + t * (GRAD_END_R - GRAD_START_R));
+            var g = (int) Math.round(GRAD_START_G + t * (GRAD_END_G - GRAD_START_G));
+            var b = (int) Math.round(GRAD_START_B + t * (GRAD_END_B - GRAD_START_B));
+            sb.append("\033[1;38;2;").append(r).append(';').append(g).append(';').append(b).append('m');
+            sb.append(new String(Character.toChars(codepoints[i])));
+        }
+        sb.append("\033[0m");
+        return sb.toString();
+    }
+
+    /**
      * Wrap {@code text} in the ANSI SGR codes for {@code style} so the
      * result can be written to a {@code PrintStream} / {@code System.out}
      * verbatim. Bypasses {@link org.jline.utils.AttributedString#toAnsi()}
@@ -164,9 +195,7 @@ public final class Theme {
     /** Maps (state, glyph) to the style used to render that rail glyph. */
     public static AttributedStyle railStyle(Rail.StepState state, Rail.RailGlyph glyph) {
         return switch (glyph) {
-            case COMPLETED_BULLET -> completedStep();
-            case ACTIVE_BULLET -> activeStep();
-            case OPEN, MID, CLOSE -> switch (state) {
+            case BULLET, OPEN, MID, CLOSE -> switch (state) {
                 case ACTIVE -> activeStep();
                 case COMPLETED, INACTIVE -> darkGray();
             };

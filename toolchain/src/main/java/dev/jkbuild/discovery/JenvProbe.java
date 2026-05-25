@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.JdkHit;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -41,5 +45,17 @@ public final class JenvProbe implements LocalToolProbe {
                     .findFirst()
                     .map(path -> new DiscoveredTool(path, spec.version(), name()));
         }
+    }
+
+    @Override
+    public List<JdkHit> discoverAllJdks() throws IOException {
+        Path versionsDir = jenvRoot.resolve("versions");
+        if (!Files.isDirectory(versionsDir)) return List.of(); // fail fast
+        List<JdkHit> hits = new ArrayList<>();
+        try (Stream<Path> entries = Files.list(versionsDir)) {
+            entries.filter(Files::isDirectory)
+                    .forEach(p -> ProbeSupport.discoverJdk(p, name()).ifPresent(hits::add));
+        }
+        return hits;
     }
 }

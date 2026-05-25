@@ -30,19 +30,15 @@ import java.util.concurrent.Callable;
  * become first-class.
  */
 @Command(name = "explain", description = "Print the planned build with cache hit/miss")
-public final class ExplainCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--cache-dir", hidden = true,
+public final class ExplainCommand implements Callable<Integer> {    @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
@@ -56,7 +52,7 @@ public final class ExplainCommand implements Callable<Integer> {
         Cas cas = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
         List<Path> lockClasspath = new ClasspathResolver(cas).classpathFor(lock);
-        int release = CompileCommand.parseReleaseFromJdk(project.project().jdk());
+        int release = project.project().javaRelease();
 
         System.out.println("build plan for " + project.project().artifact()
                 + " v" + project.project().version() + ":");

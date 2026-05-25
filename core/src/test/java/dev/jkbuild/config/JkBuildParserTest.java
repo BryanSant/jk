@@ -17,7 +17,8 @@ class JkBuildParserTest {
             group    = "com.example"
             artifact = "widget"
             version  = "1.0.0"
-            jdk      = "21"
+            jdk      = 21
+            java     = 21
             """;
 
     @Test
@@ -26,8 +27,9 @@ class JkBuildParserTest {
         assertThat(parsed.project().group()).isEqualTo("com.example");
         assertThat(parsed.project().artifact()).isEqualTo("widget");
         assertThat(parsed.project().version()).isEqualTo("1.0.0");
-        assertThat(parsed.project().jdk()).isEqualTo("21");
-        assertThat(parsed.project().language()).isEqualTo("java");
+        assertThat(parsed.project().jdk()).isEqualTo(21);
+        assertThat(parsed.project().java()).isEqualTo(21);
+        assertThat(parsed.project().isKotlin()).isFalse();
         assertThat(parsed.project().main()).isNull();
         assertThat(parsed.project().shadow()).isFalse();
         assertThat(parsed.project().nativeImage()).isFalse();

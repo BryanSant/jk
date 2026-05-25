@@ -17,13 +17,7 @@ import java.util.concurrent.Callable;
 
 /** {@code jk sync} — ensure every locked package is present in the local CAS. */
 @Command(name = "sync", description = "Reconcile cache to jk.lock")
-public final class SyncCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--cache-dir", hidden = true,
+public final class SyncCommand implements Callable<Integer> {    @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
 
@@ -31,9 +25,11 @@ public final class SyncCommand implements Callable<Integer> {
             description = "Prepare for an offline build (accepted, no-op in v0.1).")
     boolean offlinePrepare;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws Exception {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(lockFile)) {
             System.err.println("jk sync: no jk.lock in " + dir + " (run `jk lock` first)");

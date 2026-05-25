@@ -185,8 +185,16 @@ public final class PomImporter {
         if (version == null || version.isBlank()) {
             throw new PomParseException("POM has no <version> and no <parent><version>");
         }
-        String jdk = jdkFromCompilerPlugin(doc).orElse("25");
+        int jdk = jdkFromCompilerPlugin(doc).flatMap(PomImporter::parseInt).orElse(25);
         return new JkBuild.Project(group, pom.artifactId(), version, jdk);
+    }
+
+    private static Optional<Integer> parseInt(String s) {
+        try {
+            return Optional.of(Integer.parseInt(s.trim()));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     private static Optional<String> jdkFromCompilerPlugin(Document doc) {

@@ -18,8 +18,8 @@ public final class Rail {
         OPEN,
         MID,
         CLOSE,
-        COMPLETED_BULLET,
-        ACTIVE_BULLET
+        /** Step header bullet; used for active, completed, and inactive steps (color varies by state). */
+        BULLET
     }
 
     public enum StepState {
@@ -31,28 +31,34 @@ public final class Rail {
     private static final String OPEN_CHAR = "╭";
     private static final String MID_CHAR = "│";
     private static final String CLOSE_CHAR = "╰";
-    private static final String COMPLETED_BULLET_CHAR = "✓";
-    private static final String ACTIVE_BULLET_CHAR = "■";
+    private static final String BULLET_CHAR = "■";
+
+    /** Horizontal bars drawn after the corner glyph on the top/bottom of the frame. */
+    private static final String CORNER_DASHES = "──";
 
     public static final String CHECKBOX_OFF = "◻";
     public static final String CHECKBOX_ON = "◼";
     public static final String RADIO_ON = "●";
     public static final String RADIO_OFF = "○";
 
-    /** {@code ┌  <title>} — first line of the frame. */
+    /** {@code ╭── <title>} — first line of the frame. */
     public static AttributedString opener(String title, StepState state) {
+        var cornerStyle = Theme.railStyle(state, RailGlyph.OPEN);
         return new AttributedStringBuilder()
-                .append(OPEN_CHAR, Theme.railStyle(state, RailGlyph.OPEN))
-                .append("  ")
+                .append(OPEN_CHAR, cornerStyle)
+                .append(CORNER_DASHES, cornerStyle)
+                .append(" ")
                 .append(title, Theme.focused())
                 .toAttributedString();
     }
 
     /** Same as {@link #opener(String, StepState)} but the title carries its own styling. */
     public static AttributedString opener(AttributedString styledTitle, StepState state) {
+        var cornerStyle = Theme.railStyle(state, RailGlyph.OPEN);
         return new AttributedStringBuilder()
-                .append(OPEN_CHAR, Theme.railStyle(state, RailGlyph.OPEN))
-                .append("  ")
+                .append(OPEN_CHAR, cornerStyle)
+                .append(CORNER_DASHES, cornerStyle)
+                .append(" ")
                 .append(styledTitle)
                 .toAttributedString();
     }
@@ -81,41 +87,34 @@ public final class Rail {
                 .toAttributedString();
     }
 
-    /** {@code └  <text>} — final line. */
+    /** {@code ╰── [text]} — final line; trailing text is omitted when empty. */
     public static AttributedString closer(String text, AttributedStyle textStyle) {
         return closer(text, textStyle, StepState.INACTIVE);
     }
 
-    /** {@code └  <text>} with explicit rail state (controls the corner-glyph color). */
+    /** {@code ╰── [text]} with explicit rail state (controls the corner-glyph color). */
     public static AttributedString closer(String text, AttributedStyle textStyle, StepState state) {
-        return new AttributedStringBuilder()
-                .append(CLOSE_CHAR, Theme.railStyle(state, RailGlyph.CLOSE))
-                .append("  ")
-                .append(text, textStyle)
-                .toAttributedString();
+        var cornerStyle = Theme.railStyle(state, RailGlyph.CLOSE);
+        var sb = new AttributedStringBuilder()
+                .append(CLOSE_CHAR, cornerStyle)
+                .append(CORNER_DASHES, cornerStyle);
+        if (text != null && !text.isEmpty()) {
+            sb.append(" ").append(text, textStyle);
+        }
+        return sb.toAttributedString();
     }
 
-    /** Step header bullet: {@code ✓} (completed) or {@code ■} (active). */
+    /** Step header bullet: {@code ■} for every state; cyan when active, otherwise dark-gray. */
     public static AttributedString stepBullet(StepState state, String prompt) {
-        var sb = new AttributedStringBuilder();
         var promptStyle = switch (state) {
             case ACTIVE -> Theme.focused();
             case COMPLETED -> Theme.completedPrompt();
             case INACTIVE -> Theme.dim();
         };
-        return switch (state) {
-            case COMPLETED -> sb.append(COMPLETED_BULLET_CHAR, Theme.railStyle(state, RailGlyph.COMPLETED_BULLET))
-                    .append("  ")
-                    .append(prompt, promptStyle)
-                    .toAttributedString();
-            case ACTIVE -> sb.append(ACTIVE_BULLET_CHAR, Theme.railStyle(state, RailGlyph.ACTIVE_BULLET))
-                    .append("  ")
-                    .append(prompt, promptStyle)
-                    .toAttributedString();
-            case INACTIVE -> sb.append(COMPLETED_BULLET_CHAR, Theme.dim())
-                    .append("  ")
-                    .append(prompt, promptStyle)
-                    .toAttributedString();
-        };
+        return new AttributedStringBuilder()
+                .append(BULLET_CHAR, Theme.railStyle(state, RailGlyph.BULLET))
+                .append("  ")
+                .append(prompt, promptStyle)
+                .toAttributedString();
     }
 }

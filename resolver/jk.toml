@@ -2,8 +2,8 @@
 group    = "dev.jkbuild"
 artifact = "jk-resolver"
 version  = "0.6.0-SNAPSHOT"
-jdk      = "25"
-language = "java"
+jdk      = 25
+java     = 25
 
 [dependencies]
 main = [

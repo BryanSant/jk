@@ -12,18 +12,25 @@ import java.util.Set;
 /**
  * In-memory representation of {@code jk.lock} per PRD §9.
  *
- * <p>v0.3 schema (v5): each package carries the list of scopes whose
- * resolution reached it. v0.2-era v4 lockfiles still parse — every
- * package is treated as {@code [main]}.
+ * <p>The schema is pinned to {@code version = 1} for the pre-1.x window;
+ * the version bumps when we cut a public release. Fields added in this
+ * window stay backward-compatible at the reader (unknown / missing optional
+ * fields fall back to defaults).
+ *
+ * <p>{@code jdk} is the resolved JDK install identifier the project was
+ * built against (e.g. {@code temurin-25.0.3}), stamped by {@code jk new}
+ * and refreshed by {@code jk lock}. Optional; {@code null} for legacy
+ * lockfiles produced before the field existed.
  */
 public record Lockfile(
         int version,
         String generatedBy,
         String resolutionAlgorithm,
+        String jdk,
         List<Package> packages) {
 
-    public static final int CURRENT_VERSION = 5;
-    public static final int MIN_SUPPORTED_VERSION = 4;
+    public static final int CURRENT_VERSION = 1;
+    public static final int MIN_SUPPORTED_VERSION = 1;
     public static final String RESOLUTION_ALGORITHM = "pubgrub-v1";
 
     public Lockfile {
@@ -33,8 +40,18 @@ public record Lockfile(
         packages = List.copyOf(packages);
     }
 
+    /** Back-compat constructor for callers that don't yet stamp a JDK. */
+    public Lockfile(int version, String generatedBy, String resolutionAlgorithm, List<Package> packages) {
+        this(version, generatedBy, resolutionAlgorithm, null, packages);
+    }
+
     public static Lockfile empty(String jkVersion) {
-        return new Lockfile(CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, List.of());
+        return empty(jkVersion, null);
+    }
+
+    /** Empty package set with a resolved JDK pinned for the project. */
+    public static Lockfile empty(String jkVersion, String jdk) {
+        return new Lockfile(CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, jdk, List.of());
     }
 
     public record Package(

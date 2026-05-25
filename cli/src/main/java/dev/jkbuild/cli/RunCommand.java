@@ -76,13 +76,7 @@ public final class RunCommand implements Callable<Integer> {
     @Parameters(arity = "0..*", paramLabel = "<args>",
             description = "Either a .java/.kt/.kts/.jar file (then args after it) "
                     + "or arguments forwarded to the project's main class.")
-    List<String> positional = new ArrayList<>();
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory for project-mode runs. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--cache-dir", hidden = true,
+    List<String> positional = new ArrayList<>();    @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
 
@@ -98,6 +92,8 @@ public final class RunCommand implements Callable<Integer> {
             description = "Ignore cached classes and recompile (script modes).")
     boolean forceRecompile;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
         Path scriptPath = detectScript();
@@ -109,8 +105,7 @@ public final class RunCommand implements Callable<Integer> {
             if (name.endsWith(".kt"))   return runKotlinScript(scriptPath, args);
             if (name.endsWith(".jar"))  return runJar(scriptPath, args);
         }
-        Path projectDir = directory != null
-                ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = global.workingDir();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
             System.err.println("jk run: no recognized file argument and no jk.toml in " + projectDir);

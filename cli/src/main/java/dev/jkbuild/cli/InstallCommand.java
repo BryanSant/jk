@@ -68,13 +68,7 @@ public final class InstallCommand implements Callable<Integer> {
 
     @Option(names = "--main",
             description = "Override the Main-Class to exec.")
-    String mainClass;
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory for the no-arg case. Default: cwd.")
-    Path directory;
-
-    @Option(names = "--cache-dir", hidden = true,
+    String mainClass;    @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
 
@@ -90,6 +84,8 @@ public final class InstallCommand implements Callable<Integer> {
             description = "Override the Maven repository URL (for tests).")
     URI repoUrl;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
         if (source == null || source.isBlank()) {
@@ -104,8 +100,7 @@ public final class InstallCommand implements Callable<Integer> {
     // --- mode 1: current project -----------------------------------------
 
     private int installCurrentProject() throws IOException {
-        Path projectDir = directory != null
-                ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = global.workingDir();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
             System.err.println("jk install: no jk.toml in " + projectDir);

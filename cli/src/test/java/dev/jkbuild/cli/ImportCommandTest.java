@@ -105,7 +105,7 @@ class ImportCommandTest {
 
         String jkBuild = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(jkBuild).contains("group    = \"com.example\"");
-        assertThat(jkBuild).contains("jdk      = \"21\"");
+        assertThat(jkBuild).contains("jdk      = 21");
         assertThat(jkBuild).contains("\"com.fasterxml.jackson.core:jackson-databind:2.18.2\"");
 
         assertThat(Files.readString(tempDir.resolve("jk-import-report.md")))

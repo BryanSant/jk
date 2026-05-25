@@ -42,12 +42,12 @@ public final class JdkReconcileCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws IOException {
-        Path root = jdksDir != null ? jdksDir : IntellijJdkDir.root();
+        JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
+        Path root = registry.jdksRoot();
         if (!Files.isDirectory(root)) {
             System.out.println("(no JDK directory at " + root + ")");
             return 0;
         }
-        JdkRegistry registry = new JdkRegistry(root);
         List<InstalledJdk> jdks = registry.list();
 
         int healthy = 0;

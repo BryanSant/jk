@@ -21,6 +21,7 @@ public final class KeyReader {
             permits Key.CtrlC,
                     Key.Enter,
                     Key.Space,
+                    Key.Tab,
                     Key.Backspace,
                     Key.Escape,
                     Key.Up,
@@ -40,6 +41,10 @@ public final class KeyReader {
 
         record Space() implements Key {
             public static final Space INSTANCE = new Space();
+        }
+
+        record Tab() implements Key {
+            public static final Tab INSTANCE = new Tab();
         }
 
         record Backspace() implements Key {
@@ -100,6 +105,7 @@ public final class KeyReader {
         return switch (c) {
             case 0x03 -> Key.CtrlC.INSTANCE;
             case 0x0A, 0x0D -> Key.Enter.INSTANCE;
+            case 0x09 -> Key.Tab.INSTANCE;
             case 0x20 -> Key.Space.INSTANCE;
             case 0x7F, 0x08 -> Key.Backspace.INSTANCE;
             case 0x1B -> parseEscape(reader);

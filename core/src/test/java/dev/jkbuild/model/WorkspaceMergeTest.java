@@ -54,7 +54,7 @@ class WorkspaceMergeTest {
         EnumMap<Scope, List<Dependency>> by = new EnumMap<>(Scope.class);
         depsByScope.forEach(by::put);
         return new JkBuild(
-                new JkBuild.Project("com.example", artifact, "0.1.0", null),
+                new JkBuild.Project("com.example", artifact, "0.1.0", 0),
                 new JkBuild.Dependencies(by));
     }
 

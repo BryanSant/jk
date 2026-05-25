@@ -75,9 +75,8 @@ class JdkCommandTest {
         makeJdkInstall(jdks.resolve("temurin-23"));
 
         String stdout = captureStdout(() -> run("jdk", "list",
-                "--offline",
                 "--jdks-dir", jdks.toString()));
-        // Grouped by major desc: 23 first, then 21.0.5.
+        // Default is offline / installed-only. Grouped by major desc: 23 first, then 21.0.5.
         int idx23 = stdout.indexOf("temurin-23");
         int idx21 = stdout.indexOf("temurin-21.0.5");
         assertThat(idx23).isGreaterThanOrEqualTo(0);
@@ -95,11 +94,12 @@ class JdkCommandTest {
         served.put("/feed/jdks.json.xz", xz(multiEntryFeedJson(dummyArchive.length,
                 Hashing.sha256Hex(dummyArchive), base.toString())));
 
-        String stdout = captureStdout(() -> run("jdk", "list",
+        String stdout = captureStdout(() -> run("jdk", "list", "--all",
                 "--jdks-dir", jdks.toString(),
                 "--feed-url", base.resolve("/feed/jdks.json.xz").toString()));
 
-        // Higher major (catalog-only) appears first; installed row follows.
+        // --all surfaces catalog rows alongside installed rows. Higher major
+        // (catalog-only) appears first; installed row follows.
         int idxAvailable25 = stdout.indexOf("temurin-25");
         int idxInstalled21 = stdout.indexOf("temurin-21.0.5");
         assertThat(idxAvailable25).isGreaterThanOrEqualTo(0);
@@ -109,19 +109,21 @@ class JdkCommandTest {
     }
 
     @Test
-    void installed_drops_catalog_only_rows(@TempDir Path tempDir) throws Exception {
+    void list_without_all_skips_catalog_entirely(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
 
+        // Even if a catalog is reachable, `jk jdk list` (no --all) must
+        // not show available-only rows from it — the network shouldn't
+        // even be hit. Serve a feed anyway to prove the command ignores it.
         byte[] dummyArchive = "stub".getBytes(StandardCharsets.UTF_8);
         served.put("/feed/jdks.json.xz", xz(multiEntryFeedJson(dummyArchive.length,
                 Hashing.sha256Hex(dummyArchive), base.toString())));
 
-        String stdout = captureStdout(() -> run("jdk", "installed",
+        String stdout = captureStdout(() -> run("jdk", "list",
                 "--jdks-dir", jdks.toString(),
                 "--feed-url", base.resolve("/feed/jdks.json.xz").toString()));
 
-        // Installed row is present; the catalog-only "temurin-25" row is filtered out.
         assertThat(stdout).contains("temurin-21.0.5");
         assertThat(stdout).contains("installed");
         assertThat(stdout).doesNotContain("temurin-25");
@@ -267,7 +269,6 @@ class JdkCommandTest {
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
 
         String stdout = captureStdout(() -> run("jdks", "list",
-                "--offline",
                 "--jdks-dir", jdks.toString()));
         assertThat(stdout).contains("temurin-21.0.5");
     }
@@ -341,6 +342,13 @@ class JdkCommandTest {
     private static void makeJdkInstall(Path home) throws IOException {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
+        // ProbeSupport.discoverJdk demands a release file — every modern
+        // JDK ships one since 7u72, so the fixture follows suit.
+        var m = java.util.regex.Pattern.compile("(\\d+(?:\\.\\d+){0,2})")
+                .matcher(home.getFileName().toString());
+        String version = m.find() ? m.group(1) : "21";
+        Files.writeString(home.resolve("release"),
+                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
     }
 
     private static String feedJson(long size, String sha256, String url) {

@@ -13,9 +13,9 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Layout: {@code ▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  62%: <status>}
  *
  * <ul>
- *   <li>20 segments. Filled segments use a per-position gradient from
- *       dark green {@code #166534} to bright green {@code #4ade80};
- *       empty segments are faint.</li>
+ *   <li>40 segments. Filled segments use a per-position gradient from
+ *       violet {@code #8150fe} to coral {@code #e3475b} (the reverse of
+ *       the wizard title gradient); empty segments are faint.</li>
  *   <li>The percent is right-aligned to 4 chars so the status doesn't
  *       jump columns as it advances.</li>
  *   <li>Redraws are surgical: only the segments that flipped, only the
@@ -41,9 +41,9 @@ public final class ProgressBar implements AutoCloseable {
     static final String GAP = "  ";
     static final String SEPARATOR = ": ";
 
-    // Gradient: dark green #166534 → bright green #4ade80.
-    private static final int START_R = 0x16, START_G = 0x65, START_B = 0x34;
-    private static final int END_R = 0x4a, END_G = 0xde, END_B = 0x80;
+    // Gradient: reverse of the wizard title — violet #8150fe → coral #e3475b.
+    private static final int START_R = 0x81, START_G = 0x50, START_B = 0xfe;
+    private static final int END_R = 0xe3, END_G = 0x47, END_B = 0x5b;
 
     private static final String HIDE_CURSOR = "\033[?25l";
     private static final String SHOW_CURSOR = "\033[?25h";

@@ -5,11 +5,12 @@ import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
-import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkCatalogClient;
+import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
+import dev.jkbuild.jdk.JdkVendor;
 import dev.jkbuild.resolver.Versions;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
@@ -31,24 +32,25 @@ import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 
 /**
- * {@code jk jdk list} — installed JDKs (under the IntelliJ JDK directory)
- * alongside the catalog entries available for download from the
- * JetBrains feed for the current OS / arch.
+ * {@code jk jdk list} — every JDK the probe chain finds on this machine
+ * (jk's managed dir, {@code $JAVA_HOME}, SDKMAN, JBang, mise, asdf, jenv,
+ * Homebrew, system paths). With {@code --all}, also lists JDKs available
+ * for download from the JetBrains feed for the current OS / arch.
  *
- * <p>Renders a box-drawn table grouped by major version. Network failure
- * or {@code --offline} skips the catalog half — installed JDKs still
- * render, with whatever major info can be parsed from their identifier.
+ * <p>Renders a box-drawn table grouped by major version. Without
+ * {@code --all} the command is purely offline; with {@code --all},
+ * network failure degrades to installed-only rows with a stderr warning.
  */
-@Command(name = "list", description = "List the available JDK installations")
+@Command(name = "list", description = "List installed JDKs (use --all to also show available ones)")
 public final class JdkListCommand implements Callable<Integer> {
+
+    @Option(names = "--all",
+            description = "Also list JDKs available for download from the JetBrains feed.")
+    boolean all;
 
     @Option(names = "--jdks-dir", hidden = true,
             description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
-
-    @Option(names = "--offline",
-            description = "Skip the JetBrains catalog fetch; show only installed JDKs.")
-    boolean offline;
 
     @Option(names = "--feed-url", hidden = true,
             description = "Override the JetBrains JDK feed URL (for tests).")
@@ -58,17 +60,10 @@ public final class JdkListCommand implements Callable<Integer> {
             description = "Override the catalog cache path (for tests).")
     Path cacheFile;
 
-    /**
-     * When true, AVAILABLE (catalog-only) rows are filtered out so the
-     * table shows only DEFAULT + INSTALLED rows. Set programmatically by
-     * {@link JdkInstalledCommand}; not exposed as a flag on {@code list}.
-     */
-    boolean installedOnly;
-
     enum Status {
         DEFAULT("default"),
         INSTALLED("installed"),
-        AVAILABLE("");
+        AVAILABLE("available");
 
         final String label;
 
@@ -76,26 +71,30 @@ public final class JdkListCommand implements Callable<Integer> {
     }
 
     /** One row in the rendered table. */
-    record Row(int major, String vendor, String spec, Status status) {}
+    record Row(int major, String vendor, String spec, Status status, String location) {}
 
     @Override
     public Integer call() throws Exception {
-        Path jdksRoot = jdksDir != null ? jdksDir : IntellijJdkDir.root();
-        List<InstalledJdk> installed = new JdkRegistry(jdksRoot).list();
+        JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
+        Path jdksRoot = registry.jdksRoot();
+        List<JdkHit> installed = registry.listHits();
         Optional<String> defaultId = readDefaultIdentifier();
-        JdkCatalog catalog = offline ? null : fetchCatalogOrNull();
+        // Catalog (and therefore the network fetch) is only consulted when the
+        // user opts in to "available" rows via --all. Default `list` is a
+        // pure offline view of what's on disk.
+        JdkCatalog catalog = all ? fetchCatalogOrNull() : null;
 
         String os = HostPlatform.currentOs();
         String arch = HostPlatform.currentArch();
 
         List<Row> rows = buildRows(installed, defaultId.orElse(null), catalog, os, arch);
-        if (installedOnly) {
+        if (!all) {
             rows = rows.stream()
                     .filter(r -> r.status() != Status.AVAILABLE)
                     .toList();
         }
         if (rows.isEmpty()) {
-            String suffix = (installedOnly || offline) ? "" : ", no remote JDKs found";
+            String suffix = all ? ", no remote JDKs found" : "";
             System.out.println("(no JDKs installed under " + jdksRoot + suffix + ")");
             return 0;
         }
@@ -107,7 +106,7 @@ public final class JdkListCommand implements Callable<Integer> {
     }
 
     static List<Row> buildRows(
-            List<InstalledJdk> installed,
+            List<JdkHit> installed,
             String defaultId,
             JdkCatalog catalog,
             String os,
@@ -123,12 +122,18 @@ public final class JdkListCommand implements Callable<Integer> {
 
         // Installed → Row. Mark default first, then installed.
         List<Row> rows = new ArrayList<>();
-        for (InstalledJdk j : installed) {
-            JdkCatalog.Entry e = byInstall.get(j.identifier());
-            String vendor = e != null ? e.vendor() + " " + e.product() : "";
-            int major = e != null ? e.majorVersion() : parseMajor(j.identifier());
-            Status status = j.identifier().equals(defaultId) ? Status.DEFAULT : Status.INSTALLED;
-            rows.add(new Row(major, vendor, j.identifier(), status));
+        for (JdkHit j : installed) {
+            String id = IntellijJdkDir.installDirOf(j.home()).getFileName().toString();
+            JdkCatalog.Entry e = byInstall.get(id);
+            // Catalog match → catalog's display strings. No match → fall back to the
+            // probe's vendor lookup so external installs (SDKMAN, system, mise, …)
+            // still get a useful vendor column.
+            String vendor = e != null
+                    ? e.vendor() + " " + e.product()
+                    : (j.vendor() != JdkVendor.UNKNOWN ? j.vendor().displayName() : "");
+            int major = e != null ? e.majorVersion() : parseMajor(id);
+            Status status = id.equals(defaultId) ? Status.DEFAULT : Status.INSTALLED;
+            rows.add(new Row(major, vendor, id, status, j.source()));
         }
 
         // Catalog → Row for each (vendor, product, major) not already installed.
@@ -155,7 +160,8 @@ public final class JdkListCommand implements Callable<Integer> {
                         e.majorVersion(),
                         e.vendor() + " " + e.product(),
                         e.installFolderName(),
-                        Status.AVAILABLE));
+                        Status.AVAILABLE,
+                        "download"));
             }
         }
 
@@ -188,7 +194,7 @@ public final class JdkListCommand implements Callable<Integer> {
     // Rendering
     // ---------------------------------------------------------------
 
-    private static final String[] HEADERS = {"Version", "Vendor", "Spec", "Status"};
+    private static final String[] HEADERS = {"Version", "Vendor", "Spec", "Status", "Source"};
 
     /** Render the table as a sequence of ANSI-styled lines, ready to println. */
     static List<String> renderTable(List<Row> rows, String os, String arch) {
@@ -218,7 +224,7 @@ public final class JdkListCommand implements Callable<Integer> {
             for (int i = 0; i < groupRows.size(); i++) {
                 Row r = groupRows.get(i);
                 String versionCell = (i == 0) ? String.valueOf(r.major()) : "";
-                out.add(dataRow(versionCell, r.vendor(), r.spec(), r.status(), widths));
+                out.add(dataRow(versionCell, r.vendor(), r.spec(), r.status(), r.location(), widths));
             }
         }
 
@@ -227,22 +233,23 @@ public final class JdkListCommand implements Callable<Integer> {
     }
 
     private static int[] computeWidths(List<Row> rows) {
-        int[] w = new int[4];
+        int[] w = new int[5];
         for (int i = 0; i < HEADERS.length; i++) w[i] = HEADERS[i].length();
         for (Row r : rows) {
             w[0] = Math.max(w[0], String.valueOf(r.major()).length());
             w[1] = Math.max(w[1], r.vendor() == null ? 0 : r.vendor().length());
             w[2] = Math.max(w[2], r.spec().length());
             w[3] = Math.max(w[3], r.status().label.length());
+            w[4] = Math.max(w[4], r.location() == null ? 0 : r.location().length());
         }
         return w;
     }
 
     private static int innerWidth(int[] widths) {
-        // 4 cells, each ` content ` (content + 2 padding), with 3 internal │ separators.
+        // 5 cells, each ` content ` (content + 2 padding), with 4 internal │ separators.
         int sum = 0;
         for (int c : widths) sum += c + 2;
-        return sum + 3;
+        return sum + 4;
     }
 
     // We compose lines as raw Strings via Theme.colorize() (which wraps the
@@ -289,13 +296,24 @@ public final class JdkListCommand implements Callable<Integer> {
     }
 
     private static String dataRow(
-            String version, String vendor, String spec, Status status, int[] widths) {
+            String version, String vendor, String spec, Status status, String location, int[] widths) {
         var bar = Theme.colorize("│", Theme.darkGray());
+        String locStyled;
+        if (location == null || location.isEmpty()) {
+            locStyled = padRight("", widths[4]);
+        } else {
+            // AVAILABLE rows render the source ("download") in the same dark-gray
+            // as their status, so the entire catalog-only row reads as de-emphasised
+            // relative to actually-installed JDKs.
+            AttributedStyle locStyle = status == Status.AVAILABLE ? Theme.darkGray() : Theme.warning();
+            locStyled = Theme.colorize(location, locStyle) + " ".repeat(widths[4] - location.length());
+        }
         return bar
                 + " " + center(version, widths[0]) + " " + bar
                 + " " + padRight(vendor == null ? "" : vendor, widths[1]) + " " + bar
                 + " " + Theme.colorize(padRight(spec, widths[2]), Theme.settled()) + " " + bar
-                + " " + Theme.colorize(padRight(status.label, widths[3]), statusStyle(status)) + " " + bar;
+                + " " + Theme.colorize(padRight(status.label, widths[3]), statusStyle(status)) + " " + bar
+                + " " + locStyled + " " + bar;
     }
 
     /**
@@ -320,7 +338,7 @@ public final class JdkListCommand implements Callable<Integer> {
         return switch (status) {
             case DEFAULT -> Theme.warning();
             case INSTALLED -> Theme.completedStep();
-            case AVAILABLE -> AttributedStyle.DEFAULT;
+            case AVAILABLE -> Theme.darkGray();
         };
     }
 

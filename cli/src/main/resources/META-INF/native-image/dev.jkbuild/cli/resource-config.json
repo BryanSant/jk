@@ -1,0 +1,9 @@
+{
+  "resources": {
+    "includes": [
+      {"pattern": "dev/jkbuild/cli/activate/.*\\.sh"},
+      {"pattern": "dev/jkbuild/cli/activate/.*\\.fish"},
+      {"pattern": "dev/jkbuild/cli/activate/.*\\.ps1"}
+    ]
+  }
+}

@@ -1,9 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.JdkHit;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.stream.Stream;
 
@@ -62,5 +66,17 @@ public final class JbangProbe implements LocalToolProbe {
     private static String majorOf(String version) {
         int dot = version.indexOf('.');
         return dot > 0 ? version.substring(0, dot) : version;
+    }
+
+    @Override
+    public List<JdkHit> discoverAllJdks() throws IOException {
+        Path jdksDir = jbangRoot.resolve("cache").resolve("jdks");
+        if (!Files.isDirectory(jdksDir)) return List.of(); // fail fast
+        List<JdkHit> hits = new ArrayList<>();
+        try (Stream<Path> entries = Files.list(jdksDir)) {
+            entries.filter(Files::isDirectory)
+                    .forEach(p -> ProbeSupport.discoverJdk(p, name()).ifPresent(hits::add));
+        }
+        return hits;
     }
 }

@@ -17,7 +17,7 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class InitCommandTest {
+class NewCommandTest {
 
     @Test
     void flag_mode_writes_files(@TempDir Path tempDir) throws IOException {
@@ -34,8 +34,9 @@ class InitCommandTest {
         assertThat(parsed.project().group()).isEqualTo("com.example");
         assertThat(parsed.project().artifact()).isEqualTo("widget");
         assertThat(parsed.project().version()).isEqualTo("0.1.0");
-        assertThat(parsed.project().jdk()).isEqualTo("25");
-        assertThat(parsed.project().language()).isEqualTo("java");
+        assertThat(parsed.project().jdk()).isEqualTo(25);
+        assertThat(parsed.project().java()).isEqualTo(25);
+        assertThat(parsed.project().isKotlin()).isFalse();
 
         Lockfile lock = LockfileReader.read(lockFile);
         assertThat(lock.version()).isEqualTo(Lockfile.CURRENT_VERSION);
@@ -69,23 +70,34 @@ class InitCommandTest {
     }
 
     @Test
-    void shadow_requires_main(@TempDir Path tempDir) {
-        int exit = Jk.execute("init", "--shadow", tempDir.toString());
-        assertThat(exit).isEqualTo(64);
-    }
-
-    @Test
-    void runnable_with_main_writes_main_field(@TempDir Path tempDir) throws IOException {
+    void shadow_implies_executable(@TempDir Path tempDir) throws IOException {
+        // --shadow used to require an explicit --main; now it just implies
+        // --executable and the generated Main FQCN is derived from the group.
         int exit = Jk.execute(
                 "init",
                 "--group", "com.example",
                 "--name", "widget",
-                "--main", "com.example.App",
+                "--shadow",
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(parsed.project().main()).isEqualTo("com.example.App");
+        assertThat(parsed.project().main()).isEqualTo("com.example.Main");
+        assertThat(parsed.project().isRunnable()).isTrue();
+    }
+
+    @Test
+    void executable_writes_derived_main_field(@TempDir Path tempDir) throws IOException {
+        int exit = Jk.execute(
+                "init",
+                "--group", "com.example",
+                "--name", "widget",
+                "--executable",
+                tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+
+        JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThat(parsed.project().main()).isEqualTo("com.example.Main");
         assertThat(parsed.project().isRunnable()).isTrue();
     }
 
@@ -110,65 +122,65 @@ class InitCommandTest {
                 "--group", "com.example",
                 "--name", "widget",
                 "--lang", "kotlin",
-                "--main", "com.example.App",
+                "--executable",
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
-        Path app = tempDir.resolve("src/main/kotlin/com/example/App.kt");
+        Path app = tempDir.resolve("src/main/kotlin/com/example/Main.kt");
         assertThat(app).exists();
         assertThat(Files.readString(app)).contains("fun main()");
     }
 
     @Test
     void wizard_preset_name_is_empty_when_no_positional() {
-        assertThat(InitCommand.wizardPresetName(null, Path.of("/home/bob/myapp"))).isEmpty();
+        assertThat(NewCommand.wizardPresetName(null, Path.of("/home/bob/myapp"))).isEmpty();
     }
 
     @Test
     void wizard_preset_name_uses_cwd_leaf_for_dot_arg() {
-        assertThat(InitCommand.wizardPresetName(Path.of("."), Path.of("/home/bob/myapp")))
+        assertThat(NewCommand.wizardPresetName(Path.of("."), Path.of("/home/bob/myapp")))
                 .contains("myapp");
     }
 
     @Test
     void wizard_preset_name_uses_arg_leaf_for_named_arg() {
         // Relative arg.
-        assertThat(InitCommand.wizardPresetName(Path.of("my-project"), Path.of("/home/bob")))
+        assertThat(NewCommand.wizardPresetName(Path.of("my-project"), Path.of("/home/bob")))
                 .contains("my-project");
         // Absolute path: still use the leaf, not the full path.
-        assertThat(InitCommand.wizardPresetName(Path.of("/tmp/foo/my-project"), Path.of("/home/bob")))
+        assertThat(NewCommand.wizardPresetName(Path.of("/tmp/foo/my-project"), Path.of("/home/bob")))
                 .contains("my-project");
     }
 
     @Test
     void wizard_preset_name_falls_back_when_dot_at_filesystem_root() {
         // Defensive: filesystem root has no leaf name; don't blow up.
-        assertThat(InitCommand.wizardPresetName(Path.of("."), Path.of("/"))).isEmpty();
+        assertThat(NewCommand.wizardPresetName(Path.of("."), Path.of("/"))).isEmpty();
     }
 
     @Test
     void resolve_target_with_dot_uses_cwd() {
-        assertThat(InitCommand.resolveTarget(Path.of("."), Path.of("/home/bob/myapp"), "myapp"))
+        assertThat(NewCommand.resolveTarget(Path.of("."), Path.of("/home/bob/myapp"), "myapp"))
                 .isEqualTo(Path.of("/home/bob/myapp"));
     }
 
     @Test
     void resolve_target_with_relative_arg_resolves_against_cwd() {
-        assertThat(InitCommand.resolveTarget(
+        assertThat(NewCommand.resolveTarget(
                 Path.of("widget"), Path.of("/home/bob"), "widget"))
                 .isEqualTo(Path.of("/home/bob/widget"));
     }
 
     @Test
     void resolve_target_with_absolute_arg_uses_it_as_is() {
-        assertThat(InitCommand.resolveTarget(
+        assertThat(NewCommand.resolveTarget(
                 Path.of("/tmp/foo/widget"), Path.of("/home/bob"), "widget"))
                 .isEqualTo(Path.of("/tmp/foo/widget"));
     }
 
     @Test
     void resolve_target_with_no_arg_creates_subdir_named_after_project() {
-        assertThat(InitCommand.resolveTarget(null, Path.of("/home/bob"), "myapp"))
+        assertThat(NewCommand.resolveTarget(null, Path.of("/home/bob"), "myapp"))
                 .isEqualTo(Path.of("/home/bob/myapp"));
     }
 

@@ -33,13 +33,7 @@ import java.util.concurrent.Callable;
  * and per-scope lockfile entries all land in subsequent slices.
  */
 @Command(name = "test", description = "Compile and run tests")
-public final class TestCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--profile", paramLabel = "<name>",
+public final class TestCommand implements Callable<Integer> {    @Option(names = "--profile", paramLabel = "<name>",
             description = "Build profile to apply.")
     String profileName;
 
@@ -47,9 +41,11 @@ public final class TestCommand implements Callable<Integer> {
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
@@ -76,7 +72,7 @@ public final class TestCommand implements Callable<Integer> {
         List<Path> compileMainCp = classpathResolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
         List<Path> compileTestCp = classpathResolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST);
         List<Path> testRuntimeCp = classpathResolver.classpathFor(lock, ClasspathResolver.TEST);
-        int release = CompileCommand.parseReleaseFromJdk(project.project().jdk());
+        int release = project.project().javaRelease();
 
         Path target = dir.resolve("target");
         Path mainClasses = target.resolve("classes");

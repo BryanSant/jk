@@ -42,6 +42,12 @@ class KeyReaderTest {
     }
 
     @Test
+    void tab_maps_to_tab() {
+        var key = KeyReader.read(reader(new byte[] {0x09}));
+        assertThat(key).isInstanceOf(KeyReader.Key.Tab.class);
+    }
+
+    @Test
     void del_maps_to_backspace() {
         var key = KeyReader.read(reader(new byte[] {0x7F}));
         assertThat(key).isInstanceOf(KeyReader.Key.Backspace.class);

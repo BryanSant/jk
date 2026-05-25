@@ -29,13 +29,7 @@ import java.util.concurrent.Callable;
  * but a no-op until selective resolution lands.
  */
 @Command(name = "update", description = "Re-resolve declared dependencies and rewrite jk.lock")
-public final class UpdateCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--precise", paramLabel = "<coord>@<ver>",
+public final class UpdateCommand implements Callable<Integer> {    @Option(names = "--precise", paramLabel = "<coord>@<ver>",
             description = "Pin a single coord to a version for this update (not yet implemented).")
     String precise;
 
@@ -57,9 +51,11 @@ public final class UpdateCommand implements Callable<Integer> {
             hidden = true)
     Path cacheDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws Exception {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {

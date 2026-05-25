@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import org.jline.utils.Signals;
+
 /**
  * App-level SIGINT handler: prints {@code 𝘅 Canceled} in red, performs an
  * SGR reset, and halts with exit code 2.
@@ -11,14 +13,17 @@ package dev.jkbuild.cli.tui;
  * from its {@code finally} block so the global default is restored on exit —
  * JLine's "previous handler" tracking doesn't reliably round-trip the
  * underlying {@code sun.misc.Signal} handler back into place.
+ *
+ * <p>Uses {@link Signals#register} (JLine's reflective wrapper around
+ * {@code sun.misc.Signal}) instead of calling that class directly, so the
+ * compiler doesn't emit "internal proprietary API" warnings.
  */
 public final class GlobalCancel {
 
     private GlobalCancel() {}
 
-    @SuppressWarnings("removal")
     public static void install() {
-        sun.misc.Signal.handle(new sun.misc.Signal("INT"), sig -> {
+        Signals.register("INT", () -> {
             ProgressBar active = ProgressBar.active();
             if (active != null) {
                 // Repaint the in-flight bar in red + strikethrough so the

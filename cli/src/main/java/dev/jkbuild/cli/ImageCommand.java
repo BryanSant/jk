@@ -35,13 +35,7 @@ import java.util.concurrent.Callable;
  * pushing — useful for tests and for inspecting layers without a registry.
  */
 @Command(name = "image", description = "Build and push an OCI image for the project")
-public final class ImageCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--main",
+public final class ImageCommand implements Callable<Integer> {    @Option(names = "--main",
             description = "Main class to set as the image entrypoint. Default: image.main-class or project.main.")
     String mainClass;
 
@@ -61,10 +55,11 @@ public final class ImageCommand implements Callable<Integer> {
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
-        Path projectDir = directory != null
-                ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
             System.err.println("jk image: " + jkBuildPath + " not found.");

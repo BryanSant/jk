@@ -51,6 +51,7 @@ public final class LockfileReader {
         }
         String generatedBy = requireString(result, "generated-by");
         String resolutionAlgorithm = requireString(result, "resolution-algorithm");
+        String jdk = result.getString("jdk"); // optional
 
         List<Lockfile.Package> packages = new ArrayList<>();
         TomlArray pkgArray = result.getArray("package");
@@ -60,7 +61,7 @@ public final class LockfileReader {
                 packages.add(toPackage(table));
             }
         }
-        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, packages);
+        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, packages);
     }
 
     private static Lockfile.Package toPackage(TomlTable table) {

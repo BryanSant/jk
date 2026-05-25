@@ -139,14 +139,14 @@ class ProgressBarTest {
     }
 
     @Test
-    void gradient_runs_from_dark_to_bright_green() {
+    void gradient_runs_from_violet_to_coral() {
         var colors = ProgressBar.buildGradient(20);
         assertThat(colors).hasSize(20);
-        // First color should be the dark-green endpoint, last the bright.
+        // Reverse of the wizard title: violet #8150fe → coral #e3475b.
         String first = colors[0].toAnsi();
         String last = colors[19].toAnsi();
-        assertThat(first).isEqualTo("38;2;22;101;52");   // #166534
-        assertThat(last).isEqualTo("38;2;74;222;128");   // #4ade80
+        assertThat(first).isEqualTo("38;2;129;80;254");  // #8150fe
+        assertThat(last).isEqualTo("38;2;227;71;91");    // #e3475b
     }
 
     private static PrintStream stream(ByteArrayOutputStream buf) {

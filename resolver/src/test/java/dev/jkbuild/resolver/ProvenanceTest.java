@@ -73,7 +73,7 @@ class ProvenanceTest {
             deps.add(new Dependency(m, new VersionSelector.Exact("=1.0", "1.0")));
         }
         return new JkBuild(
-                new JkBuild.Project("com.example", "widget", "0.1.0", null),
+                new JkBuild.Project("com.example", "widget", "0.1.0", 0),
                 new JkBuild.Dependencies(Map.of(Scope.MAIN, deps)));
     }
 

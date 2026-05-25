@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.JdkHit;
+
 import java.io.IOException;
+import java.util.List;
 import java.util.Optional;
 
 /**
@@ -26,4 +29,18 @@ public interface LocalToolProbe {
 
     /** Return a matching install, or empty if this probe doesn't have one. */
     Optional<DiscoveredTool> find(ToolSpec spec) throws IOException;
+
+    /**
+     * Enumerate every JDK install this probe knows about. Implementations
+     * must fail fast: if the probe's root location isn't present on the
+     * host, return an empty list immediately without filesystem walks or
+     * subprocess calls. The default implementation returns empty, so probes
+     * opt in by overriding.
+     *
+     * <p>Used by {@code jk jdk discover} to surface JDKs installed outside
+     * jk's managed directory.
+     */
+    default List<JdkHit> discoverAllJdks() throws IOException {
+        return List.of();
+    }
 }

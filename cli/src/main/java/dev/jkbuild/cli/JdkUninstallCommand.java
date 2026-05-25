@@ -5,7 +5,6 @@ import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
-import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkRegistry;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
@@ -41,8 +40,7 @@ public final class JdkUninstallCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        Path jdksRoot = jdksDir != null ? jdksDir : IntellijJdkDir.root();
-        JdkRegistry registry = new JdkRegistry(jdksRoot);
+        JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
 
         if (identifier != null && !identifier.isBlank()) {
@@ -148,9 +146,11 @@ public final class JdkUninstallCommand implements Callable<Integer> {
                 : survivors.getFirst()); // safety net; wizard branch already prompted
         defaults.set(promote);
         System.out.println(
-                Theme.colorize("➜ ", Theme.blue())
+                Theme.colorize("➜ ", Theme.brightGreen())
                         + Theme.colorize(promote.identifier(), Theme.focused())
-                        + " " + Theme.colorize("is now the default JDK", Theme.normalGray()));
+                        + " " + Theme.colorize("is now the ", Theme.normalGray())
+                        + Theme.colorize("default", Theme.focused())
+                        + Theme.colorize(" JDK", Theme.normalGray()));
     }
 
     private static boolean isInteractiveTerminal() {

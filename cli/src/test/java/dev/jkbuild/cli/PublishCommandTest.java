@@ -79,7 +79,7 @@ class PublishCommandTest {
                 group    = "com.example"
                 artifact = "widget"
                 version  = "1.0.0-SNAPSHOT"
-                jdk      = "21"
+                jdk      = 21
                 """);
         writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
 
@@ -97,7 +97,7 @@ class PublishCommandTest {
                 group    = "com.example"
                 artifact = "widget"
                 version  = "1.0.0-SNAPSHOT"
-                jdk      = "21"
+                jdk      = 21
                 """);
         writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
 
@@ -251,7 +251,7 @@ class PublishCommandTest {
                 group    = "com.example"
                 artifact = "widget"
                 version  = "1.0.0"
-                jdk      = "21"
+                jdk      = 21
                 """);
     }
 

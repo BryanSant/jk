@@ -81,13 +81,15 @@ class InstallCommandTest {
         Jk.execute("init",
                 "--group", "com.example",
                 "--name", "widget",
-                "--main", "com.example.App",
+                "--executable",
                 tempDir.toString());
-        Path src = tempDir.resolve("src/main/java/com/example/App.java");
+        // init generates a Main.java sample; overwrite it with a no-op main
+        // so the launcher's classpath/entrypoint test is hermetic.
+        Path src = tempDir.resolve("src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
                 package com.example;
-                public final class App {
+                public final class Main {
                     public static void main(String[] args) {}
                 }
                 """);
@@ -106,6 +108,6 @@ class InstallCommandTest {
         Path envJson = state.resolve("tools/envs/widget/env.json");
         assertThat(launcher).exists();
         assertThat(envJson).exists();
-        assertThat(Files.readString(launcher)).contains("com.example.App");
+        assertThat(Files.readString(launcher)).contains("com.example.Main");
     }
 }

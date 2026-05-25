@@ -41,4 +41,22 @@ public final class IntellijJdkDir {
         Path macHome = installDir.resolve("Contents").resolve("Home");
         return Files.isDirectory(macHome.resolve("bin")) ? macHome : installDir;
     }
+
+    /**
+     * Inverse of {@link #javaHome}: given a JAVA_HOME path, return the
+     * containing install directory. On macOS this strips the
+     * {@code /Contents/Home} suffix to recover the {@code .jdk} bundle dir;
+     * elsewhere it's identity.
+     */
+    public static Path installDirOf(Path javaHome) {
+        Path fileName = javaHome.getFileName();
+        Path parent = javaHome.getParent();
+        if (fileName != null && parent != null
+                && "Home".equals(fileName.toString())
+                && parent.getFileName() != null
+                && "Contents".equals(parent.getFileName().toString())) {
+            return parent.getParent();
+        }
+        return javaHome;
+    }
 }

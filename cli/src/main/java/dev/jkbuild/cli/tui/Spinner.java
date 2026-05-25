@@ -28,9 +28,9 @@ public final class Spinner implements AutoCloseable {
     /** Interval between frames. */
     static final long FRAME_MS = 120L;
 
-    // Reverse of the init title gradient: blue #3b82f6 → magenta #d946ef.
-    private static final int START_R = 0x3b, START_G = 0x82, START_B = 0xf6;
-    private static final int END_R = 0xd9, END_G = 0x46, END_B = 0xef;
+    // Reverse of the title gradient: violet #8150fe → coral #e3475b.
+    private static final int START_R = 0x81, START_G = 0x50, START_B = 0xfe;
+    private static final int END_R = 0xe3, END_G = 0x47, END_B = 0x5b;
 
     private static final String HIDE_CURSOR = "\033[?25l";
     private static final String SHOW_CURSOR = "\033[?25h";

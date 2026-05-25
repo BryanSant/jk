@@ -31,6 +31,9 @@ public final class LockfileWriter {
         out.append("version = ").append(lockfile.version()).append('\n');
         out.append("generated-by = ").append(quote(lockfile.generatedBy())).append('\n');
         out.append("resolution-algorithm = ").append(quote(lockfile.resolutionAlgorithm())).append('\n');
+        if (lockfile.jdk() != null) {
+            out.append("jdk = ").append(quote(lockfile.jdk())).append('\n');
+        }
 
         List<Lockfile.Package> sorted = new ArrayList<>(lockfile.packages());
         sorted.sort(Comparator

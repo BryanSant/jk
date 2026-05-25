@@ -41,13 +41,7 @@ import java.util.concurrent.Callable;
  * {@code --allow-snapshot} is set.
  */
 @Command(name = "publish", description = "Publish artifacts to a Maven repository")
-public final class PublishCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory containing jk.toml. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--repo-url", required = true,
+public final class PublishCommand implements Callable<Integer> {    @Option(names = "--repo-url", required = true,
             description = "Target Maven repository base URL.")
     URI repoUrl;
 
@@ -96,11 +90,11 @@ public final class PublishCommand implements Callable<Integer> {
             description = "Emit CycloneDX 1.6 (-cyclonedx.json) and SPDX 2.3 (-spdx.json) SBOMs.")
     boolean sbom;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException, InterruptedException {
-        Path projectDir = directory != null
-                ? directory.toAbsolutePath().normalize()
-                : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
             System.err.println("jk publish: " + jkBuildPath + " not found.");
@@ -222,7 +216,7 @@ public final class PublishCommand implements Callable<Integer> {
                         "group", project.group(),
                         "artifact", project.artifact(),
                         "version", project.version(),
-                        "jdk", project.jdk()));
+                        "jdk", String.valueOf(project.jdk())));
         return SlsaProvenance.generate(
                 List.of(new SlsaProvenance.Subject(jarFilename, Checksums.sha256Hex(jarBytes))),
                 ctx);

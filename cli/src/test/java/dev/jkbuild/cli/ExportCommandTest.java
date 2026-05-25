@@ -20,7 +20,7 @@ class ExportCommandTest {
                 group    = "com.example"
                 artifact = "widget"
                 version  = "1.0.0"
-                jdk      = "21"
+                jdk      = 21
 
                 [dependencies]
                 main = ["com.fasterxml.jackson.core:jackson-databind:2.18.2"]
@@ -42,7 +42,7 @@ class ExportCommandTest {
                 group    = "com.example"
                 artifact = "widget"
                 version  = "1.0.0"
-                jdk      = "21"
+                jdk      = 21
                 """, StandardCharsets.UTF_8);
         Files.writeString(tempDir.resolve("pom.xml"), "<existing/>\n");
 
@@ -58,7 +58,7 @@ class ExportCommandTest {
                 group    = "com.example"
                 artifact = "widget-parent"
                 version  = "1.0.0"
-                jdk      = "21"
+                jdk      = 21
 
                 [workspace]
                 members = ["core", "app"]
@@ -69,7 +69,7 @@ class ExportCommandTest {
                 group    = "com.example"
                 artifact = "widget-core"
                 version  = "1.0.0"
-                jdk      = "21"
+                jdk      = 21
                 """, StandardCharsets.UTF_8);
         Files.createDirectories(tempDir.resolve("app"));
         Files.writeString(tempDir.resolve("app/jk.toml"), """
@@ -77,7 +77,7 @@ class ExportCommandTest {
                 group    = "com.example"
                 artifact = "widget-app"
                 version  = "1.0.0"
-                jdk      = "21"
+                jdk      = 21
                 """, StandardCharsets.UTF_8);
 
         int exit = run("export", "-C", tempDir.toString(), "pom.xml");
@@ -108,7 +108,7 @@ class ExportCommandTest {
                 group    = "com.example"
                 artifact = "widget"
                 version  = "1.0.0"
-                jdk      = "21"
+                jdk      = 21
                 """, StandardCharsets.UTF_8);
 
         int exit = run("export", "-C", tempDir.toString(), "build.gradle.kts");

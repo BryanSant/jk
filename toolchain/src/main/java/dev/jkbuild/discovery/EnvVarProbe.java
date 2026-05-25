@@ -1,9 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.JdkHit;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 import java.util.function.Function;
 
@@ -20,7 +23,7 @@ public final class EnvVarProbe implements LocalToolProbe {
     EnvVarProbe(Function<String, String> env) { this.env = env; }
 
     @Override
-    public String name() { return "env"; }
+    public String name() { return "java-home"; }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {
@@ -45,5 +48,14 @@ public final class EnvVarProbe implements LocalToolProbe {
             return Optional.of(new DiscoveredTool(home, version.get(), name() + ":" + var));
         }
         return Optional.empty();
+    }
+
+    @Override
+    public List<JdkHit> discoverAllJdks() {
+        String value = env.apply("JAVA_HOME");
+        if (value == null || value.isBlank()) return List.of();
+        return ProbeSupport.discoverJdk(Path.of(value), name())
+                .map(List::of)
+                .orElseGet(List::of);
     }
 }

@@ -192,19 +192,18 @@ class RunCommandTest {
 
     @Test
     void runs_current_project_when_no_script_given(@TempDir Path tempDir) throws Exception {
-        // Scaffold a runnable project, write source that exits with code 7.
+        // Scaffold a runnable project, write source that exits with code = arg count.
         run("init",
                 "--group", "com.example",
                 "--name", "widget",
-                "--main", "com.example.App",
+                "--executable",
                 tempDir.toString());
-        Path src = tempDir.resolve("src/main/java/com/example/App.java");
+        Path src = tempDir.resolve("src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
                 package com.example;
-                public final class App {
+                public final class Main {
                     public static void main(String[] args) {
-                        // Echo args count back as the exit code.
                         System.exit(args.length);
                     }
                 }

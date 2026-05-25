@@ -59,7 +59,7 @@ class MavenPublisherTest {
     @Test
     void publishes_jar_pom_and_four_checksums_each() throws Exception {
         MavenPublisher publisher = new MavenPublisher(base, null, null);
-        JkBuild.Project project = new JkBuild.Project("com.example", "widget", "1.0.0", "21");
+        JkBuild.Project project = new JkBuild.Project("com.example", "widget", "1.0.0", 21);
         byte[] jarBytes = "fake-jar".getBytes(StandardCharsets.UTF_8);
         byte[] pomBytes = "<project/>".getBytes(StandardCharsets.UTF_8);
         publisher.publish(project, List.of(
@@ -84,7 +84,7 @@ class MavenPublisherTest {
     void basic_auth_header_is_attached_when_credentials_provided() throws Exception {
         MavenPublisher publisher = new MavenPublisher(base, "alice", "swordfish");
         publisher.publish(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 List.of(new MavenPublisher.Artifact(".jar", new byte[] {1, 2, 3})));
 
         String expected = "Basic " + Base64.getEncoder().encodeToString(
@@ -99,7 +99,7 @@ class MavenPublisherTest {
         GpgSigner signer = GpgSigner.fromKeyFile(key.secretKeyFile(), "test-pass".toCharArray());
 
         MavenPublisher publisher = new MavenPublisher(base, null, null);
-        JkBuild.Project project = new JkBuild.Project("com.example", "widget", "1.0.0", "21");
+        JkBuild.Project project = new JkBuild.Project("com.example", "widget", "1.0.0", 21);
         byte[] jarBytes = "fake-jar".getBytes(StandardCharsets.UTF_8);
         publisher.publish(project, List.of(
                 new MavenPublisher.Artifact(".jar", jarBytes)), SigningOptions.of(signer));
@@ -122,7 +122,7 @@ class MavenPublisherTest {
                 StandardCharsets.UTF_8) + "\"}").getBytes(StandardCharsets.UTF_8);
 
         MavenPublisher publisher = new MavenPublisher(base, null, null);
-        JkBuild.Project project = new JkBuild.Project("com.example", "widget", "1.0.0", "21");
+        JkBuild.Project project = new JkBuild.Project("com.example", "widget", "1.0.0", 21);
         byte[] jarBytes = "fake-jar".getBytes(StandardCharsets.UTF_8);
         publisher.publish(project,
                 List.of(new MavenPublisher.Artifact(".jar", jarBytes)),
@@ -146,7 +146,7 @@ class MavenPublisherTest {
 
         MavenPublisher publisher = new MavenPublisher(base, null, null);
         publisher.publish(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 List.of(new MavenPublisher.Artifact(".jar", new byte[] {1, 2, 3})),
                 new SigningOptions(gpg, fake));
 
@@ -159,7 +159,7 @@ class MavenPublisherTest {
         MavenPublisher publisher = new MavenPublisher(base, null, null);
         failNext = true;
         assertThatThrownBy(() -> publisher.publish(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 List.of(new MavenPublisher.Artifact(".jar", new byte[] {1, 2, 3}))))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("401");

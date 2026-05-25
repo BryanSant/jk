@@ -24,7 +24,7 @@ class JkBuildRendererTest {
     @Test
     void renders_a_minimal_project_block() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 JkBuild.Dependencies.empty());
         String out = JkBuildRenderer.render(model);
         assertThat(out).isEqualTo("""
@@ -32,19 +32,19 @@ class JkBuildRendererTest {
                 group    = "com.example"
                 artifact = "widget"
                 version  = "1.0.0"
-                jdk      = "21"
-                language = "java"
+                jdk      = 21
+                java     = 21
                 """);
     }
 
     @Test
     void renders_main_shadow_and_native_when_set() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21",
-                        "com.example.App", true, true, "kotlin"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 0, 2,
+                        "com.example.App", true, true),
                 JkBuild.Dependencies.empty());
         String out = JkBuildRenderer.render(model);
-        assertThat(out).contains("language = \"kotlin\"");
+        assertThat(out).contains("kotlin   = 2");
         assertThat(out).contains("main     = \"com.example.App\"");
         assertThat(out).contains("shadow   = true");
         assertThat(out).contains("native   = true");
@@ -63,7 +63,7 @@ class JkBuildRendererTest {
                         VersionSelector.parse("5.11.0"))));
 
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope));
         String out = JkBuildRenderer.render(model);
 
@@ -80,7 +80,7 @@ class JkBuildRendererTest {
     @Test
     void renders_repositories_block_when_present() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 JkBuild.Dependencies.empty(),
                 List.of(new RepositorySpec("sonatype",
                         URI.create("https://s01.oss.sonatype.org/content/repositories/snapshots/"))));
@@ -93,7 +93,7 @@ class JkBuildRendererTest {
     @Test
     void renders_workspace_block() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget-parent", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget-parent", "1.0.0", 21),
                 JkBuild.Dependencies.empty(),
                 List.of(),
                 Profiles.empty(),
@@ -117,7 +117,7 @@ class JkBuildRendererTest {
                         VersionSelector.parseFloating("^2.0.0"), false)));
 
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope));
         String out = JkBuildRenderer.render(model);
 
@@ -135,7 +135,7 @@ class JkBuildRendererTest {
                         VersionSelector.parse("3.4.0"))));
 
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", "21"),
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope),
                 List.of(new RepositorySpec("internal",
                         URI.create("https://nexus.example.com/repository/maven-public/"))));

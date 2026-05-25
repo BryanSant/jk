@@ -30,14 +30,10 @@ public final class ExportCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "<file>",
             description = "Target file: pom.xml (Gradle export lands at v1.1+).")
-    Path target;
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory containing jk.toml. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--force", description = "Overwrite an existing pom.xml.")
+    Path target;    @Option(names = "--force", description = "Overwrite an existing pom.xml.")
     boolean force;
+
+    @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Override
     public Integer call() throws IOException {
@@ -53,9 +49,7 @@ public final class ExportCommand implements Callable<Integer> {
             return 64; // EX_USAGE
         }
 
-        Path projectDir = directory != null
-                ? directory.toAbsolutePath().normalize()
-                : Path.of(".").toAbsolutePath().normalize();
+        Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
             System.err.println("jk export: " + jkBuildPath + " not found.");

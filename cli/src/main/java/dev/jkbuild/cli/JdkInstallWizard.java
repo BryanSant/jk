@@ -96,14 +96,14 @@ final class JdkInstallWizard {
 
     static Wizard buildWizard(List<VendorOption> vendors, String vendorDefault) {
         WizardStep.RadioStep.Builder versionStep = WizardStep.RadioStep
-                .horizontal("version", "Select a JDK Version:");
+                .horizontal("version", "Select a JDK Version");
         for (String v : SUPPORTED_MAJORS) {
             versionStep.choice(v, v);
         }
         versionStep.defaultChoice(DEFAULT_MAJOR);
 
         WizardStep.RadioStep.Builder vendorStep = WizardStep.RadioStep
-                .vertical("vendor", "Select a JDK Vendor:");
+                .vertical("vendor", "Select a JDK Vendor");
         for (VendorOption v : vendors) {
             vendorStep.choice(v.id(), v.label(), answers -> hintForAnswers(v, answers));
         }

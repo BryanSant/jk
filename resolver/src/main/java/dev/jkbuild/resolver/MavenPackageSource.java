@@ -11,15 +11,17 @@ import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.pubgrub.PackageSource;
 import dev.jkbuild.resolver.pubgrub.Term;
 import dev.jkbuild.resolver.pubgrub.VersionSet;
+import dev.jkbuild.util.JkThreads;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 
 /**
  * Adapts a {@link MavenRepo} + {@link EffectivePomBuilder} into the
@@ -27,15 +29,28 @@ import java.util.Set;
  *
  * <p>Caches versions and dep lists in-memory per solver run so repeated
  * lookups during conflict resolution don't re-hit the network.
+ *
+ * <p>After resolving a package's dependency list, the source
+ * speculatively prefetches {@code maven-metadata.xml} for each transitive
+ * on {@link JkThreads#io()}. PubGrub explores one package at a time, so
+ * by the time it asks for those packages' versions the metadata is
+ * already in the on-disk cache. A {@link Semaphore} caps concurrent
+ * prefetches so we don't get rate-limited by Maven Central; the cache
+ * maps are switched to {@link ConcurrentHashMap} so speculative writes
+ * are safe.
  */
 public final class MavenPackageSource implements PackageSource {
 
     private static final Set<String> FOLLOWED_SCOPES = Set.of("compile", "runtime");
 
+    /** Max concurrent speculative prefetches. Tuned to stay polite to Maven Central. */
+    private static final int PREFETCH_PERMITS = 8;
+
     private final RepoGroup repos;
     private final EffectivePomBuilder pomBuilder;
-    private final Map<String, List<String>> versionCache = new HashMap<>();
-    private final Map<String, List<Term>> depsCache = new HashMap<>();
+    private final Map<String, List<String>> versionCache = new ConcurrentHashMap<>();
+    private final Map<String, List<Term>> depsCache = new ConcurrentHashMap<>();
+    private final Semaphore prefetchSlots = new Semaphore(PREFETCH_PERMITS);
 
     public MavenPackageSource(MavenRepo repo, EffectivePomBuilder pomBuilder) {
         this(RepoGroup.of(repo), pomBuilder);
@@ -86,8 +101,39 @@ public final class MavenPackageSource implements PackageSource {
             // ranges (rare in practice) still need their own parser.
             out.add(Term.positive(dep.module(), VersionSet.atLeast(dep.version(), true)));
         }
-        depsCache.put(key, List.copyOf(out));
-        return depsCache.get(key);
+        List<Term> immutable = List.copyOf(out);
+        depsCache.put(key, immutable);
+        // PubGrub will ask for these packages' versions next. Warm the
+        // metadata cache speculatively while it's still chewing on this
+        // package — turns a serial RTT chain into a near-flat fetch curve.
+        prefetchVersionsAsync(immutable);
+        return immutable;
+    }
+
+    /**
+     * Fire-and-forget metadata fetches for each {@code Term}'s package on
+     * {@link JkThreads#io()}. Bounded by {@link #prefetchSlots} so a deep
+     * fan-out doesn't blast a remote repo. Failures are swallowed — the
+     * solver's own synchronous {@link #versions} call will report the
+     * real error if the package is genuinely unreachable.
+     */
+    private void prefetchVersionsAsync(List<Term> deps) {
+        for (Term dep : deps) {
+            String pkg = dep.pkg();
+            if (versionCache.containsKey(pkg)) continue;
+            JkThreads.io().execute(() -> {
+                try {
+                    prefetchSlots.acquire();
+                    try {
+                        versions(pkg);
+                    } finally {
+                        prefetchSlots.release();
+                    }
+                } catch (Exception ignored) {
+                    // best-effort prefetch; surface errors via the sync path
+                }
+            });
+        }
     }
 
     private static Coordinate withVersion(String pkg, String version) {

@@ -38,13 +38,7 @@ import java.util.stream.Stream;
  * processors join in later slices.
  */
 @Command(name = "compile", description = "Type-check without producing artifacts")
-public final class CompileCommand implements Callable<Integer> {
-
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
-    Path directory;
-
-    @Option(names = "--profile", paramLabel = "<name>",
+public final class CompileCommand implements Callable<Integer> {    @Option(names = "--profile", paramLabel = "<name>",
             description = "Build profile to apply. Default: auto (ci if CI=true, else none).")
     String profileName;
 
@@ -52,9 +46,11 @@ public final class CompileCommand implements Callable<Integer> {
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @Override
     public Integer call() throws IOException {
-        Path dir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
+        Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
@@ -89,7 +85,7 @@ public final class CompileCommand implements Callable<Integer> {
 
         Profile profile = resolveProfile(project.profiles(), profileName);
 
-        int release = parseReleaseFromJdk(project.project().jdk());
+        int release = project.project().javaRelease();
 
         Path scratch = Files.createTempDirectory("jk-check-");
         Path javaHome = CompileToolchain.resolveJavaHome(dir);
@@ -199,24 +195,4 @@ public final class CompileCommand implements Callable<Integer> {
         return null;
     }
 
-    /**
-     * Parse a release number from the {@code project.jdk} pin. Accepts
-     * {@code "25"} or SDKMAN-style {@code "25.0.3-tem"}. Defaults to 25
-     * if absent or unparseable.
-     */
-    static int parseReleaseFromJdk(String jdk) {
-        if (jdk == null || jdk.isBlank()) return 25;
-        StringBuilder digits = new StringBuilder();
-        for (int i = 0; i < jdk.length(); i++) {
-            char c = jdk.charAt(i);
-            if (Character.isDigit(c)) digits.append(c);
-            else break;
-        }
-        if (digits.length() == 0) return 25;
-        try {
-            return Integer.parseInt(digits.toString());
-        } catch (NumberFormatException e) {
-            return 25;
-        }
-    }
 }
