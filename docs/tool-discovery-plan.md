@@ -306,7 +306,7 @@ End-to-end:
    Add an opt-in `--verify-linked` that runs `sha256sum` over the linked
    tree and compares against a recorded fingerprint?
 
-4. **What about user-pinned tools.** `.jk-version` / `.sdkmanrc` pin the
+4. **What about user-pinned tools.** `.jdk-version` / `.sdkmanrc` pin the
    project to a JDK. If the user *already* has that JDK on SDKMAN, we
    should prefer linking over downloading even when nothing's in
    `$JK_JDKS_DIR/`. The plan covers this implicitly via step 4 of
@@ -331,7 +331,7 @@ End-to-end:
 1. *Exact version only — no fuzzy match. Implemented in `ToolHealth.isHealthy`.*
 2. *Probe `ServiceLoader`, with the acknowledged limitation that it's JVM-mode only. `Probes.defaultChain()` appends ServiceLoader-discovered entries after the built-ins.*
 3. *`--verify-linked` opt-in. Lives on `jk jdk reconcile` and `jk tool reconcile`. Default-off. Writes `.fingerprint` sidecars via `TreeFingerprint`.*
-4. *Tested. `SdkmanProbeTest.user_pinned_tool_already_in_sdkman_resolves_without_download` covers the `.jk-version`-pins-a-SDKMAN-install path.*
+4. *Tested. `SdkmanProbeTest.user_pinned_tool_already_in_sdkman_resolves_without_download` covers the `.jdk-version`-pins-a-SDKMAN-install path.*
 5. *Containers (see §11 below).*
 6. *No. `jk install` (Maven-coord tool installer) stays as-is.*
 

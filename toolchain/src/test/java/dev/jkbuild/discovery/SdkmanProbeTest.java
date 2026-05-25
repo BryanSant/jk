@@ -58,7 +58,7 @@ class SdkmanProbeTest {
 
     @Test
     void user_pinned_tool_already_in_sdkman_resolves_without_download(@TempDir Path tempDir) throws Exception {
-        // Open Q #4: user has .jk-version pinning 21.0.5-tem; SDKMAN has it.
+        // Open Q #4: user has .jdk-version pinning 21.0.5-tem; SDKMAN has it.
         // Provisioner should link straight from SDKMAN, no download attempt.
         Path sdkman = tempDir.resolve(".sdkman");
         Path candidate = sdkman.resolve("candidates").resolve("java").resolve("21.0.5-tem");

@@ -121,7 +121,7 @@ public final class JdkProvisioning {
                                     .contains(e.product().toLowerCase(Locale.ROOT)));
         }
         // No catalog match — accept JAVA_HOME if its version satisfies a
-        // bare-version spec (e.g., `.jk-version` says `21` and JAVA_HOME is JDK 21).
+        // bare-version spec (e.g., `.jdk-version` says `21` and JAVA_HOME is JDK 21).
         if (!spec.bareVersion()) return false;
         return version.equals(spec.value()) || version.startsWith(spec.value() + ".");
     }

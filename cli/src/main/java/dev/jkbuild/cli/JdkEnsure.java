@@ -25,7 +25,7 @@ import java.util.Optional;
  *
  * <p>Lookup order:
  * <ol>
- *   <li>An already-installed JDK keyed on the project's {@code .jk-version}
+ *   <li>An already-installed JDK keyed on the project's {@code .jdk-version}
  *       (via {@link JdkResolver#forProject}).</li>
  *   <li>The {@code jdk} stamped in {@code jk.lock}, looked up by install
  *       identifier in the local registry.</li>
@@ -53,7 +53,7 @@ final class JdkEnsure {
 
     static Outcome ensure(Path projectDir, Path jdksDirOverride, JkBuild build, Lockfile lock)
             throws IOException, InterruptedException {
-        // 1. Already pinned via .jk-version → use what's there.
+        // 1. Already pinned via .jdk-version → use what's there.
         Optional<InstalledJdk> resolved = JdkResolver.forProject(projectDir, jdksDirOverride);
         if (resolved.isPresent()) {
             return new Outcome(resolved, Source.ALREADY_PINNED, null);

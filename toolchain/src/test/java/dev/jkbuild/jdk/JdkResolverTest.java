@@ -22,7 +22,7 @@ class JdkResolverTest {
 
         Path project = tempDir.resolve("project");
         Files.createDirectories(project);
-        Files.writeString(project.resolve(".jk-version"), "temurin-21.0.5");
+        Files.writeString(project.resolve(".jdk-version"), "temurin-21.0.5");
 
         JdkResolver resolver = new JdkResolver(isolatedRegistry(jdks));
         assertThat(resolver.resolve(project))
@@ -37,7 +37,7 @@ class JdkResolverTest {
         makeJdkInstall(jdks.resolve("temurin-21.0.5"), "21.0.5");
         Path project = tempDir.resolve("project");
         Files.createDirectories(project);
-        Files.writeString(project.resolve(".jk-version"), "temurin-21");
+        Files.writeString(project.resolve(".jdk-version"), "temurin-21");
 
         assertThat(new JdkResolver(isolatedRegistry(jdks)).resolve(project))
                 .isPresent().get()

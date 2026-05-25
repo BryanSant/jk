@@ -138,7 +138,7 @@ class JdkCommandTest {
                 "-C", tempDir.toString(),
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(Files.readString(tempDir.resolve(".jk-version")).trim())
+        assertThat(Files.readString(tempDir.resolve(".jdk-version")).trim())
                 .isEqualTo("temurin-21.0.5");
     }
 
@@ -196,7 +196,7 @@ class JdkCommandTest {
         Path jdks = tempDir.resolve("jdks");
         Path jdkHome = jdks.resolve("temurin-21.0.5");
         makeJdkInstall(jdkHome);
-        Files.writeString(tempDir.resolve(".jk-version"), "temurin-21.0.5\n");
+        Files.writeString(tempDir.resolve(".jdk-version"), "temurin-21.0.5\n");
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream origOut = System.out;

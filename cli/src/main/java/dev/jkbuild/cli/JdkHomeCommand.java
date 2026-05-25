@@ -34,7 +34,7 @@ public final class JdkHomeCommand implements Callable<Integer> {    @Option(name
         Optional<InstalledJdk> jdk = JdkResolver.forProject(dir, jdksDir);
         if (jdk.isEmpty()) {
             System.err.println("jk jdk home: no pinned JDK for " + dir
-                    + " (write `.jk-version` via `jk jdk use <spec>`)");
+                    + " (write `.jdk-version` via `jk jdk use <spec>`)");
             return 2;
         }
         Path home = jdk.get().home();

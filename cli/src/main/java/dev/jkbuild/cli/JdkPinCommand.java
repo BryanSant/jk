@@ -16,7 +16,7 @@ import java.util.concurrent.Callable;
 
 /**
  * {@code jk jdk pin <spec>} — pin the project to an installed JDK by
- * writing {@code .jk-version}. The pin string is the directory name
+ * writing {@code .jdk-version}. The pin string is the directory name
  * under the IntelliJ JDK directory (e.g. {@code temurin-21.0.5}).
  */
 @Command(name = "pin", description = "Pin to a specific JDK version")
@@ -46,7 +46,7 @@ public final class JdkPinCommand implements Callable<Integer> {
         }
 
         String identifier = jdk.get().identifier();
-        Files.writeString(projectDir.resolve(".jk-version"),
+        Files.writeString(projectDir.resolve(".jdk-version"),
                 identifier + "\n", StandardCharsets.UTF_8);
         System.out.println("Pinned project to " + identifier);
         return 0;

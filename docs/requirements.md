@@ -159,7 +159,7 @@ $JK_JDKS_DIR/                   # installed JDKs (default: IntelliJ neighbor loc
 <project>/
   jk.toml                       # canonical manifest, TOML
   jk.lock                       # TOML, sorted, committed
-  .jk-version                   # optional, single-line JDK pin (feed vocabulary, e.g. `temurin-21`)
+  .jdk-version                   # optional, single-line JDK pin (feed vocabulary, e.g. `temurin-21`)
   .jk/                          # generated, gitignored
     classpath.txt
     jdk -> $JK_JDKS_DIR/...
@@ -207,9 +207,9 @@ Conventions:
 
 TOML. Sorted, deterministic (LF, terminal newline, two-space indent), no comments. Always committed to VCS. See §9.
 
-### 5.3 `.jk-version`
+### 5.3 `.jdk-version`
 
-Single line. JetBrains feed identifier — typically a `suggested_sdk_name` like `temurin-21`, or a bare version like `21` / `21.0.5`. Read on every `jk` invocation. If `jk.toml`'s `[project].jdk` is set, it takes precedence and `jk sync` regenerates `.jk-version`.
+Single line. JetBrains feed identifier — typically a `suggested_sdk_name` like `temurin-21`, or a bare version like `21` / `21.0.5`. Read on every `jk` invocation. If `jk.toml`'s `[project].jdk` is set, it takes precedence and `jk sync` regenerates `.jdk-version`.
 
 ---
 
@@ -683,7 +683,7 @@ jk jdk install openjdk-26      # Oracle OpenJDK 26
 jk jdk install temurin-21.0.5  # vendor + exact version
 ```
 
-Older SDKMAN-style strings (`21-tem`, `21.0.5-tem`) are no longer accepted; migrate `.jk-version` pins to the new vocabulary.
+Older SDKMAN-style strings (`21-tem`, `21.0.5-tem`) are no longer accepted; migrate `.jdk-version` pins to the new vocabulary.
 
 ### 12.4 Install location
 

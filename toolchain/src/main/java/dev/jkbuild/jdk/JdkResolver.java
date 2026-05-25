@@ -10,7 +10,7 @@ import java.util.Optional;
 /**
  * Resolves the JDK a project should use. Lookup order:
  * <ol>
- *   <li>{@code .jk-version} — its content is parsed as a {@link JdkSpec}
+ *   <li>{@code .jdk-version} — its content is parsed as a {@link JdkSpec}
  *       and resolved through {@link JdkProvisioning} (which consults the
  *       IntelliJ JDK directory and {@code JAVA_HOME}).</li>
  *   <li>None — caller falls back to {@code JAVA_HOME} / the running JVM.</li>
@@ -25,7 +25,7 @@ public final class JdkResolver {
     }
 
     public Optional<InstalledJdk> resolve(Path projectDir) throws IOException {
-        Optional<String> pin = readJkVersion(projectDir);
+        Optional<String> pin = readJdkVersion(projectDir);
         if (pin.isEmpty()) return Optional.empty();
         JdkSpec spec = JdkSpec.parse(pin.get());
         Optional<InstalledJdk> direct = registry.find(spec.value())
@@ -39,8 +39,8 @@ public final class JdkResolver {
                 .map(JdkProvisioning.Result::jdk);
     }
 
-    public static Optional<String> readJkVersion(Path projectDir) throws IOException {
-        Path file = projectDir.resolve(".jk-version");
+    public static Optional<String> readJdkVersion(Path projectDir) throws IOException {
+        Path file = projectDir.resolve(".jdk-version");
         if (!Files.exists(file)) return Optional.empty();
         String body = Files.readString(file).trim();
         return body.isEmpty() ? Optional.empty() : Optional.of(body);

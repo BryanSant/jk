@@ -16,7 +16,7 @@ import java.util.Objects;
  * with inherited IO.
  *
  * <p>jk does <i>not</i> automatically install GraalVM here — the user
- * pins a GraalVM JDK via {@code project.jdk} or {@code .jk-version}.
+ * pins a GraalVM JDK via {@code project.jdk} or {@code .jdk-version}.
  * If {@code native-image} is missing the driver fails with a clear hint
  * to {@code jk jdk install graalvm-25}.
  */

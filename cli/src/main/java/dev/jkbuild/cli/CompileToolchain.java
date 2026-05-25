@@ -64,9 +64,9 @@ final class CompileToolchain {
         if (home == null || home.isBlank()) home = System.getenv("JAVA_HOME");
         if (home == null || home.isBlank()) {
             throw new IllegalStateException(
-                    "Cannot resolve a JDK: no project pin (`.jk-version` or `.sdkmanrc`), "
+                    "Cannot resolve a JDK: no project pin (`.jdk-version` or `.sdkmanrc`), "
                     + "no `java.home` (running under native-image?), and `JAVA_HOME` is unset. "
-                    + "Pin a JDK with a `.jk-version` file, set `JAVA_HOME`, or run jk on a JVM.");
+                    + "Pin a JDK with a `.jdk-version` file, set `JAVA_HOME`, or run jk on a JVM.");
         }
         return Path.of(home);
     }

@@ -5,7 +5,7 @@ import java.util.Objects;
 
 /**
  * What the user typed to {@code jk jdk install <spec>} or
- * {@code .jk-version}. Matched against the JetBrains feed's
+ * {@code .jdk-version}. Matched against the JetBrains feed's
  * {@code shared_index_aliases} / {@code suggested_sdk_name}.
  *
  * <p>Examples:
