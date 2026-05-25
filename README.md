@@ -17,6 +17,15 @@ speaks Maven Central's protocol natively and ships first-class
 `jk mvn` / `jk gradle` passthroughs so you don't have to migrate to
 start using it.
 
+## Supported JDKs
+
+`jk` targets the forward-facing Java/Kotlin developer. The supported
+range is **JDK 17 and above** — specifically, every LTS at or after 17
+(17, 21, 25, …) plus the single most recent release on the JetBrains
+feed. There is no support for Java 8, 11, or any other interim release
+before 17. The catalog, registry, and `jk.toml` parser all enforce this
+floor.
+
 ## Quick start
 
 ```bash

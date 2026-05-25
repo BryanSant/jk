@@ -110,10 +110,25 @@ public final class TestCommand implements Callable<Integer> {    @Option(names =
         if (!ok) return 1;
 
         // 3. Run JUnit Platform on the test-runtime classpath (main + runtime + test).
+        // The launcher forks a JVM with the project's pinned JDK so tests
+        // run on real HotSpot rather than under jk's native-image VM.
         List<Path> runtimeClasspath = new ArrayList<>();
         runtimeClasspath.add(mainClasses);
         runtimeClasspath.addAll(testRuntimeCp);
-        JUnitLauncher.Result result = new JUnitLauncher().run(testClasses, runtimeClasspath);
+        JUnitLauncher.Result result;
+        try {
+            result = new JUnitLauncher().run(javaHome, testClasses, runtimeClasspath);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("jk test: interrupted");
+            return 130;
+        } catch (IOException e) {
+            // Most-common failure today: native-image build can't locate
+            // the JUnit launcher jars. The exception message is already
+            // user-friendly, so print it as-is without a stacktrace.
+            System.err.println(e.getMessage());
+            return 1;
+        }
 
         System.out.println("Tests: " + result.succeeded() + " passed, "
                 + result.failed() + " failed, "

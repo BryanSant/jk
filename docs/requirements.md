@@ -30,6 +30,15 @@ It exists because Maven is too verbose and non-reproducible, Gradle is too progr
 
 ## 2. Goals and Non-Goals
 
+### Supported JDK range
+
+jk targets the forward-facing Java/Kotlin developer. The supported set
+is **JDK 17 and above** — every LTS at or after 17 (17, 21, 25, 29, …)
+plus the single most recent release on the JetBrains feed. JDK 8 and
+JDK 11 are explicitly out of scope; jk's catalog, registry, and
+`jk.toml` parser all reject anything below 17. This is enforced
+centrally by `dev.jkbuild.jdk.SupportedJdk`.
+
 ### v1.0 Goals
 
 - Build, test, run, package, and publish Java and Kotlin projects (single-module and multi-module workspaces).

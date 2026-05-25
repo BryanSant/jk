@@ -102,7 +102,8 @@ class JdkInstallWizardTest {
                 17, "graalvm-jdk-17.0.12",
                 21, "graalvm-jdk-21.0.5",
                 25, "graalvm-jdk-25"));
-        Wizard w = JdkInstallWizard.buildWizard(List.of(temurin, graalvm), "Eclipse|Temurin");
+        Wizard w = JdkInstallWizard.buildWizard(List.of(25, 21, 17),
+                List.of(temurin, graalvm), "Eclipse|Temurin");
         WizardStep.RadioStep vendor = (WizardStep.RadioStep) w.steps().get(1);
 
         // User picks "17" → hints update to the 17 line.
@@ -172,7 +173,8 @@ class JdkInstallWizardTest {
     void wizard_builds_three_steps_with_expected_shape() {
         var temurin = vendorOption("Eclipse", "Temurin", Map.of(25, "temurin-25.0.1"));
         var openjdk = vendorOption("Oracle", "OpenJDK", Map.of(25, "openjdk-26"));
-        Wizard w = JdkInstallWizard.buildWizard(List.of(temurin, openjdk), "Eclipse|Temurin");
+        Wizard w = JdkInstallWizard.buildWizard(List.of(25, 21, 17),
+                List.of(temurin, openjdk), "Eclipse|Temurin");
         List<WizardStep> steps = w.steps();
         assertThat(steps).hasSize(3);
 

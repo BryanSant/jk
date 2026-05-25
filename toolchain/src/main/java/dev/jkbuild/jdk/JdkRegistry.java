@@ -106,10 +106,44 @@ public final class JdkRegistry {
         Map<Path, JdkHit> hits = new LinkedHashMap<>();
         for (CompletableFuture<List<JdkHit>> f : futures) {
             for (JdkHit hit : f.join()) {
+                if (!isSupportedHit(hit)) continue;
                 hits.putIfAbsent(hit.home(), hit);
             }
         }
         return new ArrayList<>(hits.values());
+    }
+
+    /**
+     * Drop installs below the supported floor ({@link SupportedJdk#MIN_MAJOR}).
+     * Hits whose {@code release} file is unreadable / lacks a parseable
+     * version are kept on the benefit of the doubt — they may be valid
+     * installs we can't classify, and silently hiding them would be worse
+     * than letting the user see an unknown row in {@code jk jdk list}.
+     */
+    private static boolean isSupportedHit(JdkHit hit) {
+        Integer m = majorOfVersion(hit.version());
+        if (m == null) return true;
+        return SupportedJdk.isSupported(m);
+    }
+
+    private static Integer majorOfVersion(String version) {
+        if (version == null || version.isEmpty()) return null;
+        int end = 0;
+        while (end < version.length() && Character.isDigit(version.charAt(end))) end++;
+        if (end == 0) return null;
+        try {
+            int n = Integer.parseInt(version.substring(0, end));
+            // Legacy "1.x" → x is the real major (only matters for inputs we'd
+            // reject anyway, but classify them honestly).
+            if (n != 1 || end == version.length()) return n;
+            int i = end + 1;
+            int j = i;
+            while (j < version.length() && Character.isDigit(version.charAt(j))) j++;
+            if (j == i) return n;
+            return Integer.parseInt(version.substring(i, j));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     public Optional<InstalledJdk> find(String identifier) throws IOException {

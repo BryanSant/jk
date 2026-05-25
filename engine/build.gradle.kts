@@ -11,9 +11,11 @@ dependencies {
     implementation(project(":io"))
     implementation(libs.asm)
     implementation(libs.asm.tree)
-    // jk launches JUnit Platform programmatically for jk test — these need
-    // to be on the runtime classpath, not just the test classpath.
+    // jk forks a JVM child for `jk test` that runs JUnit's ConsoleLauncher;
+    // both jars need to be in the install-dist `lib/` dir so the launcher
+    // can locate them and add them to the child's classpath.
     implementation(libs.junit.platform.launcher)
+    implementation(libs.junit.platform.console)
     implementation(libs.junit.jupiter)
     // Kotlin support is now subprocess-based — SubprocessKotlincStrategy
     // execs <kotlin-home>/bin/kotlinc from a jk-installed distribution.

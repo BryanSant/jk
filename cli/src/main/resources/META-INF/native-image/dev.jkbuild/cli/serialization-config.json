@@ -1,0 +1,10 @@
+{
+  "_comment": "Serialization metadata for classes reached by `jk test` in the native image. JUnit Platform 6.x ships no native-image config of its own (unlike 5.x), so we register the types its launcher serialises here. Add new entries when a downstream upgrade surfaces a fresh SerializationConstructorAccessor miss.",
+  "types": [
+    {"name": "org.junit.platform.engine.UniqueId$SerializedForm"},
+    {"name": "org.junit.platform.engine.UniqueId$Segment"},
+    {"name": "org.junit.platform.engine.UniqueId"}
+  ],
+  "lambdaCapturingTypes": [],
+  "proxies": []
+}

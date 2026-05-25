@@ -11,9 +11,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 class JdkLtsTest {
 
     @Test
-    void legacy_lts_pair() {
-        assertThat(JdkLts.isLtsMajor(8)).isTrue();
-        assertThat(JdkLts.isLtsMajor(11)).isTrue();
+    void legacy_pre_17_majors_are_not_lts() {
+        // jk intentionally drops 8 and 11 — they're below the supported floor.
+        assertThat(JdkLts.isLtsMajor(8)).isFalse();
+        assertThat(JdkLts.isLtsMajor(11)).isFalse();
     }
 
     @Test
@@ -34,20 +35,21 @@ class JdkLtsTest {
 
     @Test
     void latest_lts_in_today_feed_is_25() {
-        // Snapshot of what the JetBrains feed publishes as of mid-2026.
-        var feedMajors = List.of(8, 11, 17, 21, 24, 25, 26);
+        // Snapshot of what the JetBrains feed publishes as of mid-2026,
+        // already filtered to jk's supported range (>= 17).
+        var feedMajors = List.of(17, 21, 24, 25, 26);
         assertThat(JdkLts.latestLtsIn(feedMajors)).hasValue(25);
     }
 
     @Test
     void latest_lts_advances_when_29_ships() {
-        var futureFeed = List.of(11, 17, 21, 25, 27, 28, 29);
+        var futureFeed = List.of(17, 21, 25, 27, 28, 29);
         assertThat(JdkLts.latestLtsIn(futureFeed)).hasValue(29);
     }
 
     @Test
     void latest_lts_empty_when_no_candidates_are_lts() {
-        var weirdFeed = List.of(9, 10, 12, 22, 26);
-        assertThat(JdkLts.latestLtsIn(weirdFeed)).isEqualTo(OptionalInt.empty());
+        var nonLts = List.of(22, 23, 26);
+        assertThat(JdkLts.latestLtsIn(nonLts)).isEqualTo(OptionalInt.empty());
     }
 }

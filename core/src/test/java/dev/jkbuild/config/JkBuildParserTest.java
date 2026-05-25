@@ -43,6 +43,34 @@ class JkBuildParserTest {
     }
 
     @Test
+    void rejects_project_java_below_17() {
+        assertThatThrownBy(() -> JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "1.0.0"
+                java     = 11
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("project.java = 11")
+                .hasMessageContaining("JDK 17 and above");
+    }
+
+    @Test
+    void rejects_project_jdk_below_17() {
+        assertThatThrownBy(() -> JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "1.0.0"
+                jdk      = 8
+                java     = 17
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("project.jdk = 8");
+    }
+
+    @Test
     void missing_required_key_rejected() {
         assertThatThrownBy(() -> JkBuildParser.parse("""
                 [project]

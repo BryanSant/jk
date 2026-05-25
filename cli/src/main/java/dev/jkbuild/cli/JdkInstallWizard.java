@@ -14,7 +14,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -26,10 +25,21 @@ import java.util.TreeMap;
  */
 final class JdkInstallWizard {
 
-    /** LTS-only set for v1. Non-LTS / preview majors stay off the wheel. */
-    static final List<String> SUPPORTED_MAJORS = List.of("25", "21", "17");
-    static final Set<Integer> SUPPORTED_MAJORS_INT = Set.of(25, 21, 17);
-    static final String DEFAULT_MAJOR = "25";
+    /**
+     * Majors the wizard exposes — derived from the (already supported-
+     * filtered) catalog rather than hard-coded, so when JDK 27 ships
+     * we don't have to update a constant.
+     */
+    static List<Integer> supportedMajorsFrom(JdkCatalog catalog, String os, String arch) {
+        var sorted = new java.util.TreeSet<Integer>(Comparator.reverseOrder());
+        for (JdkCatalog.Entry e : catalog.entries()) {
+            if (e.preview()) continue;
+            if (!e.os().equals(os)) continue;
+            if (!e.arch().equals(arch)) continue;
+            sorted.add(e.majorVersion());
+        }
+        return List.copyOf(sorted);
+    }
 
     /** Separator used inside vendor-step choice IDs to encode "vendor|product". */
     private static final String VENDOR_PRODUCT_SEP = "|";
@@ -79,9 +89,13 @@ final class JdkInstallWizard {
         if (vendors.isEmpty()) {
             return Optional.empty();
         }
+        List<Integer> majors = supportedMajorsFrom(catalog, os, arch);
+        if (majors.isEmpty()) {
+            return Optional.empty();
+        }
         String vendorDefault = pickVendorDefault(vendors);
 
-        Wizard wizard = buildWizard(vendors, vendorDefault);
+        Wizard wizard = buildWizard(majors, vendors, vendorDefault);
         Optional<Answers> ans = wizard.run(terminal);
         if (ans.isEmpty()) return Optional.empty();
         Answers a = ans.get();
@@ -94,13 +108,20 @@ final class JdkInstallWizard {
         return entry.map(e -> new Result(e, makeDefault));
     }
 
-    static Wizard buildWizard(List<VendorOption> vendors, String vendorDefault) {
+    static Wizard buildWizard(List<Integer> majors, List<VendorOption> vendors, String vendorDefault) {
         WizardStep.RadioStep.Builder versionStep = WizardStep.RadioStep
                 .horizontal("version", "Select a JDK Version");
-        for (String v : SUPPORTED_MAJORS) {
-            versionStep.choice(v, v);
+        for (Integer m : majors) {
+            String s = m.toString();
+            versionStep.choice(s, s);
         }
-        versionStep.defaultChoice(DEFAULT_MAJOR);
+        // Default to the latest LTS we have on hand; if there's no LTS in
+        // the catalog at all (unlikely), fall back to the highest major.
+        int defaultMajor = majors.stream()
+                .filter(dev.jkbuild.jdk.JdkLts::isLtsMajor)
+                .max(Integer::compareTo)
+                .orElse(majors.getFirst());
+        versionStep.defaultChoice(String.valueOf(defaultMajor));
 
         WizardStep.RadioStep.Builder vendorStep = WizardStep.RadioStep
                 .vertical("vendor", "Select a JDK Vendor");
@@ -166,7 +187,11 @@ final class JdkInstallWizard {
             if (e.preview()) continue;
             if (!e.os().equals(os)) continue;
             if (!e.arch().equals(arch)) continue;
-            if (!SUPPORTED_MAJORS_INT.contains(e.majorVersion())) continue;
+            // Catalogs from JdkCatalogClient are already supported-filtered;
+            // this defensive check covers programmatically-constructed
+            // catalogs (tests, fixtures) so an unsupported major from those
+            // can't leak through to the wizard.
+            if (!dev.jkbuild.jdk.SupportedJdk.isSupported(e.majorVersion())) continue;
             String key = e.vendor() + VENDOR_PRODUCT_SEP + e.product();
             var byMajor = perKey.computeIfAbsent(key, k -> new TreeMap<>());
             var prior = byMajor.get(e.majorVersion());

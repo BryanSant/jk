@@ -91,6 +91,8 @@ public final class JkBuildParser {
         int jdk = intOrZero(project, "jdk", "project.jdk");
         int java = intOrZero(project, "java", "project.java");
         int kotlin = intOrZero(project, "kotlin", "project.kotlin");
+        requireSupportedMajor("project.jdk", jdk);
+        requireSupportedMajor("project.java", java);
         if (java > 0 && kotlin > 0) {
             throw new JkBuildParseException(
                     "project must set exactly one of `java` or `kotlin`, not both");
@@ -112,6 +114,20 @@ public final class JkBuildParser {
             throw new JkBuildParseException(path + " out of range: " + value);
         }
         return value.intValue();
+    }
+
+    /**
+     * jk only supports JDK 17 and above (LTS + latest). Reject any older
+     * value at parse time so users learn the constraint up front instead
+     * of in the middle of a resolve.
+     */
+    private static void requireSupportedMajor(String path, int value) {
+        if (value == 0) return;
+        if (value < 17) {
+            throw new JkBuildParseException(path + " = " + value
+                    + " is not supported — jk targets JDK 17 and above "
+                    + "(LTS: 17, 21, 25, … plus the latest release).");
+        }
     }
 
     private static Map<String, GitSource> parseSources(TomlTable root) {

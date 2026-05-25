@@ -183,7 +183,24 @@ public final class JdkCatalogClient {
                         javaHomeSubpath));
             }
         }
-        return new JdkCatalog(entries);
+        return new JdkCatalog(filterSupported(entries));
+    }
+
+    /**
+     * Drop catalog rows for majors jk doesn't claim to support: anything
+     * below {@link SupportedJdk#MIN_MAJOR}, and any non-LTS that isn't the
+     * single most-recent major in the feed. The JetBrains feed publishes
+     * 8 / 11 / 17 / 21 / 23 / 24 / 25 / 26 / …; after this pass we keep
+     * {17, 21, 25, latestMajor}.
+     */
+    private static List<JdkCatalog.Entry> filterSupported(List<JdkCatalog.Entry> all) {
+        if (all.isEmpty()) return all;
+        int latest = all.stream().mapToInt(JdkCatalog.Entry::majorVersion).max().orElse(0);
+        List<JdkCatalog.Entry> kept = new ArrayList<>(all.size());
+        for (JdkCatalog.Entry e : all) {
+            if (SupportedJdk.isFirstClass(e.majorVersion(), latest)) kept.add(e);
+        }
+        return kept;
     }
 
     private static List<String> readStrings(JsonNode node) {
