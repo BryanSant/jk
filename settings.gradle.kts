@@ -28,5 +28,6 @@ include(
     ":supply-chain",
     ":image",
     ":compat",
+    ":test-runner",
     ":cli",
 )

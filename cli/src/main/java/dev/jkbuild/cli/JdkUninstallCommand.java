@@ -184,6 +184,12 @@ public final class JdkUninstallCommand implements Callable<Integer> {
     /**
      * Single bulk confirmation. {@code --yes} short-circuits. Returns
      * {@code true} on Enter / {@code y} / {@code yes}; anything else aborts.
+     *
+     * <p>Reads via {@link System#console} when one is attached — important
+     * for the wizard path, where JLine's {@code system(true)} terminal will
+     * have closed the underlying {@code System.in} stream by the time we
+     * get here. Falls back to {@code System.in} for piped / non-TTY runs
+     * (tests, CI), where {@code System.console()} returns {@code null}.
      */
     private boolean confirmDeletion(List<JdkHit> victims) throws IOException {
         if (assumeYes) return true;
@@ -201,12 +207,20 @@ public final class JdkUninstallCommand implements Callable<Integer> {
             System.out.print("[Y/n] ");
         }
         System.out.flush();
-        var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-        String line = reader.readLine();
+        String line = readPromptLine();
         if (line == null) return false;
         String trimmed = line.trim();
         if (trimmed.isEmpty()) return true;
         return trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
+    }
+
+    private static String readPromptLine() throws IOException {
+        var console = System.console();
+        if (console != null) {
+            return console.readLine();
+        }
+        var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        return reader.readLine();
     }
 
     /**

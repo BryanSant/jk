@@ -38,6 +38,29 @@ dependencies {
     testImplementation(libs.tukaani.xz)
 }
 
+// The jk-test-runner jar is the bytecode jk forks into a child JVM to run
+// JUnit Platform on the user's behalf. It's a data file from cli's
+// perspective — never on cli's own classpath — so we declare a custom
+// configuration that won't drag the runner's runtime deps into cli, and
+// then splice the jar into cli's resources for both installDist and
+// native-image distributions.
+val testRunnerJar by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    // Only the jar itself — no transitive deps. The user's project supplies
+    // junit-platform-launcher etc. via lock-time injection (LockOrchestrator).
+    isTransitive = false
+}
+dependencies {
+    testRunnerJar(project(":test-runner"))
+}
+tasks.processResources {
+    from(testRunnerJar) {
+        into("dev/jkbuild/test/runner")
+        rename { "jk-test-runner.jar" }
+    }
+}
+
 tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.add("-Aproject=dev.jkbuild.cli")
 }
