@@ -32,8 +32,8 @@ jk compile
 jk build
 jk test
 
-# Run a published CLI tool ephemerally (the jk exec ≈ uvx analog)
-jk exec com.diffplug.spotless:spotless-cli:2.45.0 -- check
+# Run a published CLI tool ephemerally (≈ uvx)
+jk tool run com.diffplug.spotless:spotless-cli:2.45.0 -- check
 
 # Pin a JDK per-project
 jk jdk install 25.0.3-tem
@@ -50,7 +50,7 @@ jk mvn package
 | Dependencies | `add` `remove` `lock` `sync` `update` `tree` `why` `fetch` |
 | Build | `compile` `build` `test` `clean` `explain` `why-rebuilt` |
 | Toolchain | `jdk install/list/use/uninstall/reconcile/dir` |
-| CLI tools | `tool install/list/uninstall/run/dir`, `exec` (alias: `jkx`) |
+| CLI tools | `tool install/list/uninstall/run/dir` |
 | Maven / Gradle | `mvn` `gradle` (passthroughs), `import` `export` |
 | Publishing | `publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOM) |
 | Supply chain | `audit` (OSV), `deny` (license/source/yanked policy) |

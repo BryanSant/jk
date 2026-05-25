@@ -136,35 +136,8 @@ class InstallExecCommandTest {
     }
 
     @Test
-    void exec_resolves_and_returns_tool_exit_code(@TempDir Path tempDir) throws Exception {
+    void tool_run_resolves_and_returns_tool_exit_code(@TempDir Path tempDir) throws Exception {
         // A jar carrying a real Main that exits 0.
-        Path realJar = buildRealRunnableJar(tempDir, "ToolMain");
-        servePom("com.example", "tool", "1.0.0");
-        served.put(mavenPath("com.example", "tool", "1.0.0", "jar"), Files.readAllBytes(realJar));
-
-        int exit = run("exec",
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--repo-url", base.toString(),
-                "com.example:tool:1.0.0");
-        // The synthetic ToolMain is a no-op; exit code is whatever it returns.
-        assertThat(exit).isEqualTo(0);
-    }
-
-    @Test
-    void jkx_alias_dispatches_to_exec(@TempDir Path tempDir) throws Exception {
-        Path realJar = buildRealRunnableJar(tempDir, "ToolMain");
-        servePom("com.example", "tool", "1.0.0");
-        served.put(mavenPath("com.example", "tool", "1.0.0", "jar"), Files.readAllBytes(realJar));
-
-        int exit = run("jkx",
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--repo-url", base.toString(),
-                "com.example:tool:1.0.0");
-        assertThat(exit).isEqualTo(0);
-    }
-
-    @Test
-    void tool_run_shares_exec_implementation(@TempDir Path tempDir) throws Exception {
         Path realJar = buildRealRunnableJar(tempDir, "ToolMain");
         servePom("com.example", "tool", "1.0.0");
         served.put(mavenPath("com.example", "tool", "1.0.0", "jar"), Files.readAllBytes(realJar));
@@ -173,6 +146,7 @@ class InstallExecCommandTest {
                 "--cache-dir", tempDir.resolve("cache").toString(),
                 "--repo-url", base.toString(),
                 "com.example:tool:1.0.0");
+        // The synthetic ToolMain is a no-op; exit code is whatever it returns.
         assertThat(exit).isEqualTo(0);
     }
 

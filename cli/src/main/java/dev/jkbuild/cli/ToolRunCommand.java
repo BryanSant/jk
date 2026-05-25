@@ -25,8 +25,10 @@ import java.util.concurrent.Callable;
 
 /**
  * {@code jk tool run <coord> -- <args>} — ephemeral exec from a Maven coord
- * (PRD §20.3). Same code path as {@code jk exec} (aliased {@code jkx});
- * {@code exec} is the top-level shorthand for the most-typed ergonomic case.
+ * (PRD §20.3). Resolves the coordinate, caches the jar under
+ * {@code $JK_CACHE_DIR}, and execs its {@code Main-Class}. {@code jk activate}
+ * scripts also expose this on the path as a {@code jkx} alias for
+ * uvx-style muscle memory.
  */
 @Command(name = "run", description = "Ephemerally run a tool from a Maven coord")
 public final class ToolRunCommand implements Callable<Integer> {
@@ -53,27 +55,18 @@ public final class ToolRunCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws IOException, InterruptedException {
-        return Ephemeral.run(coord, mainClass, cacheDirOverride, repoUrl, toolArgs);
-    }
+        Coordinate primary = Coordinate.parse(coord);
+        Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
+        Files.createDirectories(cacheDir);
 
-    /** Shared implementation used by {@code jk tool run} and {@code jk exec}. */
-    static final class Ephemeral {
-        static int run(String coord, String mainClass, Path cacheDirOverride, URI repoUrl,
-                       List<String> toolArgs)
-                throws IOException, InterruptedException {
-            Coordinate primary = Coordinate.parse(coord);
-            Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
-            Files.createDirectories(cacheDir);
+        Cas cas = new Cas(cacheDir);
+        Http http = new Http();
+        URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
+        RepoGroup repos = RepoGroup.of(new MavenRepo("central", url, http, cas));
+        ToolResolver toolResolver = new ToolResolver(repos);
 
-            Cas cas = new Cas(cacheDir);
-            Http http = new Http();
-            URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
-            RepoGroup repos = RepoGroup.of(new MavenRepo("central", url, http, cas));
-            ToolResolver toolResolver = new ToolResolver(repos);
-
-            ToolEnv env = toolResolver.resolve(primary, primary.artifact(), mainClass);
-            Path javaHome = CompileToolchain.runningJavaHome();
-            return ToolLauncher.execEphemeral(javaHome, env, toolArgs);
-        }
+        ToolEnv env = toolResolver.resolve(primary, primary.artifact(), mainClass);
+        Path javaHome = CompileToolchain.runningJavaHome();
+        return ToolLauncher.execEphemeral(javaHome, env, toolArgs);
     }
 }

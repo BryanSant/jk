@@ -57,7 +57,6 @@ import java.util.Set;
                 GradleCommand.class,
                 ImportCommand.class,
                 ExportCommand.class,
-                ExecCommand.class,
                 InstallCommand.class,
                 RunCommand.class,
                 PublishCommand.class,
@@ -424,7 +423,7 @@ public final class Jk implements Runnable {
                     "audit", "deny", "verify-build")),
             new CommandGroup("Toolchain commands:", List.of(
                     "jdk", "env", "shell", "activate", "deactivate",
-                    "tool", "exec")),
+                    "tool")),
             new CommandGroup("Interop commands:", List.of(
                     "import", "mvn", "gradle", "export")),
             new CommandGroup("System commands:", List.of(
