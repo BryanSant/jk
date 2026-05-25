@@ -62,10 +62,11 @@ final class JdkUninstallWizard {
         for (JdkHit hit : installed) {
             String id = choiceIdFor(hit);
             String identifier = JdkRegistry.identifierFor(hit.home());
-            AttributedString rich = richLabel(hit, identifier);
+            String fallback = richLabel(hit, identifier, false).toString();
             String hint = currentDefault.isPresent() && currentDefault.get().equals(identifier)
                     ? "(default)" : "";
-            victims.choice(new Choice(id, rich.toString(), hint, null, rich));
+            victims.choice(Choice.rich(id, fallback, hint,
+                    focused -> richLabel(hit, identifier, focused)));
         }
 
         Wizard wizard = Wizard.builder()
@@ -86,14 +87,21 @@ final class JdkUninstallWizard {
 
     /**
      * Render-only: {@code source/identifier - Vendor Product} as a mixed-style
-     * {@link AttributedString}. Source bold-yellow; identifier bold-white;
-     * trailing vendor metadata dark-gray; vendor block omitted when unknown.
+     * {@link AttributedString}.
+     *
+     * <p>When {@code focused} is {@code true}: source bold-yellow,
+     * identifier bold-white. When {@code false}: same colors with the bold
+     * dropped, so only the row the user's cursor is sitting on stands out.
+     * The trailing vendor metadata is always dark-gray; vendor block
+     * omitted when unknown.
      */
-    static AttributedString richLabel(JdkHit hit, String identifier) {
+    static AttributedString richLabel(JdkHit hit, String identifier, boolean focused) {
+        var sourceStyle = focused ? Theme.warning().bold() : Theme.warning();
+        var idStyle = focused ? Theme.focused() : Theme.plainWhite();
         var sb = new AttributedStringBuilder();
-        sb.append(hit.source(), Theme.warning().bold());
-        sb.append("/", Theme.focused());
-        sb.append(identifier, Theme.focused());
+        sb.append(hit.source(), sourceStyle);
+        sb.append("/", idStyle);
+        sb.append(identifier, idStyle);
         if (hit.vendor() != null && hit.vendor() != JdkVendor.UNKNOWN) {
             sb.append(" - ", Theme.darkGray());
             sb.append(hit.vendor().displayName(), Theme.darkGray());

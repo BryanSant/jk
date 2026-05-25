@@ -16,11 +16,17 @@ class JdkUninstallWizardTest {
         JdkHit hit = new JdkHit(Path.of("/home/u/.jdks/temurin-26.0.1"),
                 "26.0.1", JdkVendor.TEMURIN, "intellij");
 
-        var rich = JdkUninstallWizard.richLabel(hit, "temurin-26.0.1");
-        // Stringified form drops styling; check that ordering + tokens match
-        // the user's spec.
-        assertThat(rich.toString())
-                .isEqualTo("intellij/temurin-26.0.1 - Eclipse Temurin");
+        // Both focused and unfocused renderings produce the same text; the
+        // visual difference is bold-vs-plain on source + identifier.
+        var focused = JdkUninstallWizard.richLabel(hit, "temurin-26.0.1", true);
+        var plain = JdkUninstallWizard.richLabel(hit, "temurin-26.0.1", false);
+        assertThat(focused.toString()).isEqualTo("intellij/temurin-26.0.1 - Eclipse Temurin");
+        assertThat(plain.toString()).isEqualTo("intellij/temurin-26.0.1 - Eclipse Temurin");
+
+        // Focused emits the BOLD SGR (\033[1m... or composed with color); plain
+        // does not. Check the ANSI to make sure only the focused row is bold.
+        assertThat(focused.toAnsi()).contains(";1m");
+        assertThat(plain.toAnsi()).doesNotContain(";1m");
     }
 
     @Test
@@ -28,7 +34,7 @@ class JdkUninstallWizardTest {
         JdkHit hit = new JdkHit(Path.of("/opt/custom-jdk-x"),
                 "21", JdkVendor.UNKNOWN, "system");
 
-        var rich = JdkUninstallWizard.richLabel(hit, "custom-jdk-x");
+        var rich = JdkUninstallWizard.richLabel(hit, "custom-jdk-x", true);
         assertThat(rich.toString()).isEqualTo("system/custom-jdk-x");
     }
 

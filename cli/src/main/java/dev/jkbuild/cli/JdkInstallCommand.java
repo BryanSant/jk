@@ -30,40 +30,32 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk jdk install <spec>} — pull a JDK from the JetBrains JDK feed
+ * {@code jk jdk install [<spec>]} — pull a JDK from the JetBrains JDK feed
  * and unpack it into the IntelliJ JDK directory ({@code ~/.jdks/} or
  * {@code ~/Library/Java/JavaVirtualMachines/}).
  *
- * <p>The {@code <spec>} matches the feed's vocabulary:
+ * <p>{@code <spec>} accepts both denormalized vendor strings and the three
+ * keyword shortcuts:
  * <ul>
+ *   <li>{@code lts} / {@code stable} — latest LTS major shipped to this host,
+ *       resolved as {@code temurin-<major>}.</li>
+ *   <li>{@code latest} — most recent major (LTS or interim), also Temurin.</li>
  *   <li>{@code 21}, {@code 21.0.5} — bare version; picks whichever vendor
- *       the feed marks {@code default: true} for that major (OpenJDK,
- *       today).</li>
- *   <li>{@code temurin-21}, {@code openjdk-26}, {@code corretto-21.0.5} —
- *       a {@code suggested_sdk_name} from the feed.</li>
+ *       the feed marks {@code default: true} for that major.</li>
+ *   <li>{@code temurin-21}, {@code openjdk-26}, {@code corretto-21.0.5},
+ *       {@code 25-graal}, {@code java-17-openjdk} — denormalized form
+ *       resolved via {@link JdkSelector#selectFlexible}.</li>
  * </ul>
  */
 @Command(name = "install", aliases = {"add"},
         description = "Install a Java Development Kit")
 public final class JdkInstallCommand implements Callable<Integer> {
 
-    @Parameters(arity = "0..1", paramLabel = "<version>",
-            description = "Denormalized version spec — `25`, `21.0.5`, `temurin-21`, "
-                    + "`openjdk-26`, etc. Resolved to the best-matching catalog entry. "
+    @Parameters(arity = "0..1", paramLabel = "<spec>",
+            description = "Keyword (`lts` / `stable` / `latest`) or a denormalized version "
+                    + "(`25`, `21.0.5`, `temurin-21`, `25-graal`, `java-17-openjdk`). "
                     + "Omit to launch the interactive wizard.")
     String spec;
-
-    @Option(names = {"-l", "--lts"},
-            description = "Install the most recent LTS major (e.g. 25 today, 29 after Sep 2027).")
-    boolean lts;
-
-    @Option(names = {"-s", "--stable"},
-            description = "Alias for --lts.")
-    boolean stable;
-
-    @Option(names = {"-L", "--latest"},
-            description = "Install the most recent JDK major (LTS or interim release).")
-    boolean latest;
 
     @Option(names = {"-d", "--make-default"},
             description = "After install, mark this JDK as the system-wide default.")
@@ -109,27 +101,21 @@ public final class JdkInstallCommand implements Callable<Integer> {
         String os = HostPlatform.currentOs();
         String arch = HostPlatform.currentArch();
 
-        // --lts / --stable / --latest resolve to a major-version spec by
-        // looking at what the catalog actually ships. Mutually exclusive
-        // with each other and with the positional <version>.
-        int flagsSet = (lts ? 1 : 0) + (stable ? 1 : 0) + (latest ? 1 : 0);
-        if (flagsSet > 1) {
-            System.err.println("jk jdk install: --lts, --stable, and --latest are mutually exclusive.");
-            return 64;
-        }
         boolean haveSpec = spec != null && !spec.isBlank();
-        String resolvedSpec = resolveShortcutSpec(catalog, os, arch);
-        if (resolvedSpec != null && haveSpec) {
-            System.err.println("jk jdk install: --lts/--stable/--latest and <version> are mutually exclusive.");
-            return 64; // EX_USAGE
+        // `lts` / `stable` / `latest` are keyword specs — resolve them to a
+        // concrete `temurin-<major>` string so the selector handles the rest
+        // (and so `--verbose` reports the actual resolved entry).
+        String effectiveSpec = haveSpec ? resolveKeyword(spec, catalog, os, arch) : null;
+        if (haveSpec && effectiveSpec == null) {
+            // Not a keyword — use the raw spec verbatim.
+            effectiveSpec = spec;
         }
-        String effectiveSpec = resolvedSpec != null ? resolvedSpec : spec;
 
         JdkCatalog.Entry entry;
         boolean wantDefault = makeDefault;
         if (effectiveSpec == null || effectiveSpec.isBlank()) {
             if (!isInteractiveTerminal()) {
-                System.err.println("jk jdk install: stdin is not a TTY — pass --lts/--stable/--latest "
+                System.err.println("jk jdk install: stdin is not a TTY — pass `lts` / `latest` "
                         + "or a <spec> (e.g. `jk jdk install temurin-21`) or run interactively.");
                 return 64; // EX_USAGE
             }
@@ -178,13 +164,21 @@ public final class JdkInstallCommand implements Callable<Integer> {
     }
 
     /**
-     * Translate the shortcut flags ({@code --lts}, {@code --stable},
-     * {@code --latest}) into a major-version spec string, or {@code null}
-     * when no shortcut is set. Mutual-exclusion check happens in
-     * {@link #call} before this is called.
+     * Translate the keyword specs ({@code lts}, {@code stable}, {@code latest})
+     * into a concrete {@code temurin-<major>} spec string. Returns {@code null}
+     * when {@code raw} is not a keyword — the caller treats it as a normal
+     * denormalized spec in that case.
+     *
+     * <p>The Temurin bias matches the user's mental model of "the default LTS
+     * JDK"; if Temurin isn't shipped at that major for this host, the flexible
+     * selector falls back to the catalog's default-for-major.
      */
-    private String resolveShortcutSpec(JdkCatalog catalog, String os, String arch) {
-        if (!lts && !stable && !latest) return null;
+    private String resolveKeyword(String raw, JdkCatalog catalog, String os, String arch) {
+        var norm = raw.trim().toLowerCase(java.util.Locale.ROOT);
+        boolean wantLts = norm.equals("lts") || norm.equals("stable");
+        boolean wantLatest = norm.equals("latest");
+        if (!wantLts && !wantLatest) return null;
+
         var majors = new java.util.TreeSet<Integer>();
         for (JdkCatalog.Entry e : catalog.entries()) {
             if (e.preview()) continue;
@@ -192,17 +186,19 @@ public final class JdkInstallCommand implements Callable<Integer> {
             majors.add(e.majorVersion());
         }
         if (majors.isEmpty()) return null; // selector will then complain
-        if (latest) {
-            return String.valueOf(majors.last());
+        int picked;
+        if (wantLatest) {
+            picked = majors.last();
+        } else {
+            var lts = JdkLts.latestLtsIn(majors);
+            if (lts.isEmpty()) {
+                System.err.println("jk jdk install: no LTS major present in the feed for "
+                        + os + "/" + arch + ".");
+                return null;
+            }
+            picked = lts.getAsInt();
         }
-        // --lts / --stable
-        var picked = JdkLts.latestLtsIn(majors);
-        if (picked.isEmpty()) {
-            System.err.println("jk jdk install: no LTS major present in the feed for "
-                    + os + "/" + arch + ".");
-            return null;
-        }
-        return String.valueOf(picked.getAsInt());
+        return "temurin-" + picked;
     }
 
     /**

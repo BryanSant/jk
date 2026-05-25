@@ -644,8 +644,8 @@ public final class Wizard {
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
                             .append(" ");
-                    if (c.richLabel() != null) {
-                        sb.append(c.richLabel());
+                    if (c.richLabelFn() != null) {
+                        sb.append(c.richLabelFn().apply(isFocused));
                     } else {
                         sb.append(c.label(), labelStyle);
                     }

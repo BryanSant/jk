@@ -109,6 +109,11 @@ public final class Theme {
         return withColor(AttributedStyle.DEFAULT, 0xff, 0xff, 0xff);
     }
 
+    /** Alias for {@link #settled} — plain white with no weight modifier. */
+    public static AttributedStyle plainWhite() {
+        return settled();
+    }
+
     /**
      * Dark gray #4b5563 (same as the inactive rail glyphs). Used for the
      * prompt line of a step once it has been settled — the gray de-emphasises

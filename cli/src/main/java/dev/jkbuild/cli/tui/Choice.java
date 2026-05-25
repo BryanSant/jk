@@ -17,19 +17,19 @@ import java.util.function.Function;
  * {@link Answers} at render time so options can reflect choices made on
  * earlier steps. {@code hintFn} wins over the static {@code hint}.
  *
- * <p>{@code richLabel}, when non-null, is rendered <em>verbatim</em> as the
- * choice's label — bypassing the wizard's usual focused/dim recolor pass
- * so callers can mix multiple styles in one row (e.g. a bold-yellow source
- * tag followed by bold-white identifier followed by gray metadata).
- * Focus is still conveyed by the checkbox/radio glyph color, which the
- * wizard owns independently of the label content.
+ * <p>{@code richLabelFn}, when non-null, builds the choice's label as a
+ * multi-style {@link AttributedString}. The {@code Boolean} argument is
+ * {@code true} when this row is currently focused, so callers can vary
+ * intensity (e.g. bold the focused row, ordinary weight on the rest)
+ * while keeping the same colors. Set this when one label needs to mix
+ * multiple foreground styles in one row.
  */
 public record Choice(
         String id,
         String label,
         String hint,
         Function<Answers, String> hintFn,
-        AttributedString richLabel) {
+        Function<Boolean, AttributedString> richLabelFn) {
 
     public Choice {
         if (hint == null) hint = "";
@@ -47,9 +47,16 @@ public record Choice(
         this(id, label, "", hintFn, null);
     }
 
-    /** Rich-label constructor — bypass the uniform style pass. */
-    public Choice(String id, AttributedString richLabel) {
-        this(id, richLabel.toString(), "", null, richLabel);
+    /** Rich-label factory — caller supplies focused/unfocused renderings. */
+    public static Choice rich(String id, String fallbackLabel,
+                              Function<Boolean, AttributedString> richLabelFn) {
+        return new Choice(id, fallbackLabel, "", null, richLabelFn);
+    }
+
+    /** Rich-label factory with a hint suffix. */
+    public static Choice rich(String id, String fallbackLabel, String hint,
+                              Function<Boolean, AttributedString> richLabelFn) {
+        return new Choice(id, fallbackLabel, hint, null, richLabelFn);
     }
 
     /** Resolved hint at render time. Dynamic {@code hintFn} wins over static {@code hint}. */
