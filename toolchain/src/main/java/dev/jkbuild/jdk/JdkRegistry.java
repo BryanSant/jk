@@ -135,12 +135,20 @@ public final class JdkRegistry {
      * "natural precedence" pick.
      */
     public Optional<InstalledJdk> findBySpec(String spec) {
+        return findHitBySpec(spec)
+                .map(hit -> new InstalledJdk(identifierFor(hit.home()), hit.home()));
+    }
+
+    /**
+     * Same matcher as {@link #findBySpec}, but returns the raw {@link JdkHit}
+     * so callers can read vendor + version metadata for display purposes
+     * without re-parsing the install's {@code release} file.
+     */
+    public Optional<JdkHit> findHitBySpec(String spec) {
         if (spec == null || spec.isBlank()) return Optional.empty();
         JdkSelector.FlexibleQuery query = JdkSelector.parseFlexible(spec);
         for (JdkHit hit : listHits()) {
-            if (matchesSpec(hit, query)) {
-                return Optional.of(new InstalledJdk(identifierFor(hit.home()), hit.home()));
-            }
+            if (matchesSpec(hit, query)) return Optional.of(hit);
         }
         return Optional.empty();
     }
@@ -213,7 +221,7 @@ public final class JdkRegistry {
      * basename of the install dir (the home itself, or its grandparent on
      * macOS where the real install dir wraps {@code Contents/Home}).
      */
-    private static String identifierFor(Path home) {
+    public static String identifierFor(Path home) {
         return IntellijJdkDir.installDirOf(home).getFileName().toString();
     }
 

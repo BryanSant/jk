@@ -336,7 +336,9 @@ public final class JdkListCommand implements Callable<Integer> {
 
     private static AttributedStyle statusStyle(Status status) {
         return switch (status) {
-            case DEFAULT -> Theme.warning();
+            // Bold + bright-green draws the eye to the system-default JDK row
+            // — it's the one a fresh shell will pick up via $JAVA_HOME.
+            case DEFAULT -> Theme.brightGreen().bold();
             case INSTALLED -> Theme.completedStep();
             case AVAILABLE -> Theme.darkGray();
         };
