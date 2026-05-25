@@ -16,7 +16,6 @@ import picocli.CommandLine.Spec;
                 JdkListCommand.class,
                 JdkInstallCommand.class,
                 JdkPinCommand.class,
-                JdkDirCommand.class,
                 JdkHomeCommand.class,
                 JdkUninstallCommand.class,
                 JdkReconcileCommand.class,

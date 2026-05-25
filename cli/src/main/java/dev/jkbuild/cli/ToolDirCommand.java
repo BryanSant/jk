@@ -10,7 +10,7 @@ import java.util.concurrent.Callable;
 
 /**
  * {@code jk tool dir} — print the tools install root (parallel to
- * {@code jk cache dir} and {@code jk jdk dir}).
+ * {@code jk cache dir}).
  */
 @Command(name = "dir", description = "Print the tools install root")
 public final class ToolDirCommand implements Callable<Integer> {
