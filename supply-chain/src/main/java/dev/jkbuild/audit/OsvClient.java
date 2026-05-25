@@ -77,6 +77,9 @@ public final class OsvClient {
         }
         body.append("]}");
 
+        if (dev.jkbuild.config.ActiveConfig.get().offlineOr(false)) {
+            throw new dev.jkbuild.http.OfflineException(batchUrl);
+        }
         HttpRequest request = HttpRequest.newBuilder(batchUrl)
                 .timeout(Duration.ofMinutes(2))
                 .header("Content-Type", "application/json")
@@ -92,7 +95,11 @@ public final class OsvClient {
 
     /** Fetch full vulnerability metadata. */
     public Vulnerability fetchVuln(String vulnId) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(vulnsUrl.resolve(vulnId))
+        var url = vulnsUrl.resolve(vulnId);
+        if (dev.jkbuild.config.ActiveConfig.get().offlineOr(false)) {
+            throw new dev.jkbuild.http.OfflineException(url);
+        }
+        HttpRequest request = HttpRequest.newBuilder(url)
                 .timeout(Duration.ofSeconds(30))
                 .GET()
                 .build();

@@ -57,6 +57,7 @@ public final class Http {
      */
     public HttpResponse<byte[]> get(URI uri, Map<String, String> headers)
             throws IOException, InterruptedException {
+        checkOffline(uri);
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                 .GET()
                 .timeout(Duration.ofSeconds(60));
@@ -101,6 +102,7 @@ public final class Http {
      * would cut them off on slow links.
      */
     public HttpResponse<InputStream> getStream(URI uri) throws IOException, InterruptedException {
+        checkOffline(uri);
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .GET()
                 .timeout(Duration.ofMinutes(15))
@@ -139,5 +141,19 @@ public final class Http {
         long ms = base.toMillis();
         // +/- 10% jitter
         return ms + (long) ((Math.random() - 0.5) * 0.2 * ms);
+    }
+
+    /**
+     * Fail fast when the user passed {@code --offline} (or set
+     * {@code JK_OFFLINE} / {@code config.offline = true}). Any outbound HTTP
+     * is short-circuited with a clear error before the request is even
+     * constructed; callers that need to fall back to cached data should
+     * either avoid calling Http entirely in offline mode or catch this and
+     * substitute a cache lookup.
+     */
+    private static void checkOffline(URI uri) throws OfflineException {
+        if (dev.jkbuild.config.ActiveConfig.get().offlineOr(false)) {
+            throw new OfflineException(uri);
+        }
     }
 }

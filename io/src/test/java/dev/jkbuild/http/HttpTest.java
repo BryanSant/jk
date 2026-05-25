@@ -97,6 +97,22 @@ class HttpTest {
                 .hasMessageContaining("503");
     }
 
+    @Test
+    void offline_short_circuits_with_offline_exception() {
+        var prev = dev.jkbuild.config.ActiveConfig.get();
+        dev.jkbuild.config.ActiveConfig.install(prev.mergedWith(new dev.jkbuild.config.JkConfig(
+                java.util.Optional.empty(), java.util.Optional.of(true),
+                java.util.Optional.empty(), java.util.Optional.empty(),
+                java.util.Optional.empty(), java.util.Optional.empty())));
+        try {
+            assertThatThrownBy(() -> http().get(base.resolve("/anything")))
+                    .isInstanceOf(OfflineException.class)
+                    .hasMessageContaining("offline:");
+        } finally {
+            dev.jkbuild.config.ActiveConfig.install(prev);
+        }
+    }
+
     private static Http http() {
         HttpClient client = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(2))

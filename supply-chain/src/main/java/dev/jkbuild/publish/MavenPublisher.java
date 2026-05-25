@@ -124,6 +124,9 @@ public final class MavenPublisher {
     private void put(String relPath, byte[] body, String contentType, Map<String, Integer> out)
             throws IOException, InterruptedException {
         URI uri = repoBase.resolve(relPath);
+        if (dev.jkbuild.config.ActiveConfig.get().offlineOr(false)) {
+            throw new dev.jkbuild.http.OfflineException(uri);
+        }
         HttpRequest.Builder rb = HttpRequest.newBuilder(uri)
                 .timeout(Duration.ofMinutes(2))
                 .header("Content-Type", contentType)
