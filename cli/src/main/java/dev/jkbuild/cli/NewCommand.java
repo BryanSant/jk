@@ -252,41 +252,40 @@ public final class NewCommand implements Callable<Integer> {
                 .addPhase(scaffold)
                 .build();
 
-        GoalResult result;
+        // Single try/finally wrapping the whole goal lifecycle plus the
+        // success-emit path: emitSuccessOnTerminal writes through the
+        // wizard's JLine terminal handle, so the terminal has to stay
+        // open until after that call. The finally closes it on the way
+        // out whether scaffold succeeded, failed, or threw.
         try {
-            result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+            GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+
+            if (!result.success()) {
+                for (GoalResult.Diagnostic d : result.errors()) {
+                    if ("no-jdks".equals(d.code())) {
+                        emitNoJdksError();
+                        return 2;
+                    }
+                    if ("exists".equals(d.code())) {
+                        NewInputs partial = goal.get(INPUTS).orElse(null);
+                        String name = partial != null ? partial.name() : "project";
+                        emitProjectExistsError(name);
+                        return 2;
+                    }
+                }
+                return 2;
+            }
+
+            NewInputs inputs = goal.get(INPUTS).orElseThrow();
+            goal.get(TERMINAL).ifPresentOrElse(
+                    t -> emitSuccessOnTerminal(inputs, t),
+                    () -> emitSuccessPlain(inputs));
+            return 0;
         } finally {
-            // Terminal is opened in prewarm; close it on the way out
-            // whether scaffold succeeded or not.
             goal.get(TERMINAL).ifPresent(t -> {
                 try { t.close(); } catch (IOException ignored) {}
             });
         }
-
-        if (!result.success()) {
-            for (GoalResult.Diagnostic d : result.errors()) {
-                if ("no-jdks".equals(d.code())) {
-                    emitNoJdksError();
-                    return 2;
-                }
-                if ("exists".equals(d.code())) {
-                    NewInputs partial = goal.get(INPUTS).orElse(null);
-                    String name = partial != null ? partial.name() : "project";
-                    emitProjectExistsError(name);
-                    return 2;
-                }
-            }
-            return 2;
-        }
-
-        // Success path: re-open or reuse the wizard's terminal for the
-        // success line. The terminal handle was set in prewarm; emitting
-        // through it before close keeps the styled output.
-        NewInputs inputs = goal.get(INPUTS).orElseThrow();
-        goal.get(TERMINAL).ifPresentOrElse(
-                t -> emitSuccessOnTerminal(inputs, t),
-                () -> emitSuccessPlain(inputs));
-        return 0;
     }
 
     /**
