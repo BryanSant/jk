@@ -65,6 +65,8 @@ public final class Goal {
     private final List<GoalResult.Diagnostic> warnings = Collections.synchronizedList(new ArrayList<>());
     private final List<GoalResult.Diagnostic> errors = Collections.synchronizedList(new ArrayList<>());
     private final List<GoalResult.PhaseReport> reports = Collections.synchronizedList(new ArrayList<>());
+    /** Cross-phase shared state — typed via {@link GoalKey}. Reads happen via PhaseContext. */
+    private final ConcurrentHashMap<String, Object> state = new ConcurrentHashMap<>();
 
     Goal(String name, boolean interactive, List<Phase> phases, List<GoalListener> listeners) {
         this.name = Objects.requireNonNull(name);
@@ -283,6 +285,23 @@ public final class Goal {
     AtomicBoolean cancelledRef() { return cancelled; }
     List<GoalResult.Diagnostic> warningsRef() { return warnings; }
     List<GoalResult.Diagnostic> errorsRef() { return errors; }
+    ConcurrentHashMap<String, Object> stateRef() { return state; }
+
+    /**
+     * Read a phase-stashed value after {@link #run} has returned.
+     * Command bodies use this to surface state phases produced —
+     * resolved lockfile, JDK outcome, etc. — into their summary
+     * output without needing a separate holder object.
+     */
+    public <T> java.util.Optional<T> get(GoalKey<T> key) {
+        Object raw = state.get(key.name());
+        if (raw == null) return java.util.Optional.empty();
+        if (!key.type().isInstance(raw)) {
+            throw new ClassCastException("goal state '" + key.name() + "' is "
+                    + raw.getClass().getName() + " not " + key.type().getName());
+        }
+        return java.util.Optional.of(key.type().cast(raw));
+    }
 
     // --- DAG validation + topo sort -----------------------------------
 

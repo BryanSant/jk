@@ -63,6 +63,30 @@ final class DefaultPhaseContext implements PhaseContext {
         return goal.cancelledRef().get();
     }
 
+    @Override
+    public <T> void put(GoalKey<T> key, T value) {
+        // Allow null to be stored as a sentinel? Decided against — phases
+        // should signal "no value" by not putting at all and downstream
+        // reading via .get() returning empty.
+        if (value == null) {
+            goal.stateRef().remove(key.name());
+        } else {
+            goal.stateRef().put(key.name(), value);
+        }
+    }
+
+    @Override
+    public <T> java.util.Optional<T> get(GoalKey<T> key) {
+        return goal.get(key);
+    }
+
+    @Override
+    public <T> T require(GoalKey<T> key) {
+        return goal.get(key).orElseThrow(() ->
+                new IllegalStateException("phase '" + phase + "' required key '"
+                        + key.name() + "' but it wasn't set by any upstream phase"));
+    }
+
     /** How much {@link #updateScope} grew this phase's denominator. */
     int scopeGrowth() {
         return scopeGrowth.get();

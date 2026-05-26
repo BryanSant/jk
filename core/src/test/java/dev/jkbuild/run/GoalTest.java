@@ -179,6 +179,43 @@ class GoalTest {
     }
 
     @Test
+    void typed_state_flows_between_phases() {
+        GoalKey<String> NAME = GoalKey.of("name", String.class);
+        GoalKey<Integer> COUNT = GoalKey.of("count", Integer.class);
+        List<String> consumed = new ArrayList<>();
+
+        var goal = Goal.builder("flow")
+                .addPhase(Phase.builder("producer").execute(ctx -> {
+                    ctx.put(NAME, "widget");
+                    ctx.put(COUNT, 42);
+                }).build())
+                .addPhase(Phase.builder("consumer").requires("producer")
+                        .execute(ctx -> {
+                            consumed.add(ctx.require(NAME));
+                            consumed.add(String.valueOf((int) ctx.require(COUNT)));
+                        }).build())
+                .build();
+
+        var result = goal.run();
+        assertThat(result.success()).isTrue();
+        assertThat(consumed).containsExactly("widget", "42");
+        // Command body can read state back too.
+        assertThat(goal.get(NAME)).hasValue("widget");
+    }
+
+    @Test
+    void require_throws_when_key_missing() {
+        GoalKey<String> MISSING = GoalKey.of("missing", String.class);
+        var goal = Goal.builder("oops")
+                .addPhase(Phase.builder("reader").execute(ctx -> ctx.require(MISSING)).build())
+                .build();
+        var result = goal.run();
+        assertThat(result.success()).isFalse();
+        assertThat(result.errors()).hasSize(1);
+        assertThat(result.errors().getFirst().message()).contains("required key 'missing'");
+    }
+
+    @Test
     void cancellation_propagates_to_running_phases() throws InterruptedException {
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch sawCancelled = new CountDownLatch(1);

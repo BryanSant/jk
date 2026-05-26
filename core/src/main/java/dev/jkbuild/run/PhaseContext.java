@@ -62,4 +62,28 @@ public interface PhaseContext {
      * a 200ms grace period if a phase doesn't shut down cooperatively.
      */
     boolean cancelled();
+
+    /**
+     * Stash {@code value} in the goal's shared state under {@code key}.
+     * Visible to every subsequent phase via {@link #get} / {@link #require}.
+     * Thread-safe; concurrent puts to the same key may overwrite each
+     * other, but that's a phase-design problem — keys should be owned
+     * by a single producer.
+     */
+    <T> void put(GoalKey<T> key, T value);
+
+    /**
+     * Read a previously-stashed value. Returns empty when the key has
+     * never been {@link #put}; the optional shape makes phase authors
+     * decide explicitly whether a missing value is OK to handle.
+     */
+    <T> java.util.Optional<T> get(GoalKey<T> key);
+
+    /**
+     * Read a value the phase author knows must be present (an upstream
+     * phase {@code require}-ed by this one populated it). Throws
+     * {@link IllegalStateException} when missing — that's a programming
+     * error, not a runtime condition.
+     */
+    <T> T require(GoalKey<T> key);
 }

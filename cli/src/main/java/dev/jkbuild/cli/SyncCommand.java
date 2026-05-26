@@ -10,8 +10,11 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -33,16 +36,11 @@ import java.util.concurrent.Callable;
  *   <li>{@code ensure-jdk} (IO, parallel) — resolve or install the
  *       project's pinned JDK via {@link JdkEnsure}.</li>
  *   <li>{@code sync-cas} (IO, parallel) — fetch any locked artifacts the
- *       CAS doesn't already hold.</li>
+ *       CAS doesn't already hold. Per-package progress events come from
+ *       {@link CacheSync.ProgressObserver}.</li>
  *   <li>{@code write-sync-manifest} (SYNC) — stamp
- *       {@code actions/synced/<projectFingerprint>} so the future sweep
- *       treats this project's deps as reachable until the manifest
- *       ages out.</li>
+ *       {@code actions/synced/<projectFingerprint>}.</li>
  * </ol>
- *
- * <p>The progress bar / verbose / JSON / silent rendering is fanned out
- * by {@link GoalConsole}; this command's body just builds the goal and
- * prints the existing one-line summaries after it finishes.
  */
 @Command(name = "sync", description = "Reconcile JDK + cache to jk.lock")
 public final class SyncCommand implements Callable<Integer> {    @Option(names = "--cache-dir", hidden = true,
@@ -63,17 +61,24 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
+    /** Cross-phase keys. Lifted out so each phase reads/writes through the same handle. */
+    private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
+    private static final GoalKey<JkBuild> BUILD = GoalKey.of("build", JkBuild.class);
+    private static final GoalKey<JdkEnsure.Outcome> JDK_OUTCOME =
+            GoalKey.of("jdk-outcome", JdkEnsure.Outcome.class);
+    private static final GoalKey<CacheSync.Report> CAS_REPORT =
+            GoalKey.of("cas-report", CacheSync.Report.class);
+    private static final GoalKey<Integer> WORKSPACE_MEMBERS =
+            GoalKey.of("workspace-members", Integer.class);
+    private static final GoalKey<Boolean> LOCKFILE_CREATED =
+            GoalKey.of("lockfile-created", Boolean.class);
+
     @Override
     public Integer call() throws Exception {
         Path dir = global.workingDir();
         Path lockFile = dir.resolve("jk.lock");
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
-
-        // Mutable holder shared across phases. The parse-lock phase
-        // populates the lockfile + build; later phases consume it.
-        // Using a small inline record-holder keeps the surface tiny.
-        State state = new State();
 
         Phase parseLock = Phase.builder("parse-lock")
                 .scope(1)
@@ -83,18 +88,21 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                         ctx.label("resolve deps");
                         var result = LockFlow.run(
                                 dir, cache, List.of(), false, repoUrl, "jk sync");
-                        state.workspaceMembers = result.workspaceMemberCount();
+                        if (result.workspaceMemberCount() > 0) {
+                            ctx.put(WORKSPACE_MEMBERS, result.workspaceMemberCount());
+                        }
                         if (result.status() != 0) {
                             ctx.error("lock", "lockfile resolution failed (exit "
                                     + result.status() + ")");
                             throw new RuntimeException("lock-flow failed");
                         }
-                        state.lockfile = result.lockfile();
-                        state.build = result.build();
-                        state.lockfileCreated = true;
+                        ctx.put(LOCKFILE, result.lockfile());
+                        if (result.build() != null) ctx.put(BUILD, result.build());
+                        ctx.put(LOCKFILE_CREATED, true);
                     } else {
-                        state.lockfile = LockfileReader.read(lockFile);
-                        state.build = parseBuildIfPresent(dir);
+                        ctx.put(LOCKFILE, LockfileReader.read(lockFile));
+                        var build = parseBuildIfPresent(dir);
+                        if (build != null) ctx.put(BUILD, build);
                     }
                     ctx.progress(1);
                 })
@@ -106,9 +114,11 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("resolve JDK");
+                    Lockfile lock = ctx.require(LOCKFILE);
+                    JkBuild build = ctx.get(BUILD).orElse(null);
                     try {
-                        state.jdkOutcome = JdkEnsure.ensure(
-                                dir, jdksDir, state.build, state.lockfile);
+                        var outcome = JdkEnsure.ensure(dir, jdksDir, build, lock);
+                        ctx.put(JDK_OUTCOME, outcome);
                     } catch (Exception e) {
                         ctx.error("jdk", e.getMessage() == null
                                 ? e.getClass().getSimpleName() : e.getMessage());
@@ -121,22 +131,37 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
         Phase syncCas = Phase.builder("sync-cas")
                 .kind(PhaseKind.IO)
                 .requires("parse-lock")
-                .scope(0)                 // unknown until parse-lock fills lockfile
+                .scope(0)                 // grown once parse-lock fills lockfile
                 .execute(ctx -> {
-                    int packages = state.lockfile.packages().size();
+                    Lockfile lock = ctx.require(LOCKFILE);
+                    int packages = lock.packages().size();
                     if (packages > 0) ctx.updateScope(packages);
                     ctx.label("fetch deps");
+
                     Cas cas = new Cas(cache);
                     Http http = new Http();
-                    var report = new CacheSync(cas, http).sync(state.lockfile);
-                    state.casReport = report;
-                    // Report progress as one chunk after CacheSync completes —
-                    // per-package events are a follow-up that needs CacheSync
-                    // itself to expose a callback.
-                    ctx.progress(packages);
-                    for (String err : report.errors()) {
-                        ctx.error("dep", err);
-                    }
+                    // Per-package progress: each callback adds 1 to the
+                    // numerator on whatever thread completed the fetch.
+                    // The TUI bar advances as individual deps land; the
+                    // event log records them ordered by completion.
+                    var observer = new CacheSync.ProgressObserver() {
+                        @Override public void fetched(Lockfile.Package pkg) {
+                            ctx.label("fetched " + pkg.name() + ":" + pkg.version());
+                            ctx.progress(1);
+                        }
+                        @Override public void upToDate(Lockfile.Package pkg) {
+                            ctx.progress(1);
+                        }
+                        @Override public void skipped(Lockfile.Package pkg) {
+                            ctx.progress(1);
+                        }
+                        @Override public void failed(Lockfile.Package pkg, String error) {
+                            ctx.error("dep", pkg.name() + ":" + pkg.version() + " — " + error);
+                            ctx.progress(1);
+                        }
+                    };
+                    var report = new CacheSync(cas, http).sync(lock, observer);
+                    ctx.put(CAS_REPORT, report);
                     if (report.hasErrors()) {
                         throw new RuntimeException("dep fetch had errors");
                     }
@@ -149,8 +174,9 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                 .execute(ctx -> {
                     ctx.label("stamp reachability manifest");
                     try {
+                        Lockfile lock = ctx.require(LOCKFILE);
                         dev.jkbuild.task.SyncManifest.write(
-                                cache.resolve("actions"), lockFile, state.lockfile);
+                                cache.resolve("actions"), lockFile, lock);
                     } catch (IOException e) {
                         ctx.warn("manifest",
                                 "could not stamp reachability manifest: " + e.getMessage());
@@ -166,32 +192,11 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                 .addPhase(writeManifest)
                 .build();
 
-        var result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
-
-        // Backward-compat summary lines. The Goal listeners already
-        // surfaced live progress + diagnostics; these one-liners
-        // preserve the previous CLI shape for scripts/tests.
-        if (state.workspaceMembers > 0) {
-            System.out.println("Workspace: " + state.workspaceMembers + " member"
-                    + (state.workspaceMembers == 1 ? "" : "s"));
-        }
-        if (state.lockfileCreated && state.lockfile != null) {
-            System.out.println("Created " + lockFile + " ("
-                    + state.lockfile.packages().size() + " package"
-                    + (state.lockfile.packages().size() == 1 ? "" : "s") + ")");
-        }
-        if (state.jdkOutcome != null) {
-            printJdkSummary(state.jdkOutcome);
-        }
-        if (state.casReport != null) {
-            System.out.println(state.casReport.fetched() + " fetched, "
-                    + state.casReport.upToDate() + " up-to-date, "
-                    + state.casReport.skipped() + " skipped");
-        }
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
 
         if (result.success()) {
-            // Opportunistic cache prune — no-op when [cache].auto-prune
-            // is off; detached subprocess otherwise.
+            printSuccessSummary(goal, lockFile);
+            // Opportunistic cache prune — no-op when auto-prune is off.
             try {
                 var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(
                         dir.resolve("jk.toml"));
@@ -201,8 +206,57 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
             } catch (IOException ignored) {
                 // Cache hygiene is never load-bearing.
             }
+            return 0;
         }
-        return result.success() ? 0 : 1;
+        printFailureSummary(result);
+        return 1;
+    }
+
+    /**
+     * On success, surface the backward-compat one-liners every prior
+     * version of {@code jk sync} printed. Tests + dotfiles + scripts
+     * grep for these.
+     */
+    private void printSuccessSummary(Goal goal, Path lockFile) {
+        goal.get(WORKSPACE_MEMBERS).ifPresent(n ->
+                System.out.println("Workspace: " + n + " member" + (n == 1 ? "" : "s")));
+        boolean created = goal.get(LOCKFILE_CREATED).orElse(false);
+        goal.get(LOCKFILE).ifPresent(lock -> {
+            if (created) {
+                int n = lock.packages().size();
+                System.out.println("Created " + lockFile + " (" + n
+                        + " package" + (n == 1 ? "" : "s") + ")");
+            }
+        });
+        goal.get(JDK_OUTCOME).ifPresent(SyncCommand::printJdkSummary);
+        goal.get(CAS_REPORT).ifPresent(r ->
+                System.out.println(r.fetched() + " fetched, "
+                        + r.upToDate() + " up-to-date, "
+                        + r.skipped() + " skipped"));
+    }
+
+    /**
+     * On failure, blank the partial-success summary lines (they'd be
+     * confusing next to a "failed" verdict) and instead surface the
+     * failing phase, the primary error message, and the run-log
+     * directory the user can inspect for the full picture.
+     */
+    private void printFailureSummary(GoalResult result) {
+        String failedPhase = result.phases().stream()
+                .filter(p -> p.status() == PhaseStatus.FAIL)
+                .map(GoalResult.PhaseReport::name)
+                .findFirst().orElse("?");
+        System.err.println("jk sync failed: " + failedPhase);
+        if (!result.errors().isEmpty()) {
+            var first = result.errors().getFirst();
+            System.err.println("  " + first.code() + ": " + first.message());
+            if (result.errors().size() > 1) {
+                System.err.println("  …and " + (result.errors().size() - 1)
+                        + " more (see run log)");
+            }
+        }
+        System.err.println("Run log: " + (cacheDir != null ? cacheDir : JkDirs.cache())
+                .resolve("runs"));
     }
 
     private static void printJdkSummary(JdkEnsure.Outcome outcome) {
@@ -228,24 +282,7 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
         try {
             return JkBuildParser.parse(buildFile);
         } catch (Exception e) {
-            // Sync should still succeed even if jk.toml is malformed (the
-            // lockfile is authoritative). Caller falls back to lockfile-only
-            // resolution.
             return null;
         }
-    }
-
-    /**
-     * Mutable scratchpad shared across phases. The Goal framework deliberately
-     * doesn't ship a "phase result" channel — phases that need to hand data
-     * downstream use closures over a small holder like this.
-     */
-    private static final class State {
-        Lockfile lockfile;
-        JkBuild build;
-        boolean lockfileCreated;
-        int workspaceMembers;
-        JdkEnsure.Outcome jdkOutcome;
-        CacheSync.Report casReport;
     }
 }

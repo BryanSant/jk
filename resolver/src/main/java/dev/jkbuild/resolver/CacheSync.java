@@ -40,6 +40,19 @@ public final class CacheSync {
     }
 
     public Report sync(Lockfile lock) throws IOException, InterruptedException {
+        return sync(lock, ProgressObserver.NOOP);
+    }
+
+    /**
+     * Sync with per-package progress reporting. {@code observer} is
+     * notified as each package's outcome resolves — synchronously for
+     * already-cached / POM-only packages, on the fetcher's completion
+     * thread for fetched / failed packages. Use this to drive a
+     * Goal-style progress bar where the numerator climbs one tick per
+     * package processed.
+     */
+    public Report sync(Lockfile lock, ProgressObserver observer)
+            throws IOException, InterruptedException {
         int upToDate = 0;
         int skipped = 0;
         // Build the list of fetches to do, resolving repos up front (the
@@ -50,6 +63,7 @@ public final class CacheSync {
         for (Lockfile.Package pkg : lock.packages()) {
             if (pkg.checksum() == null) {
                 skipped++; // POM-only / path / git deps
+                observer.skipped(pkg);
                 continue;
             }
             String hex = pkg.checksum().startsWith("sha256:")
@@ -58,6 +72,7 @@ public final class CacheSync {
 
             if (cas.contains(hex)) {
                 upToDate++;
+                observer.upToDate(pkg);
                 continue;
             }
             pending.add(new PendingFetch(pkg, hex, repoFor(pkg.source(), repoCache)));
@@ -68,7 +83,19 @@ public final class CacheSync {
         HostRateLimiter limiter = HostRateLimiter.shared();
         List<CompletableFuture<FetchResult>> futures = new ArrayList<>(pending.size());
         for (PendingFetch p : pending) {
-            futures.add(CompletableFuture.supplyAsync(() -> fetch(p, limiter), JkThreads.io()));
+            CompletableFuture<FetchResult> fut = CompletableFuture.supplyAsync(
+                    () -> fetch(p, limiter), JkThreads.io());
+            // Fire the per-package callback on the fetcher's completion
+            // thread so the progress bar updates as parallel fetches
+            // finish, not in a single end-of-pass burst. thenAccept
+            // returns a new future we don't track — the original `fut`
+            // is what we collect below; the notification side-effect
+            // happens before the parent join.
+            fut.thenAccept(result -> {
+                if (result.error != null) observer.failed(p.pkg, result.error);
+                else observer.fetched(p.pkg);
+            });
+            futures.add(fut);
         }
 
         int fetched = 0;
@@ -88,6 +115,20 @@ public final class CacheSync {
         }
 
         return new Report(fetched, upToDate, skipped, List.copyOf(errors));
+    }
+
+    /**
+     * Per-package callback driven by {@link #sync(Lockfile, ProgressObserver)}.
+     * Methods are invoked once per package, on whatever thread resolved
+     * that package's outcome. Implementations need to be thread-safe.
+     */
+    public interface ProgressObserver {
+        ProgressObserver NOOP = new ProgressObserver() {};
+
+        default void upToDate(Lockfile.Package pkg) {}
+        default void fetched(Lockfile.Package pkg) {}
+        default void skipped(Lockfile.Package pkg) {}
+        default void failed(Lockfile.Package pkg, String error) {}
     }
 
     private static FetchResult fetch(PendingFetch p, HostRateLimiter limiter) {
