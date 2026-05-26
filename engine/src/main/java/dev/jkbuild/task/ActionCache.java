@@ -65,14 +65,15 @@ public final class ActionCache {
             String actionKey,
             Map<String, String> inputs,
             Path outputDir) throws IOException {
-        Files.createDirectories(byKeyDir());
-        Files.createDirectories(lastByTaskDir());
-
         Map<String, String> outputs = new TreeMap<>();
         if (Files.exists(outputDir)) {
             try (Stream<Path> stream = Files.walk(outputDir)) {
                 for (Path file : (Iterable<Path>) stream::iterator) {
                     if (!Files.isRegularFile(file)) continue;
+                    // FreshnessStamp's sentinel lives inside outputDir but
+                    // isn't an action output — exclude it so we don't
+                    // accidentally cache the stamp from a previous run.
+                    if (".jk-stamp".equals(file.getFileName().toString())) continue;
                     // Hash once, then hard-link the file into the CAS rather
                     // than re-reading + writing the bytes. On POSIX same-fs
                     // the output file in target/ and the CAS object share an
@@ -88,6 +89,23 @@ public final class ActionCache {
                 }
             }
         }
+        return storeWithOutputs(taskId, actionKey, inputs, outputs);
+    }
+
+    /**
+     * Write an action record using a pre-computed {@code outputs} map —
+     * used by callers that already CAS'd the files via {@link CasPrewriter}
+     * (or anything else that hashed + hard-linked while the action was
+     * still running). Skips the output-dir walk; just writes the manifest
+     * and pointer.
+     */
+    public ActionRecord storeWithOutputs(
+            String taskId,
+            String actionKey,
+            Map<String, String> inputs,
+            Map<String, String> outputs) throws IOException {
+        Files.createDirectories(byKeyDir());
+        Files.createDirectories(lastByTaskDir());
         ActionRecord record = new ActionRecord(taskId, actionKey, inputs, outputs);
         Files.writeString(byKeyDir().resolve(actionKey), render(record));
         Files.writeString(lastByTaskDir().resolve(taskId), actionKey);

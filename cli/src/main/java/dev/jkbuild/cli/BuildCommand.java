@@ -139,15 +139,29 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                     actionCache.restore(cached.get(), classes);
                     System.out.println("Cache hit: " + taskId + " (" + actionKey.substring(0, 8) + ")");
                 } else {
-                    // Layer 3: full compile.
-                    CompileResult result = new JavacDriver().compile(request);
+                    // Layer 3: full compile, with CAS prewriting in the
+                    // background. The prewriter watches `classes/` while
+                    // javac runs and hard-links each settled .class into
+                    // the CAS as it appears; by the time javac exits,
+                    // most outputs are already cached.
+                    var prewriter = dev.jkbuild.task.CasPrewriter.watching(cas, classes);
+                    CompileResult result;
+                    java.util.Map<String, String> precomputedOutputs;
+                    try {
+                        result = new JavacDriver().compile(request);
+                    } finally {
+                        // finish() always runs — stops the poller and
+                        // performs the final correctness sweep.
+                        precomputedOutputs = prewriter.finish();
+                    }
                     for (CompileResult.Diagnostic d : result.diagnostics()) {
                         System.err.println(d.render());
                     }
                     if (!result.success() || result.hasErrors()) {
                         return 1;
                     }
-                    actionCache.store(taskId, actionKey, ActionKey.snapshotInputs(request), classes);
+                    actionCache.storeWithOutputs(taskId, actionKey,
+                            ActionKey.snapshotInputs(request), precomputedOutputs);
                 }
                 // Stamp lives inside classes/, so wiping the output tree
                 // automatically invalidates the stamp.
