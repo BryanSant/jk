@@ -641,7 +641,7 @@ public final class NewCommand implements Callable<Integer> {
                 .defaultChoice(defaultJdkId);
 
         return Wizard.builder()
-                .title("JK - Create a New Project")
+                .title("Jk - Create a New Project")
                 .step(WizardStep.InputStep.of("name", "Project name:")
                         .placeholder("untitled")
                         .defaultValue("untitled")
