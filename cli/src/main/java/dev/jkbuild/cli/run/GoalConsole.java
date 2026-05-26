@@ -81,9 +81,9 @@ public final class GoalConsole {
      * {@code --output json} &gt; {@code --quiet} &gt;
      * {@code --no-progress} &gt; {@code --verbose} &gt; default.
      *
-     * <p>JSON wins over the visualization flags because it's an
-     * explicit "I want machine-readable output" — the user's other
-     * preferences don't override that.
+     * <p>{@code --output json} wins over the visualization flags
+     * because it's an explicit "I want machine-readable output" —
+     * the user's other preferences don't override that.
      */
     public static Mode modeFor(dev.jkbuild.cli.GlobalOptions opts) {
         if (opts == null) return Mode.AUTO;

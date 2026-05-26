@@ -61,10 +61,6 @@ public final class NativeCommand implements Callable<Integer> {
             description = "Main class to compile. Default: read from jk.toml's image.main-class.")
     String mainClass;
 
-    @Option(names = "--output",
-            description = "Output binary path. Default: target/<artifact>.")
-    Path output;
-
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
@@ -134,9 +130,7 @@ public final class NativeCommand implements Callable<Integer> {
                     }
                     ctx.put(MAIN_CLASS, chosenMain);
 
-                    Path out = output != null
-                            ? output
-                            : projectDir.resolve("target").resolve(project.project().artifact());
+                    Path out = projectDir.resolve("target").resolve(project.project().artifact());
                     ctx.put(OUTPUT_PATH, out);
                     ctx.progress(1);
                 })

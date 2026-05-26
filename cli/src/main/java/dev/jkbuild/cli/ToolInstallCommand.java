@@ -36,7 +36,7 @@ import java.util.concurrent.Callable;
  * <p>Two phases: {@code resolve-coord} (IO) → {@code install-launcher}.
  * Not marked interactive — the work is straightforward enough that the
  * standard progress widget works fine, and the goal stays
- * {@code --format json}-friendly.
+ * {@code --output json}-friendly.
  */
 @Command(name = "install", description = "Install a tool from a Maven coordinate")
 public final class ToolInstallCommand implements Callable<Integer> {

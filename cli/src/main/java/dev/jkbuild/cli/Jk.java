@@ -542,7 +542,8 @@ public final class Jk implements Runnable {
      */
     private static final Set<String> GLOBAL_OPTION_LONG_NAMES = Set.of(
             "--quiet", "--verbose", "--color", "--offline", "--no-progress",
-            "--config-file", "--no-config", "--directory", "--help", "--version");
+            "--output", "--config-file", "--no-config", "--directory",
+            "--help", "--version");
 
     /** True when this option came from the {@link GlobalOptions} mixin. */
     private static boolean isGlobal(picocli.CommandLine.Model.OptionSpec opt) {
