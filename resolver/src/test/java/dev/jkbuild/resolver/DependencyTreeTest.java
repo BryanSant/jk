@@ -25,9 +25,9 @@ class DependencyTreeTest {
 
         String rendered = DependencyTree.render(project, lock);
         assertThat(rendered).isEqualToIgnoringWhitespace("""
-                widget v0.1.0
-                └── com.foo:root v1.0
-                    └── com.foo:leaf v1.0
+                com.example:widget:0.1.0
+                └── com.foo:root:1.0
+                    └── com.foo:leaf:1.0
                 """);
     }
 
@@ -44,8 +44,8 @@ class DependencyTreeTest {
 
         String rendered = DependencyTree.render(project, lock);
         // First occurrence: full label. Second: (*) marker.
-        assertThat(rendered).contains("com.foo:leaf v1.0\n");
-        assertThat(rendered).contains("com.foo:leaf v1.0 (*)\n");
+        assertThat(rendered).contains("com.foo:leaf:1.0\n");
+        assertThat(rendered).contains("com.foo:leaf:1.0 (*)\n");
     }
 
     @Test
@@ -56,7 +56,7 @@ class DependencyTreeTest {
                 pkg("com.foo:leaf", "1.0", List.of()));
 
         String rendered = DependencyTree.render(project, lock, 0);
-        assertThat(rendered).contains("com.foo:root v1.0");
+        assertThat(rendered).contains("com.foo:root:1.0");
         assertThat(rendered).doesNotContain("leaf");
     }
 

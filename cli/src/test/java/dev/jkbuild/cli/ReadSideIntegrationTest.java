@@ -73,10 +73,15 @@ class ReadSideIntegrationTest {
                 "--repo-url", base.toString(),
                 "--cache-dir", cache.toString());
 
-        // jk tree
-        String tree = captureStdout(() -> run("tree", "-C", tempDir.toString()));
-        assertThat(tree).contains("com.foo:root v1.0");
-        assertThat(tree).contains("com.foo:leaf v1.0");
+        // jk tree — strip ANSI escapes so the GAV-formatted labels
+        // line up as plain substrings the assertions can match
+        // against. --color=never drops the foreground colors but
+        // leaves text attributes (underline/bold) in place, hence
+        // the regex below.
+        String tree = stripAnsi(captureStdout(() ->
+                run("tree", "-C", tempDir.toString())));
+        assertThat(tree).contains("com.foo:root:1.0");
+        assertThat(tree).contains("com.foo:leaf:1.0");
 
         // jk why
         String why = captureStdout(() -> run("why", "com.foo:leaf", "-C", tempDir.toString()));
@@ -162,6 +167,11 @@ class ReadSideIntegrationTest {
 
     private static int run(String... args) {
         return Jk.execute(args);
+    }
+
+    /** Remove ANSI CSI escape sequences from {@code s}. */
+    private static String stripAnsi(String s) {
+        return s.replaceAll("\\[[0-9;]*[a-zA-Z]", "");
     }
 
     private static String captureStdout(Runnable body) {

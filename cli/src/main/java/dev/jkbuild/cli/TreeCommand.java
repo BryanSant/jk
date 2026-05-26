@@ -14,7 +14,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
-import java.util.function.UnaryOperator;
 
 /** {@code jk tree} — print the resolved dependency tree. */
 @Command(name = "tree", description = "Print the resolved dependency tree")
@@ -41,19 +40,28 @@ public final class TreeCommand implements Callable<Integer> {    @Option(names =
         JkBuild project = JkBuildParser.parse(buildFile);
         Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
-        UnaryOperator<String> rail = paintRail();
-        System.out.print(DependencyTree.render(project, lock, max, rail));
+
+        // Header line matching the wizard's "Jk - …" prefix.
+        System.out.println("Jk - Project Tree");
+        System.out.print(DependencyTree.render(project, lock, max, styling()));
         return 0;
     }
 
     /**
-     * Wrap each box-drawing run in the same dark-gray the wizard uses
-     * for its settled rails ({@link Theme#darkGray()}). When color is
-     * disabled (NO_COLOR / dumb terminal / piped output the user
-     * explicitly stripped), Theme.colorize already returns the raw
-     * text — no escape codes leak.
+     * Color pattern matching how Java devs read a Maven coordinate:
+     * <pre>
+     *   <u><blue>group</blue></u>:<b><cyan>artifact</cyan></b>:<yellow>version</yellow>
+     * </pre>
+     * Rails get the same dim dark-gray the wizard uses for its
+     * settled rails. {@link Theme#colorize} respects {@code --color}
+     * / {@code NO_COLOR} / dumb terminals, so escapes are dropped
+     * cleanly when color is off.
      */
-    private static UnaryOperator<String> paintRail() {
-        return s -> Theme.colorize(s, Theme.darkGray());
+    private static DependencyTree.Styling styling() {
+        return new DependencyTree.Styling(
+                s -> Theme.colorize(s, Theme.darkGray()),
+                s -> Theme.colorize(s, Theme.blue().underline()),
+                s -> Theme.colorize(s, Theme.activeStep().bold()),
+                s -> Theme.colorize(s, Theme.warning()));
     }
 }

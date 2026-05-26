@@ -23,6 +23,28 @@ import java.util.stream.Stream;
  */
 public final class DependencyTree {
 
+    /**
+     * Optional ANSI styling for tree output. Each operator wraps the
+     * matching piece of text with whatever escape sequence the caller
+     * prefers. Defaults to {@link #plain()} (identity everywhere) so
+     * tests and non-color consumers get raw ASCII back.
+     *
+     * <p>The fields map directly to the rendered shape:
+     * <pre>
+     *   {rail}└── {/rail}{group}{group}{/group}:{artifact}{artifact}{/artifact}:{version}{version}{/version}
+     * </pre>
+     */
+    public record Styling(
+            UnaryOperator<String> rail,
+            UnaryOperator<String> group,
+            UnaryOperator<String> artifact,
+            UnaryOperator<String> version) {
+        public static Styling plain() {
+            return new Styling(UnaryOperator.identity(), UnaryOperator.identity(),
+                    UnaryOperator.identity(), UnaryOperator.identity());
+        }
+    }
+
     private DependencyTree() {}
 
     public static String render(JkBuild project, Lockfile lock) {
@@ -30,30 +52,40 @@ public final class DependencyTree {
     }
 
     public static String render(JkBuild project, Lockfile lock, int maxDepth) {
-        return render(project, lock, maxDepth, UnaryOperator.identity());
+        return render(project, lock, maxDepth, Styling.plain());
+    }
+
+    /** Back-compat overload — rail-only styling. */
+    public static String render(JkBuild project, Lockfile lock, int maxDepth,
+                                UnaryOperator<String> railStyler) {
+        return render(project, lock, maxDepth, new Styling(
+                railStyler, UnaryOperator.identity(),
+                UnaryOperator.identity(), UnaryOperator.identity()));
     }
 
     /**
-     * Render with a custom rail styler. {@code railStyler} is applied to
-     * each box-drawing run ({@code ├── }, {@code └── }, {@code │   },
-     * {@code "    "}) so callers in the CLI can paint them in the same
-     * dim color the wizard uses for its settled rails. Tests and other
-     * non-TTY consumers pass {@link UnaryOperator#identity()} and get
-     * plain ASCII back.
+     * Render with full styling. Labels are emitted in {@code group:artifact:version}
+     * shape (the Maven coordinate convention Java developers expect), with each
+     * segment passed through its corresponding {@link Styling} operator. Rail
+     * connectors ({@code ├── }, {@code └── }, {@code │   }, {@code "    "}) are
+     * passed through {@link Styling#rail}.
      */
     public static String render(JkBuild project, Lockfile lock, int maxDepth,
-                                UnaryOperator<String> railStyler) {
+                                Styling styling) {
         Map<String, Lockfile.Package> byModule = indexByModule(lock);
         StringBuilder out = new StringBuilder();
-        out.append(project.project().artifact())
-                .append(" v").append(project.project().version())
-                .append('\n');
+        // Root project: group:artifact:version, styled like every other line.
+        out.append(formatCoord(
+                project.project().group(),
+                project.project().artifact(),
+                project.project().version(),
+                styling)).append('\n');
 
         List<String> roots = collectRoots(project);
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < roots.size(); i++) {
             renderNode(byModule, roots.get(i), 0, maxDepth,
-                    i == roots.size() - 1, "", railStyler, seen, out);
+                    i == roots.size() - 1, "", styling, seen, out);
         }
         return out.toString();
     }
@@ -65,32 +97,50 @@ public final class DependencyTree {
             int maxDepth,
             boolean isLast,
             String prefix,
-            UnaryOperator<String> railStyler,
+            Styling styling,
             Set<String> seen,
             StringBuilder out) {
 
         Lockfile.Package pkg = byModule.get(module);
-        String label = pkg != null
-                ? module + " v" + pkg.version()
-                : module + " (missing)";
+        // module is "group:artifact"; split for per-segment styling.
+        int colon = module.indexOf(':');
+        String groupId = colon > 0 ? module.substring(0, colon) : module;
+        String artifactId = colon > 0 ? module.substring(colon + 1) : "";
+
+        String label;
+        if (pkg != null) {
+            label = formatCoord(groupId, artifactId, pkg.version(), styling);
+        } else {
+            // No version available — emit "group:artifact (missing)" so the
+            // (missing) marker is unmistakable and stays unstyled.
+            label = styling.group().apply(groupId) + ":"
+                    + styling.artifact().apply(artifactId) + " (missing)";
+        }
         boolean alreadyShown = !seen.add(module);
         String marker = alreadyShown ? " (*)" : "";
         String connector = isLast ? "└── " : "├── ";
 
-        out.append(prefix).append(railStyler.apply(connector))
+        out.append(prefix).append(styling.rail().apply(connector))
                 .append(label).append(marker).append('\n');
 
         if (alreadyShown || pkg == null || depth >= maxDepth) return;
 
-        String childPrefix = prefix + railStyler.apply(isLast ? "    " : "│   ");
+        String childPrefix = prefix + styling.rail().apply(isLast ? "    " : "│   ");
         List<String> children = pkg.deps().stream()
                 .map(DependencyTree::stripVersion)
                 .sorted()
                 .toList();
         for (int i = 0; i < children.size(); i++) {
             renderNode(byModule, children.get(i), depth + 1, maxDepth,
-                    i == children.size() - 1, childPrefix, railStyler, seen, out);
+                    i == children.size() - 1, childPrefix, styling, seen, out);
         }
+    }
+
+    private static String formatCoord(String group, String artifact, String version,
+                                      Styling styling) {
+        return styling.group().apply(group)
+                + ":" + styling.artifact().apply(artifact)
+                + ":" + styling.version().apply(version);
     }
 
     static Map<String, Lockfile.Package> indexByModule(Lockfile lock) {
