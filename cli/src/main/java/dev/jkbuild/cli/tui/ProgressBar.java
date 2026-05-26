@@ -134,9 +134,13 @@ public final class ProgressBar implements AutoCloseable {
         closed = true;
         ACTIVE.compareAndSet(this, null);
         if (silent) return;
+        // Wipe the bar line entirely on the way out. Without the
+        // CR + erase-line, a partial bar (e.g. a goal that failed
+        // before any progress) would stay in the transcript next to
+        // the failure summary that follows.
+        if (drawn) out.print("\r\033[K");
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
-        out.println();
         out.flush();
     }
 
@@ -163,6 +167,38 @@ public final class ProgressBar implements AutoCloseable {
         out.print(SHOW_CURSOR);
         out.println(message);
         out.flush();
+    }
+
+    /**
+     * Print {@code line} on its own row <em>above</em> the bar, without
+     * disturbing the bar's pinned position. Wipes the current bar line,
+     * prints the message + newline, then redraws the bar in place.
+     * Used by listeners to surface warnings / errors mid-run so they
+     * land cleanly in the scroll-back instead of being glued to the
+     * end of the carriage-returned bar line. Safe to call from any
+     * thread (synchronizes on this).
+     *
+     * <p>If the bar is silent or already closed, the message passes
+     * through as a plain {@code println} on the bar's stream — there's
+     * no pinned row to clear.
+     */
+    public synchronized void writeAbove(String line) {
+        if (silent || closed || !drawn) {
+            out.println(line);
+            out.flush();
+            return;
+        }
+        out.print("\r\033[K");           // wipe the bar line
+        out.println(line);                // emit the hoisted message
+        // Force a fresh full redraw at the same position. Without resetting
+        // `drawn`, renderDiff would no-op on identical state and the bar
+        // wouldn't reappear.
+        drawn = false;
+        renderInitial(lastFilled, lastPercent, lastStatus);
+        out.print(String.format(OSC_PROGRESS_FMT,
+                Math.round(lastFilled * 100.0 / SEGMENTS)));
+        out.flush();
+        drawn = true;
     }
 
     /**

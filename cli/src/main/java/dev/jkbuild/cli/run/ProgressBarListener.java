@@ -68,17 +68,28 @@ public final class ProgressBarListener implements GoalListener {
     }
 
     @Override
-    public void warn(String phase, String code, String message) {
-        // Don't bury the warning inside the bar — print it above and
-        // re-render the bar on the next event.
-        err.println(Theme.colorize("⚠", Theme.warning())
-                + " " + phase + "/" + code + ": " + message);
+    public synchronized void warn(String phase, String code, String message) {
+        // Don't smash the warning into the bar line — hoist it above
+        // the pinned row and let the bar redraw beneath. If the bar
+        // is already gone, fall back to plain stderr.
+        String line = Theme.colorize("⚠", Theme.warning())
+                + " " + phase + "/" + code + ": " + message;
+        if (bar != null) {
+            bar.writeAbove(line);
+        } else {
+            err.println(line);
+        }
     }
 
     @Override
-    public void error(String phase, String code, String message) {
-        err.println(Theme.colorize("✗", Theme.error())
-                + " " + phase + "/" + code + ": " + message);
+    public synchronized void error(String phase, String code, String message) {
+        String line = Theme.colorize("✗", Theme.error())
+                + " " + phase + "/" + code + ": " + message;
+        if (bar != null) {
+            bar.writeAbove(line);
+        } else {
+            err.println(line);
+        }
     }
 
     @Override
@@ -89,14 +100,16 @@ public final class ProgressBarListener implements GoalListener {
     @Override
     public synchronized void goalFinish(GoalResult result) {
         if (bar == null) return;
-        if (result.success()) {
-            // Wipe the bar in favour of the command's own success line —
-            // the build/sync command will print its "Built ..." / etc.
-            // summary right after.
-            bar.close();
-        } else {
+        if (result.cancelled()) {
+            // Explicit Ctrl-C — preserve the red struck-through shape so
+            // the user can see where the run was when they aborted it.
             bar.renderCanceled();
             err.println();
+        } else {
+            // Both success and plain failure wipe the bar entirely. The
+            // command's success summary or failure summary takes its
+            // place; a leftover bar would clutter the failure output.
+            bar.close();
         }
         bar = null;
     }
