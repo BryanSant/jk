@@ -19,7 +19,7 @@ import java.util.stream.Stream;
 /**
  * Renders a Cargo-style dependency tree from a {@link JkBuild} project and
  * its resolved {@link Lockfile}. Revisited subtrees are marked with an
- * up-arrow ({@code ↑}) so diamond-shaped graphs don't explode the output —
+ * up-arrow ({@code 🡱}) so diamond-shaped graphs don't explode the output —
  * the arrow points the reader back to the earlier expansion.
  */
 public final class DependencyTree {
@@ -118,7 +118,7 @@ public final class DependencyTree {
                     + styling.artifact().apply(artifactId) + " (missing)";
         }
         boolean alreadyShown = !seen.add(module);
-        String marker = alreadyShown ? " ↑" : "";
+        String marker = alreadyShown ? " 🡱" : "";
         // ╰── for the last child (rounded arc); ├── for the rest.
         // Standard "rounded tree" convention used by eza, tre, etc.
         String connector = isLast ? "╰── " : "├── ";
