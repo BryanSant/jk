@@ -135,6 +135,21 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                     System.err.println("  " + error);
                 }
                 exit = 1;
+            } else {
+                // Stamp a per-project reachability manifest so the future
+                // mark-and-sweep treats this project's locked deps as live
+                // — important between sync and the first build, when no
+                // action record covers them yet.
+                try {
+                    dev.jkbuild.task.SyncManifest.write(
+                            cache.resolve("actions"), lockFile, lockFinal);
+                } catch (java.io.IOException manifestErr) {
+                    // Best-effort: a manifest write failure shouldn't fail
+                    // the sync. Worst case: a sweep collects the deps and
+                    // the next build re-fetches them.
+                    System.err.println("jk sync: warning: could not stamp "
+                            + "reachability manifest (" + manifestErr.getMessage() + ")");
+                }
             }
         } catch (ExecutionException e) {
             Throwable cause = e.getCause() != null ? e.getCause() : e;
