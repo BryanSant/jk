@@ -101,6 +101,11 @@ public final class CacheCommand implements Callable<Integer> {
                 description = "Print what would be removed; touch nothing.")
         boolean dryRun;
 
+        @Option(names = "--sweep",
+                description = "After expiring stale records, mark-and-sweep "
+                        + "unreferenced objects out of the CAS pool. Off by default.")
+        boolean sweep;
+
         @Override
         public Integer call() throws IOException {
             Path root = resolveCacheRoot(cacheDir);
@@ -111,34 +116,60 @@ public final class CacheCommand implements Callable<Integer> {
             long cutoffMillis = System.currentTimeMillis()
                     - (long) olderThanDays * 24L * 60L * 60L * 1000L;
 
-            int prunedCount = 0;
-            long freedBytes = 0;
+            int recordsExpired = 0;
+            long recordsBytes = 0;
+            int tempsCleared = 0;
+            long tempsBytes = 0;
 
-            // Stale action-cache entries.
-            Path actionsDir = root.resolve("actions");
-            if (Files.isDirectory(actionsDir)) {
-                for (Path file : olderThan(actionsDir, cutoffMillis)) {
-                    long size = Files.size(file);
-                    if (!dryRun) Files.deleteIfExists(file);
-                    prunedCount++;
-                    freedBytes += size;
-                }
-            }
-
-            // Atomic-write tempfiles left behind by interrupted Cas.put calls.
+            // Phase 1: atomic-write tempfiles left behind by interrupted Cas.put.
             Path shaDir = root.resolve("sha256");
             if (Files.isDirectory(shaDir)) {
                 for (Path file : tempFiles(shaDir)) {
                     long size = Files.size(file);
                     if (!dryRun) Files.deleteIfExists(file);
-                    prunedCount++;
-                    freedBytes += size;
+                    tempsCleared++;
+                    tempsBytes += size;
                 }
             }
 
+            // Phase 2: TTL action records + sync manifests. Run BEFORE the
+            // sweep so freshly-orphaned manifests' refs get collected in
+            // the same prune cycle.
+            Path actionsDir = root.resolve("actions");
+            if (Files.isDirectory(actionsDir)) {
+                for (Path file : olderThan(actionsDir, cutoffMillis)) {
+                    long size = Files.size(file);
+                    if (!dryRun) Files.deleteIfExists(file);
+                    recordsExpired++;
+                    recordsBytes += size;
+                }
+            }
+
+            // Phase 3: mark-and-sweep CAS (opt-in via --sweep).
+            int sweptCount = 0;
+            long sweptBytes = 0;
+            int sweptKept = 0;
+            if (sweep) {
+                dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(root);
+                Path toolsDir = root.resolve("tools");
+                var liveRefs = dev.jkbuild.task.CacheRoots.collect(cas, actionsDir, toolsDir);
+                var report = dev.jkbuild.task.CasSweep.sweep(cas, liveRefs, dryRun);
+                sweptCount = report.deleted();
+                sweptBytes = report.freedBytes();
+                sweptKept = report.kept();
+            }
+
             String verb = dryRun ? "Would prune" : "Pruned";
-            System.out.printf("%s %s entries, %s freed.%n",
-                    verb, fmtCount(prunedCount), fmtBytes(freedBytes));
+            System.out.printf("%s: records expired %s (%s), temps %s (%s)",
+                    verb,
+                    fmtCount(recordsExpired), fmtBytes(recordsBytes),
+                    fmtCount(tempsCleared), fmtBytes(tempsBytes));
+            if (sweep) {
+                System.out.printf(", swept %s (%s); kept %s%n",
+                        fmtCount(sweptCount), fmtBytes(sweptBytes), fmtCount(sweptKept));
+            } else {
+                System.out.println();
+            }
             return 0;
         }
 

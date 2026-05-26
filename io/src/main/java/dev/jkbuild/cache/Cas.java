@@ -41,6 +41,39 @@ public final class Cas {
     }
 
     /**
+     * Inverse of {@link #pathFor}: extract the hex hash from a path that
+     * looks like a CAS object location, or {@link java.util.Optional#empty}
+     * if it doesn't fit the layout. Used by the sweep when scanning tool
+     * env JSONs and action records — any absolute path under
+     * {@code <root>/sha256/AA/BB/<rest>} contributes its hash to the
+     * reachable set, regardless of the file format it came from.
+     */
+    public java.util.Optional<String> hashFromPath(Path candidate) {
+        Path normalised = candidate.toAbsolutePath().normalize();
+        Path shaRoot = root.resolve("sha256");
+        if (!normalised.startsWith(shaRoot)) return java.util.Optional.empty();
+        Path rel = shaRoot.relativize(normalised);
+        if (rel.getNameCount() != 3) return java.util.Optional.empty();
+        String aa = rel.getName(0).toString();
+        String bb = rel.getName(1).toString();
+        String rest = rel.getName(2).toString();
+        if (aa.length() != 2 || bb.length() != 2) return java.util.Optional.empty();
+        String hex = aa + bb + rest;
+        if (!isHex(hex)) return java.util.Optional.empty();
+        return java.util.Optional.of(hex);
+    }
+
+    private static boolean isHex(String s) {
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                return false;
+            }
+        }
+        return !s.isEmpty();
+    }
+
+    /**
      * Write data into the CAS. Returns the on-disk path. Idempotent — if the
      * blob is already present and matches, the existing path is returned
      * without re-writing.

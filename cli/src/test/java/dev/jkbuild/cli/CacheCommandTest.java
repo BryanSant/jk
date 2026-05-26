@@ -63,7 +63,10 @@ class CacheCommandTest {
         assertThat(Files.exists(fresh)).isTrue();
         assertThat(Files.exists(leftoverTmp)).isFalse();
         assertThat(Files.exists(keptBlob)).isTrue();
-        assertThat(stdout).contains("Pruned 2 entries");
+        // New summary format breaks the count out by phase.
+        assertThat(stdout)
+                .contains("records expired 1")
+                .contains("temps 1");
     }
 
     @Test
@@ -77,7 +80,9 @@ class CacheCommandTest {
                 "--cache-dir", cache.toString(), "--dry-run"));
 
         assertThat(Files.exists(stale)).isTrue();
-        assertThat(stdout).contains("Would prune 1 entries");
+        assertThat(stdout)
+                .startsWith("Would prune")
+                .contains("records expired 1");
     }
 
     @Test
