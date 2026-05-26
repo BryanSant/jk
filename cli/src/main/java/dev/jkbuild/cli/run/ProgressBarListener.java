@@ -118,7 +118,10 @@ public final class ProgressBarListener implements GoalListener {
         sb.append(" [").append(phase).append("/").append(code).append("]: ");
         sb.append(summary, Theme.focused());
         if (detail != null) {
-            sb.append(" — ").append(detail);
+            // Bright cyan for the actionable second half — keeps the
+            // "what went wrong" / "what to do about it" halves easy to
+            // tell apart at a glance.
+            sb.append(" — ").append(detail, Theme.activeStep());
         }
         return sb.toAnsi();
     }

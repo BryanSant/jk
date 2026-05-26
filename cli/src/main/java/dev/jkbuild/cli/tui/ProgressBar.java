@@ -45,6 +45,12 @@ public final class ProgressBar implements AutoCloseable {
     private static final int START_R = 0x81, START_G = 0x50, START_B = 0xfe;
     private static final int END_R = 0xe3, END_G = 0x47, END_B = 0x5b;
 
+    // Failure gradient: dark red #7f1d1d → bright red #ef4444 (tailwind
+    // red-900 → red-500). Used by renderFailed so the bar reads as
+    // "this didn't finish" even when no segments were filled in.
+    private static final int FAIL_START_R = 0x7f, FAIL_START_G = 0x1d, FAIL_START_B = 0x1d;
+    private static final int FAIL_END_R = 0xef, FAIL_END_G = 0x44, FAIL_END_B = 0x44;
+
     private static final String HIDE_CURSOR = "\033[?25l";
     private static final String SHOW_CURSOR = "\033[?25h";
 
@@ -73,6 +79,7 @@ public final class ProgressBar implements AutoCloseable {
 
     private final PrintStream out;
     private final AttributedStyle[] segmentColors;
+    private final AttributedStyle[] failColors;
     private final AttributedStyle emptyStyle = Theme.dim();
     private final boolean silent;
 
@@ -85,7 +92,11 @@ public final class ProgressBar implements AutoCloseable {
     private ProgressBar(PrintStream out, boolean silent) {
         this.out = out;
         this.silent = silent;
-        this.segmentColors = buildGradient(SEGMENTS);
+        this.segmentColors = buildGradient(SEGMENTS,
+                START_R, START_G, START_B, END_R, END_G, END_B);
+        this.failColors = buildGradient(SEGMENTS,
+                FAIL_START_R, FAIL_START_G, FAIL_START_B,
+                FAIL_END_R, FAIL_END_G, FAIL_END_B);
     }
 
     /**
@@ -220,7 +231,13 @@ public final class ProgressBar implements AutoCloseable {
         out.print("\r");
         out.print(Theme.colorize("Failed", Theme.error().bold()));
         out.print(" ");
-        renderSegments(0, SEGMENTS, lastFilled);
+        // Every segment painted with the dark-red→bright-red gradient.
+        // We don't care about filled vs empty here — the bar's role at
+        // this point is to mark *where* the goal stopped, not to
+        // continue showing in-flight progress.
+        for (int i = 0; i < SEGMENTS; i++) {
+            out.print(Theme.colorize(String.valueOf(EMPTY_CHAR), failColors[i]));
+        }
         out.print(GAP);
         out.print(Theme.colorize(lastPercent, Theme.settled()));
         out.print(SEPARATOR);
@@ -310,12 +327,17 @@ public final class ProgressBar implements AutoCloseable {
     }
 
     static AttributedStyle[] buildGradient(int n) {
+        return buildGradient(n, START_R, START_G, START_B, END_R, END_G, END_B);
+    }
+
+    static AttributedStyle[] buildGradient(int n,
+            int sr, int sg, int sb, int er, int eg, int eb) {
         AttributedStyle[] a = new AttributedStyle[n];
         for (int i = 0; i < n; i++) {
             double t = n <= 1 ? 0.0 : (double) i / (n - 1);
-            int r = (int) Math.round(START_R + t * (END_R - START_R));
-            int g = (int) Math.round(START_G + t * (END_G - START_G));
-            int b = (int) Math.round(START_B + t * (END_B - START_B));
+            int r = (int) Math.round(sr + t * (er - sr));
+            int g = (int) Math.round(sg + t * (eg - sg));
+            int b = (int) Math.round(sb + t * (eb - sb));
             a[i] = Theme.bright(r, g, b);
         }
         return a;
