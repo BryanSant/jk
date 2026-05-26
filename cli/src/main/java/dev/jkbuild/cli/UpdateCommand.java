@@ -2,17 +2,23 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,7 +35,9 @@ import java.util.concurrent.Callable;
  * but a no-op until selective resolution lands.
  */
 @Command(name = "update", description = "Re-resolve declared dependencies and rewrite jk.lock")
-public final class UpdateCommand implements Callable<Integer> {    @Option(names = "--precise", paramLabel = "<coord>@<ver>",
+public final class UpdateCommand implements Callable<Integer> {
+
+    @Option(names = "--precise", paramLabel = "<coord>@<ver>",
             description = "Pin a single coord to a version for this update (not yet implemented).")
     String precise;
 
@@ -53,6 +61,9 @@ public final class UpdateCommand implements Callable<Integer> {    @Option(names
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
+    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
+
     @Override
     public Integer call() throws Exception {
         Path dir = global.workingDir();
@@ -62,10 +73,7 @@ public final class UpdateCommand implements Callable<Integer> {    @Option(names
             System.err.println("jk update: no jk.toml in " + dir);
             return 2;
         }
-
         if (precise != null && !precise.isBlank()) {
-            // Accept but don't act on it yet — the resolver doesn't have
-            // a "selective re-resolve" entry point.
             System.err.println("jk update: --precise is recognized but not yet implemented; "
                     + "performing a full re-resolve instead.");
         }
@@ -73,25 +81,73 @@ public final class UpdateCommand implements Callable<Integer> {    @Option(names
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
 
-        JkBuild parsed;
-        try {
-            parsed = JkBuildParser.parse(buildFile);
-        } catch (RuntimeException e) {
-            System.err.println("jk update: " + e.getMessage());
-            return 2;
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml");
+                    JkBuild parsed;
+                    try {
+                        parsed = JkBuildParser.parse(buildFile);
+                    } catch (RuntimeException e) {
+                        ctx.error("toml", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.put(PROJECT, parsed);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase resolve = Phase.builder("resolve")
+                .kind(PhaseKind.IO)
+                .requires("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("re-resolve dependencies");
+                    RepoGroup repos = RepoGroupBuilder.buildFor(
+                            ctx.require(PROJECT), repoUrl, new Cas(cache));
+                    LockOrchestrator orchestrator = new LockOrchestrator(repos);
+                    try {
+                        Lockfile lock = orchestrator.lock(ctx.require(PROJECT),
+                                Jk.VERSION, features, !noDefaultFeatures);
+                        ctx.put(LOCKFILE, lock);
+                    } catch (Exception e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase write = Phase.builder("write-lockfile")
+                .requires("resolve")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("write " + lockFile.getFileName());
+                    LockfileWriter.write(ctx.require(LOCKFILE), lockFile);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("update")
+                .addPhase(parseBuild)
+                .addPhase(resolve)
+                .addPhase(write)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk update failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            System.err.println("Run log: " + cache.resolve("runs"));
+            return failed.equals("resolve") ? 6 : 2;
         }
 
-        RepoGroup repos = RepoGroupBuilder.buildFor(parsed, repoUrl, new Cas(cache));
-        LockOrchestrator orchestrator = new LockOrchestrator(repos);
-
-        Lockfile lock;
-        try {
-            lock = orchestrator.lock(parsed, Jk.VERSION, features, !noDefaultFeatures);
-        } catch (IOException e) {
-            System.err.println("jk update: " + e.getMessage());
-            return 6;
-        }
-        LockfileWriter.write(lock, lockFile);
+        Lockfile lock = goal.get(LOCKFILE).orElseThrow();
         System.out.println("Updated " + lockFile + " (" + lock.packages().size() + " package"
                 + (lock.packages().size() == 1 ? "" : "s") + ")");
         return 0;
