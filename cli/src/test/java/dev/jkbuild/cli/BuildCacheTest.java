@@ -6,6 +6,7 @@ import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,7 +18,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class BuildCacheTest {
 
     @Test
-    void second_build_hits_action_cache(@TempDir Path tempDir) throws Exception {
+    void second_build_is_up_to_date_via_freshness_stamp(@TempDir Path tempDir) throws Exception {
         run("init", "--name", "widget", tempDir.toString());
         Path src = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(src.getParent());
@@ -27,14 +28,48 @@ class BuildCacheTest {
                 """);
 
         Path cache = tempDir.resolve("cache");
-        // First build: cache miss, real compile.
+        // First build: stamp is absent, action cache misses, real compile.
         int first = run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString());
         assertThat(first).isEqualTo(0);
 
-        // Second build: same inputs → cache hit. Capture stdout.
+        // Second build: stamp is fresh, no input newer → fast skip without
+        // even hashing source content for an action-key lookup.
+        String stdout = captureStdout(() ->
+                run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
+        assertThat(stdout).contains("Up to date: compile-main");
+    }
+
+    @Test
+    void wiping_classes_dir_falls_through_to_action_cache(@TempDir Path tempDir) throws Exception {
+        // The freshness stamp lives inside the classes dir; deleting the
+        // dir (e.g. `jk clean`) removes the stamp and forces the action-key
+        // path, which restores from CAS on a hit.
+        run("init", "--name", "widget", tempDir.toString());
+        Path src = tempDir.resolve("src/main/java/example/Hello.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package example;
+                public class Hello { public static String greet() { return "hi"; } }
+                """);
+
+        Path cache = tempDir.resolve("cache");
+        run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString());
+
+        // Simulate `jk clean` — wipe the output tree, taking the stamp with it.
+        deleteRecursively(tempDir.resolve("target"));
+
         String stdout = captureStdout(() ->
                 run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
         assertThat(stdout).contains("Cache hit: compile-main");
+    }
+
+    private static void deleteRecursively(Path root) throws IOException {
+        if (!Files.exists(root)) return;
+        try (var stream = Files.walk(root)) {
+            for (Path p : stream.sorted(java.util.Comparator.reverseOrder()).toList()) {
+                Files.deleteIfExists(p);
+            }
+        }
     }
 
     @Test

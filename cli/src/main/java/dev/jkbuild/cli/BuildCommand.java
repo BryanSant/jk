@@ -123,22 +123,36 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                     .javaHome(javaHome)
                     .build();
             String taskId = "compile-main";
-            String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
             ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
 
-            var cached = actionCache.lookup(actionKey);
-            if (cached.isPresent()) {
-                actionCache.restore(cached.get(), classes);
-                System.out.println("Cache hit: " + taskId + " (" + actionKey.substring(0, 8) + ")");
+            // Layer 1: maven-style mtime check. Cheap stat-per-input — if
+            // nothing has moved since the last stamp, skip the action-key
+            // hash entirely.
+            if (dev.jkbuild.task.FreshnessStamp.isFresh(classes, sources, classpath)) {
+                System.out.println("Up to date: " + taskId);
             } else {
-                CompileResult result = new JavacDriver().compile(request);
-                for (CompileResult.Diagnostic d : result.diagnostics()) {
-                    System.err.println(d.render());
+                // Layer 2: action cache lookup. Hashes content; survives
+                // mtime jiggles and works across machines via shared CAS.
+                String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
+                var cached = actionCache.lookup(actionKey);
+                if (cached.isPresent()) {
+                    actionCache.restore(cached.get(), classes);
+                    System.out.println("Cache hit: " + taskId + " (" + actionKey.substring(0, 8) + ")");
+                } else {
+                    // Layer 3: full compile.
+                    CompileResult result = new JavacDriver().compile(request);
+                    for (CompileResult.Diagnostic d : result.diagnostics()) {
+                        System.err.println(d.render());
+                    }
+                    if (!result.success() || result.hasErrors()) {
+                        return 1;
+                    }
+                    actionCache.store(taskId, actionKey, ActionKey.snapshotInputs(request), classes);
                 }
-                if (!result.success() || result.hasErrors()) {
-                    return 1;
-                }
-                actionCache.store(taskId, actionKey, ActionKey.snapshotInputs(request), classes);
+                // Stamp lives inside classes/, so wiping the output tree
+                // automatically invalidates the stamp.
+                dev.jkbuild.task.FreshnessStamp.write(classes, taskId, actionKey,
+                        sources, classpath);
             }
         } else {
             Files.createDirectories(classes);
