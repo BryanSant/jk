@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.publish.Checksums;
@@ -10,11 +11,18 @@ import dev.jkbuild.publish.MavenPublisher;
 import dev.jkbuild.publish.PublishablePom;
 import dev.jkbuild.publish.SigningOptions;
 import dev.jkbuild.publish.SigstoreSigner;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.publish.Sbom;
 import dev.jkbuild.publish.SlsaProvenance;
 import dev.jkbuild.publish.SourcesJar;
+import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -35,13 +43,19 @@ import java.util.concurrent.Callable;
  * (main jar, generated POM, sources jar + four checksum files each) and
  * uploads it to a Maven HTTP repository.
  *
- * <p>v0.6 slice C-1 limitations: no GPG signing, no Sigstore, no SLSA
- * attestation, no SBOM, no Maven Central staging. Those layer on in
- * follow-up sub-slices. SNAPSHOT versions are refused per PRD §21.4 unless
+ * <p>Goal shape: {@code parse-build} → {@code assemble-artifacts} →
+ * {@code sign} (only when signing is requested) → {@code upload}
+ * (skipped on {@code --dry-run}). The signing options carry the GPG
+ * key and Sigstore client; we close them in a finally block so the
+ * Sigstore HTTP client doesn't leak on cancellation.
+ *
+ * <p>SNAPSHOT versions are refused per PRD §21.4 unless
  * {@code --allow-snapshot} is set.
  */
 @Command(name = "publish", description = "Publish artifacts to a Maven repository")
-public final class PublishCommand implements Callable<Integer> {    @Option(names = "--repo-url", required = true,
+public final class PublishCommand implements Callable<Integer> {
+
+    @Option(names = "--repo-url", required = true,
             description = "Target Maven repository base URL.")
     URI repoUrl;
 
@@ -92,93 +106,206 @@ public final class PublishCommand implements Callable<Integer> {    @Option(name
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
+    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    private static final GoalKey<Path> JAR = GoalKey.of("jar", Path.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> ARTIFACTS = GoalKey.of("artifacts", List.class);
+    private static final GoalKey<SigningOptions> SIGNING = GoalKey.of("signing", SigningOptions.class);
+    private static final GoalKey<MavenPublisher.Result> PUB_RESULT =
+            GoalKey.of("publish-result", MavenPublisher.Result.class);
+
     @Override
     public Integer call() throws IOException, InterruptedException {
         Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
             System.err.println("jk publish: " + jkBuildPath + " not found.");
-            return 66; // EX_NOINPUT
-        }
-        JkBuild project = JkBuildParser.parse(jkBuildPath);
-
-        if (project.project().version().endsWith("-SNAPSHOT") && !allowSnapshot) {
-            System.err.println("jk publish: refusing to publish a SNAPSHOT version "
-                    + "(use --allow-snapshot, or rename to -dev.N / -rc.N per PRD §21.4).");
-            return 65; // EX_DATAERR
-        }
-
-        Path jar = jarPath != null ? jarPath
-                : projectDir.resolve("target").resolve(
-                        project.project().artifact() + "-" + project.project().version() + ".jar");
-        if (!Files.exists(jar)) {
-            System.err.println("jk publish: main jar not found at " + jar
-                    + " — run `jk build` first or pass --jar.");
             return 66;
         }
+        Path cache = JkDirs.cache();
 
-        byte[] jarBytes = Files.readAllBytes(jar);
-        List<MavenPublisher.Artifact> artifacts = new ArrayList<>();
-        artifacts.add(new MavenPublisher.Artifact(".jar", jarBytes));
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml + validate version");
+                    JkBuild project = JkBuildParser.parse(jkBuildPath);
+                    if (project.project().version().endsWith("-SNAPSHOT") && !allowSnapshot) {
+                        ctx.error("snapshot", "refusing to publish a SNAPSHOT version "
+                                + "(use --allow-snapshot, or rename to -dev.N / -rc.N "
+                                + "per PRD §21.4).");
+                        throw new RuntimeException("snapshot refused");
+                    }
+                    Path jar = jarPath != null ? jarPath
+                            : projectDir.resolve("target").resolve(
+                                    project.project().artifact() + "-"
+                                            + project.project().version() + ".jar");
+                    if (!Files.exists(jar)) {
+                        ctx.error("missing-jar", "main jar not found at " + jar
+                                + " — run `jk build` first or pass --jar.");
+                        throw new RuntimeException("missing jar");
+                    }
+                    ctx.put(PROJECT, project);
+                    ctx.put(JAR, jar);
+                    ctx.progress(1);
+                })
+                .build();
 
-        PublishablePom.Pom pom = PublishablePom.render(project, PublishablePom.Metadata.empty());
-        artifacts.add(new MavenPublisher.Artifact(".pom",
-                pom.xml().getBytes(StandardCharsets.UTF_8)));
+        Phase assembleArtifacts = Phase.builder("assemble-artifacts")
+                .requires("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    JkBuild project = ctx.require(PROJECT);
+                    Path jar = ctx.require(JAR);
+                    ctx.label("assemble publish bundle");
+                    byte[] jarBytes = Files.readAllBytes(jar);
+                    List<MavenPublisher.Artifact> artifacts = new ArrayList<>();
+                    artifacts.add(new MavenPublisher.Artifact(".jar", jarBytes));
 
-        if (!noSources) {
-            Path srcRoot = projectDir.resolve("src/main/java");
-            byte[] sourcesJar = SourcesJar.build(List.of(srcRoot));
-            artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesJar));
-        }
+                    PublishablePom.Pom pom = PublishablePom.render(project,
+                            PublishablePom.Metadata.empty());
+                    artifacts.add(new MavenPublisher.Artifact(".pom",
+                            pom.xml().getBytes(StandardCharsets.UTF_8)));
 
-        if (slsa) {
-            artifacts.add(new MavenPublisher.Artifact(".intoto.json",
-                    buildSlsaProvenance(project.project(), jar.getFileName().toString(), jarBytes)));
-        }
+                    if (!noSources) {
+                        Path srcRoot = projectDir.resolve("src/main/java");
+                        byte[] sourcesJar = SourcesJar.build(List.of(srcRoot));
+                        artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesJar));
+                    }
 
-        if (sbom) {
-            Lockfile lock = loadLockfileIfPresent(projectDir);
-            artifacts.add(new MavenPublisher.Artifact("-cyclonedx.json",
-                    Sbom.cyclonedx(project, lock)));
-            artifacts.add(new MavenPublisher.Artifact("-spdx.json",
-                    Sbom.spdx(project, lock)));
-        }
+                    if (slsa) {
+                        artifacts.add(new MavenPublisher.Artifact(".intoto.json",
+                                buildSlsaProvenance(project.project(),
+                                        jar.getFileName().toString(), jarBytes)));
+                    }
 
-        String user = username != null ? username : System.getenv("PUBLISH_USER");
-        String pass = password != null ? password : System.getenv("PUBLISH_PASSWORD");
+                    if (sbom) {
+                        Lockfile lock = loadLockfileIfPresent(projectDir);
+                        artifacts.add(new MavenPublisher.Artifact("-cyclonedx.json",
+                                Sbom.cyclonedx(project, lock)));
+                        artifacts.add(new MavenPublisher.Artifact("-spdx.json",
+                                Sbom.spdx(project, lock)));
+                    }
+                    ctx.put(ARTIFACTS, artifacts);
+                    ctx.progress(1);
+                })
+                .build();
 
-        if (dryRun) {
-            String groupPath = project.project().group().replace('.', '/');
-            String prefix = repoUrl + (repoUrl.toString().endsWith("/") ? "" : "/")
-                    + groupPath + "/" + project.project().artifact() + "/"
-                    + project.project().version() + "/";
-            System.out.println("Would PUT to " + prefix + ":");
-            for (MavenPublisher.Artifact a : artifacts) {
-                String name = project.project().artifact() + "-"
-                        + project.project().version() + a.filenameSuffix();
-                System.out.println("  " + name + " (" + a.body().length + " bytes)");
-                System.out.println("  " + name + ".md5 / .sha1 / .sha256 / .sha512");
-                if (sign) System.out.println("  " + name + ".asc + four checksums");
-                if (sigstore) System.out.println("  " + name + ".sigstore + four checksums");
-                if (slsa && a.filenameSuffix().equals(".jar")) {
-                    System.out.println("  " + project.project().artifact() + "-"
-                            + project.project().version() + ".intoto.json + four checksums");
-                }
-            }
-            return 0;
-        }
+        Phase prepareSigning = Phase.builder("prepare-signing")
+                .kind(PhaseKind.IO)
+                .requires("assemble-artifacts")
+                .scope(1)
+                .execute(ctx -> {
+                    if (!sign && !sigstore) {
+                        ctx.label("no signing requested");
+                        ctx.put(SIGNING, new SigningOptions(null, null));
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("load signing keys");
+                    try {
+                        ctx.put(SIGNING, buildSigningOptions());
+                    } catch (RuntimeException | IOException e) {
+                        ctx.error("signing", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
 
-        SigningOptions signing = buildSigningOptions();
+        Phase upload = Phase.builder("upload")
+                .kind(PhaseKind.IO)
+                .requires("prepare-signing")
+                .scope(1)
+                .execute(ctx -> {
+                    if (dryRun) {
+                        ctx.label("dry-run — printing upload plan");
+                        printDryRunPlan(ctx.require(PROJECT), ctx.require(ARTIFACTS));
+                        ctx.progress(1);
+                        return;
+                    }
+                    JkBuild project = ctx.require(PROJECT);
+                    @SuppressWarnings("unchecked")
+                    List<MavenPublisher.Artifact> artifacts =
+                            (List<MavenPublisher.Artifact>) ctx.require(ARTIFACTS);
+                    String user = username != null ? username : System.getenv("PUBLISH_USER");
+                    String pass = password != null ? password : System.getenv("PUBLISH_PASSWORD");
+                    ctx.label("upload to " + repoUrl);
+                    MavenPublisher publisher = new MavenPublisher(repoUrl, user, pass);
+                    try {
+                        MavenPublisher.Result result = publisher.publish(
+                                project.project(), artifacts, ctx.require(SIGNING));
+                        ctx.put(PUB_RESULT, result);
+                        if (!result.allOk()) {
+                            ctx.error("upload", "publish reported partial failure");
+                            throw new RuntimeException("upload failed");
+                        }
+                    } catch (IOException | InterruptedException e) {
+                        ctx.error("upload", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("publish")
+                .addPhase(parseBuild)
+                .addPhase(assembleArtifacts)
+                .addPhase(prepareSigning)
+                .addPhase(upload)
+                .build();
+
+        GoalResult result;
         try {
-            MavenPublisher publisher = new MavenPublisher(repoUrl, user, pass);
-            MavenPublisher.Result result = publisher.publish(project.project(), artifacts, signing);
-            System.out.println("Published " + project.project().group() + ":"
-                    + project.project().artifact() + ":" + project.project().version()
-                    + " (" + result.statusByPath().size() + " files"
-                    + (signing.isNoop() ? "" : ", signed") + ")");
-            return result.allOk() ? 0 : 1;
+            result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         } finally {
-            closeSigningOptions(signing);
+            goal.get(SIGNING).ifPresent(PublishCommand::closeSigningOptions);
+        }
+
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk publish failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            System.err.println("Run log: " + cache.resolve("runs"));
+            for (GoalResult.Diagnostic d : result.errors()) {
+                if ("snapshot".equals(d.code())) return 65;
+                if ("missing-jar".equals(d.code())) return 66;
+            }
+            return 1;
+        }
+
+        if (dryRun) return 0;
+
+        JkBuild project = goal.get(PROJECT).orElseThrow();
+        MavenPublisher.Result pub = goal.get(PUB_RESULT).orElseThrow();
+        SigningOptions signing = goal.get(SIGNING).orElseThrow();
+        System.out.println("Published " + project.project().group() + ":"
+                + project.project().artifact() + ":" + project.project().version()
+                + " (" + pub.statusByPath().size() + " files"
+                + (signing.isNoop() ? "" : ", signed") + ")");
+        return 0;
+    }
+
+    private void printDryRunPlan(JkBuild project, List<MavenPublisher.Artifact> artifacts) {
+        String groupPath = project.project().group().replace('.', '/');
+        String prefix = repoUrl + (repoUrl.toString().endsWith("/") ? "" : "/")
+                + groupPath + "/" + project.project().artifact() + "/"
+                + project.project().version() + "/";
+        System.out.println("Would PUT to " + prefix + ":");
+        for (MavenPublisher.Artifact a : artifacts) {
+            String name = project.project().artifact() + "-"
+                    + project.project().version() + a.filenameSuffix();
+            System.out.println("  " + name + " (" + a.body().length + " bytes)");
+            System.out.println("  " + name + ".md5 / .sha1 / .sha256 / .sha512");
+            if (sign) System.out.println("  " + name + ".asc + four checksums");
+            if (sigstore) System.out.println("  " + name + ".sigstore + four checksums");
+            if (slsa && a.filenameSuffix().equals(".jar")) {
+                System.out.println("  " + project.project().artifact() + "-"
+                        + project.project().version() + ".intoto.json + four checksums");
+            }
         }
     }
 

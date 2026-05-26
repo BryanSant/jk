@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.image.ImageBuilder;
@@ -8,15 +9,17 @@ import dev.jkbuild.image.ImageConfig;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Coordinate;
-import dev.jkbuild.repo.MavenLayout;
-import dev.jkbuild.util.Hashing;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -26,16 +29,19 @@ import java.util.concurrent.Callable;
 /**
  * {@code jk image} — build an OCI image for the project (PRD §22).
  *
- * <p>Reads {@code jk.toml} for project coords and the optional
- * {@code image { ... }} block. The main jar must already be built under
- * {@code target/<artifact>-<version>.jar}. Dependency jars come from the
- * CAS via {@code jk.lock}.
+ * <p>Goal shape: {@code parse-build} (SYNC) reads jk.toml, picks
+ * main class, locates main jar; {@code load-deps} (SYNC) reads the
+ * lockfile and resolves CAS paths for every MAIN/RUNTIME dependency
+ * jar; {@code write-image} (IO) either writes the OCI tarball or
+ * pushes to the configured registry.
  *
  * <p>{@code --tarball <path>} writes an OCI archive locally instead of
- * pushing — useful for tests and for inspecting layers without a registry.
+ * pushing.
  */
 @Command(name = "image", description = "Build and push an OCI image for the project")
-public final class ImageCommand implements Callable<Integer> {    @Option(names = "--main",
+public final class ImageCommand implements Callable<Integer> {
+
+    @Option(names = "--main",
             description = "Main class to set as the image entrypoint. Default: image.main-class or project.main.")
     String mainClass;
 
@@ -57,6 +63,14 @@ public final class ImageCommand implements Callable<Integer> {    @Option(names 
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
+    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    private static final GoalKey<ImageConfig> CONFIG = GoalKey.of("image-config", ImageConfig.class);
+    private static final GoalKey<Path> MAIN_JAR = GoalKey.of("main-jar", Path.class);
+    private static final GoalKey<String> CHOSEN_MAIN = GoalKey.of("chosen-main", String.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> DEP_JARS = GoalKey.of("dep-jars", List.class);
+    private static final GoalKey<ImageBuilder.Plan> PLAN = GoalKey.of("plan", ImageBuilder.Plan.class);
+
     @Override
     public Integer call() throws IOException, InterruptedException {
         Path projectDir = global.workingDir();
@@ -65,35 +79,113 @@ public final class ImageCommand implements Callable<Integer> {    @Option(names 
             System.err.println("jk image: " + jkBuildPath + " not found.");
             return 66;
         }
-        JkBuild project = JkBuildParser.parse(jkBuildPath);
+        Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
 
-        ImageConfig config = buildConfig(jkBuildPath);
-        Path mainJar = projectDir.resolve("target").resolve(
-                project.project().artifact() + "-" + project.project().version() + ".jar");
-        if (!Files.exists(mainJar)) {
-            System.err.println("jk image: main jar not found at " + mainJar
-                    + " — run `jk build` first.");
-            return 66;
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml + image config");
+                    JkBuild project = JkBuildParser.parse(jkBuildPath);
+                    ctx.put(PROJECT, project);
+                    ImageConfig config = buildConfig(jkBuildPath);
+                    ctx.put(CONFIG, config);
+
+                    Path mainJar = projectDir.resolve("target").resolve(
+                            project.project().artifact() + "-"
+                                    + project.project().version() + ".jar");
+                    if (!Files.exists(mainJar)) {
+                        ctx.error("missing-jar", "main jar not found at " + mainJar
+                                + " — run `jk build` first.");
+                        throw new RuntimeException("missing main jar");
+                    }
+                    ctx.put(MAIN_JAR, mainJar);
+
+                    String chosen = mainClass != null ? mainClass : config.mainClass();
+                    if (chosen == null || chosen.isBlank()) {
+                        ctx.error("no-main", "no main class set — pass --main or "
+                                + "set image.main-class.");
+                        throw new RuntimeException("missing main class");
+                    }
+                    ctx.put(CHOSEN_MAIN, chosen);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase loadDeps = Phase.builder("load-deps")
+                .requires("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("collect dep jars from CAS");
+                    List<Path> depJars = loadDependencyJars(projectDir, cache);
+                    ctx.put(DEP_JARS, depJars);
+
+                    JkBuild project = ctx.require(PROJECT);
+                    @SuppressWarnings("unchecked")
+                    List<Path> jars = depJars;
+                    ImageBuilder.Plan plan = new ImageBuilder.Plan(
+                            ctx.require(CONFIG),
+                            project.project().artifact(),
+                            project.project().version(),
+                            ctx.require(CHOSEN_MAIN),
+                            ctx.require(MAIN_JAR),
+                            jars);
+                    ctx.put(PLAN, plan);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase writeImage = Phase.builder("write-image")
+                .kind(PhaseKind.IO)
+                .requires("load-deps")
+                .scope(1)
+                .execute(ctx -> {
+                    ImageBuilder.Plan plan = ctx.require(PLAN);
+                    if (tarball != null) {
+                        ctx.label("write OCI tarball " + tarball.getFileName());
+                        ImageBuilder.writeToTarball(plan, tarball);
+                    } else {
+                        ctx.label("push to " + plan.config().registry());
+                        try {
+                            ImageBuilder.pushToRegistry(plan);
+                        } catch (Exception e) {
+                            ctx.error("push", e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("image")
+                .addPhase(parseBuild)
+                .addPhase(loadDeps)
+                .addPhase(writeImage)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk image failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            System.err.println("Run log: " + cache.resolve("runs"));
+            for (GoalResult.Diagnostic d : result.errors()) {
+                if ("missing-jar".equals(d.code())) return 66;
+                if ("no-main".equals(d.code())) return 64;
+            }
+            return 1;
         }
 
-        String chosenMain = mainClass != null ? mainClass : config.mainClass();
-        if (chosenMain == null || chosenMain.isBlank()) {
-            System.err.println("jk image: no main class set — pass --main or set image.main-class.");
-            return 64;
-        }
-
-        List<Path> depJars = loadDependencyJars(projectDir);
-
-        ImageBuilder.Plan plan = new ImageBuilder.Plan(
-                config, project.project().artifact(), project.project().version(),
-                chosenMain, mainJar, depJars);
-
+        ImageBuilder.Plan plan = goal.get(PLAN).orElseThrow();
+        JkBuild project = goal.get(PROJECT).orElseThrow();
+        ImageConfig config = goal.get(CONFIG).orElseThrow();
         if (tarball != null) {
-            ImageBuilder.writeToTarball(plan, tarball);
             System.out.println("Wrote OCI tarball " + tarball
                     + " (" + plan.dependencyJars().size() + " dep layers, main jar layer)");
         } else {
-            ImageBuilder.pushToRegistry(plan);
             System.out.println("Pushed " + config.targetReference(
                     project.project().artifact(), project.project().version()));
         }
@@ -115,10 +207,9 @@ public final class ImageCommand implements Callable<Integer> {    @Option(names 
      * into a path under the CAS. Missing entries are silently skipped — jk
      * sync should have populated them, but partial caches are recoverable.
      */
-    private List<Path> loadDependencyJars(Path projectDir) throws IOException {
+    private static List<Path> loadDependencyJars(Path projectDir, Path cache) throws IOException {
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(lockPath)) return List.of();
-        Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
         Path casRoot = cache.resolve("sha256");
         Lockfile lock = LockfileReader.read(lockPath);
         List<Path> result = new ArrayList<>();
@@ -131,22 +222,5 @@ public final class ImageCommand implements Callable<Integer> {    @Option(names 
             if (Files.exists(candidate)) result.add(candidate);
         }
         return result;
-    }
-
-    @SuppressWarnings("unused")
-    private static Coordinate coordOf(Lockfile.Package pkg) {
-        int colon = pkg.name().indexOf(':');
-        return Coordinate.of(pkg.name().substring(0, colon),
-                pkg.name().substring(colon + 1), pkg.version());
-    }
-
-    @SuppressWarnings("unused")
-    private static String hashSource(String url) {
-        return Hashing.sha256Hex(url.getBytes(StandardCharsets.UTF_8));
-    }
-
-    @SuppressWarnings("unused")
-    private static String mavenPath(Coordinate c) {
-        return MavenLayout.artifactPath(c);
     }
 }
