@@ -104,12 +104,16 @@ public final class ActionCache {
             deleteRecursively(outputDir);
         }
         Files.createDirectories(outputDir);
+        AccessLedger ledger = new AccessLedger(cas.root());
         for (Map.Entry<String, String> entry : record.outputs().entrySet()) {
             Path target = outputDir.resolve(entry.getKey());
             // Hard-link from the CAS object on POSIX same-fs; cross-fs and
             // Windows fall back to a copy automatically. Cuts restore cost
             // for large classes/ trees from O(bytes) to O(entries).
             Linking.linkOrCopy(cas.pathFor(entry.getValue()), target);
+            // Best-effort access journal — feeds the LRU evictor when the
+            // user configures a cache size budget.
+            ledger.touch(entry.getValue());
         }
     }
 

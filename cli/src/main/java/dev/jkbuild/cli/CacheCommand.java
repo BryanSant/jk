@@ -106,6 +106,12 @@ public final class CacheCommand implements Callable<Integer> {
                         + "unreferenced objects out of the CAS pool. Off by default.")
         boolean sweep;
 
+        @Option(names = "--max-size",
+                paramLabel = "<size>",
+                description = "After sweep, evict oldest-accessed objects until the "
+                        + "CAS pool is under <size> (e.g. 20G, 500M). Forces --sweep.")
+        String maxSize;
+
         @Override
         public Integer call() throws IOException {
             Path root = resolveCacheRoot(cacheDir);
@@ -145,18 +151,49 @@ public final class CacheCommand implements Callable<Integer> {
                 }
             }
 
-            // Phase 3: mark-and-sweep CAS (opt-in via --sweep).
+            // --max-size implies --sweep — there's no scenario where you
+            // want LRU eviction without first dropping the GC-collectible
+            // floor.
+            boolean doSweep = sweep || maxSize != null;
+            long budgetBytes = maxSize != null
+                    ? dev.jkbuild.task.LruEvictor.parseSize(maxSize)
+                    : -1L;
+
+            // Phase 3: mark-and-sweep CAS (opt-in via --sweep / --max-size).
             int sweptCount = 0;
             long sweptBytes = 0;
             int sweptKept = 0;
-            if (sweep) {
+            int evictedCount = 0;
+            long evictedBytes = 0;
+            int evictedReachable = 0;
+            long finalSize = -1L;
+            if (doSweep) {
                 dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(root);
                 Path toolsDir = root.resolve("tools");
                 var liveRefs = dev.jkbuild.task.CacheRoots.collect(cas, actionsDir, toolsDir);
-                var report = dev.jkbuild.task.CasSweep.sweep(cas, liveRefs, dryRun);
-                sweptCount = report.deleted();
-                sweptBytes = report.freedBytes();
-                sweptKept = report.kept();
+                var sweepReport = dev.jkbuild.task.CasSweep.sweep(cas, liveRefs, dryRun);
+                sweptCount = sweepReport.deleted();
+                sweptBytes = sweepReport.freedBytes();
+                sweptKept = sweepReport.kept();
+
+                // Phase 4: LRU eviction (only when --max-size set).
+                if (budgetBytes > 0) {
+                    var ledger = new dev.jkbuild.task.AccessLedger(root);
+                    var evictReport = dev.jkbuild.task.LruEvictor.evictDownTo(
+                            cas, budgetBytes, liveRefs, ledger, dryRun);
+                    evictedCount = evictReport.deleted();
+                    evictedBytes = evictReport.freedBytes();
+                    evictedReachable = evictReport.reachableEvicted();
+                    finalSize = evictReport.finalSize();
+                    if (!dryRun) {
+                        try {
+                            ledger.compactIfLarge();
+                        } catch (IOException ignored) {
+                            // Compaction is opportunistic; failures don't
+                            // break the prune.
+                        }
+                    }
+                }
             }
 
             String verb = dryRun ? "Would prune" : "Pruned";
@@ -164,11 +201,19 @@ public final class CacheCommand implements Callable<Integer> {
                     verb,
                     fmtCount(recordsExpired), fmtBytes(recordsBytes),
                     fmtCount(tempsCleared), fmtBytes(tempsBytes));
-            if (sweep) {
-                System.out.printf(", swept %s (%s); kept %s%n",
+            if (doSweep) {
+                System.out.printf(", swept %s (%s); kept %s",
                         fmtCount(sweptCount), fmtBytes(sweptBytes), fmtCount(sweptKept));
-            } else {
-                System.out.println();
+            }
+            if (budgetBytes > 0) {
+                System.out.printf("; evicted %s (%s) to fit %s",
+                        fmtCount(evictedCount), fmtBytes(evictedBytes),
+                        fmtBytes(budgetBytes));
+            }
+            System.out.println();
+            if (evictedReachable > 0) {
+                System.err.println("Warning: evicted " + evictedReachable
+                        + " reachable objects to fit the budget — consider raising --max-size.");
             }
             return 0;
         }
