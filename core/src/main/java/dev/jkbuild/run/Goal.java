@@ -246,10 +246,20 @@ public final class Goal {
             emit(l -> l.phaseFinish(phase.name(), PhaseStatus.SUCCESS, dur));
             return PhaseStatus.SUCCESS;
         } catch (Throwable t) {
-            errors.add(new GoalResult.Diagnostic(phase.name(),
-                    cancelled.get() ? "cancelled" : "exception",
-                    t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
-            PhaseStatus terminal = cancelled.get() ? PhaseStatus.CANCELLED : PhaseStatus.FAIL;
+            // If the phase body already recorded a specific error via
+            // ctx.error(...) and then threw to signal failure, don't
+            // pile on a duplicate "exception" diagnostic — the phase
+            // told us exactly what went wrong. We only synthesise a
+            // generic diagnostic when nothing else was reported.
+            boolean cancel = cancelled.get();
+            boolean phaseAlreadyReported = !cancel && errors.stream()
+                    .anyMatch(d -> phase.name().equals(d.phase()));
+            if (!phaseAlreadyReported) {
+                errors.add(new GoalResult.Diagnostic(phase.name(),
+                        cancel ? "cancelled" : "exception",
+                        t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
+            }
+            PhaseStatus terminal = cancel ? PhaseStatus.CANCELLED : PhaseStatus.FAIL;
             statuses.put(phase.name(), terminal);
             Duration dur = Duration.between(start, Instant.now());
             reports.add(new GoalResult.PhaseReport(phase.name(), terminal, dur));
