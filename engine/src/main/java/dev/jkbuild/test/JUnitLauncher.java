@@ -10,6 +10,8 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,25 +21,33 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
- * Runs a project's compiled tests by forking a child JVM and invoking
- * {@code dev.jkbuild.test.runner.JkRunner} (jk's tiny test-runner shim
- * bundled as a classpath resource and extracted on first use).
+ * Runs a project's compiled tests by forking child JVM(s) that invoke
+ * {@code dev.jkbuild.test.runner.JkRunner}. Supports two modes:
  *
- * <p>The child JVM is the project's pinned JDK from {@code jk.toml} /
- * {@code jk.lock}, so a test compiled for JDK 25 actually runs on JDK 25.
- * The runner uses {@code junit-platform-launcher} + {@code junit-jupiter}
- * — both injected into the user's TEST scope at lock time by
- * {@code LockOrchestrator}, sourced from the CAS like any other dep.
+ * <ul>
+ *   <li><b>Single-worker</b> ({@code workers=1}, default): one child JVM
+ *       discovers and runs everything, streaming events back via NDJSON on
+ *       stdout. The baseline path — preserves today's behavior exactly.</li>
+ *   <li><b>Parallel pull-queue</b> ({@code workers>1}): spawn a discovery
+ *       child first to enumerate test classes, then spawn N pull-mode
+ *       workers concurrently. Each worker stays alive across multiple
+ *       classes; the parent dispatches one class at a time via RUN/DONE
+ *       commands on the worker's stdin, in response to {@code ready}
+ *       events the worker emits after each class completes. Process
+ *       isolation between forks; serial within a fork.</li>
+ * </ul>
  *
- * <p>Wire protocol: the child emits one NDJSON event per line on stdout,
- * each line prefixed with {@code ##JK:}. Lines without the prefix are the
- * user's tests printing — passed through to the parent's stdout verbatim.
+ * <p>Wire protocol: child emits one NDJSON event per line on stdout, each
+ * line prefixed with {@code ##JK:}. Lines without the prefix are the user's
+ * test stdout/stderr — forwarded to the parent's stdout with a
+ * {@code [w<N>] } worker prefix in parallel mode.
  */
 public final class JUnitLauncher {
 
-    /** Marker prefix every protocol line carries. Must match {@code JsonEventWriter.PREFIX} in the runner. */
+    /** Marker prefix every protocol line carries. Must match {@code JsonEventWriter.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JK:";
 
     /** Where the embedded runner jar lives inside the cli jar / native binary. */
@@ -45,35 +55,59 @@ public final class JUnitLauncher {
 
     private static final ObjectMapper JSON = JsonMapper.builder().build();
 
-    public Result run(Path javaHome, Path testClassesDir, List<Path> runtimeClasspath,
-                      Path runnerCacheDir, String jkVersion)
+    /**
+     * Run the project's tests. {@code workers} of 1 (today's default) takes
+     * the one-shot path; anything higher fans out across pull-mode workers.
+     *
+     * <p>{@code listener} receives a stream of progress callbacks as events
+     * arrive — pass {@link TestProgressListener#noop()} when no UI is wired.
+     */
+    public Result run(
+            Path javaHome,
+            Path testClassesDir,
+            List<Path> runtimeClasspath,
+            Path runnerCacheDir,
+            String jkVersion,
+            int workers,
+            TestProgressListener listener)
             throws IOException, InterruptedException {
         Objects.requireNonNull(javaHome, "javaHome");
         Objects.requireNonNull(testClassesDir, "testClassesDir");
         Objects.requireNonNull(runtimeClasspath, "runtimeClasspath");
         Objects.requireNonNull(runnerCacheDir, "runnerCacheDir");
         Objects.requireNonNull(jkVersion, "jkVersion");
+        Objects.requireNonNull(listener, "listener");
+        if (workers < 1) throw new IllegalArgumentException("workers must be >= 1");
 
         Path runnerJar = extractRunner(runnerCacheDir, jkVersion);
+        var classpathBase = new LinkedHashSet<Path>();
+        classpathBase.add(testClassesDir);
+        classpathBase.addAll(runtimeClasspath);
+        classpathBase.add(runnerJar);
+        String classpath = joinClasspath(classpathBase);
+        Path javaBinary = javaBinary(javaHome);
 
-        var classpath = new LinkedHashSet<Path>();
-        classpath.add(testClassesDir);
-        classpath.addAll(runtimeClasspath);
-        classpath.add(runnerJar);
+        if (workers == 1) {
+            return runSingle(javaBinary, classpath, testClassesDir, listener);
+        }
+        return runParallel(javaBinary, classpath, testClassesDir, workers, listener);
+    }
 
-        Path javaBinary = javaHome.resolve("bin").resolve(isWindows() ? "java.exe" : "java");
+    // -------- single-worker ---------------------------------------------
 
+    private Result runSingle(
+            Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
+            throws IOException, InterruptedException {
         var cmd = new ArrayList<String>();
         cmd.add(javaBinary.toString());
         cmd.add("-cp");
-        cmd.add(joinClasspath(classpath));
+        cmd.add(classpath);
         cmd.add("dev.jkbuild.test.runner.JkRunner");
         cmd.add("--scan-classpath=" + testClassesDir);
 
         var pb = new ProcessBuilder(cmd).redirectErrorStream(true);
         var process = pb.start();
-
-        var aggregator = new ResultAggregator();
+        var aggregator = new ResultAggregator(listener, /* workerId */ 0);
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
@@ -81,8 +115,7 @@ public final class JUnitLauncher {
                 if (line.startsWith(PROTOCOL_PREFIX)) {
                     aggregator.accept(line.substring(PROTOCOL_PREFIX.length()));
                 } else {
-                    // Plain test output — pass straight through to the user.
-                    System.out.println(line);
+                    listener.onUserOutput(0, line);
                 }
             }
         }
@@ -90,11 +123,174 @@ public final class JUnitLauncher {
         return aggregator.toResult(exit);
     }
 
+    // -------- parallel pull-queue ---------------------------------------
+
+    private Result runParallel(
+            Path javaBinary, String classpath, Path testClassesDir, int workers, TestProgressListener listener)
+            throws IOException, InterruptedException {
+        // 1. Discovery — one fork, list-only mode, harvest class FQCNs.
+        List<String> classes = discoverClasses(javaBinary, classpath, testClassesDir, listener);
+        if (classes.isEmpty()) {
+            return new Result(0, 0, 0, 0, List.of());
+        }
+        // Don't waste workers on small suites — N workers > N classes leaves
+        // some idle waiting for a class that'll never come.
+        int actualWorkers = Math.min(workers, classes.size());
+
+        var queue = new ConcurrentLinkedDeque<>(classes);
+        var aggregators = new java.util.ArrayList<ResultAggregator>();
+        var workerThreads = new ArrayList<Thread>();
+        var workerProcesses = new ArrayList<Process>();
+
+        for (int w = 1; w <= actualWorkers; w++) {
+            final int workerId = w;
+            var pb = new ProcessBuilder(
+                    javaBinary.toString(),
+                    "-cp", classpath,
+                    "dev.jkbuild.test.runner.JkRunner",
+                    "--pull",
+                    "--worker=" + workerId,
+                    "--scan-classpath=" + testClassesDir)
+                    .redirectErrorStream(true);
+            var proc = pb.start();
+            workerProcesses.add(proc);
+            var agg = new ResultAggregator(listener, workerId);
+            aggregators.add(agg);
+            var t = new Thread(
+                    () -> driveWorker(proc, workerId, queue, agg, listener),
+                    "jk-test-worker-" + workerId);
+            t.start();
+            workerThreads.add(t);
+        }
+        // Wait for all reader threads first — they drain stdout fully. Then
+        // join the OS processes (they should already be exiting by the time
+        // we get here since their stdin was closed).
+        for (Thread t : workerThreads) t.join();
+        int worstExit = 0;
+        for (Process p : workerProcesses) {
+            int exit = p.waitFor();
+            if (exit != 0) worstExit = exit;
+        }
+        // Merge per-worker aggregators into one Result.
+        long total = 0, succeeded = 0, failed = 0, skipped = 0;
+        var allFailures = new ArrayList<Failure>();
+        for (var agg : aggregators) {
+            var r = agg.snapshot();
+            total += r.total;
+            succeeded += r.succeeded;
+            failed += r.failed;
+            skipped += r.skipped;
+            allFailures.addAll(r.failures);
+        }
+        if (total == 0 && worstExit != 0) {
+            return new Result(1, 0, 1, 0, List.of(
+                    new Failure("(test run)", "runner exited " + worstExit)));
+        }
+        return new Result(total, succeeded, failed, skipped, allFailures);
+    }
+
     /**
-     * Copy the runner jar out of {@code /dev/jkbuild/test/runner/jk-test-runner.jar}
-     * (bundled at cli build time) into {@code <cacheDir>/<jkVersion>.jar}. The
-     * cache is keyed by jk version, not jar SHA, because the resource lives in
-     * the binary we're running — if jk gets upgraded the cache file is replaced.
+     * Per-worker reader thread. Reads the child's stdout line-by-line. On
+     * each {@code ready} event, dispatch the next class from the shared
+     * queue (or {@code DONE} when the queue is empty) by writing one line
+     * to the child's stdin. Non-protocol lines are user test output —
+     * passed through to the parent's stdout, tagged with the worker id.
+     */
+    private static void driveWorker(
+            Process proc, int workerId, ConcurrentLinkedDeque<String> queue,
+            ResultAggregator aggregator, TestProgressListener listener) {
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8));
+             PrintWriter writer = new PrintWriter(
+                     new OutputStreamWriter(proc.getOutputStream(), StandardCharsets.UTF_8), true)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!line.startsWith(PROTOCOL_PREFIX)) {
+                    listener.onUserOutput(workerId, line);
+                    continue;
+                }
+                String json = line.substring(PROTOCOL_PREFIX.length());
+                JsonNode node;
+                try {
+                    node = JSON.readTree(json);
+                } catch (RuntimeException e) {
+                    listener.onUserOutput(workerId, "malformed protocol line: " + json);
+                    continue;
+                }
+                String event = node.path("e").asString();
+                if ("ready".equals(event)) {
+                    String next = queue.pollFirst();
+                    if (next != null) {
+                        writer.println("RUN " + next);
+                    } else {
+                        // Closing stdin makes the child's readLine return
+                        // null so it exits its pull loop cleanly. Sending
+                        // DONE first is for symmetry — either signal works.
+                        writer.println("DONE");
+                        writer.flush();
+                        try {
+                            proc.getOutputStream().close();
+                        } catch (IOException ignored) {
+                            // already-closed pipe is fine
+                        }
+                    }
+                } else {
+                    aggregator.accept(node);
+                }
+            }
+        } catch (IOException e) {
+            listener.onUserOutput(workerId, "reader error: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Phase one of parallel mode: list every top-level test class without
+     * running anything. Uses {@code Launcher.discover} (not {@code execute})
+     * so this completes in 100–300 ms even for big suites.
+     */
+    private List<String> discoverClasses(
+            Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
+            throws IOException, InterruptedException {
+        var pb = new ProcessBuilder(
+                javaBinary.toString(),
+                "-cp", classpath,
+                "dev.jkbuild.test.runner.JkRunner",
+                "--list-only",
+                "--scan-classpath=" + testClassesDir)
+                .redirectErrorStream(true);
+        var proc = pb.start();
+        var classes = new ArrayList<String>();
+        try (BufferedReader reader = new BufferedReader(
+                new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                if (!line.startsWith(PROTOCOL_PREFIX)) continue;
+                JsonNode node;
+                try {
+                    node = JSON.readTree(line.substring(PROTOCOL_PREFIX.length()));
+                } catch (RuntimeException ignored) {
+                    continue;
+                }
+                String event = node.path("e").asString();
+                if ("discovered".equals(event)) {
+                    classes.add(node.path("class").asString());
+                } else if ("discovery_total".equals(event)) {
+                    listener.onDiscoveryTotal(
+                            node.path("classes").asInt(0),
+                            node.path("tests").asInt(0));
+                }
+            }
+        }
+        proc.waitFor();
+        return classes;
+    }
+
+    // -------- shared helpers --------------------------------------------
+
+    /**
+     * Copy the runner jar out of the cli classpath resource into
+     * {@code <cacheDir>/<jkVersion>.jar}. Keyed by jk version: a newer jk
+     * overwrites the cached jar on first use.
      */
     private static Path extractRunner(Path cacheDir, String jkVersion) throws IOException {
         Path target = cacheDir.resolve(jkVersion + ".jar");
@@ -105,8 +301,6 @@ public final class JUnitLauncher {
                 throw new IOException("jk test: " + RUNNER_RESOURCE + " missing from this build "
                         + "(processResources didn't bundle it)");
             }
-            // Stage to a temp file in the same directory, then rename — keeps
-            // concurrent jk invocations from racing on a half-written jar.
             Path tmp = Files.createTempFile(cacheDir, "jk-test-runner-", ".jar.tmp");
             Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
             Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
@@ -123,76 +317,132 @@ public final class JUnitLauncher {
         return sb.toString();
     }
 
+    private static Path javaBinary(Path javaHome) {
+        return javaHome.resolve("bin").resolve(isWindows() ? "java.exe" : "java");
+    }
+
     private static boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
     }
 
-    // ------------------------------------------------------------------
-    // Event-stream aggregation
-    // ------------------------------------------------------------------
+    // -------- event aggregation -----------------------------------------
 
     /**
-     * Consumes the runner's NDJSON event stream and builds the {@link Result}
-     * we hand back to {@code TestCommand}. {@code plan_finished} provides the
-     * authoritative totals; we additionally collect per-test failure details
-     * from {@code finished} events so the parent can render a {@code FAIL: …}
-     * list without re-parsing later.
+     * Thread-safe accumulator. Multiple driveWorker threads call into
+     * {@link #accept} concurrently. Counts come from FINISHED / SKIPPED
+     * events for {@code type == TEST} — we ignore CONTAINER nodes (the
+     * engine root, classes themselves) so totals match
+     * {@code SummaryGeneratingListener} semantics. Failure detail is
+     * pulled from FINISHED[status=FAILED] events.
+     *
+     * <p>Counting per-event (not summing per-worker plan totals) sidesteps
+     * a {@link org.junit.platform.launcher.listeners.SummaryGeneratingListener}
+     * quirk: it resets its accumulator on every {@code testPlanExecutionStarted}
+     * — which fires per {@code Launcher.execute()} call — so in pull mode a
+     * worker's final summary reflects only its last class.
      */
-    private static final class ResultAggregator {
+    static final class ResultAggregator {
 
-        private long total;
+        private final TestProgressListener listener;
+        private final int workerId;
         private long succeeded;
         private long failed;
         private long skipped;
         private final List<Failure> failures = new ArrayList<>();
 
-        void accept(String json) {
+        /** Test-friendly ctor: no listener, no worker id. */
+        ResultAggregator() {
+            this(TestProgressListener.noop(), 0);
+        }
+
+        ResultAggregator(TestProgressListener listener, int workerId) {
+            this.listener = listener;
+            this.workerId = workerId;
+        }
+
+        synchronized void accept(String json) {
             JsonNode node;
             try {
                 node = JSON.readTree(json);
             } catch (RuntimeException e) {
-                // Malformed event — surface to stderr but don't kill the run.
-                // Jackson 3 throws JacksonException (unchecked) for parse errors.
                 System.err.println("jk test: malformed protocol line: " + json);
                 return;
             }
-            var event = node.path("e").asString();
-            switch (event) {
+            acceptNode(node);
+        }
+
+        synchronized void accept(JsonNode node) {
+            acceptNode(node);
+        }
+
+        private void acceptNode(JsonNode node) {
+            switch (node.path("e").asString()) {
+                case "discovery_total" -> listener.onDiscoveryTotal(
+                        node.path("classes").asInt(0),
+                        node.path("tests").asInt(0));
+                case "started" -> onStarted(node);
                 case "finished" -> onFinished(node);
-                case "plan_finished" -> onPlanFinished(node);
-                // started / skipped / dynamic_registered / report / plan_started
-                // are no-ops for the summary today — they'll feed live UI in a
-                // follow-up that wires per-test rendering.
+                case "skipped" -> onSkipped(node);
                 default -> {}
             }
         }
 
+        private void onStarted(JsonNode node) {
+            boolean isTest = "TEST".equals(node.path("type").asString());
+            listener.onTestStarted(
+                    node.path("id").asString(),
+                    node.path("display").asString(),
+                    isTest,
+                    workerId);
+        }
+
         private void onFinished(JsonNode node) {
-            var status = node.path("status").asString();
-            if (!"FAILED".equals(status)) return;
-            var id = node.path("id").asString();
-            var throwable = node.path("throwable");
-            String message = throwable.isMissingNode()
-                    ? "(no throwable)"
-                    : throwable.path("class").asString("?") + ": "
-                            + throwable.path("message").asString("");
-            failures.add(new Failure(id, message));
+            boolean isTest = "TEST".equals(node.path("type").asString());
+            String status = node.path("status").asString();
+            String display = node.path("display").asString(node.path("id").asString());
+            long duration = node.path("duration_ms").asLong(0);
+            if (isTest) {
+                switch (status) {
+                    case "SUCCESSFUL" -> succeeded++;
+                    case "FAILED" -> {
+                        failed++;
+                        var throwable = node.path("throwable");
+                        String exClass = throwable.path("class").asString("?");
+                        String message = throwable.path("message").asString("");
+                        failures.add(new Failure(display, exClass + ": " + message));
+                        listener.onFailure(node.path("id").asString(), display, exClass, message, workerId);
+                    }
+                    case "ABORTED" -> skipped++;
+                    default -> {}
+                }
+            }
+            listener.onTestFinished(
+                    node.path("id").asString(), display, status, isTest, duration, workerId);
         }
 
-        private void onPlanFinished(JsonNode node) {
-            total = node.path("total").asLong(0);
-            succeeded = node.path("successful").asLong(0);
-            failed = node.path("failed").asLong(0);
-            skipped = node.path("skipped").asLong(0);
+        private void onSkipped(JsonNode node) {
+            boolean isTest = "TEST".equals(node.path("type").asString());
+            if (isTest) skipped++;
+            listener.onTestSkipped(
+                    node.path("id").asString(),
+                    node.path("display").asString(),
+                    node.path("reason").asString(""),
+                    isTest,
+                    workerId);
         }
 
-        Result toResult(int exitCode) {
-            // Exit code is the source of truth — if the runner died abruptly
-            // (no plan_finished event) we still report a failure.
-            if (total == 0 && failed == 0 && exitCode != 0) {
+        synchronized Result toResult(int exitCode) {
+            long total = succeeded + failed + skipped;
+            if (total == 0 && exitCode != 0) {
                 return new Result(1, 0, 1, 0, List.of(
                         new Failure("(test run)", "runner exited " + exitCode)));
             }
+            return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
+        }
+
+        /** Snapshot of just the counters — used by the parallel-merge path. */
+        synchronized Result snapshot() {
+            long total = succeeded + failed + skipped;
             return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
         }
     }

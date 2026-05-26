@@ -27,26 +27,20 @@ import java.util.concurrent.ConcurrentHashMap;
 final class StreamingListener implements TestExecutionListener {
 
     private final EventWriter out;
+    private final int workerId;
     private final ConcurrentHashMap<String, Long> startNanos = new ConcurrentHashMap<>();
     private long planStartNanos;
 
-    StreamingListener(EventWriter out) {
+    StreamingListener(EventWriter out, int workerId) {
         this.out = out;
+        this.workerId = workerId;
     }
 
     @Override
     public void testPlanExecutionStarted(TestPlan testPlan) {
-        planStartNanos = System.nanoTime();
-        var payload = new LinkedHashMap<String, Object>();
-        payload.put("ts", System.currentTimeMillis());
-        // Engines we found. Each root id has the form `[engine:junit-jupiter]`,
-        // strip the brackets+key for a cleaner display string.
-        var engines = new java.util.ArrayList<String>();
-        for (var root : testPlan.getRoots()) {
-            engines.add(displayEngine(root.getUniqueId()));
-        }
-        payload.put("engines", engines);
-        emit(EventType.PLAN_STARTED, payload);
+        // PLAN_STARTED is emitted by JkRunner once per worker session, not
+        // here — in pull mode this method fires per-class, so emitting here
+        // would produce N plan_started events per worker.
     }
 
     @Override
@@ -64,6 +58,7 @@ final class StreamingListener implements TestExecutionListener {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("id", id.getUniqueId());
         payload.put("display", id.getDisplayName());
+        payload.put("type", id.getType().name());
         payload.put("reason", reason == null ? "" : reason);
         emit(EventType.SKIPPED, payload);
     }
@@ -88,6 +83,8 @@ final class StreamingListener implements TestExecutionListener {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("id", id.getUniqueId());
         payload.put("status", result.getStatus().name());
+        payload.put("type", id.getType().name());  // parent counts FINISHED[type=TEST] for totals
+        payload.put("display", id.getDisplayName());
         payload.put("duration_ms", durationMs);
         result.getThrowable().ifPresent(t -> payload.put("throwable", flatten(t)));
         emit(EventType.FINISHED, payload);
@@ -103,6 +100,11 @@ final class StreamingListener implements TestExecutionListener {
 
     @Override
     public void testPlanExecutionFinished(TestPlan testPlan) {
+        // Counters are derived from this listener's view of the just-finished
+        // plan: walking the plan + the TestExecutionResult callbacks would be
+        // redundant when ResultAggregator on the parent already counts
+        // FINISHED events directly. Emit a marker event with the per-plan
+        // duration so the parent can show "engine X took Yms" if it wants.
         long durationMs = Math.max(0, (System.nanoTime() - planStartNanos) / 1_000_000);
         var payload = new LinkedHashMap<String, Object>();
         payload.put("duration_ms", durationMs);
@@ -138,6 +140,10 @@ final class StreamingListener implements TestExecutionListener {
 
     private void emit(EventType type, Map<String, Object> payload) {
         try {
+            // Stamp the worker id on every event in pull/parallel mode so
+            // the parent can attribute output. Single-worker (id 0) runs
+            // omit it to keep the wire form unchanged from Stage A.
+            if (workerId > 0) payload.put("w", workerId);
             out.write(type, payload);
             out.flush();
         } catch (IOException e) {
@@ -145,5 +151,28 @@ final class StreamingListener implements TestExecutionListener {
             // Don't propagate: we don't want to derail the test run for an IPC blip.
             System.err.println("jk-test-runner: " + e.getMessage());
         }
+    }
+
+    /** Pull-mode helper: signal "send me the next class" to the parent. */
+    void emitReady() {
+        emit(EventType.READY, new LinkedHashMap<>());
+    }
+
+    /** Discovery helper: emit one DISCOVERED per top-level class. */
+    void emitDiscovered(String className) {
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("class", className);
+        emit(EventType.DISCOVERED, payload);
+    }
+
+    /**
+     * Discovery helper: emit the up-front totals so the parent can populate
+     * a {@code [n of N]} progress display before the first test runs.
+     */
+    void emitDiscoveryTotal(int classes, int tests) {
+        var payload = new LinkedHashMap<String, Object>();
+        payload.put("classes", classes);
+        payload.put("tests", tests);
+        emit(EventType.DISCOVERY_TOTAL, payload);
     }
 }
