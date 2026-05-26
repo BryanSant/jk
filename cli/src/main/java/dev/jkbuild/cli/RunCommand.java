@@ -2,6 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
@@ -26,6 +27,12 @@ import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.NaiveResolver;
 import dev.jkbuild.resolver.Resolution;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.script.ScriptHeader;
 import dev.jkbuild.script.ScriptHeaderParser;
 import dev.jkbuild.tool.JarManifest;
@@ -55,19 +62,19 @@ import java.util.concurrent.Callable;
  *   <li><b>{@code .java}</b> script (JBang-compatible, PRD §19).</li>
  *   <li><b>{@code .kt}</b> Kotlin script (JBang-compatible, with
  *       {@code //KOTLIN <version>} support).</li>
- *   <li><b>{@code .kts}</b> Kotlin Script — delegated to {@code kotlinc -script}.
- *       {@code //jk} directives are NOT honored here; the file is given to
- *       the Kotlin compiler as-is.</li>
- *   <li><b>{@code .jar}</b> already-built artifact. Reads the
- *       {@code Main-Class} manifest attribute (fails if missing), scans
- *       {@code META-INF/maven/&lt;g&gt;/&lt;a&gt;/pom.xml} for transitive deps,
- *       and exec'es with the assembled classpath.</li>
- *   <li><b>(no arg)</b> in a directory with {@code jk.toml}: builds the project
- *       if needed, then exec'es the configured {@code project.main}.</li>
+ *   <li><b>{@code .kts}</b> Kotlin Script — delegated to {@code kotlinc -script}.</li>
+ *   <li><b>{@code .jar}</b> already-built artifact.</li>
+ *   <li><b>(no arg)</b> the current project (from {@code jk.toml}).</li>
  * </ul>
  *
- * <p>Every mode auto-provisions missing tooling: kotlinc downloads via the
- * tool mechanism, transitive deps fetch into the CAS, etc.
+ * <p>Each mode runs its preparation (parse, resolve, compile) inside a
+ * {@link Goal} so progress, warnings, and the run-log behave like every
+ * other {@code jk} verb. The actual subprocess that exec's the user's
+ * program runs <i>after</i> the goal returns — by then the progress
+ * widget has wiped itself, so the inferior owns the TTY cleanly.
+ *
+ * <p>If the goal fails (compile error, resolution failure, missing
+ * main class, etc.) we exit without forking.
  */
 @Command(name = "run",
         description = "Run a script (.java/.kt/.kts), a jar, or the current project")
@@ -76,7 +83,9 @@ public final class RunCommand implements Callable<Integer> {
     @Parameters(arity = "0..*", paramLabel = "<args>",
             description = "Either a .java/.kt/.kts/.jar file (then args after it) "
                     + "or arguments forwarded to the project's main class.")
-    List<String> positional = new ArrayList<>();    @Option(names = "--cache-dir", hidden = true,
+    List<String> positional = new ArrayList<>();
+
+    @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
 
@@ -93,6 +102,17 @@ public final class RunCommand implements Callable<Integer> {
     boolean forceRecompile;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
+
+    // Cross-phase keys (mode-specific, but all live in the same record).
+    private static final GoalKey<ScriptHeader> HEADER = GoalKey.of("script-header", ScriptHeader.class);
+    private static final GoalKey<Path> CLASSES_DIR = GoalKey.of("classes-dir", Path.class);
+    private static final GoalKey<Path> KOTLIN_HOME = GoalKey.of("kotlin-home", Path.class);
+    private static final GoalKey<Path> KOTLINC_BIN = GoalKey.of("kotlinc-bin", Path.class);
+    private static final GoalKey<String> MAIN_CLASS = GoalKey.of("main-class", String.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> CLASSPATH = GoalKey.of("classpath", List.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> JAR_DECLARED_DEPS = GoalKey.of("jar-declared-deps", List.class);
 
     @Override
     public Integer call() throws IOException, InterruptedException {
@@ -140,30 +160,83 @@ public final class RunCommand implements Callable<Integer> {
         byte[] bytes = Files.readAllBytes(script);
         String source = new String(bytes, StandardCharsets.UTF_8);
         ScriptHeader header = ScriptHeaderParser.parse(source);
-
         Paths paths = scriptPaths(bytes);
-        Files.createDirectories(paths.cacheDir);
-
-        Cas cas = new Cas(paths.cacheDir);
-        Http http = new Http();
-        RepoGroup repos = buildRepos(header, http, cas);
-        List<Path> classpath = resolveClasspath(header.deps(), repos);
-
         String mainClass = simpleMainClassName(script, ".java");
-        if (forceRecompile
-                || !Files.exists(paths.classesDir.resolve(mainClass + ".class"))) {
-            Files.createDirectories(paths.classesDir);
-            CompileResult result = compileJava(script, header, paths.classesDir, classpath);
-            if (!result.success()) {
-                for (var d : result.diagnostics()) {
-                    System.err.println(d.severity() + " "
-                            + (d.source() != null ? d.source().getFileName() : "<unknown>")
-                            + ":" + d.line() + ": " + d.message());
-                }
-                return 1;
-            }
-        }
-        return execJava(paths.classesDir, classpath, header.javaOptions(), mainClass, args);
+
+        Phase parseHeader = Phase.builder("parse-script")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse " + script.getFileName());
+                    ctx.put(HEADER, header);
+                    ctx.put(MAIN_CLASS, mainClass);
+                    ctx.put(CLASSES_DIR, paths.classesDir);
+                    Files.createDirectories(paths.cacheDir);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase resolveDeps = Phase.builder("resolve-deps")
+                .kind(PhaseKind.IO)
+                .requires("parse-script")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("resolve script dependencies");
+                    Cas cas = new Cas(paths.cacheDir);
+                    Http http = new Http();
+                    RepoGroup repos = buildRepos(header, http, cas);
+                    try {
+                        List<Path> classpath = resolveClasspath(header.deps(), repos);
+                        ctx.put(CLASSPATH, classpath);
+                    } catch (RuntimeException e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw e;
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase compile = Phase.builder("compile-java")
+                .kind(PhaseKind.CPU)
+                .requires("resolve-deps")
+                .scope(1)
+                .execute(ctx -> {
+                    Path classesDir = ctx.require(CLASSES_DIR);
+                    if (!forceRecompile
+                            && Files.exists(classesDir.resolve(mainClass + ".class"))) {
+                        ctx.label("cache hit (" + mainClass + ".class)");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("javac " + script.getFileName());
+                    Files.createDirectories(classesDir);
+                    @SuppressWarnings("unchecked")
+                    List<Path> cp = (List<Path>) ctx.require(CLASSPATH);
+                    CompileResult result = compileJava(script, header, classesDir, cp);
+                    if (!result.success()) {
+                        for (var d : result.diagnostics()) {
+                            ctx.error("javac",
+                                    d.severity() + " "
+                                            + (d.source() != null ? d.source().getFileName() : "<unknown>")
+                                            + ":" + d.line() + ": " + d.message());
+                        }
+                        throw new RuntimeException("javac failed");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("run-java")
+                .addPhase(parseHeader)
+                .addPhase(resolveDeps)
+                .addPhase(compile)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir());
+        if (!result.success()) return failureExitCode(result, "jk run-java");
+
+        @SuppressWarnings("unchecked")
+        List<Path> cp = (List<Path>) goal.get(CLASSPATH).orElseThrow();
+        return execJava(paths.classesDir, cp, header.javaOptions(), mainClass, args);
     }
 
     private CompileResult compileJava(Path script, ScriptHeader header,
@@ -192,41 +265,113 @@ public final class RunCommand implements Callable<Integer> {
         byte[] bytes = Files.readAllBytes(script);
         String source = new String(bytes, StandardCharsets.UTF_8);
         ScriptHeader header = ScriptHeaderParser.parse(source);
-
         Paths paths = scriptPaths(bytes);
-        Files.createDirectories(paths.cacheDir);
-
-        Cas cas = new Cas(paths.cacheDir);
-        Http http = new Http();
-        RepoGroup repos = buildRepos(header, http, cas);
-        List<Path> depsClasspath = resolveClasspath(header.deps(), repos);
-
-        // Provision kotlinc — honors `//KOTLIN <version>` if present.
-        Path kotlinHome = CompileToolchain.resolveKotlinHome(paths.cacheDir, header.kotlinVersion());
-
         String mainClass = kotlinMainClassName(script);
-        if (forceRecompile
-                || !Files.exists(paths.classesDir.resolve(mainClass + ".class"))) {
-            Files.createDirectories(paths.classesDir);
-            int jvmTarget = header.release() != null
-                    ? header.release() : Runtime.version().feature();
-            KotlincRequest req = KotlincRequest.builder()
-                    .sources(List.of(script.toAbsolutePath()))
-                    .classpath(depsClasspath)
-                    .outputDir(paths.classesDir)
-                    .jvmTarget(CompileCommand.kotlinJvmTarget(jvmTarget))
-                    .kotlinHome(kotlinHome)
-                    .build();
-            KotlincResult result = new KotlincDriver().compile(req);
-            if (!result.success()) {
-                System.err.print(result.output());
-                return 1;
-            }
-        }
+
+        Phase parseHeader = Phase.builder("parse-script")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse " + script.getFileName());
+                    ctx.put(HEADER, header);
+                    ctx.put(MAIN_CLASS, mainClass);
+                    ctx.put(CLASSES_DIR, paths.classesDir);
+                    Files.createDirectories(paths.cacheDir);
+                    ctx.progress(1);
+                })
+                .build();
+
+        // resolve-deps and resolve-kotlinc are independent and slow; run
+        // them in parallel.
+        Phase resolveDeps = Phase.builder("resolve-deps")
+                .kind(PhaseKind.IO)
+                .requires("parse-script")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("resolve script dependencies");
+                    Cas cas = new Cas(paths.cacheDir);
+                    Http http = new Http();
+                    RepoGroup repos = buildRepos(header, http, cas);
+                    try {
+                        List<Path> classpath = resolveClasspath(header.deps(), repos);
+                        ctx.put(CLASSPATH, classpath);
+                    } catch (RuntimeException e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw e;
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase resolveKotlinc = Phase.builder("resolve-kotlinc")
+                .kind(PhaseKind.IO)
+                .requires("parse-script")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label(header.kotlinVersion() != null
+                            ? "provision kotlinc " + header.kotlinVersion()
+                            : "provision kotlinc");
+                    try {
+                        Path kotlinHome = CompileToolchain.resolveKotlinHome(
+                                paths.cacheDir, header.kotlinVersion());
+                        ctx.put(KOTLIN_HOME, kotlinHome);
+                    } catch (RuntimeException e) {
+                        ctx.error("kotlinc", e.getMessage());
+                        throw e;
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase compile = Phase.builder("compile-kt")
+                .kind(PhaseKind.CPU)
+                .requires("resolve-deps", "resolve-kotlinc")
+                .scope(1)
+                .execute(ctx -> {
+                    Path classesDir = ctx.require(CLASSES_DIR);
+                    if (!forceRecompile
+                            && Files.exists(classesDir.resolve(mainClass + ".class"))) {
+                        ctx.label("cache hit (" + mainClass + ".class)");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("kotlinc " + script.getFileName());
+                    Files.createDirectories(classesDir);
+                    @SuppressWarnings("unchecked")
+                    List<Path> depsClasspath = (List<Path>) ctx.require(CLASSPATH);
+                    int jvmTarget = header.release() != null
+                            ? header.release() : Runtime.version().feature();
+                    KotlincRequest req = KotlincRequest.builder()
+                            .sources(List.of(script.toAbsolutePath()))
+                            .classpath(depsClasspath)
+                            .outputDir(classesDir)
+                            .jvmTarget(CompileCommand.kotlinJvmTarget(jvmTarget))
+                            .kotlinHome(ctx.require(KOTLIN_HOME))
+                            .build();
+                    KotlincResult result = new KotlincDriver().compile(req);
+                    if (!result.success()) {
+                        ctx.error("kotlinc", result.output());
+                        throw new RuntimeException("kotlinc failed");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("run-kt")
+                .addPhase(parseHeader)
+                .addPhase(resolveDeps)
+                .addPhase(resolveKotlinc)
+                .addPhase(compile)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir());
+        if (!result.success()) return failureExitCode(result, "jk run-kt");
+
+        @SuppressWarnings("unchecked")
+        List<Path> depsClasspath = (List<Path>) goal.get(CLASSPATH).orElseThrow();
+        Path kotlinHome = goal.get(KOTLIN_HOME).orElseThrow();
 
         // At runtime, the Kotlin stdlib must be on the classpath.
-        List<Path> runtime = new ArrayList<>();
-        runtime.addAll(depsClasspath);
+        List<Path> runtime = new ArrayList<>(depsClasspath);
         Path stdlib = kotlinHome.resolve("lib").resolve("kotlin-stdlib.jar");
         if (Files.exists(stdlib)) runtime.add(stdlib);
 
@@ -254,13 +399,41 @@ public final class RunCommand implements Callable<Integer> {
         Path cacheDir = cacheDir();
         Files.createDirectories(cacheDir);
 
-        Path kotlinHome = CompileToolchain.resolveKotlinHome(cacheDir, null);
-        Path kotlinc = kotlinHome.resolve("bin").resolve(isWindows() ? "kotlinc.bat" : "kotlinc");
-        if (!Files.exists(kotlinc)) {
-            System.err.println("jk run: kotlinc not found at " + kotlinc);
-            return 70;
+        Phase resolveKotlinc = Phase.builder("resolve-kotlinc")
+                .kind(PhaseKind.IO)
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("provision kotlinc");
+                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cacheDir, null);
+                    Path kotlinc = kotlinHome.resolve("bin").resolve(
+                            isWindows() ? "kotlinc.bat" : "kotlinc");
+                    if (!Files.exists(kotlinc)) {
+                        ctx.error("kotlinc-missing", "kotlinc not found at " + kotlinc);
+                        throw new RuntimeException("kotlinc missing");
+                    }
+                    ctx.put(KOTLINC_BIN, kotlinc);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("run-kts")
+                .addPhase(resolveKotlinc)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
+        if (!result.success()) {
+            // "kotlinc-missing" is an EX_SOFTWARE (70) shape; everything
+            // else collapses to the generic resolver error code.
+            for (GoalResult.Diagnostic d : result.errors()) {
+                if ("kotlinc-missing".equals(d.code())) {
+                    printFailureSummary(result, "jk run-kts", cacheDir);
+                    return 70;
+                }
+            }
+            return failureExitCode(result, "jk run-kts");
         }
 
+        Path kotlinc = goal.get(KOTLINC_BIN).orElseThrow();
         List<String> command = new ArrayList<>();
         command.add(kotlinc.toString());
         command.add("-script");
@@ -280,48 +453,99 @@ public final class RunCommand implements Callable<Integer> {
             System.err.println("jk run: jar not found: " + jar);
             return 66;
         }
-        Optional<String> mainClass = JarManifest.mainClass(jar);
-        if (mainClass.isEmpty()) {
-            System.err.println("jk run: " + jar + " has no Main-Class in its MANIFEST.MF");
-            return 65; // EX_DATAERR
-        }
 
-        // Inspect embedded poms for transitive deps (shaded jars carry these
-        // under META-INF/maven/<g>/<a>/pom.xml).
-        List<Dependency> declaredDeps = new ArrayList<>();
-        List<JarManifest.EmbeddedPom> poms = JarManifest.scanEmbeddedPoms(jar);
-        for (JarManifest.EmbeddedPom p : poms) {
-            if (!p.hasPomXml()) continue;
-            try {
-                var imported = PomImporter.importFromBytes(p.pomXml());
-                var byScope = imported.jkBuild().dependencies().byScope();
-                for (Scope scope : EnumSet.of(Scope.MAIN, Scope.RUNTIME)) {
-                    List<Dependency> scoped = byScope.get(scope);
-                    if (scoped != null) declaredDeps.addAll(scoped);
+        Phase inspect = Phase.builder("inspect-jar")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("read manifest + embedded poms");
+                    Optional<String> mainClass = JarManifest.mainClass(jar);
+                    if (mainClass.isEmpty()) {
+                        ctx.error("no-main-class",
+                                jar + " has no Main-Class in its MANIFEST.MF");
+                        throw new RuntimeException("missing Main-Class");
+                    }
+                    ctx.put(MAIN_CLASS, mainClass.get());
+
+                    List<Dependency> declaredDeps = new ArrayList<>();
+                    for (JarManifest.EmbeddedPom p : JarManifest.scanEmbeddedPoms(jar)) {
+                        if (!p.hasPomXml()) continue;
+                        try {
+                            var imported = PomImporter.importFromBytes(p.pomXml());
+                            var byScope = imported.jkBuild().dependencies().byScope();
+                            for (Scope scope : EnumSet.of(Scope.MAIN, Scope.RUNTIME)) {
+                                List<Dependency> scoped = byScope.get(scope);
+                                if (scoped != null) declaredDeps.addAll(scoped);
+                            }
+                        } catch (RuntimeException e) {
+                            ctx.warn("pom-parse",
+                                    "failed to parse embedded pom for " + p.coord()
+                                            + ": " + e.getMessage());
+                        }
+                    }
+                    if (JarManifest.hasModuleInfo(jar)) {
+                        ctx.warn("jpms", jar.getFileName()
+                                + " ships a module-info.class (JPMS module); "
+                                + "running it from the classpath.");
+                    }
+                    ctx.put(JAR_DECLARED_DEPS, declaredDeps);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase resolveJarDeps = Phase.builder("resolve-jar-deps")
+                .kind(PhaseKind.IO)
+                .requires("inspect-jar")
+                .scope(1)
+                .execute(ctx -> {
+                    @SuppressWarnings("unchecked")
+                    List<Dependency> declaredDeps = (List<Dependency>) ctx.require(JAR_DECLARED_DEPS);
+                    List<Path> classpath = new ArrayList<>();
+                    classpath.add(jar);
+                    if (declaredDeps.isEmpty()) {
+                        ctx.label("no embedded deps");
+                        ctx.put(CLASSPATH, classpath);
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("fetch " + declaredDeps.size() + " embedded deps");
+                    Path cacheDir = cacheDir();
+                    Files.createDirectories(cacheDir);
+                    Cas cas = new Cas(cacheDir);
+                    Http http = new Http();
+                    RepoGroup repos = new RepoGroup(List.of(new MavenRepo(
+                            "central",
+                            repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url(),
+                            http, cas)));
+                    try {
+                        classpath.addAll(resolveClasspath(declaredDeps, repos));
+                    } catch (RuntimeException e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw e;
+                    }
+                    ctx.put(CLASSPATH, classpath);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("run-jar")
+                .addPhase(inspect)
+                .addPhase(resolveJarDeps)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir());
+        if (!result.success()) {
+            for (GoalResult.Diagnostic d : result.errors()) {
+                if ("no-main-class".equals(d.code())) {
+                    printFailureSummary(result, "jk run-jar", cacheDir());
+                    return 65; // EX_DATAERR
                 }
-            } catch (RuntimeException e) {
-                System.err.println("jk run: warning: failed to parse embedded pom for "
-                        + p.coord() + ": " + e.getMessage());
             }
-        }
-        if (JarManifest.hasModuleInfo(jar)) {
-            System.err.println("Note: " + jar.getFileName()
-                    + " ships a module-info.class (JPMS module); running it from the classpath.");
+            return failureExitCode(result, "jk run-jar");
         }
 
-        List<Path> classpath = new ArrayList<>();
-        classpath.add(jar);
-        if (!declaredDeps.isEmpty()) {
-            Path cacheDir = cacheDir();
-            Files.createDirectories(cacheDir);
-            Cas cas = new Cas(cacheDir);
-            Http http = new Http();
-            RepoGroup repos = new RepoGroup(List.of(new MavenRepo(
-                    "central",
-                    repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url(),
-                    http, cas)));
-            classpath.addAll(resolveClasspath(declaredDeps, repos));
-        }
+        String mainClass = goal.get(MAIN_CLASS).orElseThrow();
+        @SuppressWarnings("unchecked")
+        List<Path> classpath = (List<Path>) goal.get(CLASSPATH).orElseThrow();
 
         Path java = CompileToolchain.runningJavaHome().resolve("bin")
                 .resolve(isWindows() ? "java.exe" : "java");
@@ -334,13 +558,13 @@ public final class RunCommand implements Callable<Integer> {
         } else {
             command.add("-cp");
             command.add(joinClasspath(classpath));
-            command.add(mainClass.get());
+            command.add(mainClass);
         }
         command.addAll(args);
         return new ProcessBuilder(command).inheritIO().start().waitFor();
     }
 
-    // --- project mode (unchanged from prior commit) ----------------------
+    // --- project mode ----------------------------------------------------
 
     private int runProject(Path projectDir, List<String> appArgs)
             throws IOException, InterruptedException {
@@ -354,6 +578,8 @@ public final class RunCommand implements Callable<Integer> {
         String version = project.project().version();
         Path target = projectDir.resolve("target");
 
+        // If a native binary exists, it's the fast path — skip the goal
+        // entirely and exec it directly. No prep needed.
         Path nativeBin = target.resolve(artifact);
         if (Files.isRegularFile(nativeBin) && Files.isExecutable(nativeBin)) {
             List<String> command = new ArrayList<>();
@@ -363,17 +589,69 @@ public final class RunCommand implements Callable<Integer> {
         }
 
         Path jar = target.resolve(artifact + "-" + version + ".jar");
-        if (!Files.exists(jar)) {
-            int rc = Jk.execute("build", "-C", projectDir.toString());
-            if (rc != 0) return rc;
-        }
-        if (!Files.exists(jar)) {
-            System.err.println("jk run: expected jar at " + jar + " but build did not produce it.");
-            return 70;
+
+        Phase ensureBuilt = Phase.builder("ensure-built")
+                .kind(PhaseKind.CPU)
+                .scope(1)
+                .execute(ctx -> {
+                    if (Files.exists(jar)) {
+                        ctx.label("jar present");
+                        ctx.progress(1);
+                        return;
+                    }
+                    // The nested `jk build` invocation paints its own
+                    // progress widget; this outer goal's widget yields
+                    // for the duration. Acceptable for now — we could
+                    // model build as a sub-goal in a future commit.
+                    ctx.label("jar missing — running jk build");
+                    int rc = Jk.execute("build", "-C", projectDir.toString());
+                    if (rc != 0) {
+                        ctx.error("nested-build", "jk build exited " + rc);
+                        throw new RuntimeException("nested build failed");
+                    }
+                    if (!Files.exists(jar)) {
+                        ctx.error("missing-jar", "expected jar at " + jar
+                                + " but build did not produce it.");
+                        throw new RuntimeException("jar not produced");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase assembleClasspath = Phase.builder("assemble-classpath")
+                .requires("ensure-built")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("collect runtime classpath");
+                    List<Path> classpath = assembleRuntimeClasspath(projectDir, project, jar);
+                    ctx.put(CLASSPATH, classpath);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("run")
+                .addPhase(ensureBuilt)
+                .addPhase(assembleClasspath)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir());
+        if (!result.success()) {
+            for (GoalResult.Diagnostic d : result.errors()) {
+                if ("missing-jar".equals(d.code())) {
+                    printFailureSummary(result, "jk run", cacheDir());
+                    return 70; // EX_SOFTWARE — build promised but didn't deliver
+                }
+                if ("nested-build".equals(d.code())) {
+                    // Bubble whatever code jk build returned.
+                    printFailureSummary(result, "jk run", cacheDir());
+                    return 1;
+                }
+            }
+            return failureExitCode(result, "jk run");
         }
 
-        List<Path> classpath = assembleRuntimeClasspath(projectDir, project, jar);
-
+        @SuppressWarnings("unchecked")
+        List<Path> classpath = (List<Path>) goal.get(CLASSPATH).orElseThrow();
         Path java = CompileToolchain.runningJavaHome().resolve("bin")
                 .resolve(isWindows() ? "java.exe" : "java");
         List<String> command = new ArrayList<>();
@@ -411,6 +689,24 @@ public final class RunCommand implements Callable<Integer> {
     }
 
     // --- shared helpers --------------------------------------------------
+
+    /** Map a failed goal to an exit code + write the failure summary. */
+    private int failureExitCode(GoalResult result, String commandLabel) {
+        printFailureSummary(result, commandLabel, cacheDir());
+        return 1;
+    }
+
+    private static void printFailureSummary(GoalResult result, String commandLabel, Path cache) {
+        String failedPhase = result.phases().stream()
+                .filter(p -> p.status() == PhaseStatus.FAIL)
+                .map(GoalResult.PhaseReport::name)
+                .findFirst().orElse("?");
+        System.err.println(commandLabel + " failed: " + failedPhase);
+        for (GoalResult.Diagnostic d : result.errors()) {
+            System.err.println("  " + d.code() + ": " + d.message());
+        }
+        System.err.println("Run log: " + cache.resolve("runs"));
+    }
 
     /** {@code classes/} for compiled output + shared CAS cache root. */
     private record Paths(Path cacheDir, Path classesDir) {}
