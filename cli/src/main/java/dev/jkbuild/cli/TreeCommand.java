@@ -41,8 +41,8 @@ public final class TreeCommand implements Callable<Integer> {    @Option(names =
         Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
-        // Header line matching the wizard's "Jk - …" prefix.
-        System.out.println("Jk - Project Tree");
+        // Header line matching the wizard's gradient title.
+        System.out.println(Theme.gradientHeaderAnsi("Jk - Project Tree"));
         System.out.print(DependencyTree.render(project, lock, max, styling()));
         return 0;
     }
@@ -50,7 +50,7 @@ public final class TreeCommand implements Callable<Integer> {    @Option(names =
     /**
      * Color pattern matching how Java devs read a Maven coordinate:
      * <pre>
-     *   <u><blue>group</blue></u>:<b><cyan>artifact</cyan></b>:<yellow>version</yellow>
+     *   <blue>group</blue>:<b><cyan>artifact</cyan></b>:<yellow>version</yellow>
      * </pre>
      * Rails get the same dim dark-gray the wizard uses for its
      * settled rails. {@link Theme#colorize} respects {@code --color}
@@ -60,7 +60,7 @@ public final class TreeCommand implements Callable<Integer> {    @Option(names =
     private static DependencyTree.Styling styling() {
         return new DependencyTree.Styling(
                 s -> Theme.colorize(s, Theme.darkGray()),
-                s -> Theme.colorize(s, Theme.blue().underline()),
+                s -> Theme.colorize(s, Theme.blue()),
                 s -> Theme.colorize(s, Theme.activeStep().bold()),
                 s -> Theme.colorize(s, Theme.warning()));
     }
