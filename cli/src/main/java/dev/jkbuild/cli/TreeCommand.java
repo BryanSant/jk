@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
@@ -13,6 +14,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.Callable;
+import java.util.function.UnaryOperator;
 
 /** {@code jk tree} — print the resolved dependency tree. */
 @Command(name = "tree", description = "Print the resolved dependency tree")
@@ -39,7 +41,19 @@ public final class TreeCommand implements Callable<Integer> {    @Option(names =
         JkBuild project = JkBuildParser.parse(buildFile);
         Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
-        System.out.print(DependencyTree.render(project, lock, max));
+        UnaryOperator<String> rail = paintRail();
+        System.out.print(DependencyTree.render(project, lock, max, rail));
         return 0;
+    }
+
+    /**
+     * Wrap each box-drawing run in the same dark-gray the wizard uses
+     * for its settled rails ({@link Theme#darkGray()}). When color is
+     * disabled (NO_COLOR / dumb terminal / piped output the user
+     * explicitly stripped), Theme.colorize already returns the raw
+     * text — no escape codes leak.
+     */
+    private static UnaryOperator<String> paintRail() {
+        return s -> Theme.colorize(s, Theme.darkGray());
     }
 }

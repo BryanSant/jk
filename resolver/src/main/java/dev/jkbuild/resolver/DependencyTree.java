@@ -13,6 +13,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
 /**
@@ -29,6 +30,19 @@ public final class DependencyTree {
     }
 
     public static String render(JkBuild project, Lockfile lock, int maxDepth) {
+        return render(project, lock, maxDepth, UnaryOperator.identity());
+    }
+
+    /**
+     * Render with a custom rail styler. {@code railStyler} is applied to
+     * each box-drawing run ({@code ├── }, {@code └── }, {@code │   },
+     * {@code "    "}) so callers in the CLI can paint them in the same
+     * dim color the wizard uses for its settled rails. Tests and other
+     * non-TTY consumers pass {@link UnaryOperator#identity()} and get
+     * plain ASCII back.
+     */
+    public static String render(JkBuild project, Lockfile lock, int maxDepth,
+                                UnaryOperator<String> railStyler) {
         Map<String, Lockfile.Package> byModule = indexByModule(lock);
         StringBuilder out = new StringBuilder();
         out.append(project.project().artifact())
@@ -39,7 +53,7 @@ public final class DependencyTree {
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < roots.size(); i++) {
             renderNode(byModule, roots.get(i), 0, maxDepth,
-                    i == roots.size() - 1, "", seen, out);
+                    i == roots.size() - 1, "", railStyler, seen, out);
         }
         return out.toString();
     }
@@ -51,6 +65,7 @@ public final class DependencyTree {
             int maxDepth,
             boolean isLast,
             String prefix,
+            UnaryOperator<String> railStyler,
             Set<String> seen,
             StringBuilder out) {
 
@@ -62,18 +77,19 @@ public final class DependencyTree {
         String marker = alreadyShown ? " (*)" : "";
         String connector = isLast ? "└── " : "├── ";
 
-        out.append(prefix).append(connector).append(label).append(marker).append('\n');
+        out.append(prefix).append(railStyler.apply(connector))
+                .append(label).append(marker).append('\n');
 
         if (alreadyShown || pkg == null || depth >= maxDepth) return;
 
-        String childPrefix = prefix + (isLast ? "    " : "│   ");
+        String childPrefix = prefix + railStyler.apply(isLast ? "    " : "│   ");
         List<String> children = pkg.deps().stream()
                 .map(DependencyTree::stripVersion)
                 .sorted()
                 .toList();
         for (int i = 0; i < children.size(); i++) {
             renderNode(byModule, children.get(i), depth + 1, maxDepth,
-                    i == children.size() - 1, childPrefix, seen, out);
+                    i == children.size() - 1, childPrefix, railStyler, seen, out);
         }
     }
 
