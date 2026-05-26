@@ -1,10 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.JkThreads;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
@@ -72,6 +80,13 @@ public final class NewCommand implements Callable<Integer> {
     @Parameters(arity = "0..1", description = "Target directory. Default: current directory or --name subdir.")
     Path directory;
 
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> CANDIDATES = GoalKey.of("candidates", List.class);
+    private static final GoalKey<Terminal> TERMINAL = GoalKey.of("terminal", Terminal.class);
+    private static final GoalKey<Answers> ANSWERS = GoalKey.of("answers", Answers.class);
+    private static final GoalKey<NewJdkCandidate> PICKED = GoalKey.of("picked", NewJdkCandidate.class);
+    private static final GoalKey<NewInputs> INPUTS = GoalKey.of("inputs", NewInputs.class);
+
     @Override
     public Integer call() throws IOException {
         Path cwd = Path.of(".").toAbsolutePath().normalize();
@@ -89,93 +104,237 @@ public final class NewCommand implements Callable<Integer> {
         }
 
         if (shouldRunWizard()) {
-            // Pre-warm: JDK discovery (probe chain over the filesystem) and the
-            // JDK catalog fetch (XZ download or cache hit) both run in parallel
-            // with TerminalBuilder.build() (which probes the terminal's
-            // capabilities). All three are IO-bound and independent; overlap
-            // saves 50–200ms of perceived startup time before the wizard's
-            // first frame. Catalog fetch is best-effort: a network failure
-            // collapses to an empty catalog and the wizard offers only what's
-            // installed.
-            var jdkOptionsFuture = java.util.concurrent.CompletableFuture
-                    .supplyAsync(NewJdkOptions::discover, JkThreads.io());
-            var catalogFuture = java.util.concurrent.CompletableFuture
-                    .supplyAsync(NewCommand::fetchCatalogQuiet, JkThreads.io());
-            Terminal terminal;
-            try {
-                terminal = TerminalBuilder.builder().system(true).build();
-            } catch (IOException e) {
-                throw new RuntimeException("failed to open terminal: " + e.getMessage(), e);
-            }
-            var jdkOptions = jdkOptionsFuture.join();
-            var catalog = catalogFuture.join();
-            var candidates = NewJdkCandidate.build(
-                    jdkOptions, catalog, LATEST_LTS_MAJOR,
-                    dev.jkbuild.jdk.HostPlatform.currentOs(),
-                    dev.jkbuild.jdk.HostPlatform.currentArch());
-            if (candidates.isEmpty()) {
-                emitNoJdksError();
-                return 2; // EX_CONFIG
-            }
-            // Pre-seed the "name" answer when the user already supplied one
-            // via the positional arg. Skipped steps render as settled.
-            Answers preset = wizardPresetName(directory, cwd)
-                    .map(n -> Answers.of(Map.of("name", (Object) n)))
-                    .orElseGet(() -> Answers.of(Map.of()));
+            return runWizardGoal(cwd);
+        }
+        return runFlagGoal(cwd);
+    }
 
-            var groupGuess = NewGroupGuess.guess(cwd,
-                    Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null));
-            var wizard = buildWizard(candidates, groupGuess);
-            var wizardResult = wizard.run(terminal, preset);
-            if (wizardResult.isEmpty()) {
-                // Cancelled via Ctrl-C. Wizard.printCancellation preserves the
-                // cyan active-rail closer and prints the red marker beside it.
-                //
-                // Runtime.halt() instead of System.exit(): halt skips shutdown
-                // hooks, which is what we want here because JLine registers a
-                // terminal-cleanup hook that calls Terminal.close() -> blocks on
-                // the NonBlockingReader background thread that's blocked on a
-                // stdin read() macOS won't let us interrupt. Our wizard's finally
-                // already restored terminal attributes, cursor, and SGR.
-                Wizard.printCancellation(terminal, "𝘅 Project creation canceled");
-                Runtime.getRuntime().halt(130); // 128 + SIGINT
-            }
-            try (terminal) {
-                var picked = pickCandidate(wizardResult.get(), candidates);
-                NewJdkCandidate resolved = picked;
-                if (!resolved.installed()) {
-                    var installed = installCandidate(resolved);
-                    if (installed.isEmpty()) return 2;
-                    resolved = installed.get();
-                }
-                // After install, the candidate is always Installed (installCandidate's
-                // contract). Unwrap to the underlying Option for fromAnswers.
-                var pickedOpt = ((NewJdkCandidate.Installed) resolved).option();
-                var inputs = fromAnswers(wizardResult.get(), cwd, pickedOpt);
-                if (Files.exists(inputs.directory().resolve("jk.toml"))) {
-                    emitProjectExistsError(inputs.name());
-                    return 2;
-                }
-                Files.createDirectories(inputs.directory());
-                NewScaffolder.write(inputs);
-                emitSuccessOnTerminal(inputs, terminal);
-            } catch (IOException e) {
-                throw new RuntimeException("failed to close terminal: " + e.getMessage(), e);
-            }
-            return 0;
+    /**
+     * Wizard mode: four phases under a Goal marked interactive.
+     * <ol>
+     *   <li>{@code prewarm} (IO) — opens the terminal + discovers JDKs +
+     *       fetches the catalog in parallel via
+     *       {@link java.util.concurrent.CompletableFuture}; saves the
+     *       perceived 50–200ms by overlapping three IO-bound calls.</li>
+     *   <li>{@code wizard} (SYNC) — runs the wizard UI on the open terminal.
+     *       Ctrl-C halts the process hard (Runtime.halt) so JLine's
+     *       cleanup hook can't deadlock on the NonBlockingReader.</li>
+     *   <li>{@code install-jdk} (IO) — only when the user picked an
+     *       installable (not-yet-on-disk) candidate; runs the same
+     *       download/extract dance as {@code jk jdk install}.</li>
+     *   <li>{@code scaffold} (SYNC) — writes jk.toml + jk.lock + sources,
+     *       emits the styled "Done. Next:" line through the wizard
+     *       terminal's writer.</li>
+     * </ol>
+     * The terminal lives across phases via a {@link GoalKey} and is
+     * closed in a finally so it survives both success and failure.
+     */
+    private int runWizardGoal(Path cwd) throws IOException {
+        Path cache = JkDirs.cache();
+
+        Phase prewarm = Phase.builder("prewarm")
+                .kind(PhaseKind.IO)
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("discover JDKs + fetch catalog + open terminal");
+                    var jdkOptionsFuture = java.util.concurrent.CompletableFuture
+                            .supplyAsync(NewJdkOptions::discover, JkThreads.io());
+                    var catalogFuture = java.util.concurrent.CompletableFuture
+                            .supplyAsync(NewCommand::fetchCatalogQuiet, JkThreads.io());
+                    Terminal terminal;
+                    try {
+                        terminal = TerminalBuilder.builder().system(true).build();
+                    } catch (IOException e) {
+                        ctx.error("terminal", "failed to open terminal: " + e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.put(TERMINAL, terminal);
+                    var jdkOptions = jdkOptionsFuture.join();
+                    var catalog = catalogFuture.join();
+                    var candidates = NewJdkCandidate.build(
+                            jdkOptions, catalog, LATEST_LTS_MAJOR,
+                            dev.jkbuild.jdk.HostPlatform.currentOs(),
+                            dev.jkbuild.jdk.HostPlatform.currentArch());
+                    if (candidates.isEmpty()) {
+                        ctx.error("no-jdks", "no JDKs found on this system");
+                        throw new RuntimeException("no jdks");
+                    }
+                    ctx.put(CANDIDATES, candidates);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase wizardPhase = Phase.builder("wizard")
+                .requires("prewarm")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("run wizard");
+                    Terminal terminal = ctx.require(TERMINAL);
+                    @SuppressWarnings("unchecked")
+                    List<NewJdkCandidate> candidates =
+                            (List<NewJdkCandidate>) ctx.require(CANDIDATES);
+
+                    Answers preset = wizardPresetName(directory, cwd)
+                            .map(n -> Answers.of(Map.of("name", (Object) n)))
+                            .orElseGet(() -> Answers.of(Map.of()));
+                    var groupGuess = NewGroupGuess.guess(cwd,
+                            Optional.ofNullable(System.getProperty("user.home"))
+                                    .map(Path::of).orElse(null));
+                    var wizard = buildWizard(candidates, groupGuess);
+                    var wizardResult = wizard.run(terminal, preset);
+                    if (wizardResult.isEmpty()) {
+                        // Cancelled via Ctrl-C. Wizard.printCancellation
+                        // preserves the cyan active-rail closer and prints
+                        // the red marker beside it. Runtime.halt() skips
+                        // shutdown hooks — JLine's cleanup hook would block
+                        // on the NonBlockingReader.
+                        Wizard.printCancellation(terminal,
+                                "𝘅 Project creation canceled");
+                        Runtime.getRuntime().halt(130);
+                    }
+                    ctx.put(ANSWERS, wizardResult.get());
+                    ctx.put(PICKED, pickCandidate(wizardResult.get(), candidates));
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase installJdk = Phase.builder("install-jdk")
+                .kind(PhaseKind.IO)
+                .requires("wizard")
+                .scope(1)
+                .execute(ctx -> {
+                    NewJdkCandidate picked = ctx.require(PICKED);
+                    if (picked.installed()) {
+                        ctx.label("JDK already installed");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("install missing JDK");
+                    var installed = installCandidate(picked);
+                    if (installed.isEmpty()) {
+                        ctx.error("jdk-install", "JDK install failed");
+                        throw new RuntimeException("jdk install failed");
+                    }
+                    ctx.put(PICKED, installed.get());
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase scaffold = Phase.builder("scaffold")
+                .requires("install-jdk")
+                .scope(1)
+                .execute(ctx -> {
+                    NewJdkCandidate resolved = ctx.require(PICKED);
+                    // After install-jdk, picked is always Installed; unwrap
+                    // for fromAnswers.
+                    var pickedOpt = ((NewJdkCandidate.Installed) resolved).option();
+                    var inputs = fromAnswers(ctx.require(ANSWERS), cwd, pickedOpt);
+                    if (Files.exists(inputs.directory().resolve("jk.toml"))) {
+                        ctx.error("exists", "project " + inputs.name()
+                                + " already exists at " + inputs.directory());
+                        throw new RuntimeException("project exists");
+                    }
+                    ctx.label("scaffold " + inputs.name());
+                    Files.createDirectories(inputs.directory());
+                    NewScaffolder.write(inputs);
+                    ctx.put(INPUTS, inputs);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("new")
+                .interactive(true)
+                .addPhase(prewarm)
+                .addPhase(wizardPhase)
+                .addPhase(installJdk)
+                .addPhase(scaffold)
+                .build();
+
+        GoalResult result;
+        try {
+            result = GoalConsole.run(goal, GoalConsole.modeFor(null), cache);
+        } finally {
+            // Terminal is opened in prewarm; close it on the way out
+            // whether scaffold succeeded or not.
+            goal.get(TERMINAL).ifPresent(t -> {
+                try { t.close(); } catch (IOException ignored) {}
+            });
         }
 
+        if (!result.success()) {
+            for (GoalResult.Diagnostic d : result.errors()) {
+                if ("no-jdks".equals(d.code())) {
+                    emitNoJdksError();
+                    return 2;
+                }
+                if ("exists".equals(d.code())) {
+                    NewInputs partial = goal.get(INPUTS).orElse(null);
+                    String name = partial != null ? partial.name() : "project";
+                    emitProjectExistsError(name);
+                    return 2;
+                }
+            }
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk new failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            System.err.println("Run log: " + cache.resolve("runs"));
+            return 2;
+        }
+
+        // Success path: re-open or reuse the wizard's terminal for the
+        // success line. The terminal handle was set in prewarm; emitting
+        // through it before close keeps the styled output.
+        NewInputs inputs = goal.get(INPUTS).orElseThrow();
+        goal.get(TERMINAL).ifPresentOrElse(
+                t -> emitSuccessOnTerminal(inputs, t),
+                () -> emitSuccessPlain(inputs));
+        return 0;
+    }
+
+    /**
+     * Flag mode: validate inputs, scaffold. Not interactive (no wizard,
+     * no progress widgets in the command's own output). Wrapping it in
+     * a goal still gives us a run-log entry for `jk new --name=X` etc.
+     */
+    private int runFlagGoal(Path cwd) {
         var inputs = fromFlags(cwd);
         if (shadow && inputs.main().isEmpty()) {
             System.err.println("jk new: --shadow requires --executable");
-            return 64; // EX_USAGE
+            return 64;
         }
         if (Files.exists(inputs.directory().resolve("jk.toml"))) {
             emitProjectExistsError(inputs.name());
             return 2;
         }
-        Files.createDirectories(inputs.directory());
-        NewScaffolder.write(inputs);
+        Path cache = JkDirs.cache();
+
+        Phase scaffold = Phase.builder("scaffold")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("scaffold " + inputs.name());
+                    Files.createDirectories(inputs.directory());
+                    NewScaffolder.write(inputs);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("new")
+                .addPhase(scaffold)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(null), cache);
+        if (!result.success()) {
+            System.err.println("jk new failed: scaffold");
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            System.err.println("Run log: " + cache.resolve("runs"));
+            return 1;
+        }
         emitSuccessPlain(inputs);
         return 0;
     }
