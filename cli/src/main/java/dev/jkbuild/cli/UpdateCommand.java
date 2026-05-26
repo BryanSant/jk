@@ -139,11 +139,6 @@ public final class UpdateCommand implements Callable<Integer> {
             String failed = result.phases().stream()
                     .filter(p -> p.status() == PhaseStatus.FAIL)
                     .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
-            System.err.println("jk update failed: " + failed);
-            for (GoalResult.Diagnostic d : result.errors()) {
-                System.err.println("  " + d.code() + ": " + d.message());
-            }
-            System.err.println("Run log: " + cache.resolve("runs"));
             return failed.equals("resolve") ? 6 : 2;
         }
 

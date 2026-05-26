@@ -202,6 +202,37 @@ public final class ProgressBar implements AutoCloseable {
     }
 
     /**
+     * Repaint the bar as a final "Failed" line: bold red "Failed" prefix,
+     * the bar at its last filled state in normal colors, status struck
+     * through. Caller-facing: terminates the line with a newline so the
+     * shell prompt that follows doesn't overlay the bar.
+     *
+     * <p>Distinct from {@link #renderCanceled} which exists for explicit
+     * Ctrl-C — that one paints every segment red and leaves the cursor
+     * mid-line for a follow-up "Force-cancelled" notice.
+     */
+    public synchronized void renderFailed() {
+        if (closed) return;
+        closed = true;
+        ACTIVE.compareAndSet(this, null);
+        if (silent) return;
+        AttributedStyle strikeStyle = Theme.dim().crossedOut();
+        out.print("\r");
+        out.print(Theme.colorize("Failed", Theme.error().bold()));
+        out.print(" ");
+        renderSegments(0, SEGMENTS, lastFilled);
+        out.print(GAP);
+        out.print(Theme.colorize(lastPercent, Theme.settled()));
+        out.print(SEPARATOR);
+        out.print(Theme.colorize(lastStatus, strikeStyle));
+        out.print("\033[K"); // wipe any residue past the (shorter) status
+        out.print(OSC_CLEAR);
+        out.print(SHOW_CURSOR);
+        out.println();
+        out.flush();
+    }
+
+    /**
      * Repaint the bar as canceled: every segment in bright red, status struck
      * through. Used by the global SIGINT handler to mark the in-flight work
      * before the process halts. Leaves the cursor at the end of the bar line

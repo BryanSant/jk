@@ -164,14 +164,6 @@ public final class ImageCommand implements Callable<Integer> {
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) {
-            String failed = result.phases().stream()
-                    .filter(p -> p.status() == PhaseStatus.FAIL)
-                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
-            System.err.println("jk image failed: " + failed);
-            for (GoalResult.Diagnostic d : result.errors()) {
-                System.err.println("  " + d.code() + ": " + d.message());
-            }
-            System.err.println("Run log: " + cache.resolve("runs"));
             for (GoalResult.Diagnostic d : result.errors()) {
                 if ("missing-jar".equals(d.code())) return 66;
                 if ("no-main".equals(d.code())) return 64;

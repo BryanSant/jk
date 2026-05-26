@@ -208,7 +208,8 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
             }
             return 0;
         }
-        printFailureSummary(result);
+        // The progress-bar listener (or SilentListener on a pipe) has
+        // already surfaced the failure — no command-side summary.
         return 1;
     }
 
@@ -234,30 +235,6 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                 System.out.println(r.fetched() + " fetched, "
                         + r.upToDate() + " up-to-date, "
                         + r.skipped() + " skipped"));
-    }
-
-    /**
-     * On failure, blank the partial-success summary lines (they'd be
-     * confusing next to a "failed" verdict) and instead surface the
-     * failing phase, the primary error message, and the run-log
-     * directory the user can inspect for the full picture.
-     */
-    private void printFailureSummary(GoalResult result) {
-        String failedPhase = result.phases().stream()
-                .filter(p -> p.status() == PhaseStatus.FAIL)
-                .map(GoalResult.PhaseReport::name)
-                .findFirst().orElse("?");
-        System.err.println("jk sync failed: " + failedPhase);
-        if (!result.errors().isEmpty()) {
-            var first = result.errors().getFirst();
-            System.err.println("  " + first.code() + ": " + first.message());
-            if (result.errors().size() > 1) {
-                System.err.println("  …and " + (result.errors().size() - 1)
-                        + " more (see run log)");
-            }
-        }
-        System.err.println("Run log: " + (cacheDir != null ? cacheDir : JkDirs.cache())
-                .resolve("runs"));
     }
 
     private static void printJdkSummary(JdkEnsure.Outcome outcome) {

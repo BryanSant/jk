@@ -6,6 +6,8 @@ import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.PhaseStatus;
+import org.jline.utils.AttributedStringBuilder;
+import org.jline.utils.AttributedStyle;
 
 import java.io.PrintStream;
 import java.util.concurrent.ConcurrentHashMap;
@@ -69,11 +71,8 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void warn(String phase, String code, String message) {
-        // Don't smash the warning into the bar line — hoist it above
-        // the pinned row and let the bar redraw beneath. If the bar
-        // is already gone, fall back to plain stderr.
-        String line = Theme.colorize("⚠", Theme.warning())
-                + " " + phase + "/" + code + ": " + message;
+        String line = renderDiagnostic("⚠ Warning", Theme.warning().bold(),
+                phase, code, message);
         if (bar != null) {
             bar.writeAbove(line);
         } else {
@@ -83,13 +82,52 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void error(String phase, String code, String message) {
-        String line = Theme.colorize("✗", Theme.error())
-                + " " + phase + "/" + code + ": " + message;
+        String line = renderDiagnostic("✗ Error", Theme.error().bold(),
+                phase, code, message);
         if (bar != null) {
             bar.writeAbove(line);
         } else {
             err.println(line);
         }
+    }
+
+    /**
+     * Render an inline diagnostic line in the canonical shape:
+     * <pre>
+     *   ✗ Error [phase/code]: <b>Summary</b> — Detail.
+     * </pre>
+     * The message is split on the first {@code " — "}: text before
+     * becomes the bold-white summary, text after stays in default
+     * weight. Both halves get their first letter auto-capitalized so
+     * the rendering looks like a proper sentence regardless of how
+     * the diagnostic was authored.
+     */
+    private static String renderDiagnostic(
+            String prefix, AttributedStyle prefixStyle,
+            String phase, String code, String message) {
+        String summary = message == null ? "" : message;
+        String detail = null;
+        int sep = summary.indexOf(" — ");
+        if (sep >= 0) {
+            detail = capitalize(summary.substring(sep + 3));
+            summary = summary.substring(0, sep);
+        }
+        summary = capitalize(summary);
+        AttributedStringBuilder sb = new AttributedStringBuilder();
+        sb.append(prefix, prefixStyle);
+        sb.append(" [").append(phase).append("/").append(code).append("]: ");
+        sb.append(summary, Theme.focused());
+        if (detail != null) {
+            sb.append(" — ").append(detail);
+        }
+        return sb.toAnsi();
+    }
+
+    private static String capitalize(String s) {
+        if (s == null || s.isEmpty()) return s == null ? "" : s;
+        char first = s.charAt(0);
+        if (!Character.isLowerCase(first)) return s;
+        return Character.toUpperCase(first) + s.substring(1);
     }
 
     @Override
@@ -100,15 +138,22 @@ public final class ProgressBarListener implements GoalListener {
     @Override
     public synchronized void goalFinish(GoalResult result) {
         if (bar == null) return;
-        if (result.cancelled()) {
+        if (result.userCancelled()) {
             // Explicit Ctrl-C — preserve the red struck-through shape so
             // the user can see where the run was when they aborted it.
+            // (Goal.cancelled() also flips on internal short-circuit after
+            // a phase failure, so we use the more specific userCancelled
+            // flag to avoid mis-rendering plain failures as user cancels.)
             bar.renderCanceled();
             err.println();
+        } else if (!result.success()) {
+            // Plain failure: paint "Failed" + struck-through label.
+            // The bar IS the failure summary now — commands no longer
+            // print their own redundant "jk X failed: …" block.
+            bar.renderFailed();
         } else {
-            // Both success and plain failure wipe the bar entirely. The
-            // command's success summary or failure summary takes its
-            // place; a leftover bar would clutter the failure output.
+            // Success: wipe the bar entirely. The command's own
+            // success line ("Built …", "Wrote …") takes its place.
             bar.close();
         }
         bar = null;

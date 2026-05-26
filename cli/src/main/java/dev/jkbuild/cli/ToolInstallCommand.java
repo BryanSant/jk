@@ -124,17 +124,7 @@ public final class ToolInstallCommand implements Callable<Integer> {
                 .build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
-        if (!result.success()) {
-            String failed = result.phases().stream()
-                    .filter(p -> p.status() == PhaseStatus.FAIL)
-                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
-            System.err.println("jk tool install failed: " + failed);
-            for (GoalResult.Diagnostic d : result.errors()) {
-                System.err.println("  " + d.code() + ": " + d.message());
-            }
-            System.err.println("Run log: " + cacheDir.resolve("runs"));
-            return 1;
-        }
+        if (!result.success()) return 1;
 
         Path launcher = goal.get(LAUNCHER).orElseThrow();
         if (!global.outputIsJson()) {

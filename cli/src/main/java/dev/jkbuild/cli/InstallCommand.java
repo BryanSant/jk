@@ -243,10 +243,7 @@ public final class InstallCommand implements Callable<Integer> {
                 fetchGoal, GoalConsole.modeFor(global), cacheDir);
         if (!fetchResult.success()) {
             for (GoalResult.Diagnostic d : fetchResult.errors()) {
-                if ("no-jk-toml".equals(d.code())) {
-                    printFailure(fetchResult, "jk install", cacheDir);
-                    return 70;
-                }
+                if ("no-jk-toml".equals(d.code())) return 70;
             }
             return failureExit(fetchResult, "jk install", cacheDir);
         }
@@ -382,14 +379,8 @@ public final class InstallCommand implements Callable<Integer> {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("no-main".equals(d.code())) {
-                    printFailure(result, "jk install", cacheDir);
-                    return 64;
-                }
-                if ("missing-jar".equals(d.code())) {
-                    printFailure(result, "jk install", cacheDir);
-                    return 70;
-                }
+                if ("no-main".equals(d.code())) return 64;
+                if ("missing-jar".equals(d.code())) return 70;
             }
             return failureExit(result, "jk install", cacheDir);
         }
@@ -426,20 +417,13 @@ public final class InstallCommand implements Callable<Integer> {
 
     // --- helpers ---------------------------------------------------------
 
+    /**
+     * Maps a failed install goal to exit code 1. Kept as a named helper so
+     * the various call sites read uniformly; the listener already printed
+     * the "✗ Error" diagnostic so we don't repeat ourselves.
+     */
     private static int failureExit(GoalResult result, String label, Path cache) {
-        printFailure(result, label, cache);
         return 1;
-    }
-
-    private static void printFailure(GoalResult result, String label, Path cache) {
-        String failed = result.phases().stream()
-                .filter(p -> p.status() == PhaseStatus.FAIL)
-                .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
-        System.err.println(label + " failed: " + failed);
-        for (GoalResult.Diagnostic d : result.errors()) {
-            System.err.println("  " + d.code() + ": " + d.message());
-        }
-        System.err.println("Run log: " + cache.resolve("runs"));
     }
 
     private Path cacheDir() {

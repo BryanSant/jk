@@ -61,6 +61,17 @@ public final class Goal {
     private final LongAdder denominator = new LongAdder();
     private final AtomicInteger phasesComplete = new AtomicInteger();
     private final AtomicBoolean cancelled = new AtomicBoolean(false);
+
+    /**
+     * True only when {@link #requestCancel} was invoked by the host
+     * (typically the SIGINT bridge). The {@link #cancelled} flag is
+     * also flipped internally when a phase fails so still-pending
+     * phases get torn down — so {@code cancelled} alone can't tell us
+     * "the user asked to abort" vs "a phase failed and we're winding
+     * the others down." Listeners need that distinction to pick the
+     * right end-of-goal rendering.
+     */
+    private final AtomicBoolean userRequestedCancel = new AtomicBoolean(false);
     private final Map<String, PhaseStatus> statuses = new ConcurrentHashMap<>();
     private final List<GoalResult.Diagnostic> warnings = Collections.synchronizedList(new ArrayList<>());
     private final List<GoalResult.Diagnostic> errors = Collections.synchronizedList(new ArrayList<>());
@@ -87,6 +98,7 @@ public final class Goal {
 
     /** Request cancellation; running phases see {@link PhaseContext#cancelled} flip. */
     public void requestCancel() {
+        userRequestedCancel.set(true);
         cancelled.set(true);
     }
 
@@ -169,7 +181,8 @@ public final class Goal {
         GoalResult result = new GoalResult(
                 name, success,
                 Duration.between(goalStart, Instant.now()),
-                orderedReports, warnings, errors, cancelled.get());
+                orderedReports, warnings, errors,
+                cancelled.get(), userRequestedCancel.get());
         emit(l -> l.goalFinish(result));
         return result;
     }

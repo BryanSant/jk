@@ -352,7 +352,8 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
             }
             return 0;
         }
-        printFailureSummary(result, cache);
+        // Failure UX is owned by the listener (✗ Error line + Failed bar);
+        // commands just translate codes into exit status.
         return 1;
     }
 
@@ -392,23 +393,6 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
             System.out.println("Built " + jar + " (" + n + " source"
                     + (n == 1 ? "" : "s") + ")");
         });
-    }
-
-    private void printFailureSummary(GoalResult result, Path cache) {
-        String failedPhase = result.phases().stream()
-                .filter(p -> p.status() == PhaseStatus.FAIL)
-                .map(GoalResult.PhaseReport::name)
-                .findFirst().orElse("?");
-        System.err.println("jk build failed: " + failedPhase);
-        if (!result.errors().isEmpty()) {
-            // Compile errors from javac come through here verbatim — preserve
-            // their original formatting (file:line: message) by printing
-            // each on its own line.
-            for (GoalResult.Diagnostic d : result.errors()) {
-                System.err.println("  " + d.message());
-            }
-        }
-        System.err.println("Run log: " + cache.resolve("runs"));
     }
 
     @SuppressWarnings("unchecked")

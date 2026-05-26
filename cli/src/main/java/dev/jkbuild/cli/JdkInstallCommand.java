@@ -301,23 +301,7 @@ public final class JdkInstallCommand implements Callable<Integer> {
                 .build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
-        if (!result.success()) {
-            String failed = result.phases().stream()
-                    .filter(p -> p.status() == PhaseStatus.FAIL)
-                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
-            for (GoalResult.Diagnostic d : result.errors()) {
-                if ("no-match".equals(d.code())) {
-                    System.err.println("jk jdk install: " + d.message());
-                    return 1;
-                }
-            }
-            System.err.println("jk jdk install failed: " + failed);
-            for (GoalResult.Diagnostic d : result.errors()) {
-                System.err.println("  " + d.code() + ": " + d.message());
-            }
-            System.err.println("Run log: " + cache.resolve("runs"));
-            return 1;
-        }
+        if (!result.success()) return 1;
         return 0;
     }
 

@@ -100,7 +100,7 @@ public final class NativeCommand implements Callable<Integer> {
         Phase parseBuild = Phase.builder("parse-build")
                 .scope(1)
                 .execute(ctx -> {
-                    ctx.label("parse jk.toml");
+                    ctx.label("Parse jk.toml");
                     JkBuild project;
                     try {
                         project = JkBuildParser.parse(jkBuildPath);
@@ -205,28 +205,17 @@ public final class NativeCommand implements Callable<Integer> {
             }
             return 0;
         }
-        printFailureSummary(result, cache);
-        // Preserve the previous error codes:
+        // The progress-bar listener already painted the "✗ Error" line
+        // and the "Failed" bar; we just translate the diagnostic codes
+        // into the right exit status.
         //   66 (EX_NOINPUT) for missing inputs (jar / main class)
-        //   64 (EX_USAGE)   for "no main class — pass --main"
+        //   64 (EX_USAGE)   for missing main class
         //   1              for native-image subprocess failure
         for (GoalResult.Diagnostic d : result.errors()) {
             if ("missing-jar".equals(d.code())) return 66;
             if ("no-main".equals(d.code())) return 64;
         }
         return 1;
-    }
-
-    private void printFailureSummary(GoalResult result, Path cache) {
-        String failedPhase = result.phases().stream()
-                .filter(p -> p.status() == PhaseStatus.FAIL)
-                .map(GoalResult.PhaseReport::name)
-                .findFirst().orElse("?");
-        System.err.println("jk native failed: " + failedPhase);
-        for (GoalResult.Diagnostic d : result.errors()) {
-            System.err.println("  " + d.code() + ": " + d.message());
-        }
-        System.err.println("Run log: " + cache.resolve("runs"));
     }
 
     private static List<Path> loadLockedJars(Path projectDir, Path cache) throws IOException {

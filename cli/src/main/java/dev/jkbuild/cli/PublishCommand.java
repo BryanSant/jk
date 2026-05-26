@@ -264,14 +264,6 @@ public final class PublishCommand implements Callable<Integer> {
         }
 
         if (!result.success()) {
-            String failed = result.phases().stream()
-                    .filter(p -> p.status() == PhaseStatus.FAIL)
-                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
-            System.err.println("jk publish failed: " + failed);
-            for (GoalResult.Diagnostic d : result.errors()) {
-                System.err.println("  " + d.code() + ": " + d.message());
-            }
-            System.err.println("Run log: " + cache.resolve("runs"));
             for (GoalResult.Diagnostic d : result.errors()) {
                 if ("snapshot".equals(d.code())) return 65;
                 if ("missing-jar".equals(d.code())) return 66;

@@ -425,10 +425,7 @@ public final class RunCommand implements Callable<Integer> {
             // "kotlinc-missing" is an EX_SOFTWARE (70) shape; everything
             // else collapses to the generic resolver error code.
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("kotlinc-missing".equals(d.code())) {
-                    printFailureSummary(result, "jk run-kts", cacheDir);
-                    return 70;
-                }
+                if ("kotlinc-missing".equals(d.code())) return 70;
             }
             return failureExitCode(result, "jk run-kts");
         }
@@ -535,10 +532,7 @@ public final class RunCommand implements Callable<Integer> {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir());
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("no-main-class".equals(d.code())) {
-                    printFailureSummary(result, "jk run-jar", cacheDir());
-                    return 65; // EX_DATAERR
-                }
+                if ("no-main-class".equals(d.code())) return 65; // EX_DATAERR
             }
             return failureExitCode(result, "jk run-jar");
         }
@@ -637,15 +631,8 @@ public final class RunCommand implements Callable<Integer> {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir());
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("missing-jar".equals(d.code())) {
-                    printFailureSummary(result, "jk run", cacheDir());
-                    return 70; // EX_SOFTWARE — build promised but didn't deliver
-                }
-                if ("nested-build".equals(d.code())) {
-                    // Bubble whatever code jk build returned.
-                    printFailureSummary(result, "jk run", cacheDir());
-                    return 1;
-                }
+                if ("missing-jar".equals(d.code())) return 70; // EX_SOFTWARE — build promised but didn't deliver
+                if ("nested-build".equals(d.code())) return 1;
             }
             return failureExitCode(result, "jk run");
         }
@@ -690,22 +677,12 @@ public final class RunCommand implements Callable<Integer> {
 
     // --- shared helpers --------------------------------------------------
 
-    /** Map a failed goal to an exit code + write the failure summary. */
+    /**
+     * Map a failed goal to exit code 1. The listener already painted
+     * the diagnostic and the "Failed" bar; we don't repeat ourselves.
+     */
     private int failureExitCode(GoalResult result, String commandLabel) {
-        printFailureSummary(result, commandLabel, cacheDir());
         return 1;
-    }
-
-    private static void printFailureSummary(GoalResult result, String commandLabel, Path cache) {
-        String failedPhase = result.phases().stream()
-                .filter(p -> p.status() == PhaseStatus.FAIL)
-                .map(GoalResult.PhaseReport::name)
-                .findFirst().orElse("?");
-        System.err.println(commandLabel + " failed: " + failedPhase);
-        for (GoalResult.Diagnostic d : result.errors()) {
-            System.err.println("  " + d.code() + ": " + d.message());
-        }
-        System.err.println("Run log: " + cache.resolve("runs"));
     }
 
     /** {@code classes/} for compiled output + shared CAS cache root. */

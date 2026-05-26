@@ -214,14 +214,7 @@ public final class CompileCommand implements Callable<Integer> {
         // Clean up scratch regardless of outcome.
         goal.get(SCRATCH).ifPresent(CompileCommand::deleteRecursively);
 
-        if (!result.success()) {
-            String failed = result.phases().stream()
-                    .filter(p -> p.status() == PhaseStatus.FAIL)
-                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
-            System.err.println("jk compile failed: " + failed);
-            System.err.println("Run log: " + cache.resolve("runs"));
-            return 1;
-        }
+        if (!result.success()) return 1;
 
         @SuppressWarnings("unchecked")
         List<Path> javaSources = (List<Path>) goal.get(JAVA_SOURCES).orElse(List.of());

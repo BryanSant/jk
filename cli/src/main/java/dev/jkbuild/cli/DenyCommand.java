@@ -85,16 +85,7 @@ public final class DenyCommand implements Callable<Integer> {
                 .build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
-        if (!result.success()) {
-            String failed = result.phases().stream()
-                    .filter(p -> p.status() == PhaseStatus.FAIL)
-                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
-            System.err.println("jk deny failed: " + failed);
-            for (GoalResult.Diagnostic d : result.errors()) {
-                System.err.println("  " + d.code() + ": " + d.message());
-            }
-            return 1;
-        }
+        if (!result.success()) return 1;
 
         @SuppressWarnings("unchecked")
         List<PolicyChecker.Violation> violations =

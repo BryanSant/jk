@@ -273,7 +273,7 @@ public final class TestCommand implements Callable<Integer> {
         if (testResult != null && !testResult.allPassed()) {
             return 4;
         }
-        printFailureSummary(result, cache);
+        // Failure UX owned by the listener.
         return 1;
     }
 
@@ -331,18 +331,6 @@ public final class TestCommand implements Callable<Integer> {
                 // println output would drown the structured stream.
             }
         };
-    }
-
-    private void printFailureSummary(GoalResult result, Path cache) {
-        String failedPhase = result.phases().stream()
-                .filter(p -> p.status() == PhaseStatus.FAIL)
-                .map(GoalResult.PhaseReport::name)
-                .findFirst().orElse("?");
-        System.err.println("jk test failed: " + failedPhase);
-        for (GoalResult.Diagnostic d : result.errors()) {
-            System.err.println("  " + d.message());
-        }
-        System.err.println("Run log: " + cache.resolve("runs"));
     }
 
     /**

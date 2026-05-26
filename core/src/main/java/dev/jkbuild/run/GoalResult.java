@@ -17,7 +17,8 @@ public record GoalResult(
         List<PhaseReport> phases,
         List<Diagnostic> warnings,
         List<Diagnostic> errors,
-        boolean cancelled) {
+        boolean cancelled,
+        boolean userCancelled) {
 
     public GoalResult {
         Objects.requireNonNull(goalName, "goalName");
@@ -25,6 +26,19 @@ public record GoalResult(
         phases = List.copyOf(phases);
         warnings = List.copyOf(warnings);
         errors = List.copyOf(errors);
+    }
+
+    /**
+     * 7-arg compatibility constructor. {@code cancelled=true} is
+     * presumed user-initiated when no separate flag is supplied —
+     * the older callers all came from the SIGINT bridge.
+     */
+    public GoalResult(
+            String goalName, boolean success, Duration duration,
+            List<PhaseReport> phases, List<Diagnostic> warnings,
+            List<Diagnostic> errors, boolean cancelled) {
+        this(goalName, success, duration, phases, warnings, errors,
+                cancelled, cancelled);
     }
 
     /** One row in the report's per-phase breakdown. */
