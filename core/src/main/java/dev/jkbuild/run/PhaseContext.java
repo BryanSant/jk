@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.jkbuild.run;
+
+/**
+ * Handle a phase uses to talk back to the Goal. Every method is safe to
+ * call from a worker thread (async phases) — the underlying counters use
+ * atomic adds and the listener fanout is the framework's responsibility.
+ *
+ * <p>Phases should:
+ * <ul>
+ *   <li>Call {@link #progress} as units of work complete (a file
+ *       compiled, a dep fetched, a byte downloaded — whatever the
+ *       phase's scope unit is).</li>
+ *   <li>Call {@link #updateScope} when the initial estimate turns out
+ *       too low (e.g. resolving uncovered more transitive deps).
+ *       The Goal's denominator grows; the progress bar grows
+ *       accordingly.</li>
+ *   <li>Call {@link #label} when the active "what am I doing right
+ *       now" sub-task changes. The TUI shows this beside the bar.</li>
+ *   <li>Poll {@link #cancelled} in inner loops so the Goal can
+ *       cooperatively shut down on a failure or Ctrl-C.</li>
+ *   <li>Call {@link #warn} / {@link #error} for structured diagnostics
+ *       — the Goal report groups these by phase.</li>
+ * </ul>
+ */
+public interface PhaseContext {
+
+    /** Add {@code delta} to the goal's progress numerator. */
+    void progress(int delta);
+
+    /**
+     * Grow the phase's scope (and therefore the goal's denominator) by
+     * {@code additionalScope}. Use when the {@link Phase#estimateScope}
+     * up-front guess proves too low.
+     */
+    void updateScope(int additionalScope);
+
+    /**
+     * Set the phase's current sub-task label — what's happening right
+     * now. The TUI uses this for the "Compiling Foo.java" annotation
+     * beside the bar; logging listeners may write it as a status line.
+     * Pass {@code null} or empty to clear.
+     */
+    void label(String description);
+
+    /** Accumulating warning. Surfaces in the run report. */
+    void warn(String code, String message);
+
+    /**
+     * Accumulating error. Does NOT terminate the phase — phases signal
+     * fatal failure by throwing from {@link Phase#execute}. Use {@code
+     * error} for non-fatal-but-important issues that should still
+     * surface in the report (e.g. one file in a batch failed but the
+     * batch continued).
+     */
+    void error(String code, String message);
+
+    /**
+     * True if the goal has been cancelled (sibling failure or Ctrl-C).
+     * Long-running phases should check this in their inner loops and
+     * exit promptly when set; the scheduler will hard-interrupt after
+     * a 200ms grace period if a phase doesn't shut down cooperatively.
+     */
+    boolean cancelled();
+}

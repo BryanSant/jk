@@ -1,0 +1,81 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.jkbuild.run;
+
+import java.util.concurrent.atomic.AtomicInteger;
+
+/**
+ * Internal {@link PhaseContext} the scheduler hands to each phase.
+ * Wires {@code progress / updateScope / warn / error} into the goal's
+ * counters and listener fanout; tracks per-phase scope growth so the
+ * scheduler can do the "auto-fill the bar to 100% on success" trick
+ * without conflating it with the phase's own reports.
+ *
+ * <p>Package-private — phases only see this through the
+ * {@link PhaseContext} interface.
+ */
+final class DefaultPhaseContext implements PhaseContext {
+
+    private final String phase;
+    private final Goal goal;
+    private final AtomicInteger scopeGrowth = new AtomicInteger(0);
+
+    DefaultPhaseContext(String phase, Goal goal) {
+        this.phase = phase;
+        this.goal = goal;
+    }
+
+    @Override
+    public void progress(int delta) {
+        if (delta <= 0) return;
+        goal.numeratorRef().add(delta);
+        notifyProgress(delta);
+    }
+
+    @Override
+    public void updateScope(int additional) {
+        if (additional <= 0) return;
+        scopeGrowth.addAndGet(additional);
+        goal.denominatorRef().add(additional);
+        GoalView snap = goal.snapshot();
+        goal.emit(l -> l.scopeUpdate(phase, additional, snap));
+    }
+
+    @Override
+    public void label(String description) {
+        String d = description == null ? "" : description;
+        goal.emit(l -> l.label(phase, d));
+    }
+
+    @Override
+    public void warn(String code, String message) {
+        goal.warningsRef().add(new GoalResult.Diagnostic(phase, code, message));
+        goal.emit(l -> l.warn(phase, code, message));
+    }
+
+    @Override
+    public void error(String code, String message) {
+        goal.errorsRef().add(new GoalResult.Diagnostic(phase, code, message));
+        goal.emit(l -> l.error(phase, code, message));
+    }
+
+    @Override
+    public boolean cancelled() {
+        return goal.cancelledRef().get();
+    }
+
+    /** How much {@link #updateScope} grew this phase's denominator. */
+    int scopeGrowth() {
+        return scopeGrowth.get();
+    }
+
+    /**
+     * Fanout for synthetic auto-fill at phase end. Same shape as a
+     * regular {@link #progress} but invoked by the scheduler, not by
+     * the phase body.
+     */
+    void notifyProgress(int delta) {
+        if (delta <= 0) return;
+        GoalView snap = goal.snapshot();
+        goal.emit(l -> l.progress(phase, delta, snap));
+    }
+}

@@ -186,6 +186,13 @@ public final class CacheCommand implements Callable<Integer> {
                 }
             }
 
+            // Phase 2b: GC the goal event log (separate TTL — 7 days).
+            // Independent of action-record retention so debug data ages
+            // out predictably regardless of how aggressive the user's
+            // record TTL is.
+            var runLogReport = dev.jkbuild.task.RunLogGc.sweep(
+                    root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
+
             // --max-size implies --sweep — there's no scenario where you
             // want LRU eviction without first dropping the GC-collectible
             // floor.
@@ -232,10 +239,11 @@ public final class CacheCommand implements Callable<Integer> {
             }
 
             String verb = dryRun ? "Would prune" : "Pruned";
-            System.out.printf("%s: records expired %s (%s), temps %s (%s)",
+            System.out.printf("%s: records expired %s (%s), temps %s (%s), run-logs %s (%s)",
                     verb,
                     fmtCount(recordsExpired), fmtBytes(recordsBytes),
-                    fmtCount(tempsCleared), fmtBytes(tempsBytes));
+                    fmtCount(tempsCleared), fmtBytes(tempsBytes),
+                    fmtCount(runLogReport.deleted()), fmtBytes(runLogReport.freedBytes()));
             if (doSweep) {
                 System.out.printf(", swept %s (%s); kept %s",
                         fmtCount(sweptCount), fmtBytes(sweptBytes), fmtCount(sweptKept));
