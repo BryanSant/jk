@@ -43,9 +43,9 @@ class DependencyTreeTest {
                 pkg("com.foo:leaf", "1.0", List.of()));
 
         String rendered = DependencyTree.render(project, lock);
-        // First occurrence: full label. Second: (*) marker.
+        // First occurrence: full label. Second: ↑ marker.
         assertThat(rendered).contains("com.foo:leaf:1.0\n");
-        assertThat(rendered).contains("com.foo:leaf:1.0 (*)\n");
+        assertThat(rendered).contains("com.foo:leaf:1.0 ↑\n");
     }
 
     @Test

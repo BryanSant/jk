@@ -18,8 +18,9 @@ import java.util.stream.Stream;
 
 /**
  * Renders a Cargo-style dependency tree from a {@link JkBuild} project and
- * its resolved {@link Lockfile}. Revisited subtrees are marked with
- * {@code (*)} so diamond-shaped graphs don't explode the output.
+ * its resolved {@link Lockfile}. Revisited subtrees are marked with an
+ * up-arrow ({@code ↑}) so diamond-shaped graphs don't explode the output —
+ * the arrow points the reader back to the earlier expansion.
  */
 public final class DependencyTree {
 
@@ -117,7 +118,7 @@ public final class DependencyTree {
                     + styling.artifact().apply(artifactId) + " (missing)";
         }
         boolean alreadyShown = !seen.add(module);
-        String marker = alreadyShown ? " (*)" : "";
+        String marker = alreadyShown ? " ↑" : "";
         String connector = isLast ? "└── " : "├── ";
 
         out.append(prefix).append(styling.rail().apply(connector))
