@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.deny.PolicyChecker;
 import dev.jkbuild.config.DenyPolicyParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.DenyPolicy;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,11 +24,21 @@ import java.util.concurrent.Callable;
 /**
  * {@code jk deny} — apply the jk.toml {@code deny} policy against the
  * locked dependencies (PRD §23.6). Exits non-zero on any violation.
+ *
+ * <p>Two phases: {@code parse-policy} reads jk.toml + jk.lock; {@code check}
+ * runs the {@link PolicyChecker}. Violations are surfaced via the goal's
+ * structured warnings/errors so they show up in the run log alongside
+ * the human-readable summary.
  */
 @Command(name = "deny", description = "Apply the project's license / source / yanked policy")
 public final class DenyCommand implements Callable<Integer> {
 
     @picocli.CommandLine.Mixin GlobalOptions global;
+
+    private static final GoalKey<DenyPolicy> POLICY = GoalKey.of("policy", DenyPolicy.class);
+    private static final GoalKey<Lockfile> LOCK = GoalKey.of("lock", Lockfile.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> VIOLATIONS = GoalKey.of("violations", List.class);
 
     @Override
     public Integer call() throws IOException {
@@ -38,10 +54,52 @@ public final class DenyCommand implements Callable<Integer> {
                     + " (run `jk lock` first).");
             return 2;
         }
+        Path cache = JkDirs.cache();
 
-        DenyPolicy policy = DenyPolicyParser.parse(jkBuild);
-        Lockfile lock = LockfileReader.read(lockPath);
-        List<PolicyChecker.Violation> violations = new PolicyChecker(policy).check(lock);
+        Phase parsePolicy = Phase.builder("parse-policy")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse policy + lock");
+                    ctx.put(POLICY, DenyPolicyParser.parse(jkBuild));
+                    ctx.put(LOCK, LockfileReader.read(lockPath));
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase check = Phase.builder("check")
+                .requires("parse-policy")
+                .scope(1)
+                .execute(ctx -> {
+                    Lockfile lock = ctx.require(LOCK);
+                    ctx.label("check " + lock.packages().size() + " packages");
+                    List<PolicyChecker.Violation> violations =
+                            new PolicyChecker(ctx.require(POLICY)).check(lock);
+                    ctx.put(VIOLATIONS, violations);
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("deny")
+                .addPhase(parsePolicy)
+                .addPhase(check)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk deny failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            return 1;
+        }
+
+        @SuppressWarnings("unchecked")
+        List<PolicyChecker.Violation> violations =
+                (List<PolicyChecker.Violation>) goal.get(VIOLATIONS).orElse(List.of());
+        Lockfile lock = goal.get(LOCK).orElseThrow();
 
         if (violations.isEmpty()) {
             System.out.println("jk deny: " + lock.packages().size()
