@@ -119,7 +119,9 @@ public final class DependencyTree {
         }
         boolean alreadyShown = !seen.add(module);
         String marker = alreadyShown ? " ↑" : "";
-        String connector = isLast ? "└── " : "├── ";
+        // ╰── for the last child (rounded arc); ├── for the rest.
+        // Standard "rounded tree" convention used by eza, tre, etc.
+        String connector = isLast ? "╰── " : "├── ";
 
         out.append(prefix).append(styling.rail().apply(connector))
                 .append(label).append(marker).append('\n');

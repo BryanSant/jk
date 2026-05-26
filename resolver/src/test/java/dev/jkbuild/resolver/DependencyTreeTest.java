@@ -26,8 +26,8 @@ class DependencyTreeTest {
         String rendered = DependencyTree.render(project, lock);
         assertThat(rendered).isEqualToIgnoringWhitespace("""
                 com.example:widget:0.1.0
-                └── com.foo:root:1.0
-                    └── com.foo:leaf:1.0
+                ╰── com.foo:root:1.0
+                    ╰── com.foo:leaf:1.0
                 """);
     }
 
