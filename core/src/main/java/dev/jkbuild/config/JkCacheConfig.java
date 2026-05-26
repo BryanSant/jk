@@ -16,14 +16,20 @@ import java.util.Optional;
  * {@code ~/.config/jk/jk.toml} (user-global). Project values override
  * user-global; both fall back to the defaults below.
  *
- * <p>Schema:
+ * <p>Schema (default values shown):
  * <pre>{@code
  *   [cache]
- *   auto-prune          = false   # opt-in to opportunistic prune
+ *   auto-prune          = true    # opportunistic prune in build/sync tail
  *   max-size-gb         = 20      # LRU budget; unset means no ceiling
  *   prune-interval-days = 7       # minimum gap between auto-prunes
  *   record-ttl-days     = 30      # action-record + sync-manifest TTL
  * }</pre>
+ *
+ * <p>Auto-prune is <strong>on by default</strong> — the prune is opaque
+ * to the user (detached subprocess, output to a sidecar log), and
+ * letting the cache grow unbounded is a worse default than a background
+ * prune every 7 days. Opt out per project with
+ * {@code [cache]\nauto-prune = false}.
  *
  * <p>Reading is intentionally lenient: malformed values fall back to the
  * default rather than failing the build. The cache layer is an
@@ -36,7 +42,7 @@ public record JkCacheConfig(
         int recordTtlDays) {
 
     public static final JkCacheConfig DEFAULTS =
-            new JkCacheConfig(false, Optional.empty(), 7, 30);
+            new JkCacheConfig(true, Optional.empty(), 7, 30);
 
     /**
      * Layer this config <em>over</em> {@code base}: every present field
