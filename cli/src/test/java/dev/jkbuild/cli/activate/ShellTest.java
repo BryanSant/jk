@@ -126,4 +126,50 @@ class ShellTest {
         assertThat(new FishShell().deactivateScript()).contains("functions --erase jkx");
         assertThat(new PwshShell().deactivateScript()).contains("function:jkx");
     }
+
+    @Test
+    void zsh_rc_file_is_dot_zshrc_not_zshenv() {
+        // .zshrc is the interactive-shell config; .zshenv runs even for
+        // non-interactive subshells where our precmd/chpwd hooks don't fit.
+        var home = java.nio.file.Path.of("/home/u");
+        assertThat(new ZshShell().rcFile(home)).isEqualTo(home.resolve(".zshrc"));
+        assertThat(new ZshShell().rcFileDisplay()).isEqualTo("~/.zshrc");
+    }
+
+    @Test
+    void bash_rc_file_is_dot_bashrc() {
+        var home = java.nio.file.Path.of("/home/u");
+        assertThat(new BashShell().rcFile(home)).isEqualTo(home.resolve(".bashrc"));
+        assertThat(new BashShell().rcFileDisplay()).isEqualTo("~/.bashrc");
+    }
+
+    @Test
+    void fish_rc_file_is_config_fish() {
+        var home = java.nio.file.Path.of("/home/u");
+        assertThat(new FishShell().rcFile(home))
+                .isEqualTo(home.resolve(".config").resolve("fish").resolve("config.fish"));
+    }
+
+    @Test
+    void activation_lines_use_the_right_idiom_per_shell() {
+        assertThat(new BashShell().activationLine("/opt/jk/bin/jk"))
+                .isEqualTo("eval \"$(/opt/jk/bin/jk activate bash)\"");
+        assertThat(new ZshShell().activationLine("/opt/jk/bin/jk"))
+                .isEqualTo("eval \"$(/opt/jk/bin/jk activate zsh)\"");
+        assertThat(new FishShell().activationLine("/opt/jk/bin/jk"))
+                .isEqualTo("/opt/jk/bin/jk activate fish | source");
+        assertThat(new PwshShell().activationLine("/opt/jk/bin/jk"))
+                .contains("Invoke-Expression")
+                .contains("activate pwsh");
+    }
+
+    @Test
+    void detect_resolves_shell_from_path_basename() {
+        assertThat(Shell.detect("/bin/zsh")).get().isInstanceOf(ZshShell.class);
+        assertThat(Shell.detect("/usr/local/bin/fish")).get().isInstanceOf(FishShell.class);
+        assertThat(Shell.detect("bash")).get().isInstanceOf(BashShell.class);
+        assertThat(Shell.detect("/usr/bin/dash")).isEmpty();
+        assertThat(Shell.detect(null)).isEmpty();
+        assertThat(Shell.detect("")).isEmpty();
+    }
 }

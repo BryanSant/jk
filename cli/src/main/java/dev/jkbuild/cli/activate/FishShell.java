@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.activate;
 
+import java.nio.file.Path;
+
 /**
  * Fish flavour. Uses {@code --on-event fish_prompt} and {@code --on-variable PWD}
  * for the equivalent of precmd/chpwd. PATH is treated as a colon-joined string
@@ -35,5 +37,20 @@ public final class FishShell implements Shell {
     @Override
     public String deactivateScript() {
         return ShellResources.load("fish_deactivate.fish");
+    }
+
+    @Override
+    public Path rcFile(Path home) {
+        return home.resolve(".config").resolve("fish").resolve("config.fish");
+    }
+
+    @Override
+    public String rcFileDisplay() {
+        return "~/.config/fish/config.fish";
+    }
+
+    @Override
+    public String activationLine(String jkExe) {
+        return jkExe + " activate fish | source";
     }
 }

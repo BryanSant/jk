@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.activate;
 
+import java.nio.file.Path;
+
 /**
  * PowerShell flavour. Single-quoted strings with backtick escaping for
  * embedded quotes, newlines, and tabs.
@@ -33,6 +35,25 @@ public final class PwshShell implements Shell {
     @Override
     public String deactivateScript() {
         return ShellResources.load("pwsh_deactivate.ps1");
+    }
+
+    @Override
+    public Path rcFile(Path home) {
+        // Cross-platform $PROFILE on Windows lives under Documents; on macOS
+        // and Linux PowerShell uses ~/.config/powershell/. Pick the most
+        // common Windows location since pwsh on Unix is rare for jk users.
+        return home.resolve("Documents").resolve("PowerShell")
+                .resolve("Microsoft.PowerShell_profile.ps1");
+    }
+
+    @Override
+    public String rcFileDisplay() {
+        return "$PROFILE";
+    }
+
+    @Override
+    public String activationLine(String jkExe) {
+        return "(& '" + pwshEscape(jkExe) + "' activate pwsh) | Out-String | Invoke-Expression";
     }
 
     /**

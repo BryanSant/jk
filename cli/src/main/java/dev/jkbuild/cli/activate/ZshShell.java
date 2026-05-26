@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.activate;
 
+import java.nio.file.Path;
+
 /**
  * Zsh flavour. Uses {@code precmd} + {@code chpwd} hooks via
  * {@code add-zsh-hook} so directory changes update env immediately and a
@@ -32,5 +34,20 @@ public final class ZshShell implements Shell {
     @Override
     public String deactivateScript() {
         return ShellResources.load("zsh_deactivate.sh");
+    }
+
+    @Override
+    public Path rcFile(Path home) {
+        return home.resolve(".zshrc");
+    }
+
+    @Override
+    public String rcFileDisplay() {
+        return "~/.zshrc";
+    }
+
+    @Override
+    public String activationLine(String jkExe) {
+        return "eval \"$(" + jkExe + " activate zsh)\"";
     }
 }

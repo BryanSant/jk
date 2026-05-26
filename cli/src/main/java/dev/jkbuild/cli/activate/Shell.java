@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.activate;
 
+import java.nio.file.Path;
 import java.util.Locale;
 import java.util.Optional;
 
@@ -37,6 +38,25 @@ public sealed interface Shell permits BashShell, ZshShell, FishShell, PwshShell 
     /** Render the deactivation script (undoes {@link #activateScript}). */
     String deactivateScript();
 
+    /**
+     * RC file the activation line should be appended to. This is the file
+     * the user's interactive shell sources at startup — {@code .zshrc} (not
+     * {@code .zshenv}), {@code .bashrc}, {@code config/fish/config.fish},
+     * {@code $PROFILE} on PowerShell.
+     */
+    Path rcFile(Path home);
+
+    /** {@code ~}-prefixed display form of {@link #rcFile} for user-facing prompts. */
+    String rcFileDisplay();
+
+    /**
+     * Line to append to {@link #rcFile} so the shell sources the activation
+     * script on startup. Each shell has its own idiom — {@code eval} for
+     * POSIX shells, pipe-to-source for fish, {@code Invoke-Expression} for
+     * PowerShell.
+     */
+    String activationLine(String jkExe);
+
     /** Resolve a shell from its name (case-insensitive). */
     static Optional<Shell> byName(String name) {
         if (name == null) return Optional.empty();
@@ -47,5 +67,18 @@ public sealed interface Shell permits BashShell, ZshShell, FishShell, PwshShell 
             case "pwsh", "powershell" -> Optional.of(new PwshShell());
             default -> Optional.empty();
         };
+    }
+
+    /** Detect the user's shell from {@code $SHELL}. */
+    static Optional<Shell> detect() {
+        return detect(System.getenv("SHELL"));
+    }
+
+    /** Test seam — caller supplies the raw {@code $SHELL} value. */
+    static Optional<Shell> detect(String rawShell) {
+        if (rawShell == null || rawShell.isBlank()) return Optional.empty();
+        int slash = rawShell.lastIndexOf('/');
+        String name = slash >= 0 ? rawShell.substring(slash + 1) : rawShell;
+        return byName(name);
     }
 }
