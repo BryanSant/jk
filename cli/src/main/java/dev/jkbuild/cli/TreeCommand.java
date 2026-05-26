@@ -48,19 +48,20 @@ public final class TreeCommand implements Callable<Integer> {    @Option(names =
     }
 
     /**
-     * Color pattern matching how Java devs read a Maven coordinate:
+     * Color pattern for the Maven coordinate:
      * <pre>
-     *   <blue>group</blue>:<b><cyan>artifact</cyan></b>:<yellow>version</yellow>
+     *   <cyan>group</cyan>:<b><cyan>artifact</cyan></b>:<yellow>version</yellow>
      * </pre>
-     * Rails get the same dim dark-gray the wizard uses for its
-     * settled rails. {@link Theme#colorize} respects {@code --color}
-     * / {@code NO_COLOR} / dumb terminals, so escapes are dropped
-     * cleanly when color is off.
+     * Group and artifact share the cyan family — only weight (bold)
+     * distinguishes them. Rails get the same dim dark-gray the wizard
+     * uses for its settled rails. {@link Theme#colorize} respects
+     * {@code --color} / {@code NO_COLOR} / dumb terminals, so escapes
+     * are dropped cleanly when color is off.
      */
     private static DependencyTree.Styling styling() {
         return new DependencyTree.Styling(
                 s -> Theme.colorize(s, Theme.darkGray()),
-                s -> Theme.colorize(s, Theme.blue()),
+                s -> Theme.colorize(s, Theme.activeStep()),
                 s -> Theme.colorize(s, Theme.activeStep().bold()),
                 s -> Theme.colorize(s, Theme.warning()));
     }
