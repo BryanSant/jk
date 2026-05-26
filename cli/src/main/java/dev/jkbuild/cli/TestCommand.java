@@ -2,6 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
@@ -11,9 +12,17 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Profile;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseContext;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.test.JUnitLauncher;
+import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -28,20 +37,63 @@ import java.util.concurrent.Callable;
 /**
  * {@code jk test} — compile main + test sources and run JUnit Platform tests.
  *
- * <p>v0.2 first iteration: in-process JUnit launch. JVM-forking, test
- * source sets, parallel workers, JUnit XML / SARIF / JaCoCo reporting,
- * and per-scope lockfile entries all land in subsequent slices.
+ * <p>Organised as a {@link Goal} with four phases:
+ * <ol>
+ *   <li>{@code parse-build} (SYNC) — load jk.toml + jk.lock + classpaths.</li>
+ *   <li>{@code compile-main} (CPU) — compile src/main/java with the
+ *       action-cache layer.</li>
+ *   <li>{@code compile-test} (CPU) — compile src/test/java; requires
+ *       compile-main.</li>
+ *   <li>{@code run-tests} (IO) — fork the jk-test-runner JVM(s). The
+ *       NDJSON event stream from the runner bridges into the Goal:
+ *       each test completion is a {@code progress(1)} event, each
+ *       failure becomes a {@code ctx.error}, the discovery total
+ *       grows the denominator via {@code updateScope}.</li>
+ * </ol>
+ *
+ * <p>{@code Goal.interactive} is true: the pinned {@link
+ * dev.jkbuild.cli.tui.TestProgress} widget owns the foreground
+ * rendering, so the Goal framework's ProgressBarListener stays out of
+ * the way. The structured event log captures everything regardless of
+ * what's rendered to the terminal.
  */
 @Command(name = "test", description = "Compile and run tests")
-public final class TestCommand implements Callable<Integer> {    @Option(names = "--profile", paramLabel = "<name>",
+public final class TestCommand implements Callable<Integer> {
+
+    @Option(names = "--profile", paramLabel = "<name>",
             description = "Build profile to apply.")
     String profileName;
+
+    @Option(names = {"-w", "--workers"}, paramLabel = "<N>",
+            description = "Number of test-runner JVMs to fork in parallel. Each fork is fully "
+                    + "process-isolated and pulls test classes from a shared queue. Default 1.")
+    Integer workers;
 
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
+
+    // Cross-phase keys.
+    private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
+    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> COMPILE_MAIN_CP = GoalKey.of("cp-main", List.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> COMPILE_TEST_CP = GoalKey.of("cp-test", List.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> TEST_RUNTIME_CP = GoalKey.of("cp-runtime", List.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> JAVAC_ARGS = GoalKey.of("javac-args", List.class);
+    private static final GoalKey<Path> JAVA_HOME = GoalKey.of("java-home", Path.class);
+    private static final GoalKey<Integer> RELEASE = GoalKey.of("release", Integer.class);
+    private static final GoalKey<Path> MAIN_CLASSES = GoalKey.of("main-classes", Path.class);
+    private static final GoalKey<Path> TEST_CLASSES = GoalKey.of("test-classes", Path.class);
+    private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
+            GoalKey.of("test-result", JUnitLauncher.Result.class);
+    private static final GoalKey<Boolean> NO_TEST_SOURCES =
+            GoalKey.of("no-test-sources", Boolean.class);
 
     @Override
     public Integer call() throws IOException {
@@ -57,93 +109,249 @@ public final class TestCommand implements Callable<Integer> {    @Option(names =
             return 2;
         }
 
-        JkBuild project;
-        try {
-            project = JkBuildParser.parse(buildFile);
-        } catch (RuntimeException e) {
-            System.err.println("jk test: " + e.getMessage());
-            return 2;
-        }
-        Lockfile lock = LockfileReader.read(lockFile);
-
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Cas cas = new Cas(cache);
-        ClasspathResolver classpathResolver = new ClasspathResolver(cas);
-        List<Path> compileMainCp = classpathResolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
-        List<Path> compileTestCp = classpathResolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST);
-        List<Path> testRuntimeCp = classpathResolver.classpathFor(lock, ClasspathResolver.TEST);
-        int release = project.project().javaRelease();
+        int workerCount = workers != null && workers > 0 ? workers : 1;
 
-        Path target = dir.resolve("target");
-        Path mainClasses = target.resolve("classes");
-        Path testClasses = target.resolve("test-classes");
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml / jk.lock");
+                    JkBuild project;
+                    try {
+                        project = JkBuildParser.parse(buildFile);
+                    } catch (RuntimeException e) {
+                        ctx.error("toml", e.getMessage());
+                        throw e;
+                    }
+                    ctx.put(PROJECT, project);
+                    Lockfile lock = LockfileReader.read(lockFile);
+                    ctx.put(LOCKFILE, lock);
 
-        Profile profile =
-                CompileCommand.resolveProfile(project.profiles(), profileName);
-        List<String> javacArgs = profile == null ? List.of() : profile.javacArgs();
+                    ClasspathResolver resolver = new ClasspathResolver(cas);
+                    ctx.put(COMPILE_MAIN_CP,
+                            resolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
+                    ctx.put(COMPILE_TEST_CP,
+                            resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
+                    ctx.put(TEST_RUNTIME_CP,
+                            resolver.classpathFor(lock, ClasspathResolver.TEST));
 
-        Path javaHome = CompileToolchain.resolveJavaHome(dir);
+                    Profile profile = CompileCommand.resolveProfile(project.profiles(), profileName);
+                    ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
+                    ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(dir));
+                    ctx.put(RELEASE, project.project().javaRelease());
 
-        // 1. Compile main sources (main + provided scope on the classpath).
-        boolean ok = compileWithCache(
-                "compile-main",
-                dir.resolve("src/main/java"),
-                mainClasses,
-                compileMainCp,
-                release, javacArgs, javaHome, cas, cache);
-        if (!ok) return 1;
+                    Path target = dir.resolve("target");
+                    ctx.put(MAIN_CLASSES, target.resolve("classes"));
+                    ctx.put(TEST_CLASSES, target.resolve("test-classes"));
+                    ctx.progress(1);
+                })
+                .build();
 
-        // 2. Compile test sources (main classes + main + provided + test scope).
-        Path srcTest = dir.resolve("src/test/java");
-        if (CompileCommand.collectJavaSources(srcTest).isEmpty()) {
-            System.out.println("jk test: no test sources in src/test/java");
+        Phase compileMain = Phase.builder("compile-main")
+                .kind(PhaseKind.CPU)
+                .requires("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    @SuppressWarnings("unchecked")
+                    List<Path> cp = (List<Path>) ctx.require(COMPILE_MAIN_CP);
+                    @SuppressWarnings("unchecked")
+                    List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
+                    boolean ok = compileWithCache(ctx, "compile-main",
+                            dir.resolve("src/main/java"),
+                            ctx.require(MAIN_CLASSES),
+                            cp, ctx.require(RELEASE), javacArgs,
+                            ctx.require(JAVA_HOME), cas, cache);
+                    if (!ok) throw new RuntimeException("main compile failed");
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase compileTest = Phase.builder("compile-test")
+                .kind(PhaseKind.CPU)
+                .requires("compile-main")
+                .scope(1)
+                .execute(ctx -> {
+                    Path srcTest = dir.resolve("src/test/java");
+                    if (CompileCommand.collectJavaSources(srcTest).isEmpty()) {
+                        ctx.label("no test sources");
+                        ctx.put(NO_TEST_SOURCES, true);
+                        ctx.progress(1);
+                        return;
+                    }
+                    @SuppressWarnings("unchecked")
+                    List<Path> compileTestCp = (List<Path>) ctx.require(COMPILE_TEST_CP);
+                    List<Path> fullCp = new ArrayList<>();
+                    fullCp.add(ctx.require(MAIN_CLASSES));
+                    fullCp.addAll(compileTestCp);
+                    @SuppressWarnings("unchecked")
+                    List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
+                    boolean ok = compileWithCache(ctx, "compile-test",
+                            srcTest, ctx.require(TEST_CLASSES), fullCp,
+                            ctx.require(RELEASE), javacArgs,
+                            ctx.require(JAVA_HOME), cas, cache);
+                    if (!ok) throw new RuntimeException("test compile failed");
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase runTests = Phase.builder("run-tests")
+                .kind(PhaseKind.IO)
+                .requires("compile-test")
+                .scope(0)            // grown via updateScope on discovery total
+                .execute(ctx -> {
+                    if (ctx.get(NO_TEST_SOURCES).orElse(false)) {
+                        ctx.label("no tests to run");
+                        return;
+                    }
+                    @SuppressWarnings("unchecked")
+                    List<Path> testRuntimeCp = (List<Path>) ctx.require(TEST_RUNTIME_CP);
+                    List<Path> runtimeClasspath = new ArrayList<>();
+                    runtimeClasspath.add(ctx.require(MAIN_CLASSES));
+                    runtimeClasspath.addAll(testRuntimeCp);
+
+                    Path runnerCacheDir = cache.resolve("test-runner");
+
+                    // TestProgress is the foreground rendering owner —
+                    // pinned status row + writeAbove for user output /
+                    // failures. The Goal framework stays out of the way
+                    // because the goal is marked interactive.
+                    var progress = dev.jkbuild.cli.tui.TestProgress.start(System.out);
+                    TestProgressListener listener = bridgeListener(ctx, progress, workerCount);
+
+                    JUnitLauncher.Result result;
+                    try {
+                        result = new JUnitLauncher().run(
+                                ctx.require(JAVA_HOME),
+                                ctx.require(TEST_CLASSES),
+                                runtimeClasspath,
+                                runnerCacheDir, Jk.VERSION, workerCount, listener);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        progress.writeAbove("jk test: interrupted");
+                        progress.close();
+                        ctx.error("test", "interrupted");
+                        throw new RuntimeException(e);
+                    } catch (IOException e) {
+                        progress.writeAbove("jk test: " + e.getMessage());
+                        progress.close();
+                        ctx.error("test", e.getMessage());
+                        throw e;
+                    }
+
+                    ctx.put(TEST_RESULT, result);
+                    if (result.allPassed()) {
+                        progress.finishSuccess();
+                    } else {
+                        progress.finishFailure(result.failed());
+                        // Throwing here marks the phase FAIL so the
+                        // event log captures the verdict; the outer
+                        // exit-code logic still distinguishes "test
+                        // failure" (exit 4) from "phase exception".
+                        throw new RuntimeException(result.failed() + " test failure"
+                                + (result.failed() == 1 ? "" : "s"));
+                    }
+                })
+                .build();
+
+        Goal goal = Goal.builder("test")
+                .interactive(true)   // TestProgress owns the foreground
+                .addPhase(parseBuild)
+                .addPhase(compileMain)
+                .addPhase(compileTest)
+                .addPhase(runTests)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+
+        if (result.success()) {
             return 0;
         }
-        List<Path> compileTestFullCp = new ArrayList<>();
-        compileTestFullCp.add(mainClasses);
-        compileTestFullCp.addAll(compileTestCp);
-        ok = compileWithCache(
-                "compile-test",
-                srcTest, testClasses,
-                compileTestFullCp,
-                release, javacArgs, javaHome, cas, cache);
-        if (!ok) return 1;
-
-        // 3. Run JUnit Platform on the test-runtime classpath (main + runtime + test).
-        // The launcher forks a JVM with the project's pinned JDK so tests
-        // run on real HotSpot rather than under jk's native-image VM.
-        List<Path> runtimeClasspath = new ArrayList<>();
-        runtimeClasspath.add(mainClasses);
-        runtimeClasspath.addAll(testRuntimeCp);
-        // jk-test-runner is extracted once per jk version into this cache
-        // dir, then reused. CAS keyed by jk version (not jar SHA) — when jk
-        // is upgraded the new resource clobbers the old extract.
-        Path runnerCacheDir = cache.resolve("test-runner");
-        JUnitLauncher.Result result;
-        try {
-            result = new JUnitLauncher().run(
-                    javaHome, testClasses, runtimeClasspath, runnerCacheDir, Jk.VERSION);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            System.err.println("jk test: interrupted");
-            return 130;
-        } catch (IOException e) {
-            System.err.println("jk test: " + e.getMessage());
-            return 1;
+        // Test failures get exit 4 (PRD §6); compile / launcher errors are
+        // exit 1.
+        var testResult = goal.get(TEST_RESULT).orElse(null);
+        if (testResult != null && !testResult.allPassed()) {
+            return 4;
         }
-
-        System.out.println("Tests: " + result.succeeded() + " passed, "
-                + result.failed() + " failed, "
-                + result.skipped() + " skipped"
-                + " (of " + result.total() + ")");
-        for (JUnitLauncher.Failure failure : result.failures()) {
-            System.err.println("FAIL: " + failure.testName() + " — " + failure.message());
-        }
-        return result.allPassed() ? 0 : 4; // 4 = test failure per PRD §6
+        printFailureSummary(result, cache);
+        return 1;
     }
 
-    /** Compile sources with action-cache lookup. Shared with {@link BuildCommand}. */
+    /**
+     * Wraps both the {@link dev.jkbuild.cli.tui.TestProgress} widget
+     * (pinned-row UI) and the Goal's {@link PhaseContext} (structured
+     * events). Each test completion ticks both: the widget's counter
+     * advances and the goal's numerator grows. The discovery total
+     * grows the goal's denominator via {@code updateScope} so the
+     * event log has accurate scope numbers even though the visual UI
+     * is owned by TestProgress.
+     */
+    private static TestProgressListener bridgeListener(
+            PhaseContext ctx,
+            dev.jkbuild.cli.tui.TestProgress progress,
+            int workerCount) {
+        return new TestProgressListener() {
+            @Override
+            public void onDiscoveryTotal(int classes, int tests) {
+                progress.setTotal(tests);
+                if (tests > 0) ctx.updateScope(tests);
+            }
+
+            @Override
+            public void onTestFinished(String id, String display, String status,
+                                       boolean isTest, long durationMs, int workerId) {
+                if (!isTest) return;
+                progress.incrementCompleted();
+                ctx.progress(1);
+                ctx.label(display);
+            }
+
+            @Override
+            public void onTestSkipped(String id, String display, String reason,
+                                      boolean isTest, int workerId) {
+                if (!isTest) return;
+                progress.incrementCompleted();
+                ctx.progress(1);
+            }
+
+            @Override
+            public void onFailure(String id, String display, String exClass,
+                                  String message, int workerId) {
+                progress.writeAbove("FAIL: " + display + " — " + exClass
+                        + (message.isEmpty() ? "" : ": " + message));
+                ctx.error("test", display + ": " + exClass
+                        + (message.isEmpty() ? "" : " — " + message));
+            }
+
+            @Override
+            public void onUserOutput(int workerId, String line) {
+                String prefix = workerCount > 1 ? "[w" + workerId + "] " : "";
+                progress.writeAbove(prefix + line);
+                // Deliberately NOT routed to the event log — test
+                // println output would drown the structured stream.
+            }
+        };
+    }
+
+    private void printFailureSummary(GoalResult result, Path cache) {
+        String failedPhase = result.phases().stream()
+                .filter(p -> p.status() == PhaseStatus.FAIL)
+                .map(GoalResult.PhaseReport::name)
+                .findFirst().orElse("?");
+        System.err.println("jk test failed: " + failedPhase);
+        for (GoalResult.Diagnostic d : result.errors()) {
+            System.err.println("  " + d.message());
+        }
+        System.err.println("Run log: " + cache.resolve("runs"));
+    }
+
+    /**
+     * Compile sources with action-cache lookup. Shared by the compile-main
+     * and compile-test phases — each calls it with its own task ID, source
+     * dir, classpath, and output dir.
+     */
     static boolean compileWithCache(
+            PhaseContext ctx,
             String taskId,
             Path srcDir,
             Path outputDir,
@@ -174,12 +382,13 @@ public final class TestCommand implements Callable<Integer> {    @Option(names =
         var cached = actionCache.lookup(actionKey);
         if (cached.isPresent()) {
             actionCache.restore(cached.get(), outputDir);
-            System.out.println("Cache hit: " + taskId + " (" + actionKey.substring(0, 8) + ")");
+            ctx.label(taskId + ": cache hit " + actionKey.substring(0, 8));
             return true;
         }
+        ctx.label(taskId + ": compiling " + sources.size() + " sources");
         CompileResult result = new JavacDriver().compile(request);
         for (CompileResult.Diagnostic d : result.diagnostics()) {
-            System.err.println(d.render());
+            ctx.error("javac", d.render());
         }
         if (!result.success() || result.hasErrors()) return false;
         actionCache.store(taskId, actionKey, ActionKey.snapshotInputs(request), outputDir);
