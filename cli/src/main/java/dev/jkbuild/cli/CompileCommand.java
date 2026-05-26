@@ -2,6 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
@@ -15,6 +16,12 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -33,12 +40,15 @@ import java.util.stream.Stream;
  * Was {@code jk check} pre-v1.0; {@code check} remains a hidden alias
  * (see {@code docs/aliases.md}).
  *
- * <p>v0.2 first slice: Java only, single source set ({@code src/main/java}),
- * Maven-resolved classpath from {@code jk.lock}. Kotlin and annotation
- * processors join in later slices.
+ * <p>Goal shape: {@code parse-build} → {@code resolve-classpath} →
+ * {@code compile-java} (if Java sources) → {@code compile-kotlin}
+ * (if Kotlin sources, after Java). The scratch output directory
+ * lives under {@code $TMPDIR} and is deleted on goal completion.
  */
 @Command(name = "compile", description = "Type-check without producing artifacts")
-public final class CompileCommand implements Callable<Integer> {    @Option(names = "--profile", paramLabel = "<name>",
+public final class CompileCommand implements Callable<Integer> {
+
+    @Option(names = "--profile", paramLabel = "<name>",
             description = "Build profile to apply. Default: auto (ci if CI=true, else none).")
     String profileName;
 
@@ -47,6 +57,16 @@ public final class CompileCommand implements Callable<Integer> {    @Option(name
     Path cacheDir;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
+
+    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    private static final GoalKey<Lockfile> LOCK = GoalKey.of("lock", Lockfile.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> JAVA_SOURCES = GoalKey.of("java-sources", List.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> KT_SOURCES = GoalKey.of("kt-sources", List.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> CLASSPATH = GoalKey.of("classpath", List.class);
+    private static final GoalKey<Path> SCRATCH = GoalKey.of("scratch", Path.class);
 
     @Override
     public Integer call() throws IOException {
@@ -61,73 +81,159 @@ public final class CompileCommand implements Callable<Integer> {    @Option(name
             System.err.println("jk compile: no jk.lock in " + dir + " (run `jk lock` first)");
             return 2;
         }
-
-        JkBuild project;
-        try {
-            project = JkBuildParser.parse(buildFile);
-        } catch (RuntimeException e) {
-            System.err.println("jk compile: " + e.getMessage());
-            return 2;
-        }
-        Lockfile lock = LockfileReader.read(lockFile);
-
-        List<Path> javaSources = collectJavaSources(dir.resolve("src/main/java"));
-        List<Path> ktSources = collectKotlinSources(dir);
-        if (javaSources.isEmpty() && ktSources.isEmpty()) {
-            System.out.println("jk compile: no sources in src/main/{java,kotlin}");
-            return 0;
-        }
-
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        Cas cas = new Cas(cache);
-        List<Path> classpath = new ClasspathResolver(cas)
-                .classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
 
-        Profile profile = resolveProfile(project.profiles(), profileName);
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml + jk.lock");
+                    JkBuild project;
+                    try {
+                        project = JkBuildParser.parse(buildFile);
+                    } catch (RuntimeException e) {
+                        ctx.error("toml", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.put(PROJECT, project);
+                    ctx.put(LOCK, LockfileReader.read(lockFile));
+                    List<Path> javaSources = collectJavaSources(dir.resolve("src/main/java"));
+                    List<Path> ktSources = collectKotlinSources(dir);
+                    ctx.put(JAVA_SOURCES, javaSources);
+                    ctx.put(KT_SOURCES, ktSources);
+                    if (javaSources.isEmpty() && ktSources.isEmpty()) {
+                        ctx.label("no sources");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
 
-        int release = project.project().javaRelease();
+        Phase resolveClasspath = Phase.builder("resolve-classpath")
+                .requires("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("collect compile classpath");
+                    Cas cas = new Cas(cache);
+                    List<Path> classpath = new ClasspathResolver(cas)
+                            .classpathFor(ctx.require(LOCK), ClasspathResolver.COMPILE_MAIN);
+                    ctx.put(CLASSPATH, classpath);
+                    Path scratch = Files.createTempDirectory("jk-check-");
+                    ctx.put(SCRATCH, scratch);
+                    ctx.progress(1);
+                })
+                .build();
 
-        Path scratch = Files.createTempDirectory("jk-check-");
-        Path javaHome = CompileToolchain.resolveJavaHome(dir);
-        try {
-            if (!javaSources.isEmpty()) {
-                CompileRequest request = CompileRequest.builder()
-                        .sources(javaSources)
-                        .classpath(classpath)
-                        .outputDir(scratch)
-                        .release(release)
-                        .extraOptions(profile == null ? List.of() : profile.javacArgs())
-                        .javaHome(javaHome)
-                        .build();
-                CompileResult result = new JavacDriver().compile(request);
-                for (CompileResult.Diagnostic d : result.diagnostics()) {
-                    System.err.println(d.render());
-                }
-                if (!result.success() || result.hasErrors()) return 1;
-            }
-            if (!ktSources.isEmpty()) {
-                List<Path> kotlincCp = new ArrayList<>(classpath);
-                kotlincCp.add(scratch);
-                Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
-                KotlincResult result = new KotlincDriver().compile(
-                        KotlincRequest.builder()
-                                .sources(ktSources)
-                                .classpath(kotlincCp)
-                                .outputDir(scratch)
-                                .jvmTarget(kotlinJvmTarget(release))
-                                .kotlinHome(kotlinHome)
-                                .build());
-                if (!result.success()) {
-                    System.err.print(result.output());
-                    return 1;
-                }
-            }
-        } finally {
-            deleteRecursively(scratch);
+        Phase compileJava = Phase.builder("compile-java")
+                .kind(PhaseKind.CPU)
+                .requires("resolve-classpath")
+                .scope(1)
+                .execute(ctx -> {
+                    @SuppressWarnings("unchecked")
+                    List<Path> javaSources = (List<Path>) ctx.require(JAVA_SOURCES);
+                    if (javaSources.isEmpty()) {
+                        ctx.label("no java sources");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("javac (" + javaSources.size() + " source"
+                            + (javaSources.size() == 1 ? ")" : "s)"));
+                    JkBuild project = ctx.require(PROJECT);
+                    @SuppressWarnings("unchecked")
+                    List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
+                    Path scratch = ctx.require(SCRATCH);
+                    Profile profile = resolveProfile(project.profiles(), profileName);
+                    int release = project.project().javaRelease();
+                    Path javaHome = CompileToolchain.resolveJavaHome(dir);
+                    CompileRequest request = CompileRequest.builder()
+                            .sources(javaSources)
+                            .classpath(classpath)
+                            .outputDir(scratch)
+                            .release(release)
+                            .extraOptions(profile == null ? List.of() : profile.javacArgs())
+                            .javaHome(javaHome)
+                            .build();
+                    CompileResult result = new JavacDriver().compile(request);
+                    for (CompileResult.Diagnostic d : result.diagnostics()) {
+                        System.err.println(d.render());
+                    }
+                    if (!result.success() || result.hasErrors()) {
+                        ctx.error("javac", "javac reported errors");
+                        throw new RuntimeException("javac failed");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase compileKotlin = Phase.builder("compile-kotlin")
+                .kind(PhaseKind.CPU)
+                .requires("compile-java")
+                .scope(1)
+                .execute(ctx -> {
+                    @SuppressWarnings("unchecked")
+                    List<Path> ktSources = (List<Path>) ctx.require(KT_SOURCES);
+                    if (ktSources.isEmpty()) {
+                        ctx.label("no kotlin sources");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("kotlinc (" + ktSources.size() + " source"
+                            + (ktSources.size() == 1 ? ")" : "s)"));
+                    @SuppressWarnings("unchecked")
+                    List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
+                    Path scratch = ctx.require(SCRATCH);
+                    JkBuild project = ctx.require(PROJECT);
+                    int release = project.project().javaRelease();
+                    List<Path> kotlincCp = new ArrayList<>(classpath);
+                    kotlincCp.add(scratch);
+                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
+                    KotlincResult result = new KotlincDriver().compile(
+                            KotlincRequest.builder()
+                                    .sources(ktSources)
+                                    .classpath(kotlincCp)
+                                    .outputDir(scratch)
+                                    .jvmTarget(kotlinJvmTarget(release))
+                                    .kotlinHome(kotlinHome)
+                                    .build());
+                    if (!result.success()) {
+                        System.err.print(result.output());
+                        ctx.error("kotlinc", "kotlinc reported errors");
+                        throw new RuntimeException("kotlinc failed");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("compile")
+                .addPhase(parseBuild)
+                .addPhase(resolveClasspath)
+                .addPhase(compileJava)
+                .addPhase(compileKotlin)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+
+        // Clean up scratch regardless of outcome.
+        goal.get(SCRATCH).ifPresent(CompileCommand::deleteRecursively);
+
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk compile failed: " + failed);
+            System.err.println("Run log: " + cache.resolve("runs"));
+            return 1;
         }
+
+        @SuppressWarnings("unchecked")
+        List<Path> javaSources = (List<Path>) goal.get(JAVA_SOURCES).orElse(List.of());
+        @SuppressWarnings("unchecked")
+        List<Path> ktSources = (List<Path>) goal.get(KT_SOURCES).orElse(List.of());
         int total = javaSources.size() + ktSources.size();
-        System.out.println("jk compile: ok (" + total + " source"
-                + (total == 1 ? "" : "s") + ")");
+        if (total == 0) {
+            System.out.println("jk compile: no sources in src/main/{java,kotlin}");
+        } else {
+            System.out.println("jk compile: ok (" + total + " source"
+                    + (total == 1 ? "" : "s") + ")");
+        }
         return 0;
     }
 
@@ -160,13 +266,13 @@ public final class CompileCommand implements Callable<Integer> {    @Option(name
         return result;
     }
 
-    private static void deleteRecursively(Path target) throws IOException {
-        if (!Files.exists(target)) return;
+    private static void deleteRecursively(Path target) {
+        if (target == null || !Files.exists(target)) return;
         try (Stream<Path> stream = Files.walk(target)) {
             stream.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try { Files.deleteIfExists(p); } catch (IOException ignored) {}
             });
-        }
+        } catch (IOException ignored) {}
     }
 
     static List<Path> collectJavaSources(Path root) throws IOException {
@@ -194,5 +300,4 @@ public final class CompileCommand implements Callable<Integer> {    @Option(name
         }
         return null;
     }
-
 }

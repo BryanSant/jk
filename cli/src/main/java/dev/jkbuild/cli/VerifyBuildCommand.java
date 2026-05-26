@@ -2,6 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
@@ -11,6 +12,12 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
@@ -29,17 +36,26 @@ import java.util.concurrent.Callable;
  * existing {@code target/<artifact>-<version>.jar} (PRD §23.7,
  * impl-plan §7 step 3).
  *
- * <p>The first build is the user's existing checkout. This verb does the
- * second pass and the comparison — if jk's build is reproducible, the
- * two sha256s match.
+ * <p>Goal shape: {@code parse-build} → {@code rebuild-scratch} (CPU) →
+ * {@code compare-hashes} (SYNC).
  */
 @Command(name = "verify-build",
         description = "Rebuild in scratch; diff jar vs target/")
-public final class VerifyBuildCommand implements Callable<Integer> {    @Option(names = "--cache-dir", hidden = true,
+public final class VerifyBuildCommand implements Callable<Integer> {
+
+    @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
+
+    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    private static final GoalKey<Lockfile> LOCK = GoalKey.of("lock", Lockfile.class);
+    private static final GoalKey<Path> EXISTING_JAR = GoalKey.of("existing-jar", Path.class);
+    private static final GoalKey<Path> SCRATCH = GoalKey.of("scratch", Path.class);
+    private static final GoalKey<Path> REBUILT_JAR = GoalKey.of("rebuilt-jar", Path.class);
+    private static final GoalKey<String> EXISTING_HASH = GoalKey.of("existing-hash", String.class);
+    private static final GoalKey<String> REBUILT_HASH = GoalKey.of("rebuilt-hash", String.class);
 
     @Override
     public Integer call() throws IOException {
@@ -50,46 +66,109 @@ public final class VerifyBuildCommand implements Callable<Integer> {    @Option(
             System.err.println("jk verify-build: jk.toml and jk.lock required in " + dir);
             return 2;
         }
+        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
 
-        JkBuild project = JkBuildParser.parse(buildFile);
-        Lockfile lock = LockfileReader.read(lockFile);
-        Path existingJar = dir.resolve("target").resolve(
-                project.project().artifact() + "-" + project.project().version() + ".jar");
-        if (!Files.exists(existingJar)) {
-            System.err.println("jk verify-build: no existing jar at " + existingJar
-                    + " — run `jk build` first.");
-            return 66;
-        }
+        Phase parseBuild = Phase.builder("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse jk.toml + jk.lock");
+                    JkBuild project = JkBuildParser.parse(buildFile);
+                    Lockfile lock = LockfileReader.read(lockFile);
+                    Path existingJar = dir.resolve("target").resolve(
+                            project.project().artifact() + "-"
+                                    + project.project().version() + ".jar");
+                    if (!Files.exists(existingJar)) {
+                        ctx.error("missing-jar", "no existing jar at " + existingJar
+                                + " — run `jk build` first.");
+                        throw new RuntimeException("missing existing jar");
+                    }
+                    ctx.put(PROJECT, project);
+                    ctx.put(LOCK, lock);
+                    ctx.put(EXISTING_JAR, existingJar);
+                    ctx.put(SCRATCH, Files.createTempDirectory("jk-verify-"));
+                    ctx.progress(1);
+                })
+                .build();
 
-        Path scratch = Files.createTempDirectory("jk-verify-");
-        try {
-            Path classesA = scratch.resolve("classes");
-            Path jarA = scratch.resolve(project.project().artifact()
-                    + "-" + project.project().version() + ".jar");
-            buildOnce(dir, project, lock, classesA, jarA);
+        Phase rebuild = Phase.builder("rebuild-scratch")
+                .kind(PhaseKind.CPU)
+                .requires("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("rebuild into scratch");
+                    JkBuild project = ctx.require(PROJECT);
+                    Lockfile lock = ctx.require(LOCK);
+                    Path scratch = ctx.require(SCRATCH);
+                    Path classesA = scratch.resolve("classes");
+                    Path jarA = scratch.resolve(project.project().artifact()
+                            + "-" + project.project().version() + ".jar");
+                    try {
+                        buildOnce(dir, project, lock, classesA, jarA, cache);
+                    } catch (IOException e) {
+                        ctx.error("build", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.put(REBUILT_JAR, jarA);
+                    ctx.progress(1);
+                })
+                .build();
 
-            String existingHash = Hashing.sha256Hex(Files.readAllBytes(existingJar));
-            String rebuildHash = Hashing.sha256Hex(Files.readAllBytes(jarA));
+        Phase compare = Phase.builder("compare-hashes")
+                .requires("rebuild-scratch")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("sha256 both jars");
+                    String existingHash = Hashing.sha256Hex(
+                            Files.readAllBytes(ctx.require(EXISTING_JAR)));
+                    String rebuildHash = Hashing.sha256Hex(
+                            Files.readAllBytes(ctx.require(REBUILT_JAR)));
+                    ctx.put(EXISTING_HASH, existingHash);
+                    ctx.put(REBUILT_HASH, rebuildHash);
+                    ctx.progress(1);
+                })
+                .build();
 
-            System.out.println("Existing: " + existingHash);
-            System.out.println("Rebuilt : " + rebuildHash);
-            if (existingHash.equals(rebuildHash)) {
-                System.out.println("Reproducible.");
-                return 0;
+        Goal goal = Goal.builder("verify-build")
+                .addPhase(parseBuild)
+                .addPhase(rebuild)
+                .addPhase(compare)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        goal.get(SCRATCH).ifPresent(VerifyBuildCommand::deleteRecursively);
+
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk verify-build failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
             }
-            System.err.println("Not reproducible — see diff above.");
+            System.err.println("Run log: " + cache.resolve("runs"));
+            for (GoalResult.Diagnostic d : result.errors()) {
+                if ("missing-jar".equals(d.code())) return 66;
+            }
             return 1;
-        } finally {
-            deleteRecursively(scratch);
         }
+
+        String existing = goal.get(EXISTING_HASH).orElseThrow();
+        String rebuilt = goal.get(REBUILT_HASH).orElseThrow();
+        System.out.println("Existing: " + existing);
+        System.out.println("Rebuilt : " + rebuilt);
+        if (existing.equals(rebuilt)) {
+            System.out.println("Reproducible.");
+            return 0;
+        }
+        System.err.println("Not reproducible — see diff above.");
+        return 1;
     }
 
     private void buildOnce(Path projectDir, JkBuild project, Lockfile lock,
-                           Path classesOut, Path jarOut) throws IOException {
+                           Path classesOut, Path jarOut, Path cache) throws IOException {
         Path srcMain = projectDir.resolve("src/main/java");
         Path resMain = projectDir.resolve("src/main/resources");
         List<Path> sources = CompileCommand.collectJavaSources(srcMain);
-        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Cas cas = new Cas(cache);
         List<Path> classpath = new ClasspathResolver(cas)
                 .classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
@@ -123,7 +202,7 @@ public final class VerifyBuildCommand implements Callable<Integer> {    @Option(
     }
 
     private static void deleteRecursively(Path root) {
-        if (!Files.exists(root)) return;
+        if (root == null || !Files.exists(root)) return;
         try (var stream = Files.walk(root)) {
             stream.sorted(Comparator.reverseOrder())
                     .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
