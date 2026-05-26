@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
@@ -8,6 +9,13 @@ import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.util.JkDirs;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import picocli.CommandLine.Command;
@@ -37,6 +45,10 @@ import java.util.concurrent.Callable;
  * <p>After all deletions, if the global default JDK was among the victims,
  * delegate to {@link JdkDefaultCommand#applyLts} so the next-best LTS on
  * disk becomes the new default automatically.
+ *
+ * <p>The Goal wraps the actual delete loop + default reconciliation so
+ * we get a run-log entry per uninstall. Marked interactive so the
+ * progress widget stays out of the way of the spinner + wizard UI.
  */
 @Command(name = "uninstall", aliases = {"remove"},
         description = "Uninstall JDK versions")
@@ -66,6 +78,9 @@ public final class JdkUninstallCommand implements Callable<Integer> {
     @Option(names = "--jdks-dir", hidden = true,
             description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
+
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> VICTIMS = GoalKey.of("victims", List.class);
 
     @Override
     public Integer call() throws Exception {
@@ -126,10 +141,7 @@ public final class JdkUninstallCommand implements Callable<Integer> {
             System.out.println("Aborted.");
             return 0;
         }
-
-        uninstallOne(hit, registry);
-        reconcileDefaultAfterRemoval(registry, defaults, List.of(hit));
-        return 0;
+        return runDeleteGoal(List.of(hit), registry, defaults);
     }
 
     // --- wizard path --------------------------------------------------------
@@ -173,12 +185,75 @@ public final class JdkUninstallCommand implements Callable<Integer> {
                 System.out.println("Aborted.");
                 return 0;
             }
-            for (JdkHit v : victims) {
-                uninstallOne(v, registry);
-            }
-            reconcileDefaultAfterRemoval(registry, defaults, victims);
-            return 0;
+            return runDeleteGoal(victims, registry, defaults);
         }
+    }
+
+    // --- goal-wrapped delete + reconcile ------------------------------------
+
+    /**
+     * One goal per command invocation. The wizard or single-arg path has
+     * already settled which hits are victims; the goal does the actual
+     * disk work + default-pointer reconciliation. Interactive=true keeps
+     * the {@link Spinner} from competing with the framework's bar.
+     */
+    private Integer runDeleteGoal(List<JdkHit> victims, JdkRegistry registry,
+                                  GlobalDefaultJdk defaults) {
+        Path cache = JkDirs.cache();
+
+        Phase deletePhase = Phase.builder("delete")
+                .kind(PhaseKind.IO)
+                .scope(victims.size())
+                .execute(ctx -> {
+                    ctx.label("delete " + victims.size() + " install"
+                            + (victims.size() == 1 ? "" : "s"));
+                    for (JdkHit v : victims) {
+                        try {
+                            uninstallOne(v, registry);
+                            ctx.progress(1);
+                        } catch (IOException e) {
+                            ctx.error("delete", e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    ctx.put(VICTIMS, victims);
+                })
+                .build();
+
+        Phase reconcile = Phase.builder("reconcile-default")
+                .requires("delete")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("reconcile default JDK pointer");
+                    try {
+                        reconcileDefaultAfterRemoval(registry, defaults, victims);
+                    } catch (IOException e) {
+                        ctx.error("reconcile", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("jdk-uninstall")
+                .interactive(true)
+                .addPhase(deletePhase)
+                .addPhase(reconcile)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(null), cache);
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk jdk uninstall failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            System.err.println("Run log: " + cache.resolve("runs"));
+            return 1;
+        }
+        return 0;
     }
 
     // --- shared mechanics ---------------------------------------------------

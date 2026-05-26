@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.tui.ProgressBar;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.tui.Theme;
@@ -16,6 +17,13 @@ import dev.jkbuild.jdk.JdkLts;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.jdk.JdkSpec;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.util.JkDirs;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedStyle;
@@ -34,18 +42,14 @@ import java.util.concurrent.Callable;
  * and unpack it into the IntelliJ JDK directory ({@code ~/.jdks/} or
  * {@code ~/Library/Java/JavaVirtualMachines/}).
  *
- * <p>{@code <spec>} accepts both denormalized vendor strings and the three
- * keyword shortcuts:
- * <ul>
- *   <li>{@code lts} / {@code stable} — latest LTS major shipped to this host,
- *       resolved as {@code temurin-<major>}.</li>
- *   <li>{@code latest} — most recent major (LTS or interim), also Temurin.</li>
- *   <li>{@code 21}, {@code 21.0.5} — bare version; picks whichever vendor
- *       the feed marks {@code default: true} for that major.</li>
- *   <li>{@code temurin-21}, {@code openjdk-26}, {@code corretto-21.0.5},
- *       {@code 25-graal}, {@code java-17-openjdk} — denormalized form
- *       resolved via {@link JdkSelector#selectFlexible}.</li>
- * </ul>
+ * <p>Goal shape: {@code fetch-catalog} (IO) → {@code select} (SYNC; runs
+ * the wizard when no spec was given) → {@code download} (IO; uses the
+ * inline progress bar) → {@code extract} (IO; uses the inline spinner)
+ * → {@code set-default} (SYNC; only when {@code --make-default}).
+ *
+ * <p>Marked interactive so the framework's progress widget stays out of
+ * the way of the wizard, ProgressBar and Spinner — those keep ownership
+ * of the rendered output.
  */
 @Command(name = "install", aliases = {"add"},
         description = "Install a Java Development Kit")
@@ -82,6 +86,13 @@ public final class JdkInstallCommand implements Callable<Integer> {
             description = "Override the catalog cache path (for tests).")
     Path cacheFile;
 
+    private static final GoalKey<JdkCatalog> CATALOG = GoalKey.of("catalog", JdkCatalog.class);
+    private static final GoalKey<JdkCatalog.Entry> ENTRY = GoalKey.of("entry", JdkCatalog.Entry.class);
+    private static final GoalKey<JdkInstaller.DownloadedArchive> ARCHIVE =
+            GoalKey.of("archive", JdkInstaller.DownloadedArchive.class);
+    private static final GoalKey<InstalledJdk> INSTALLED = GoalKey.of("installed", InstalledJdk.class);
+    private static final GoalKey<Boolean> WANT_DEFAULT = GoalKey.of("want-default", Boolean.class);
+
     @Override
     public Integer call() throws Exception {
         if (!HostPlatform.supported()) {
@@ -90,80 +101,222 @@ public final class JdkInstallCommand implements Callable<Integer> {
                     + " is not covered by the JetBrains JDK feed. Set JAVA_HOME explicitly.");
             return 1;
         }
-
-        JdkCatalogClient client = feedUrl != null
-                ? new JdkCatalogClient(new Http(), feedUrl,
-                        cacheFile != null ? cacheFile : ephemeralCachePath(),
-                        java.time.Duration.ZERO)
-                : new JdkCatalogClient();
-        JdkCatalog catalog = client.fetch();
-
         String os = HostPlatform.currentOs();
         String arch = HostPlatform.currentArch();
 
-        boolean haveSpec = spec != null && !spec.isBlank();
-        // `lts` / `stable` / `latest` are keyword specs — resolve them to a
-        // concrete `temurin-<major>` string so the selector handles the rest
-        // (and so `--verbose` reports the actual resolved entry).
-        String effectiveSpec = haveSpec ? resolveKeyword(spec, catalog, os, arch) : null;
-        if (haveSpec && effectiveSpec == null) {
-            // Not a keyword — use the raw spec verbatim.
-            effectiveSpec = spec;
-        }
-
-        JdkCatalog.Entry entry;
-        boolean wantDefault = makeDefault;
-        if (effectiveSpec == null || effectiveSpec.isBlank()) {
-            if (!isInteractiveTerminal()) {
-                System.err.println("jk jdk install: stdin is not a TTY — pass `lts` / `latest` "
-                        + "or a <spec> (e.g. `jk jdk install temurin-21`) or run interactively.");
-                return 64; // EX_USAGE
-            }
-            JdkInstallWizard.Result chosen = runWizard(catalog, os, arch, showAll);
-            entry = chosen.entry();
-            wantDefault = wantDefault || chosen.makeDefault();
-        } else {
-            JdkSpec parsed = JdkSpec.parse(effectiveSpec);
-            Optional<JdkCatalog.Entry> selected = JdkSelector.select(catalog, parsed, os, arch);
-            if (selected.isEmpty()) {
-                System.err.println("jk jdk install: no JDK matches " + effectiveSpec
-                        + " on " + os + "/" + arch);
-                return 1;
-            }
-            entry = selected.get();
-        }
-
-        if (global != null && global.verbose) {
-            System.err.println("jk jdk install: resolved spec='" + effectiveSpec + "' to "
-                    + entry.installFolderName() + " (" + entry.vendor() + " " + entry.product()
-                    + ", " + os + "/" + arch + ")");
-        }
-
+        Path cache = JkDirs.cache();
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         JdkInstaller installer = new JdkInstaller(new Http(), registry);
-        InstalledJdk installed = downloadAndInstall(installer, entry);
-        // Journal the install event for the JDK-usage stats — feeds future
-        // wizards that surface a user's preferred vendors / versions.
-        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "install");
 
-        if (wantDefault) {
-            GlobalDefaultJdk.current().set(installed);
-            dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath()
-                    .touch(installed.identifier(), "default-set");
-            System.out.println();
-            // Bright-green ➜ + bold id + emphasized "default".
-            System.out.println(Theme.colorize("➜", Theme.brightGreen())
-                    + " " + Theme.colorize(installed.identifier(), AttributedStyle.DEFAULT.bold())
-                    + " is now the " + Theme.colorize("default", Theme.focused())
-                    + " JDK");
-            Optional<Shell> shell = Shell.detect();
-            if (shell.isPresent()) {
-                System.out.println("Add `" + shell.get().hookInstallCommand()
-                        + "` to activate JAVA_HOME on new shells.");
-            } else {
-                System.out.println("Add `jk hook <bash|zsh|fish>` output to your shell rc "
-                        + "to activate JAVA_HOME on new shells.");
+        // Pre-goal sanity: when no spec and no TTY, we can't go further.
+        boolean haveSpec = spec != null && !spec.isBlank();
+        if (!haveSpec && !isInteractiveTerminal()) {
+            System.err.println("jk jdk install: stdin is not a TTY — pass `lts` / `latest` "
+                    + "or a <spec> (e.g. `jk jdk install temurin-21`) or run interactively.");
+            return 64;
+        }
+
+        Phase fetchCatalog = Phase.builder("fetch-catalog")
+                .kind(PhaseKind.IO)
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("fetch JetBrains JDK feed");
+                    JdkCatalogClient client = feedUrl != null
+                            ? new JdkCatalogClient(new Http(), feedUrl,
+                                    cacheFile != null ? cacheFile : ephemeralCachePath(),
+                                    java.time.Duration.ZERO)
+                            : new JdkCatalogClient();
+                    try {
+                        ctx.put(CATALOG, client.fetch());
+                    } catch (Exception e) {
+                        ctx.error("catalog", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase select = Phase.builder("select")
+                .requires("fetch-catalog")
+                .scope(1)
+                .execute(ctx -> {
+                    JdkCatalog catalog = ctx.require(CATALOG);
+                    String effective = haveSpec ? resolveKeyword(spec, catalog, os, arch) : null;
+                    if (haveSpec && effective == null) effective = spec;
+
+                    JdkCatalog.Entry entry;
+                    boolean wantDefault = makeDefault;
+                    if (effective == null || effective.isBlank()) {
+                        ctx.label("wizard");
+                        JdkInstallWizard.Result chosen;
+                        try {
+                            chosen = runWizard(catalog, os, arch, showAll);
+                        } catch (RuntimeException e) {
+                            ctx.error("wizard", e.getMessage());
+                            throw e;
+                        }
+                        entry = chosen.entry();
+                        wantDefault = wantDefault || chosen.makeDefault();
+                    } else {
+                        ctx.label("select " + effective);
+                        JdkSpec parsed = JdkSpec.parse(effective);
+                        Optional<JdkCatalog.Entry> selected =
+                                JdkSelector.select(catalog, parsed, os, arch);
+                        if (selected.isEmpty()) {
+                            ctx.error("no-match", "no JDK matches " + effective
+                                    + " on " + os + "/" + arch);
+                            throw new RuntimeException("no match");
+                        }
+                        entry = selected.get();
+                    }
+                    ctx.put(ENTRY, entry);
+                    ctx.put(WANT_DEFAULT, wantDefault);
+                    if (global != null && global.verbose) {
+                        System.err.println("jk jdk install: resolved spec='" + effective + "' to "
+                                + entry.installFolderName() + " (" + entry.vendor() + " "
+                                + entry.product() + ", " + os + "/" + arch + ")");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase download = Phase.builder("download")
+                .kind(PhaseKind.IO)
+                .requires("select")
+                .scope(1)
+                .execute(ctx -> {
+                    JdkCatalog.Entry entry = ctx.require(ENTRY);
+                    InstalledJdk already = installer.alreadyInstalled(entry);
+                    if (already != null) {
+                        String label = entry.vendor() + " " + entry.product()
+                                + " " + entry.majorVersion();
+                        System.out.println(doneLine(label, already.home(),
+                                "is already installed at"));
+                        ctx.put(INSTALLED, already);
+                        ctx.label("already installed");
+                        ctx.progress(1);
+                        return;
+                    }
+                    String label = entry.vendor() + " " + entry.product()
+                            + " " + entry.majorVersion();
+                    String hostLabel = entry.os() + "/" + entry.arch();
+                    ctx.label("download " + label + " (" + hostLabel + ")");
+                    String downloading = "Downloading " + label + " (" + hostLabel + ")";
+                    long total = entry.archiveSize();
+                    try (ProgressBar pb = ProgressBar.show(System.out)) {
+                        pb.update(0, downloading);
+                        JdkInstaller.DownloadedArchive dl = installer.download(entry, bytes -> {
+                            int pct = total > 0
+                                    ? (int) Math.min(100, bytes * 100L / total)
+                                    : 0;
+                            pb.update(pct, downloading);
+                        });
+                        pb.finish(Theme.colorize("✓", Theme.completedStep())
+                                + " " + Theme.colorize("Download finished for ", Theme.normalGray())
+                                + Theme.colorize(label, Theme.focused()));
+                        ctx.put(ARCHIVE, dl);
+                    } catch (Exception e) {
+                        ctx.error("download", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase extract = Phase.builder("extract")
+                .kind(PhaseKind.IO)
+                .requires("download")
+                .scope(1)
+                .execute(ctx -> {
+                    if (ctx.get(INSTALLED).isPresent()) {
+                        // Already-installed short-circuit from the download phase.
+                        ctx.label("skip (already installed)");
+                        ctx.progress(1);
+                        return;
+                    }
+                    JdkCatalog.Entry entry = ctx.require(ENTRY);
+                    String label = entry.vendor() + " " + entry.product()
+                            + " " + entry.majorVersion();
+                    String installing = "Installing "
+                            + Theme.colorize(label, Theme.focused()) + "...";
+                    ctx.label("extract " + label);
+                    try (Spinner sp = Spinner.show(System.out, installing)) {
+                        InstalledJdk installed = installer.extractInstalled(
+                                entry, ctx.require(ARCHIVE));
+                        ctx.put(INSTALLED, installed);
+                        // Journal the install event for the JDK-usage stats —
+                        // feeds future wizards that surface a user's
+                        // preferred vendors / versions.
+                        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath()
+                                .touch(installed.identifier(), "install");
+                        System.out.println(doneLine(label, installed.home(),
+                                "has been installed to"));
+                    } catch (Exception e) {
+                        ctx.error("extract", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Phase setDefault = Phase.builder("set-default")
+                .requires("extract")
+                .scope(1)
+                .execute(ctx -> {
+                    if (!Boolean.TRUE.equals(ctx.get(WANT_DEFAULT).orElse(false))) {
+                        ctx.label("skip (not requested)");
+                        ctx.progress(1);
+                        return;
+                    }
+                    InstalledJdk installed = ctx.require(INSTALLED);
+                    ctx.label("set " + installed.identifier() + " as default");
+                    GlobalDefaultJdk.current().set(installed);
+                    dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath()
+                            .touch(installed.identifier(), "default-set");
+                    System.out.println();
+                    System.out.println(Theme.colorize("➜", Theme.brightGreen())
+                            + " " + Theme.colorize(installed.identifier(),
+                                    AttributedStyle.DEFAULT.bold())
+                            + " is now the " + Theme.colorize("default", Theme.focused())
+                            + " JDK");
+                    Optional<Shell> shell = Shell.detect();
+                    if (shell.isPresent()) {
+                        System.out.println("Add `" + shell.get().hookInstallCommand()
+                                + "` to activate JAVA_HOME on new shells.");
+                    } else {
+                        System.out.println("Add `jk hook <bash|zsh|fish>` output to your shell rc "
+                                + "to activate JAVA_HOME on new shells.");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        Goal goal = Goal.builder("jdk-install")
+                .interactive(true)
+                .addPhase(fetchCatalog)
+                .addPhase(select)
+                .addPhase(download)
+                .addPhase(extract)
+                .addPhase(setDefault)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            for (GoalResult.Diagnostic d : result.errors()) {
+                if ("no-match".equals(d.code())) {
+                    System.err.println("jk jdk install: " + d.message());
+                    return 1;
+                }
             }
+            System.err.println("jk jdk install failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            System.err.println("Run log: " + cache.resolve("runs"));
+            return 1;
         }
         return 0;
     }
@@ -190,7 +343,7 @@ public final class JdkInstallCommand implements Callable<Integer> {
             if (!e.os().equals(os) || !e.arch().equals(arch)) continue;
             majors.add(e.majorVersion());
         }
-        if (majors.isEmpty()) return null; // selector will then complain
+        if (majors.isEmpty()) return null;
         int picked;
         if (wantLatest) {
             picked = majors.last();
@@ -207,64 +360,10 @@ public final class JdkInstallCommand implements Callable<Integer> {
     }
 
     /**
-     * Drive the download (progress bar) → extract (spinner) sequence and
-     * print the final ✓ "Installing ... Done." line. Falls through to a
-     * one-line "Already installed" message when the target is already on
-     * disk so we don't show a 0%→0% bar for an instant.
-     */
-    private static InstalledJdk downloadAndInstall(JdkInstaller installer, JdkCatalog.Entry entry)
-            throws IOException, InterruptedException {
-        InstalledJdk already = installer.alreadyInstalled(entry);
-        String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-        if (already != null) {
-            System.out.println(doneLine(label, already.home(), "is already installed at"));
-            return already;
-        }
-
-        String hostLabel = entry.os() + "/" + entry.arch();
-        String downloading = "Downloading " + label + " (" + hostLabel + ")";
-        // Spinner prints its message raw (unlike the bar, whose status is
-        // wrapped in Theme.dim()), so we can splice bold-white ANSI around
-        // the JDK label to make it pop on the active install line.
-        String installing = "Installing "
-                + Theme.colorize(label, Theme.focused())
-                + "...";
-        long total = entry.archiveSize();
-
-        JdkInstaller.DownloadedArchive dl;
-        try (ProgressBar pb = ProgressBar.show(System.out)) {
-            pb.update(0, downloading);
-            dl = installer.download(entry, bytes -> {
-                int pct = total > 0
-                        ? (int) Math.min(100, bytes * 100L / total)
-                        : 0;
-                pb.update(pct, downloading);
-            });
-            pb.finish(Theme.colorize("✓", Theme.completedStep())
-                    + " " + Theme.colorize("Download finished for ", Theme.normalGray())
-                    + Theme.colorize(label, Theme.focused()));
-        }
-
-        InstalledJdk installed;
-        try (Spinner sp = Spinner.show(System.out, installing)) {
-            installed = installer.extractInstalled(entry, dl);
-        }
-        // Spinner.close() cleared its line; replace it with the done line.
-        // Bold-white label sits between normal-gray connective tissue, with
-        // a yellow tilde-collapsed install path as the closing anchor.
-        System.out.println(doneLine(label, installed.home(), "has been installed to"));
-        return installed;
-    }
-
-    /**
      * Render the post-install summary line:
      * <pre>
      *   ✓ &lt;label&gt; &lt;verb&gt; &lt;~/path&gt;
      * </pre>
-     * with the {@code ✓} in green, {@code label} bold-white, {@code verb}
-     * normal-gray (with the word "installed" lifted to bold-white for
-     * emphasis), and the install path yellow with {@code ~} collapsed
-     * for the user's home dir.
      */
     private static String doneLine(String label, Path home, String verb) {
         return Theme.colorize("✓", Theme.completedStep())
@@ -314,8 +413,12 @@ public final class JdkInstallCommand implements Callable<Integer> {
                 JdkInstallWizard.run(catalog, os, arch, showAll, terminal);
         if (result.isEmpty()) {
             // Ctrl-C cancellation. Wizard.printCancellation preserves the cyan
-            // active-rail closer and prints the red marker beside it. See
-            // NewCommand for the Runtime.halt() rationale.
+            // active-rail closer and prints the red marker beside it.
+            //
+            // Runtime.halt() instead of System.exit(): halt skips shutdown
+            // hooks, which is what we want here — JLine's cleanup hook blocks
+            // on its stdin reader thread that macOS won't let us interrupt.
+            // The wizard's finally already restored terminal attributes.
             Wizard.printCancellation(terminal, "𝘅 JDK installation canceled");
             Runtime.getRuntime().halt(130); // 128 + SIGINT
             throw new AssertionError("unreachable");
@@ -333,7 +436,7 @@ public final class JdkInstallCommand implements Callable<Integer> {
     private static Path ephemeralCachePath() throws java.io.IOException {
         Path tmp = java.nio.file.Files.createTempFile("jk-feed-", ".json.xz");
         tmp.toFile().deleteOnExit();
-        java.nio.file.Files.delete(tmp);  // force a fresh fetch (file present but empty would parse-fail)
+        java.nio.file.Files.delete(tmp);  // force a fresh fetch
         return tmp;
     }
 }

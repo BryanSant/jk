@@ -2,11 +2,18 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
 import dev.jkbuild.tool.ToolResolver;
@@ -25,6 +32,10 @@ import java.util.concurrent.Callable;
  * {@code jk tool install <coord>} — install a Maven-published tool as a
  * launcher under {@code $JK_BIN_DIR} (PRD §20.1). Was {@code jk install}
  * pre-v1.0; {@code install} remains a hidden alias.
+ *
+ * <p>Marked as an interactive goal so the framework's progress widget
+ * stays out of the way — this command's own "Resolving … / Installed …"
+ * output is the user-facing UX.
  */
 @Command(name = "install", description = "Install a tool from a Maven coordinate")
 public final class ToolInstallCommand implements Callable<Integer> {
@@ -57,6 +68,9 @@ public final class ToolInstallCommand implements Callable<Integer> {
             description = "Override the Maven repository URL (for tests).")
     URI repoUrl;
 
+    private static final GoalKey<ToolEnv> TOOL_ENV = GoalKey.of("tool-env", ToolEnv.class);
+    private static final GoalKey<Path> LAUNCHER = GoalKey.of("launcher", Path.class);
+
     @Override
     public Integer call() throws IOException, InterruptedException {
         Coordinate primary = Coordinate.parse(coord);
@@ -68,17 +82,60 @@ public final class ToolInstallCommand implements Callable<Integer> {
         Path envsRoot = stateDir.resolve("tools").resolve("envs");
         Files.createDirectories(cacheDir);
 
-        Cas cas = new Cas(cacheDir);
-        Http http = new Http();
-        URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
-        RepoGroup repos = RepoGroup.of(new MavenRepo("central", url, http, cas));
-        ToolResolver toolResolver = new ToolResolver(repos);
+        Phase resolve = Phase.builder("resolve-coord")
+                .kind(PhaseKind.IO)
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("resolve " + primary.toGav());
+                    System.out.println("Resolving " + primary.toGav() + " ...");
+                    Cas cas = new Cas(cacheDir);
+                    Http http = new Http();
+                    URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
+                    RepoGroup repos = RepoGroup.of(new MavenRepo("central", url, http, cas));
+                    ToolResolver toolResolver = new ToolResolver(repos);
+                    try {
+                        ctx.put(TOOL_ENV, toolResolver.resolve(primary, bin, mainClass));
+                    } catch (RuntimeException | IOException e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
 
-        System.out.println("Resolving " + primary.toGav() + " ...");
-        ToolEnv env = toolResolver.resolve(primary, bin, mainClass);
-        Path javaHome = CompileToolchain.runningJavaHome();
-        Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, env);
+        Phase installLauncher = Phase.builder("install-launcher")
+                .requires("resolve-coord")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("write launcher to " + binDir);
+                    Path javaHome = CompileToolchain.runningJavaHome();
+                    Path launcher = ToolLauncher.install(
+                            envsRoot, binDir, javaHome, ctx.require(TOOL_ENV));
+                    ctx.put(LAUNCHER, launcher);
+                    ctx.progress(1);
+                })
+                .build();
 
+        Goal goal = Goal.builder("tool-install")
+                .interactive(true)
+                .addPhase(resolve)
+                .addPhase(installLauncher)
+                .build();
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(null), cacheDir);
+        if (!result.success()) {
+            String failed = result.phases().stream()
+                    .filter(p -> p.status() == PhaseStatus.FAIL)
+                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+            System.err.println("jk tool install failed: " + failed);
+            for (GoalResult.Diagnostic d : result.errors()) {
+                System.err.println("  " + d.code() + ": " + d.message());
+            }
+            System.err.println("Run log: " + cacheDir.resolve("runs"));
+            return 1;
+        }
+
+        Path launcher = goal.get(LAUNCHER).orElseThrow();
         System.out.println("Installed " + primary.toGav() + " → " + launcher);
         System.out.println("Add to PATH if needed:");
         System.out.println("  export PATH=\"" + binDir + ":$PATH\"");
