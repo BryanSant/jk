@@ -80,6 +80,8 @@ public final class NewCommand implements Callable<Integer> {
     @Parameters(arity = "0..1", description = "Target directory. Default: current directory or --name subdir.")
     Path directory;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> CANDIDATES = GoalKey.of("candidates", List.class);
     private static final GoalKey<Terminal> TERMINAL = GoalKey.of("terminal", Terminal.class);
@@ -252,7 +254,7 @@ public final class NewCommand implements Callable<Integer> {
 
         GoalResult result;
         try {
-            result = GoalConsole.run(goal, GoalConsole.modeFor(null), cache);
+            result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         } finally {
             // Terminal is opened in prewarm; close it on the way out
             // whether scaffold succeeded or not.
@@ -326,7 +328,7 @@ public final class NewCommand implements Callable<Integer> {
                 .addPhase(scaffold)
                 .build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(null), cache);
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) {
             System.err.println("jk new failed: scaffold");
             for (GoalResult.Diagnostic d : result.errors()) {
@@ -335,7 +337,7 @@ public final class NewCommand implements Callable<Integer> {
             System.err.println("Run log: " + cache.resolve("runs"));
             return 1;
         }
-        emitSuccessPlain(inputs);
+        if (!global.outputIsJson()) emitSuccessPlain(inputs);
         return 0;
     }
 

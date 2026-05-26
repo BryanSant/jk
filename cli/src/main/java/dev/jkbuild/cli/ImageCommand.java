@@ -182,12 +182,14 @@ public final class ImageCommand implements Callable<Integer> {
         ImageBuilder.Plan plan = goal.get(PLAN).orElseThrow();
         JkBuild project = goal.get(PROJECT).orElseThrow();
         ImageConfig config = goal.get(CONFIG).orElseThrow();
-        if (tarball != null) {
-            System.out.println("Wrote OCI tarball " + tarball
-                    + " (" + plan.dependencyJars().size() + " dep layers, main jar layer)");
-        } else {
-            System.out.println("Pushed " + config.targetReference(
-                    project.project().artifact(), project.project().version()));
+        if (!global.outputIsJson()) {
+            if (tarball != null) {
+                System.out.println("Wrote OCI tarball " + tarball
+                        + " (" + plan.dependencyJars().size() + " dep layers, main jar layer)");
+            } else {
+                System.out.println("Pushed " + config.targetReference(
+                        project.project().artifact(), project.project().version()));
+            }
         }
         return 0;
     }

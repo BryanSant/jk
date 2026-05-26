@@ -131,7 +131,9 @@ public final class AuditCommand implements Callable<Integer> {
         }
 
         AuditReport report = goal.get(REPORT).orElseThrow();
-        System.out.println(report.renderMarkdown());
+        if (!global.outputIsJson()) {
+            System.out.println(report.renderMarkdown());
+        }
 
         @SuppressWarnings("unchecked")
         List<AuditReport.Finding> blocking =

@@ -373,6 +373,7 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
     }
 
     private void printSuccessSummary(Goal goal) {
+        if (global.outputIsJson()) return;
         // Match the existing CLI shape for grep-ability:
         //   Up to date: compile-main
         //   Cache hit: compile-main (12345678)

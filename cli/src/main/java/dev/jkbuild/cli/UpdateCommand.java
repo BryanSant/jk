@@ -148,8 +148,10 @@ public final class UpdateCommand implements Callable<Integer> {
         }
 
         Lockfile lock = goal.get(LOCKFILE).orElseThrow();
-        System.out.println("Updated " + lockFile + " (" + lock.packages().size() + " package"
-                + (lock.packages().size() == 1 ? "" : "s") + ")");
+        if (!global.outputIsJson()) {
+            System.out.println("Updated " + lockFile + " (" + lock.packages().size() + " package"
+                    + (lock.packages().size() == 1 ? "" : "s") + ")");
+        }
         return 0;
     }
 }

@@ -205,8 +205,10 @@ public final class NativeCommand implements Callable<Integer> {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
 
         if (result.success()) {
-            goal.get(OUTPUT_PATH).ifPresent(out ->
-                    System.out.println("Built native binary " + out));
+            if (!global.outputIsJson()) {
+                goal.get(OUTPUT_PATH).ifPresent(out ->
+                        System.out.println("Built native binary " + out));
+            }
             return 0;
         }
         printFailureSummary(result, cache);

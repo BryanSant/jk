@@ -160,13 +160,15 @@ public final class LockCommand implements Callable<Integer> {
             return failed.equals("resolve") ? 6 : 2;
         }
 
-        if (memberCount.get() > 0) {
-            System.out.println("Workspace: " + memberCount.get() + " member"
-                    + (memberCount.get() == 1 ? "" : "s"));
+        if (!global.outputIsJson()) {
+            if (memberCount.get() > 0) {
+                System.out.println("Workspace: " + memberCount.get() + " member"
+                        + (memberCount.get() == 1 ? "" : "s"));
+            }
+            Lockfile lock = goal.get(LOCKFILE).orElseThrow();
+            System.out.println("Wrote " + lockFile + " (" + lock.packages().size() + " package"
+                    + (lock.packages().size() == 1 ? "" : "s") + ")");
         }
-        Lockfile lock = goal.get(LOCKFILE).orElseThrow();
-        System.out.println("Wrote " + lockFile + " (" + lock.packages().size() + " package"
-                + (lock.packages().size() == 1 ? "" : "s") + ")");
         return 0;
     }
 }

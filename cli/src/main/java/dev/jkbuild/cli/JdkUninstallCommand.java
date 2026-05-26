@@ -79,6 +79,8 @@ public final class JdkUninstallCommand implements Callable<Integer> {
             description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> VICTIMS = GoalKey.of("victims", List.class);
 
@@ -241,7 +243,7 @@ public final class JdkUninstallCommand implements Callable<Integer> {
                 .addPhase(reconcile)
                 .build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(null), cache);
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) {
             String failed = result.phases().stream()
                     .filter(p -> p.status() == PhaseStatus.FAIL)

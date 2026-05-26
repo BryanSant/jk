@@ -78,11 +78,16 @@ public final class GoalConsole {
     /**
      * Translate {@code GlobalOptions} flags into a {@link Mode}. Lives
      * here so every command picks the same precedence:
-     * {@code --quiet} &gt; {@code --no-progress} &gt; {@code --verbose}
-     * &gt; default. JSON output lands in a later commit.
+     * {@code --output json} &gt; {@code --quiet} &gt;
+     * {@code --no-progress} &gt; {@code --verbose} &gt; default.
+     *
+     * <p>JSON wins over the visualization flags because it's an
+     * explicit "I want machine-readable output" — the user's other
+     * preferences don't override that.
      */
     public static Mode modeFor(dev.jkbuild.cli.GlobalOptions opts) {
         if (opts == null) return Mode.AUTO;
+        if (opts.outputIsJson()) return Mode.JSON;
         if (opts.quiet) return Mode.QUIET;
         if (opts.noProgress) return Mode.QUIET;
         if (opts.verbose) return Mode.VERBOSE;

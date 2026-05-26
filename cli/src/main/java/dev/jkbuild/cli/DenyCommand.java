@@ -102,8 +102,10 @@ public final class DenyCommand implements Callable<Integer> {
         Lockfile lock = goal.get(LOCK).orElseThrow();
 
         if (violations.isEmpty()) {
-            System.out.println("jk deny: " + lock.packages().size()
-                    + " package(s) checked — no violations.");
+            if (!global.outputIsJson()) {
+                System.out.println("jk deny: " + lock.packages().size()
+                        + " package(s) checked — no violations.");
+            }
             return 0;
         }
         System.err.println("jk deny: " + violations.size() + " violation(s):");

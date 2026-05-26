@@ -43,6 +43,28 @@ public final class GlobalOptions {
             description = "Disable all progress bars and spinners. [env: JK_NO_PROGRESS]")
     public boolean noProgress;
 
+    @Option(names = "--format", paramLabel = "<FORMAT>",
+            description = "Output format: text (default) or json. With json, every "
+                    + "event (phase boundaries, progress, warnings, errors, goal finish) "
+                    + "is emitted as a single NDJSON line on stdout. Wizards and commands "
+                    + "marked interactive ignore this flag — they own stdout. "
+                    + "[env: JK_FORMAT]")
+    public String format;
+
+    /**
+     * True when the user asked for {@code --format json} (or set
+     * {@code JK_FORMAT=json}). Commands may use this to suppress their
+     * own human-readable summary lines so the NDJSON stream stays
+     * machine-parseable.
+     */
+    public boolean outputIsJson() {
+        String resolved = format;
+        if (resolved == null) {
+            resolved = System.getenv("JK_FORMAT");
+        }
+        return resolved != null && resolved.equalsIgnoreCase("json");
+    }
+
     @Option(names = "--config-file", paramLabel = "<CONFIG_FILE>",
             description = "Use this jk.toml for configuration. [env: JK_CONFIG_FILE]")
     public Path configFile;

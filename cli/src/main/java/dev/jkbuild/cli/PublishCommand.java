@@ -219,7 +219,9 @@ public final class PublishCommand implements Callable<Integer> {
                 .execute(ctx -> {
                     if (dryRun) {
                         ctx.label("dry-run — printing upload plan");
-                        printDryRunPlan(ctx.require(PROJECT), ctx.require(ARTIFACTS));
+                        if (!global.outputIsJson()) {
+                            printDryRunPlan(ctx.require(PROJECT), ctx.require(ARTIFACTS));
+                        }
                         ctx.progress(1);
                         return;
                     }
@@ -282,10 +284,12 @@ public final class PublishCommand implements Callable<Integer> {
         JkBuild project = goal.get(PROJECT).orElseThrow();
         MavenPublisher.Result pub = goal.get(PUB_RESULT).orElseThrow();
         SigningOptions signing = goal.get(SIGNING).orElseThrow();
-        System.out.println("Published " + project.project().group() + ":"
-                + project.project().artifact() + ":" + project.project().version()
-                + " (" + pub.statusByPath().size() + " files"
-                + (signing.isNoop() ? "" : ", signed") + ")");
+        if (!global.outputIsJson()) {
+            System.out.println("Published " + project.project().group() + ":"
+                    + project.project().artifact() + ":" + project.project().version()
+                    + " (" + pub.statusByPath().size() + " files"
+                    + (signing.isNoop() ? "" : ", signed") + ")");
+        }
         return 0;
     }
 

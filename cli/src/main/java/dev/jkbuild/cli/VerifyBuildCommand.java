@@ -154,10 +154,12 @@ public final class VerifyBuildCommand implements Callable<Integer> {
 
         String existing = goal.get(EXISTING_HASH).orElseThrow();
         String rebuilt = goal.get(REBUILT_HASH).orElseThrow();
-        System.out.println("Existing: " + existing);
-        System.out.println("Rebuilt : " + rebuilt);
+        if (!global.outputIsJson()) {
+            System.out.println("Existing: " + existing);
+            System.out.println("Rebuilt : " + rebuilt);
+        }
         if (existing.equals(rebuilt)) {
-            System.out.println("Reproducible.");
+            if (!global.outputIsJson()) System.out.println("Reproducible.");
             return 0;
         }
         System.err.println("Not reproducible — see diff above.");

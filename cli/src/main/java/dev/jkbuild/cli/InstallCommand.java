@@ -253,8 +253,10 @@ public final class InstallCommand implements Callable<Integer> {
 
         Path checkout = fetchGoal.get(CHECKOUT).orElseThrow();
         String sha = fetchGoal.get(FETCHED_SHA).orElseThrow();
-        System.out.println("Fetched " + expanded + " @ " + refStr
-                + " (" + sha.substring(0, Math.min(7, sha.length())) + ")");
+        if (!global.outputIsJson()) {
+            System.out.println("Fetched " + expanded + " @ " + refStr
+                    + " (" + sha.substring(0, Math.min(7, sha.length())) + ")");
+        }
 
         return runProjectInstallGoal(checkout, "install-git");
     }
@@ -452,7 +454,8 @@ public final class InstallCommand implements Callable<Integer> {
         return binDirOverride != null ? binDirOverride : JkDirs.binDir();
     }
 
-    private static void announceInstall(String coord, Path launcher, Path binDir) {
+    private void announceInstall(String coord, Path launcher, Path binDir) {
+        if (global.outputIsJson()) return;
         System.out.println("Installed " + coord + " → " + launcher);
         System.out.println("Add to PATH if needed:");
         System.out.println("  export PATH=\"" + binDir + ":$PATH\"");

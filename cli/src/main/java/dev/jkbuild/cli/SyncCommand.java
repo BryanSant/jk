@@ -218,6 +218,7 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
      * grep for these.
      */
     private void printSuccessSummary(Goal goal, Path lockFile) {
+        if (global.outputIsJson()) return;
         goal.get(WORKSPACE_MEMBERS).ifPresent(n ->
                 System.out.println("Workspace: " + n + " member" + (n == 1 ? "" : "s")));
         boolean created = goal.get(LOCKFILE_CREATED).orElse(false);

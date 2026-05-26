@@ -33,9 +33,10 @@ import java.util.concurrent.Callable;
  * launcher under {@code $JK_BIN_DIR} (PRD §20.1). Was {@code jk install}
  * pre-v1.0; {@code install} remains a hidden alias.
  *
- * <p>Marked as an interactive goal so the framework's progress widget
- * stays out of the way — this command's own "Resolving … / Installed …"
- * output is the user-facing UX.
+ * <p>Two phases: {@code resolve-coord} (IO) → {@code install-launcher}.
+ * Not marked interactive — the work is straightforward enough that the
+ * standard progress widget works fine, and the goal stays
+ * {@code --format json}-friendly.
  */
 @Command(name = "install", description = "Install a tool from a Maven coordinate")
 public final class ToolInstallCommand implements Callable<Integer> {
@@ -68,6 +69,8 @@ public final class ToolInstallCommand implements Callable<Integer> {
             description = "Override the Maven repository URL (for tests).")
     URI repoUrl;
 
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
     private static final GoalKey<ToolEnv> TOOL_ENV = GoalKey.of("tool-env", ToolEnv.class);
     private static final GoalKey<Path> LAUNCHER = GoalKey.of("launcher", Path.class);
 
@@ -87,7 +90,6 @@ public final class ToolInstallCommand implements Callable<Integer> {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("resolve " + primary.toGav());
-                    System.out.println("Resolving " + primary.toGav() + " ...");
                     Cas cas = new Cas(cacheDir);
                     Http http = new Http();
                     URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
@@ -117,12 +119,11 @@ public final class ToolInstallCommand implements Callable<Integer> {
                 .build();
 
         Goal goal = Goal.builder("tool-install")
-                .interactive(true)
                 .addPhase(resolve)
                 .addPhase(installLauncher)
                 .build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(null), cacheDir);
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
         if (!result.success()) {
             String failed = result.phases().stream()
                     .filter(p -> p.status() == PhaseStatus.FAIL)
@@ -136,9 +137,11 @@ public final class ToolInstallCommand implements Callable<Integer> {
         }
 
         Path launcher = goal.get(LAUNCHER).orElseThrow();
-        System.out.println("Installed " + primary.toGav() + " → " + launcher);
-        System.out.println("Add to PATH if needed:");
-        System.out.println("  export PATH=\"" + binDir + ":$PATH\"");
+        if (!global.outputIsJson()) {
+            System.out.println("Installed " + primary.toGav() + " → " + launcher);
+            System.out.println("Add to PATH if needed:");
+            System.out.println("  export PATH=\"" + binDir + ":$PATH\"");
+        }
         return 0;
     }
 }

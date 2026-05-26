@@ -228,11 +228,13 @@ public final class CompileCommand implements Callable<Integer> {
         @SuppressWarnings("unchecked")
         List<Path> ktSources = (List<Path>) goal.get(KT_SOURCES).orElse(List.of());
         int total = javaSources.size() + ktSources.size();
-        if (total == 0) {
-            System.out.println("jk compile: no sources in src/main/{java,kotlin}");
-        } else {
-            System.out.println("jk compile: ok (" + total + " source"
-                    + (total == 1 ? "" : "s") + ")");
+        if (!global.outputIsJson()) {
+            if (total == 0) {
+                System.out.println("jk compile: no sources in src/main/{java,kotlin}");
+            } else {
+                System.out.println("jk compile: ok (" + total + " source"
+                        + (total == 1 ? "" : "s") + ")");
+            }
         }
         return 0;
     }
