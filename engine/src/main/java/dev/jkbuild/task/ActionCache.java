@@ -2,13 +2,13 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cache.Linking;
 import dev.jkbuild.util.Hashing;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -99,8 +99,10 @@ public final class ActionCache {
         Files.createDirectories(outputDir);
         for (Map.Entry<String, String> entry : record.outputs().entrySet()) {
             Path target = outputDir.resolve(entry.getKey());
-            if (target.getParent() != null) Files.createDirectories(target.getParent());
-            Files.copy(cas.pathFor(entry.getValue()), target, StandardCopyOption.REPLACE_EXISTING);
+            // Hard-link from the CAS object on POSIX same-fs; cross-fs and
+            // Windows fall back to a copy automatically. Cuts restore cost
+            // for large classes/ trees from O(bytes) to O(entries).
+            Linking.linkOrCopy(cas.pathFor(entry.getValue()), target);
         }
     }
 
