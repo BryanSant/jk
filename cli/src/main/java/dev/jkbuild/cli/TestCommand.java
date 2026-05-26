@@ -210,8 +210,6 @@ public final class TestCommand implements Callable<Integer> {
                     runtimeClasspath.add(ctx.require(MAIN_CLASSES));
                     runtimeClasspath.addAll(testRuntimeCp);
 
-                    Path runnerCacheDir = cache.resolve("test-runner");
-
                     // TestProgress is the foreground rendering owner —
                     // pinned status row + writeAbove for user output /
                     // failures. The Goal framework stays out of the way
@@ -225,7 +223,7 @@ public final class TestCommand implements Callable<Integer> {
                                 ctx.require(JAVA_HOME),
                                 ctx.require(TEST_CLASSES),
                                 runtimeClasspath,
-                                runnerCacheDir, Jk.VERSION, workerCount, listener);
+                                cache, workerCount, listener);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         progress.writeAbove("jk test: interrupted");

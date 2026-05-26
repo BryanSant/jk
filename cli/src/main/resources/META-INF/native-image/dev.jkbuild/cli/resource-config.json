@@ -4,7 +4,7 @@
       {"pattern": "dev/jkbuild/cli/activate/.*\\.sh"},
       {"pattern": "dev/jkbuild/cli/activate/.*\\.fish"},
       {"pattern": "dev/jkbuild/cli/activate/.*\\.ps1"},
-      {"pattern": "dev/jkbuild/test/runner/jk-test-runner\\.jar"}
+      {"pattern": "META-INF/jk-test-runner-sha256\\.txt"}
     ]
   }
 }

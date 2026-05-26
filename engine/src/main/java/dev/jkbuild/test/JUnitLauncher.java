@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.test;
 
+import dev.jkbuild.cache.Cas;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.json.JsonMapper;
@@ -15,7 +16,6 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -50,8 +50,13 @@ public final class JUnitLauncher {
     /** Marker prefix every protocol line carries. Must match {@code JsonEventWriter.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JK:";
 
-    /** Where the embedded runner jar lives inside the cli jar / native binary. */
-    private static final String RUNNER_RESOURCE = "/dev/jkbuild/test/runner/jk-test-runner.jar";
+    /**
+     * Build-time-generated resource carrying the SHA-256 of the
+     * jk-test-runner jar this build of engine pairs with. Engine reads
+     * the hash, then looks the jar up in the CAS at that key. See
+     * {@code engine/build.gradle.kts:writeRunnerSha}.
+     */
+    private static final String RUNNER_SHA_RESOURCE = "/META-INF/jk-test-runner-sha256.txt";
 
     private static final ObjectMapper JSON = JsonMapper.builder().build();
 
@@ -66,20 +71,18 @@ public final class JUnitLauncher {
             Path javaHome,
             Path testClassesDir,
             List<Path> runtimeClasspath,
-            Path runnerCacheDir,
-            String jkVersion,
+            Path cacheRoot,
             int workers,
             TestProgressListener listener)
             throws IOException, InterruptedException {
         Objects.requireNonNull(javaHome, "javaHome");
         Objects.requireNonNull(testClassesDir, "testClassesDir");
         Objects.requireNonNull(runtimeClasspath, "runtimeClasspath");
-        Objects.requireNonNull(runnerCacheDir, "runnerCacheDir");
-        Objects.requireNonNull(jkVersion, "jkVersion");
+        Objects.requireNonNull(cacheRoot, "cacheRoot");
         Objects.requireNonNull(listener, "listener");
         if (workers < 1) throw new IllegalArgumentException("workers must be >= 1");
 
-        Path runnerJar = extractRunner(runnerCacheDir, jkVersion);
+        Path runnerJar = locateRunner(cacheRoot);
         var classpathBase = new LinkedHashSet<Path>();
         classpathBase.add(testClassesDir);
         classpathBase.addAll(runtimeClasspath);
@@ -288,24 +291,46 @@ public final class JUnitLauncher {
     // -------- shared helpers --------------------------------------------
 
     /**
-     * Copy the runner jar out of the cli classpath resource into
-     * {@code <cacheDir>/<jkVersion>.jar}. Keyed by jk version: a newer jk
-     * overwrites the cached jar on first use.
+     * Look up the jk-test-runner jar in the local CAS, keyed by its
+     * SHA-256 (the hash this build of engine was paired against —
+     * embedded as a resource at {@link #RUNNER_SHA_RESOURCE} by
+     * Gradle's {@code writeRunnerSha} task).
+     *
+     * <p>Until jk-test-runner ships to Maven Central, the user is
+     * responsible for side-loading the jar into the CAS — typically by
+     * running {@code ./gradlew :test-runner:installLocalCas} in jk's
+     * own tree. Once the runner is published, {@code jk sync} will
+     * populate the CAS automatically.
+     *
+     * <p>Throws {@link IOException} with side-load instructions if the
+     * jar isn't in the CAS at the expected hash. The error message
+     * spells out the exact destination path the user needs to populate.
      */
-    private static Path extractRunner(Path cacheDir, String jkVersion) throws IOException {
-        Path target = cacheDir.resolve(jkVersion + ".jar");
-        if (Files.isRegularFile(target)) return target;
-        Files.createDirectories(cacheDir);
-        try (InputStream in = JUnitLauncher.class.getResourceAsStream(RUNNER_RESOURCE)) {
-            if (in == null) {
-                throw new IOException("jk test: " + RUNNER_RESOURCE + " missing from this build "
-                        + "(processResources didn't bundle it)");
-            }
-            Path tmp = Files.createTempFile(cacheDir, "jk-test-runner-", ".jar.tmp");
-            Files.copy(in, tmp, StandardCopyOption.REPLACE_EXISTING);
-            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+    private static Path locateRunner(Path cacheRoot) throws IOException {
+        String expectedHash = readExpectedHash();
+        Cas cas = new Cas(cacheRoot);
+        Path target = cas.pathFor(expectedHash);
+        if (Files.isRegularFile(target)) {
+            return target;
         }
-        return target;
+        throw new IOException(
+                "jk test: jk-test-runner.jar is not in the CAS.\n"
+                + "  expected sha256: " + expectedHash + "\n"
+                + "  expected path:   " + target + "\n"
+                + "  Until jk-test-runner is published to Maven Central, side-load it:\n"
+                + "    ./gradlew :test-runner:installLocalCas   (in jk's own tree)\n"
+                + "  or copy a known-good test-runner.jar to the expected path manually.");
+    }
+
+    private static String readExpectedHash() throws IOException {
+        try (InputStream in = JUnitLauncher.class.getResourceAsStream(RUNNER_SHA_RESOURCE)) {
+            if (in == null) {
+                throw new IOException(
+                        "jk test: " + RUNNER_SHA_RESOURCE + " missing from this engine build "
+                        + "(writeRunnerSha didn't run)");
+            }
+            return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
+        }
     }
 
     private static String joinClasspath(Iterable<Path> entries) {
