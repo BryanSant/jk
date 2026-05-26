@@ -112,6 +112,12 @@ public final class CacheCommand implements Callable<Integer> {
                         + "CAS pool is under <size> (e.g. 20G, 500M). Forces --sweep.")
         String maxSize;
 
+        @Option(names = "--background", hidden = true,
+                description = "Internal: opportunistic prune. Acquires a flock, "
+                        + "exits silently if another prune is running, writes a "
+                        + ".last-pruned stamp on success.")
+        boolean background;
+
         @Override
         public Integer call() throws IOException {
             Path root = resolveCacheRoot(cacheDir);
@@ -119,6 +125,35 @@ public final class CacheCommand implements Callable<Integer> {
                 System.out.println("Nothing to prune — " + root + " does not exist.");
                 return 0;
             }
+
+            // Background prune: acquire flock first; if another prune is
+            // running, exit silently. Redirect output to a sidecar log
+            // instead of stdout/stderr.
+            java.nio.channels.FileChannel lockChan = null;
+            java.nio.channels.FileLock lock = null;
+            java.io.PrintStream originalOut = null;
+            java.io.PrintStream originalErr = null;
+            if (background) {
+                Files.createDirectories(root);
+                Path lockFile = root.resolve(".prune.lock");
+                lockChan = java.nio.channels.FileChannel.open(lockFile,
+                        java.nio.file.StandardOpenOption.CREATE,
+                        java.nio.file.StandardOpenOption.WRITE);
+                lock = lockChan.tryLock();
+                if (lock == null) {
+                    lockChan.close();
+                    return 0; // another prune is running; not an error.
+                }
+                Path logFile = root.resolve(".prune-log");
+                var logStream = new java.io.PrintStream(java.nio.file.Files.newOutputStream(
+                        logFile, java.nio.file.StandardOpenOption.CREATE,
+                        java.nio.file.StandardOpenOption.TRUNCATE_EXISTING));
+                originalOut = System.out;
+                originalErr = System.err;
+                System.setOut(logStream);
+                System.setErr(logStream);
+            }
+            try {
             long cutoffMillis = System.currentTimeMillis()
                     - (long) olderThanDays * 24L * 60L * 60L * 1000L;
 
@@ -216,6 +251,29 @@ public final class CacheCommand implements Callable<Integer> {
                         + " reachable objects to fit the budget — consider raising --max-size.");
             }
             return 0;
+            } finally {
+                if (background && !dryRun) {
+                    // Stamp the successful prune so the scheduler can
+                    // honor the interval.
+                    try {
+                        Files.writeString(root.resolve(
+                                dev.jkbuild.task.CachePruneScheduler.LAST_PRUNED_FILE),
+                                Long.toString(System.currentTimeMillis()),
+                                java.nio.charset.StandardCharsets.UTF_8);
+                    } catch (IOException ignored) {
+                        // Worst case: next opportunistic prune fires
+                        // again sooner than expected.
+                    }
+                }
+                if (originalOut != null) System.setOut(originalOut);
+                if (originalErr != null) System.setErr(originalErr);
+                if (lock != null) {
+                    try { lock.release(); } catch (IOException ignored) {}
+                }
+                if (lockChan != null) {
+                    try { lockChan.close(); } catch (IOException ignored) {}
+                }
+            }
         }
 
         private static List<Path> olderThan(Path dir, long cutoffMillis) throws IOException {

@@ -187,6 +187,15 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
         int totalSources = sources.size() + ktSources.size();
         System.out.println("Built " + jarPath + " (" + totalSources + " source"
                 + (totalSources == 1 ? "" : "s") + ")");
+
+        // Opportunistic cache prune (no-op when [cache].auto-prune is off).
+        try {
+            var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(dir.resolve("jk.toml"));
+            dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
+                    dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+        } catch (IOException ignored) {
+            // Cache hygiene is never load-bearing.
+        }
         return 0;
     }
 

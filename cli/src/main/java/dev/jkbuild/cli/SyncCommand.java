@@ -157,6 +157,18 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
             exit = 1;
         }
 
+        if (exit == 0) {
+            // Opportunistic cache prune — no-op when [cache].auto-prune is
+            // off; detached subprocess otherwise. The build-flavour hook
+            // is symmetric; both trigger paths share the scheduler.
+            try {
+                var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(dir.resolve("jk.toml"));
+                dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
+                        dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+            } catch (java.io.IOException ignored) {
+                // Cache hygiene is never load-bearing.
+            }
+        }
         return exit;
     }
 
