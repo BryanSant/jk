@@ -48,6 +48,7 @@ public final class JdkPinCommand implements Callable<Integer> {
         String identifier = jdk.get().identifier();
         Files.writeString(projectDir.resolve(".jdk-version"),
                 identifier + "\n", StandardCharsets.UTF_8);
+        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(identifier, "pin");
         System.out.println("Pinned project to " + identifier);
         return 0;
     }

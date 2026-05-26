@@ -56,6 +56,11 @@ public final class JdkResolver {
         JdkRegistry registry = jdksDirOverride != null
                 ? new JdkRegistry(jdksDirOverride)
                 : new JdkRegistry();
-        return new JdkResolver(registry).resolve(projectDir);
+        Optional<InstalledJdk> resolved = new JdkResolver(registry).resolve(projectDir);
+        // Record the "this JDK was used by a project build / run / test"
+        // signal. Best-effort; downstream wizards lean on this for
+        // most-recently-used ordering and uninstall recommendations.
+        resolved.ifPresent(jdk -> JdkAccessLedger.atDefaultPath().touch(jdk.identifier(), "resolve"));
+        return resolved;
     }
 }

@@ -124,6 +124,7 @@ public final class JdkDefaultCommand implements Callable<Integer> {
         String identifier = JdkRegistry.identifierFor(hit.home());
         InstalledJdk chosen = new InstalledJdk(identifier, hit.home());
         defaults.set(chosen);
+        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(identifier, "default-set");
         String displayName = renderDisplayName(hit);
         out.println(Theme.colorize("➜", Theme.brightGreen())
                 + " The " + Theme.colorize("default", Theme.focused())

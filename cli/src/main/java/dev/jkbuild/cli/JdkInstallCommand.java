@@ -142,9 +142,14 @@ public final class JdkInstallCommand implements Callable<Integer> {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         JdkInstaller installer = new JdkInstaller(new Http(), registry);
         InstalledJdk installed = downloadAndInstall(installer, entry);
+        // Journal the install event for the JDK-usage stats — feeds future
+        // wizards that surface a user's preferred vendors / versions.
+        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "install");
 
         if (wantDefault) {
             GlobalDefaultJdk.current().set(installed);
+            dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath()
+                    .touch(installed.identifier(), "default-set");
             System.out.println();
             // Bright-green ➜ + bold id + emphasized "default".
             System.out.println(Theme.colorize("➜", Theme.brightGreen())
