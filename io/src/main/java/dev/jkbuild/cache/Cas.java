@@ -64,6 +64,34 @@ public final class Cas {
     }
 
     /**
+     * Materialise a CAS entry as a hard link to {@code source} when the
+     * filesystem supports it; falls back to a byte copy otherwise.
+     *
+     * <p>This is the right primitive when an action has just produced a
+     * file in its own output tree (e.g. {@code target/classes/Hello.class}
+     * fresh out of javac) and we want the CAS to also reference it: one
+     * inode, two paths. No double-write, no double-storage. The caller
+     * supplies the hex hash so the file isn't re-read just to verify the
+     * key — the caller already had to hash it to build the action record.
+     *
+     * <p>Idempotent. If a CAS entry for {@code hex} already exists the
+     * source is left untouched.
+     */
+    public Path putByLink(Path source, String hex) throws IOException {
+        Path target = pathFor(hex);
+        if (Files.exists(target)) {
+            return target;
+        }
+        Files.createDirectories(target.getParent());
+        // Linking.linkOrCopy handles cross-filesystem fallback and parent
+        // creation. Race with a concurrent putByLink: linkOrCopy deletes
+        // any existing entry first, so the second writer overwrites the
+        // first — same content, indistinguishable outcome.
+        Linking.linkOrCopy(source, target);
+        return target;
+    }
+
+    /**
      * Read bytes for a hash. Verifies the content actually hashes to the
      * expected value; throws if the on-disk blob is corrupted.
      */

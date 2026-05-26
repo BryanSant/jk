@@ -73,11 +73,18 @@ public final class ActionCache {
             try (Stream<Path> stream = Files.walk(outputDir)) {
                 for (Path file : (Iterable<Path>) stream::iterator) {
                     if (!Files.isRegularFile(file)) continue;
+                    // Hash once, then hard-link the file into the CAS rather
+                    // than re-reading + writing the bytes. On POSIX same-fs
+                    // the output file in target/ and the CAS object share an
+                    // inode from this point on; the storage cost of caching
+                    // is zero. Cross-fs falls back to a byte copy via
+                    // Cas.putByLink → Linking.linkOrCopy.
                     byte[] bytes = Files.readAllBytes(file);
-                    cas.put(bytes);
+                    String hex = Hashing.sha256Hex(bytes);
+                    cas.putByLink(file, hex);
                     String relPath = outputDir.relativize(file).toString()
                             .replace(File.separatorChar, '/');
-                    outputs.put(relPath, Hashing.sha256Hex(bytes));
+                    outputs.put(relPath, hex);
                 }
             }
         }
