@@ -75,6 +75,20 @@ public final class GoalConsole {
         return run(goal, mode, JkDirs.cache());
     }
 
+    /**
+     * Translate {@code GlobalOptions} flags into a {@link Mode}. Lives
+     * here so every command picks the same precedence:
+     * {@code --quiet} &gt; {@code --no-progress} &gt; {@code --verbose}
+     * &gt; default. JSON output lands in a later commit.
+     */
+    public static Mode modeFor(dev.jkbuild.cli.GlobalOptions opts) {
+        if (opts == null) return Mode.AUTO;
+        if (opts.quiet) return Mode.QUIET;
+        if (opts.noProgress) return Mode.QUIET;
+        if (opts.verbose) return Mode.VERBOSE;
+        return Mode.AUTO;
+    }
+
     private static GoalListener chooseConsoleListener(Goal goal, Mode mode) {
         // Interactive goals (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events
