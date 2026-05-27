@@ -40,9 +40,7 @@ public final class GlobalOptions {
     public boolean offline;
 
     @Option(names = "--no-cache",
-            description = "Bypass all caches for this run: recompile from source, "
-                    + "re-download all dependencies and JDKs. Cache entries are still "
-                    + "written so subsequent runs without this flag benefit. [env: JK_NO_CACHE]")
+            description = "Bypass all caches for this run. [env: JK_NO_CACHE]")
     public boolean noCache;
 
     @Option(names = "--no-progress",
