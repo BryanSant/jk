@@ -78,7 +78,7 @@ class InstallCommandTest {
     @DisabledOnOs(OS.WINDOWS) // POSIX launcher only.
     void no_args_installs_current_project_after_building(@TempDir Path tempDir) throws Exception {
         // Scaffold a tiny runnable project.
-        Jk.execute("init",
+        Jk.execute("new",
                 "--group", "com.example",
                 "--name", "widget",
                 "--executable",

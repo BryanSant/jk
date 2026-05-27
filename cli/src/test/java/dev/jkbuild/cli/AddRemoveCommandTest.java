@@ -16,7 +16,7 @@ class AddRemoveCommandTest {
 
     @Test
     void add_modifies_build_jk(@TempDir Path tempDir) throws Exception {
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         int exit = run("add", "com.fasterxml.jackson.core:jackson-databind:2.18.2",
                 "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
@@ -30,7 +30,7 @@ class AddRemoveCommandTest {
 
     @Test
     void add_test_scope(@TempDir Path tempDir) throws Exception {
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         int exit = run("add", "org.junit.jupiter:junit-jupiter:6.1.0", "--test",
                 "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
@@ -42,7 +42,7 @@ class AddRemoveCommandTest {
 
     @Test
     void add_then_remove_cycle(@TempDir Path tempDir) throws Exception {
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         run("add", "com.foo:bar:1.0", "-C", tempDir.toString());
         int exit = run("remove", "com.foo:bar", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
@@ -53,7 +53,7 @@ class AddRemoveCommandTest {
 
     @Test
     void add_rejects_unparseable_coord(@TempDir Path tempDir) throws Exception {
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         int exit = run("add", "not-a-coord", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(64);
     }

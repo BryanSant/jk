@@ -34,6 +34,7 @@ import java.util.Set;
         description = "A fast build tool and package manager for Java & Kotlin",
         subcommands = {
                 NewCommand.class,
+                InitCommand.class,
                 AddCommand.class,
                 RemoveCommand.class,
                 LockCommand.class,
@@ -82,7 +83,6 @@ public final class Jk implements Runnable {
      */
     static final Map<String, List<String>> VERB_ALIASES = Map.ofEntries(
             Map.entry("generate", List.of("new")),            // Maven mvn archetype:generate
-            Map.entry("init", List.of("new")),                // old `jk init` muscle memory
             Map.entry("dependencies", List.of("tree")),       // Gradle gradle dependencies
             Map.entry("package", List.of("build")),           // Maven mvn package
             Map.entry("deploy", List.of("publish")),          // Maven mvn deploy
@@ -413,7 +413,7 @@ public final class Jk implements Runnable {
 
     private static final List<CommandGroup> COMMAND_GROUPS = List.of(
             new CommandGroup("Project commands:", List.of(
-                    "new",
+                    "new", "init",
                     "add", "remove",
                     "lock", "update", "sync",
                     "tree", "why",

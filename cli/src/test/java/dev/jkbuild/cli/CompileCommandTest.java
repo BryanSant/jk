@@ -78,7 +78,7 @@ class CompileCommandTest {
     // --- helpers -----------------------------------------------------------
 
     private static void scaffold(Path dir) throws IOException {
-        run("init", dir.toString());
+        run("new", dir.toString());
     }
 
     private static int run(String... args) {

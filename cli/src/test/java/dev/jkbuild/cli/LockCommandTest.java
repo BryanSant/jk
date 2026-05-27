@@ -70,7 +70,7 @@ class LockCommandTest {
 
         // Run the verbs against the test repo.
         int exit;
-        exit = run("init", tempDir.toString());
+        exit = run("new", tempDir.toString());
         assertThat(exit).isEqualTo(0);
         exit = run("add", "com.foo:root:1.0", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
@@ -108,7 +108,7 @@ class LockCommandTest {
 
     @Test
     void lock_with_no_dependencies_writes_empty_lockfile(@TempDir Path tempDir) throws Exception {
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         int exit = run("lock",
                 "-C", tempDir.toString(),
                 "--repo-url", base.toString(),

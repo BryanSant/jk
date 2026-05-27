@@ -63,7 +63,7 @@ class TestCommandTest {
     }
 
     private static void scaffoldNoDeps(Path dir) {
-        run("init", dir.toString());
+        run("new", dir.toString());
     }
 
     private static int run(String... args) {

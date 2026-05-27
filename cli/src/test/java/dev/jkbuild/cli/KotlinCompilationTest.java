@@ -21,7 +21,7 @@ class KotlinCompilationTest {
 
     @Test
     void check_passes_for_pure_kotlin_project(@TempDir Path tempDir) throws IOException {
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         Path src = tempDir.resolve("src/main/kotlin/example/Hello.kt");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
@@ -38,7 +38,7 @@ class KotlinCompilationTest {
 
     @Test
     void build_packages_kotlin_classes_into_jar(@TempDir Path tempDir) throws IOException {
-        run("init", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", tempDir.toString());
         Path src = tempDir.resolve("src/main/kotlin/example/Hello.kt");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
@@ -62,7 +62,7 @@ class KotlinCompilationTest {
 
     @Test
     void check_fails_on_kotlin_syntax_error(@TempDir Path tempDir) throws IOException {
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         Path src = tempDir.resolve("src/main/kotlin/Broken.kt");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "fun broken( = oops");
@@ -75,7 +75,7 @@ class KotlinCompilationTest {
 
     @Test
     void mixed_java_and_kotlin_compile_together(@TempDir Path tempDir) throws IOException {
-        run("init", "--name", "mixed", tempDir.toString());
+        run("new", "--name", "mixed", tempDir.toString());
         // Java type that Kotlin will use.
         Path javaSrc = tempDir.resolve("src/main/java/example/Hub.java");
         Files.createDirectories(javaSrc.getParent());

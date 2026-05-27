@@ -54,7 +54,7 @@ class UpdateCommandTest {
         registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
 
         // Initial state: no deps.
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         run("lock", "-C", tempDir.toString(),
                 "--repo-url", base.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
@@ -80,7 +80,7 @@ class UpdateCommandTest {
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
 
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
         int exit = run("update",
                 "-C", tempDir.toString(),

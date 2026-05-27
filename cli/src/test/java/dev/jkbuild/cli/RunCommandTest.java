@@ -193,7 +193,7 @@ class RunCommandTest {
     @Test
     void runs_current_project_when_no_script_given(@TempDir Path tempDir) throws Exception {
         // Scaffold a runnable project, write source that exits with code = arg count.
-        run("init",
+        run("new",
                 "--group", "com.example",
                 "--name", "widget",
                 "--executable",

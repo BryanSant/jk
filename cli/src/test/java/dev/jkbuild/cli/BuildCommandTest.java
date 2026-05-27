@@ -17,7 +17,7 @@ class BuildCommandTest {
 
     @Test
     void builds_jar_from_main_sources(@TempDir Path tempDir) throws Exception {
-        run("init", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", tempDir.toString());
 
         Path src = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(src.getParent());
@@ -42,7 +42,7 @@ class BuildCommandTest {
 
     @Test
     void copies_resources_into_jar(@TempDir Path tempDir) throws Exception {
-        run("init", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", tempDir.toString());
         Path res = tempDir.resolve("src/main/resources/application.properties");
         Files.createDirectories(res.getParent());
         Files.writeString(res, "name=widget\n");
@@ -62,7 +62,7 @@ class BuildCommandTest {
 
     @Test
     void build_fails_on_syntax_error(@TempDir Path tempDir) throws Exception {
-        run("init", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", tempDir.toString());
         Path src = tempDir.resolve("src/main/java/Bad.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "public class Bad { void f(   // missing\n");
@@ -83,7 +83,7 @@ class BuildCommandTest {
 
     @Test
     void build_with_no_sources_still_produces_jar(@TempDir Path tempDir) throws Exception {
-        run("init", "--name", "empty", tempDir.toString());
+        run("new", "--name", "empty", tempDir.toString());
         int exit = run("build", "-C", tempDir.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);

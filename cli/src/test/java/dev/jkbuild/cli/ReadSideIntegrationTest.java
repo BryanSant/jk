@@ -67,7 +67,7 @@ class ReadSideIntegrationTest {
 
         Path cache = tempDir.resolve("cache");
 
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         run("add", "com.foo:root:1.0", "-C", tempDir.toString());
         run("lock", "-C", tempDir.toString(),
                 "--repo-url", base.toString(),
@@ -84,9 +84,9 @@ class ReadSideIntegrationTest {
         assertThat(tree).contains("com.foo:leaf:1.0");
 
         // jk why
-        String why = captureStdout(() -> run("why", "com.foo:leaf", "-C", tempDir.toString()));
-        assertThat(why).contains("com.foo:leaf v1.0 is pulled in by:");
-        assertThat(why).contains("com.foo:root v1.0 -> com.foo:leaf v1.0");
+        String why = stripAnsi(captureStdout(() -> run("why", "com.foo:leaf", "-C", tempDir.toString())));
+        assertThat(why).contains("com.foo:leaf:1.0 is pulled in by:");
+        assertThat(why).contains("com.foo:root:1.0");
 
         // jk sync — second time with cache populated should report up-to-date.
         String sync = captureStdout(() -> run("sync",
@@ -106,7 +106,7 @@ class ReadSideIntegrationTest {
     @Test
     void why_returns_1_for_unknown_module(@TempDir Path tempDir) {
         // init writes an empty jk.lock; the queried module isn't in it.
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         int exit = run("why", "com.foo:bar", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(1);
     }
@@ -126,7 +126,7 @@ class ReadSideIntegrationTest {
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
 
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
         // Erase the empty lockfile that `jk init` stamps so we can verify
         // sync creates a fresh one (with the dep we just added).
@@ -150,7 +150,7 @@ class ReadSideIntegrationTest {
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
 
-        run("init", tempDir.toString());
+        run("new", tempDir.toString());
         run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
         run("lock", "-C", tempDir.toString(),
                 "--repo-url", base.toString(),

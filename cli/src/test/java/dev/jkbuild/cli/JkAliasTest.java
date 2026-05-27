@@ -15,7 +15,6 @@ class JkAliasTest {
     @Test
     void rewrite_maps_known_aliases_to_canonical_verbs() {
         assertThat(Jk.rewriteAlias(new String[] {"generate"})[0]).isEqualTo("new");
-        assertThat(Jk.rewriteAlias(new String[] {"init"})[0]).isEqualTo("new");
         assertThat(Jk.rewriteAlias(new String[] {"dependencies"})[0]).isEqualTo("tree");
         assertThat(Jk.rewriteAlias(new String[] {"package"})[0]).isEqualTo("build");
         assertThat(Jk.rewriteAlias(new String[] {"deploy"})[0]).isEqualTo("publish");

@@ -22,7 +22,7 @@ class NewCommandTest {
     @Test
     void flag_mode_writes_files(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute(
-                "init", "--group", "com.example", "--name", "widget", "--jdk", "25", tempDir.toString());
+                "new", "--group", "com.example", "--name", "widget", "--jdk", "25", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         Path buildFile = tempDir.resolve("jk.toml");
@@ -51,7 +51,7 @@ class NewCommandTest {
         System.setErr(new PrintStream(captured, true, StandardCharsets.UTF_8));
         int exit;
         try {
-            exit = Jk.execute("init", tempDir.toString());
+            exit = Jk.execute("new", tempDir.toString());
         } finally {
             System.setErr(prevErr);
         }
@@ -74,7 +74,7 @@ class NewCommandTest {
         // --shadow used to require an explicit --main; now it just implies
         // --executable and the generated Main FQCN is derived from the group.
         int exit = Jk.execute(
-                "init",
+                "new",
                 "--group", "com.example",
                 "--name", "widget",
                 "--shadow",
@@ -89,7 +89,7 @@ class NewCommandTest {
     @Test
     void executable_writes_derived_main_field(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute(
-                "init",
+                "new",
                 "--group", "com.example",
                 "--name", "widget",
                 "--executable",
@@ -104,7 +104,7 @@ class NewCommandTest {
     @Test
     void library_when_no_main(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute(
-                "init",
+                "new",
                 "--group", "com.example",
                 "--name", "widget",
                 tempDir.toString());
@@ -118,7 +118,7 @@ class NewCommandTest {
     @Test
     void kotlin_lang_writes_kt_sample(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute(
-                "init",
+                "new",
                 "--group", "com.example",
                 "--name", "widget",
                 "--lang", "kotlin",
@@ -188,7 +188,7 @@ class NewCommandTest {
     void named_positional_uses_arg_as_artifact_name(@TempDir Path tempDir) throws IOException {
         // `jk init <abs-path>/my-project` → artifact = "my-project" (the leaf).
         Path target = tempDir.resolve("my-project");
-        int exit = Jk.execute("init", "--group", "com.example", target.toString());
+        int exit = Jk.execute("new", "--group", "com.example", target.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(target.resolve("jk.toml"));
@@ -202,7 +202,7 @@ class NewCommandTest {
         System.setOut(new PrintStream(captured, true, StandardCharsets.UTF_8));
         int exit;
         try {
-            exit = Jk.execute("init", "--name", "foo", tempDir.toString());
+            exit = Jk.execute("new", "--name", "foo", tempDir.toString());
         } finally {
             System.setOut(prevOut);
         }

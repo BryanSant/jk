@@ -41,7 +41,7 @@ import java.util.concurrent.Callable;
  * flags with sane defaults. Both paths converge on {@link NewInputs} +
  * {@link NewScaffolder#write(NewInputs)}.
  */
-@Command(name = "new", aliases = {"init", "create"}, description = "Create a new jk project")
+@Command(name = "new", aliases = {"create"}, description = "Create a new jk project in a new directory")
 public final class NewCommand implements Callable<Integer> {
 
     @Option(names = "--name", description = "Project name (target directory).")
