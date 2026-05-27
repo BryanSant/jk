@@ -71,14 +71,20 @@ final class JdkEnsure {
             }
         }
 
-        // 3. Install. Pick a spec: lockfile id (treated as a bare identifier)
-        //    if present, otherwise the major version from jk.toml. If neither
-        //    is available we can't decide what to install — return empty and
-        //    let the caller fall back to JAVA_HOME.
+        // 3. Probe chain — same logic as `jk jdk default <spec>`. Walks all
+        //    known JDK sources (IntelliJ dir, SDKMAN, JAVA_HOME, …) and
+        //    returns the first match. This ensures bare-major specs like
+        //    `jdk = 25` resolve the same way in both commands.
         String spec = chooseSpec(build, lock);
         if (spec == null) {
             return new Outcome(Optional.empty(), Source.ALREADY_PINNED, null);
         }
+        Optional<InstalledJdk> probed = registry.findBySpec(spec);
+        if (probed.isPresent()) {
+            return new Outcome(probed, Source.ALREADY_PINNED, spec);
+        }
+
+        // 4. Nothing on disk matches — download from the JetBrains catalog.
         if (!HostPlatform.supported()) {
             throw new IOException("host " + System.getProperty("os.name") + "/"
                     + System.getProperty("os.arch")
@@ -93,12 +99,6 @@ final class JdkEnsure {
                     + HostPlatform.currentOs() + "/" + HostPlatform.currentArch());
         }
         JdkInstaller installer = new JdkInstaller(new Http(), registry);
-        // Catalog produced an entry that already maps to an on-disk install
-        // — no download needed.
-        InstalledJdk already = installer.alreadyInstalled(entry.get());
-        if (already != null) {
-            return new Outcome(Optional.of(already), Source.ALREADY_PINNED, spec);
-        }
         InstalledJdk installed = installer.install(entry.get());
         return new Outcome(Optional.of(installed), Source.INSTALLED, spec);
     }

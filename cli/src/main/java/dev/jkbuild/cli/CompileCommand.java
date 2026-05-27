@@ -222,11 +222,18 @@ public final class CompileCommand implements Callable<Integer> {
         List<Path> ktSources = (List<Path>) goal.get(KT_SOURCES).orElse(List.of());
         int total = javaSources.size() + ktSources.size();
         if (!global.outputIsJson()) {
+            String check  = dev.jkbuild.cli.tui.Theme.colorize(
+                    "✓", dev.jkbuild.cli.tui.Theme.brightGreen().bold());
+            String inTime = dev.jkbuild.cli.tui.Theme.colorize(
+                    "in " + BuildCommand.fmtDuration(result.duration()),
+                    dev.jkbuild.cli.tui.Theme.darkGray());
             if (total == 0) {
-                System.out.println("jk compile: no sources in src/main/{java,kotlin}");
+                System.out.println(check + " No sources found");
             } else {
-                System.out.println("jk compile: ok (" + total + " source"
-                        + (total == 1 ? "" : "s") + ")");
+                String compiled = dev.jkbuild.cli.tui.Theme.colorize(
+                        "Compiled", dev.jkbuild.cli.tui.Theme.focused());
+                System.out.println(check + " " + compiled + " " + total
+                        + " source file" + (total == 1 ? "" : "s") + " " + inTime);
             }
         }
         return 0;

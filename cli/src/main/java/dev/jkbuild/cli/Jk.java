@@ -46,7 +46,6 @@ import java.util.Set;
                 TestCommand.class,
                 CleanCommand.class,
                 ExplainCommand.class,
-                WhyRebuiltCommand.class,
                 JdkCommand.class,
                 dev.jkbuild.cli.activate.ActivateCommand.class,
                 dev.jkbuild.cli.activate.HookEnvCommand.class,
@@ -419,7 +418,7 @@ public final class Jk implements Runnable {
                     "lock", "update", "sync",
                     "tree", "why",
                     "compile", "build", "test", "run", "clean",
-                    "explain", "why-rebuilt",
+                    "explain",
                     "install", "publish", "image", "native",
                     "audit", "deny", "verify-build")),
             new CommandGroup("Toolchain commands:", List.of(

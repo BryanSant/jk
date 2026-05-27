@@ -45,11 +45,11 @@ public final class CleanCommand implements Callable<Integer> {
         } else {
             String check   = Theme.colorize("✓", Theme.brightGreen().bold());
             String removed = Theme.colorize("Removed", Theme.focused());
-            String detail  = String.format("%,d file%s, %s total, in %s",
+            String stats_  = String.format("%,d file%s, %s total",
                     stats[0], stats[0] == 1 ? "" : "s",
-                    CacheCommand.fmtBytes(stats[1]),
-                    fmtMs(elapsedMs));
-            System.out.println(check + " " + removed + " " + detail);
+                    CacheCommand.fmtBytes(stats[1]));
+            String inTime  = Theme.colorize("in " + fmtMs(elapsedMs), Theme.darkGray());
+            System.out.println(check + " " + removed + " " + stats_ + " " + inTime);
         }
         return 0;
     }

@@ -299,7 +299,12 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                             project.project().artifact() + "-"
                                     + project.project().version() + ".jar");
                     ctx.label("package " + jarPath.getFileName());
-                    new JarPackager().packageJar(JarPackager.JarRequest.of(classes, jarPath));
+                    JarPackager.JarRequest jarRequest = JarPackager.JarRequest.of(classes, jarPath);
+                    String mainClass = project.project().main();
+                    if (mainClass != null && !mainClass.isBlank()) {
+                        jarRequest = jarRequest.withMainClass(mainClass);
+                    }
+                    new JarPackager().packageJar(jarRequest);
                     ctx.put(JAR_PATH, jarPath);
                     ctx.progress(1);
                 })

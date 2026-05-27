@@ -56,7 +56,7 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
     java.net.URI repoUrl;
 
     @Option(names = "--offline-prepare",
-            description = "Prepare for an offline build (accepted, no-op in v0.1).")
+            description = "Prepare for an offline build.")
     boolean offlinePrepare;
 
     @picocli.CommandLine.Mixin GlobalOptions global;

@@ -229,7 +229,7 @@ public final class ProgressBar implements AutoCloseable {
         if (silent) return;
         AttributedStyle strikeStyle = Theme.dim().crossedOut();
         out.print("\r");
-        out.print(Theme.colorize("Failed", Theme.error().bold()));
+        out.print(Theme.colorize("✗ Failed", Theme.error().bold()));
         out.print(" ");
         // Every segment painted with the dark-red→bright-red gradient.
         // We don't care about filled vs empty here — the bar's role at

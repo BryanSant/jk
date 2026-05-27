@@ -124,8 +124,11 @@ public final class NativeCommand implements Callable<Integer> {
                             ? mainClass
                             : ImageConfigParser.parse(jkBuildPath).mainClass();
                     if (chosenMain == null || chosenMain.isBlank()) {
+                        chosenMain = project.project().main();
+                    }
+                    if (chosenMain == null || chosenMain.isBlank()) {
                         ctx.error("no-main",
-                                "no main class — pass --main or set image.main-class.");
+                                "no main class — pass --main or set [project] main or [image] main-class.");
                         throw new RuntimeException("missing main class");
                     }
                     ctx.put(MAIN_CLASS, chosenMain);

@@ -232,7 +232,7 @@ public final class ProgressBarListener implements GoalListener {
     private void renderFailed() {
         String label = activeLabels.getOrDefault(currentPhase, currentPhase);
         out.print("\r");
-        out.print(Theme.colorize("Failed", Theme.error().bold()));
+        out.print(Theme.colorize("✗ Failed", Theme.error().bold()));
         out.print(" ");
         for (int i = 0; i < BAR_SEGS; i++) {
             out.print(Theme.colorize(String.valueOf(EMPTY), failColors[i]));
