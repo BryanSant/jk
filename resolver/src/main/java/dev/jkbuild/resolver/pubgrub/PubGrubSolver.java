@@ -215,12 +215,14 @@ public class PubGrubSolver {
 
         for (String pkg : seen) {
             if (decided.containsKey(pkg)) continue;
+            // Phantom: mentioned only via derived negative incompatibilities.
+            // No positive constraint requires it to exist — leave it alone.
+            // (Distinct from a real positive-but-unbounded constraint like
+            // `pkg@latest`, where `positiveSet` *also* returns ALL but the
+            // solver still needs to pick a concrete version.)
+            if (!solution.hasPositiveTerm(pkg)) continue;
             VersionSet allowed = solution.positiveSet(pkg);
-            if (allowed.isEmpty() || allowed.isAll()) {
-                // ALL = the partial solution mentions this package only via
-                // a contradicted term (constraint dissolved). Nothing to do.
-                continue;
-            }
+            if (allowed.isEmpty()) continue;
 
             String pick = chooseVersion(pkg, allowed);
             if (pick == null) {

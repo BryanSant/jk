@@ -3,8 +3,10 @@ package dev.jkbuild.resolver.pubgrub;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 
 /**
@@ -20,6 +22,15 @@ public final class PartialSolution {
 
     private final List<Assignment> assignments = new ArrayList<>();
     private final Map<String, VersionSet> positiveByPackage = new HashMap<>();
+    /**
+     * Packages that the partial solution has seen via at least one
+     * <em>positive</em> term. Used to distinguish "needs a decision"
+     * (positive constraint, even if the constraint set happens to be
+     * {@link VersionSet#ALL}) from a phantom package mentioned only by
+     * derived negative incompatibilities (no positive force ever
+     * required it; the solver shouldn't pick a version for it).
+     */
+    private final Set<String> packagesWithPositiveTerm = new HashSet<>();
     private final Map<String, String> decisionByPackage = new TreeMap<>();
     private int decisionLevel = 0;
 
@@ -49,6 +60,19 @@ public final class PartialSolution {
 
     private void register(Term t) {
         positiveByPackage.merge(t.pkg(), t.effectiveVersions(), VersionSet::intersect);
+        if (t.positive()) {
+            packagesWithPositiveTerm.add(t.pkg());
+        }
+    }
+
+    /**
+     * True iff at least one positive term about {@code pkg} has been
+     * recorded — i.e. the partial solution requires the package to
+     * exist at some version. False for "phantom" packages mentioned
+     * only by negative incompatibilities.
+     */
+    public boolean hasPositiveTerm(String pkg) {
+        return packagesWithPositiveTerm.contains(pkg);
     }
 
     public int decisionLevel() {
@@ -65,8 +89,23 @@ public final class PartialSolution {
         return positiveSet(term.pkg()).subsetOf(term.effectiveVersions());
     }
 
-    /** True iff every allowed version of {@code term.pkg()} contradicts {@code term}. */
+    /**
+     * True iff every allowed version of {@code term.pkg()} contradicts
+     * {@code term}.
+     *
+     * <p>If the partial solution has no positive constraint about
+     * {@code term.pkg()} at all, the package is unconstrained — nothing
+     * the solution holds can contradict a term about it. Without this
+     * guard, a negative term whose {@code effectiveVersions} is
+     * {@link VersionSet#EMPTY} (the negation of a positive root term
+     * with {@code versionSet = ALL}, i.e. an unbounded {@code @latest}
+     * selector) would spuriously appear contradicted — and the inco
+     * carrying it would stay INCONCLUSIVE forever, so no positive term
+     * for the package ever gets derived and the dep is silently
+     * dropped from the resolution.
+     */
     public boolean contradicts(Term term) {
+        if (!packagesWithPositiveTerm.contains(term.pkg())) return false;
         return positiveSet(term.pkg()).intersect(term.effectiveVersions()).isEmpty();
     }
 
@@ -91,6 +130,7 @@ public final class PartialSolution {
         decisionLevel = targetLevel;
         decisionByPackage.clear();
         positiveByPackage.clear();
+        packagesWithPositiveTerm.clear();
         for (Assignment a : assignments) {
             register(a.term());
             if (a instanceof Assignment.Decision d
