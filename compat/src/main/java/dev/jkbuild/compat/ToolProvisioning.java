@@ -53,7 +53,16 @@ public final class ToolProvisioning {
             ToolRegistry registry,
             Http http,
             boolean noDiscover) throws IOException, InterruptedException {
-        return provision(distribution, registry, http, noDiscover, new ToolProvisioner());
+        return provision(distribution, registry, http, noDiscover, false, new ToolProvisioner());
+    }
+
+    public static Result provision(
+            ToolDistribution distribution,
+            ToolRegistry registry,
+            Http http,
+            boolean noDiscover,
+            boolean noCache) throws IOException, InterruptedException {
+        return provision(distribution, registry, http, noDiscover, noCache, new ToolProvisioner());
     }
 
     static Result provision(
@@ -61,13 +70,14 @@ public final class ToolProvisioning {
             ToolRegistry registry,
             Http http,
             boolean noDiscover,
+            boolean noCache,
             ToolProvisioner provisioner) throws IOException, InterruptedException {
 
         ToolSpec spec = specFor(distribution);
 
-        // 1. Healthy cached install wins.
+        // 1. Healthy cached install wins (skipped when noCache).
         Optional<InstalledTool> existing = registry.find(distribution.tool(), distribution.version());
-        if (existing.isPresent() && isHealthyEntry(spec, existing.get().home())) {
+        if (!noCache && existing.isPresent() && isHealthyEntry(spec, existing.get().home())) {
             return new Result(existing.get(), Result.Source.CACHED, "");
         }
         // 2. Broken cache entry — purge and continue.

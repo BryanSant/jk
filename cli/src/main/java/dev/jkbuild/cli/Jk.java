@@ -148,6 +148,7 @@ public final class Jk implements Runnable {
     private static void applyCliOverrides(String[] args) {
         java.util.Optional<JkConfig.ColorChoice> color = java.util.Optional.empty();
         java.util.Optional<Boolean> offline = java.util.Optional.empty();
+        java.util.Optional<Boolean> noCache = java.util.Optional.empty();
         java.util.Optional<Boolean> noProgress = java.util.Optional.empty();
         java.util.Optional<Boolean> quiet = java.util.Optional.empty();
         java.util.Optional<Boolean> verbose = java.util.Optional.empty();
@@ -158,6 +159,7 @@ public final class Jk implements Runnable {
                 case "-q", "--quiet" -> quiet = java.util.Optional.of(true);
                 case "-v", "--verbose" -> verbose = java.util.Optional.of(true);
                 case "--offline" -> offline = java.util.Optional.of(true);
+                case "--no-cache" -> noCache = java.util.Optional.of(true);
                 case "--no-progress" -> noProgress = java.util.Optional.of(true);
                 case "--color" -> {
                     if (i + 1 < args.length) color = JkConfig.ColorChoice.parse(args[++i]);
@@ -174,7 +176,7 @@ public final class Jk implements Runnable {
                 }
             }
         }
-        JkConfig cli = new JkConfig(color, offline, noProgress, quiet, verbose, directory);
+        JkConfig cli = new JkConfig(color, offline, noCache, noProgress, quiet, verbose, directory);
         ActiveConfig.install(ActiveConfig.get().mergedWith(cli));
     }
 
@@ -421,8 +423,7 @@ public final class Jk implements Runnable {
                     "install", "publish", "image", "native",
                     "audit", "deny", "verify-build")),
             new CommandGroup("Toolchain commands:", List.of(
-                    "jdk", "shell", "activate", "deactivate",
-                    "tool")),
+                    "jdk", "tool", "shell", "activate", "deactivate")),
             new CommandGroup("Interop commands:", List.of(
                     "import", "mvn", "gradle", "export")),
             new CommandGroup("System commands:", List.of(
@@ -541,7 +542,7 @@ public final class Jk implements Runnable {
      * name-set check is the most portable way.
      */
     private static final Set<String> GLOBAL_OPTION_LONG_NAMES = Set.of(
-            "--quiet", "--verbose", "--color", "--offline", "--no-progress",
+            "--quiet", "--verbose", "--color", "--offline", "--no-cache", "--no-progress",
             "--output", "--config-file", "--no-config", "--directory",
             "--help", "--version");
 

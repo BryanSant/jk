@@ -39,16 +39,18 @@ public final class GlobalOptions {
             description = "Disable network access for this run. [env: JK_OFFLINE]")
     public boolean offline;
 
+    @Option(names = "--no-cache",
+            description = "Bypass all caches for this run: recompile from source, "
+                    + "re-download all dependencies and JDKs. Cache entries are still "
+                    + "written so subsequent runs without this flag benefit. [env: JK_NO_CACHE]")
+    public boolean noCache;
+
     @Option(names = "--no-progress",
             description = "Disable all progress bars and spinners. [env: JK_NO_PROGRESS]")
     public boolean noProgress;
 
     @Option(names = "--output", paramLabel = "<FORMAT>",
-            description = "Output format: text (default) or json. With json, every "
-                    + "event (phase boundaries, progress, warnings, errors, goal finish) "
-                    + "is emitted as a single NDJSON line on stdout. Wizards and commands "
-                    + "marked interactive ignore this flag — they own stdout. "
-                    + "[env: JK_OUTPUT]")
+            description = "Output format: text (default) or json. [env: JK_OUTPUT]")
     public String output;
 
     /**

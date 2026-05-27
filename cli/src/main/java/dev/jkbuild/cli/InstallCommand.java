@@ -213,10 +213,11 @@ public final class InstallCommand implements Callable<Integer> {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("git fetch " + expanded + " @ " + refStr);
+                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
                     GitFetcher fetcher = new GitFetcher(cacheDir.resolve("git"));
                     GitFetcher.Fetched fetched;
                     try {
-                        fetched = fetchTagOrBranch(fetcher, expanded, canonical, refStr);
+                        fetched = fetchTagOrBranch(fetcher, expanded, canonical, refStr, noCache);
                     } catch (IOException e) {
                         ctx.error("fetch", e.getMessage());
                         throw new RuntimeException(e);
@@ -260,19 +261,20 @@ public final class InstallCommand implements Callable<Integer> {
 
     /** Try the user's ref as a tag first, then a branch. */
     private static GitFetcher.Fetched fetchTagOrBranch(
-            GitFetcher fetcher, String expanded, String canonical, String refStr) throws IOException {
+            GitFetcher fetcher, String expanded, String canonical, String refStr,
+            boolean noCache) throws IOException {
         IOException tagFailure;
         try {
             GitSource asTag = new GitSource(
                     canonical, expanded, new GitRefSpec.Tag(refStr), null, true, false);
-            return fetcher.fetch(asTag);
+            return fetcher.fetch(asTag, noCache);
         } catch (IOException e) {
             tagFailure = e;
         }
         try {
             GitSource asBranch = new GitSource(
                     canonical, expanded, new GitRefSpec.Branch(refStr), null, true, false);
-            return fetcher.fetch(asBranch);
+            return fetcher.fetch(asBranch, noCache);
         } catch (IOException branchFailure) {
             IOException wrapped = new IOException(
                     "ref `" + refStr + "` not found as tag or branch in " + expanded);

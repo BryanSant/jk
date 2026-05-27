@@ -51,10 +51,20 @@ public final class GitFetcher {
      * against an unchanged ref hit the cache.
      */
     public Fetched fetch(GitSource source) throws IOException {
+        return fetch(source, false);
+    }
+
+    /**
+     * Resolve and checkout, optionally bypassing the checkout cache.
+     * When {@code noCache} is {@code true} any existing checkout directory
+     * is deleted and recreated from the bare clone, ensuring a clean working
+     * tree even if the checkout was previously tampered with.
+     */
+    public Fetched fetch(GitSource source, boolean noCache) throws IOException {
         Objects.requireNonNull(source, "source");
         Path bareDir = ensureBareClone(source);
         String sha = resolveRefSha(source, bareDir);
-        Path checkout = ensureCheckout(source, bareDir, sha);
+        Path checkout = ensureCheckout(source, bareDir, sha, noCache);
         return new Fetched(sha, checkout);
     }
 
@@ -149,9 +159,13 @@ public final class GitFetcher {
         }
     }
 
-    private Path ensureCheckout(GitSource source, Path bareDir, String sha) throws IOException {
+    private Path ensureCheckout(GitSource source, Path bareDir, String sha, boolean noCache)
+            throws IOException {
         String hash = GitUrl.canonicalHash(source.canonicalUrl());
         Path checkoutDir = gitRoot.resolve("co").resolve(hash).resolve(sha);
+        if (noCache && Files.isDirectory(checkoutDir)) {
+            deleteRecursively(checkoutDir);
+        }
         if (Files.isDirectory(checkoutDir)) {
             return checkoutDir;
         }

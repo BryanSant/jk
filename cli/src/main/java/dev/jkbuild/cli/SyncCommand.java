@@ -160,7 +160,8 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                             ctx.progress(1);
                         }
                     };
-                    var report = new CacheSync(cas, http).sync(lock, observer);
+                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    var report = new CacheSync(cas, http).sync(lock, observer, noCache);
                     ctx.put(CAS_REPORT, report);
                     if (report.hasErrors()) {
                         throw new RuntimeException("dep fetch had errors");

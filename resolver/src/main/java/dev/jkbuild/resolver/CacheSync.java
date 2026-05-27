@@ -40,7 +40,12 @@ public final class CacheSync {
     }
 
     public Report sync(Lockfile lock) throws IOException, InterruptedException {
-        return sync(lock, ProgressObserver.NOOP);
+        return sync(lock, ProgressObserver.NOOP, false);
+    }
+
+    public Report sync(Lockfile lock, ProgressObserver observer)
+            throws IOException, InterruptedException {
+        return sync(lock, observer, false);
     }
 
     /**
@@ -50,8 +55,12 @@ public final class CacheSync {
      * thread for fetched / failed packages. Use this to drive a
      * Goal-style progress bar where the numerator climbs one tick per
      * package processed.
+     *
+     * <p>When {@code noCache} is true the CAS presence check is skipped
+     * and every artifact is re-downloaded from its source, regardless of
+     * whether a local copy already exists.
      */
-    public Report sync(Lockfile lock, ProgressObserver observer)
+    public Report sync(Lockfile lock, ProgressObserver observer, boolean noCache)
             throws IOException, InterruptedException {
         int upToDate = 0;
         int skipped = 0;
@@ -70,7 +79,7 @@ public final class CacheSync {
                     ? pkg.checksum().substring("sha256:".length())
                     : pkg.checksum();
 
-            if (cas.contains(hex)) {
+            if (!noCache && cas.contains(hex)) {
                 upToDate++;
                 observer.upToDate(pkg);
                 continue;

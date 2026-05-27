@@ -201,8 +201,9 @@ public final class RunCommand implements Callable<Integer> {
                 .scope(1)
                 .execute(ctx -> {
                     Path classesDir = ctx.require(CLASSES_DIR);
-                    if (!forceRecompile
-                            && Files.exists(classesDir.resolve(mainClass + ".class"))) {
+                    boolean noCache = forceRecompile
+                            || dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    if (!noCache && Files.exists(classesDir.resolve(mainClass + ".class"))) {
                         ctx.label("cache hit (" + mainClass + ".class)");
                         ctx.progress(1);
                         return;
@@ -328,8 +329,9 @@ public final class RunCommand implements Callable<Integer> {
                 .scope(1)
                 .execute(ctx -> {
                     Path classesDir = ctx.require(CLASSES_DIR);
-                    if (!forceRecompile
-                            && Files.exists(classesDir.resolve(mainClass + ".class"))) {
+                    boolean noCache = forceRecompile
+                            || dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    if (!noCache && Files.exists(classesDir.resolve(mainClass + ".class"))) {
                         ctx.label("cache hit (" + mainClass + ".class)");
                         ctx.progress(1);
                         return;

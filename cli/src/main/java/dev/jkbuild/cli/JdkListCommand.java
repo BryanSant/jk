@@ -376,12 +376,13 @@ public final class JdkListCommand implements Callable<Integer> {
     private JdkCatalog fetchCatalogOrNull() {
         if (!HostPlatform.supported()) return null;
         try {
+            boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
             JdkCatalogClient client = feedUrl != null
                     ? new JdkCatalogClient(new Http(), feedUrl,
                             cacheFile != null ? cacheFile : ephemeralCachePath(),
                             java.time.Duration.ZERO)
                     : new JdkCatalogClient();
-            return client.fetch();
+            return client.fetch(noCache);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             System.err.println("jk jdk list: JetBrains feed unreachable ("

@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.tui.Spinner;
+import dev.jkbuild.cli.tui.Theme;
 import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -28,29 +29,50 @@ public final class CleanCommand implements Callable<Integer> {
     public Integer call() throws IOException {
         Path dir = global.workingDir();
 
-        boolean removed = false;
-        removed |= deleteRecursively(dir.resolve("target"));
-        removed |= deleteRecursively(dir.resolve(".jk").resolve("generated"));
+        long startMs = System.currentTimeMillis();
+        long[] stats = {0L, 0L}; // [fileCount, totalBytes]
 
-        if (removed) {
-            System.out.println("jk clean: removed target/ and .jk/generated/");
+        try (Spinner spinner = Spinner.show(System.out, "Cleaning...")) {
+            deleteRecursively(dir.resolve("target"), stats);
+            deleteRecursively(dir.resolve(".jk").resolve("generated"), stats);
+        }
+
+        long elapsedMs = System.currentTimeMillis() - startMs;
+
+        if (stats[0] == 0) {
+            System.out.println(Theme.colorize("✓", Theme.brightGreen().bold())
+                    + " Nothing to remove");
         } else {
-            System.out.println("jk clean: nothing to remove");
+            String check   = Theme.colorize("✓", Theme.brightGreen().bold());
+            String removed = Theme.colorize("Removed", Theme.focused());
+            String detail  = String.format("%,d file%s, %s total, in %s",
+                    stats[0], stats[0] == 1 ? "" : "s",
+                    CacheCommand.fmtBytes(stats[1]),
+                    fmtMs(elapsedMs));
+            System.out.println(check + " " + removed + " " + detail);
         }
         return 0;
     }
 
-    private static boolean deleteRecursively(Path root) throws IOException {
-        if (!Files.exists(root)) return false;
+    private static void deleteRecursively(Path root, long[] stats) throws IOException {
+        if (!Files.exists(root)) return;
         try (Stream<Path> stream = Files.walk(root)) {
             stream.sorted(Comparator.reverseOrder()).forEach(p -> {
                 try {
+                    if (Files.isRegularFile(p)) {
+                        stats[1] += Files.size(p);
+                        stats[0]++;
+                    }
                     Files.deleteIfExists(p);
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
             });
         }
-        return true;
+    }
+
+    private static String fmtMs(long ms) {
+        if (ms < 1000) return ms + "ms";
+        return String.format("%.2fs", ms / 1000.0);
     }
 }

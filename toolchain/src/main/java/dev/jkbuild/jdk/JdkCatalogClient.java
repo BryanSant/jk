@@ -75,12 +75,21 @@ public final class JdkCatalogClient {
      * warning) so {@code jk jdk list} stays useful offline.
      */
     public JdkCatalog fetch() throws IOException, InterruptedException {
-        byte[] body = loadBody();
+        return fetch(false);
+    }
+
+    /**
+     * Fetch the catalog. When {@code noCache} is {@code true} the TTL
+     * check is skipped and the feed is always re-fetched from the network.
+     */
+    public JdkCatalog fetch(boolean noCache) throws IOException, InterruptedException {
+        byte[] body = loadBody(noCache);
         return parse(body);
     }
 
-    private byte[] loadBody() throws IOException, InterruptedException {
-        boolean cacheFresh = Files.isRegularFile(cacheFile)
+    private byte[] loadBody(boolean noCache) throws IOException, InterruptedException {
+        boolean cacheFresh = !noCache
+                && Files.isRegularFile(cacheFile)
                 && Files.size(cacheFile) > 0
                 && cacheAge().compareTo(ttl) < 0;
         if (cacheFresh) {

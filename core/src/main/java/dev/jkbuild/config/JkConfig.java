@@ -30,6 +30,7 @@ import java.util.Optional;
 public record JkConfig(
         Optional<ColorChoice> color,
         Optional<Boolean> offline,
+        Optional<Boolean> noCache,
         Optional<Boolean> noProgress,
         Optional<Boolean> quiet,
         Optional<Boolean> verbose,
@@ -52,6 +53,7 @@ public record JkConfig(
     public JkConfig {
         Objects.requireNonNull(color, "color");
         Objects.requireNonNull(offline, "offline");
+        Objects.requireNonNull(noCache, "noCache");
         Objects.requireNonNull(noProgress, "noProgress");
         Objects.requireNonNull(quiet, "quiet");
         Objects.requireNonNull(verbose, "verbose");
@@ -61,7 +63,7 @@ public record JkConfig(
     /** Empty config — every setting unset. Used as the seed before layers merge. */
     public static JkConfig empty() {
         return new JkConfig(Optional.empty(), Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty());
+                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty());
     }
 
     /**
@@ -73,6 +75,7 @@ public record JkConfig(
         return new JkConfig(
                 over.color.or(() -> this.color),
                 over.offline.or(() -> this.offline),
+                over.noCache.or(() -> this.noCache),
                 over.noProgress.or(() -> this.noProgress),
                 over.quiet.or(() -> this.quiet),
                 over.verbose.or(() -> this.verbose),
@@ -82,6 +85,7 @@ public record JkConfig(
     /** Convenience: color with a fallback when empty. */
     public ColorChoice colorOr(ColorChoice fallback) { return color.orElse(fallback); }
     public boolean offlineOr(boolean fallback) { return offline.orElse(fallback); }
+    public boolean noCacheOr(boolean fallback) { return noCache.orElse(fallback); }
     public boolean noProgressOr(boolean fallback) { return noProgress.orElse(fallback); }
     public boolean quietOr(boolean fallback) { return quiet.orElse(fallback); }
     public boolean verboseOr(boolean fallback) { return verbose.orElse(fallback); }

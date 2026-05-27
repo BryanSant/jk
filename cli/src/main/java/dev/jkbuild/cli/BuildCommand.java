@@ -178,8 +178,10 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
 
+                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+
                     // Layer 1: maven-style mtime skip.
-                    if (dev.jkbuild.task.FreshnessStamp.isFresh(classes, sources, classpath)) {
+                    if (!noCache && dev.jkbuild.task.FreshnessStamp.isFresh(classes, sources, classpath)) {
                         ctx.label("up to date");
                         ctx.put(BUILD_OUTCOME, "up-to-date");
                         ctx.progress(sources.size());
@@ -202,7 +204,8 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                     ctx.put(ACTION_KEY, actionKey);
 
                     // Layer 2: action cache lookup.
-                    var cached = actionCache.lookup(actionKey);
+                    java.util.Optional<ActionCache.ActionRecord> cached =
+                            noCache ? java.util.Optional.empty() : actionCache.lookup(actionKey);
                     if (cached.isPresent()) {
                         ctx.label("cache hit " + actionKey.substring(0, 8));
                         actionCache.restore(cached.get(), classes);
@@ -339,7 +342,7 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
 
         if (result.success()) {
-            printSuccessSummary(goal);
+            printSuccessSummary(goal, result);
             // Opportunistic cache prune (no-op when auto-prune is off).
             try {
                 var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(
@@ -373,26 +376,48 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
         return null;
     }
 
-    private void printSuccessSummary(Goal goal) {
+    private void printSuccessSummary(Goal goal, GoalResult result) {
         if (global.outputIsJson()) return;
-        // Match the existing CLI shape for grep-ability:
-        //   Up to date: compile-main
-        //   Cache hit: compile-main (12345678)
-        //   Built /path/widget-0.1.0.jar (N sources)
+        String check  = dev.jkbuild.cli.tui.Theme.colorize(
+                "✓", dev.jkbuild.cli.tui.Theme.brightGreen().bold());
+        String inTime = dev.jkbuild.cli.tui.Theme.colorize(
+                "in " + fmtDuration(result.duration()),
+                dev.jkbuild.cli.tui.Theme.darkGray());
+
         String outcome = goal.get(BUILD_OUTCOME).orElse("");
         if ("up-to-date".equals(outcome)) {
-            System.out.println("Up to date: compile-main");
-        } else if (outcome.startsWith("cache-hit:")) {
-            System.out.println("Cache hit: compile-main (" + outcome.substring("cache-hit:".length()) + ")");
+            System.out.println(check + " Up to date " + inTime);
+            return;
         }
 
-        goal.get(JAR_PATH).ifPresent(jar -> {
-            @SuppressWarnings("unchecked")
-            int n = ((List<Path>) goal.get(JAVA_SOURCES).orElse(List.of())).size()
-                    + ((List<Path>) goal.get(KOTLIN_SOURCES).orElse(List.of())).size();
-            System.out.println("Built " + jar + " (" + n + " source"
-                    + (n == 1 ? "" : "s") + ")");
-        });
+        String built = dev.jkbuild.cli.tui.Theme.colorize(
+                "Built", dev.jkbuild.cli.tui.Theme.focused());
+
+        if (outcome.startsWith("cache-hit:")) {
+            String jarLabel = goal.get(JAR_PATH)
+                    .map(p -> p.getFileName().toString())
+                    .orElse("");
+            String suffix = jarLabel.isEmpty() ? "" : " " + jarLabel;
+            System.out.println(check + " " + built + suffix + " " + inTime);
+            return;
+        }
+
+        goal.get(JAR_PATH).ifPresentOrElse(
+                jar -> System.out.println(check + " " + built + " " + jar.getFileName()
+                        + " " + inTime),
+                ()  -> System.out.println(check + " " + built + " " + inTime));
+    }
+
+    static String fmtDuration(java.time.Duration d) {
+        long ms = d.toMillis();
+        if (ms < 1000) return ms + "ms";
+        long totalSec = d.toSeconds();
+        if (totalSec < 60) return String.format("%.1fs", ms / 1000.0);
+        long hours   = totalSec / 3600;
+        long minutes = (totalSec % 3600) / 60;
+        long seconds = totalSec % 60;
+        if (hours == 0) return minutes + "m " + seconds + "s";
+        return hours + "h " + minutes + "m " + seconds + "s";
     }
 
     @SuppressWarnings("unchecked")

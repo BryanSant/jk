@@ -365,7 +365,9 @@ public final class TestCommand implements Callable<Integer> {
         String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
 
-        var cached = actionCache.lookup(actionKey);
+        boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+        java.util.Optional<ActionCache.ActionRecord> cached =
+                noCache ? java.util.Optional.empty() : actionCache.lookup(actionKey);
         if (cached.isPresent()) {
             actionCache.restore(cached.get(), outputDir);
             ctx.label(taskId + ": cache hit " + actionKey.substring(0, 8));

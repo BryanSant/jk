@@ -30,9 +30,11 @@ class JkConfigLoaderTest {
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty(),
+                Optional.empty(),
                 Optional.empty());
         JkConfig over = new JkConfig(
                 Optional.of(JkConfig.ColorChoice.ALWAYS),
+                Optional.empty(),
                 Optional.empty(),
                 Optional.of(true),
                 Optional.empty(),
