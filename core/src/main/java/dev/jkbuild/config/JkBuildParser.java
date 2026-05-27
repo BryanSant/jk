@@ -99,9 +99,19 @@ public final class JkBuildParser {
         }
         String main = project.getString("main");
         boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
-        boolean nativeImage = Boolean.TRUE.equals(project.getBoolean("native"));
+        // native = false/absent → DISABLED, native = true → SUPPORTED,
+        // native = "always" → ALWAYS (TOML boolean vs string).
+        Object nativeRaw = project.get("native");
+        JkBuild.NativeMode nativeMode;
+        if ("always".equalsIgnoreCase(nativeRaw instanceof String s ? s : "")) {
+            nativeMode = JkBuild.NativeMode.ALWAYS;
+        } else if (Boolean.TRUE.equals(nativeRaw)) {
+            nativeMode = JkBuild.NativeMode.SUPPORTED;
+        } else {
+            nativeMode = JkBuild.NativeMode.DISABLED;
+        }
         return new JkBuild.Project(group, artifact, version, jdk, java, kotlin,
-                main, shadow, nativeImage);
+                main, shadow, nativeMode);
     }
 
     private static int intOrZero(TomlTable table, String key, String path) {
@@ -261,12 +271,10 @@ public final class JkBuildParser {
         }
         GitSource source = sources.get(module);
         if (versionPart == null) {
-            if (source == null) {
-                throw new JkBuildParseException(
-                        "dependencies." + scope.canonical() + ".\"" + module
-                                + "\" has no version and no matching [sources] entry");
-            }
-            return Dependency.git(module, source);
+            if (source != null) return Dependency.git(module, source);
+            // No version specified → treat as @latest (floating, resolves to
+            // the highest available stable release).
+            return new Dependency(module, new VersionSelector.Latest("latest"), false);
         }
         if (versionPart.isBlank()) {
             throw new JkBuildParseException(

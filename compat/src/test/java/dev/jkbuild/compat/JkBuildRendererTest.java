@@ -41,7 +41,7 @@ class JkBuildRendererTest {
     void renders_main_shadow_and_native_when_set() {
         JkBuild model = new JkBuild(
                 new JkBuild.Project("com.example", "widget", "1.0.0", 21, 0, 2,
-                        "com.example.App", true, true),
+                        "com.example.App", true, JkBuild.NativeMode.SUPPORTED),
                 JkBuild.Dependencies.empty());
         String out = JkBuildRenderer.render(model);
         assertThat(out).contains("kotlin   = 2");

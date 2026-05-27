@@ -14,11 +14,13 @@ import dev.jkbuild.compile.KotlincResult;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Scope;
+import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
@@ -27,6 +29,8 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
+import dev.jkbuild.test.JUnitLauncher;
+import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -43,85 +47,110 @@ import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
 /**
- * {@code jk build} — compile sources, copy resources, package a jar at
- * {@code target/<artifact>-<version>.jar}.
+ * {@code jk build} — smart meta-goal that orchestrates the full pipeline:
  *
- * <p>Organised as a {@link Goal} with six phases:
  * <ol>
- *   <li>{@code parse-build} (SYNC) — load jk.toml + jk.lock, resolve
- *       classpath (incl. workspace siblings), gather sources, pick a
- *       profile + JDK.</li>
- *   <li>{@code compile-java} (CPU) — internally branches:
- *       freshness-stamp skip → action-cache hit → real javac. Real
- *       compiles run javac in a subprocess while a {@link
- *       dev.jkbuild.task.CasPrewriter} streams outputs into the CAS in
- *       parallel.</li>
- *   <li>{@code compile-kotlin} (CPU) — no-op when no {@code .kt}
- *       sources; otherwise kotlinc against classes/ + classpath.</li>
- *   <li>{@code copy-resources} (CPU) — mirror src/main/resources into
- *       classes/.</li>
- *   <li>{@code package-jar} (CPU) — assemble the final jar.</li>
- *   <li>{@code write-stamp} (SYNC) — refresh the FreshnessStamp inside
- *       classes/ unless we already short-circuited as up-to-date.</li>
+ *   <li>{@code parse-build} — load {@code jk.toml}; if {@code jk.lock} is
+ *       absent, run the lock resolver inline (same as {@code jk lock}).</li>
+ *   <li>{@code sync-deps} (IO) — ensure all locked artifacts are in the CAS;
+ *       virtually a no-op when everything is already cached.</li>
+ *   <li>{@code ensure-jdk} (IO, parallel with sync-deps) — install the
+ *       pinned JDK when it is not yet on disk.</li>
+ *   <li>{@code compile-java} (CPU) — javac, with action-cache + freshness
+ *       stamp skip layers.</li>
+ *   <li>{@code compile-kotlin} (CPU) — no-op when no {@code .kt} sources.</li>
+ *   <li>{@code copy-resources} (CPU) — mirror {@code src/main/resources}.</li>
+ *   <li>{@code compile-test} (CPU) — compile {@code src/test/java}.</li>
+ *   <li>{@code run-tests} (IO) — fork JUnit Platform runner(s).</li>
+ *   <li>{@code package-jar} (CPU) — assemble the project jar.</li>
+ *   <li>{@code native-image} (IO, only when {@code native = "always"}) —
+ *       GraalVM native-image compilation.</li>
+ *   <li>{@code write-stamp} (SYNC) — refresh the freshness stamp.</li>
  * </ol>
  */
-@Command(name = "build", description = "Compile sources and package the project jar")
-public final class BuildCommand implements Callable<Integer> {    @Option(names = "--profile", paramLabel = "<name>",
+@Command(name = "build", description = "Compile, test, and package the project")
+public final class BuildCommand implements Callable<Integer> {
+
+    @Option(names = "--profile", paramLabel = "<name>",
             description = "Build profile to apply. Default: auto (ci if CI=true, else none).")
     String profileName;
 
+    @Option(names = {"-w", "--workers"}, paramLabel = "<N>",
+            description = "Number of test-runner JVMs to fork in parallel. Default 1.")
+    Integer workers;
+
     @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
+            description = "Override the jk cache directory.")
     Path cacheDir;
+
+    @Option(names = "--jdks-dir", hidden = true,
+            description = "Override the JDK install root.")
+    Path jdksDir;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
-    // Keys phases share via the goal's typed state channel.
-    private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
-    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    // ---- GoalKeys -------------------------------------------------------
+
+    private static final GoalKey<JkBuild>   PROJECT         = GoalKey.of("project",       JkBuild.class);
+    private static final GoalKey<Lockfile>  LOCKFILE        = GoalKey.of("lockfile",       Lockfile.class);
+    private static final GoalKey<Path>      JAVA_HOME       = GoalKey.of("java-home",      Path.class);
+    private static final GoalKey<Integer>   RELEASE         = GoalKey.of("release",        Integer.class);
+
     @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> CLASSPATH = GoalKey.of("classpath", List.class);
+    private static final GoalKey<List> CLASSPATH       = GoalKey.of("classpath",      List.class);
     @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> JAVA_SOURCES = GoalKey.of("java-sources", List.class);
+    private static final GoalKey<List> JAVA_SOURCES    = GoalKey.of("java-sources",   List.class);
     @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> KOTLIN_SOURCES = GoalKey.of("kotlin-sources", List.class);
+    private static final GoalKey<List> KOTLIN_SOURCES  = GoalKey.of("kotlin-sources", List.class);
     @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> JAVAC_ARGS = GoalKey.of("javac-args", List.class);
-    private static final GoalKey<Path> JAVA_HOME = GoalKey.of("java-home", Path.class);
-    private static final GoalKey<Integer> RELEASE = GoalKey.of("release", Integer.class);
-    private static final GoalKey<String> ACTION_KEY = GoalKey.of("action-key", String.class);
-    private static final GoalKey<String> BUILD_OUTCOME = GoalKey.of("build-outcome", String.class);
-    private static final GoalKey<Path> JAR_PATH = GoalKey.of("jar-path", Path.class);
+    private static final GoalKey<List> JAVAC_ARGS      = GoalKey.of("javac-args",     List.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> COMPILE_TEST_CP = GoalKey.of("cp-test",        List.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> TEST_RUNTIME_CP = GoalKey.of("cp-runtime",     List.class);
+
+    private static final GoalKey<String>    ACTION_KEY      = GoalKey.of("action-key",     String.class);
+    private static final GoalKey<String>    BUILD_OUTCOME   = GoalKey.of("build-outcome",  String.class);
+    private static final GoalKey<Path>      JAR_PATH        = GoalKey.of("jar-path",       Path.class);
+    private static final GoalKey<Path>      MAIN_CLASSES    = GoalKey.of("main-classes",   Path.class);
+    private static final GoalKey<Path>      TEST_CLASSES    = GoalKey.of("test-classes",   Path.class);
+    private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
+            GoalKey.of("test-result", JUnitLauncher.Result.class);
+    private static final GoalKey<Boolean>   NO_TEST_SOURCES = GoalKey.of("no-test-sources", Boolean.class);
+
+    // ---- Entry point ----------------------------------------------------
 
     @Override
-    public Integer call() throws IOException {
-        Path dir = global.workingDir();
+    public Integer call() throws Exception {
+        Path dir    = global.workingDir();
         Path target = dir.resolve("target");
-        Path classes = target.resolve("classes");
-        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        Cas cas = new Cas(cache);
+        Path cache  = cacheDir != null ? cacheDir : JkDirs.cache();
+        Cas cas     = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
-
-        // Bail with the existing error shape for "no jk.toml" / "no jk.lock"
-        // BEFORE we even build the goal — these aren't phase failures,
-        // they're "you ran me in the wrong directory" misconfigurations
-        // that don't need an event log trail.
         Path buildFile = dir.resolve("jk.toml");
+        Path lockFile  = dir.resolve("jk.lock");
+        int workerCount = workers != null && workers > 0 ? workers : 1;
+
         if (!Files.exists(buildFile)) {
             System.err.println("jk build: no jk.toml in " + dir);
             return 2;
         }
-        Path lockFile = resolveLockFile(dir);
-        if (lockFile == null) {
-            System.err.println("jk build: no jk.lock in " + dir + " (run `jk lock` first)");
-            return 2;
-        }
-        Path lockFileFinal = lockFile;
 
+        // ---- parse-build ------------------------------------------------
+        // Enhanced: if jk.lock is absent it runs the lock resolver inline
+        // before reading the lockfile — same path SyncCommand takes.
         Phase parseBuild = Phase.builder("parse-build")
-                .scope(1)
+                .label("Parsing")
+                .scope(() -> {
+                    // Cheap scope estimate; see LockCommand for rationale.
+                    if (Files.exists(lockFile)) {
+                        try { return LockfileReader.read(lockFile).packages().size() + 5; }
+                        catch (Exception ignored) {}
+                    }
+                    return 10;
+                })
                 .execute(ctx -> {
-                    ctx.label("parse jk.toml / jk.lock");
+                    ctx.label("parse jk.toml");
                     JkBuild project;
                     try {
                         project = JkBuildParser.parse(buildFile);
@@ -130,41 +159,109 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                         throw e;
                     }
                     ctx.put(PROJECT, project);
-                    ctx.put(LOCKFILE, LockfileReader.read(lockFileFinal));
 
+                    // If no lockfile, resolve now.
+                    if (!Files.exists(lockFile)) {
+                        ctx.label("resolve deps (first run)");
+                        var result = LockFlow.run(
+                                dir, cache, List.of(), true, null, "jk build");
+                        if (result.status() != 0) {
+                            ctx.error("lock", "dependency resolution failed");
+                            throw new RuntimeException("lock failed");
+                        }
+                        ctx.put(LOCKFILE, result.lockfile());
+                    } else {
+                        ctx.put(LOCKFILE, LockfileReader.read(lockFile));
+                    }
+
+                    Lockfile lock = ctx.require(LOCKFILE);
                     ctx.label("resolve classpath");
-                    Path srcMain = dir.resolve("src/main/java");
-                    List<Path> sources = CompileCommand.collectJavaSources(srcMain);
-                    List<Path> classpath = new ArrayList<>(new ClasspathResolver(cas)
-                            .classpathFor(ctx.require(LOCKFILE), ClasspathResolver.COMPILE_MAIN));
+                    ClasspathResolver resolver = new ClasspathResolver(cas);
+
+                    List<Path> mainCp = new ArrayList<>(
+                            resolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
                     WorkspaceClasspath.Result siblings =
                             WorkspaceClasspath.resolve(dir, project, Set.of(Scope.MAIN));
-                    classpath.addAll(siblings.jars());
+                    mainCp.addAll(siblings.jars());
                     if (!siblings.missingSiblingJars().isEmpty()) {
-                        for (String missing : siblings.missingSiblingJars()) {
+                        for (String missing : siblings.missingSiblingJars())
                             ctx.error("workspace", "sibling not built — " + missing);
-                        }
                         throw new RuntimeException("missing workspace siblings");
                     }
 
-                    Profile profile =
-                            CompileCommand.resolveProfile(project.profiles(), profileName);
+                    Profile profile = CompileCommand.resolveProfile(project.profiles(), profileName);
                     ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
-                    ctx.put(CLASSPATH, classpath);
-                    ctx.put(JAVA_SOURCES, sources);
+                    ctx.put(CLASSPATH, mainCp);
+                    ctx.put(COMPILE_TEST_CP, resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
+                    ctx.put(TEST_RUNTIME_CP, resolver.classpathFor(lock, ClasspathResolver.TEST));
+                    ctx.put(JAVA_SOURCES, CompileCommand.collectJavaSources(dir.resolve("src/main/java")));
                     ctx.put(KOTLIN_SOURCES, CompileCommand.collectKotlinSources(dir));
                     ctx.put(RELEASE, project.project().javaRelease());
                     ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(dir));
+                    ctx.put(MAIN_CLASSES, target.resolve("classes"));
+                    ctx.put(TEST_CLASSES, target.resolve("test-classes"));
                     ctx.progress(1);
                 })
                 .build();
 
-        Phase compileJava = Phase.builder("compile-java")
-                .kind(PhaseKind.CPU)
+        // ---- sync-deps --------------------------------------------------
+        Phase syncDeps = Phase.builder("sync-deps")
+                .label("Syncing")
+                .kind(PhaseKind.IO)
                 .requires("parse-build")
-                // Initial scope unknown — parse-build hasn't run when scope
-                // suppliers fire. The phase calls updateScope once it
-                // knows the source count.
+                .scope(() -> {
+                    try { return LockfileReader.read(lockFile).packages().size(); }
+                    catch (Exception ignored) { return 10; }
+                })
+                .execute(ctx -> {
+                    Lockfile lock = ctx.require(LOCKFILE);
+                    int packages = lock.packages().size();
+                    if (packages > 0) ctx.updateScope(packages);
+                    var observer = new CacheSync.ProgressObserver() {
+                        @Override public void fetched(Lockfile.Package pkg) {
+                            ctx.label("fetched " + pkg.name());
+                            ctx.progress(1);
+                        }
+                        @Override public void upToDate(Lockfile.Package pkg) { ctx.progress(1); }
+                        @Override public void skipped(Lockfile.Package pkg)  { ctx.progress(1); }
+                        @Override public void failed(Lockfile.Package pkg, String err) {
+                            ctx.error("dep", pkg.name() + " — " + err);
+                            ctx.progress(1);
+                        }
+                    };
+                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    var report = new CacheSync(cas, new Http()).sync(lock, observer, noCache);
+                    if (report.hasErrors()) throw new RuntimeException("dep sync had errors");
+                })
+                .build();
+
+        // ---- ensure-jdk -------------------------------------------------
+        Phase ensureJdk = Phase.builder("ensure-jdk")
+                .label("JDK")
+                .kind(PhaseKind.IO)
+                .requires("parse-build")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("resolve JDK");
+                    Lockfile lock = ctx.require(LOCKFILE);
+                    JkBuild project = ctx.require(PROJECT);
+                    try {
+                        JdkEnsure.ensure(dir, jdksDir, project, lock);
+                    } catch (Exception e) {
+                        ctx.error("jdk", e.getMessage() == null
+                                ? e.getClass().getSimpleName() : e.getMessage());
+                        throw e;
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
+        // ---- compile-java -----------------------------------------------
+        Path classes = target.resolve("classes");
+        Phase compileJava = Phase.builder("compile-java")
+                .label("Compiling")
+                .kind(PhaseKind.CPU)
+                .requires("parse-build", "sync-deps", "ensure-jdk")
                 .scope(0)
                 .execute(ctx -> {
                     List<Path> sources = javaSources(ctx);
@@ -177,33 +274,24 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                     ctx.updateScope(sources.size());
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
-
                     boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-
-                    // Layer 1: maven-style mtime skip.
-                    if (!noCache && dev.jkbuild.task.FreshnessStamp.isFresh(classes, sources, classpath)) {
+                    if (!noCache && dev.jkbuild.task.FreshnessStamp.isFresh(
+                            classes, sources, classpath)) {
                         ctx.label("up to date");
                         ctx.put(BUILD_OUTCOME, "up-to-date");
                         ctx.progress(sources.size());
                         return;
                     }
-
                     @SuppressWarnings("unchecked")
                     List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
                     CompileRequest request = CompileRequest.builder()
-                            .sources(sources)
-                            .classpath(classpath)
-                            .outputDir(classes)
-                            .release(ctx.require(RELEASE))
-                            .extraOptions(javacArgs)
-                            .javaHome(ctx.require(JAVA_HOME))
+                            .sources(sources).classpath(classpath)
+                            .outputDir(classes).release(ctx.require(RELEASE))
+                            .extraOptions(javacArgs).javaHome(ctx.require(JAVA_HOME))
                             .build();
-
                     String taskId = "compile-main";
                     String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
                     ctx.put(ACTION_KEY, actionKey);
-
-                    // Layer 2: action cache lookup.
                     java.util.Optional<ActionCache.ActionRecord> cached =
                             noCache ? java.util.Optional.empty() : actionCache.lookup(actionKey);
                     if (cached.isPresent()) {
@@ -213,9 +301,6 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                         ctx.progress(sources.size());
                         return;
                     }
-
-                    // Layer 3: real compile with CasPrewriter streaming
-                    // .class files into the CAS in parallel.
                     ctx.label("compiling " + sources.size() + " sources");
                     var prewriter = dev.jkbuild.task.CasPrewriter.watching(cas, classes);
                     CompileResult result;
@@ -225,14 +310,10 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                     } finally {
                         precomputedOutputs = prewriter.finish();
                     }
-                    for (CompileResult.Diagnostic d : result.diagnostics()) {
-                        // Surface each diagnostic both to the event log
-                        // (structured) and stderr (the existing CLI shape).
+                    for (CompileResult.Diagnostic d : result.diagnostics())
                         ctx.error("javac", d.render());
-                    }
-                    if (!result.success() || result.hasErrors()) {
+                    if (!result.success() || result.hasErrors())
                         throw new RuntimeException("javac reported errors");
-                    }
                     actionCache.storeWithOutputs(taskId, actionKey,
                             ActionKey.snapshotInputs(request), precomputedOutputs);
                     ctx.put(BUILD_OUTCOME, "compiled");
@@ -240,16 +321,15 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                 })
                 .build();
 
+        // ---- compile-kotlin ---------------------------------------------
         Phase compileKotlin = Phase.builder("compile-kotlin")
+                .label("Kotlin")
                 .kind(PhaseKind.CPU)
                 .requires("compile-java")
                 .scope(0)
                 .execute(ctx -> {
                     List<Path> ktSources = kotlinSources(ctx);
-                    if (ktSources.isEmpty()) {
-                        ctx.label("no Kotlin sources");
-                        return;
-                    }
+                    if (ktSources.isEmpty()) { ctx.label("no Kotlin sources"); return; }
                     ctx.updateScope(ktSources.size());
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
@@ -259,12 +339,10 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                     Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
                     KotlincResult ktResult = new KotlincDriver().compile(
                             KotlincRequest.builder()
-                                    .sources(ktSources)
-                                    .classpath(kotlincCp)
+                                    .sources(ktSources).classpath(kotlincCp)
                                     .outputDir(classes)
                                     .jvmTarget(CompileCommand.kotlinJvmTarget(ctx.require(RELEASE)))
-                                    .kotlinHome(kotlinHome)
-                                    .build());
+                                    .kotlinHome(kotlinHome).build());
                     if (!ktResult.success()) {
                         ctx.error("kotlinc", ktResult.output());
                         throw new RuntimeException("kotlinc reported errors");
@@ -273,25 +351,104 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                 })
                 .build();
 
+        // ---- copy-resources ---------------------------------------------
         Phase copyResources = Phase.builder("copy-resources")
+                .label("Resources")
                 .kind(PhaseKind.CPU)
                 .requires("compile-kotlin")
                 .scope(1)
                 .execute(ctx -> {
                     Path resMain = dir.resolve("src/main/resources");
-                    if (!Files.exists(resMain)) {
-                        ctx.label("no resources");
-                        return;
-                    }
+                    if (!Files.exists(resMain)) { ctx.label("no resources"); return; }
                     ctx.label("copy resources");
                     copyResources(resMain, classes);
                     ctx.progress(1);
                 })
                 .build();
 
-        Phase packageJar = Phase.builder("package-jar")
+        // ---- compile-test -----------------------------------------------
+        Phase compileTest = Phase.builder("compile-test")
+                .label("Test compile")
                 .kind(PhaseKind.CPU)
-                .requires("copy-resources")
+                .requires("compile-java", "sync-deps")
+                .scope(1)
+                .execute(ctx -> {
+                    Path srcTest = dir.resolve("src/test/java");
+                    if (CompileCommand.collectJavaSources(srcTest).isEmpty()) {
+                        ctx.label("no test sources");
+                        ctx.put(NO_TEST_SOURCES, true);
+                        ctx.progress(1);
+                        return;
+                    }
+                    @SuppressWarnings("unchecked")
+                    List<Path> compileCp = (List<Path>) ctx.require(COMPILE_TEST_CP);
+                    List<Path> fullCp = new ArrayList<>();
+                    fullCp.add(ctx.require(MAIN_CLASSES));
+                    fullCp.addAll(compileCp);
+                    @SuppressWarnings("unchecked")
+                    List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
+                    boolean ok = TestCommand.compileWithCache(
+                            ctx, "compile-test", srcTest,
+                            ctx.require(TEST_CLASSES), fullCp,
+                            ctx.require(RELEASE), javacArgs,
+                            ctx.require(JAVA_HOME), cas, cache);
+                    if (!ok) throw new RuntimeException("test compile failed");
+                    ctx.progress(1);
+                })
+                .build();
+
+        // ---- run-tests --------------------------------------------------
+        Phase runTests = Phase.builder("run-tests")
+                .label("Testing")
+                .kind(PhaseKind.IO)
+                .requires("compile-test", "copy-resources")
+                .scope(0)
+                .execute(ctx -> {
+                    if (ctx.get(NO_TEST_SOURCES).orElse(false)) {
+                        ctx.label("no tests to run");
+                        return;
+                    }
+                    @SuppressWarnings("unchecked")
+                    List<Path> testRtCp = (List<Path>) ctx.require(TEST_RUNTIME_CP);
+                    List<Path> runtimeCp = new ArrayList<>();
+                    runtimeCp.add(ctx.require(MAIN_CLASSES));
+                    runtimeCp.addAll(testRtCp);
+
+                    var progress = dev.jkbuild.cli.tui.TestProgress.start(System.out);
+                    TestProgressListener listener = TestCommand.bridgeListener(ctx, progress, workerCount);
+                    JUnitLauncher.Result result;
+                    try {
+                        result = new JUnitLauncher().run(
+                                ctx.require(JAVA_HOME), ctx.require(TEST_CLASSES),
+                                runtimeCp, cache, workerCount, listener);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        progress.writeAbove("jk build: interrupted");
+                        progress.close();
+                        ctx.error("test", "interrupted");
+                        throw new RuntimeException(e);
+                    } catch (IOException e) {
+                        progress.writeAbove("jk build: " + e.getMessage());
+                        progress.close();
+                        ctx.error("test", e.getMessage());
+                        throw e;
+                    }
+                    ctx.put(TEST_RESULT, result);
+                    if (result.allPassed()) {
+                        progress.finishSuccess();
+                    } else {
+                        progress.finishFailure(result.failed());
+                        throw new RuntimeException(result.failed() + " test failure"
+                                + (result.failed() == 1 ? "" : "s"));
+                    }
+                })
+                .build();
+
+        // ---- package-jar ------------------------------------------------
+        Phase packageJar = Phase.builder("package-jar")
+                .label("Packaging")
+                .kind(PhaseKind.CPU)
+                .requires("copy-resources", "run-tests")
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
@@ -299,25 +456,23 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                             project.project().artifact() + "-"
                                     + project.project().version() + ".jar");
                     ctx.label("package " + jarPath.getFileName());
-                    JarPackager.JarRequest jarRequest = JarPackager.JarRequest.of(classes, jarPath);
+                    JarPackager.JarRequest jarRequest =
+                            JarPackager.JarRequest.of(classes, jarPath);
                     String mainClass = project.project().main();
-                    if (mainClass != null && !mainClass.isBlank()) {
+                    if (mainClass != null && !mainClass.isBlank())
                         jarRequest = jarRequest.withMainClass(mainClass);
-                    }
                     new JarPackager().packageJar(jarRequest);
                     ctx.put(JAR_PATH, jarPath);
                     ctx.progress(1);
                 })
                 .build();
 
+        // ---- write-stamp ------------------------------------------------
         Phase writeStamp = Phase.builder("write-stamp")
                 .requires("compile-java")
                 .scope(1)
                 .execute(ctx -> {
                     String outcome = ctx.get(BUILD_OUTCOME).orElse("");
-                    // Don't touch the stamp on the up-to-date / no-sources
-                    // paths — the existing stamp is still valid; rewriting
-                    // it would just bump mtimes for no reason.
                     if ("up-to-date".equals(outcome) || "no-sources".equals(outcome)) {
                         ctx.label("stamp unchanged");
                         ctx.progress(1);
@@ -329,57 +484,95 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
                     String actionKey = ctx.get(ACTION_KEY).orElse("");
-                    dev.jkbuild.task.FreshnessStamp.write(classes, "compile-main",
-                            actionKey, sources, classpath);
+                    dev.jkbuild.task.FreshnessStamp.write(
+                            classes, "compile-main", actionKey, sources, classpath);
                     ctx.progress(1);
                 })
                 .build();
 
-        Goal goal = Goal.builder("build")
+        // ---- assemble goal ----------------------------------------------
+        Goal.Builder goalBuilder = Goal.builder("build")
                 .addPhase(parseBuild)
+                .addPhase(syncDeps)
+                .addPhase(ensureJdk)
                 .addPhase(compileJava)
                 .addPhase(compileKotlin)
                 .addPhase(copyResources)
+                .addPhase(compileTest)
+                .addPhase(runTests)
                 .addPhase(packageJar)
-                .addPhase(writeStamp)
-                .build();
+                .addPhase(writeStamp);
+
+        // native = "always" → add native-image phase after package-jar
+        try {
+            JkBuild project = JkBuildParser.parse(buildFile);
+            if (project.project().nativeMode() == JkBuild.NativeMode.ALWAYS) {
+                goalBuilder.addPhase(buildNativePhase(dir, cache, lockFile));
+            }
+        } catch (Exception ignored) {}
+
+        Goal goal = goalBuilder.build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
 
         if (result.success()) {
             printSuccessSummary(goal, result);
-            // Opportunistic cache prune (no-op when auto-prune is off).
             try {
-                var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(
-                        dir.resolve("jk.toml"));
+                var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(buildFile);
                 dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
-                        dev.jkbuild.task.CachePruneScheduler.maybeRun(
-                                cacheConfig, cache, exe));
-            } catch (IOException ignored) {
-                // Cache hygiene is never load-bearing.
-            }
+                        dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+            } catch (IOException ignored) {}
             return 0;
         }
-        // Failure UX is owned by the listener (✗ Error line + Failed bar);
-        // commands just translate codes into exit status.
+        // Test failures get exit 4; other failures exit 1.
+        var testResult = goal.get(TEST_RESULT).orElse(null);
+        if (testResult != null && !testResult.allPassed()) return 4;
         return 1;
     }
 
-    /**
-     * Walk up the workspace looking for a jk.lock — same fallback the
-     * old monolithic command did, kept outside the goal because "no
-     * lockfile anywhere" is a misuse error, not a phase failure.
-     */
-    private static Path resolveLockFile(Path dir) throws IOException {
-        Path local = dir.resolve("jk.lock");
-        if (Files.exists(local)) return local;
-        var workspaceRoot = WorkspaceLocator.findRoot(dir);
-        if (workspaceRoot.isPresent()) {
-            Path candidate = workspaceRoot.get().resolve("jk.lock");
-            if (Files.exists(candidate)) return candidate;
-        }
-        return null;
+    // ---- native-image phase factory ------------------------------------
+
+    private static Phase buildNativePhase(Path dir, Path cache, Path lockFile) {
+        return Phase.builder("native-image")
+                .label("Native")
+                .kind(PhaseKind.IO)
+                .requires("package-jar")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("native-image compilation");
+                    // Delegate to NativeCommand logic via a subprocess-style call.
+                    // NativeCommand reads jk.toml + the existing jar and runs
+                    // GraalVM native-image. We wire progress via ctx.label.
+                    JkBuild project = ctx.require(PROJECT);
+                    Path mainJar = dir.resolve("target").resolve(
+                            project.project().artifact() + "-"
+                                    + project.project().version() + ".jar");
+                    if (!Files.exists(mainJar)) {
+                        ctx.error("native", "jar not found at " + mainJar);
+                        throw new RuntimeException("missing main jar for native-image");
+                    }
+                    String mainClass = project.project().main();
+                    if (mainClass == null || mainClass.isBlank()) {
+                        ctx.error("native", "native = \"always\" requires [project] main to be set");
+                        throw new RuntimeException("missing main class");
+                    }
+                    ctx.label("running native-image for " + project.project().artifact());
+                    // Re-use NativeCommand.runNativeImage if accessible, or
+                    // invoke the same GraalVM driver inline here.
+                    // For now, delegate to a fresh NativeCommand invocation via
+                    // Jk.execute so we don't duplicate the driver logic.
+                    int rc = Jk.execute("native", "-C", dir.toString(),
+                            "--cache-dir", cache.toString());
+                    if (rc != 0) {
+                        ctx.error("native", "native-image exited with code " + rc);
+                        throw new RuntimeException("native-image failed");
+                    }
+                    ctx.progress(1);
+                })
+                .build();
     }
+
+    // ---- success summary -----------------------------------------------
 
     private void printSuccessSummary(Goal goal, GoalResult result) {
         if (global.outputIsJson()) return;
@@ -400,8 +593,7 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
 
         if (outcome.startsWith("cache-hit:")) {
             String jarLabel = goal.get(JAR_PATH)
-                    .map(p -> p.getFileName().toString())
-                    .orElse("");
+                    .map(p -> p.getFileName().toString()).orElse("");
             String suffix = jarLabel.isEmpty() ? "" : " " + jarLabel;
             System.out.println(check + " " + built + suffix + " " + inTime);
             return;
@@ -425,6 +617,19 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
         return hours + "h " + minutes + "m " + seconds + "s";
     }
 
+    // ---- helpers -------------------------------------------------------
+
+    private static Path resolveLockFile(Path dir) throws IOException {
+        Path local = dir.resolve("jk.lock");
+        if (Files.exists(local)) return local;
+        var workspaceRoot = WorkspaceLocator.findRoot(dir);
+        if (workspaceRoot.isPresent()) {
+            Path candidate = workspaceRoot.get().resolve("jk.lock");
+            if (Files.exists(candidate)) return candidate;
+        }
+        return null;
+    }
+
     @SuppressWarnings("unchecked")
     private static List<Path> javaSources(dev.jkbuild.run.PhaseContext ctx) {
         return (List<Path>) ctx.get(JAVA_SOURCES).orElse(List.of());
@@ -435,13 +640,13 @@ public final class BuildCommand implements Callable<Integer> {    @Option(names 
         return (List<Path>) ctx.get(KOTLIN_SOURCES).orElse(List.of());
     }
 
-    private static void copyResources(Path resourceDir, Path classes) throws IOException {
+    private static void copyResources(Path resourceDir, Path classesDir) throws IOException {
         if (!Files.exists(resourceDir)) return;
         try (Stream<Path> stream = Files.walk(resourceDir)) {
             for (Path source : (Iterable<Path>) stream::iterator) {
                 if (Files.isDirectory(source)) continue;
                 Path relative = resourceDir.relativize(source);
-                Path target = classes.resolve(relative);
+                Path target   = classesDir.resolve(relative);
                 Files.createDirectories(target.getParent());
                 Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             }

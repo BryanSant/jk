@@ -157,13 +157,15 @@ class JkBuildParserTest {
     }
 
     @Test
-    void source_only_dep_requires_matching_sources_entry() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+    void source_only_dep_resolves_to_latest() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies]
                 main = ["com.foo:bar"]
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("no version and no matching [sources]");
+                """);
+        var dep = parsed.dependencies().of(dev.jkbuild.model.Scope.MAIN).getFirst();
+        assertThat(dep.module()).isEqualTo("com.foo:bar");
+        assertThat(dep.version()).isInstanceOf(dev.jkbuild.model.VersionSelector.Latest.class);
+        assertThat(dep.pinned()).isFalse();
     }
 
     @Test

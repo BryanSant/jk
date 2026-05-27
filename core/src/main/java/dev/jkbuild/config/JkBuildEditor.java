@@ -50,7 +50,18 @@ public final class JkBuildEditor {
     private JkBuildEditor() {}
 
     public static String addDependency(String content, Scope scope, String module, String versionLiteral) {
-        String entry = module + ":" + versionLiteral;
+        return addDependency(content, scope, module, versionLiteral, false);
+    }
+
+    /**
+     * @param floating {@code true} → writes {@code module@version} ({@code @}-form,
+     *                 floating). {@code false} → writes {@code module:version}
+     *                 ({@code :}-form, pinned). Pass {@code versionLiteral = "latest"}
+     *                 with {@code floating = true} for a no-version dep.
+     */
+    public static String addDependency(String content, Scope scope, String module,
+                                       String versionLiteral, boolean floating) {
+        String entry = floating ? module + "@" + versionLiteral : module + ":" + versionLiteral;
         List<String> lines = splitPreservingTerminator(content);
 
         if (containsCoord(lines, scope, module)) {

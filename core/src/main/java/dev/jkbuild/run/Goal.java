@@ -409,6 +409,20 @@ public final class Goal {
             return this;
         }
 
+        /**
+         * Append every phase from {@code more} whose name is not already
+         * present — ordered-set semantics. Use this to compose a goal from
+         * multiple phase sequences without duplicate phases.
+         */
+        public Builder addAllPhases(java.util.Collection<Phase> more) {
+            java.util.Set<String> existing = new java.util.HashSet<>();
+            for (Phase p : phases) existing.add(p.name());
+            for (Phase p : more) {
+                if (existing.add(p.name())) phases.add(p);
+            }
+            return this;
+        }
+
         public Builder addListener(GoalListener listener) {
             listeners.add(listener);
             return this;

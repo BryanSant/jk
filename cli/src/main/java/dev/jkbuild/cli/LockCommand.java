@@ -110,24 +110,74 @@ public final class LockCommand implements Callable<Integer> {
                 })
                 .build();
 
+        // Captured by both the scope supplier and the onTotal callback so the
+        // phase body only adds the delta between the up-front estimate and
+        // the actual package count, instead of adding the full actual count.
+        java.util.concurrent.atomic.AtomicInteger resolveEstimate =
+                new java.util.concurrent.atomic.AtomicInteger(0);
+
         Phase resolve = Phase.builder("resolve")
+                .label("Resolving")
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
-                .scope(1)
+                .scope(() -> {
+                    // Best case: existing lockfile is accurate (re-runs).
+                    try {
+                        int n = dev.jkbuild.lock.LockfileReader.read(lockFile).packages().size();
+                        if (n > 0) { resolveEstimate.set(n); return n; }
+                    } catch (Exception ignored) {}
+                    // Fallback: declared deps × rough transitive expansion.
+                    try {
+                        int declared = JkBuildParser.parse(buildFile)
+                                .dependencies().byScope().values().stream()
+                                .mapToInt(List::size).sum();
+                        int estimate = Math.max(5, declared * 8);
+                        resolveEstimate.set(estimate);
+                        return estimate;
+                    } catch (Exception ignored) {}
+                    resolveEstimate.set(20);
+                    return 20;
+                })
                 .execute(ctx -> {
-                    ctx.label("resolve dependencies");
+                    ctx.label("Resolving");
                     JkBuild effective = ctx.require(EFFECTIVE);
                     RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, new Cas(cache));
                     LockOrchestrator orchestrator = new LockOrchestrator(repos);
+                    dev.jkbuild.resolver.ResolveObserver observer =
+                            new dev.jkbuild.resolver.ResolveObserver() {
+                        @Override
+                        public void onTotal(int total) {
+                            // Only add the delta so the pre-allocated estimate
+                            // slots aren't double-counted in the denominator.
+                            int delta = total - resolveEstimate.get();
+                            if (delta > 0) ctx.updateScope(delta);
+                        }
+                        @Override
+                        public void onPackage(String module, String version) {
+                            int colon = module.indexOf(':');
+                            String group    = module.substring(0, colon);
+                            String artifact = module.substring(colon + 1);
+                            String label = "Resolved "
+                                    + dev.jkbuild.cli.tui.Theme.colorize(group,
+                                            dev.jkbuild.cli.tui.Theme.activeStep())
+                                    + ":"
+                                    + dev.jkbuild.cli.tui.Theme.colorize(artifact,
+                                            dev.jkbuild.cli.tui.Theme.activeStep().bold())
+                                    + ":"
+                                    + dev.jkbuild.cli.tui.Theme.colorize(version,
+                                            dev.jkbuild.cli.tui.Theme.warning());
+                            ctx.label(label);
+                            ctx.progress(1);
+                        }
+                    };
                     try {
                         Lockfile lock = orchestrator.lock(
-                                effective, Jk.VERSION, features, !noDefaultFeatures);
+                                effective, Jk.VERSION, features, !noDefaultFeatures, observer);
                         ctx.put(LOCKFILE, lock);
                     } catch (Exception e) {
                         ctx.error("resolve", e.getMessage());
                         throw new RuntimeException(e);
                     }
-                    ctx.progress(1);
                 })
                 .build();
 
@@ -156,13 +206,20 @@ public final class LockCommand implements Callable<Integer> {
         }
 
         if (!global.outputIsJson()) {
-            if (memberCount.get() > 0) {
-                System.out.println("Workspace: " + memberCount.get() + " member"
-                        + (memberCount.get() == 1 ? "" : "s"));
-            }
             Lockfile lock = goal.get(LOCKFILE).orElseThrow();
-            System.out.println("Wrote " + lockFile + " (" + lock.packages().size() + " package"
-                    + (lock.packages().size() == 1 ? "" : "s") + ")");
+            int pkgs = lock.packages().size();
+            String check  = dev.jkbuild.cli.tui.Theme.colorize(
+                    "✓", dev.jkbuild.cli.tui.Theme.brightGreen().bold());
+            String inTime = dev.jkbuild.cli.tui.Theme.colorize(
+                    "in " + BuildCommand.fmtDuration(result.duration()),
+                    dev.jkbuild.cli.tui.Theme.darkGray());
+            int members = memberCount.get();
+            String suffix = members > 0
+                    ? " across " + (members + 1) + " workspace"
+                            + (members + 1 == 1 ? "" : "s")
+                    : "";
+            System.out.println(check + " Resolved " + pkgs + " dependenc"
+                    + (pkgs == 1 ? "y" : "ies") + suffix + " " + inTime);
         }
         return 0;
     }

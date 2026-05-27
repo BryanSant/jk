@@ -85,21 +85,31 @@ public final class LockOrchestrator {
     }
 
     /** Lock with the project's default feature selection. */
+    /** Lock with the project's default feature selection. */
     public Lockfile lock(JkBuild project, String jkVersion) throws IOException, InterruptedException {
-        return lock(project, jkVersion, List.of(), true);
+        return lock(project, jkVersion, List.of(), true, ResolveObserver.NOOP);
     }
 
-    /**
-     * Lock with an explicit feature selection. {@code featuresRequested}
-     * are added on top of the project's default feature list (gated by
-     * {@code withDefaults}). The expanded feature deps fold into the
-     * MAIN scope's roots.
-     */
     public Lockfile lock(
             JkBuild project,
             String jkVersion,
             Collection<String> featuresRequested,
             boolean withDefaults) throws IOException, InterruptedException {
+        return lock(project, jkVersion, featuresRequested, withDefaults, ResolveObserver.NOOP);
+    }
+
+    /**
+     * Lock with an explicit feature selection and a progress observer.
+     * {@link ResolveObserver#onTotal} fires once after the solver returns the
+     * full decision map; {@link ResolveObserver#onPackage} fires once per
+     * package as each artifact is fetched and recorded.
+     */
+    public Lockfile lock(
+            JkBuild project,
+            String jkVersion,
+            Collection<String> featuresRequested,
+            boolean withDefaults,
+            ResolveObserver observer) throws IOException, InterruptedException {
 
         Set<String> activated = project.features().activate(
                 new LinkedHashSet<>(featuresRequested), withDefaults);
@@ -129,6 +139,7 @@ public final class LockOrchestrator {
         }
         List<Dependency> declared = new ArrayList<>(deduped.values());
         Resolution resolution = resolver.resolve(declared);
+        observer.onTotal(resolution.modules().size());
 
         // For each scope, BFS the resolution graph from that scope's roots
         // (feature deps act as additional main-scope roots).
@@ -162,6 +173,8 @@ public final class LockOrchestrator {
                     mod.module().substring(0, colon),
                     mod.module().substring(colon + 1),
                     mod.version());
+
+            observer.onPackage(mod.module(), mod.version());
 
             String source = fallbackSource;
             String checksum = null;

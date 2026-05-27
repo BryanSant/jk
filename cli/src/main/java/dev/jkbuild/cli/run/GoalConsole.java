@@ -104,8 +104,7 @@ public final class GoalConsole {
             case JSON -> new NdjsonListener(System.out);
             case VERBOSE -> new VerboseListener(System.out, System.err);
             case AUTO -> isInteractiveTerminal()
-                    ? new ProgressBarListener(System.out, System.err,
-                            goal.phases().stream().map(dev.jkbuild.run.Phase::name).toList())
+                    ? new ProgressBarListener(System.out, System.err, goal.phases())
                     : new SilentListener(System.out, System.err);
         };
     }

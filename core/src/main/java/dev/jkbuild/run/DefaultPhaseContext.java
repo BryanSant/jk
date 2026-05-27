@@ -35,7 +35,17 @@ final class DefaultPhaseContext implements PhaseContext {
     public void updateScope(int additional) {
         if (additional <= 0) return;
         scopeGrowth.addAndGet(additional);
+        // Advance the numerator proportionally so the goal-level fraction
+        // never decreases. Without this, a phase that discovers more work
+        // mid-flight (e.g. dependency resolution finding 93 deps after scope
+        // was estimated at 0) would make the bar appear to go backwards.
+        long currentNum = goal.numeratorRef().sum();
+        long currentDen = goal.denominatorRef().sum();
+        long numAdvance = currentDen > 0
+                ? (long) Math.floor((double) additional * currentNum / currentDen)
+                : 0;
         goal.denominatorRef().add(additional);
+        if (numAdvance > 0) goal.numeratorRef().add(numAdvance);
         GoalView snap = goal.snapshot();
         goal.emit(l -> l.scopeUpdate(phase, additional, snap));
     }

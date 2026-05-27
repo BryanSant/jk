@@ -103,7 +103,8 @@ class HttpTest {
         dev.jkbuild.config.ActiveConfig.install(prev.mergedWith(new dev.jkbuild.config.JkConfig(
                 java.util.Optional.empty(), java.util.Optional.of(true),
                 java.util.Optional.empty(), java.util.Optional.empty(),
-                java.util.Optional.empty(), java.util.Optional.empty())));
+                java.util.Optional.empty(), java.util.Optional.empty(),
+                java.util.Optional.empty())));
         try {
             assertThatThrownBy(() -> http().get(base.resolve("/anything")))
                     .isInstanceOf(OfflineException.class)

@@ -284,7 +284,7 @@ public final class TestCommand implements Callable<Integer> {
      * event log has accurate scope numbers even though the visual UI
      * is owned by TestProgress.
      */
-    private static TestProgressListener bridgeListener(
+    static TestProgressListener bridgeListener(
             PhaseContext ctx,
             dev.jkbuild.cli.tui.TestProgress progress,
             int workerCount) {

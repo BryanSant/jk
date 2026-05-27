@@ -16,14 +16,16 @@ import java.util.function.IntSupplier;
 public final class Phase {
 
     private final String name;
+    private final String label;
     private final PhaseKind kind;
     private final List<String> requires;
     private final IntSupplier scope;
     private final Body body;
 
-    Phase(String name, PhaseKind kind, List<String> requires,
+    Phase(String name, String label, PhaseKind kind, List<String> requires,
           IntSupplier scope, Body body) {
         this.name = Objects.requireNonNull(name);
+        this.label = label != null ? label : name;
         this.kind = Objects.requireNonNull(kind);
         this.requires = List.copyOf(requires);
         this.scope = Objects.requireNonNull(scope);
@@ -31,6 +33,8 @@ public final class Phase {
     }
 
     public String name() { return name; }
+    /** Display label shown in the TUI progress bar. Defaults to {@link #name()}. */
+    public String label() { return label; }
     public PhaseKind kind() { return kind; }
     public List<String> requires() { return requires; }
     public int estimateScope() { return Math.max(0, scope.getAsInt()); }
@@ -51,6 +55,7 @@ public final class Phase {
 
     public static final class Builder {
         private final String name;
+        private String label;
         private PhaseKind kind = PhaseKind.SYNC;
         private final List<String> requires = new ArrayList<>();
         private IntSupplier scope = () -> 1;
@@ -59,6 +64,9 @@ public final class Phase {
         Builder(String name) {
             this.name = Objects.requireNonNull(name);
         }
+
+        /** Override the TUI display label (defaults to the phase name). */
+        public Builder label(String label) { this.label = label; return this; }
 
         public Builder kind(PhaseKind kind) { this.kind = kind; return this; }
 
@@ -81,7 +89,7 @@ public final class Phase {
         public Builder execute(Body body) { this.body = body; return this; }
 
         public Phase build() {
-            return new Phase(name, kind, requires, scope, body);
+            return new Phase(name, label, kind, requires, scope, body);
         }
     }
 }

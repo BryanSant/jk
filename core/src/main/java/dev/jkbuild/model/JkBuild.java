@@ -80,16 +80,32 @@ public record JkBuild(
      *   <li>{@code main} — fully qualified main class of a runnable project,
      *       or {@code null} for a library.</li>
      *   <li>{@code shadow} — bundle an all-in-one (shadow / fat) jar.</li>
-     *   <li>{@code nativeImage} — wire a GraalVM native-image build. Stored
-     *       under TOML key {@code native}.</li>
+     *   <li>{@code nativeMode} — controls GraalVM native-image participation.
+     *       TOML key {@code native}: absent/{@code false} → DISABLED,
+     *       {@code true} → SUPPORTED (explicit {@code jk native} only),
+     *       {@code "always"} → ALWAYS ({@code jk build} automatically
+     *       produces the binary).</li>
      * </ul>
      *
      * <p>Exactly one of {@code java}/{@code kotlin} must be set; the parser
      * enforces this. {@link #isKotlin()} is the cheap predicate.
      */
+
+    /** Controls how native-image compilation participates in the build. */
+    public enum NativeMode {
+        /** {@code native = false} or absent — no native support. */
+        DISABLED,
+        /** {@code native = true} — user must run {@code jk native} explicitly. */
+        SUPPORTED,
+        /** {@code native = "always"} — {@code jk build} automatically produces the binary. */
+        ALWAYS;
+
+        public boolean isEnabled() { return this != DISABLED; }
+    }
+
     public record Project(String group, String artifact, String version,
                           int jdk, int java, int kotlin,
-                          String main, boolean shadow, boolean nativeImage) {
+                          String main, boolean shadow, NativeMode nativeMode) {
 
         public Project {
             Objects.requireNonNull(group, "group");
@@ -105,12 +121,16 @@ public record JkBuild(
                 throw new IllegalArgumentException(
                         "project must set exactly one of `java` or `kotlin`, not both");
             }
+            if (nativeMode == null) nativeMode = NativeMode.DISABLED;
         }
 
         /** Library project — no main, no shadow, no native; defaults to a Java project. */
         public Project(String group, String artifact, String version, int jdk) {
-            this(group, artifact, version, jdk, jdk, 0, null, false, false);
+            this(group, artifact, version, jdk, jdk, 0, null, false, NativeMode.DISABLED);
         }
+
+        /** Backward-compat: true when native mode is not DISABLED. */
+        public boolean nativeImage() { return nativeMode != NativeMode.DISABLED; }
 
         /** True when an explicit {@code main} class is set. */
         public boolean isRunnable() {
