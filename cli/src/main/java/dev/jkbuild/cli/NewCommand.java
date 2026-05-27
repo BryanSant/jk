@@ -15,7 +15,6 @@ import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.JkThreads;
 import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import picocli.CommandLine.Command;
@@ -145,7 +144,7 @@ public final class NewCommand implements Callable<Integer> {
                             .supplyAsync(NewCommand::fetchCatalogQuiet, JkThreads.io());
                     Terminal terminal;
                     try {
-                        terminal = TerminalBuilder.builder().system(true).build();
+                        terminal = Wizard.openTerminal();
                     } catch (IOException e) {
                         ctx.error("terminal", "failed to open terminal: " + e.getMessage());
                         throw new RuntimeException(e);

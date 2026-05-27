@@ -23,32 +23,31 @@ import java.nio.file.Path;
 public final class GlobalOptions {
 
     @Option(names = {"-q", "--quiet"},
-            description = "Suppress informational output.")
+            description = "Suppress informational output")
     public boolean quiet;
 
     @Option(names = {"-v", "--verbose"},
-            description = "Print additional diagnostic output.")
+            description = "Print additional diagnostic output")
     public boolean verbose;
 
-    @Option(names = "--color", paramLabel = "<COLOR_CHOICE>",
-            description = "When to colorize output: auto, always, never. "
-                    + "[env: NO_COLOR, JK_COLOR]")
+    @Option(names = "--color", paramLabel = "<WHEN>",
+            description = "When to colorize output: auto, always, never")
     public String color;
 
     @Option(names = "--offline",
-            description = "Disable network access for this run. [env: JK_OFFLINE]")
+            description = "Disable network access for this run")
     public boolean offline;
 
     @Option(names = "--no-cache",
-            description = "Bypass all caches for this run. [env: JK_NO_CACHE]")
+            description = "Bypass all caches for this run")
     public boolean noCache;
 
     @Option(names = "--no-progress",
-            description = "Disable all progress bars and spinners. [env: JK_NO_PROGRESS]")
+            description = "Disable all progress bars and spinners")
     public boolean noProgress;
 
     @Option(names = "--output", paramLabel = "<FORMAT>",
-            description = "Output format: text (default) or json. [env: JK_OUTPUT]")
+            description = "Output format: text (default) or json")
     public String output;
 
     /**
@@ -65,16 +64,16 @@ public final class GlobalOptions {
         return resolved != null && resolved.equalsIgnoreCase("json");
     }
 
-    @Option(names = "--config-file", paramLabel = "<CONFIG_FILE>",
-            description = "Use this jk.toml for configuration. [env: JK_CONFIG_FILE]")
+    @Option(names = "--config-file", paramLabel = "<FILE>",
+            description = "Use this jk.toml for configuration")
     public Path configFile;
 
     @Option(names = "--no-config",
-            description = "Skip jk.toml discovery; use built-in defaults only. [env: JK_NO_CONFIG]")
+            description = "Skip jk.toml discovery; use built-in defaults only")
     public boolean noConfig;
 
-    @Option(names = {"-C", "--directory"}, paramLabel = "<DIRECTORY>",
-            description = "Change to this directory before running the command. [env: JK_WORKING_DIR]")
+    @Option(names = {"-C", "--directory"}, paramLabel = "<DIR>",
+            description = "Change to this directory before running the command")
     public Path directory;
 
     /**
@@ -94,10 +93,10 @@ public final class GlobalOptions {
     }
 
     @Option(names = {"-h", "--help"}, usageHelp = true,
-            description = "Show this help message and exit.")
+            description = "Show this help message and exit")
     public boolean help;
 
     @Option(names = {"-V", "--version"}, versionHelp = true,
-            description = "Print version information and exit.")
+            description = "Print version information and exit")
     public boolean version;
 }

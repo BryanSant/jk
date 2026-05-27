@@ -4,6 +4,7 @@ package dev.jkbuild.cli;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.tui.Theme;
+import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.IntellijJdkDir;
@@ -17,7 +18,6 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -163,14 +163,14 @@ public final class JdkUninstallCommand implements Callable<Integer> {
 
         Terminal terminal;
         try {
-            terminal = TerminalBuilder.builder().system(true).build();
+            terminal = Wizard.openTerminal();
         } catch (IOException e) {
             throw new IOException("failed to open terminal: " + e.getMessage(), e);
         }
         // Keep terminal open through confirmation + deletion: JLine's
         // system(true) terminal owns the native FD 0, and `terminal.close()`
         // closes it. Reading System.in after that throws "Stream Closed".
-        // The wizard restores cooked mode before returning, so a plain
+        // Wizard.run's finally force-restores ECHO+ICANON on, so a plain
         // System.in readLine inside this block works as expected.
         try (terminal) {
             Optional<List<JdkHit>> outcome =

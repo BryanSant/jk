@@ -90,7 +90,8 @@ public final class Jk implements Runnable {
             Map.entry("sh", List.of("shell")),
             Map.entry("bash", List.of("shell")),
             Map.entry("nativeCompile", List.of("native")),    // Gradle :nativeCompile task
-            Map.entry("verify-target", List.of("verify-build")),
+            Map.entry("verify-target", List.of("verify")),    // Maven's `verify` phase output naming
+            Map.entry("verify-build", List.of("verify")),     // renamed verb; verify-build kept for back-compat
             Map.entry("check", List.of("compile")));          // renamed verb; check kept for back-compat
 
     public static void main(String[] args) {
@@ -100,6 +101,9 @@ public final class Jk implements Runnable {
 
     /** Run jk with the given argv. The first positional is rewritten if it's a known alias. */
     public static int execute(String... args) {
+        // `--list` is an undocumented synonym for `--help`. Rewrite it before any
+        // arg scan so both the config loader and picocli only ever see `--help`.
+        args = rewriteListToHelp(args);
         // Resolve configuration first — picocli's subsequent option parsing only
         // determines explicit flag values; defaults still need to come from the
         // env / project jk.toml / user / system layers via JkConfigLoader.
@@ -210,6 +214,22 @@ public final class Jk implements Runnable {
             System.err.println("jk: warning: could not load config (" + e.getMessage() + "); using defaults.");
             ActiveConfig.install(JkConfig.empty());
         }
+    }
+
+    /**
+     * Rewrite any {@code --list} occurrence to {@code --help}. {@code --list} is
+     * an undocumented alias so muscle memory from tools like {@code rustup} /
+     * {@code cargo} keeps working; downstream code never sees it.
+     */
+    static String[] rewriteListToHelp(String[] args) {
+        String[] out = null;
+        for (int i = 0; i < args.length; i++) {
+            if ("--list".equals(args[i])) {
+                if (out == null) out = args.clone();
+                out[i] = "--help";
+            }
+        }
+        return out != null ? out : args;
     }
 
     static String[] rewriteAlias(String[] args) {
@@ -412,21 +432,38 @@ public final class Jk implements Runnable {
     private record CommandGroup(String heading, List<String> names) {}
 
     private static final List<CommandGroup> COMMAND_GROUPS = List.of(
+            new CommandGroup("Build commands:", List.of(
+                    "build", "run", "clean", "image",
+                    "compile", "test", "native",
+                    "install", "publish")),
             new CommandGroup("Project commands:", List.of(
                     "new", "init",
                     "add", "remove",
                     "lock", "update", "sync",
+                    "deny",
                     "tree", "why",
-                    "compile", "build", "test", "run", "clean",
                     "explain",
-                    "install", "publish", "image", "native",
-                    "audit", "deny", "verify-build")),
+                    "audit",
+                    "verify")),
             new CommandGroup("Toolchain commands:", List.of(
                     "jdk", "tool", "shell", "activate", "deactivate")),
             new CommandGroup("Interop commands:", List.of(
                     "import", "mvn", "gradle", "export")),
             new CommandGroup("System commands:", List.of(
                     "doctor", "cache")));
+
+    /**
+     * Curated subset of verbs shown when the user runs bare {@code jk}.
+     * Goal: cover the day-to-day verbs without overwhelming first-time users.
+     * The full screen is still one keystroke away via {@code --help}.
+     */
+    private static final List<CommandGroup> SHORT_COMMAND_GROUPS = List.of(
+            new CommandGroup("Build commands:", List.of(
+                    "build", "run", "clean", "image", "native", "install", "publish")),
+            new CommandGroup("Project commands:", List.of(
+                    "new", "init", "add", "remove", "lock", "update")),
+            new CommandGroup("Toolchain commands:", List.of(
+                    "jdk", "tool", "shell", "activate")));
 
     private static String renderGroupedSubcommands(Help help) {
         // Help.subcommands() keys aliased entries as "name, alias" — index by
@@ -439,7 +476,7 @@ public final class Jk implements Runnable {
             byName.put(name, sub);
             width = Math.max(width, name.length());
         }
-        width += 2;
+        width += 4;
 
         boolean ansi = help.colorScheme().ansi().enabled();
         Set<String> placed = new LinkedHashSet<>();
@@ -447,14 +484,11 @@ public final class Jk implements Runnable {
         String nl = System.lineSeparator();
         // Separate this section from the preceding options block.
         out.append(nl);
-        boolean first = true;
         for (CommandGroup group : COMMAND_GROUPS) {
             List<String> visible = group.names().stream()
                     .filter(byName::containsKey)
                     .toList();
             if (visible.isEmpty()) continue;
-            if (!first) out.append(nl);
-            first = false;
             out.append(brightGreen(group.heading(), ansi)).append(nl);
             for (String name : visible) {
                 appendCommandRow(out, name, byName.get(name), width, ansi);
@@ -467,7 +501,6 @@ public final class Jk implements Runnable {
                 .sorted()
                 .toList();
         if (!leftover.isEmpty()) {
-            if (!first) out.append(nl);
             out.append(brightGreen("Shell integration commands:", ansi)).append(nl);
             for (String name : leftover) {
                 appendCommandRow(out, name, byName.get(name), width, ansi);
@@ -494,17 +527,26 @@ public final class Jk implements Runnable {
     }
 
     /**
-     * "{@code <name> <COMMAND> [OPTIONS]}" — name is bold+bright-cyan, the rest is plain
+     * "{@code <name> [...args] [OPTIONS]}" — name is bold+bright-cyan, the rest is plain
      * bright-cyan. Replaces picocli's auto-generated synopsis (which would list every
-     * registered flag) with a fixed, abstract form.
+     * registered flag) with a fixed, abstract form. Parents render as
+     * {@code <name> <COMMAND> [OPTIONS]}; leaves include any visible positional
+     * parameters in declaration order before {@code [OPTIONS]}.
      */
     private static String renderSynopsis(Help help) {
         boolean ansi = help.colorScheme().ansi().enabled();
         String name = help.commandSpec().qualifiedName();
-        // Parents have subcommands → `<name> <COMMAND> [OPTIONS]`;
-        // leaves don't → `<name> [OPTIONS]`.
         boolean isLeaf = help.commandSpec().subcommands().isEmpty();
-        String suffix = isLeaf ? " [OPTIONS]" : " <COMMAND> [OPTIONS]";
+        StringBuilder suffix = new StringBuilder();
+        if (!isLeaf) {
+            suffix.append(" <COMMAND>");
+        } else {
+            for (var p : help.commandSpec().positionalParameters()) {
+                if (p.hidden()) continue;
+                suffix.append(" ").append(p.paramLabel());
+            }
+        }
+        suffix.append(" [OPTIONS]");
         String nl = System.lineSeparator();
         if (ansi) {
             return "\033[1;96m" + name + "\033[0m\033[96m" + suffix + "\033[0m" + nl;
@@ -605,6 +647,13 @@ public final class Jk implements Runnable {
     }
 
     /**
+     * Option name aliases that still parse but are kept out of {@code --help}.
+     * Lets us retire short flags from the help screen without breaking users
+     * (or tests) that already depend on them.
+     */
+    private static final Set<String> HIDDEN_OPTION_NAMES = Set.of("-C");
+
+    /**
      * Format a list of options as `  -x, --xx <param>  description` rows.
      * Name block is bold-cyan; param label (when present) is plain cyan;
      * description is unstyled. Boolean flags (arity 0) skip the label.
@@ -617,7 +666,9 @@ public final class Jk implements Runnable {
         List<Row> rows = new ArrayList<>(options.size());
         int width = 0;
         for (var opt : options) {
-            String namePart = String.join(", ", opt.names());
+            String namePart = java.util.Arrays.stream(opt.names())
+                    .filter(n -> !HIDDEN_OPTION_NAMES.contains(n))
+                    .collect(java.util.stream.Collectors.joining(", "));
             String labelPart = (opt.arity().max() > 0 && opt.paramLabel() != null && !opt.paramLabel().isEmpty())
                     ? opt.paramLabel()
                     : "";
@@ -625,7 +676,7 @@ public final class Jk implements Runnable {
             rows.add(row);
             width = Math.max(width, row.width());
         }
-        width += 2; // gutter between name/label block and description
+        width += 3; // gutter between name/label block and description
 
         var sb = new StringBuilder();
         String nl = System.lineSeparator();
@@ -753,9 +804,60 @@ public final class Jk implements Runnable {
 
     @Override
     public void run() {
-        // No subcommand: print help via the active CommandLine so the grouped
-        // subcommand renderer registered in newCommandLine() is used. A fresh
-        // `new CommandLine(this)` would bypass that customization.
-        spec.commandLine().usage(System.out);
+        // No subcommand: print the curated short-help screen. The full screen
+        // (every verb, every global option) is one keystroke away via --help.
+        boolean ansi = spec.commandLine().getColorScheme().ansi().enabled();
+        printShortHelp(spec, System.out, ansi);
+    }
+
+    /**
+     * Render the abbreviated help shown when the user runs bare {@code jk}.
+     * Lists a curated subset of verbs (see {@link #SHORT_COMMAND_GROUPS}) plus
+     * a "More commands:" footer pointing at {@code jk --help}. Reuses the
+     * bright-green heading / bright-cyan name styling from the full screen.
+     */
+    static void printShortHelp(CommandSpec rootSpec, java.io.PrintStream out, boolean ansi) {
+        for (String line : rootSpec.usageMessage().description()) {
+            out.println(line);
+        }
+        out.println();
+        String qualifiedName = rootSpec.qualifiedName();
+        if (ansi) {
+            out.println("\033[1;92mUsage:\033[0m \033[1;96m" + qualifiedName
+                    + "\033[0m\033[96m <COMMAND> [OPTIONS]\033[0m");
+        } else {
+            out.println("Usage: " + qualifiedName + " <COMMAND> [OPTIONS]");
+        }
+        out.println();
+
+        Map<String, CommandLine> subs = rootSpec.subcommands();
+        int nameWidth = 0;
+        for (CommandGroup group : SHORT_COMMAND_GROUPS) {
+            for (String n : group.names()) {
+                if (subs.containsKey(n)) nameWidth = Math.max(nameWidth, n.length());
+            }
+        }
+        int descCol = 2 + nameWidth + 4;
+
+        for (CommandGroup group : SHORT_COMMAND_GROUPS) {
+            out.println(brightGreen(group.heading(), ansi));
+            for (String n : group.names()) {
+                CommandLine sub = subs.get(n);
+                if (sub == null) continue;
+                if (sub.getCommandSpec().usageMessage().hidden()) continue;
+                String[] desc = sub.getCommandSpec().usageMessage().description();
+                String firstLine = desc.length > 0 ? desc[0] : "";
+                String padding = " ".repeat(descCol - 2 - n.length());
+                out.println("  " + brightCyan(n, ansi) + padding + firstLine);
+            }
+        }
+
+        out.println(brightGreen("More commands:", ansi));
+        String ellipsis = "...";
+        String ellipsisPad = " ".repeat(descCol - 4 - ellipsis.length());
+        String prefix = "See all commands and options by running ";
+        String helpCmd = "jk --help";
+        String coloredHelp = ansi ? "\033[33m" + helpCmd + "\033[0m" : helpCmd;
+        out.println("    " + brightCyan(ellipsis, ansi) + ellipsisPad + prefix + coloredHelp);
     }
 }

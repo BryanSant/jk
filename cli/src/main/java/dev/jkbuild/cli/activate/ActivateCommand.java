@@ -6,7 +6,6 @@ import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
 import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
@@ -116,7 +115,7 @@ public final class ActivateCommand implements Callable<Integer> {
 
         Terminal terminal;
         try {
-            terminal = TerminalBuilder.builder().system(true).build();
+            terminal = Wizard.openTerminal();
         } catch (IOException e) {
             throw new IOException("failed to open terminal: " + e.getMessage(), e);
         }

@@ -23,18 +23,18 @@ import java.util.concurrent.Callable;
 @Command(name = "remove", description = "Remove a dependency from jk.toml")
 public final class RemoveCommand implements Callable<Integer> {
 
-    @Parameters(arity = "1", paramLabel = "<module>",
-            description = "group:artifact (or group:artifact:version; the version is ignored)")
+    @Parameters(arity = "1", paramLabel = "[dep]",
+            description = "group:artifact")
     String moduleArg;
 
     // Inlined scope flags (see AddCommand for the picocli-codegen rationale).
-    @Option(names = "--test",      description = "Test scope.")
+    @Option(names = "--test",      description = "Test scope")
     boolean test;
-    @Option(names = "--runtime",   description = "Runtime scope.")
+    @Option(names = "--runtime",   description = "Runtime scope")
     boolean runtime;
-    @Option(names = "--provided",  description = "Provided scope.")
+    @Option(names = "--provided",  description = "Provided scope")
     boolean provided;
-    @Option(names = "--processor", description = "Annotation processor scope.")
+    @Option(names = "--processor", description = "Annotation processor scope")
     boolean processor;
 
     @picocli.CommandLine.Mixin GlobalOptions global;

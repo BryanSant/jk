@@ -42,7 +42,7 @@ import java.util.concurrent.Callable;
  *       {@code actions/synced/<projectFingerprint>}.</li>
  * </ol>
  */
-@Command(name = "sync", description = "Reconcile JDK + cache to jk.lock")
+@Command(name = "sync", description = "Ensure our local cache has all project dependencies")
 public final class SyncCommand implements Callable<Integer> {    @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;

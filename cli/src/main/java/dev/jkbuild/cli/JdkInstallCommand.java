@@ -25,7 +25,6 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedStyle;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -391,7 +390,7 @@ public final class JdkInstallCommand implements Callable<Integer> {
             JdkCatalog catalog, String os, String arch, boolean showAll) throws IOException {
         Terminal terminal;
         try {
-            terminal = TerminalBuilder.builder().system(true).build();
+            terminal = Wizard.openTerminal();
         } catch (IOException e) {
             throw new IOException("failed to open terminal: " + e.getMessage(), e);
         }

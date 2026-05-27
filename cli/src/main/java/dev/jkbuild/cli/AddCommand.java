@@ -24,21 +24,21 @@ import java.util.concurrent.Callable;
 @Command(name = "add", description = "Add a dependency to jk.toml")
 public final class AddCommand implements Callable<Integer> {
 
-    @Parameters(arity = "1", paramLabel = "<coord>",
-            description = "group:artifact:version (or group:artifact -- version required in v0.1)")
+    @Parameters(arity = "1", paramLabel = "[dep]",
+            description = "group:artifact OR group:artifact@version OR group:artifact:version")
     String coord;
 
     // Mutually-exclusive scope flags. Default (no flag) = main.
     // Inlined rather than wrapped in @ArgGroup because picocli-codegen 4.7.7
     // can't generate native-image reflection config for that pattern; we
     // enforce exclusivity by hand below.
-    @Option(names = "--test",      description = "Test scope.")
+    @Option(names = "--test",      description = "Test scope")
     boolean test;
-    @Option(names = "--runtime",   description = "Runtime scope.")
+    @Option(names = "--runtime",   description = "Runtime scope")
     boolean runtime;
-    @Option(names = "--provided",  description = "Provided scope.")
+    @Option(names = "--provided",  description = "Provided scope")
     boolean provided;
-    @Option(names = "--processor", description = "Annotation processor scope.")
+    @Option(names = "--processor", description = "Annotation processor scope")
     boolean processor;
 
     @picocli.CommandLine.Mixin GlobalOptions global;

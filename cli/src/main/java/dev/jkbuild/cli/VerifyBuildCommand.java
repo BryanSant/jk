@@ -31,7 +31,7 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk verify-build} — re-build the project into a clean
+ * {@code jk verify} — re-build the project into a clean
  * scratch directory and compare the produced jar's SHA-256 against the
  * existing {@code target/<artifact>-<version>.jar} (PRD §23.7,
  * impl-plan §7 step 3).
@@ -39,8 +39,8 @@ import java.util.concurrent.Callable;
  * <p>Goal shape: {@code parse-build} → {@code rebuild-scratch} (CPU) →
  * {@code compare-hashes} (SYNC).
  */
-@Command(name = "verify-build",
-        description = "Rebuild in scratch; diff jar vs target/")
+@Command(name = "verify",
+        description = "Rebuild from scratch and diff that jar vs target/")
 public final class VerifyBuildCommand implements Callable<Integer> {
 
     @Option(names = "--cache-dir", hidden = true,
@@ -63,7 +63,7 @@ public final class VerifyBuildCommand implements Callable<Integer> {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
-            System.err.println("jk verify-build: jk.toml and jk.lock required in " + dir);
+            System.err.println("jk verify: jk.toml and jk.lock required in " + dir);
             return 2;
         }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();

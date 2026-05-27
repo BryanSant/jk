@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
@@ -59,6 +61,29 @@ public final class Wizard {
         return new WizardBuilder();
     }
 
+    /**
+     * Open a system terminal with input echo suppressed.
+     *
+     * <p>{@link TerminalBuilder#build()} probes the terminal with capability
+     * queries (DA, DECRQM). Their responses arrive on stdin shortly after;
+     * with default cooked-mode ECHO on, the OS driver echoes them to the
+     * screen as raw ANSI text before {@link #run} gets a chance to enter raw
+     * mode. The flash is most noticeable when the caller does parallel work
+     * between build and {@code run()} (e.g. {@code jk new}'s prewarm phase).
+     *
+     * <p>Disabling ECHO here closes the window. Output flags are left alone,
+     * so callers that {@code println} between build and {@code run()} still
+     * get normal LF→CRLF translation. The original attributes are restored
+     * when the terminal is closed.
+     */
+    public static Terminal openTerminal() throws IOException {
+        var terminal = TerminalBuilder.builder().system(true).build();
+        var attrs = terminal.getAttributes();
+        attrs.setLocalFlag(Attributes.LocalFlag.ECHO, false);
+        terminal.setAttributes(attrs);
+        return terminal;
+    }
+
     public List<WizardStep> steps() {
         return steps;
     }
@@ -93,11 +118,17 @@ public final class Wizard {
         var writer = terminal.writer();
         writer.print("\r" + CLEAR_TO_END);
         // Belt-and-suspenders for crashes that bypass the finally block.
+        // Same ECHO+ICANON force-on as the finally — if we crash here, leaving
+        // the user's shell in raw mode would be a worse failure mode than the
+        // crash itself.
         var restoreHook = new Thread(() -> {
             writer.print(SHOW_CURSOR);
             writer.print(RESET_SGR);
             writer.flush();
-            terminal.setAttributes(saved);
+            var cooked = new Attributes(saved);
+            cooked.setLocalFlag(Attributes.LocalFlag.ECHO, true);
+            cooked.setLocalFlag(Attributes.LocalFlag.ICANON, true);
+            terminal.setAttributes(cooked);
             terminal.flush();
         });
         Runtime.getRuntime().addShutdownHook(restoreHook);
@@ -117,7 +148,15 @@ public final class Wizard {
             writer.print(SHOW_CURSOR);
             writer.flush();
             terminal.handle(Terminal.Signal.INT, prevHandler);
-            terminal.setAttributes(saved);
+            // Restore the pre-raw attrs, but force ECHO+ICANON back on:
+            // openTerminal suppresses ECHO before build() to hide JLine's
+            // probe-response flicker, so `saved` here captures "echo off".
+            // Callers (jk jdk uninstall's [Y/n]) read System.in after the
+            // wizard returns and need cooked mode with echo on.
+            var cooked = new Attributes(saved);
+            cooked.setLocalFlag(Attributes.LocalFlag.ECHO, true);
+            cooked.setLocalFlag(Attributes.LocalFlag.ICANON, true);
+            terminal.setAttributes(cooked);
             writer.print("\r\n");
             writer.flush();
             terminal.flush();

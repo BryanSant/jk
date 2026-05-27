@@ -33,7 +33,7 @@ import java.util.concurrent.Callable;
  * (IO) hits the OSV batch endpoint — this is the slow, network-bound step;
  * {@code evaluate} (SYNC) applies the severity threshold to the findings.
  */
-@Command(name = "audit", description = "Check the locked dependencies for known vulnerabilities (OSV)")
+@Command(name = "audit", description = "Check the locked dependencies for known vulnerabilities")
 public final class AuditCommand implements Callable<Integer> {
 
     @Option(names = "--severity",

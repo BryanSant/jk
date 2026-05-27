@@ -22,7 +22,8 @@ class JkAliasTest {
         assertThat(Jk.rewriteAlias(new String[] {"sh"})[0]).isEqualTo("shell");
         assertThat(Jk.rewriteAlias(new String[] {"bash"})[0]).isEqualTo("shell");
         assertThat(Jk.rewriteAlias(new String[] {"nativeCompile"})[0]).isEqualTo("native");
-        assertThat(Jk.rewriteAlias(new String[] {"verify-target"})[0]).isEqualTo("verify-build");
+        assertThat(Jk.rewriteAlias(new String[] {"verify-target"})[0]).isEqualTo("verify");
+        assertThat(Jk.rewriteAlias(new String[] {"verify-build"})[0]).isEqualTo("verify");
         assertThat(Jk.rewriteAlias(new String[] {"check"})[0]).isEqualTo("compile");
     }
 
