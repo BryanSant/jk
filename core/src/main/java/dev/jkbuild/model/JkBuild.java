@@ -85,6 +85,9 @@ public record JkBuild(
      *       {@code true} → SUPPORTED (explicit {@code jk native} only),
      *       {@code "always"} → ALWAYS ({@code jk build} automatically
      *       produces the binary).</li>
+     *   <li>{@code description} — free-form human-readable description.
+     *       Surfaces as {@code <description>} in {@code jk publish} POMs and
+     *       {@code jk export pom.xml}; {@code null} when omitted.</li>
      * </ul>
      *
      * <p>Exactly one of {@code java}/{@code kotlin} must be set; the parser
@@ -105,7 +108,8 @@ public record JkBuild(
 
     public record Project(String group, String artifact, String version,
                           int jdk, int java, int kotlin,
-                          String main, boolean shadow, NativeMode nativeMode) {
+                          String main, boolean shadow, NativeMode nativeMode,
+                          String description) {
 
         public Project {
             Objects.requireNonNull(group, "group");
@@ -122,11 +126,12 @@ public record JkBuild(
                         "project must set exactly one of `java` or `kotlin`, not both");
             }
             if (nativeMode == null) nativeMode = NativeMode.DISABLED;
+            if (description != null && description.isBlank()) description = null;
         }
 
         /** Library project — no main, no shadow, no native; defaults to a Java project. */
         public Project(String group, String artifact, String version, int jdk) {
-            this(group, artifact, version, jdk, jdk, 0, null, false, NativeMode.DISABLED);
+            this(group, artifact, version, jdk, jdk, 0, null, false, NativeMode.DISABLED, null);
         }
 
         /** Backward-compat: true when native mode is not DISABLED. */

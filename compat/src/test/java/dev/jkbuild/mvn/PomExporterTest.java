@@ -37,6 +37,17 @@ class PomExporterTest {
     }
 
     @Test
+    void emits_description_when_project_sets_it() {
+        JkBuild model = new JkBuild(
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 21, 0,
+                        null, false, JkBuild.NativeMode.DISABLED,
+                        "A widget for widgeting."),
+                JkBuild.Dependencies.empty());
+        String xml = PomExporter.export(model).xml();
+        assertThat(xml).contains("<description>A widget for widgeting.</description>");
+    }
+
+    @Test
     void dependencies_emit_with_correct_scopes() {
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         byScope.put(Scope.MAIN, List.of(

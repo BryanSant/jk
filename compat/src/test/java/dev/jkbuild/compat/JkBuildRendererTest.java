@@ -41,13 +41,27 @@ class JkBuildRendererTest {
     void renders_main_shadow_and_native_when_set() {
         JkBuild model = new JkBuild(
                 new JkBuild.Project("com.example", "widget", "1.0.0", 21, 0, 2,
-                        "com.example.App", true, JkBuild.NativeMode.SUPPORTED),
+                        "com.example.App", true, JkBuild.NativeMode.SUPPORTED, null),
                 JkBuild.Dependencies.empty());
         String out = JkBuildRenderer.render(model);
         assertThat(out).contains("kotlin   = 2");
         assertThat(out).contains("main     = \"com.example.App\"");
         assertThat(out).contains("shadow   = true");
         assertThat(out).contains("native   = true");
+    }
+
+    @Test
+    void renders_description_when_set() {
+        JkBuild model = new JkBuild(
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 21, 0,
+                        null, false, JkBuild.NativeMode.DISABLED,
+                        "A tiny widget library."),
+                JkBuild.Dependencies.empty());
+        String out = JkBuildRenderer.render(model);
+        assertThat(out).contains("description = \"A tiny widget library.\"");
+
+        JkBuild reparsed = JkBuildParser.parse(out);
+        assertThat(reparsed.project().description()).isEqualTo("A tiny widget library.");
     }
 
     @Test

@@ -65,6 +65,9 @@ public final class PomExporter {
         sb.append("  <artifactId>").append(escape(p.artifact())).append("</artifactId>\n");
         sb.append("  <version>").append(escape(p.version())).append("</version>\n");
         sb.append("  <packaging>").append(workspaceRoot ? "pom" : "jar").append("</packaging>\n");
+        if (p.description() != null) {
+            sb.append("  <description>").append(escape(p.description())).append("</description>\n");
+        }
     }
 
     private static void appendProperties(StringBuilder sb, JkBuild.Project p) {

@@ -33,6 +33,23 @@ class JkBuildParserTest {
         assertThat(parsed.project().main()).isNull();
         assertThat(parsed.project().shadow()).isFalse();
         assertThat(parsed.project().nativeImage()).isFalse();
+        assertThat(parsed.project().description()).isNull();
+    }
+
+    @Test
+    void parses_optional_description() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                description = "A widget for widgeting."
+                """);
+        assertThat(parsed.project().description()).isEqualTo("A widget for widgeting.");
+    }
+
+    @Test
+    void blank_description_normalises_to_null() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                description = "   "
+                """);
+        assertThat(parsed.project().description()).isNull();
     }
 
     @Test

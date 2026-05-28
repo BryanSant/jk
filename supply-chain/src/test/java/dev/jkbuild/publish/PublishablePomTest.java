@@ -92,6 +92,29 @@ class PublishablePomTest {
     }
 
     @Test
+    void project_description_is_emitted_when_metadata_omits_it() {
+        JkBuild.Project p = new JkBuild.Project("com.example", "widget", "1.0.0", 21,
+                21, 0, null, false, JkBuild.NativeMode.DISABLED,
+                "A widget from jk.toml.");
+        String xml = PublishablePom.render(
+                new JkBuild(p, JkBuild.Dependencies.empty()), null).xml();
+        assertThat(xml).contains("<description>A widget from jk.toml.</description>");
+    }
+
+    @Test
+    void metadata_description_overrides_project_description() {
+        JkBuild.Project p = new JkBuild.Project("com.example", "widget", "1.0.0", 21,
+                21, 0, null, false, JkBuild.NativeMode.DISABLED,
+                "from jk.toml");
+        var meta = new PublishablePom.Metadata(
+                null, "from publish call", null, List.of(), List.of(), null);
+        String xml = PublishablePom.render(
+                new JkBuild(p, JkBuild.Dependencies.empty()), meta).xml();
+        assertThat(xml).contains("<description>from publish call</description>");
+        assertThat(xml).doesNotContain("from jk.toml");
+    }
+
+    @Test
     void standard_scopes_carry_their_maven_scope_tags() {
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         byScope.put(Scope.MAIN, List.of(

@@ -54,6 +54,10 @@ public final class JkBuildRenderer {
         sb.append("group    = ").append(quote(p.group())).append('\n');
         sb.append("artifact = ").append(quote(p.artifact())).append('\n');
         sb.append("version  = ").append(quote(p.version())).append('\n');
+        if (p.description() != null) {
+            // Longer key than the rest of the block; emit unpadded.
+            sb.append("description = ").append(quote(p.description())).append('\n');
+        }
         if (p.jdk() > 0) {
             sb.append("jdk      = ").append(p.jdk()).append('\n');
         }

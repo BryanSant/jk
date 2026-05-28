@@ -76,8 +76,12 @@ public final class PublishablePom {
         sb.append("  <packaging>jar</packaging>\n");
 
         if (meta.name() != null) sb.append("  <name>").append(escape(meta.name())).append("</name>\n");
-        if (meta.description() != null) {
-            sb.append("  <description>").append(escape(meta.description())).append("</description>\n");
+        // Metadata wins over project.description; fall back to the project's
+        // description so `jk publish` carries the manifest's description into
+        // the POM without forcing every caller to thread it through Metadata.
+        String description = meta.description() != null ? meta.description() : p.description();
+        if (description != null) {
+            sb.append("  <description>").append(escape(description)).append("</description>\n");
         }
         if (meta.url() != null) sb.append("  <url>").append(escape(meta.url())).append("</url>\n");
 

@@ -36,7 +36,8 @@ import java.util.Objects;
  * <p>Schema (PRD §5):
  * <ul>
  *   <li>{@code [project]} — required; {@code group}, {@code artifact}, {@code version} required;
- *       optional {@code jdk}, {@code main}, {@code language}, {@code shadow}, {@code native}.</li>
+ *       optional {@code jdk}, {@code main}, {@code language}, {@code shadow}, {@code native},
+ *       {@code description}.</li>
  *   <li>{@code [dependencies]} — optional; per-scope arrays of {@code "group:artifact:version"}
  *       strings. The version part is everything after the second colon and parses via
  *       {@link VersionSelector#parse(String)}. A coord written as {@code "group:artifact"}
@@ -110,8 +111,9 @@ public final class JkBuildParser {
         } else {
             nativeMode = JkBuild.NativeMode.DISABLED;
         }
+        String description = project.getString("description");
         return new JkBuild.Project(group, artifact, version, jdk, java, kotlin,
-                main, shadow, nativeMode);
+                main, shadow, nativeMode, description);
     }
 
     private static int intOrZero(TomlTable table, String key, String path) {

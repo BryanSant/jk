@@ -35,6 +35,20 @@ class PomImporterTest {
     }
 
     @Test
+    void carries_pom_description_into_project() {
+        var result = importPom("""
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>widget</artifactId>
+                  <version>1.0.0</version>
+                  <description>A widget for widgeting.</description>
+                </project>
+                """);
+        assertThat(result.jkBuild().project().description()).isEqualTo("A widget for widgeting.");
+    }
+
+    @Test
     void picks_jdk_from_maven_compiler_release_property() {
         var result = importPom("""
                 <project>
