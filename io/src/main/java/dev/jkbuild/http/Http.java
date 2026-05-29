@@ -1,14 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.http;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodyHandler;
+import java.net.http.HttpResponse.BodySubscribers;
 import java.time.Duration;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 
 /**
  * Thin wrapper over {@link HttpClient} that adds the retry/backoff schedule
@@ -64,6 +69,14 @@ public final class Http {
         for (Map.Entry<String, String> e : headers.entrySet()) {
             builder.header(e.getKey(), e.getValue());
         }
+        // Opt into transport-level gzip unless the caller already set
+        // their own Accept-Encoding (e.g. testing without compression).
+        // The response body is transparently decompressed by
+        // `gzipAwareByteArray()` when the server replies with
+        // Content-Encoding: gzip.
+        if (!hasHeaderIgnoreCase(headers, "Accept-Encoding")) {
+            builder.header("Accept-Encoding", "gzip");
+        }
         HttpRequest request = builder.build();
 
         IOException lastIo = null;
@@ -73,7 +86,7 @@ public final class Http {
                 Thread.sleep(jittered(backoffs[attempt - 1]));
             }
             try {
-                HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                HttpResponse<byte[]> response = client.send(request, gzipAwareByteArray());
                 int status = response.statusCode();
                 if (status < 500) {
                     return response;
@@ -105,6 +118,7 @@ public final class Http {
         checkOffline(uri);
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .GET()
+                .header("Accept-Encoding", "gzip")
                 .timeout(Duration.ofMinutes(15))
                 .build();
         IOException lastIo = null;
@@ -114,8 +128,7 @@ public final class Http {
                 Thread.sleep(jittered(backoffs[attempt - 1]));
             }
             try {
-                HttpResponse<InputStream> response =
-                        client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+                HttpResponse<InputStream> response = client.send(request, gzipAwareInputStream());
                 int status = response.statusCode();
                 if (status < 500) {
                     return response;
@@ -141,6 +154,67 @@ public final class Http {
         long ms = base.toMillis();
         // +/- 10% jitter
         return ms + (long) ((Math.random() - 0.5) * 0.2 * ms);
+    }
+
+    /**
+     * Body handler that returns the response as a {@code byte[]} and
+     * transparently inflates the payload when the server set
+     * {@code Content-Encoding: gzip}. Java's {@link HttpClient} never
+     * decompresses on its own (unlike curl), so without this every
+     * gzip-aware caller would have to wrap manually.
+     *
+     * <p>Callers should treat the returned bytes as the canonical body.
+     * The response object retains the original {@code Content-Encoding}
+     * and {@code Content-Length} headers — those describe the wire, not
+     * the decoded payload, so reading them is now a footgun. In practice
+     * jk callers don't, so the tradeoff is acceptable.
+     */
+    static BodyHandler<byte[]> gzipAwareByteArray() {
+        return responseInfo -> {
+            var upstream = HttpResponse.BodyHandlers.ofByteArray().apply(responseInfo);
+            if (!isGzipped(responseInfo)) return upstream;
+            return BodySubscribers.mapping(upstream, raw -> {
+                try (var in = new GZIPInputStream(new ByteArrayInputStream(raw))) {
+                    return in.readAllBytes();
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        };
+    }
+
+    /**
+     * Streaming counterpart of {@link #gzipAwareByteArray()}. Wraps the
+     * incoming {@link InputStream} in a {@link GZIPInputStream} when the
+     * response is gzip-encoded; the caller's {@code try-with-resources}
+     * closes the gzip stream, which in turn releases the underlying
+     * connection.
+     */
+    static BodyHandler<InputStream> gzipAwareInputStream() {
+        return responseInfo -> {
+            var upstream = HttpResponse.BodyHandlers.ofInputStream().apply(responseInfo);
+            if (!isGzipped(responseInfo)) return upstream;
+            return BodySubscribers.mapping(upstream, in -> {
+                try {
+                    return new GZIPInputStream(in);
+                } catch (IOException e) {
+                    throw new UncheckedIOException(e);
+                }
+            });
+        };
+    }
+
+    private static boolean isGzipped(HttpResponse.ResponseInfo info) {
+        return info.headers().firstValue("Content-Encoding")
+                .map(v -> v.trim().equalsIgnoreCase("gzip"))
+                .orElse(false);
+    }
+
+    private static boolean hasHeaderIgnoreCase(Map<String, String> headers, String name) {
+        for (String k : headers.keySet()) {
+            if (k.equalsIgnoreCase(name)) return true;
+        }
+        return false;
     }
 
     /**

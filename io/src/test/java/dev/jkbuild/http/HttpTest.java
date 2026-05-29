@@ -6,7 +6,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -14,6 +16,8 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.GZIPOutputStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -112,6 +116,97 @@ class HttpTest {
         } finally {
             dev.jkbuild.config.ActiveConfig.install(prev);
         }
+    }
+
+    @Test
+    void get_sends_accept_encoding_gzip_by_default() throws Exception {
+        AtomicReference<String> seenAcceptEncoding = new AtomicReference<>();
+        server.createContext("/hello", exchange -> {
+            seenAcceptEncoding.set(exchange.getRequestHeaders().getFirst("Accept-Encoding"));
+            byte[] body = "hi".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        http().get(base.resolve("/hello"));
+        assertThat(seenAcceptEncoding.get()).isEqualTo("gzip");
+    }
+
+    @Test
+    void get_transparently_decompresses_gzip_response() throws Exception {
+        byte[] payload = "hello, gzip world".getBytes(StandardCharsets.UTF_8);
+        byte[] gzipped = gzip(payload);
+
+        server.createContext("/gz", exchange -> {
+            exchange.getResponseHeaders().add("Content-Encoding", "gzip");
+            exchange.sendResponseHeaders(200, gzipped.length);
+            exchange.getResponseBody().write(gzipped);
+            exchange.close();
+        });
+
+        HttpResponse<byte[]> response = http().get(base.resolve("/gz"));
+        assertThat(response.statusCode()).isEqualTo(200);
+        // Body is the *decompressed* payload, not the wire bytes.
+        assertThat(new String(response.body(), StandardCharsets.UTF_8))
+                .isEqualTo("hello, gzip world");
+    }
+
+    @Test
+    void get_passes_plain_response_through_unchanged() throws Exception {
+        // No Content-Encoding on the response → we hand the bytes back as-is
+        // even though we sent Accept-Encoding: gzip.
+        server.createContext("/plain", exchange -> {
+            byte[] body = "plain text".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        HttpResponse<byte[]> response = http().get(base.resolve("/plain"));
+        assertThat(new String(response.body(), StandardCharsets.UTF_8)).isEqualTo("plain text");
+    }
+
+    @Test
+    void caller_supplied_accept_encoding_overrides_default() throws Exception {
+        AtomicReference<String> seenAcceptEncoding = new AtomicReference<>();
+        server.createContext("/hello", exchange -> {
+            seenAcceptEncoding.set(exchange.getRequestHeaders().getFirst("Accept-Encoding"));
+            byte[] body = "hi".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        http().get(base.resolve("/hello"), java.util.Map.of("Accept-Encoding", "identity"));
+        assertThat(seenAcceptEncoding.get()).isEqualTo("identity");
+    }
+
+    @Test
+    void get_stream_decompresses_gzip_response() throws Exception {
+        byte[] payload = "streamed payload".getBytes(StandardCharsets.UTF_8);
+        byte[] gzipped = gzip(payload);
+
+        server.createContext("/gz-stream", exchange -> {
+            exchange.getResponseHeaders().add("Content-Encoding", "gzip");
+            exchange.sendResponseHeaders(200, gzipped.length);
+            exchange.getResponseBody().write(gzipped);
+            exchange.close();
+        });
+
+        HttpResponse<InputStream> response = http().getStream(base.resolve("/gz-stream"));
+        try (var in = response.body()) {
+            assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8))
+                    .isEqualTo("streamed payload");
+        }
+    }
+
+    private static byte[] gzip(byte[] raw) throws IOException {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        try (var gz = new GZIPOutputStream(buf)) {
+            gz.write(raw);
+        }
+        return buf.toByteArray();
     }
 
     private static Http http() {
