@@ -5,6 +5,7 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
@@ -57,7 +58,8 @@ public final class ExplainCommand implements Callable<Integer> {    @Option(name
         System.out.println("build plan for " + project.project().artifact()
                 + " v" + project.project().version() + ":");
 
-        Path mainClasses = dir.resolve("target/classes");
+        BuildLayout layout = BuildLayout.of(dir, project);
+        Path mainClasses = layout.classesDir();
         explainCompile(dir.resolve("src/main/java"), "compile-main",
                 lockClasspath, release, mainClasses, actionCache);
 
@@ -65,7 +67,7 @@ public final class ExplainCommand implements Callable<Integer> {    @Option(name
         testClasspath.add(mainClasses);
         testClasspath.addAll(lockClasspath);
         explainCompile(dir.resolve("src/test/java"), "compile-test",
-                testClasspath, release, dir.resolve("target/test-classes"), actionCache);
+                testClasspath, release, layout.testClassesDir(), actionCache);
 
         return 0;
     }

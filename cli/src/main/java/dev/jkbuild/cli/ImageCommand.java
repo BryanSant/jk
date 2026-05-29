@@ -6,6 +6,7 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.image.ImageBuilder;
 import dev.jkbuild.image.ImageConfig;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
@@ -53,9 +54,10 @@ public final class ImageCommand implements Callable<Integer> {
             description = "Override image.tag from jk.toml (default: project.version).")
     String tag;
 
-    @Option(names = "--tarball",
-            description = "Write an OCI tarball to this path instead of pushing.")
-    Path tarball;
+    @Option(names = "--tarball", arity = "0..1", fallbackValue = "",
+            description = "Write an OCI tarball instead of pushing. Optional <path>; "
+                    + "defaults to target/images/<artifact>.oci.tar.")
+    String tarballArg;
 
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
@@ -64,8 +66,10 @@ public final class ImageCommand implements Callable<Integer> {
     @picocli.CommandLine.Mixin GlobalOptions global;
 
     private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    private static final GoalKey<BuildLayout> LAYOUT = GoalKey.of("layout", BuildLayout.class);
     private static final GoalKey<ImageConfig> CONFIG = GoalKey.of("image-config", ImageConfig.class);
     private static final GoalKey<Path> MAIN_JAR = GoalKey.of("main-jar", Path.class);
+    private static final GoalKey<Path> TARBALL_PATH = GoalKey.of("tarball-path", Path.class);
     private static final GoalKey<String> CHOSEN_MAIN = GoalKey.of("chosen-main", String.class);
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> DEP_JARS = GoalKey.of("dep-jars", List.class);
@@ -87,12 +91,14 @@ public final class ImageCommand implements Callable<Integer> {
                     ctx.label("parse jk.toml + image config");
                     JkBuild project = JkBuildParser.parse(jkBuildPath);
                     ctx.put(PROJECT, project);
+                    BuildLayout layout = BuildLayout.of(projectDir, project);
+                    ctx.put(LAYOUT, layout);
+                    Path tarballPath = resolveTarballPath(layout);
+                    if (tarballPath != null) ctx.put(TARBALL_PATH, tarballPath);
                     ImageConfig config = buildConfig(jkBuildPath);
                     ctx.put(CONFIG, config);
 
-                    Path mainJar = projectDir.resolve("target").resolve(
-                            project.project().artifact() + "-"
-                                    + project.project().version() + ".jar");
+                    Path mainJar = layout.mainJar();
                     if (!Files.exists(mainJar)) {
                         ctx.error("missing-jar", "main jar not found at " + mainJar
                                 + " — run `jk build` first.");
@@ -140,9 +146,11 @@ public final class ImageCommand implements Callable<Integer> {
                 .scope(1)
                 .execute(ctx -> {
                     ImageBuilder.Plan plan = ctx.require(PLAN);
-                    if (tarball != null) {
-                        ctx.label("write OCI tarball " + tarball.getFileName());
-                        ImageBuilder.writeToTarball(plan, tarball);
+                    Path tarballPath = ctx.get(TARBALL_PATH).orElse(null);
+                    if (tarballPath != null) {
+                        ctx.label("write OCI tarball " + tarballPath.getFileName());
+                        Files.createDirectories(tarballPath.getParent());
+                        ImageBuilder.writeToTarball(plan, tarballPath);
                     } else {
                         ctx.label("push to " + plan.config().registry());
                         try {
@@ -174,9 +182,10 @@ public final class ImageCommand implements Callable<Integer> {
         ImageBuilder.Plan plan = goal.get(PLAN).orElseThrow();
         JkBuild project = goal.get(PROJECT).orElseThrow();
         ImageConfig config = goal.get(CONFIG).orElseThrow();
+        Path tarballPath = goal.get(TARBALL_PATH).orElse(null);
         if (!global.outputIsJson()) {
-            if (tarball != null) {
-                System.out.println("Wrote OCI tarball " + tarball
+            if (tarballPath != null) {
+                System.out.println("Wrote OCI tarball " + tarballPath
                         + " (" + plan.dependencyJars().size() + " dep layers, main jar layer)");
             } else {
                 System.out.println("Pushed " + config.targetReference(
@@ -184,6 +193,21 @@ public final class ImageCommand implements Callable<Integer> {
             }
         }
         return 0;
+    }
+
+    /**
+     * Map the {@code --tarball} CLI flag to an effective output path.
+     *
+     * <ul>
+     *   <li>Flag absent → {@code null} (push mode).</li>
+     *   <li>Flag with no path → {@code layout.ociImageTar()}.</li>
+     *   <li>Flag with explicit path → that path verbatim.</li>
+     * </ul>
+     */
+    private Path resolveTarballPath(BuildLayout layout) {
+        if (tarballArg == null) return null;
+        if (tarballArg.isBlank()) return layout.ociImageTar();
+        return Path.of(tarballArg);
     }
 
     private ImageConfig buildConfig(Path jkBuild) throws IOException {

@@ -8,6 +8,7 @@ import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
 import dev.jkbuild.compile.JavacDriver;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
@@ -141,9 +142,9 @@ public final class TestCommand implements Callable<Integer> {
                     ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(dir));
                     ctx.put(RELEASE, project.project().javaRelease());
 
-                    Path target = dir.resolve("target");
-                    ctx.put(MAIN_CLASSES, target.resolve("classes"));
-                    ctx.put(TEST_CLASSES, target.resolve("test-classes"));
+                    BuildLayout layout = BuildLayout.of(dir, project);
+                    ctx.put(MAIN_CLASSES, layout.classesDir());
+                    ctx.put(TEST_CLASSES, layout.testClassesDir());
                     ctx.progress(1);
                 })
                 .build();

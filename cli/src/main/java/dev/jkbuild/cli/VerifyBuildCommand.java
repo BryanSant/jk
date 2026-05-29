@@ -9,6 +9,7 @@ import dev.jkbuild.compile.CompileResult;
 import dev.jkbuild.compile.JarPackager;
 import dev.jkbuild.compile.JavacDriver;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
@@ -74,9 +75,7 @@ public final class VerifyBuildCommand implements Callable<Integer> {
                     ctx.label("parse jk.toml + jk.lock");
                     JkBuild project = JkBuildParser.parse(buildFile);
                     Lockfile lock = LockfileReader.read(lockFile);
-                    Path existingJar = dir.resolve("target").resolve(
-                            project.project().artifact() + "-"
-                                    + project.project().version() + ".jar");
+                    Path existingJar = BuildLayout.of(dir, project).mainJar();
                     if (!Files.exists(existingJar)) {
                         ctx.error("missing-jar", "no existing jar at " + existingJar
                                 + " — run `jk build` first.");

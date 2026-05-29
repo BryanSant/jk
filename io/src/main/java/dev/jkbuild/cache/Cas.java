@@ -101,7 +101,7 @@ public final class Cas {
      * filesystem supports it; falls back to a byte copy otherwise.
      *
      * <p>This is the right primitive when an action has just produced a
-     * file in its own output tree (e.g. {@code target/classes/Hello.class}
+     * file in its own output tree (e.g. {@code build/classes/main/Hello.class}
      * fresh out of javac) and we want the CAS to also reference it: one
      * inode, two paths. No double-write, no double-storage. The caller
      * supplies the hex hash so the file isn't re-read just to verify the

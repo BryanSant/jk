@@ -3,6 +3,7 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.publish.Checksums;
 import dev.jkbuild.publish.GpgSigner;
@@ -135,10 +136,8 @@ public final class PublishCommand implements Callable<Integer> {
                                 + "per PRD §21.4).");
                         throw new RuntimeException("snapshot refused");
                     }
-                    Path jar = jarPath != null ? jarPath
-                            : projectDir.resolve("target").resolve(
-                                    project.project().artifact() + "-"
-                                            + project.project().version() + ".jar");
+                    BuildLayout layout = BuildLayout.of(projectDir, project);
+                    Path jar = jarPath != null ? jarPath : layout.mainJar();
                     if (!Files.exists(jar)) {
                         ctx.error("missing-jar", "main jar not found at " + jar
                                 + " — run `jk build` first or pass --jar.");

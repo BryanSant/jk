@@ -55,7 +55,9 @@ class BuildCacheTest {
         Path cache = tempDir.resolve("cache");
         run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString());
 
-        // Simulate `jk clean` — wipe the output tree, taking the stamp with it.
+        // Simulate `jk clean` — wipe both the intermediates (build/, where
+        // the freshness stamp lives) and the artifacts (target/).
+        deleteRecursively(tempDir.resolve("build"));
         deleteRecursively(tempDir.resolve("target"));
 
         String stdout = captureStdout(() ->

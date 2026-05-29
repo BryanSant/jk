@@ -18,17 +18,36 @@ class CleanExplainWhyRebuiltTest {
     // --- clean -------------------------------------------------------------
 
     @Test
-    void clean_removes_target_and_generated(@TempDir Path tempDir) throws Exception {
+    void clean_removes_target_and_build_and_generated(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        Files.createDirectories(tempDir.resolve("target/classes/example"));
-        Files.writeString(tempDir.resolve("target/classes/example/Hello.class"), "fake");
+        // Intermediates live under build/ in the v1 two-tier layout.
+        Files.createDirectories(tempDir.resolve("build/classes/main/example"));
+        Files.writeString(tempDir.resolve("build/classes/main/example/Hello.class"), "fake");
+        // Final artifacts live under target/.
+        Files.createDirectories(tempDir.resolve("target"));
+        Files.writeString(tempDir.resolve("target/widget-0.1.0.jar"), "fake");
         Files.createDirectories(tempDir.resolve(".jk/generated"));
         Files.writeString(tempDir.resolve(".jk/generated/Source.java"), "// gen");
 
         int exit = run("clean", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
+        assertThat(tempDir.resolve("build")).doesNotExist();
         assertThat(tempDir.resolve("target")).doesNotExist();
         assertThat(tempDir.resolve(".jk/generated")).doesNotExist();
+    }
+
+    @Test
+    void clean_keep_artifacts_preserves_target(@TempDir Path tempDir) throws Exception {
+        run("new", tempDir.toString());
+        Files.createDirectories(tempDir.resolve("build/classes/main"));
+        Files.writeString(tempDir.resolve("build/classes/main/Hello.class"), "fake");
+        Files.createDirectories(tempDir.resolve("target"));
+        Files.writeString(tempDir.resolve("target/widget-0.1.0.jar"), "fake-jar");
+
+        int exit = run("clean", "--keep-artifacts", "-C", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(tempDir.resolve("build")).doesNotExist();
+        assertThat(tempDir.resolve("target/widget-0.1.0.jar")).exists();
     }
 
     @Test

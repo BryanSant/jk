@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.Scope;
@@ -22,9 +23,9 @@ import java.util.Set;
  * Workspace-internal coords are filtered out of the lockfile by
  * {@code WorkspaceMerge}, so they must be re-injected here: for each
  * sibling member whose project coord matches an entry in the current
- * member's {@code dependencies.<scope>}, add
- * {@code <root>/<sibling>/target/<artifact>-<version>.jar} to the
- * classpath.
+ * member's {@code dependencies.<scope>}, add the sibling's main jar
+ * (under the workspace's shared {@code target/} per {@link BuildLayout})
+ * to the classpath.
  */
 public final class WorkspaceClasspath {
 
@@ -60,8 +61,11 @@ public final class WorkspaceClasspath {
                 continue;
             }
             String moduleCoord = sibling.project().group() + ":" + sibling.project().artifact();
-            Path jar = siblingDir.resolve("target").resolve(
-                    sibling.project().artifact() + "-" + sibling.project().version() + ".jar");
+            // Until workspace-aware build wiring lands, each sibling
+            // builds with workspaceRoot == memberDir — so its jar lands
+            // under <siblingDir>/target/, not the shared workspace
+            // target/. Match that here.
+            Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
             siblingJarByModule.put(moduleCoord, jar);
         }
 

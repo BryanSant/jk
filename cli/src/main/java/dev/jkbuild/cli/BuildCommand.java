@@ -15,6 +15,7 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
@@ -114,6 +115,7 @@ public final class BuildCommand implements Callable<Integer> {
     private static final GoalKey<Path>      JAR_PATH        = GoalKey.of("jar-path",       Path.class);
     private static final GoalKey<Path>      MAIN_CLASSES    = GoalKey.of("main-classes",   Path.class);
     private static final GoalKey<Path>      TEST_CLASSES    = GoalKey.of("test-classes",   Path.class);
+    private static final GoalKey<BuildLayout> LAYOUT        = GoalKey.of("layout",         BuildLayout.class);
     private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
             GoalKey.of("test-result", JUnitLauncher.Result.class);
     private static final GoalKey<Boolean>   NO_TEST_SOURCES = GoalKey.of("no-test-sources", Boolean.class);
@@ -123,7 +125,6 @@ public final class BuildCommand implements Callable<Integer> {
     @Override
     public Integer call() throws Exception {
         Path dir    = global.workingDir();
-        Path target = dir.resolve("target");
         Path cache  = cacheDir != null ? cacheDir : JkDirs.cache();
         Cas cas     = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
@@ -159,6 +160,8 @@ public final class BuildCommand implements Callable<Integer> {
                         throw e;
                     }
                     ctx.put(PROJECT, project);
+                    BuildLayout layout = BuildLayout.of(dir, project);
+                    ctx.put(LAYOUT, layout);
 
                     // If no lockfile, resolve now.
                     if (!Files.exists(lockFile)) {
@@ -198,8 +201,8 @@ public final class BuildCommand implements Callable<Integer> {
                     ctx.put(KOTLIN_SOURCES, CompileCommand.collectKotlinSources(dir));
                     ctx.put(RELEASE, project.project().javaRelease());
                     ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(dir));
-                    ctx.put(MAIN_CLASSES, target.resolve("classes"));
-                    ctx.put(TEST_CLASSES, target.resolve("test-classes"));
+                    ctx.put(MAIN_CLASSES, layout.classesDir());
+                    ctx.put(TEST_CLASSES, layout.testClassesDir());
                     ctx.progress(1);
                 })
                 .build();
@@ -257,13 +260,13 @@ public final class BuildCommand implements Callable<Integer> {
                 .build();
 
         // ---- compile-java -----------------------------------------------
-        Path classes = target.resolve("classes");
         Phase compileJava = Phase.builder("compile-java")
                 .label("Compiling")
                 .kind(PhaseKind.CPU)
                 .requires("parse-build", "sync-deps", "ensure-jdk")
                 .scope(0)
                 .execute(ctx -> {
+                    Path classes = ctx.require(MAIN_CLASSES);
                     List<Path> sources = javaSources(ctx);
                     if (sources.isEmpty()) {
                         ctx.label("no Java sources");
@@ -328,6 +331,7 @@ public final class BuildCommand implements Callable<Integer> {
                 .requires("compile-java")
                 .scope(0)
                 .execute(ctx -> {
+                    Path classes = ctx.require(MAIN_CLASSES);
                     List<Path> ktSources = kotlinSources(ctx);
                     if (ktSources.isEmpty()) { ctx.label("no Kotlin sources"); return; }
                     ctx.updateScope(ktSources.size());
@@ -358,6 +362,7 @@ public final class BuildCommand implements Callable<Integer> {
                 .requires("compile-kotlin")
                 .scope(1)
                 .execute(ctx -> {
+                    Path classes = ctx.require(MAIN_CLASSES);
                     Path resMain = dir.resolve("src/main/resources");
                     if (!Files.exists(resMain)) { ctx.label("no resources"); return; }
                     ctx.label("copy resources");
@@ -452,9 +457,10 @@ public final class BuildCommand implements Callable<Integer> {
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
-                    Path jarPath = target.resolve(
-                            project.project().artifact() + "-"
-                                    + project.project().version() + ".jar");
+                    BuildLayout layout = ctx.require(LAYOUT);
+                    Path classes = ctx.require(MAIN_CLASSES);
+                    Path jarPath = layout.mainJar();
+                    Files.createDirectories(jarPath.getParent());
                     ctx.label("package " + jarPath.getFileName());
                     JarPackager.JarRequest jarRequest =
                             JarPackager.JarRequest.of(classes, jarPath);
@@ -479,6 +485,7 @@ public final class BuildCommand implements Callable<Integer> {
                         return;
                     }
                     ctx.label("write freshness stamp");
+                    Path classes = ctx.require(MAIN_CLASSES);
                     @SuppressWarnings("unchecked")
                     List<Path> sources = (List<Path>) ctx.require(JAVA_SOURCES);
                     @SuppressWarnings("unchecked")
@@ -544,9 +551,8 @@ public final class BuildCommand implements Callable<Integer> {
                     // NativeCommand reads jk.toml + the existing jar and runs
                     // GraalVM native-image. We wire progress via ctx.label.
                     JkBuild project = ctx.require(PROJECT);
-                    Path mainJar = dir.resolve("target").resolve(
-                            project.project().artifact() + "-"
-                                    + project.project().version() + ".jar");
+                    BuildLayout layout = ctx.require(LAYOUT);
+                    Path mainJar = layout.mainJar();
                     if (!Files.exists(mainJar)) {
                         ctx.error("native", "jar not found at " + mainJar);
                         throw new RuntimeException("missing main jar for native-image");

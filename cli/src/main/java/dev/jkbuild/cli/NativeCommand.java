@@ -6,6 +6,7 @@ import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkResolver;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
@@ -109,10 +110,9 @@ public final class NativeCommand implements Callable<Integer> {
                         throw e;
                     }
                     ctx.put(PROJECT, project);
+                    BuildLayout layout = BuildLayout.of(projectDir, project);
 
-                    Path mainJar = projectDir.resolve("target").resolve(
-                            project.project().artifact() + "-"
-                                    + project.project().version() + ".jar");
+                    Path mainJar = layout.mainJar();
                     if (!Files.exists(mainJar)) {
                         ctx.error("missing-jar", "main jar not found at " + mainJar
                                 + " — run `jk build` first.");
@@ -133,7 +133,8 @@ public final class NativeCommand implements Callable<Integer> {
                     }
                     ctx.put(MAIN_CLASS, chosenMain);
 
-                    Path out = projectDir.resolve("target").resolve(project.project().artifact());
+                    Path out = layout.nativeBinary();
+                    Files.createDirectories(out.getParent());
                     ctx.put(OUTPUT_PATH, out);
                     ctx.progress(1);
                 })

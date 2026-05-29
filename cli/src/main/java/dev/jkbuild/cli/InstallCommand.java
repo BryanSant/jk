@@ -9,6 +9,7 @@ import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
@@ -302,9 +303,7 @@ public final class InstallCommand implements Callable<Integer> {
                         throw new RuntimeException("no main");
                     }
                     ctx.put(PROJECT, project);
-                    ctx.put(JAR, projectDir.resolve("target")
-                            .resolve(project.project().artifact() + "-"
-                                    + project.project().version() + ".jar"));
+                    ctx.put(JAR, BuildLayout.of(projectDir, project).mainJar());
                     ctx.progress(1);
                 })
                 .build();

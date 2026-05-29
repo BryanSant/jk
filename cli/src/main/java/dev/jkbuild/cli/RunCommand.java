@@ -14,6 +14,7 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
@@ -570,13 +571,11 @@ public final class RunCommand implements Callable<Integer> {
                     + projectDir + " — set `main = \"<fqcn>\"` or pass a script.");
             return 64;
         }
-        String artifact = project.project().artifact();
-        String version = project.project().version();
-        Path target = projectDir.resolve("target");
+        BuildLayout layout = BuildLayout.of(projectDir, project);
 
         // If a native binary exists, it's the fast path — skip the goal
         // entirely and exec it directly. No prep needed.
-        Path nativeBin = target.resolve(artifact);
+        Path nativeBin = layout.nativeBinary();
         if (Files.isRegularFile(nativeBin) && Files.isExecutable(nativeBin)) {
             List<String> command = new ArrayList<>();
             command.add(nativeBin.toAbsolutePath().toString());
@@ -584,7 +583,7 @@ public final class RunCommand implements Callable<Integer> {
             return new ProcessBuilder(command).inheritIO().start().waitFor();
         }
 
-        Path jar = target.resolve(artifact + "-" + version + ".jar");
+        Path jar = layout.mainJar();
 
         Phase ensureBuilt = Phase.builder("ensure-built")
                 .kind(PhaseKind.CPU)
