@@ -13,17 +13,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 class IntellijJdkDirTest {
 
     @Test
-    void linux_root_is_dot_jdks() {
-        assertThat(IntellijJdkDir.rootFor("linux", "/home/me"))
-                .isEqualTo(Path.of("/home/me/.jdks"));
-        assertThat(IntellijJdkDir.rootFor("windows", "/home/me"))
-                .isEqualTo(Path.of("/home/me/.jdks"));
-    }
-
-    @Test
-    void macos_root_is_library_java_jvms() {
-        assertThat(IntellijJdkDir.rootFor("macOS", "/Users/me"))
-                .isEqualTo(Path.of("/Users/me/Library/Java/JavaVirtualMachines"));
+    void root_is_dot_jk_jdks_on_every_platform() {
+        assertThat(IntellijJdkDir.rootFor("/home/me"))
+                .isEqualTo(Path.of("/home/me/.jk/jdks"));
+        assertThat(IntellijJdkDir.rootFor("/Users/me"))
+                .isEqualTo(Path.of("/Users/me/.jk/jdks"));
     }
 
     @Test

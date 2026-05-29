@@ -2,56 +2,74 @@
 package dev.jkbuild.util;
 
 import java.nio.file.Path;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * Resolves the on-disk directories jk uses for config, cache, state, the
- * user bin dir, and installed JDKs. Follows the XDG Base Directory
- * Specification on Linux and macOS:
+ * Resolves the on-disk directories jk uses for config, cache, state, data,
+ * tool launchers, and installed JDKs. Cargo-style flat layout under a
+ * single root, identical on Linux, macOS, and Windows:
  *
  * <pre>
- *   config()         =  $JK_CONFIG_DIR   |  $XDG_CONFIG_HOME/jk  |  ~/.config/jk
- *   userConfigFile() =  $JK_CONFIG_FILE  |  $XDG_CONFIG_HOME/jk.toml  |  ~/.config/jk.toml
- *   cache()          =  $JK_CACHE_DIR    |  $XDG_CACHE_HOME/jk   |  ~/.cache/jk
- *   state()          =  $JK_STATE_DIR    |  $XDG_STATE_HOME/jk   |  ~/.local/state/jk
- *   data()           =  $JK_DATA_DIR     |  $XDG_DATA_HOME/jk    |  ~/.local/share/jk
- *   binDir()         =  $JK_BIN_DIR      |  $XDG_BIN_HOME        |  ~/.local/bin
- *   jdks()           =  $JK_JDKS_DIR     |  (macOS) ~/Library/Java/JavaVirtualMachines  |  ~/.jdks
+ *   ~/.jk/
+ *   ├── config.toml      # user config (was ~/.config/jk.toml)
+ *   ├── cache/           # downloads + content-addressed action cache
+ *   ├── state/           # mutable per-host state
+ *   ├── data/            # immutable installed data (ledgers, registries)
+ *   ├── bin/             # user-installed tool launchers
+ *   └── jdks/            # JDK installs
  * </pre>
  *
- * <p>{@code binDir()} is shared with other user-installed launchers
- * (uv/cargo style) — no {@code /jk} suffix.
+ * <p>Overrides, highest precedence first:
+ * <ul>
+ *   <li>Per-directory: {@code JK_CONFIG_FILE}, {@code JK_CACHE_DIR},
+ *       {@code JK_STATE_DIR}, {@code JK_DATA_DIR}, {@code JK_BIN_DIR},
+ *       {@code JK_JDKS_DIR}. Absolute paths; no jk suffix appended.</li>
+ *   <li>Root: {@code JK_HOME} relocates the entire tree. Defaults to
+ *       {@code $HOME/.jk}.</li>
+ * </ul>
  *
- * <p>The class is configuration, not policy: it doesn't create directories.
- * Callers materialise paths with {@link java.nio.file.Files#createDirectories}.
+ * <p>XDG Base Directory variables are deliberately not consulted —
+ * jk owns its tree the way Cargo owns {@code ~/.cargo} and Rustup owns
+ * {@code ~/.rustup}. Tool launchers under {@code ~/.jk/bin} should be
+ * added to {@code $PATH} explicitly (jk's installer does this on first
+ * run).
+ *
+ * <p>This class is configuration, not policy: it doesn't create
+ * directories. Callers materialise paths with
+ * {@link java.nio.file.Files#createDirectories}.
  */
 public final class JkDirs {
 
+    private static final String DEFAULT_HOME_SUFFIX = ".jk";
+
     private final Function<String, String> env;
     private final String userHome;
-    private final String os;
 
-    private JkDirs(Function<String, String> env, String userHome, String os) {
+    private JkDirs(Function<String, String> env, String userHome) {
         this.env = Objects.requireNonNull(env, "env");
         this.userHome = Objects.requireNonNull(userHome, "userHome");
-        this.os = Objects.requireNonNull(os, "os");
     }
 
     /** Live resolver bound to {@link System#getenv} and {@code user.home}. */
     public static JkDirs current() {
-        return new JkDirs(System::getenv,
-                System.getProperty("user.home"),
-                System.getProperty("os.name", ""));
+        return new JkDirs(System::getenv, System.getProperty("user.home"));
     }
 
     /** Test seam: fully synthetic environment. */
-    public static JkDirs of(Function<String, String> env, String userHome, String os) {
-        return new JkDirs(env, userHome, os);
+    public static JkDirs of(Function<String, String> env, String userHome) {
+        return new JkDirs(env, userHome);
     }
 
-    public static Path config()         { return current().configDir(); }
+    /**
+     * Back-compat seam for callers that still pass an OS string. The OS is
+     * no longer consulted; the layout is identical on every platform.
+     */
+    public static JkDirs of(Function<String, String> env, String userHome, String ignoredOs) {
+        return new JkDirs(env, userHome);
+    }
+
+    public static Path home()           { return current().homeDir(); }
     public static Path userConfigFile() { return current().userConfigFilePath(); }
     public static Path cache()          { return current().cacheDir(); }
     public static Path state()          { return current().stateDir(); }
@@ -59,86 +77,67 @@ public final class JkDirs {
     public static Path binDir()         { return current().binDirectory(); }
     public static Path jdks()           { return current().jdksDir(); }
 
-    public Path configDir() {
-        return resolve("JK_CONFIG_DIR", "XDG_CONFIG_HOME", ".config");
+    /**
+     * The root of jk's on-disk tree. {@code JK_HOME} overrides; otherwise
+     * {@code $HOME/.jk}.
+     */
+    public Path homeDir() {
+        String override = nonBlank(env.apply("JK_HOME"));
+        if (override != null) return Path.of(override);
+        return Path.of(userHome).resolve(DEFAULT_HOME_SUFFIX);
     }
 
     /**
-     * Single-file user config (sibling of the per-app config dir):
-     * literal {@code ~/.config/jk.toml} on Linux/Windows, or
-     * {@code $XDG_CONFIG_HOME/jk.toml} when set. The file is not under
-     * {@link #configDir()} — it lives one level up so it's a peer of
-     * other tools' {@code <name>.toml} files. Overridable via
-     * {@code $JK_CONFIG_FILE}.
+     * Single-file user config at {@code ~/.jk/config.toml}.
+     * Overridable via {@code JK_CONFIG_FILE}.
      */
     public Path userConfigFilePath() {
         String override = nonBlank(env.apply("JK_CONFIG_FILE"));
         if (override != null) return Path.of(override);
-        String xdg = nonBlank(env.apply("XDG_CONFIG_HOME"));
-        if (xdg != null) return Path.of(xdg).resolve("jk.toml");
-        return home().resolve(".config").resolve("jk.toml");
+        return homeDir().resolve("config.toml");
     }
 
     public Path cacheDir() {
-        return resolve("JK_CACHE_DIR", "XDG_CACHE_HOME", ".cache");
+        return resolve("JK_CACHE_DIR", "cache");
     }
 
     public Path stateDir() {
-        return resolve("JK_STATE_DIR", "XDG_STATE_HOME", ".local/state");
+        return resolve("JK_STATE_DIR", "state");
     }
 
     public Path dataDir() {
-        return resolve("JK_DATA_DIR", "XDG_DATA_HOME", ".local/share");
+        return resolve("JK_DATA_DIR", "data");
     }
 
     /**
-     * The directory user-installed launchers live in. Conventionally on
-     * {@code $PATH}; shared with other tools' launchers, so no {@code /jk}
-     * suffix. XDG_BIN_HOME is honored when set even though it's not part
-     * of the formal spec.
+     * Where {@code jk tool install} writes launchers. Defaults to
+     * {@code ~/.jk/bin/} (cargo-style). Override via {@code JK_BIN_DIR}.
+     * On a fresh install jk asks the user to add this directory to
+     * {@code $PATH}.
      */
     public Path binDirectory() {
-        String override = nonBlank(env.apply("JK_BIN_DIR"));
-        if (override != null) return Path.of(override);
-        String xdg = nonBlank(env.apply("XDG_BIN_HOME"));
-        if (xdg != null) return Path.of(xdg);
-        return home().resolve(".local").resolve("bin");
+        return resolve("JK_BIN_DIR", "bin");
     }
 
     /**
-     * Where jk installs JDKs. Defaults to the IntelliJ neighbor location
-     * so jk and IntelliJ share downloads transparently:
-     * {@code ~/Library/Java/JavaVirtualMachines/} on macOS,
-     * {@code ~/.jdks/} on Linux/Windows. {@code JK_JDKS_DIR} overrides.
+     * Where {@code jk jdk install} extracts JDK tarballs. Defaults to
+     * {@code ~/.jk/jdks/} on every platform. Override via
+     * {@code JK_JDKS_DIR}. JDKs installed elsewhere (IntelliJ's
+     * {@code ~/.jdks} or {@code ~/Library/Java/JavaVirtualMachines}, SDKMAN,
+     * mise, system packages) are still discovered by the probe chain;
+     * they're not stored here.
      */
     public Path jdksDir() {
-        String override = nonBlank(env.apply("JK_JDKS_DIR"));
-        if (override != null) return Path.of(override);
-        if (isMacOs()) {
-            return home().resolve("Library").resolve("Java").resolve("JavaVirtualMachines");
-        }
-        return home().resolve(".jdks");
+        return resolve("JK_JDKS_DIR", "jdks");
     }
 
-    private Path resolve(String jkEnv, String xdgEnv, String defaultSubpath) {
+    /**
+     * Per-method env override wins; otherwise {@code $JK_HOME/<segment>}.
+     */
+    private Path resolve(String jkEnv, String segment) {
         String override = nonBlank(env.apply(jkEnv));
         if (override != null) return Path.of(override);
-        String xdg = nonBlank(env.apply(xdgEnv));
-        if (xdg != null) return Path.of(xdg).resolve("jk");
-        Path base = home();
-        for (String segment : defaultSubpath.split("/")) {
-            base = base.resolve(segment);
-        }
-        return base.resolve("jk");
-    }
-
-    private Path home() {
-        return Path.of(userHome);
-    }
-
-    private boolean isMacOs() {
-        String lower = os.toLowerCase(Locale.ROOT);
-        return lower.contains("mac") || lower.contains("darwin");
+        return homeDir().resolve(segment);
     }
 
     private static String nonBlank(String value) {

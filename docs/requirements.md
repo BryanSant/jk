@@ -119,51 +119,60 @@ centrally by `dev.jkbuild.jdk.SupportedJdk`.
 
 ### Filesystem layout
 
-jk follows the XDG Base Directory Specification on Linux and macOS, with
-JDK installs sharing the IntelliJ neighbor location. Each root is
-overridable via a `JK_*_DIR` env var (which takes precedence over the
-XDG variable when set):
+jk owns a single root directory the way Cargo owns `~/.cargo` and Rustup
+owns `~/.rustup`. The same flat layout is used on Linux, macOS, and
+Windows. `JK_HOME` relocates the whole tree; per-directory env vars
+(`JK_CACHE_DIR`, etc.) override individual subdirs.
 
-| Role   | Default (Linux / macOS)                                | XDG override                     | jk override     |
-| ------ | ------------------------------------------------------ | -------------------------------- | --------------- |
-| config | `~/.config/jk/`                                        | `$XDG_CONFIG_HOME/jk/`           | `JK_CONFIG_DIR` |
-| cache  | `~/.cache/jk/`                                         | `$XDG_CACHE_HOME/jk/`            | `JK_CACHE_DIR`  |
-| state  | `~/.local/state/jk/`                                   | `$XDG_STATE_HOME/jk/`            | `JK_STATE_DIR`  |
-| bin    | `~/.local/bin/`                                        | `$XDG_BIN_HOME`                  | `JK_BIN_DIR`    |
-| JDKs   | Linux: `~/.jdks/` &nbsp; macOS: `~/Library/Java/JavaVirtualMachines/` | —                  | `JK_JDKS_DIR`   |
+| Role   | Default               | Override        |
+| ------ | --------------------- | --------------- |
+| root   | `~/.jk/`              | `JK_HOME`       |
+| config | `~/.jk/config.toml`   | `JK_CONFIG_FILE`|
+| cache  | `~/.jk/cache/`        | `JK_CACHE_DIR`  |
+| state  | `~/.jk/state/`        | `JK_STATE_DIR`  |
+| data   | `~/.jk/data/`         | `JK_DATA_DIR`   |
+| bin    | `~/.jk/bin/`          | `JK_BIN_DIR`    |
+| JDKs   | `~/.jk/jdks/`         | `JK_JDKS_DIR`   |
+
+XDG Base Directory variables are deliberately not consulted —
+`$XDG_CONFIG_HOME`, `$XDG_CACHE_HOME`, etc. have no effect on jk's
+defaults.
 
 ```
-$JK_CONFIG_DIR/                 # config (default: ~/.config/jk/)
+~/.jk/                          # JK_HOME — entire tree relocates with this var
   config.toml                   # user-global config (default vendor, parallelism, etc.)
   credentials.toml              # per-host secrets (0600), or delegated to keychain/.netrc
 
-$JK_CACHE_DIR/                  # cache (default: ~/.cache/jk/)
-  sha256/                       # content-addressed blob store; jars, source jars, javadoc jars, metadata
-    ab/cd/ef.../artifact.jar
-  actions/                      # action cache: hash(action) -> hash(outputs)
-  metadata/                     # cached maven-metadata.xml, repo index entries
-  exec/                         # ephemeral tool environments (LRU-evicted)
-  jdks.json.xz                  # cached JetBrains JDK feed (24h TTL, conditional-GET revalidation)
-  tools/                        # downloaded mvn/gradle/kotlin distributions (or symlinks to SDKMAN, etc.)
-    maven/<version>/
-    gradle/<version>/
-    kotlin/<version>/
-  git/
-    db/<sha256(url)>/           # bare repo per canonical URL
-    co/<sha256(url)>/<sha>/     # checkout per resolved SHA
-    sparse/<sha256(url)>/<sha>/<path-hash>/   # sparse checkouts for monorepo sub-paths
+  cache/                        # JK_CACHE_DIR
+    sha256/                     # content-addressed blob store; jars, source jars, javadoc jars, metadata
+      ab/cd/ef.../artifact.jar
+    actions/                    # action cache: hash(action) -> hash(outputs)
+    metadata/                   # cached maven-metadata.xml, repo index entries
+    exec/                       # ephemeral tool environments (LRU-evicted)
+    jdks.json.xz                # cached JetBrains JDK feed (24h TTL, conditional-GET revalidation)
+    tools/                      # downloaded mvn/gradle/kotlin distributions (or symlinks to SDKMAN, etc.)
+      maven/<version>/
+      gradle/<version>/
+      kotlin/<version>/
+    git/
+      db/<sha256(url)>/         # bare repo per canonical URL
+      co/<sha256(url)>/<sha>/   # checkout per resolved SHA
+      sparse/<sha256(url)>/<sha>/<path-hash>/   # sparse checkouts for monorepo sub-paths
 
-$JK_STATE_DIR/                  # state (default: ~/.local/state/jk/)
-  projects.toml                 # registry of known projects for `jk jdk gc`
-  tools/
-    envs/                       # one resolved env per installed CLI tool (env.json with bin/classpath/main)
+  state/                        # JK_STATE_DIR
+    projects.toml               # registry of known projects for `jk jdk gc`
+    tools/
+      envs/                     # one resolved env per installed CLI tool (env.json with bin/classpath/main)
 
-$JK_BIN_DIR/                    # launchers on the user's PATH (default: ~/.local/bin/)
-  <tool>                        # POSIX shell wrapper (or .cmd on Windows) emitted by `jk install` / `jk tool install`
+  data/                         # JK_DATA_DIR
+    jdk-access.log              # last-used timestamps for `jk jdk gc`
 
-$JK_JDKS_DIR/                   # installed JDKs (default: IntelliJ neighbor location)
-  21.0.5-tem-aarch64-darwin/    # content-addressed by (vendor, version, arch, os)
-  graalvm-jdk-21-aarch64-darwin/
+  bin/                          # JK_BIN_DIR — add to $PATH explicitly (installer prompts on first run)
+    <tool>                      # POSIX shell wrapper (or .cmd on Windows) emitted by `jk tool install`
+
+  jdks/                         # JK_JDKS_DIR
+    21.0.5-tem-aarch64-darwin/  # content-addressed by (vendor, version, arch, os)
+    graalvm-jdk-21-aarch64-darwin/
 
 <project>/
   jk.toml                       # canonical manifest, TOML
@@ -563,7 +572,7 @@ Resolved in this order:
 
 1. `auth = "env:NAME"` — environment variable bearer token.
 2. `auth = "gh-token"` — uses `gh auth token` when present (developer machines).
-3. `$JK_CONFIG_DIR/credentials.toml` (chmod 600).
+3. `~/.jk/credentials.toml` (chmod 600).
 4. `.netrc` for HTTP basic.
 5. `~/.m2/settings.xml` `<servers>` for back-compat.
 6. macOS Keychain / freedesktop secret service / Windows Credential Manager.
@@ -653,7 +662,7 @@ URL canonicalization (lowercase host, strip `.git`, drop default port) prevents 
 
 ### 11.6 Authentication
 
-- HTTPS basic: `$JK_CONFIG_DIR/credentials.toml`, `git credential` helper protocol.
+- HTTPS basic: `~/.jk/credentials.toml`, `git credential` helper protocol.
 - SSH: `ssh-agent` + `~/.ssh/config`. jk never touches keys directly.
 - GitHub developer: `gh auth token` reused transparently.
 - CI: `GH_APP_INSTALLATION_TOKEN`, `CI_JOB_TOKEN`, generic `JK_GIT_TOKEN_<HOST>`.
@@ -688,10 +697,14 @@ Older SDKMAN-style strings (`21-tem`, `21.0.5-tem`) are no longer accepted; migr
 
 ### 12.4 Install location
 
-The IntelliJ JDK directory:
+`~/.jk/jdks/<install_folder_name>/` on every platform. On macOS the
+tarball preserves its native bundle layout, so `JAVA_HOME` points at
+`~/.jk/jdks/<install_folder_name>/Contents/Home/`.
 
-- Linux / Windows: `~/.jdks/<install_folder_name>/`
-- macOS: `~/Library/Java/JavaVirtualMachines/<install_folder_name>/Contents/Home/`
+JDKs installed by other tools (IntelliJ at `~/.jdks/` or
+`~/Library/Java/JavaVirtualMachines/`, SDKMAN, mise, asdf, system
+packages) are still discovered by the probe chain and exposed via
+`jk jdk list` — they just aren't owned by jk.
 
 `install_folder_name` comes from the feed (e.g. `temurin-21.0.5`, `openjdk-26.0.1`). `JAVA_HOME` resolves through the macOS `Contents/Home` subpath automatically.
 
@@ -1369,7 +1382,7 @@ The aspirational comparison is uv. uv is fast because it's Rust + opinionated + 
 
 ### 28.1 User-global config
 
-`$JK_CONFIG_DIR/config.toml`:
+`~/.jk/config.toml`:
 
 ```toml
 [default]
@@ -1385,25 +1398,28 @@ mode = "auto"
 
 ### 28.2 Project-level overrides
 
-Anything in `$JK_CONFIG_DIR/config.toml` is overridable in `jk.toml`'s top-level scope. Workspaces override per-member.
+Anything in `~/.jk/config.toml` is overridable in `jk.toml`'s top-level scope. Workspaces override per-member.
 
 ### 28.3 Environment variables
 
 | Variable | Effect |
 |---|---|
-| `JK_CONFIG_DIR` | Override the config dir (default: `$XDG_CONFIG_HOME/jk` or `~/.config/jk`). |
-| `JK_CACHE_DIR` | Override the cache dir (default: `$XDG_CACHE_HOME/jk` or `~/.cache/jk`). |
-| `JK_STATE_DIR` | Override the state dir (default: `$XDG_STATE_HOME/jk` or `~/.local/state/jk`). |
-| `JK_BIN_DIR` | Override where tool launchers are written (default: `$XDG_BIN_HOME` or `~/.local/bin`). |
-| `JK_JDKS_DIR` | Override the JDK install dir (default: IntelliJ neighbor location — `~/Library/Java/JavaVirtualMachines` on macOS, `~/.jdks` elsewhere). |
+| `JK_HOME` | Relocate the whole tree (default: `~/.jk`). Affects all subdirs unless individually overridden. |
+| `JK_CONFIG_FILE` | Override the config file path (default: `~/.jk/config.toml`). |
+| `JK_CACHE_DIR` | Override the cache dir (default: `~/.jk/cache`). |
+| `JK_STATE_DIR` | Override the state dir (default: `~/.jk/state`). |
+| `JK_DATA_DIR` | Override the data dir (default: `~/.jk/data`). |
+| `JK_BIN_DIR` | Override where tool launchers are written (default: `~/.jk/bin`). |
+| `JK_JDKS_DIR` | Override the JDK install dir (default: `~/.jk/jdks`). |
 | `JK_OFFLINE` | Same as `--offline`. |
 | `JK_LOG` | Log level (`error`, `warn`, `info`, `debug`, `trace`). |
 | `JK_NO_COLOR` / `NO_COLOR` | Disable ANSI. |
 | `CI` (and friends) | Auto-select `profile=ci`. |
 | `JK_GIT_TOKEN_<HOST>` | Bearer token for a git host. |
 
-`XDG_CONFIG_HOME` / `XDG_CACHE_HOME` / `XDG_STATE_HOME` / `XDG_BIN_HOME` are
-honored when set; `JK_*_DIR` overrides take precedence.
+XDG Base Directory variables (`XDG_CONFIG_HOME`, `XDG_CACHE_HOME`, etc.)
+are deliberately not consulted — jk owns `~/.jk` the way Cargo owns
+`~/.cargo`.
 
 ---
 

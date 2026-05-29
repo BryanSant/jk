@@ -7,17 +7,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * The directory jk installs JDKs into. Defaults to the IntelliJ neighbor
- * location so jk and IntelliJ transparently share downloads:
+ * Helpers for handling the macOS {@code .jdk/Contents/Home} bundle layout
+ * that JDK distributions ship with on macOS. Originally this class also
+ * decided where jk installs JDKs (defaulting to the IntelliJ neighbor
+ * location for shared downloads); installs now live under
+ * {@code ~/.jk/jdks/} on every platform — see {@link JkDirs#jdks()}.
  *
- * <ul>
- *   <li>Linux / Windows: {@code ~/.jdks/}</li>
- *   <li>macOS: {@code ~/Library/Java/JavaVirtualMachines/}</li>
- * </ul>
- *
- * <p>Override via {@code JK_JDKS_DIR}. Resolution is delegated to
- * {@link JkDirs#jdks()}; this class is the home for the macOS
- * {@code Contents/Home} bundle-unwrap convention.
+ * <p>The bundle-unwrap helpers stay because external JDKs discovered by
+ * the probe chain (IntelliJ's {@code ~/.jdks}, system installs under
+ * {@code ~/Library/Java/JavaVirtualMachines}, SDKMAN/mise/asdf) still
+ * follow the macOS {@code Contents/Home} convention and need normalising
+ * before {@code JAVA_HOME} is exported.
  */
 public final class IntellijJdkDir {
 
@@ -27,8 +27,8 @@ public final class IntellijJdkDir {
         return JkDirs.jdks();
     }
 
-    static Path rootFor(String os, String userHome) {
-        return JkDirs.of(name -> null, userHome, os).jdksDir();
+    static Path rootFor(String userHome) {
+        return JkDirs.of(name -> null, userHome).jdksDir();
     }
 
     /**
