@@ -37,6 +37,15 @@ import java.util.Optional;
  * <p>Returns {@link Outcome} describing what happened — the resolved JDK plus
  * a flag for whether an install actually ran — so callers can word their
  * status output accordingly.
+ *
+ * <p><b>Note:</b> JDK lifecycle is deliberately decoupled from
+ * {@code --no-cache}. Build caches (deps, action cache, git checkouts, tool
+ * downloads) get cleared when the user passes the flag; JDK installs do
+ * not. JDKs are large (~200 MB), discovered by probes that often share
+ * with IntelliJ, and have a dedicated lifecycle under {@code jk jdk
+ * install/uninstall}. This file must not accept a {@code noCache}
+ * parameter — anything that wants to re-resolve a JDK should go through
+ * {@code jk jdk reconcile} or remove the install explicitly.
  */
 final class JdkEnsure {
 
