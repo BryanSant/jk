@@ -18,9 +18,42 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class SelfHostingTomlTest {
 
-    private static final Path REPO = Path.of(".").toAbsolutePath()
-            // The test is in :core; the repo root is two levels up.
-            .getParent().getParent();
+    /**
+     * Walk up from the test class's own location until we find a
+     * {@code jk.toml} whose {@code [workspace]} table claims this
+     * directory as a member. That root is the repo. This is more robust
+     * than relying on the JVM's cwd, which differs between the Gradle
+     * test launcher (per-module cwd) and a forked test JVM under
+     * {@code jk test} (typically inherits the parent process's cwd).
+     */
+    private static final Path REPO = findRepoRoot();
+
+    private static Path findRepoRoot() {
+        // The .class file path tells us where we are on disk regardless of
+        // cwd. From there, walk up looking for jk.toml with [workspace].
+        try {
+            Path classPath = Path.of(SelfHostingTomlTest.class
+                    .getProtectionDomain().getCodeSource().getLocation().toURI());
+            Path candidate = classPath.toAbsolutePath().normalize();
+            for (int i = 0; i < 12 && candidate != null; i++) {
+                Path manifest = candidate.resolve("jk.toml");
+                if (java.nio.file.Files.isRegularFile(manifest)) {
+                    try {
+                        JkBuild parsed = JkBuildParser.parse(manifest);
+                        if (parsed.isWorkspaceRoot()) return candidate;
+                    } catch (RuntimeException ignored) {
+                        // unparseable jk.toml — keep walking
+                    }
+                }
+                candidate = candidate.getParent();
+            }
+        } catch (Exception ignored) {
+            // fall through
+        }
+        // Last-resort fallback: cwd-relative, two levels up (legacy Gradle
+        // test launcher convention).
+        return Path.of(".").toAbsolutePath().getParent().getParent();
+    }
 
     @Test
     void root_jk_toml_declares_the_workspace() throws Exception {

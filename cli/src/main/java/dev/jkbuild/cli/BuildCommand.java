@@ -13,11 +13,13 @@ import dev.jkbuild.compile.KotlincRequest;
 import dev.jkbuild.compile.KotlincResult;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
+import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
+import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Scope;
@@ -41,6 +43,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -124,7 +129,132 @@ public final class BuildCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        Path dir    = global.workingDir();
+        Path startDir = global.workingDir();
+        Path buildFile = startDir.resolve("jk.toml");
+        if (!Files.exists(buildFile)) {
+            System.err.println("jk build: no jk.toml in " + startDir);
+            return 2;
+        }
+        // Peek at the manifest before committing to a per-dir build. A
+        // workspace root dispatches to runWorkspaceBuild, which iterates
+        // members in topological order and calls runForDir per member.
+        JkBuild peek;
+        try {
+            peek = JkBuildParser.parse(buildFile);
+        } catch (RuntimeException e) {
+            System.err.println("jk build: " + e.getMessage());
+            return 2;
+        }
+        if (peek.isWorkspaceRoot()) {
+            return runWorkspaceBuild(startDir, peek);
+        }
+        return runForDir(startDir);
+    }
+
+    /**
+     * Build every member of the workspace whose root is {@code workspaceRoot}.
+     * Members compile in topological order computed from each member's
+     * inter-sibling deps (a sibling listed as a regular Maven coord whose
+     * group+artifact match another member's {@code [project]}). Each
+     * member's jar lands at {@code <workspaceRoot>/target/} per the
+     * {@link BuildLayout} contract.
+     *
+     * <p>If the root manifest also declares its own {@code [project]} with
+     * source files, that build is skipped — the workspace root is
+     * coordinator-only here. (We may revisit this once virtual workspaces
+     * land; for now the assumption matches every multi-module JVM project
+     * we've seen.)
+     */
+    private int runWorkspaceBuild(Path workspaceRoot, JkBuild root) throws Exception {
+        Map<Path, JkBuild> membersByDir;
+        try {
+            membersByDir = WorkspaceLoader.loadMembers(workspaceRoot, root);
+        } catch (RuntimeException e) {
+            System.err.println("jk build: " + e.getMessage());
+            return 2;
+        }
+        if (membersByDir.isEmpty()) {
+            System.out.println("(workspace declares no members)");
+            return 0;
+        }
+        List<Path> sorted = topoSortMembers(membersByDir);
+        for (int i = 0; i < sorted.size(); i++) {
+            Path memberDir = sorted.get(i);
+            System.out.println();
+            System.out.println("══ " + workspaceRoot.relativize(memberDir)
+                    + " (" + (i + 1) + "/" + sorted.size() + ") ══");
+            int exit = runForDir(memberDir);
+            if (exit != 0) {
+                System.err.println("jk build: " + workspaceRoot.relativize(memberDir)
+                        + " failed (exit " + exit + ")");
+                return exit;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * Order workspace members so each builds after its sibling deps.
+     * Kahn's algorithm against the in-workspace dep graph. Sibling
+     * matches are by full Maven coord ({@code group:artifact}) — members
+     * declare sibling deps explicitly with inline coords, no
+     * {@code .workspace = true} shorthand needed.
+     *
+     * <p>Cycles (which the workspace's
+     * {@link dev.jkbuild.config.WorkspaceLoader} doesn't currently
+     * detect) result in any unsorted members being appended in
+     * declaration order so the build still attempts to make progress.
+     */
+    private static List<Path> topoSortMembers(Map<Path, JkBuild> membersByDir) {
+        Map<String, Path> dirByCoord = new HashMap<>();
+        for (var e : membersByDir.entrySet()) {
+            String coord = e.getValue().project().group()
+                    + ":" + e.getValue().project().artifact();
+            dirByCoord.put(coord, e.getKey());
+        }
+        Map<Path, Set<Path>> requires = new LinkedHashMap<>();
+        for (var e : membersByDir.entrySet()) {
+            Set<Path> prereqs = new LinkedHashSet<>();
+            for (Scope scope : Scope.values()) {
+                for (Dependency d : e.getValue().dependencies().of(scope)) {
+                    Path depDir = dirByCoord.get(d.module());
+                    if (depDir != null && !depDir.equals(e.getKey())) {
+                        prereqs.add(depDir);
+                    }
+                }
+            }
+            requires.put(e.getKey(), prereqs);
+        }
+        Map<Path, Integer> remainingPrereqs = new HashMap<>();
+        for (var e : requires.entrySet()) {
+            remainingPrereqs.put(e.getKey(), e.getValue().size());
+        }
+        java.util.Deque<Path> queue = new java.util.ArrayDeque<>();
+        for (var e : remainingPrereqs.entrySet()) {
+            if (e.getValue() == 0) queue.add(e.getKey());
+        }
+        List<Path> sorted = new ArrayList<>();
+        while (!queue.isEmpty()) {
+            Path next = queue.removeFirst();
+            sorted.add(next);
+            for (var e : requires.entrySet()) {
+                if (e.getValue().contains(next)) {
+                    int rem = remainingPrereqs.merge(e.getKey(), -1, Integer::sum);
+                    if (rem == 0) queue.add(e.getKey());
+                }
+            }
+        }
+        if (sorted.size() != membersByDir.size()) {
+            // Cycle. Fall back to declaration order for the stragglers
+            // so the build still tries to make progress.
+            for (Path p : membersByDir.keySet()) {
+                if (!sorted.contains(p)) sorted.add(p);
+            }
+        }
+        return sorted;
+    }
+
+    private int runForDir(Path dir) throws Exception {
         Path cache  = cacheDir != null ? cacheDir : JkDirs.cache();
         Cas cas     = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
