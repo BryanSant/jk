@@ -7,6 +7,9 @@ import dev.jkbuild.model.Scope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
+import java.io.ByteArrayOutputStream;
+import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
@@ -102,6 +105,30 @@ class AddRemoveCommandTest {
     void add_without_build_jk_fails(@TempDir Path tempDir) {
         int exit = run("add", "com.foo:bar:1.0", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(2);
+    }
+
+    @Test
+    void add_unknown_bare_name_suggests_close_registry_matches(@TempDir Path tempDir) throws Exception {
+        // `picocl` is a typo for `picocli`, which IS in the bundled
+        // registry. The "not in registry" error should surface the
+        // suggestion via AliasRegistry.suggestionsFor — matching the
+        // did-you-mean behavior of the parser.
+        run("new", tempDir.toString());
+
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        PrintStream origErr = System.err;
+        System.setErr(new PrintStream(stderr, true, StandardCharsets.UTF_8));
+        int exit;
+        try {
+            exit = run("add", "picocl", "--ver", "1.0", "-C", tempDir.toString());
+        } finally {
+            System.setErr(origErr);
+        }
+        assertThat(exit).isEqualTo(64);
+        String msg = stderr.toString(StandardCharsets.UTF_8);
+        assertThat(msg).contains("not in the registry");
+        assertThat(msg).contains("Did you mean:");
+        assertThat(msg).contains("picocli");
     }
 
     private static int run(String... args) {

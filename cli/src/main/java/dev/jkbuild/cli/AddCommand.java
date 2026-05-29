@@ -17,6 +17,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
@@ -147,19 +148,28 @@ public final class AddCommand implements Callable<Integer> {
             int atSign = coord.indexOf('@');
 
             if (firstColon < 0 && atSign < 0) {
-                // Bare short name. The bundled registry can supply group +
-                // artifact for curated names; the user still picks the
-                // version. Explicit flags always override the registry.
+                // Bare short name. The layered registry (project + user +
+                // downloaded + bundled) supplies group + artifact for
+                // curated names; the user still picks the version.
+                // Explicit flags always override the registry.
                 String name = nonBlank(nameFlag, coord);
-                var registryHit = dev.jkbuild.registry.AliasRegistry.bundled().lookup(coord);
+                var registry = dev.jkbuild.registry.AliasRegistry.layered();
+                var registryHit = registry.lookup(coord);
                 String group = nonBlank(groupFlag,
                         registryHit.map(dev.jkbuild.registry.AliasRegistry.Module::group).orElse(null));
                 String artifact = nonBlank(artifactFlag,
                         registryHit.map(dev.jkbuild.registry.AliasRegistry.Module::artifact).orElse(name));
                 if (group == null || group.isBlank()) {
-                    throw new IllegalArgumentException(
-                            "bare name `" + coord + "` is not in the bundled registry; "
-                                    + "supply --group (and optionally --artifact) explicitly");
+                    StringBuilder msg = new StringBuilder("bare name `")
+                            .append(coord).append("` is not in the registry. ");
+                    List<String> suggestions = registry.suggestionsFor(coord, 5);
+                    if (!suggestions.isEmpty()) {
+                        msg.append("Did you mean: ")
+                                .append(String.join(", ", suggestions)).append("? ");
+                    }
+                    msg.append("Either pick a registry name or supply --group ")
+                            .append("(and optionally --artifact) explicitly.");
+                    throw new IllegalArgumentException(msg.toString());
                 }
                 if (versionFlag == null || versionFlag.isBlank()) {
                     throw new IllegalArgumentException(
