@@ -259,13 +259,27 @@ public final class BuildCommand implements Callable<Integer> {
         Cas cas     = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
         Path buildFile = dir.resolve("jk.toml");
-        Path lockFile  = dir.resolve("jk.lock");
         int workerCount = workers != null && workers > 0 ? workers : 1;
 
         if (!Files.exists(buildFile)) {
             System.err.println("jk build: no jk.toml in " + dir);
             return 2;
         }
+
+        // Workspace members share the root's jk.lock — there's exactly one
+        // lock per workspace (PRD §13.2). A member-local jk.lock would be
+        // resolved against a partial view of the dep graph and would race
+        // with the root's. Detect the member case here and target the
+        // root's lockfile for both reads and the first-run write.
+        final Path lockFile = resolveLockFileForDir(dir, buildFile);
+        if (lockFile == null) {
+            // resolveLockFileForDir handles the error message internally.
+            return 2;
+        }
+        // The directory where LockFlow.run should write a missing lock —
+        // always the workspace root when we're a member, so the member
+        // doesn't shadow the root with its own.
+        final Path lockDir = lockFile.getParent();
 
         // ---- parse-build ------------------------------------------------
         // Enhanced: if jk.lock is absent it runs the lock resolver inline
@@ -293,11 +307,13 @@ public final class BuildCommand implements Callable<Integer> {
                     BuildLayout layout = BuildLayout.of(dir, project);
                     ctx.put(LAYOUT, layout);
 
-                    // If no lockfile, resolve now.
+                    // If no lockfile, resolve now. For workspace members
+                    // this runs LockFlow against the workspace root so the
+                    // single shared jk.lock gets written there.
                     if (!Files.exists(lockFile)) {
                         ctx.label("resolve deps (first run)");
                         var result = LockFlow.run(
-                                dir, cache, List.of(), true, null, "jk build");
+                                lockDir, cache, List.of(), true, null, "jk build");
                         if (result.status() != 0) {
                             ctx.error("lock", "dependency resolution failed");
                             throw new RuntimeException("lock failed");
@@ -768,15 +784,30 @@ public final class BuildCommand implements Callable<Integer> {
 
     // ---- helpers -------------------------------------------------------
 
-    private static Path resolveLockFile(Path dir) throws IOException {
-        Path local = dir.resolve("jk.lock");
-        if (Files.exists(local)) return local;
-        var workspaceRoot = WorkspaceLocator.findRoot(dir);
-        if (workspaceRoot.isPresent()) {
-            Path candidate = workspaceRoot.get().resolve("jk.lock");
-            if (Files.exists(candidate)) return candidate;
+    /**
+     * Resolve which {@code jk.lock} a member project should use. For a
+     * workspace member, the workspace root's {@code jk.lock} is shared —
+     * we never write a per-member lockfile. For a standalone project (or
+     * the workspace root itself), the project's own directory.
+     *
+     * @return the lockfile path, or {@code null} if the parse failed
+     *         (an error message was already printed to stderr).
+     */
+    private static Path resolveLockFileForDir(Path dir, Path buildFile) throws IOException {
+        JkBuild peek;
+        try {
+            peek = JkBuildParser.parse(buildFile);
+        } catch (RuntimeException e) {
+            System.err.println("jk build: " + e.getMessage());
+            return null;
         }
-        return null;
+        if (!peek.isWorkspaceRoot()) {
+            var workspaceRoot = WorkspaceLocator.findRoot(dir);
+            if (workspaceRoot.isPresent()) {
+                return workspaceRoot.get().resolve("jk.lock");
+            }
+        }
+        return dir.resolve("jk.lock");
     }
 
     @SuppressWarnings("unchecked")
