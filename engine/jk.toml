@@ -6,13 +6,18 @@ jdk      = 25
 java     = 25
 
 [dependencies.main]
-jk-core.workspace                 = true
-jk-io.workspace                   = true
-junit-jupiter.workspace           = true
-junit-platform-launcher.workspace = true
-asm                               = { group = "org.ow2.asm", version = "9.10" }
-asm-tree                          = { group = "org.ow2.asm", version = "9.10" }
+# JUnit is intentionally absent. `jk test` forks a child JVM that runs
+# jk-test-runner (a separate companion jar resolved by SHA-256 from the
+# user's CAS), which is where JUnit lives. Keeping JUnit out of engine's
+# main scope keeps the native binary leaner and avoids version drift
+# between the runner's classpath and ours.
+jk-core.workspace          = true
+jk-io.workspace            = true
+jackson-databind.workspace = true   # parses the runner's NDJSON event stream
+asm                        = { group = "org.ow2.asm", version = "9.10" }
+asm-tree                   = { group = "org.ow2.asm", version = "9.10" }
 
 [dependencies.test]
 assertj-core.workspace            = true
+junit-jupiter.workspace           = true
 junit-platform-launcher.workspace = true
