@@ -99,37 +99,54 @@ class JkBuildParserTest {
     }
 
     @Test
-    void parses_pinned_and_floating_dep_forms() {
+    void parses_name_as_key_dep_with_full_table() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["org.slf4j:slf4j-api:2.0.16", "info.picocli:picocli@^4.7.7"]
-                test = ["org.junit.jupiter:junit-jupiter@>=5.10,<6"]
+                [dependencies.main]
+                slf4j-api = { group = "org.slf4j", artifact = "slf4j-api", version = "2.0.16" }
+                picocli   = { group = "info.picocli", artifact = "picocli", version = "^4.7.7" }
+
+                [dependencies.test]
+                junit-jupiter = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = ">=5.10, <6" }
                 """);
 
         var mainDeps = parsed.dependencies().of(Scope.MAIN);
         assertThat(mainDeps).hasSize(2);
 
-        // `:` form → pinned Exact
-        assertThat(mainDeps.get(0).module()).isEqualTo("org.slf4j:slf4j-api");
-        assertThat(mainDeps.get(0).pinned()).isTrue();
-        assertThat(mainDeps.get(0).version()).isInstanceOf(VersionSelector.Exact.class);
+        // Bare version on the new format → Caret (Cargo-style default).
+        var slf4j = mainDeps.get(0);
+        assertThat(slf4j.name()).isEqualTo("slf4j-api");
+        assertThat(slf4j.module()).isEqualTo("org.slf4j:slf4j-api");
+        assertThat(slf4j.version()).isInstanceOf(VersionSelector.Caret.class);
+        assertThat(slf4j.pinned()).isFalse();
 
-        // `@` form → floating, Caret here
-        assertThat(mainDeps.get(1).module()).isEqualTo("info.picocli:picocli");
-        assertThat(mainDeps.get(1).pinned()).isFalse();
-        assertThat(mainDeps.get(1).version()).isInstanceOf(VersionSelector.Caret.class);
+        var picocli = mainDeps.get(1);
+        assertThat(picocli.name()).isEqualTo("picocli");
+        assertThat(picocli.module()).isEqualTo("info.picocli:picocli");
+        assertThat(picocli.version()).isInstanceOf(VersionSelector.Caret.class);
+        assertThat(picocli.pinned()).isFalse();
 
         var testDeps = parsed.dependencies().of(Scope.TEST);
         assertThat(testDeps).hasSize(1);
-        assertThat(testDeps.get(0).pinned()).isFalse();
-        assertThat(testDeps.get(0).version()).isInstanceOf(VersionSelector.Range.class);
+        assertThat(testDeps.getFirst().pinned()).isFalse();
+        assertThat(testDeps.getFirst().version()).isInstanceOf(VersionSelector.Range.class);
     }
 
     @Test
-    void colon_form_bare_version_is_exact_and_pinned() {
+    void artifact_defaults_to_key_name() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["com.example:lib:1.2.3"]
+                [dependencies.main]
+                picocli = { group = "info.picocli", version = "4.7.7" }
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.name()).isEqualTo("picocli");
+        assertThat(dep.module()).isEqualTo("info.picocli:picocli");
+    }
+
+    @Test
+    void equals_selector_pins_dep() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                lib = { group = "com.example", version = "=1.2.3" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.version()).isInstanceOf(VersionSelector.Exact.class);
@@ -138,11 +155,11 @@ class JkBuildParserTest {
     }
 
     @Test
-    void at_form_bare_version_defaults_to_caret() {
-        // Cargo-style: `@1.2.3` means "compatible with 1.2.3" → Caret.
+    void bare_version_is_caret_floating() {
+        // Per the v1 locked default: bare "1.2.3" reads as ^1.2.3.
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["com.example:lib@1.2.3"]
+                [dependencies.main]
+                lib = { group = "com.example", version = "1.2.3" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.version()).isInstanceOf(VersionSelector.Caret.class);
@@ -151,80 +168,215 @@ class JkBuildParserTest {
     }
 
     @Test
-    void at_form_with_equals_pins_to_exact() {
+    void latest_selector_floats() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["com.example:lib@=1.2.3"]
+                [dependencies.main]
+                lib = { group = "com.example", version = "latest" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.version()).isInstanceOf(VersionSelector.Exact.class);
-        // The `@` form is still considered "floating" at the manifest level —
-        // `jk update` may revisit it, even though the current constraint is Exact.
+        assertThat(dep.version()).isInstanceOf(VersionSelector.Latest.class);
         assertThat(dep.pinned()).isFalse();
     }
 
     @Test
-    void colon_form_rejects_decorations() {
+    void default_scope_shorthand_treats_dependencies_as_main() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies]
+                slf4j-api = { group = "org.slf4j", version = "2.0.16" }
+                picocli   = { group = "info.picocli", version = "4.7.7" }
+                """);
+
+        assertThat(parsed.dependencies().of(Scope.MAIN)).hasSize(2);
+        assertThat(parsed.dependencies().of(Scope.TEST)).isEmpty();
+    }
+
+    @Test
+    void mixed_flat_and_sub_scope_is_rejected() {
+        // [dependencies] cannot mix flat deps with sub-scope tables: the
+        // shape is ambiguous and the parser rejects it.
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies]
-                main = ["com.example:lib:^1.2.3"]
+                stray = { group = "com.example", version = "1.0" }
+
+                [dependencies.test]
+                junit = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = "5.10.0" }
                 """))
                 .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("the `:` form is for pinned versions only");
+                .hasMessageContaining("mixed flat and sub-scope");
     }
 
     @Test
-    void source_only_dep_resolves_to_latest() {
+    void path_source_is_pinned() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["com.foo:bar"]
+                [dependencies.main]
+                shared-utils = { group = "com.acme", artifact = "shared-utils", path = "../shared-utils" }
                 """);
-        var dep = parsed.dependencies().of(dev.jkbuild.model.Scope.MAIN).getFirst();
-        assertThat(dep.module()).isEqualTo("com.foo:bar");
-        assertThat(dep.version()).isInstanceOf(dev.jkbuild.model.VersionSelector.Latest.class);
-        assertThat(dep.pinned()).isFalse();
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isPath()).isTrue();
+        assertThat(dep.pathSource()).isEqualTo("../shared-utils");
+        assertThat(dep.module()).isEqualTo("com.acme:shared-utils");
+        assertThat(dep.pinned()).isTrue();
     }
 
     @Test
-    void parses_git_source_overlay() {
+    void git_source_inline_on_dep_table() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["com.foo:bar"]
-
-                [sources]
-                "com.foo:bar" = { git = "https://github.com/foo/bar", tag = "v1.2.3" }
+                [dependencies.main]
+                codec = { group = "com.acme", git = "https://github.com/acme/codec", tag = "v0.9.1" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.isGit()).isTrue();
-        assertThat(dep.gitSource().originalUrl()).isEqualTo("https://github.com/foo/bar");
+        assertThat(dep.gitSource().originalUrl()).isEqualTo("https://github.com/acme/codec");
         assertThat(dep.gitSource().ref()).isInstanceOf(GitRefSpec.Tag.class);
+        assertThat(dep.module()).isEqualTo("com.acme:codec");
+        assertThat(dep.pinned()).isTrue();
     }
 
     @Test
-    void source_with_explicit_version_string_uses_source() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["com.foo:bar:1.0"]
-
-                [sources]
-                "com.foo:bar" = { git = "https://github.com/foo/bar", branch = "main" }
-                """);
-        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.isGit()).isTrue();
-        assertThat(dep.gitSource().ref()).isInstanceOf(GitRefSpec.Branch.class);
-    }
-
-    @Test
-    void source_must_set_exactly_one_ref() {
+    void git_source_must_set_exactly_one_ref() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["com.foo:bar"]
-
-                [sources]
-                "com.foo:bar" = { git = "https://github.com/foo/bar", tag = "v1", branch = "main" }
+                [dependencies.main]
+                codec = { group = "com.acme", git = "https://github.com/acme/codec", tag = "v1", branch = "main" }
                 """))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("exactly one of");
+    }
+
+    @Test
+    void multiple_sources_on_dep_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                bad = { group = "com.example", version = "1.0", path = "../bad" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("more than one");
+    }
+
+    @Test
+    void no_source_on_dep_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                bad = { group = "com.example" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("must set exactly one of");
+    }
+
+    @Test
+    void missing_group_on_dep_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                bad = { version = "1.0" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("group");
+    }
+
+    @Test
+    void dep_value_must_be_inline_table() {
+        // The v0.6 string-array form is gone; raw strings are rejected.
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                bad = "org.foo:bar:1.0"
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("inline table");
+    }
+
+    @Test
+    void parses_workspace_dependencies_block() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [workspace]
+                members = ["a", "b"]
+
+                [workspace.dependencies]
+                junit-jupiter = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = "6.1.0" }
+                assertj-core  = { group = "org.assertj",       artifact = "assertj-core",  version = "3.27.7" }
+                """);
+        assertThat(parsed.workspace().dependencies()).hasSize(2);
+        var jj = parsed.workspace().dependencies().get("junit-jupiter");
+        assertThat(jj.group()).isEqualTo("org.junit.jupiter");
+        assertThat(jj.artifact()).isEqualTo("junit-jupiter");
+        assertThat(jj.module()).isEqualTo("org.junit.jupiter:junit-jupiter");
+        assertThat(jj.version()).isInstanceOf(VersionSelector.Caret.class);
+    }
+
+    @Test
+    void workspace_dependencies_artifact_defaults_to_key() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [workspace]
+                members = ["a"]
+
+                [workspace.dependencies]
+                picocli = { group = "info.picocli", version = "4.7.7" }
+                """);
+        var pico = parsed.workspace().dependencies().get("picocli");
+        assertThat(pico.artifact()).isEqualTo("picocli");
+    }
+
+    @Test
+    void workspace_true_resolves_against_workspace_dependencies() {
+        // A workspace = true dep with a matching [workspace.dependencies]
+        // entry materializes that entry's coord directly during parse.
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [workspace]
+                members = []
+
+                [workspace.dependencies]
+                junit-jupiter = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = "6.1.0" }
+
+                [dependencies.test]
+                junit-jupiter.workspace = true
+                """);
+        var dep = parsed.dependencies().of(Scope.TEST).getFirst();
+        assertThat(dep.name()).isEqualTo("junit-jupiter");
+        assertThat(dep.module()).isEqualTo("org.junit.jupiter:junit-jupiter");
+        assertThat(dep.version()).isInstanceOf(VersionSelector.Caret.class);
+    }
+
+    @Test
+    void workspace_true_without_match_emits_placeholder_for_merge() {
+        // Without a [workspace.dependencies] match the parser emits a
+        // placeholder that WorkspaceMerge resolves against the sibling
+        // list. The single-file parser cannot fail here because it does
+        // not own the sibling roster.
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                jk-core.workspace = true
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.name()).isEqualTo("jk-core");
+        assertThat(dep.module()).startsWith("workspace:");
+    }
+
+    @Test
+    void workspace_true_cannot_combine_with_version() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                bad = { workspace = true, version = "1.0" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("more than one");
+    }
+
+    @Test
+    void workspace_true_cannot_combine_with_group() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                bad = { workspace = true, group = "com.example" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("must not set `group`");
+    }
+
+    @Test
+    void workspace_false_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                bad = { workspace = false }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("must be `true`");
     }
 
     @Test
@@ -247,6 +399,7 @@ class JkBuildParserTest {
                 """);
         assertThat(parsed.isWorkspaceRoot()).isTrue();
         assertThat(parsed.workspace().members()).containsExactly("core", "io");
+        assertThat(parsed.workspace().dependencies()).isEmpty();
     }
 
     @Test
@@ -265,26 +418,18 @@ class JkBuildParserTest {
     }
 
     @Test
-    void parses_features_block() {
+    void parses_features_block_with_dep_names() {
+        // Feature `deps` are now dep names (not coord strings). Resolution
+        // happens at activation time, against [dependencies.*].
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [features]
                 default = ["postgres"]
 
                 [features.postgres]
-                deps = ["org.postgresql:postgresql:42.7.4"]
+                deps = ["postgres-jdbc", "hikari"]
                 """);
         assertThat(parsed.features().defaults()).containsExactly("postgres");
         assertThat(parsed.features().byName().get("postgres").deps())
-                .containsExactly("org.postgresql:postgresql:42.7.4");
-    }
-
-    @Test
-    void rejects_malformed_dep_string() {
-        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
-                [dependencies]
-                main = ["bareword"]
-                """))
-                .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("group:artifact");
+                .containsExactly("postgres-jdbc", "hikari");
     }
 }

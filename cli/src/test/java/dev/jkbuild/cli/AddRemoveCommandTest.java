@@ -6,8 +6,8 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
+import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -24,8 +24,11 @@ class AddRemoveCommandTest {
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.dependencies().of(Scope.MAIN))
                 .singleElement()
-                .satisfies(d -> assertThat(d.module())
-                        .isEqualTo("com.fasterxml.jackson.core:jackson-databind"));
+                .satisfies(d -> {
+                    assertThat(d.name()).isEqualTo("jackson-databind");
+                    assertThat(d.module())
+                            .isEqualTo("com.fasterxml.jackson.core:jackson-databind");
+                });
     }
 
     @Test
@@ -41,7 +44,43 @@ class AddRemoveCommandTest {
     }
 
     @Test
-    void add_then_remove_cycle(@TempDir Path tempDir) throws Exception {
+    void add_with_structured_flags(@TempDir Path tempDir) throws Exception {
+        run("new", tempDir.toString());
+        int exit = run("add", "spring-web",
+                "--group", "org.springframework.boot",
+                "--artifact", "spring-boot-starter-web",
+                "--ver", "3.4.0",
+                "-C", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+
+        String toml = Files.readString(tempDir.resolve("jk.toml"));
+        assertThat(toml).contains(
+                "spring-web = { group = \"org.springframework.boot\", "
+                        + "artifact = \"spring-boot-starter-web\", version = \"3.4.0\" }");
+
+        JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThat(parsed.dependencies().of(Scope.MAIN))
+                .singleElement()
+                .satisfies(d -> {
+                    assertThat(d.name()).isEqualTo("spring-web");
+                    assertThat(d.module())
+                            .isEqualTo("org.springframework.boot:spring-boot-starter-web");
+                });
+    }
+
+    @Test
+    void add_then_remove_by_name(@TempDir Path tempDir) throws Exception {
+        run("new", tempDir.toString());
+        run("add", "com.foo:bar:1.0", "-C", tempDir.toString());
+        int exit = run("remove", "bar", "-C", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+
+        JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThat(parsed.dependencies().of(Scope.MAIN)).isEmpty();
+    }
+
+    @Test
+    void remove_accepts_coord_form_as_migration_aid(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
         run("add", "com.foo:bar:1.0", "-C", tempDir.toString());
         int exit = run("remove", "com.foo:bar", "-C", tempDir.toString());
@@ -54,6 +93,7 @@ class AddRemoveCommandTest {
     @Test
     void add_rejects_unparseable_coord(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
+        // A bare name without --group / --ver is a usage error.
         int exit = run("add", "not-a-coord", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(64);
     }

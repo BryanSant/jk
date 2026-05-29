@@ -7,7 +7,20 @@ import java.util.Map;
 
 /**
  * Emits a {@code jk.toml} document from {@link NewInputs}. The schema reflects
- * the post-migration form:
+ * the v0.7 name-as-key sub-table form:
+ *
+ * <pre>{@code
+ *   [project]
+ *   group    = "..."
+ *   artifact = "..."
+ *   version  = "0.1.0"
+ *   jdk      = 25
+ *   java     = 25
+ *
+ *   [dependencies.test]
+ *   junit-jupiter = { group = "org.junit.jupiter", version = "6.1.0" }
+ * }</pre>
+ *
  * <ul>
  *   <li>{@code jdk = <major>} — integer feature release; resolved to a concrete
  *       install identifier in {@code jk.lock}.</li>
@@ -51,40 +64,56 @@ public final class NewJkBuildRenderer {
         var picks = resolvePicks(inputs.deps());
         if (picks.isEmpty()) return sb.toString();
 
-        sb.append('\n');
-        sb.append("[dependencies]\n");
-        renderScope(sb, "main", picks.getOrDefault("main", Map.of()));
-        renderScope(sb, "processor", picks.getOrDefault("processor", Map.of()));
-        renderScope(sb, "provided", picks.getOrDefault("provided", Map.of()));
-        renderScope(sb, "test", picks.getOrDefault("test", Map.of()));
+        // Emit scopes in the order they show up in the curated catalog: the
+        // wizard's display order should roughly match the rendered file.
+        renderScope(sb, "main", picks.getOrDefault("main", List.of()));
+        renderScope(sb, "processor", picks.getOrDefault("processor", List.of()));
+        renderScope(sb, "provided", picks.getOrDefault("provided", List.of()));
+        renderScope(sb, "test", picks.getOrDefault("test", List.of()));
         return sb.toString();
     }
 
-    private static void renderScope(StringBuilder sb, String scope, Map<String, String> entries) {
+    private static void renderScope(StringBuilder sb, String scope, List<NewScaffolder.CuratedEntry> entries) {
         if (entries.isEmpty()) return;
-        sb.append(scope).append(" = [\n");
-        // `@major` is the floating caret form — pinned bumps stay opt-in.
-        entries.forEach((coord, version) ->
-                sb.append("  \"").append(coord).append('@').append(version).append("\",\n"));
-        sb.append("]\n");
+        sb.append('\n');
+        sb.append("[dependencies.").append(scope).append("]\n");
+        for (var e : entries) {
+            sb.append(formatEntry(e)).append('\n');
+        }
     }
 
     /**
-     * Group selected dep ids by scope. Returns a nested map of
-     * scope -> (group:artifact -> version), preserving insertion order so
-     * generated files have a stable shape.
+     * Render a single curated dep as an inline table. The short name is the
+     * artifactId (the part after the colon in {@code group:artifact}); the
+     * {@code artifact} field is omitted because it equals the key. The
+     * version uses the curated major directly — bare-string version is
+     * caret-floating per the v1 default ({@code ^1} → 1.x.x).
      */
-    private static Map<String, Map<String, String>> resolvePicks(List<String> deps) {
-        Map<String, Map<String, String>> byScope = new LinkedHashMap<>();
+    private static String formatEntry(NewScaffolder.CuratedEntry e) {
+        int colon = e.coord().indexOf(':');
+        String group = e.coord().substring(0, colon);
+        String artifact = e.coord().substring(colon + 1);
+        return artifact + " = { group = \"" + group + "\", version = \"" + e.version() + "\" }";
+    }
+
+    /**
+     * Group selected dep ids by scope. Returns a nested map of scope ->
+     * curated entries, preserving insertion order so generated files have a
+     * stable shape and de-duping by short name (artifactId) within a scope.
+     */
+    private static Map<String, List<NewScaffolder.CuratedEntry>> resolvePicks(List<String> deps) {
+        Map<String, Map<String, NewScaffolder.CuratedEntry>> byScope = new LinkedHashMap<>();
         for (var id : deps) {
             var entries = NewScaffolder.CURATED_DEPS.get(id);
             if (entries == null) continue;
             for (var e : entries) {
-                byScope
-                        .computeIfAbsent(e.scope(), _ -> new LinkedHashMap<>())
-                        .put(e.coord(), e.version());
+                String shortName = e.coord().substring(e.coord().indexOf(':') + 1);
+                byScope.computeIfAbsent(e.scope(), _ -> new LinkedHashMap<>())
+                        .putIfAbsent(shortName, e);
             }
         }
-        return byScope;
+        Map<String, List<NewScaffolder.CuratedEntry>> out = new LinkedHashMap<>();
+        byScope.forEach((scope, entries) -> out.put(scope, List.copyOf(entries.values())));
+        return out;
     }
 }

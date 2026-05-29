@@ -9,14 +9,14 @@ import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TreeMap;
 
 /**
- * Renders a {@link JkBuild} value as a TOML {@code jk.toml} document.
+ * Renders a {@link JkBuild} value as a TOML {@code jk.toml} document in
+ * the v0.7 name-as-key sub-table format.
  *
  * <p>Output shape:
  * <ul>
@@ -24,17 +24,21 @@ import java.util.TreeMap;
  *       emitted; main/shadow/native emitted only when set.</li>
  *   <li>{@code [workspace]} block when this is a workspace root.</li>
  *   <li>{@code [repositories]} block with per-name URL strings.</li>
- *   <li>{@code [dependencies]} block with per-scope arrays of
- *       {@code "group:artifact:version"} strings. Coords with a non-null
- *       {@link Dependency#gitSource()} are emitted as {@code "group:artifact"}
- *       and a matching entry in {@code [sources]}.</li>
- *   <li>{@code [sources]} block — only when at least one dep is git-sourced.</li>
+ *   <li>{@code [dependencies.<scope>]} sub-tables; each entry is
+ *       {@code name = { group = "...", artifact = "...", version = "..." }}.
+ *       The {@code artifact} field is omitted when it equals the key. Workspace
+ *       placeholders ({@code module} starts with {@code workspace:}) collapse
+ *       to {@code name.workspace = true}. Git sources emit the inline-table
+ *       form with {@code git}/{@code tag|branch|rev} fields. Path sources emit
+ *       {@code path = "..."}.</li>
  * </ul>
  *
- * <p>Modules are alphabetised within each scope for determinism; declared
- * order is not preserved.
+ * <p>Within a scope, deps are alphabetised by short {@code name} for
+ * determinism; declared order is not preserved.
  */
 public final class JkBuildRenderer {
+
+    private static final String WORKSPACE_PLACEHOLDER_PREFIX = "workspace:";
 
     private JkBuildRenderer() {}
 
@@ -45,7 +49,6 @@ public final class JkBuildRenderer {
         renderWorkspace(sb, jkBuild);
         renderRepositories(sb, jkBuild.repositories());
         renderDependencies(sb, jkBuild);
-        renderSources(sb, jkBuild);
         return sb.toString();
     }
 
@@ -99,73 +102,77 @@ public final class JkBuildRenderer {
     private static void renderDependencies(StringBuilder sb, JkBuild jkBuild) {
         Map<Scope, List<Dependency>> byScope = jkBuild.dependencies().byScope();
         if (byScope.isEmpty()) return;
-        boolean any = false;
-        StringBuilder body = new StringBuilder();
         for (Scope scope : new Scope[] {
                 Scope.PLATFORM, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR}) {
             List<Dependency> deps = byScope.get(scope);
             if (deps == null || deps.isEmpty()) continue;
-            any = true;
+            // Sort by short name for determinism. The dep `name` is the
+            // user-facing manifest key; module ordering is no longer the
+            // identifier.
             Map<String, Dependency> sorted = new TreeMap<>();
-            for (Dependency d : deps) sorted.put(d.module(), d);
-            body.append(scope.canonical()).append(" = [\n");
+            for (Dependency d : deps) sorted.put(d.name(), d);
+
+            sb.append('\n');
+            sb.append("[dependencies.").append(scope.canonical()).append("]\n");
             for (Dependency d : sorted.values()) {
-                body.append("  ").append(quote(formatDep(d))).append(",\n");
+                sb.append(renderEntry(d)).append('\n');
             }
-            body.append("]\n");
         }
-        if (!any) return;
-        sb.append('\n');
-        sb.append("[dependencies]\n");
-        sb.append(body);
     }
 
-    private static String formatDep(Dependency d) {
+    /**
+     * Render a single dep entry line. Three forms:
+     * <ul>
+     *   <li>Workspace placeholder (module starts with {@code workspace:}):
+     *       {@code name.workspace = true}</li>
+     *   <li>Git-sourced: {@code name = { group = "...", artifact?, git = "...", tag|branch|rev = "..." }}</li>
+     *   <li>Path-sourced: {@code name = { group = "...", artifact?, path = "..." }}</li>
+     *   <li>Versioned: {@code name = { group = "...", artifact?, version = "..." }}</li>
+     * </ul>
+     */
+    private static String renderEntry(Dependency d) {
+        if (d.module().startsWith(WORKSPACE_PLACEHOLDER_PREFIX)) {
+            return safeKey(d.name()) + ".workspace = true";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append(safeKey(d.name())).append(" = { group = ").append(quote(d.group()));
+        if (!d.artifact().equals(d.name())) {
+            sb.append(", artifact = ").append(quote(d.artifact()));
+        }
         if (d.isGit()) {
-            // Git deps have no version in the scope array — the override lives
-            // in [sources].
-            return d.module();
-        }
-        // Pinned → `:` form; floating → `@` form.
-        String sep = d.pinned() ? ":" : "@";
-        return d.module() + sep + d.version().raw();
-    }
-
-    private static void renderSources(StringBuilder sb, JkBuild jkBuild) {
-        Map<String, GitSource> sources = collectGitSources(jkBuild);
-        if (sources.isEmpty()) return;
-        sb.append('\n');
-        sb.append("[sources]\n");
-        for (Map.Entry<String, GitSource> entry : sources.entrySet()) {
-            sb.append(quote(entry.getKey())).append(" = ");
-            sb.append(formatGitSource(entry.getValue())).append('\n');
-        }
-    }
-
-    private static Map<String, GitSource> collectGitSources(JkBuild jkBuild) {
-        Map<String, GitSource> result = new TreeMap<>();
-        for (List<Dependency> deps : jkBuild.dependencies().byScope().values()) {
-            for (Dependency d : deps) {
-                if (d.isGit() && !result.containsKey(d.module())) {
-                    result.put(d.module(), d.gitSource());
-                }
+            GitSource s = d.gitSource();
+            sb.append(", git = ").append(quote(s.originalUrl()));
+            switch (s.ref()) {
+                case GitRefSpec.Tag t -> sb.append(", tag = ").append(quote(t.name()));
+                case GitRefSpec.Branch b -> sb.append(", branch = ").append(quote(b.name()));
+                case GitRefSpec.Rev r -> sb.append(", rev = ").append(quote(r.sha()));
             }
+            if (s.path() != null) sb.append(", path = ").append(quote(s.path()));
+            if (!s.submodules()) sb.append(", submodules = false");
+            if (s.verifySignature()) sb.append(", verify-signed = true");
+        } else if (d.isPath()) {
+            sb.append(", path = ").append(quote(d.pathSource()));
+        } else {
+            sb.append(", version = ").append(quote(versionLiteral(d.version())));
         }
-        return result;
+        sb.append(" }");
+        return sb.toString();
     }
 
-    private static String formatGitSource(GitSource s) {
-        List<String> parts = new ArrayList<>();
-        parts.add("git = " + quote(s.originalUrl()));
-        switch (s.ref()) {
-            case GitRefSpec.Tag t -> parts.add("tag = " + quote(t.name()));
-            case GitRefSpec.Branch b -> parts.add("branch = " + quote(b.name()));
-            case GitRefSpec.Rev r -> parts.add("rev = " + quote(r.sha()));
-        }
-        if (s.path() != null) parts.add("path = " + quote(s.path()));
-        if (!s.submodules()) parts.add("submodules = false");
-        if (s.verifySignature()) parts.add("verify-signed = true");
-        return "{ " + String.join(", ", parts) + " }";
+    /**
+     * Convert a {@link VersionSelector} into the literal that goes inside
+     * {@code version = "..."}. Exact selectors keep their {@code =} prefix so
+     * a re-parse via {@code parseFloating} round-trips back to {@code Exact};
+     * other selectors emit their decoration as written.
+     */
+    private static String versionLiteral(VersionSelector v) {
+        return switch (v) {
+            case VersionSelector.Exact e -> "=" + e.version();
+            case VersionSelector.Caret c -> c.version();
+            case VersionSelector.Tilde t -> "~" + t.version();
+            case VersionSelector.Range r -> r.raw();
+            case VersionSelector.Latest l -> "latest";
+        };
     }
 
     /**

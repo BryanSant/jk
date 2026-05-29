@@ -210,7 +210,7 @@ Conventions:
 
 - All top-level tables are optional. A `jk.toml` with only `[project]` (`group`, `artifact`, `version`) is a valid project.
 - A JSON Schema is published alongside the binary; IntelliJ/VS Code/Helix can autocomplete and validate.
-- Dependencies are arrays of `"group:artifact:version"` strings per scope under `[dependencies]`. Non-registry overrides (git, path, URL) live in a parallel `[sources]` table keyed by `"group:artifact"`.
+- Dependencies use **name-as-key** sub-tables per scope: `[dependencies.<scope>]` maps a short local name to an inline coord table (`{ group, artifact, version }`). The short name is the user-controlled identifier; the coordinate is a resolution detail. Source overrides (`path`, `git` + `tag`/`branch`/`rev`) are inline fields on the same table — there is **no separate `[sources]` table**. Shared external deps live in `[workspace.dependencies]`; children inherit by writing `name.workspace = true`. Workspace siblings are resolved through the same `name.workspace = true` mechanism (matched against members' `[project].artifact`). A `[dependencies]` block whose direct children are all inline dep tables is shorthand for `[dependencies.main]`. See [docs/artifact-coord-design.md](./artifact-coord-design.md) for the full grammar.
 
 ### 5.2 `jk.lock`
 
@@ -341,11 +341,8 @@ Conflicts are resolved by:
 By default, a coordinate is resolved by walking declared repositories in declared order; the first hit wins. **A package can be pinned to a specific repository** with `from = "internal"`:
 
 ```toml
-[dependencies]
-main = ["com.acme:internal-lib:1.0"]
-
-[sources]
-"com.acme:internal-lib" = { from = "internal" }
+[dependencies.main]
+internal-lib = { group = "com.acme", artifact = "internal-lib", version = "1.0", from = "internal" }
 ```
 
 When pinned, jk will *refuse* to fetch the package from any other repo even at a higher version. This closes the dependency-confusion attack class.
@@ -353,8 +350,8 @@ When pinned, jk will *refuse* to fetch the package from any other repo even at a
 ### 7.6 Platform / BOM imports
 
 ```toml
-[dependencies]
-platform = ["org.springframework.boot:spring-boot-dependencies:3.4.0"]
+[dependencies.platform]
+spring-boot-dependencies = { group = "org.springframework.boot", artifact = "spring-boot-dependencies", version = "3.4.0" }
 ```
 
 Imported `<dependencyManagement>` constraints apply to all other scopes in the project (and, in a workspace root, to all members).
@@ -362,19 +359,11 @@ Imported `<dependencyManagement>` constraints apply to all other scopes in the p
 ### 7.7 Target-conditional dependencies
 
 ```toml
-[dependencies]
-main = [
-  "io.netty:netty-transport-native-epoll:4.1.115",
-  "io.netty:netty-transport-native-kqueue:4.1.115",
-]
-
-[sources."io.netty:netty-transport-native-epoll"]
-classifier = "linux-x86_64"
-target     = "os(linux)"
-
-[sources."io.netty:netty-transport-native-kqueue"]
-classifier = "osx-aarch64"
-target     = "os(darwin) && arch(aarch64)"
+[dependencies.main]
+netty-epoll = { group = "io.netty", artifact = "netty-transport-native-epoll", version = "4.1.115",
+                classifier = "linux-x86_64", target = "os(linux)" }
+netty-kqueue = { group = "io.netty", artifact = "netty-transport-native-kqueue", version = "4.1.115",
+                 classifier = "osx-aarch64", target = "os(darwin) && arch(aarch64)" }
 ```
 
 Supported target predicates in v1: `os(linux|darwin|windows)`, `arch(x86_64|aarch64)`, `jdk(>=N)`. User-defined attributes are not in scope (avoiding Gradle's variant-attribute complexity).
@@ -383,38 +372,44 @@ Supported target predicates in v1: `os(linux|darwin|windows)`, `arch(x86_64|aarc
 
 Named, additive dependency sets. Solve real JVM problems (driver/parser/logger selection) without conditional source compilation.
 
+Features reference **short dep names** from `[dependencies.*]`, not coord strings. The dep entries themselves typically carry `optional = true` (reserved for future enforcement); features pull them into the active set.
+
 ```toml
+[dependencies.main]
+postgres-jdbc    = { group = "org.postgresql",                artifact = "postgresql",        version = "42.7.4" }
+mysql-connector  = { group = "com.mysql",                     artifact = "mysql-connector-j", version = "9.0.0"  }
+jackson-databind = { group = "com.fasterxml.jackson.core",    artifact = "jackson-databind",  version = "2.18.2" }
+gson             = { group = "com.google.code.gson",          artifact = "gson",              version = "2.11.0" }
+micrometer-core  = { group = "io.micrometer",                 artifact = "micrometer-core",   version = "1.13.6" }
+
 [features]
 default = ["postgres", "jackson"]
 
 [features.postgres]
-deps = ["org.postgresql:postgresql:42.7.4"]
+deps = ["postgres-jdbc"]
 
 [features.mysql]
-deps = ["com.mysql:mysql-connector-j:9.0.0"]
+deps = ["mysql-connector"]
 
 [features.jackson]
-deps = ["com.fasterxml.jackson.core:jackson-databind:2.18.2"]
+deps = ["jackson-databind"]
 
 [features.gson]
-deps = ["com.google.code.gson:gson:2.11.0"]
+deps = ["gson"]
 
 [features.metrics]
-deps = ["io.micrometer:micrometer-core:1.13.6"]
+deps = ["micrometer-core"]
 
 [features.full]
 features = ["postgres", "jackson", "metrics"]
 ```
 
-Consumer side — request specific features from a dependency via the `[sources]` override:
+Consumer side — request specific features from a dependency by adding fields to the dep table:
 
 ```toml
-[dependencies]
-main = ["com.example:widget:0.3.1"]
-
-[sources."com.example:widget"]
-features         = ["mysql", "gson"]
-default-features = false
+[dependencies.main]
+widget = { group = "com.example", artifact = "widget", version = "0.3.1",
+           features = ["mysql", "gson"], default-features = false }
 ```
 
 Features differ from profiles (see §14): features change *what* is compiled; profiles change *how*.
@@ -602,26 +597,23 @@ The headline new feature. Inspired by Cargo, with JVM-shaped extensions.
 
 ### 11.1 Declaration
 
-A git dep appears as a bare `"group:artifact"` (no version) in the `[dependencies]` array, and the override lives in `[sources]` — the uv pattern:
+A git dep is a regular `[dependencies.<scope>]` entry whose source mode is `git` instead of `version`. The `tag`/`branch`/`rev` selector is an inline field on the same dep table — there is no separate `[sources]` table.
 
 ```toml
-[dependencies]
-main = [
-  "com.foo:bar",
-  "com.foo:baz",
-  "com.foo:qux",
-]
-
-[sources]
+[dependencies.main]
 # Long form
-"com.foo:bar" = { git = "https://github.com/foo/bar", tag = "v1.2.3", path = "modules/bar", submodules = true }
+bar = { group = "com.foo", artifact = "bar",
+        git = "https://github.com/foo/bar", tag = "v1.2.3",
+        path = "modules/bar", submodules = true }
 # Host shorthands (gh, gl, bb, sr — for github, gitlab, bitbucket, sourcehut)
-"com.foo:baz" = { git = "gh:foo/baz", tag = "v0.5.0" }
+baz = { group = "com.foo", artifact = "baz",
+        git = "gh:foo/baz", tag = "v0.5.0" }
 # SSH form
-"com.foo:qux" = { git = "git@github.com:foo/qux.git", branch = "main" }
+qux = { group = "com.foo", artifact = "qux",
+        git = "git@github.com:foo/qux.git", branch = "main" }
 ```
 
-The ref selector is exactly one of `tag`, `branch`, or `rev`. `submodules` defaults to `true`; set `false` to opt out per dep.
+The ref selector is exactly one of `tag`, `branch`, or `rev`. `submodules` defaults to `true`; set `false` to opt out per dep. `path` (when the coord lives in a sub-directory of the cloned repo) and `verify-signed` are also inline fields on the dep table.
 
 ### 11.2 Pinning model
 
@@ -754,8 +746,8 @@ kotlin = "2.1.0"
 # shared
 
 [workspace.dependencies]
-"com.fasterxml.jackson.core:jackson-databind" = "2.18.2"
-"io.projectreactor:reactor-core"              = "3.6.10"
+jackson-databind = { group = "com.fasterxml.jackson.core", artifact = "jackson-databind", version = "2.18.2" }
+reactor-core     = { group = "io.projectreactor",          artifact = "reactor-core",     version = "3.6.10" }
 ```
 
 Member `services/api/jk.toml`:
@@ -766,21 +758,20 @@ group    = "com.example"
 artifact = "api"
 version  = "$workspace"
 
-[dependencies]
-main = [
-  "com.fasterxml.jackson.core:jackson-databind:$workspace",
-  "com.example:widget-core",
-]
-
-[sources]
-"com.example:widget-core" = { path = "../../libs/core" }
+[dependencies.main]
+# Shared external dep — inherited from [workspace.dependencies] above.
+jackson-databind.workspace = true
+# Workspace sibling — short name matches the sibling member's [project].artifact.
+# The resolver looks up siblings before [workspace.dependencies].
+widget-core.workspace = true
 ```
 
 ### 13.2 Properties
 
 - **One `jk.lock` at workspace root.** Always.
 - **Shared `target/`** under workspace root. Incremental compilation reuses across members.
-- **Workspace-level dep version pinning** (`dependencies.workspace.*`) — members reference via `$workspace`.
+- **Shared external deps** declared once in `[workspace.dependencies]`; members opt in with `name.workspace = true`.
+- **Workspace siblings** resolved through the same `name.workspace = true` mechanism — the short name is matched against the sibling's `[project].artifact`.
 - **`jk -p <member> <cmd>`** scopes a command.
 - **Virtual workspaces** supported — a root `jk.toml` with `workspace { }` but no `project { }` is valid.
 - **Glob members** (`libs/*`) to avoid hand-listing.
@@ -927,7 +918,7 @@ JUnit Platform (JUnit 5). Auto-detected; no configuration. Other frameworks (Tes
 ```toml
 [test-sets.integration]
 path = "src/integrationTest"
-deps = ["org.testcontainers:testcontainers:1.20.4"]    # appended to dependencies.test
+deps = ["testcontainers"]    # short names referencing entries in [dependencies.test]
 
 [test-sets.smoke]
 path = "src/smoke"

@@ -14,18 +14,21 @@ import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk remove &lt;module&gt;} — remove a dependency from {@code jk.toml}.
+ * {@code jk remove &lt;name&gt;} — remove a dependency from {@code jk.toml}
+ * by its short name (the manifest key).
  *
- * <p>Accepts either {@code group:artifact} or a full
- * {@code group:artifact:version} (the version, if present, is ignored —
- * a module only appears once per scope).
+ * <p>A Maven-coord shorthand ({@code group:artifact} or
+ * {@code group:artifact:version}) is also accepted as a migration aid:
+ * the artifactId is extracted and used as the short name. The
+ * recommended form is the bare short name.
  */
 @Command(name = "remove", description = "Remove a dependency from jk.toml")
 public final class RemoveCommand implements Callable<Integer> {
 
-    @Parameters(arity = "1", paramLabel = "[dep]",
-            description = "group:artifact")
-    String moduleArg;
+    @Parameters(arity = "1", paramLabel = "[name]",
+            description = "Short name of the dependency to remove (the manifest key). "
+                    + "A group:artifact[:version] coord is also accepted; the artifactId is used as the name.")
+    String nameArg;
 
     // Inlined scope flags (see AddCommand for the picocli-codegen rationale).
     @Option(names = "--test",      description = "Test scope")
@@ -47,7 +50,6 @@ public final class RemoveCommand implements Callable<Integer> {
             System.err.println("jk remove: no jk.toml in current directory");
             return 2;
         }
-        String module = moduleOnly(moduleArg);
         int selected = (test ? 1 : 0) + (runtime ? 1 : 0)
                 + (provided ? 1 : 0) + (processor ? 1 : 0);
         if (selected > 1) {
@@ -59,27 +61,46 @@ public final class RemoveCommand implements Callable<Integer> {
                 : provided ? Scope.PROVIDED
                 : processor ? Scope.PROCESSOR
                 : Scope.MAIN;
+        String name;
+        try {
+            name = shortNameOf(nameArg);
+        } catch (IllegalArgumentException e) {
+            System.err.println("jk remove: " + e.getMessage());
+            return 64;
+        }
+
         String original = Files.readString(file);
         String updated;
         try {
-            updated = JkBuildEditor.removeDependency(original, scope, module);
-        } catch (IllegalStateException e) {
+            updated = JkBuildEditor.removeDependency(original, scope, name);
+        } catch (IllegalStateException | IllegalArgumentException e) {
             System.err.println("jk remove: " + e.getMessage());
             return 1;
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
-        System.out.println("Removed " + module + " from dependencies." + scope.canonical());
+        System.out.println("Removed " + name + " from dependencies." + scope.canonical());
         return 0;
     }
 
-    private static String moduleOnly(String coord) {
-        // Allow either group:artifact or group:artifact:version; keep the first two segments.
-        int first = coord.indexOf(':');
-        if (first < 0) {
-            throw new IllegalArgumentException(
-                    "expected group:artifact[:version], got: " + coord);
+    /**
+     * Extract the short name from the user's argument. A bare token is
+     * returned unchanged; a {@code group:artifact[:version]} coord
+     * collapses to its artifactId.
+     */
+    private static String shortNameOf(String arg) {
+        if (arg == null || arg.isBlank()) {
+            throw new IllegalArgumentException("name must not be blank");
         }
-        int second = coord.indexOf(':', first + 1);
-        return second < 0 ? coord : coord.substring(0, second);
+        int first = arg.indexOf(':');
+        if (first < 0) return arg;
+        int second = arg.indexOf(':', first + 1);
+        String artifact = second < 0
+                ? arg.substring(first + 1)
+                : arg.substring(first + 1, second);
+        if (artifact.isBlank()) {
+            throw new IllegalArgumentException(
+                    "could not extract artifactId from: " + arg);
+        }
+        return artifact;
     }
 }

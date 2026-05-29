@@ -87,19 +87,21 @@ class NewScaffolderTest {
     }
 
     @Test
-    void deps_render_with_at_major_form(@TempDir Path tempDir) throws IOException {
+    void deps_render_in_name_as_key_subtables(@TempDir Path tempDir) throws IOException {
         var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget", "widget",
                 Optional.empty(), false, false,
                 List.of("commons-io", "guava"), 25, false, Optional.empty());
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).contains("[dependencies]");
-        assertThat(build).contains("main = [");
-        assertThat(build).contains("\"commons-io:commons-io@2\"");
-        assertThat(build).contains("\"com.google.guava:guava@33\"");
-        assertThat(build).doesNotContain("processor =");
-        assertThat(build).doesNotContain("provided =");
+        assertThat(build).contains("[dependencies.main]");
+        // Curated versions are bare majors — caret-floating per the v1 default.
+        assertThat(build).contains(
+                "commons-io = { group = \"commons-io\", version = \"2\" }");
+        assertThat(build).contains(
+                "guava = { group = \"com.google.guava\", version = \"33\" }");
+        assertThat(build).doesNotContain("[dependencies.processor]");
+        assertThat(build).doesNotContain("[dependencies.provided]");
     }
 
     @Test
@@ -110,10 +112,11 @@ class NewScaffolderTest {
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).doesNotContain("main = [");
-        assertThat(build).contains("processor = [");
-        assertThat(build).contains("provided = [");
-        assertThat(build).contains("\"org.projectlombok:lombok@1\"");
+        assertThat(build).doesNotContain("[dependencies.main]");
+        assertThat(build).contains("[dependencies.processor]");
+        assertThat(build).contains("[dependencies.provided]");
+        assertThat(build).contains(
+                "lombok = { group = \"org.projectlombok\", version = \"1\" }");
     }
 
     @Test
@@ -124,7 +127,9 @@ class NewScaffolderTest {
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).contains("\"org.jspecify:jspecify@1\"");
+        assertThat(build).contains("[dependencies.main]");
+        assertThat(build).contains(
+                "jspecify = { group = \"org.jspecify\", version = \"1\" }");
     }
 
     @Test
@@ -135,8 +140,9 @@ class NewScaffolderTest {
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).contains("test = [");
-        assertThat(build).contains("\"io.kotest:kotest-runner-junit5@5\"");
+        assertThat(build).contains("[dependencies.test]");
+        assertThat(build).contains(
+                "kotest-runner-junit5 = { group = \"io.kotest\", version = \"5\" }");
     }
 
     @Test

@@ -6,23 +6,21 @@ jdk      = 25
 java     = 25
 main     = "dev.jkbuild.cli.Jk"
 
-[dependencies]
-main = [
-  "dev.jkbuild:jk-compat:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-core:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-engine:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-image:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-io:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-resolver:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-supply-chain:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-toolchain:0.6.0-SNAPSHOT",
-  "info.picocli:picocli:4.7.7",
-]
-test = [
-  "org.assertj:assertj-core:3.27.7",
-  "org.junit.jupiter:junit-jupiter:6.1.0",
-  "org.junit.platform:junit-platform-launcher:6.1.0",
-]
+[dependencies.main]
+jk-compat.workspace       = true
+jk-core.workspace         = true
+jk-engine.workspace       = true
+jk-image.workspace        = true
+jk-io.workspace           = true
+jk-resolver.workspace     = true
+jk-supply-chain.workspace = true
+jk-toolchain.workspace    = true
+picocli                   = { group = "info.picocli", version = "4.7.7" }
+
+[dependencies.test]
+assertj-core.workspace            = true
+junit-jupiter.workspace           = true
+junit-platform-launcher.workspace = true
 
 [image]
 main-class = "dev.jkbuild.cli.Jk"

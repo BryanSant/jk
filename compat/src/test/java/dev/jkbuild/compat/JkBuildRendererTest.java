@@ -81,11 +81,21 @@ class JkBuildRendererTest {
                 new JkBuild.Dependencies(byScope));
         String out = JkBuildRenderer.render(model);
 
-        // Main scope entry comes before test scope entry in the array order.
-        int mainIdx = out.indexOf("main = [");
-        int testIdx = out.indexOf("test = [");
+        // Main scope sub-table appears before the test sub-table.
+        int mainIdx = out.indexOf("[dependencies.main]");
+        int testIdx = out.indexOf("[dependencies.test]");
         assertThat(mainIdx).isLessThan(testIdx).isGreaterThan(0);
 
+        // Inline-table format with name-as-key. `artifact` field omitted when
+        // the artifactId matches the key.
+        assertThat(out).contains(
+                "jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
+        assertThat(out).contains(
+                "spring-boot-starter-web = { group = \"org.springframework.boot\", version = \"=3.4.0\" }");
+        assertThat(out).contains(
+                "junit-jupiter = { group = \"org.junit.jupiter\", version = \"=5.11.0\" }");
+
+        // Within a scope, sort by short name (alphabetical): jackson before spring.
         int jacksonIdx = out.indexOf("jackson-databind");
         int springIdx = out.indexOf("spring-boot-starter-web");
         assertThat(jacksonIdx).isLessThan(springIdx);
@@ -123,20 +133,31 @@ class JkBuildRendererTest {
     }
 
     @Test
-    void floating_deps_render_with_at_separator() {
+    void pinned_and_floating_deps_render_with_distinct_version_literals() {
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
+        // Exact pin via `=` prefix; caret-floating via leading `^`.
         byScope.put(Scope.MAIN, List.of(
-                new Dependency("com.example:pinned", VersionSelector.parse("1.0.0"), true),
-                new Dependency("com.example:floating",
-                        VersionSelector.parseFloating("^2.0.0"), false)));
+                new Dependency("com.example:pinned",   VersionSelector.parse("=1.0.0")),
+                new Dependency("com.example:floating", VersionSelector.parseFloating("^2.0.0"))));
 
         JkBuild model = new JkBuild(
                 new JkBuild.Project("com.example", "widget", "1.0.0", 21),
                 new JkBuild.Dependencies(byScope));
         String out = JkBuildRenderer.render(model);
 
-        assertThat(out).contains("\"com.example:pinned:1.0.0\"");
-        assertThat(out).contains("\"com.example:floating@^2.0.0\"");
+        // Exact pins retain the leading `=`; caret selectors emit the bare
+        // version (parseFloating re-parses a bare version as caret).
+        assertThat(out).contains(
+                "pinned = { group = \"com.example\", version = \"=1.0.0\" }");
+        assertThat(out).contains(
+                "floating = { group = \"com.example\", version = \"2.0.0\" }");
+
+        // Round-trip: re-parsing yields the same selector kinds.
+        JkBuild reparsed = JkBuildParser.parse(out);
+        assertThat(reparsed.dependencies().of(Scope.MAIN))
+                .extracting(Dependency::version)
+                .anyMatch(v -> v instanceof VersionSelector.Exact)
+                .anyMatch(v -> v instanceof VersionSelector.Caret);
     }
 
     @Test

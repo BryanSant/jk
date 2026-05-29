@@ -210,6 +210,7 @@ public final class GradleImporter {
             return;
         }
         String module = parts[0] + ":" + parts[1];
+        String artifactId = parts[1];
         String versionToken = parts[2];
         if (parts.length > 3) {
             report.warning("classifier/type on `" + coord + "` dropped; jk support arrives in a later slice.");
@@ -219,7 +220,9 @@ public final class GradleImporter {
                     + " jk wrote `" + versionToken + "` verbatim — resolve the variable manually.");
         }
         VersionSelector selector = VersionSelector.parse(versionToken);
-        byScope.computeIfAbsent(scope, s -> new ArrayList<>()).add(new Dependency(module, selector));
+        // Default the v0.7 short `name` to the Gradle dep's artifactId.
+        byScope.computeIfAbsent(scope, s -> new ArrayList<>())
+                .add(Dependency.of(artifactId, module, selector));
     }
 
     private static Scope mapConfiguration(String configuration) {

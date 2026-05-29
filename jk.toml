@@ -8,3 +8,9 @@ java     = 25
 
 [workspace]
 members = ["core", "io", "resolver", "toolchain", "engine", "supply-chain", "image", "compat", "cli"]
+
+[workspace.dependencies]
+jackson-databind        = { group = "tools.jackson.core",  artifact = "jackson-databind",        version = "3.1.3" }
+junit-jupiter           = { group = "org.junit.jupiter",   artifact = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform",  artifact = "junit-platform-launcher", version = "6.1.0" }
+assertj-core            = { group = "org.assertj",         artifact = "assertj-core",            version = "3.27.7" }

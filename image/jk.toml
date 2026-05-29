@@ -5,14 +5,12 @@ version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
-[dependencies]
-main = [
-  "com.google.cloud.tools:jib-core:0.28.1",
-  "dev.jkbuild:jk-core:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-io:0.6.0-SNAPSHOT",
-]
-test = [
-  "org.assertj:assertj-core:3.27.7",
-  "org.junit.jupiter:junit-jupiter:6.1.0",
-  "org.junit.platform:junit-platform-launcher:6.1.0",
-]
+[dependencies.main]
+jib-core          = { group = "com.google.cloud.tools", version = "0.28.1" }
+jk-core.workspace = true
+jk-io.workspace   = true
+
+[dependencies.test]
+assertj-core.workspace            = true
+junit-jupiter.workspace           = true
+junit-platform-launcher.workspace = true

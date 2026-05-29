@@ -5,16 +5,14 @@ version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
-[dependencies]
-main = [
-  "dev.jkbuild:jk-core:0.6.0-SNAPSHOT",
-  "dev.jkbuild:jk-io:0.6.0-SNAPSHOT",
-  "org.junit.jupiter:junit-jupiter:6.1.0",
-  "org.junit.platform:junit-platform-launcher:6.1.0",
-  "org.ow2.asm:asm:9.10",
-  "org.ow2.asm:asm-tree:9.10",
-]
-test = [
-  "org.assertj:assertj-core:3.27.7",
-  "org.junit.platform:junit-platform-launcher:6.1.0",
-]
+[dependencies.main]
+jk-core.workspace                 = true
+jk-io.workspace                   = true
+junit-jupiter.workspace           = true
+junit-platform-launcher.workspace = true
+asm                               = { group = "org.ow2.asm", version = "9.10" }
+asm-tree                          = { group = "org.ow2.asm", version = "9.10" }
+
+[dependencies.test]
+assertj-core.workspace            = true
+junit-platform-launcher.workspace = true

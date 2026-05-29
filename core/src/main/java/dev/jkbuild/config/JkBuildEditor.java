@@ -15,269 +15,270 @@ import java.util.regex.Pattern;
  * dependency entries while preserving user formatting and comments — the
  * way {@code cargo add} / {@code uv add} treat their config files.
  *
- * <p>Supports both array shapes:
+ * <p>Works against the v0.7 name-as-key sub-table format:
  * <pre>{@code
- *   [dependencies]
- *   main = [
- *     "com.foo:bar:1.0",
- *     "org.slf4j:slf4j-api:2.0.16",
- *   ]
- *   test = ["org.assertj:assertj-core:3.27.7"]
+ *   [dependencies.main]
+ *   spring-web = { group = "org.springframework.boot", artifact = "spring-boot-starter-web", version = "3.4.0" }
+ *
+ *   [dependencies.test]
+ *   junit-jupiter.workspace = true
  * }</pre>
+ *
+ * <p>Default-scope shorthand: when a file's {@code [dependencies]} table
+ * contains only inline-table children (i.e. no sub-scopes), it is treated
+ * as {@code [dependencies.main]}; we add main deps directly under that
+ * header. Adding a {@code test} dep to such a file creates a separate
+ * {@code [dependencies.test]} sub-table.
  *
  * <p>After every edit we run the result through {@link Toml#parse(String)}
  * for validation; if the document no longer parses, the edit is rejected.
- *
- * <p>For inline single-line arrays the editor expands them to multi-line
- * form on add. The result is always valid TOML.
  */
 public final class JkBuildEditor {
 
-    /** Header line for the [dependencies] table, on its own line. */
-    private static final Pattern DEPS_HEADER = Pattern.compile("^\\s*\\[dependencies]\\s*$");
+    /** Header line for the bare {@code [dependencies]} table (flat-shorthand). */
+    private static final Pattern DEPS_FLAT_HEADER = Pattern.compile("^\\s*\\[dependencies]\\s*$");
 
-    /** Matches {@code <scope> = [} starting a multi-line array. */
-    private static final Pattern MULTI_OPEN = Pattern.compile(
-            "^(\\s*)([a-zA-Z][a-zA-Z0-9_-]*)\\s*=\\s*\\[\\s*$");
+    /** Header line for {@code [dependencies.<scope>]}. Captures scope name in group 1. */
+    private static final Pattern DEPS_SCOPE_HEADER = Pattern.compile(
+            "^\\s*\\[dependencies\\.([a-zA-Z][a-zA-Z0-9_-]*)]\\s*$");
 
-    /** Matches {@code <scope> = [ ... ]} on a single line. */
-    private static final Pattern SINGLE_LINE = Pattern.compile(
-            "^(\\s*)([a-zA-Z][a-zA-Z0-9_-]*)\\s*=\\s*\\[(.*)]\\s*$");
+    /** Any TOML table header. */
+    private static final Pattern ANY_HEADER = Pattern.compile("^\\s*\\[[^]]+]\\s*$");
 
-    /** Matches the closing bracket line of a multi-line array. */
-    private static final Pattern MULTI_CLOSE = Pattern.compile("^\\s*]\\s*$");
+    /** A dep entry line: {@code key = { ... }} or {@code key.workspace = true}. Captures key in group 2. */
+    private static final Pattern DEP_ENTRY = Pattern.compile(
+            "^(\\s*)([A-Za-z][A-Za-z0-9_-]*)(?:\\.[a-zA-Z][a-zA-Z0-9_-]*)?\\s*=.*$");
 
     private JkBuildEditor() {}
 
-    public static String addDependency(String content, Scope scope, String module, String versionLiteral) {
-        return addDependency(content, scope, module, versionLiteral, false);
-    }
-
     /**
-     * @param floating {@code true} → writes {@code module@version} ({@code @}-form,
-     *                 floating). {@code false} → writes {@code module:version}
-     *                 ({@code :}-form, pinned). Pass {@code versionLiteral = "latest"}
-     *                 with {@code floating = true} for a no-version dep.
+     * Add a dependency entry to {@code [dependencies.<scope>]}.
+     *
+     * <p>Decisions:
+     * <ul>
+     *   <li>If {@code artifact.equals(name)}, the {@code artifact} field is
+     *       omitted (it defaults to the key per the design doc).</li>
+     *   <li>If the file has no {@code [dependencies]} table at all, we append
+     *       a fresh {@code [dependencies.<scope>]} header at the end.</li>
+     *   <li>If the file has a flat {@code [dependencies]} table holding only
+     *       inline-table deps (the shorthand for {@code main}), we treat it
+     *       as {@code [dependencies.main]}: adding a main dep extends it in
+     *       place; adding a non-main dep appends a separate sub-table.</li>
+     *   <li>If a {@code [dependencies.<scope>]} sub-table already exists, we
+     *       append the new entry just before the next table header.</li>
+     * </ul>
+     *
+     * @param versionLiteral the value placed inside {@code version = "..."}.
+     *                       Pass {@code "=1.2.3"} for an exact pin or {@code "1.2.3"}
+     *                       for caret-floating (the parser uses {@code parseFloating}).
      */
-    public static String addDependency(String content, Scope scope, String module,
-                                       String versionLiteral, boolean floating) {
-        String entry = floating ? module + "@" + versionLiteral : module + ":" + versionLiteral;
+    public static String addDependency(String content, Scope scope, String name,
+                                       String group, String artifact, String versionLiteral) {
+        validateName(name);
+        if (group == null || group.isBlank()) {
+            throw new IllegalArgumentException("group must not be blank");
+        }
+        if (versionLiteral == null || versionLiteral.isBlank()) {
+            throw new IllegalArgumentException("version must not be blank");
+        }
+        if (artifact == null || artifact.isBlank()) artifact = name;
+
         List<String> lines = splitPreservingTerminator(content);
-
-        if (containsCoord(lines, scope, module)) {
+        if (findDepKey(lines, scope, name) >= 0) {
             throw new IllegalStateException(
-                    "dependencies." + scope.canonical() + " already contains \"" + module + "\"");
+                    "dependencies." + scope.canonical() + " already contains \"" + name + "\"");
         }
 
-        int headerLine = findDepsHeader(lines);
-        if (headerLine < 0) {
-            // No [dependencies] block; append a fresh one.
+        String entryLine = renderEntry(name, group, artifact, versionLiteral);
+
+        // If we're adding a non-main dep while a flat [dependencies] shorthand
+        // is in use, promote the flat header to [dependencies.main] first —
+        // otherwise the resulting file mixes shapes and the parser rejects it.
+        if (scope != Scope.MAIN) {
+            promoteFlatShorthandIfPresent(lines);
+        }
+
+        int header = findScopeHeader(lines, scope);
+        if (header < 0) {
+            // No sub-table for this scope. Append one at the end of the file.
             ensureTrailingBlankLine(lines);
-            lines.add("[dependencies]");
-            lines.add(scope.canonical() + " = [");
-            lines.add("  \"" + entry + "\",");
-            lines.add("]");
+            lines.add("[dependencies." + scope.canonical() + "]");
+            lines.add(entryLine);
             return validated(join(lines));
         }
-
-        ScopeRange range = findScopeArray(lines, headerLine, scope);
-        if (range == null) {
-            // [dependencies] exists but no entry for this scope; insert one.
-            int insertAt = endOfDepsTable(lines, headerLine);
-            lines.add(insertAt, scope.canonical() + " = [");
-            lines.add(insertAt + 1, "  \"" + entry + "\",");
-            lines.add(insertAt + 2, "]");
-            return validated(join(lines));
+        int insertAt = endOfTable(lines, header);
+        // Insert just before the next header / EOF, trimming any trailing
+        // blank lines that belong between this table and the next so the
+        // entry sits flush at the bottom of the current sub-table.
+        while (insertAt > header + 1 && lines.get(insertAt - 1).isBlank()) {
+            insertAt--;
         }
-
-        if (range.singleLine) {
-            // Expand the single-line array to multi-line, append the new entry.
-            String original = lines.get(range.startLine);
-            Matcher m = SINGLE_LINE.matcher(original);
-            if (!m.matches()) throw new IllegalStateException("unexpected: single-line scope didn't match");
-            String indent = m.group(1);
-            String body = m.group(3).trim();
-            List<String> rebuilt = new ArrayList<>();
-            rebuilt.add(indent + scope.canonical() + " = [");
-            if (!body.isEmpty()) {
-                for (String item : splitInlineArray(body)) {
-                    rebuilt.add(indent + "  " + item + ",");
-                }
-            }
-            rebuilt.add(indent + "  \"" + entry + "\",");
-            rebuilt.add(indent + "]");
-            lines.remove(range.startLine);
-            lines.addAll(range.startLine, rebuilt);
-        } else {
-            lines.add(range.closingLine, "  \"" + entry + "\",");
-        }
+        lines.add(insertAt, entryLine);
         return validated(join(lines));
     }
 
-    public static String removeDependency(String content, Scope scope, String module) {
+    /**
+     * Remove a dependency by short {@code name} from
+     * {@code [dependencies.<scope>]}. Leaves the (possibly now-empty)
+     * sub-table in place — minimal blast radius on surrounding formatting.
+     *
+     * @throws IllegalStateException if the scope or name isn't present.
+     */
+    public static String removeDependency(String content, Scope scope, String name) {
+        validateName(name);
         List<String> lines = splitPreservingTerminator(content);
-        int headerLine = findDepsHeader(lines);
-        if (headerLine < 0) {
-            throw new IllegalStateException("[dependencies] table not found in jk.toml");
-        }
-        ScopeRange range = findScopeArray(lines, headerLine, scope);
-        if (range == null) {
+        int hit = findDepKey(lines, scope, name);
+        if (hit < 0) {
+            // Determine whether the scope sub-table existed for a better error.
+            if (findScopeHeader(lines, scope) < 0) {
+                throw new IllegalStateException(
+                        "dependencies." + scope.canonical() + " not found in jk.toml");
+            }
             throw new IllegalStateException(
-                    "dependencies." + scope.canonical() + " not found in jk.toml");
+                    "\"" + name + "\" not found in dependencies." + scope.canonical());
         }
-
-        if (range.singleLine) {
-            String original = lines.get(range.startLine);
-            Matcher m = SINGLE_LINE.matcher(original);
-            if (!m.matches()) throw new IllegalStateException("unexpected: single-line scope didn't match");
-            String indent = m.group(1);
-            String body = m.group(3).trim();
-            List<String> items = body.isEmpty() ? new ArrayList<>() : splitInlineArray(body);
-            int hit = -1;
-            for (int i = 0; i < items.size(); i++) {
-                if (entryMatchesModule(items.get(i), module)) { hit = i; break; }
-            }
-            if (hit < 0) {
-                throw new IllegalStateException(
-                        "\"" + module + "\" not found in dependencies." + scope.canonical());
-            }
-            items.remove(hit);
-            lines.set(range.startLine, indent + scope.canonical() + " = ["
-                    + String.join(", ", items) + "]");
-        } else {
-            int hit = -1;
-            for (int i = range.startLine + 1; i < range.closingLine; i++) {
-                String trimmed = lines.get(i).trim();
-                String coord = trimmed.endsWith(",") ? trimmed.substring(0, trimmed.length() - 1).trim() : trimmed;
-                if (entryMatchesModule(coord, module)) { hit = i; break; }
-            }
-            if (hit < 0) {
-                throw new IllegalStateException(
-                        "\"" + module + "\" not found in dependencies." + scope.canonical());
-            }
-            lines.remove(hit);
-        }
+        lines.remove(hit);
         return validated(join(lines));
     }
 
     // --- internals ---------------------------------------------------------
 
-    private static int findDepsHeader(List<String> lines) {
+    /**
+     * Locate the line that opens {@code [dependencies.<scope>]}. Honors
+     * default-scope shorthand: a bare {@code [dependencies]} table whose
+     * direct children are all dep entries (not sub-scopes) counts as
+     * {@code [dependencies.main]}.
+     */
+    private static int findScopeHeader(List<String> lines, Scope scope) {
+        int flat = -1;
         for (int i = 0; i < lines.size(); i++) {
-            if (DEPS_HEADER.matcher(lines.get(i)).matches()) return i;
+            String line = lines.get(i);
+            Matcher sub = DEPS_SCOPE_HEADER.matcher(line);
+            if (sub.matches() && sub.group(1).equals(scope.canonical())) {
+                return i;
+            }
+            if (DEPS_FLAT_HEADER.matcher(line).matches()) {
+                flat = i;
+            }
+        }
+        if (flat >= 0 && scope == Scope.MAIN && isFlatShorthand(lines, flat)) {
+            return flat;
         }
         return -1;
     }
 
-    private record ScopeRange(int startLine, int closingLine, boolean singleLine) {}
-
-    private static ScopeRange findScopeArray(List<String> lines, int headerLine, Scope scope) {
-        String target = scope.canonical();
-        for (int i = headerLine + 1; i < lines.size(); i++) {
-            String line = lines.get(i);
-            if (line.startsWith("[")) break;  // next table — give up
-            Matcher single = SINGLE_LINE.matcher(line);
-            if (single.matches() && single.group(2).equals(target)) {
-                return new ScopeRange(i, i, true);
-            }
-            Matcher multi = MULTI_OPEN.matcher(line);
-            if (multi.matches() && multi.group(2).equals(target)) {
-                for (int j = i + 1; j < lines.size(); j++) {
-                    if (MULTI_CLOSE.matcher(lines.get(j)).matches()) {
-                        return new ScopeRange(i, j, false);
-                    }
-                }
-                return null;
-            }
+    /**
+     * A bare {@code [dependencies]} table is the shorthand for
+     * {@code [dependencies.main]} iff every direct child line under it is
+     * a dep entry (i.e. no sub-table line like {@code [dependencies.test]}
+     * comes between this header and the next top-level header).
+     *
+     * <p>In practice all we need to check is that the bare header isn't
+     * immediately followed by sub-scope headers — those would mean the
+     * flat header is a parse error per the design doc. The parser rejects
+     * mixed shape, but the editor must still be forgiving: if any sub-scope
+     * appears anywhere after {@code [dependencies]}, that sub-scope is the
+     * canonical container; we don't treat the bare table as main.
+     */
+    private static boolean isFlatShorthand(List<String> lines, int flatHeaderLine) {
+        // If any [dependencies.<scope>] header exists in the file, the bare
+        // [dependencies] block is something else (e.g., an empty placeholder
+        // or user-introduced mistake) and we don't claim it as main.
+        for (int i = 0; i < lines.size(); i++) {
+            if (i == flatHeaderLine) continue;
+            if (DEPS_SCOPE_HEADER.matcher(lines.get(i)).matches()) return false;
         }
-        return null;
+        // Scan children: every non-blank, non-comment line up to the next
+        // header must be a dep entry (key = ...). Mixed shape produces a
+        // parse error downstream anyway; here we just want a sane heuristic.
+        for (int i = flatHeaderLine + 1; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (ANY_HEADER.matcher(line).matches()) break;
+            String trimmed = line.trim();
+            if (trimmed.isEmpty() || trimmed.startsWith("#")) continue;
+            if (!DEP_ENTRY.matcher(line).matches()) return false;
+        }
+        return true;
     }
 
-    /** Find the line just past the last entry of [dependencies] — where new scopes can be appended. */
-    private static int endOfDepsTable(List<String> lines, int headerLine) {
-        int depth = 0;
-        int i = headerLine + 1;
-        while (i < lines.size()) {
+    /**
+     * If a flat {@code [dependencies]} shorthand block is present, rewrite
+     * its header to {@code [dependencies.main]} so a sibling sub-scope can
+     * be added without producing a "mixed flat and sub-scope" parse error.
+     * No-op when no flat shorthand exists.
+     */
+    private static void promoteFlatShorthandIfPresent(List<String> lines) {
+        for (int i = 0; i < lines.size(); i++) {
+            if (DEPS_FLAT_HEADER.matcher(lines.get(i)).matches() && isFlatShorthand(lines, i)) {
+                // Preserve the original indentation, in case the user wrote it
+                // with leading whitespace (uncommon but legal).
+                String original = lines.get(i);
+                String leadingWs = original.substring(0, original.indexOf('['));
+                lines.set(i, leadingWs + "[dependencies.main]");
+                return;
+            }
+        }
+    }
+
+    /** Find the line index of the dep entry named {@code name} in {@code scope}, or {@code -1}. */
+    private static int findDepKey(List<String> lines, Scope scope, String name) {
+        int header = findScopeHeader(lines, scope);
+        if (header < 0) return -1;
+        int end = endOfTable(lines, header);
+        for (int i = header + 1; i < end; i++) {
             String line = lines.get(i);
-            if (depth == 0 && line.startsWith("[")) return i;
-            if (MULTI_OPEN.matcher(line).matches()) {
-                depth = 1;
-                i++;
-                continue;
-            }
-            if (depth > 0 && MULTI_CLOSE.matcher(line).matches()) {
-                depth = 0;
-            }
-            i++;
+            Matcher m = DEP_ENTRY.matcher(line);
+            if (m.matches() && m.group(2).equals(name)) return i;
+        }
+        return -1;
+    }
+
+    /** Return the index of the next top-level header after {@code headerLine}, or {@code lines.size()}. */
+    private static int endOfTable(List<String> lines, int headerLine) {
+        for (int i = headerLine + 1; i < lines.size(); i++) {
+            if (ANY_HEADER.matcher(lines.get(i)).matches()) return i;
         }
         return lines.size();
     }
 
-    private static boolean containsCoord(List<String> lines, Scope scope, String module) {
-        int headerLine = findDepsHeader(lines);
-        if (headerLine < 0) return false;
-        ScopeRange range = findScopeArray(lines, headerLine, scope);
-        if (range == null) return false;
-        if (range.singleLine) {
-            String body = SINGLE_LINE.matcher(lines.get(range.startLine)).replaceFirst("$3").trim();
-            if (body.isEmpty()) return false;
-            for (String item : splitInlineArray(body)) {
-                if (entryMatchesModule(item, module)) return true;
-            }
-            return false;
+    /** Render a single dep-entry line. Omits {@code artifact} when it matches the key. */
+    private static String renderEntry(String name, String group, String artifact, String versionLiteral) {
+        StringBuilder sb = new StringBuilder(name).append(" = { group = \"")
+                .append(escape(group)).append("\"");
+        if (!artifact.equals(name)) {
+            sb.append(", artifact = \"").append(escape(artifact)).append("\"");
         }
-        for (int i = range.startLine + 1; i < range.closingLine; i++) {
-            String trimmed = lines.get(i).trim();
-            String coord = trimmed.endsWith(",") ? trimmed.substring(0, trimmed.length() - 1).trim() : trimmed;
-            if (entryMatchesModule(coord, module)) return true;
-        }
-        return false;
+        sb.append(", version = \"").append(escape(versionLiteral)).append("\" }");
+        return sb.toString();
     }
 
-    /**
-     * An array entry like {@code "g:a:1.0"} matches module {@code "g:a"} when
-     * the entry's coord portion (group:artifact, before the version colon)
-     * equals the module. Source-only entries {@code "g:a"} also match.
-     */
-    private static boolean entryMatchesModule(String entry, String module) {
-        if (entry == null) return false;
-        String unquoted = entry;
-        if (unquoted.startsWith("\"") && unquoted.endsWith("\"")) {
-            unquoted = unquoted.substring(1, unquoted.length() - 1);
+    /** Escape a value destined for a TOML basic string literal. */
+    private static String escape(String s) {
+        StringBuilder sb = new StringBuilder(s.length());
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '\\' -> sb.append("\\\\");
+                case '"' -> sb.append("\\\"");
+                case '\n' -> sb.append("\\n");
+                case '\r' -> sb.append("\\r");
+                case '\t' -> sb.append("\\t");
+                default -> sb.append(c);
+            }
         }
-        int firstColon = unquoted.indexOf(':');
-        if (firstColon < 0) return false;
-        int secondColon = unquoted.indexOf(':', firstColon + 1);
-        String coord = secondColon < 0 ? unquoted : unquoted.substring(0, secondColon);
-        return coord.equals(module);
+        return sb.toString();
     }
 
-    /** Split {@code "a", "b", "c"} into its quoted-string elements, respecting escapes. */
-    private static List<String> splitInlineArray(String body) {
-        List<String> items = new ArrayList<>();
-        int i = 0;
-        while (i < body.length()) {
-            // skip whitespace and commas
-            while (i < body.length() && (Character.isWhitespace(body.charAt(i)) || body.charAt(i) == ',')) i++;
-            if (i >= body.length()) break;
-            if (body.charAt(i) != '"') {
-                // Non-string element; pass it through as raw token.
-                int start = i;
-                while (i < body.length() && body.charAt(i) != ',') i++;
-                items.add(body.substring(start, i).trim());
-                continue;
-            }
-            int start = i;
-            i++;
-            while (i < body.length()) {
-                char c = body.charAt(i);
-                if (c == '\\' && i + 1 < body.length()) { i += 2; continue; }
-                if (c == '"') { i++; break; }
-                i++;
-            }
-            items.add(body.substring(start, i));
+    private static void validateName(String name) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException("dependency name must not be blank");
         }
-        return items;
+        // Bare-key character class per TOML: [A-Za-z0-9_-]+. We additionally
+        // require a leading letter to keep the rendered TOML free of quoting.
+        if (!name.matches("[A-Za-z][A-Za-z0-9_-]*")) {
+            throw new IllegalArgumentException(
+                    "dependency name must match [A-Za-z][A-Za-z0-9_-]* (got: " + name + ")");
+        }
     }
 
     private static String validated(String text) {

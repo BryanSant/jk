@@ -22,8 +22,8 @@ class ExportCommandTest {
                 version  = "1.0.0"
                 jdk      = 21
 
-                [dependencies]
-                main = ["com.fasterxml.jackson.core:jackson-databind:2.18.2"]
+                [dependencies.main]
+                jackson-databind = { group = "com.fasterxml.jackson.core", version = "=2.18.2" }
                 """, StandardCharsets.UTF_8);
 
         int exit = run("export", "-C", tempDir.toString(), "pom.xml");

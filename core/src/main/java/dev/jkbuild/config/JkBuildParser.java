@@ -13,6 +13,7 @@ import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.Workspace;
+import dev.jkbuild.model.Workspace.WorkspaceDependency;
 import dev.jkbuild.util.GitUrl;
 import org.tomlj.Toml;
 import org.tomlj.TomlArray;
@@ -33,23 +34,24 @@ import java.util.Objects;
 /**
  * Loads {@code jk.toml} into a {@link JkBuild}.
  *
- * <p>Schema (PRD §5):
+ * <p>v0.7 schema (see {@code docs/artifact-coord-design.md}):
  * <ul>
  *   <li>{@code [project]} — required; {@code group}, {@code artifact}, {@code version} required;
- *       optional {@code jdk}, {@code main}, {@code language}, {@code shadow}, {@code native},
- *       {@code description}.</li>
- *   <li>{@code [dependencies]} — optional; per-scope arrays of {@code "group:artifact:version"}
- *       strings. The version part is everything after the second colon and parses via
- *       {@link VersionSelector#parse(String)}. A coord written as {@code "group:artifact"}
- *       (no version) must have a matching entry in {@code [sources]}.</li>
- *   <li>{@code [sources]} — optional; per-coord git overrides. Merged into matching deps'
- *       {@link Dependency#gitSource()}.</li>
+ *       optional {@code jdk}, {@code main}, {@code java}/{@code kotlin}, {@code shadow},
+ *       {@code native}, {@code description}.</li>
+ *   <li>{@code [dependencies.<scope>]} — name-as-key sub-tables; each entry is
+ *       {@code name = { group, artifact?, version | path | git | workspace }}.
+ *       {@code [dependencies]} with only inline-table children is shorthand for
+ *       {@code [dependencies.main]}; mixing flat and sub-scope is a parse error.</li>
+ *   <li>{@code [workspace]} — optional; {@code members = [...]} plus an optional
+ *       {@code [workspace.dependencies]} table of shared external deps inherited by
+ *       members via {@code <name>.workspace = true}.</li>
  *   <li>{@code [repositories]} — optional; per-name URL string or inline table.</li>
  *   <li>{@code [profiles.<name>]} — optional; per-profile {@code inherits}, {@code javac},
  *       {@code jvm-args}.</li>
- *   <li>{@code [features]} — optional; {@code default = [...]} and {@code [features.<name>]}
- *       subtables.</li>
- *   <li>{@code [workspace]} — optional; {@code members = [...]}.</li>
+ *   <li>{@code [features]} — optional; {@code default = [...]} plus
+ *       {@code [features.<name>]} sub-tables whose {@code deps} fields are <b>dep
+ *       names</b> (not coord strings).</li>
  * </ul>
  */
 public final class JkBuildParser {
@@ -72,12 +74,11 @@ public final class JkBuildParser {
                     "failed to parse jk.toml: " + result.errors().getFirst().getMessage());
         }
         JkBuild.Project project = parseProject(result);
-        Map<String, GitSource> sources = parseSources(result);
-        JkBuild.Dependencies deps = parseDependencies(result, sources);
+        Workspace workspace = parseWorkspace(result);
+        JkBuild.Dependencies deps = parseDependencies(result, workspace);
         List<RepositorySpec> repos = parseRepositories(result);
         Profiles profiles = parseProfiles(result);
         Features features = parseFeatures(result);
-        Workspace workspace = parseWorkspace(result);
         return new JkBuild(project, deps, repos, profiles, features, workspace);
     }
 
@@ -142,21 +143,197 @@ public final class JkBuildParser {
         }
     }
 
-    private static Map<String, GitSource> parseSources(TomlTable root) {
-        TomlTable sources = root.getTable("sources");
-        if (sources == null) return Map.of();
-        Map<String, GitSource> result = new LinkedHashMap<>();
-        // Source keys are coords like "com.foo:bar" — colon isn't legal in
-        // tomlj's dotted-key parser, so look up by literal-key path.
-        for (String key : sources.keySet()) {
-            Object value = sources.get(List.of(key));
+    // ---------------------------------------------------------------------
+    // Dependencies
+    // ---------------------------------------------------------------------
+
+    private static JkBuild.Dependencies parseDependencies(TomlTable root, Workspace workspace) {
+        TomlTable deps = root.getTable("dependencies");
+        if (deps == null) return JkBuild.Dependencies.empty();
+        EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
+
+        // Classify the children of [dependencies]:
+        //   - inline tables (TomlTable that came from a `name = { ... }` line)
+        //     → flat-form dep entries belonging to the default scope (main)
+        //   - sub-tables (TomlTable named after a scope) → per-scope groups
+        // tomlj does not distinguish inline vs sub-table at the TomlTable
+        // level, so we detect by key: a scope name (one of the six) maps to
+        // a sub-table; everything else is a flat dep entry.
+        List<String> flatDepKeys = new ArrayList<>();
+        List<String> subScopeKeys = new ArrayList<>();
+        for (String key : deps.keySet()) {
+            if (isScopeName(key)) {
+                subScopeKeys.add(key);
+            } else {
+                flatDepKeys.add(key);
+            }
+        }
+        if (!flatDepKeys.isEmpty() && !subScopeKeys.isEmpty()) {
+            throw new JkBuildParseException(
+                    "mixed flat and sub-scope dep tables are ambiguous in [dependencies]; "
+                            + "move flat entries under [dependencies.main] or remove the sub-scope tables");
+        }
+
+        if (!flatDepKeys.isEmpty()) {
+            // Default-scope shorthand: [dependencies] with only inline-table
+            // children is treated as [dependencies.main].
+            List<Dependency> parsed = parseScopeTable(deps, flatDepKeys, Scope.MAIN, workspace);
+            if (!parsed.isEmpty()) byScope.put(Scope.MAIN, parsed);
+        }
+
+        for (String scopeKey : subScopeKeys) {
+            Scope scope = scopeOf(scopeKey);
+            TomlTable scopeTable = deps.getTable(scopeKey);
+            if (scopeTable == null) {
+                throw new JkBuildParseException(
+                        "dependencies." + scopeKey + " must be a table of name → dep entries");
+            }
+            List<Dependency> parsed = parseScopeTable(scopeTable,
+                    new ArrayList<>(scopeTable.keySet()), scope, workspace);
+            if (!parsed.isEmpty()) byScope.put(scope, parsed);
+        }
+        return new JkBuild.Dependencies(byScope);
+    }
+
+    private static boolean isScopeName(String key) {
+        for (Scope s : Scope.values()) {
+            if (s.canonical().equals(key)) return true;
+        }
+        return false;
+    }
+
+    private static Scope scopeOf(String canonical) {
+        for (Scope s : Scope.values()) {
+            if (s.canonical().equals(canonical)) return s;
+        }
+        throw new JkBuildParseException("unknown dependency scope: " + canonical);
+    }
+
+    private static List<Dependency> parseScopeTable(
+            TomlTable scopeTable, List<String> keys, Scope scope, Workspace workspace) {
+        List<Dependency> result = new ArrayList<>(keys.size());
+        for (String name : keys) {
+            Object value = scopeTable.get(List.of(name));
             if (!(value instanceof TomlTable entry)) {
                 throw new JkBuildParseException(
-                        "sources.\"" + key + "\" must be an inline table");
+                        "dependencies." + scope.canonical() + "." + name
+                                + " must be an inline table (e.g. { group = \"...\", artifact = \"...\", version = \"...\" })");
             }
-            result.put(key, parseGitSource(entry, "sources.\"" + key + "\""));
+            result.add(parseDepEntry(name, entry, scope, workspace));
         }
         return result;
+    }
+
+    private static Dependency parseDepEntry(
+            String name, TomlTable entry, Scope scope, Workspace workspace) {
+        String displayPath = "dependencies." + scope.canonical() + "." + name;
+        boolean hasWorkspace = entry.contains("workspace");
+        boolean hasVersion = entry.contains("version");
+        boolean hasPath = entry.contains("path");
+        boolean hasGit = entry.contains("git");
+
+        int sourceCount = (hasVersion ? 1 : 0) + (hasPath ? 1 : 0)
+                + (hasGit ? 1 : 0) + (hasWorkspace ? 1 : 0);
+        if (sourceCount == 0) {
+            throw new JkBuildParseException(displayPath
+                    + " must set exactly one of `version`, `path`, `git`, or `workspace = true`");
+        }
+        if (sourceCount > 1) {
+            throw new JkBuildParseException(displayPath
+                    + " sets more than one of `version` / `path` / `git` / `workspace`; "
+                    + "pick exactly one");
+        }
+
+        if (hasWorkspace) {
+            Boolean ws = entry.getBoolean("workspace");
+            if (!Boolean.TRUE.equals(ws)) {
+                throw new JkBuildParseException(displayPath
+                        + ".workspace must be `true` (the only legal value)");
+            }
+            // workspace = true is mutually exclusive with group/artifact too.
+            if (entry.contains("group") || entry.contains("artifact")) {
+                throw new JkBuildParseException(displayPath
+                        + " with `workspace = true` must not set `group` or `artifact`");
+            }
+            return resolveWorkspaceDep(name, displayPath, workspace);
+        }
+
+        // For non-workspace deps, artifact defaults to the key name.
+        String artifact = entry.getString("artifact");
+        if (artifact == null) artifact = name;
+        if (artifact.isBlank()) {
+            throw new JkBuildParseException(displayPath + ".artifact must not be blank");
+        }
+
+        if (hasPath) {
+            String group = entry.getString("group");
+            if (group == null || group.isBlank()) {
+                throw new JkBuildParseException(displayPath
+                        + " with `path = ...` must set a `group`");
+            }
+            String path = entry.getString("path");
+            if (path == null || path.isBlank()) {
+                throw new JkBuildParseException(displayPath + ".path must not be blank");
+            }
+            return Dependency.path(name, group + ":" + artifact, path);
+        }
+
+        if (hasGit) {
+            String group = entry.getString("group");
+            if (group == null || group.isBlank()) {
+                throw new JkBuildParseException(displayPath
+                        + " with `git = ...` must set a `group`");
+            }
+            GitSource source = parseGitSource(entry, displayPath);
+            return Dependency.git(name, group + ":" + artifact, source);
+        }
+
+        // version-only.
+        String group = entry.getString("group");
+        if (group == null || group.isBlank()) {
+            throw new JkBuildParseException(displayPath + " must set a `group`");
+        }
+        String versionRaw = entry.getString("version");
+        if (versionRaw == null || versionRaw.isBlank()) {
+            throw new JkBuildParseException(displayPath + ".version must not be blank");
+        }
+        VersionSelector selector = VersionSelector.parseFloating(versionRaw);
+        return Dependency.of(name, group + ":" + artifact, selector);
+    }
+
+    private static Dependency resolveWorkspaceDep(
+            String name, String displayPath, Workspace workspace) {
+        // The workspace lookup chain: members are resolved upstream at
+        // merge time (we don't have them here at single-file parse time),
+        // so first check [workspace.dependencies], then fall back to
+        // emitting a placeholder coord that WorkspaceMerge can re-resolve
+        // against the sibling list.
+        if (workspace != null) {
+            WorkspaceDependency wd = workspace.dependencies().get(name);
+            if (wd != null) {
+                return materialize(name, wd);
+            }
+        }
+        // No [workspace.dependencies] match. The parser cannot resolve the
+        // sibling here — that requires the full member list, which only
+        // WorkspaceMerge / WorkspaceLoader has. Emit a placeholder dep
+        // tagged with the short name; WorkspaceMerge resolves it. We
+        // encode the unresolved state via a synthetic module of the form
+        // "workspace:<name>" and a Latest selector; the resolver never
+        // sees this because WorkspaceMerge rewrites it first.
+        return new Dependency(name, "workspace:" + name,
+                new VersionSelector.Latest("workspace"), null, null, false);
+    }
+
+    private static Dependency materialize(String name, WorkspaceDependency wd) {
+        String module = wd.module();
+        if (wd.gitSource() != null) {
+            return Dependency.git(name, module, wd.gitSource());
+        }
+        if (wd.pathSource() != null) {
+            return Dependency.path(name, module, wd.pathSource());
+        }
+        return Dependency.of(name, module, wd.version());
     }
 
     private static GitSource parseGitSource(TomlTable obj, String displayPath) {
@@ -187,128 +364,9 @@ public final class JkBuildParser {
         return new GitSource(canonical, urlRaw, ref, path, submodules, verifySigned);
     }
 
-    private static JkBuild.Dependencies parseDependencies(
-            TomlTable root, Map<String, GitSource> sources) {
-        TomlTable deps = root.getTable("dependencies");
-        if (deps == null) return JkBuild.Dependencies.empty();
-        EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
-        for (Scope scope : Scope.values()) {
-            String key = scope.canonical();
-            TomlArray arr = deps.getArray(key);
-            if (arr == null) continue;
-            List<Dependency> parsed = parseScopeArray(arr, scope, sources);
-            if (!parsed.isEmpty()) byScope.put(scope, parsed);
-        }
-        return new JkBuild.Dependencies(byScope);
-    }
-
-    private static List<Dependency> parseScopeArray(
-            TomlArray arr, Scope scope, Map<String, GitSource> sources) {
-        List<Dependency> result = new ArrayList<>(arr.size());
-        for (int i = 0; i < arr.size(); i++) {
-            Object element = arr.get(i);
-            if (!(element instanceof String spec)) {
-                throw new JkBuildParseException(
-                        "dependencies." + scope.canonical() + " must be a list of \"group:artifact:version\" strings");
-            }
-            result.add(parseDepSpec(spec, scope, sources));
-        }
-        return result;
-    }
-
-    /**
-     * Parse a single dep string. Forms:
-     * <ul>
-     *   <li>{@code "group:artifact:version"} — pinned. Version must be a
-     *       bare literal ({@code 1.2.3}) or a plain {@code =1.2.3}.
-     *       Decorations ({@code ^}, {@code ~}, ranges, {@code latest}) are
-     *       rejected — they belong on the {@code @} form.</li>
-     *   <li>{@code "group:artifact@version"} — floating (preferred).
-     *       Version is parsed via {@link VersionSelector#parseFloating};
-     *       bare versions default to caret.</li>
-     *   <li>{@code "group:artifact"} — source-only; must appear in
-     *       {@code [sources]}.</li>
-     * </ul>
-     */
-    private static Dependency parseDepSpec(String spec, Scope scope, Map<String, GitSource> sources) {
-        if (spec == null || spec.isBlank()) {
-            throw new JkBuildParseException(
-                    "dependencies." + scope.canonical() + " has a blank entry");
-        }
-        int firstColon = spec.indexOf(':');
-        if (firstColon < 0) {
-            throw new JkBuildParseException(
-                    "dependencies." + scope.canonical() + ".\"" + spec
-                            + "\" must be \"group:artifact[:version]\" or \"group:artifact@version\"");
-        }
-        // Look for the next `:` or `@` after the group/artifact separator;
-        // whichever comes first determines the form.
-        int nextColon = spec.indexOf(':', firstColon + 1);
-        int atSign = spec.indexOf('@', firstColon + 1);
-
-        String module;
-        String versionPart;
-        boolean floating;
-
-        if (nextColon < 0 && atSign < 0) {
-            // Source-only: "group:artifact" with no version.
-            module = spec;
-            versionPart = null;
-            floating = false;
-        } else if (atSign >= 0 && (nextColon < 0 || atSign < nextColon)) {
-            // @-form: group:artifact@version
-            module = spec.substring(0, atSign);
-            versionPart = spec.substring(atSign + 1);
-            floating = true;
-        } else {
-            // :-form: group:artifact:version
-            module = spec.substring(0, nextColon);
-            versionPart = spec.substring(nextColon + 1);
-            floating = false;
-        }
-
-        if (module.endsWith(":") || module.endsWith("@")) {
-            throw new JkBuildParseException(
-                    "dependencies." + scope.canonical() + ".\"" + spec + "\" has empty artifact");
-        }
-        GitSource source = sources.get(module);
-        if (versionPart == null) {
-            if (source != null) return Dependency.git(module, source);
-            // No version specified → treat as @latest (floating, resolves to
-            // the highest available stable release).
-            return new Dependency(module, new VersionSelector.Latest("latest"), false);
-        }
-        if (versionPart.isBlank()) {
-            throw new JkBuildParseException(
-                    "dependencies." + scope.canonical() + ".\"" + spec + "\" has empty version");
-        }
-
-        VersionSelector selector;
-        if (floating) {
-            selector = VersionSelector.parseFloating(versionPart);
-        } else {
-            // :-form: forbid decorations. Allow plain `=1.2.3` for symmetry
-            // with the lockfile-emitted form.
-            String trimmed = versionPart.trim();
-            if (trimmed.startsWith("^") || trimmed.startsWith("~")
-                    || trimmed.startsWith(">") || trimmed.startsWith("<")
-                    || trimmed.contains(",") || "latest".equalsIgnoreCase(trimmed)) {
-                throw new JkBuildParseException(
-                        "dependencies." + scope.canonical() + ".\"" + spec
-                                + "\" — the `:` form is for pinned versions only. "
-                                + "Use \"" + module + "@" + versionPart
-                                + "\" to declare a floating constraint.");
-            }
-            selector = VersionSelector.parse(versionPart);
-        }
-
-        if (source != null) {
-            // Coord listed in deps AND sources — emit as git-sourced; the
-            // version is informational only for git deps.
-            return Dependency.git(module, source);
-        }
-        return new Dependency(module, selector, /* pinned */ !floating);
-    }
+    // ---------------------------------------------------------------------
+    // Repositories / profiles / features / workspace
+    // ---------------------------------------------------------------------
 
     private static List<RepositorySpec> parseRepositories(TomlTable root) {
         TomlTable repos = root.getTable("repositories");
@@ -369,6 +427,8 @@ public final class JkBuildParser {
                 throw new JkBuildParseException(
                         "features." + key + " must be a table with `deps` and/or `features`");
             }
+            // `deps` and `features` are both lists of names (not coord strings).
+            // Resolution against [dependencies.*] happens at activation time.
             List<String> deps = optionalStringList(body, "deps", "features." + key + ".deps");
             List<String> nested = optionalStringList(body, "features", "features." + key + ".features");
             byName.put(key, new Feature(key, deps, nested));
@@ -380,7 +440,65 @@ public final class JkBuildParser {
         TomlTable workspace = root.getTable("workspace");
         if (workspace == null) return null;
         List<String> members = optionalStringList(workspace, "members", "workspace.members");
-        return new Workspace(members);
+        Map<String, WorkspaceDependency> wsDeps = parseWorkspaceDependencies(workspace);
+        return new Workspace(members, wsDeps);
+    }
+
+    private static Map<String, WorkspaceDependency> parseWorkspaceDependencies(TomlTable workspace) {
+        TomlTable wsDeps = workspace.getTable("dependencies");
+        if (wsDeps == null) return Map.of();
+        Map<String, WorkspaceDependency> out = new LinkedHashMap<>();
+        for (String name : wsDeps.keySet()) {
+            Object value = wsDeps.get(List.of(name));
+            if (!(value instanceof TomlTable entry)) {
+                throw new JkBuildParseException(
+                        "workspace.dependencies." + name + " must be an inline table");
+            }
+            out.put(name, parseWorkspaceDepEntry(name, entry));
+        }
+        return out;
+    }
+
+    private static WorkspaceDependency parseWorkspaceDepEntry(String name, TomlTable entry) {
+        String displayPath = "workspace.dependencies." + name;
+        String group = entry.getString("group");
+        if (group == null || group.isBlank()) {
+            throw new JkBuildParseException(displayPath + " must set a `group`");
+        }
+        String artifact = entry.getString("artifact");
+        if (artifact == null) artifact = name;
+        if (artifact.isBlank()) {
+            throw new JkBuildParseException(displayPath + ".artifact must not be blank");
+        }
+        boolean hasVersion = entry.contains("version");
+        boolean hasPath = entry.contains("path");
+        boolean hasGit = entry.contains("git");
+        int sourceCount = (hasVersion ? 1 : 0) + (hasPath ? 1 : 0) + (hasGit ? 1 : 0);
+        if (sourceCount == 0) {
+            throw new JkBuildParseException(displayPath
+                    + " must set exactly one of `version`, `path`, or `git`");
+        }
+        if (sourceCount > 1) {
+            throw new JkBuildParseException(displayPath
+                    + " sets more than one of `version` / `path` / `git`; pick exactly one");
+        }
+        if (hasPath) {
+            String path = entry.getString("path");
+            if (path == null || path.isBlank()) {
+                throw new JkBuildParseException(displayPath + ".path must not be blank");
+            }
+            return new WorkspaceDependency(group, artifact, null, null, path);
+        }
+        if (hasGit) {
+            GitSource source = parseGitSource(entry, displayPath);
+            return new WorkspaceDependency(group, artifact, null, source, null);
+        }
+        String versionRaw = entry.getString("version");
+        if (versionRaw == null || versionRaw.isBlank()) {
+            throw new JkBuildParseException(displayPath + ".version must not be blank");
+        }
+        VersionSelector selector = VersionSelector.parseFloating(versionRaw);
+        return new WorkspaceDependency(group, artifact, selector, null, null);
     }
 
     private static String requireString(TomlTable table, String key, String displayPath) {

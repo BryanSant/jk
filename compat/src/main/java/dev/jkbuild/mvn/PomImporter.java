@@ -298,7 +298,10 @@ public final class PomImporter {
         }
         // PRD §7.3: jk's bare-version default is Exact, matching Maven semantics.
         VersionSelector selector = VersionSelector.parse(version);
-        return new Dependency(dep.module(), selector);
+        // Maven coordinates have no notion of a manifest "short name"; default
+        // the v0.7 `name` field to the artifactId, matching the manifest's
+        // own `artifact`-defaults-to-key rule.
+        return Dependency.of(dep.artifactId(), dep.module(), selector);
     }
 
     // --- repositories -------------------------------------------------------

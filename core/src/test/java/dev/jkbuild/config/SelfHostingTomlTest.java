@@ -3,6 +3,7 @@ package dev.jkbuild.config;
 
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
+import dev.jkbuild.model.WorkspaceMerge;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
@@ -50,11 +51,23 @@ class SelfHostingTomlTest {
         JkBuild cli = JkBuildParser.parse(REPO.resolve("cli/jk.toml"));
         assertThat(cli.project().main()).isEqualTo("dev.jkbuild.cli.Jk");
         assertThat(cli.project().isRunnable()).isTrue();
-        List<String> mainModules = cli.dependencies().of(Scope.MAIN).stream()
+
+        // Workspace siblings declared as `name.workspace = true` parse as
+        // synthetic `workspace:<name>` placeholders. Verify the raw shape...
+        List<String> unmergedModules = cli.dependencies().of(Scope.MAIN).stream()
                 .map(d -> d.module()).toList();
-        assertThat(mainModules).contains(
-                "dev.jkbuild:jk-core",
-                "dev.jkbuild:jk-engine",
+        assertThat(unmergedModules).contains(
+                "workspace:jk-core",
+                "workspace:jk-engine",
                 "info.picocli:picocli");
+
+        // ...then merge with the root manifest's siblings to confirm the
+        // placeholders rewrite to real coords.
+        JkBuild root = JkBuildParser.parse(REPO.resolve("jk.toml"));
+        JkBuild merged = WorkspaceMerge.merge(
+                root, WorkspaceLoader.loadMembers(REPO, root).values());
+        List<String> mergedRootMain = merged.dependencies().of(Scope.MAIN).stream()
+                .map(d -> d.module()).toList();
+        assertThat(mergedRootMain).contains("info.picocli:picocli");
     }
 }
