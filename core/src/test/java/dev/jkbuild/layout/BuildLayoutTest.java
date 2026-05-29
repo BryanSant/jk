@@ -66,6 +66,64 @@ class BuildLayoutTest {
     }
 
     @Test
+    void of_auto_discovers_enclosing_workspace_root(@TempDir Path workspace) throws java.io.IOException {
+        // Two-on-disk-files scenario: a workspace root that lists `core/`
+        // as a member, plus a member manifest under `core/`. Calling
+        // BuildLayout.of(member, memberProject) should yield a layout
+        // whose target/ lives at the *workspace* root, not the member.
+        java.nio.file.Files.writeString(workspace.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "ws-root"
+                version  = "1.0.0"
+
+                [workspace]
+                members = ["core"]
+                """);
+        Path member = workspace.resolve("core");
+        java.nio.file.Files.createDirectories(member);
+        java.nio.file.Files.writeString(member.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "core"
+                version  = "1.0.0"
+                """);
+
+        JkBuild memberProject = dev.jkbuild.config.JkBuildParser.parse(member.resolve("jk.toml"));
+        BuildLayout layout = BuildLayout.of(member, memberProject);
+
+        assertThat(layout.workspaceRoot()).isEqualTo(workspace.toAbsolutePath().normalize());
+        assertThat(layout.memberRoot()).isEqualTo(member);
+        // The jar belongs at the workspace root, NOT the member.
+        assertThat(layout.mainJar())
+                .isEqualTo(workspace.toAbsolutePath().normalize().resolve("target/core-1.0.0.jar"));
+        // But intermediates stay member-local.
+        assertThat(layout.classesDir()).isEqualTo(member.resolve("build/classes/main"));
+    }
+
+    @Test
+    void of_workspace_root_itself_keeps_target_at_root(@TempDir Path workspace) {
+        // The workspace root *is* the project; both layers collapse to it.
+        BuildLayout layout = BuildLayout.of(workspace,
+                workspaceRootProject("ws-root", "1.0.0"));
+        assertThat(layout.workspaceRoot()).isEqualTo(workspace);
+        assertThat(layout.memberRoot()).isEqualTo(workspace);
+        assertThat(layout.mainJar()).isEqualTo(workspace.resolve("target/ws-root-1.0.0.jar"));
+    }
+
+    private static JkBuild workspaceRootProject(String artifact, String version) {
+        return dev.jkbuild.config.JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                artifact = "%s"
+                version  = "%s"
+
+                [workspace]
+                members = []
+                """.formatted(artifact, version));
+    }
+
+    @Test
     void artifact_and_version_are_exposed(@TempDir Path dir) {
         BuildLayout layout = BuildLayout.of(dir, project("alpha", "9.9.9-SNAPSHOT"));
 

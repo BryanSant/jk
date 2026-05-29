@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.layout;
 
+import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.model.JkBuild;
 
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
 
@@ -56,18 +58,36 @@ public final class BuildLayout {
      * Build a layout for {@code projectDir} using the manifest's
      * {@code [project]} coordinates.
      *
-     * <p>The {@code workspaceRoot} currently defaults to {@code projectDir}.
-     * The workspace-aware path (where {@code workspaceRoot} is discovered
-     * by walking up to the enclosing workspace member) will be wired in
-     * once {@code jk build -p <member>} ships. Until then a workspace
-     * member built standalone behaves like a single-project build —
-     * intermediates and artifacts both root at the member dir.
+     * <p>If {@code projectDir} is itself a workspace root (its manifest
+     * has a {@code [workspace]} table), the workspace root is
+     * {@code projectDir} and intermediates + artifacts both land under it.
+     *
+     * <p>If {@code projectDir} is a workspace <em>member</em> (its parent
+     * chain contains a workspace root whose {@code members} list names
+     * this directory), the discovered workspace root hosts the
+     * {@code target/} dir while intermediates stay under {@code projectDir}.
+     * Same-target sharing across siblings means {@code jk build} from
+     * inside a member writes its jar next to its siblings'.
+     *
+     * <p>Standalone projects (no enclosing workspace) fall back to
+     * single-tier: workspace root == member root == project dir.
+     *
+     * <p>Workspace discovery silently falls back to single-tier on I/O
+     * errors — better than failing a build over path resolution.
      */
     public static BuildLayout of(Path projectDir, JkBuild project) {
         Objects.requireNonNull(projectDir, "projectDir");
         Objects.requireNonNull(project, "project");
+        Path workspaceRoot = projectDir;
+        if (!project.isWorkspaceRoot()) {
+            try {
+                workspaceRoot = WorkspaceLocator.findRoot(projectDir).orElse(projectDir);
+            } catch (IOException ignored) {
+                // fall back to single-tier
+            }
+        }
         return new BuildLayout(
-                projectDir, projectDir,
+                workspaceRoot, projectDir,
                 project.project().artifact(),
                 project.project().version());
     }
