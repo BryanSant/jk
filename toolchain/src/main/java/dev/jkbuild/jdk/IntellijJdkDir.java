@@ -1,35 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import dev.jkbuild.util.JkDirs;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 /**
- * Helpers for handling the macOS {@code .jdk/Contents/Home} bundle layout
- * that JDK distributions ship with on macOS. Originally this class also
- * decided where jk installs JDKs (defaulting to the IntelliJ neighbor
- * location for shared downloads); installs now live under
- * {@code ~/.jk/jdks/} on every platform — see {@link JkDirs#jdks()}.
+ * Helpers for the macOS {@code .jdk/Contents/Home} bundle layout that
+ * JDK distributions ship with on macOS. Used by every JDK discovery probe
+ * to normalise install paths into {@code JAVA_HOME} paths and back.
  *
- * <p>The bundle-unwrap helpers stay because external JDKs discovered by
- * the probe chain (IntelliJ's {@code ~/.jdks}, system installs under
- * {@code ~/Library/Java/JavaVirtualMachines}, SDKMAN/mise/asdf) still
- * follow the macOS {@code Contents/Home} convention and need normalising
- * before {@code JAVA_HOME} is exported.
+ * <p>The class is named after IntelliJ because IntelliJ codified this
+ * convention for the JVM ecosystem, but the helpers apply equally to
+ * jk-installed bundles, system installs at
+ * {@code /Library/Java/JavaVirtualMachines}, and any other macOS JDK.
  */
 public final class IntellijJdkDir {
 
     private IntellijJdkDir() {}
-
-    public static Path root() {
-        return JkDirs.jdks();
-    }
-
-    static Path rootFor(String userHome) {
-        return JkDirs.of(name -> null, userHome).jdksDir();
-    }
 
     /**
      * Resolve the JAVA_HOME path within a given install directory. On

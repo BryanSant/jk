@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import dev.jkbuild.discovery.JetbrainsProbe;
+import dev.jkbuild.discovery.JkProbe;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -122,9 +122,9 @@ class JdkRegistryTest {
         assertThat(isolatedRegistry(tempDir).findBySpec("corretto-25")).isEmpty();
     }
 
-    /** A {@link JdkRegistry} backed by a single {@link JetbrainsProbe} rooted at {@code root} — isolates the test from any JDKs actually installed on the host. */
+    /** A {@link JdkRegistry} backed by a single {@link JkProbe} rooted at {@code root} — isolates the test from any JDKs actually installed on the host. */
     private static JdkRegistry isolatedRegistry(Path root) {
-        return new JdkRegistry(root, List.of(new JetbrainsProbe(root)));
+        return new JdkRegistry(root, List.of(new JkProbe(root)));
     }
 
     private static void makeJdkInstall(Path home, String version) throws IOException {

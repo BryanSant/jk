@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import dev.jkbuild.discovery.JetbrainsProbe;
+import dev.jkbuild.discovery.JkProbe;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -54,7 +54,7 @@ class JdkResolverTest {
     }
 
     private static JdkRegistry isolatedRegistry(Path root) {
-        return new JdkRegistry(root, List.of(new JetbrainsProbe(root)));
+        return new JdkRegistry(root, List.of(new JkProbe(root)));
     }
 
     /** Realistic install dir: {@code bin/java} + a {@code release} file so probe-based discovery picks it up. */

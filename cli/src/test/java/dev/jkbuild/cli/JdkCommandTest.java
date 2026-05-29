@@ -150,7 +150,7 @@ class JdkCommandTest {
 
         // The new contract requires `<source>/<spec>`; `--yes` skips the
         // interactive confirmation prompt.
-        int exit = run("jdk", "uninstall", "intellij/temurin-21.0.5", "--yes",
+        int exit = run("jdk", "uninstall", "jk/temurin-21.0.5", "--yes",
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(victim).doesNotExist();
@@ -169,7 +169,7 @@ class JdkCommandTest {
     void uninstall_rejects_bare_major_spec(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
-        int exit = run("jdk", "uninstall", "intellij/21", "--yes",
+        int exit = run("jdk", "uninstall", "jk/21", "--yes",
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(64);
     }
@@ -332,7 +332,7 @@ class JdkCommandTest {
         Path victim = jdks.resolve("temurin-21.0.5");
         makeJdkInstall(victim);
 
-        int exit = run("jdk", "remove", "intellij/temurin-21.0.5", "--yes",
+        int exit = run("jdk", "remove", "jk/temurin-21.0.5", "--yes",
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(victim).doesNotExist();

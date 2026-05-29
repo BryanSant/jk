@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import dev.jkbuild.discovery.JetbrainsProbe;
+import dev.jkbuild.discovery.JkProbe;
+import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.discovery.LocalToolProbe;
 import dev.jkbuild.discovery.Probes;
 import dev.jkbuild.util.JkThreads;
@@ -41,19 +42,19 @@ public final class JdkRegistry {
     private final Path jdksRoot;
     private final List<LocalToolProbe> probes;
 
-    /** Production: IntelliJ JDK dir as the write target + the default probe chain. */
+    /** Production: jk's own JDK dir as the write target + the default probe chain. */
     public JdkRegistry() {
-        this(IntellijJdkDir.root(), Probes.defaultChain());
+        this(JkDirs.jdks(), Probes.defaultChain());
     }
 
     /**
      * Test-friendly: walk only the given {@code jdksRoot} (via a single
-     * {@link JetbrainsProbe}). External-tool probes (SDKMAN, mise, system) are
-     * not consulted, so a test pointing at a {@code @TempDir} sees only what
-     * the test placed there.
+     * {@link JkProbe}). External-tool probes (SDKMAN, mise, IntelliJ, system)
+     * are not consulted, so a test pointing at a {@code @TempDir} sees only
+     * what the test placed there.
      */
     public JdkRegistry(Path jdksRoot) {
-        this(jdksRoot, List.of(new JetbrainsProbe(jdksRoot)));
+        this(jdksRoot, List.of(new JkProbe(jdksRoot)));
     }
 
     /** Full control — both the write target and the probe chain. */

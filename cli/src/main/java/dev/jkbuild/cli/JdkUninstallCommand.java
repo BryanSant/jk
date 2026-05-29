@@ -60,7 +60,7 @@ public final class JdkUninstallCommand implements Callable<Integer> {
      * by the OS package manager and jk can't safely remove them.
      */
     private static final Set<String> KNOWN_SOURCES = Set.of(
-            "intellij", "sdkman", "jbang", "mise", "asdf", "jenv",
+            "jk", "intellij", "sdkman", "jbang", "mise", "asdf", "jenv",
             "homebrew", "java-home");
 
     /** Probe names jk refuses to uninstall from. Listed for a friendlier error. */

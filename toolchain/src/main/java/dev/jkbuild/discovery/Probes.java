@@ -21,7 +21,8 @@ public final class Probes {
     public static List<LocalToolProbe> defaultChain() {
         List<LocalToolProbe> chain = new ArrayList<>();
         chain.add(new EnvVarProbe());
-        chain.add(new JetbrainsProbe());
+        chain.add(new JkProbe());           // ~/.jk/jdks — jk's own installs
+        chain.add(new IntellijProbe());     // ~/.jdks or ~/Library/Java/JavaVirtualMachines
         chain.add(new SdkmanProbe());
         chain.add(new JbangProbe());
         chain.add(new MiseProbe());
