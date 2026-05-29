@@ -24,6 +24,7 @@ import java.util.concurrent.Callable;
         subcommands = {
                 RegistryUpdateCommand.class,
                 RegistryListCommand.class,
+                RegistrySearchCommand.class,
         })
 public final class RegistryCommand implements Callable<Integer> {
 

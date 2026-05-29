@@ -463,6 +463,7 @@ The bundled index is intentionally version-free — it's a name-to-coord index, 
 
 - **`jk registry update`** pulls `https://raw.githubusercontent.com/BryanSant/jk-registry/main/aliases.toml` and replaces `~/.jk/registry/aliases.toml`. The previous file is preserved at `aliases.toml.prev`. A malformed or HTTP-failed response never replaces a good cache.
 - **`jk registry list`** prints every alias with its source layer. `--layer <name>` filters (e.g. `--layer project`).
+- **`jk registry search <term>...`** substring-matches against name, group, and artifact across every layer. Multiple terms are AND-ed (each must appear in at least one of the three fields). Case-insensitive. `--limit N` caps the result count for noisy queries.
 
 ### Curation policy (`BryanSant/jk-registry`)
 
