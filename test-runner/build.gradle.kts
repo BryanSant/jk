@@ -28,7 +28,7 @@ tasks.jar {
 
 /**
  * Copy the freshly-built test-runner jar into the developer's local
- * jk CAS at {@code ~/.cache/jk/sha256/AA/BB/<rest>}, keyed by the
+ * jk CAS at {@code ~/.jk/cache/sha256/AA/BB/<rest>}, keyed by the
  * jar's SHA-256. Simulates what `jk sync` will do once the runner
  * is published to Maven Central.
  *
@@ -37,7 +37,7 @@ tasks.jar {
  * so the engine's expected-hash resource regenerates as well.
  */
 tasks.register("installLocalCas") {
-    description = "Side-load the freshly-built test-runner jar into ~/.cache/jk/sha256/<hash>"
+    description = "Side-load the freshly-built test-runner jar into ~/.jk/cache/sha256/<hash>"
     group = "jk"
     dependsOn(tasks.jar)
     val jarProvider = tasks.jar.flatMap { it.archiveFile }
@@ -51,7 +51,8 @@ tasks.register("installLocalCas") {
         }
         val hex = sb.toString()
         val cacheRoot: File = System.getenv("JK_CACHE_DIR")?.let { File(it) }
-                ?: File(System.getProperty("user.home"), ".cache/jk")
+                ?: System.getenv("JK_HOME")?.let { File(it).resolve("cache") }
+                ?: File(System.getProperty("user.home"), ".jk/cache")
         val target = cacheRoot.resolve("sha256")
                 .resolve(hex.substring(0, 2))
                 .resolve(hex.substring(2, 4))
