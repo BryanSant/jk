@@ -72,9 +72,27 @@ public final class NewScaffolder {
                 .orElseGet(() -> Lockfile.empty(Jk.VERSION));
         LockfileWriter.write(lock, lockFile);
 
+        writeGitignore(dir);
+
         if (inputs.sample()) {
             writeSample(inputs);
         }
+    }
+
+    /**
+     * Seed a {@code .gitignore} covering jk's outputs. Don't clobber an
+     * existing file — the user (or their template) may have customised
+     * it. We only create one on first scaffold.
+     */
+    private static void writeGitignore(Path dir) throws IOException {
+        Path gitignore = dir.resolve(".gitignore");
+        if (Files.exists(gitignore)) return;
+        Files.writeString(gitignore, """
+                # jk build outputs
+                target/
+                **/build/
+                .jk/
+                """, StandardCharsets.UTF_8);
     }
 
     /** Class name used for the always-generated Main file. */

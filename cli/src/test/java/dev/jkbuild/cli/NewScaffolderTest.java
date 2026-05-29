@@ -226,6 +226,30 @@ class NewScaffolderTest {
     }
 
     @Test
+    void scaffolder_writes_gitignore_covering_build_outputs(@TempDir Path tempDir) throws IOException {
+        NewScaffolder.write(library(tempDir, NewInputs.Language.JAVA, false, 25));
+
+        Path gitignore = tempDir.resolve(".gitignore");
+        assertThat(gitignore).exists();
+        String body = Files.readString(gitignore);
+        assertThat(body).contains("target/");
+        assertThat(body).contains("**/build/");
+        assertThat(body).contains(".jk/");
+    }
+
+    @Test
+    void scaffolder_preserves_existing_gitignore(@TempDir Path tempDir) throws IOException {
+        Path gitignore = tempDir.resolve(".gitignore");
+        Files.createDirectories(tempDir);
+        Files.writeString(gitignore, "# pre-existing content\nnode_modules/\n");
+
+        NewScaffolder.write(library(tempDir, NewInputs.Language.JAVA, false, 25));
+
+        // jk doesn't overwrite an existing .gitignore — user customization wins.
+        assertThat(Files.readString(gitignore)).isEqualTo("# pre-existing content\nnode_modules/\n");
+    }
+
+    @Test
     void absent_jdk_identifier_leaves_no_jdk_line(@TempDir Path tempDir) throws IOException {
         var inputs = new NewInputs(
                 "com.example", "widget", "widget", "25", 25,
