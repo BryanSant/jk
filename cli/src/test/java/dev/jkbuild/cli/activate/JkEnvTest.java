@@ -56,11 +56,16 @@ class JkEnvTest {
         var env = new JkEnv(new JdkRegistry(jdksRoot), "/usr/bin:/bin");
         var target = env.resolve(project);
 
+        // ProbeSupport canonicalises JDK homes via toRealPath() — on macOS
+        // the @TempDir path lives under /var/folders/... which symlinks to
+        // /private/var/folders/..., so the expected JAVA_HOME must be the
+        // real path, not the raw @TempDir.
+        var realJdkHome = jdkHome.toRealPath();
         assertThat(target.isActive()).isTrue();
         assertThat(target.projectRoot()).contains(project);
-        assertThat(target.vars().get("JAVA_HOME")).isEqualTo(jdkHome.toString());
+        assertThat(target.vars().get("JAVA_HOME")).isEqualTo(realJdkHome.toString());
         assertThat(target.vars().get("PATH"))
-                .isEqualTo(jdkHome.resolve("bin") + File.pathSeparator + "/usr/bin:/bin");
+                .isEqualTo(realJdkHome.resolve("bin") + File.pathSeparator + "/usr/bin:/bin");
     }
 
     @Test
@@ -81,8 +86,11 @@ class JkEnvTest {
         var env = new JkEnv(new JdkRegistry(jdksRoot), "/usr/bin");
         var target = env.resolve(project);
 
-        assertThat(target.vars()).containsEntry("GRAALVM_HOME", jdkHome.toString());
-        assertThat(target.vars()).containsEntry("JAVA_HOME", jdkHome.toString());
+        // Canonicalise: see resolves_jdk_home_from_registry for the macOS
+        // /var → /private/var symlink rationale.
+        var realJdkHome = jdkHome.toRealPath();
+        assertThat(target.vars()).containsEntry("GRAALVM_HOME", realJdkHome.toString());
+        assertThat(target.vars()).containsEntry("JAVA_HOME", realJdkHome.toString());
     }
 
     @Test

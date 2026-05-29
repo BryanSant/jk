@@ -222,7 +222,10 @@ class JdkCommandTest {
         }
         assertThat(exit).isEqualTo(0);
         String stdout = out.toString(StandardCharsets.UTF_8).trim();
-        assertThat(stdout).isEqualTo("export JAVA_HOME=" + jdkHome);
+        // ProbeSupport.discoverJdk canonicalises via toRealPath(); on macOS
+        // @TempDir lives under /var/folders → /private/var/folders, so the
+        // exported JAVA_HOME is the canonical form.
+        assertThat(stdout).isEqualTo("export JAVA_HOME=" + jdkHome.toRealPath());
     }
 
     @Test

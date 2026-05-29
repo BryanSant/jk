@@ -273,7 +273,13 @@ public final class JdkRegistry {
         if (match.isEmpty()) return false;
         Path home = match.get().home();
         Path installDir = IntellijJdkDir.installDirOf(home);
-        if (!installDir.startsWith(jdksRoot)) {
+        // `installDir` is canonical (ProbeSupport.discoverJdk applies
+        // toRealPath()). `jdksRoot` may be a symlink path — e.g. macOS
+        // /var/folders/... → /private/var/folders/..., or a user's
+        // ~/.jk/jdks if their HOME is itself symlinked. Canonicalise it
+        // when it exists so the containment check actually works.
+        Path canonicalRoot = Files.exists(jdksRoot) ? jdksRoot.toRealPath() : jdksRoot;
+        if (!installDir.startsWith(canonicalRoot)) {
             // Not jk-managed; refuse to touch it.
             return false;
         }
