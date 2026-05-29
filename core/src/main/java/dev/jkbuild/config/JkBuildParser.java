@@ -272,13 +272,28 @@ public final class JkBuildParser {
             throw new JkBuildParseException(displayPath + " has an empty version string");
         }
         AliasRegistry.Module mod = registry.lookup(name).orElseThrow(() ->
-                new JkBuildParseException(displayPath
-                        + " — unknown short name `" + name + "`. "
-                        + "Either spell out the coord as `{ group = \"...\", version = \"...\" }`, "
-                        + "or pick a curated name from the bundled registry "
-                        + "(see docs/artifact-coord-design.md)."));
+                new JkBuildParseException(unknownAliasMessage(displayPath, name, registry)));
         VersionSelector selector = VersionSelector.parseFloating(versionRaw);
         return Dependency.of(name, mod.moduleKey(), selector);
+    }
+
+    /**
+     * Compose the error shown when a short name doesn't resolve. Appends
+     * a "did you mean" line when the registry has plausible alternatives —
+     * particularly useful for major-version-split families like Jackson 2
+     * vs 3, where typing the unprefixed name silently fails by design.
+     */
+    private static String unknownAliasMessage(String displayPath, String name, AliasRegistry registry) {
+        StringBuilder msg = new StringBuilder(displayPath)
+                .append(" — unknown short name `").append(name).append("`. ");
+        List<String> suggestions = registry.suggestionsFor(name, 5);
+        if (!suggestions.isEmpty()) {
+            msg.append("Did you mean: ").append(String.join(", ", suggestions)).append("? ");
+        }
+        msg.append("Either spell out the coord as `{ group = \"...\", version = \"...\" }`, ")
+                .append("or pick a curated name from the registry ")
+                .append("(see docs/artifact-coord-design.md).");
+        return msg.toString();
     }
 
     private static Dependency parseDepEntry(

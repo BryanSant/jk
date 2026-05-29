@@ -157,6 +157,45 @@ public final class AliasRegistry {
         return names().size();
     }
 
+    /**
+     * Best-effort name suggestions for an unknown alias. Splits the
+     * candidate on {@code -} and returns up to {@code maxResults}
+     * registry names that contain every non-empty part as a substring
+     * (case-insensitive). Useful for "did you mean" diagnostics — typing
+     * {@code jackson-databind} surfaces {@code jackson2-databind} and
+     * {@code jackson3-databind} since both contain "jackson" and
+     * "databind".
+     *
+     * <p>Walks the layered chain in lookup-priority order, so a
+     * project-level override shadows a same-named bundled entry in the
+     * suggestion list too.
+     */
+    public List<String> suggestionsFor(String unknownName, int maxResults) {
+        if (unknownName == null || unknownName.isBlank() || maxResults <= 0) {
+            return List.of();
+        }
+        String lowerInput = unknownName.toLowerCase(java.util.Locale.ROOT);
+        List<String> parts = new ArrayList<>();
+        for (String p : lowerInput.split("-")) {
+            if (!p.isEmpty()) parts.add(p);
+        }
+        if (parts.isEmpty()) return List.of();
+        List<String> hits = new ArrayList<>();
+        for (String name : names()) {
+            if (name.equalsIgnoreCase(unknownName)) continue;   // not a "suggestion"
+            String lower = name.toLowerCase(java.util.Locale.ROOT);
+            boolean allMatch = true;
+            for (String p : parts) {
+                if (!lower.contains(p)) { allMatch = false; break; }
+            }
+            if (allMatch) {
+                hits.add(name);
+                if (hits.size() >= maxResults) break;
+            }
+        }
+        return List.copyOf(hits);
+    }
+
     /** The non-version half of a Maven coordinate. */
     public record Module(String group, String artifact) {
         public Module {

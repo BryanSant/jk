@@ -25,16 +25,33 @@
 #     `guava`), prefer that as the short name.
 #   - Spring Boot starter prefix retained (`spring-boot-starter-*`) — it's
 #     load-bearing for grep / muscle-memory; no abbreviation.
+#   - Split aliases by major version when the Maven *coordinate* changes
+#     (e.g. Jackson 2 → 3 moved from com.fasterxml.jackson.* to
+#     tools.jackson.*). The bundled set deliberately does NOT pick a
+#     default — both `jackson2-databind` and `jackson3-databind` are
+#     curated; the unprefixed `jackson-databind` is intentionally absent
+#     so a registry adopter never gets a silent major-version bump.
+#     Within-coord major bumps (Spring Boot 2 vs 3 — same GAV, different
+#     version selector) keep one alias; the user's version field does the
+#     work.
 
 [aliases]
 
-# Jackson 3 (tools.jackson.*)
-jackson-databind             = "tools.jackson.core:jackson-databind"
-jackson-core                 = "tools.jackson.core:jackson-core"
-jackson-annotations          = "tools.jackson.core:jackson-annotations"
-jackson-module-kotlin        = "tools.jackson.module:jackson-module-kotlin"
-jackson-dataformat-yaml      = "tools.jackson.dataformat:jackson-dataformat-yaml"
-jackson-datatype-jsr310      = "tools.jackson.datatype:jackson-datatype-jsr310"
+# Jackson 2 (com.fasterxml.jackson.*) — the version still dominant in production.
+jackson2-databind             = "com.fasterxml.jackson.core:jackson-databind"
+jackson2-core                 = "com.fasterxml.jackson.core:jackson-core"
+jackson2-annotations          = "com.fasterxml.jackson.core:jackson-annotations"
+jackson2-module-kotlin        = "com.fasterxml.jackson.module:jackson-module-kotlin"
+jackson2-dataformat-yaml      = "com.fasterxml.jackson.dataformat:jackson-dataformat-yaml"
+jackson2-datatype-jsr310      = "com.fasterxml.jackson.datatype:jackson-datatype-jsr310"
+
+# Jackson 3 (tools.jackson.*) — new namespace introduced for the 3.x line.
+jackson3-databind             = "tools.jackson.core:jackson-databind"
+jackson3-core                 = "tools.jackson.core:jackson-core"
+jackson3-annotations          = "tools.jackson.core:jackson-annotations"
+jackson3-module-kotlin        = "tools.jackson.module:jackson-module-kotlin"
+jackson3-dataformat-yaml      = "tools.jackson.dataformat:jackson-dataformat-yaml"
+jackson3-datatype-jsr310      = "tools.jackson.datatype:jackson-datatype-jsr310"
 
 # JUnit
 junit-jupiter                = "org.junit.jupiter:junit-jupiter"

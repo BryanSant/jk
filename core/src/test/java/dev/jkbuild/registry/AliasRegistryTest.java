@@ -11,15 +11,62 @@ class AliasRegistryTest {
     @Test
     void bundled_registry_loads_and_contains_spot_check_entries() {
         AliasRegistry r = AliasRegistry.bundled();
-        assertThat(r.lookup("jackson-databind"))
+        // Jackson is split by major-version because the Maven coordinate
+        // moved between 2 and 3 (com.fasterxml → tools.jackson). The
+        // bundled set intentionally has no unprefixed `jackson-*`.
+        assertThat(r.lookup("jackson2-databind"))
+                .get().extracting(AliasRegistry.Module::moduleKey)
+                .isEqualTo("com.fasterxml.jackson.core:jackson-databind");
+        assertThat(r.lookup("jackson3-databind"))
                 .get().extracting(AliasRegistry.Module::moduleKey)
                 .isEqualTo("tools.jackson.core:jackson-databind");
+        assertThat(r.lookup("jackson-databind")).isEmpty();
+
         assertThat(r.lookup("junit-jupiter"))
                 .get().extracting(AliasRegistry.Module::moduleKey)
                 .isEqualTo("org.junit.jupiter:junit-jupiter");
         assertThat(r.lookup("picocli"))
                 .get().extracting(AliasRegistry.Module::moduleKey)
                 .isEqualTo("info.picocli:picocli");
+    }
+
+    @Test
+    void suggestions_surface_split_family_for_jackson_databind() {
+        // The defining motivation: a user typing the unprefixed name
+        // should see both major-version flavors.
+        var hits = AliasRegistry.bundled().suggestionsFor("jackson-databind", 5);
+        assertThat(hits).contains("jackson2-databind", "jackson3-databind");
+    }
+
+    @Test
+    void suggestions_handle_no_dash_input() {
+        var hits = AliasRegistry.bundled().suggestionsFor("picocli", 5);
+        // "picocli" is itself a registry entry; we filter the exact match
+        // out so a "did you mean" doesn't echo the input.
+        assertThat(hits).doesNotContain("picocli");
+        // …but it still surfaces related names (picocli-codegen).
+        assertThat(hits).contains("picocli-codegen");
+    }
+
+    @Test
+    void suggestions_return_empty_when_no_substring_matches() {
+        assertThat(AliasRegistry.bundled().suggestionsFor("totally-unrelated-xyz", 5))
+                .isEmpty();
+    }
+
+    @Test
+    void suggestions_respect_max_results() {
+        var hits = AliasRegistry.bundled().suggestionsFor("jackson", 2);
+        assertThat(hits).hasSize(2);
+    }
+
+    @Test
+    void suggestions_for_blank_or_null_return_empty() {
+        AliasRegistry r = AliasRegistry.bundled();
+        assertThat(r.suggestionsFor(null, 5)).isEmpty();
+        assertThat(r.suggestionsFor("", 5)).isEmpty();
+        assertThat(r.suggestionsFor("  ", 5)).isEmpty();
+        assertThat(r.suggestionsFor("anything", 0)).isEmpty();
     }
 
     @Test

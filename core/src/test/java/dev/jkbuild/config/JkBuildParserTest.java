@@ -481,6 +481,26 @@ class JkBuildParserTest {
     }
 
     @Test
+    void unknown_shorthand_surfaces_did_you_mean_for_split_families() {
+        // The parser's unknown-alias message includes suggestions drawn
+        // from the registry. For the Jackson family this means typing the
+        // unprefixed name surfaces both major-version flavors.
+        AliasRegistry splitFamily = AliasRegistry.of(Map.of(
+                "jackson2-databind", new AliasRegistry.Module("com.fasterxml.jackson.core", "jackson-databind"),
+                "jackson3-databind", new AliasRegistry.Module("tools.jackson.core", "jackson-databind")));
+
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                jackson-databind = "2.18.2"
+                """, splitFamily))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("unknown short name `jackson-databind`")
+                .hasMessageContaining("Did you mean:")
+                .hasMessageContaining("jackson2-databind")
+                .hasMessageContaining("jackson3-databind");
+    }
+
+    @Test
     void unknown_table_without_group_is_rejected() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
