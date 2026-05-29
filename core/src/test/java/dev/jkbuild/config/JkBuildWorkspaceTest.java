@@ -170,6 +170,36 @@ class JkBuildWorkspaceTest {
     }
 
     @Test
+    void workspace_loader_rejects_nested_workspaces(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "root"
+                version  = "0.1.0"
+
+                [workspace]
+                members = ["libs/a"]
+                """);
+        Path memberA = tempDir.resolve("libs/a");
+        Files.createDirectories(memberA);
+        // Member tries to declare its own [workspace] — should be rejected.
+        Files.writeString(memberA.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "a"
+                version  = "0.1.0"
+
+                [workspace]
+                members = ["sub"]
+                """);
+        JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThatThrownBy(() -> WorkspaceLoader.loadMembers(tempDir, root))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("workspaces cannot be nested")
+                .hasMessageContaining("libs/a");
+    }
+
+    @Test
     void workspace_loader_allows_same_artifact_with_different_versions(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]

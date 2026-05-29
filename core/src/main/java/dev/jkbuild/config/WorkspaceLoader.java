@@ -37,7 +37,19 @@ public final class WorkspaceLoader {
                 bad.add(member);
                 continue;
             }
-            members.put(memberDir, JkBuildParser.parse(memberJkToml));
+            JkBuild memberBuild = JkBuildParser.parse(memberJkToml);
+            // Workspaces cannot be nested — a member declaring its own
+            // [workspace] block would imply two competing roots and an
+            // ambiguous shared <root>/target/. Reject loudly so the
+            // user fixes the manifest rather than discovers it at build
+            // time when paths quietly diverge.
+            if (memberBuild.isWorkspaceRoot()) {
+                throw new JkBuildParseException(
+                        "workspaces cannot be nested — `" + member
+                                + "` declares its own `[workspace]` block "
+                                + "while being a member of `" + workspaceRoot + "`.");
+            }
+            members.put(memberDir, memberBuild);
         }
         if (!bad.isEmpty()) {
             throw new JkBuildParseException(
