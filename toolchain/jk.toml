@@ -6,13 +6,14 @@ jdk      = 25
 java     = 25
 
 [dependencies.main]
-jk-core.workspace          = true
-jk-io.workspace            = true
-jk-resolver.workspace      = true
-commons-compress           = { group = "org.apache.commons", version = "1.28.0" }
-jackson-databind.workspace = true
+jk-core          = { group = "dev.jkbuild",         artifact = "jk-core",          version = "0.6.0-SNAPSHOT" }
+jk-io            = { group = "dev.jkbuild",         artifact = "jk-io",            version = "0.6.0-SNAPSHOT" }
+jk-resolver      = { group = "dev.jkbuild",         artifact = "jk-resolver",      version = "0.6.0-SNAPSHOT" }
+commons-compress = { group = "org.apache.commons",  artifact = "commons-compress", version = "1.28.0" }
+xz               = { group = "org.tukaani",         artifact = "xz",               version = "1.10" }
+jackson-databind = { group = "tools.jackson.core",  artifact = "jackson-databind", version = "3.1.3" }
 
 [dependencies.test]
-assertj-core.workspace            = true
-junit-jupiter.workspace           = true
-junit-platform-launcher.workspace = true
+assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }

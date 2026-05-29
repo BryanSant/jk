@@ -5,19 +5,20 @@ version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
+# JUnit is intentionally absent from main. `jk test` forks a child JVM
+# that runs jk-test-runner (a separate companion jar resolved by SHA-256
+# from the user's CAS), which is where JUnit lives. Keeping JUnit out of
+# engine's main scope keeps the native binary leaner and avoids version
+# drift between the runner's classpath and ours.
+
 [dependencies.main]
-# JUnit is intentionally absent. `jk test` forks a child JVM that runs
-# jk-test-runner (a separate companion jar resolved by SHA-256 from the
-# user's CAS), which is where JUnit lives. Keeping JUnit out of engine's
-# main scope keeps the native binary leaner and avoids version drift
-# between the runner's classpath and ours.
-jk-core.workspace          = true
-jk-io.workspace            = true
-jackson-databind.workspace = true   # parses the runner's NDJSON event stream
-asm                        = { group = "org.ow2.asm", version = "9.10" }
-asm-tree                   = { group = "org.ow2.asm", version = "9.10" }
+jk-core          = { group = "dev.jkbuild",        artifact = "jk-core",          version = "0.6.0-SNAPSHOT" }
+jk-io            = { group = "dev.jkbuild",        artifact = "jk-io",            version = "0.6.0-SNAPSHOT" }
+jackson-databind = { group = "tools.jackson.core", artifact = "jackson-databind", version = "3.1.3" }
+asm              = { group = "org.ow2.asm",        artifact = "asm",              version = "9.10" }
+asm-tree         = { group = "org.ow2.asm",        artifact = "asm-tree",         version = "9.10" }
 
 [dependencies.test]
-assertj-core.workspace            = true
-junit-jupiter.workspace           = true
-junit-platform-launcher.workspace = true
+assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }

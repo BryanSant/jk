@@ -7,20 +7,21 @@ java     = 25
 main     = "dev.jkbuild.cli.Jk"
 
 [dependencies.main]
-jk-compat.workspace       = true
-jk-core.workspace         = true
-jk-engine.workspace       = true
-jk-image.workspace        = true
-jk-io.workspace           = true
-jk-resolver.workspace     = true
-jk-supply-chain.workspace = true
-jk-toolchain.workspace    = true
-picocli                   = "4.7.7"   # registry-resolved → info.picocli:picocli
+jk-compat       = { group = "dev.jkbuild", artifact = "jk-compat",       version = "0.6.0-SNAPSHOT" }
+jk-core         = { group = "dev.jkbuild", artifact = "jk-core",         version = "0.6.0-SNAPSHOT" }
+jk-engine       = { group = "dev.jkbuild", artifact = "jk-engine",       version = "0.6.0-SNAPSHOT" }
+jk-image        = { group = "dev.jkbuild", artifact = "jk-image",        version = "0.6.0-SNAPSHOT" }
+jk-io           = { group = "dev.jkbuild", artifact = "jk-io",           version = "0.6.0-SNAPSHOT" }
+jk-resolver     = { group = "dev.jkbuild", artifact = "jk-resolver",     version = "0.6.0-SNAPSHOT" }
+jk-supply-chain = { group = "dev.jkbuild",  artifact = "jk-supply-chain",    version = "0.6.0-SNAPSHOT" }
+jk-toolchain    = { group = "dev.jkbuild",  artifact = "jk-toolchain",       version = "0.6.0-SNAPSHOT" }
+picocli         = { group = "info.picocli", artifact = "picocli",            version = "4.7.7" }
+jline-terminal-ffm = { group = "org.jline", artifact = "jline-terminal-ffm", version = "4.1.2" }
 
 [dependencies.test]
-assertj-core.workspace            = true
-junit-jupiter.workspace           = true
-junit-platform-launcher.workspace = true
+assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }
 
 [image]
 main-class = "dev.jkbuild.cli.Jk"

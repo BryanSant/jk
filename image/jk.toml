@@ -6,11 +6,11 @@ jdk      = 25
 java     = 25
 
 [dependencies.main]
-jib-core          = { group = "com.google.cloud.tools", version = "0.28.1" }
-jk-core.workspace = true
-jk-io.workspace   = true
+jk-core  = { group = "dev.jkbuild",            artifact = "jk-core",  version = "0.6.0-SNAPSHOT" }
+jk-io    = { group = "dev.jkbuild",            artifact = "jk-io",    version = "0.6.0-SNAPSHOT" }
+jib-core = { group = "com.google.cloud.tools", artifact = "jib-core", version = "0.28.1" }
 
 [dependencies.test]
-assertj-core.workspace            = true
-junit-jupiter.workspace           = true
-junit-platform-launcher.workspace = true
+assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }
