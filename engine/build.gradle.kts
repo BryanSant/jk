@@ -68,3 +68,11 @@ sourceSets.named("main") {
 tasks.named("processResources") {
     dependsOn(writeRunnerSha)
 }
+// sourcesJar (added by withSourcesJar() in the conventions plugin) bundles
+// `allSource`, which includes the main source set's resource srcDirs. The
+// generated runner-sha dir is one of those, so sourcesJar implicitly reads
+// writeRunnerSha's output and Gradle 9's validator rejects undeclared
+// task→task data flow. Wire it explicitly.
+tasks.named("sourcesJar") {
+    dependsOn(writeRunnerSha)
+}
