@@ -109,4 +109,96 @@ class JkBuildWorkspaceTest {
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("missing jk.toml");
     }
+
+    @Test
+    void workspace_loader_rejects_artifact_collision_between_members(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "root"
+                version  = "0.1.0"
+
+                [workspace]
+                members = ["libs/a", "libs/b"]
+                """);
+        // Two members both call themselves `widget-0.1.0` — they'd race to
+        // write the same jar under <root>/target/.
+        for (String name : new String[]{"libs/a", "libs/b"}) {
+            Path memberDir = tempDir.resolve(name);
+            Files.createDirectories(memberDir);
+            Files.writeString(memberDir.resolve("jk.toml"), """
+                    [project]
+                    group    = "com.example"
+                    artifact = "widget"
+                    version  = "0.1.0"
+                    """);
+        }
+        JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThatThrownBy(() -> WorkspaceLoader.loadMembers(tempDir, root))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("workspace artifact collision")
+                .hasMessageContaining("widget-0.1.0.jar")
+                .hasMessageContaining("libs/a")
+                .hasMessageContaining("libs/b");
+    }
+
+    @Test
+    void workspace_loader_rejects_collision_between_root_and_member(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "0.1.0"
+
+                [workspace]
+                members = ["libs/a"]
+                """);
+        Path memberA = tempDir.resolve("libs/a");
+        Files.createDirectories(memberA);
+        Files.writeString(memberA.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "0.1.0"
+                """);
+        JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThatThrownBy(() -> WorkspaceLoader.loadMembers(tempDir, root))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("workspace artifact collision")
+                .hasMessageContaining("<workspace root>")
+                .hasMessageContaining("libs/a");
+    }
+
+    @Test
+    void workspace_loader_allows_same_artifact_with_different_versions(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "root"
+                version  = "0.1.0"
+
+                [workspace]
+                members = ["libs/a", "libs/b"]
+                """);
+        // Same artifact, different versions → no collision (jar filenames differ).
+        Path a = tempDir.resolve("libs/a");
+        Files.createDirectories(a);
+        Files.writeString(a.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "0.1.0"
+                """);
+        Path b = tempDir.resolve("libs/b");
+        Files.createDirectories(b);
+        Files.writeString(b.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                artifact = "widget"
+                version  = "0.2.0"
+                """);
+        JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        Map<Path, JkBuild> members = WorkspaceLoader.loadMembers(tempDir, root);
+        assertThat(members).hasSize(2);
+    }
 }
