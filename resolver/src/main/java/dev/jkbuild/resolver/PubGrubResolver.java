@@ -42,9 +42,17 @@ public final class PubGrubResolver implements Resolver {
     }
 
     public PubGrubResolver(RepoGroup repos) {
+        this(repos, Map.of());
+    }
+
+    /**
+     * @param bomConstraints {@code group:artifact → pinned version} from
+     *     the user's platform BOMs. Empty map = no BOM constraints.
+     */
+    public PubGrubResolver(RepoGroup repos, Map<String, String> bomConstraints) {
         EffectivePomBuilder builder = new EffectivePomBuilder(repos);
         this.pomBuilder = builder;
-        this.source = new MavenPackageSource(repos, builder);
+        this.source = new MavenPackageSource(repos, builder, bomConstraints);
     }
 
     /** Test seam: lets unit tests inject an in-memory {@link PackageSource}. */

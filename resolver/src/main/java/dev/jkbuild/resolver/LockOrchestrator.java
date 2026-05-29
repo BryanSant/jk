@@ -7,7 +7,10 @@ import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
+import dev.jkbuild.repo.EffectivePom;
+import dev.jkbuild.repo.EffectivePomBuilder;
 import dev.jkbuild.repo.MavenRepo;
+import dev.jkbuild.repo.Pom;
 import dev.jkbuild.repo.RepoGroup;
 
 import java.io.IOException;
@@ -67,7 +70,7 @@ public final class LockOrchestrator {
                     VersionSelector.parseFloating(JK_TEST_JUNIT_VERSION)));
 
     private final RepoGroup repos;
-    private final Resolver resolver;
+    private final Resolver resolverOverride;
 
     public LockOrchestrator(MavenRepo repo) {
         this(RepoGroup.of(repo));
@@ -75,13 +78,13 @@ public final class LockOrchestrator {
 
     public LockOrchestrator(RepoGroup repos) {
         this.repos = Objects.requireNonNull(repos, "repos");
-        this.resolver = new PubGrubResolver(repos);
+        this.resolverOverride = null;
     }
 
     /** Test seam: lets tests inject a different resolver (e.g. NaiveResolver). */
     LockOrchestrator(RepoGroup repos, Resolver resolver) {
         this.repos = Objects.requireNonNull(repos, "repos");
-        this.resolver = Objects.requireNonNull(resolver, "resolver");
+        this.resolverOverride = Objects.requireNonNull(resolver, "resolver");
     }
 
     /** Lock with the project's default feature selection. */
@@ -138,6 +141,48 @@ public final class LockOrchestrator {
             }
         }
         List<Dependency> declared = new ArrayList<>(deduped.values());
+
+        // Gather BOM constraints from `[dependencies.platform]` deps. Each
+        // platform dep's effective POM contributes its managedDependencies
+        // (BOM imports already expanded by EffectivePomBuilder) as
+        // group:artifact → pinned version. Provenance is tracked per coord
+        // so we can surface the BOM source in `pinned-by` and in conflict
+        // diagnostics.
+        Map<String, String> bomConstraints = new LinkedHashMap<>();
+        Map<String, String> constraintProvenance = new LinkedHashMap<>();
+        EffectivePomBuilder pomBuilder = new EffectivePomBuilder(repos);
+        for (Dependency platformDep : project.dependencies().of(Scope.PLATFORM)) {
+            String bomVersion = versionLiteral(platformDep.version());
+            if (bomVersion == null) {
+                // Floating BOM selectors aren't supported yet — the BOM
+                // version *is* the pin. Skip gracefully so a misconfigured
+                // floating platform dep doesn't take down the entire lock.
+                continue;
+            }
+            Coordinate bomCoord = Coordinate.of(
+                    platformDep.group(), platformDep.artifact(), bomVersion);
+            EffectivePom bomPom = pomBuilder.build(bomCoord);
+            String bomLabel = bomCoord.toGav();
+            for (Pom.Dep m : bomPom.managedDependencies()) {
+                if (m.version() == null || m.version().isBlank()) continue;
+                String existing = bomConstraints.get(m.module());
+                if (existing == null) {
+                    bomConstraints.put(m.module(), m.version());
+                    constraintProvenance.put(m.module(), bomLabel);
+                } else if (!existing.equals(m.version())) {
+                    throw new IllegalStateException(
+                            "platform BOM conflict on `" + m.module()
+                                    + "`: " + constraintProvenance.get(m.module())
+                                    + " constrains to " + existing + ", but "
+                                    + bomLabel + " constrains to " + m.version()
+                                    + ". Pick one BOM or pin the coord explicitly.");
+                }
+            }
+        }
+
+        Resolver resolver = resolverOverride != null
+                ? resolverOverride
+                : new PubGrubResolver(repos, bomConstraints);
         Resolution resolution = resolver.resolve(declared);
         observer.onTotal(resolution.modules().size());
 
@@ -186,6 +231,18 @@ public final class LockOrchestrator {
 
             EnumSet<Scope> tags = tagsByModule.getOrDefault(mod.module(), EnumSet.of(Scope.MAIN));
 
+            // Stamp `pinned-by` when the BOM pinned this coord and the
+            // resolver picked that pinned version. (Equality check guards
+            // against a BOM constraint that wasn't actually used — e.g.,
+            // user pinned the same coord explicitly to a different version,
+            // in which case the explicit pin wins and we don't want to lie
+            // about provenance.)
+            String pinnedBy = null;
+            String constrained = bomConstraints.get(mod.module());
+            if (constrained != null && constrained.equals(mod.version())) {
+                pinnedBy = constraintProvenance.get(mod.module());
+            }
+
             packages.add(new Lockfile.Package(
                     mod.module(),
                     mod.version(),
@@ -193,7 +250,8 @@ public final class LockOrchestrator {
                     checksum,
                     null,
                     new ArrayList<>(tags),
-                    mod.deps()));
+                    mod.deps(),
+                    pinnedBy));
         }
 
         return new Lockfile(
@@ -201,6 +259,22 @@ public final class LockOrchestrator {
                 "jk " + jkVersion,
                 Lockfile.RESOLUTION_ALGORITHM,
                 packages);
+    }
+
+    /**
+     * Extract a concrete version literal from a platform-dep's selector.
+     * Platform BOMs must be pinned (Exact) or anchored (Caret/Tilde) to a
+     * specific version — they're an authoritative pin, not a search. Returns
+     * {@code null} for selectors with no resolvable literal (Range, Latest).
+     */
+    private static String versionLiteral(VersionSelector v) {
+        return switch (v) {
+            case VersionSelector.Exact e -> e.version();
+            case VersionSelector.Caret c -> c.version();
+            case VersionSelector.Tilde t -> t.version();
+            case VersionSelector.Range ignored -> null;
+            case VersionSelector.Latest ignored -> null;
+        };
     }
 
     /** BFS through the resolved graph starting from {@code roots}. */

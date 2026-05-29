@@ -221,6 +221,60 @@ class EffectivePomBuilderTest {
     }
 
     @Test
+    void later_dependency_management_entry_overrides_earlier(@TempDir Path tempDir) throws Exception {
+        // The child first declares a local managed version (1.0), then
+        // imports a BOM that constrains the same coord to 2.0. Per
+        // EffectivePomBuilder's "later wins on collision" rule, the merged
+        // managed list should carry 2.0.
+        registerPom("org.example", "the-bom", "1.0", """
+                <project>
+                  <groupId>org.example</groupId>
+                  <artifactId>the-bom</artifactId>
+                  <version>1.0</version>
+                  <packaging>pom</packaging>
+                  <dependencyManagement>
+                    <dependencies>
+                      <dependency>
+                        <groupId>org.example</groupId>
+                        <artifactId>widget</artifactId>
+                        <version>2.0</version>
+                      </dependency>
+                    </dependencies>
+                  </dependencyManagement>
+                </project>
+                """);
+        registerPom("org.example", "child", "1.0", """
+                <project>
+                  <groupId>org.example</groupId>
+                  <artifactId>child</artifactId>
+                  <version>1.0</version>
+                  <dependencyManagement>
+                    <dependencies>
+                      <dependency>
+                        <groupId>org.example</groupId>
+                        <artifactId>widget</artifactId>
+                        <version>1.0</version>
+                      </dependency>
+                      <dependency>
+                        <groupId>org.example</groupId>
+                        <artifactId>the-bom</artifactId>
+                        <version>1.0</version>
+                        <type>pom</type>
+                        <scope>import</scope>
+                      </dependency>
+                    </dependencies>
+                  </dependencyManagement>
+                </project>
+                """);
+
+        EffectivePom pom = newBuilder(tempDir).build(Coordinate.of("org.example", "child", "1.0"));
+        assertThat(pom.managedDependencies())
+                .filteredOn(d -> d.module().equals("org.example:widget"))
+                .singleElement()
+                .satisfies(d -> assertThat(d.version()).isEqualTo("2.0"));
+    }
+
+    @Test
     void detects_parent_cycle(@TempDir Path tempDir) {
         registerPom("org.example", "a", "1.0", """
                 <project>

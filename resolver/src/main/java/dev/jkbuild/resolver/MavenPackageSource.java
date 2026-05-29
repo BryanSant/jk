@@ -23,6 +23,14 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Semaphore;
 
+// Maven BOM (`<dependencyManagement>`) support: when the user declares a
+// platform BOM in `[dependencies.platform]`, the LockOrchestrator hands a
+// `Map<group:artifact, version>` of all BOM-constrained coords to the
+// resolver. We thread it down here so {@link #versions(String)} returns a
+// single-element candidate list for any constrained coord — letting
+// PubGrub's existing machinery pick the BOM-pinned version without
+// changes to the solver itself.
+
 /**
  * Adapts a {@link MavenRepo} + {@link EffectivePomBuilder} into the
  * PubGrub {@link PackageSource} contract.
@@ -48,21 +56,43 @@ public final class MavenPackageSource implements PackageSource {
 
     private final RepoGroup repos;
     private final EffectivePomBuilder pomBuilder;
+    private final Map<String, String> bomConstraints;
     private final Map<String, List<String>> versionCache = new ConcurrentHashMap<>();
     private final Map<String, List<Term>> depsCache = new ConcurrentHashMap<>();
     private final Semaphore prefetchSlots = new Semaphore(PREFETCH_PERMITS);
 
     public MavenPackageSource(MavenRepo repo, EffectivePomBuilder pomBuilder) {
-        this(RepoGroup.of(repo), pomBuilder);
+        this(RepoGroup.of(repo), pomBuilder, Map.of());
     }
 
     public MavenPackageSource(RepoGroup repos, EffectivePomBuilder pomBuilder) {
+        this(repos, pomBuilder, Map.of());
+    }
+
+    public MavenPackageSource(
+            RepoGroup repos,
+            EffectivePomBuilder pomBuilder,
+            Map<String, String> bomConstraints) {
         this.repos = Objects.requireNonNull(repos, "repos");
         this.pomBuilder = Objects.requireNonNull(pomBuilder, "pomBuilder");
+        this.bomConstraints = Map.copyOf(Objects.requireNonNull(bomConstraints, "bomConstraints"));
     }
 
     @Override
     public List<String> versions(String pkg) throws IOException, InterruptedException {
+        // BOM constraint: a user-declared platform BOM (or one it imports)
+        // pinned this coord to a specific version. Return that single
+        // version as the only candidate so PubGrub's "first satisfying
+        // version wins" loop picks it. If a transitive demands a range
+        // that excludes this version, PubGrub will surface a clean
+        // "constraint cannot hold" diagnostic — the intended behavior
+        // (Gradle-style BOM override of transitive at-least preferences).
+        String pinned = bomConstraints.get(pkg);
+        if (pinned != null) {
+            List<String> singleton = List.of(pinned);
+            versionCache.put(pkg, singleton);
+            return singleton;
+        }
         List<String> cached = versionCache.get(pkg);
         if (cached != null) return cached;
         Coordinate metadataCoord = withVersion(pkg, "any");
