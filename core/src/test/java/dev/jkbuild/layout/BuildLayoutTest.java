@@ -45,7 +45,7 @@ class BuildLayoutTest {
         assertThat(layout.mainJar()).isEqualTo(dir.resolve("target/widget-1.2.3.jar"));
         assertThat(layout.sourcesJar()).isEqualTo(dir.resolve("target/widget-1.2.3-sources.jar"));
         assertThat(layout.javadocJar()).isEqualTo(dir.resolve("target/widget-1.2.3-javadoc.jar"));
-        assertThat(layout.nativeBinary()).isEqualTo(dir.resolve("target/native/widget"));
+        assertThat(layout.nativeBinary()).isEqualTo(dir.resolve("target/widget"));
         assertThat(layout.ociImageTar()).isEqualTo(dir.resolve("target/images/widget.oci.tar"));
         assertThat(layout.testReportsDir("core")).isEqualTo(dir.resolve("target/reports/core"));
         assertThat(layout.sbomDir()).isEqualTo(dir.resolve("target/sbom"));
@@ -62,7 +62,7 @@ class BuildLayoutTest {
         assertThat(layout.classesDir()).isEqualTo(member.resolve("build/classes/main"));
         // Final artifacts land at the workspace root.
         assertThat(layout.mainJar()).isEqualTo(workspace.resolve("target/jk-core-0.7.0.jar"));
-        assertThat(layout.nativeBinary()).isEqualTo(workspace.resolve("target/native/jk-core"));
+        assertThat(layout.nativeBinary()).isEqualTo(workspace.resolve("target/jk-core"));
     }
 
     @Test

@@ -153,9 +153,17 @@ public final class BuildLayout {
         return targetDir().resolve(artifact + "-" + version + "-javadoc.jar");
     }
 
-    /** {@code target/native/<artifact>} — GraalVM-compiled native binary. */
+    /**
+     * {@code target/<artifact>} — GraalVM-compiled native binary.
+     *
+     * <p>Sits flat at the root of {@code target/} (not under a
+     * {@code native/} subdir) so the most common artifact a user wants to
+     * find is in the most obvious place. No filename collision with
+     * {@link #mainJar()} because the jar carries the
+     * {@code -<version>.jar} suffix.
+     */
     public Path nativeBinary() {
-        return targetDir().resolve("native").resolve(artifact);
+        return targetDir().resolve(artifact);
     }
 
     /** {@code target/images/<artifact>.oci.tar} — default Jib OCI tarball. */
