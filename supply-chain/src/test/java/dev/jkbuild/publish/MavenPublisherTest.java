@@ -3,6 +3,7 @@ package dev.jkbuild.publish;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.publish.testkit.GpgTestFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

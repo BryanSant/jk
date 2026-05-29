@@ -63,7 +63,8 @@ class SelfHostingTomlTest {
         assertThat(root.isWorkspaceRoot()).isTrue();
         assertThat(root.workspace().members()).containsExactly(
                 "core", "io", "resolver", "toolchain",
-                "engine", "supply-chain", "image", "compat", "cli");
+                "engine", "supply-chain", "supply-chain-testkit",
+                "image", "compat", "cli");
     }
 
     @Test

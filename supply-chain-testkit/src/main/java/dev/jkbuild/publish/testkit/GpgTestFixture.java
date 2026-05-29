@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.publish;
+package dev.jkbuild.publish.testkit;
 
 import org.bouncycastle.bcpg.ArmoredOutputStream;
 import org.bouncycastle.bcpg.HashAlgorithmTags;
@@ -36,7 +36,7 @@ import java.util.Date;
 /**
  * Generates an ephemeral PGP keypair for tests: a small (1024-bit) RSA
  * key bound to a test identity, written as an armored secret-key file
- * that {@link GpgSigner#fromKeyFile(Path, char[])} can consume.
+ * that {@code GpgSigner.fromKeyFile(Path, char[])} can consume.
  */
 public final class GpgTestFixture {
 

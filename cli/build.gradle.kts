@@ -32,7 +32,7 @@ dependencies {
     // src/main/resources/META-INF/native-image/org.jline/jline-terminal-ffm/.
     implementation(libs.jline.terminal.ffm)
 
-    testImplementation(testFixtures(project(":supply-chain")))
+    testImplementation(project(":supply-chain-testkit"))
     // JdkCommandTest builds xz-compressed feed fixtures via XZCompressorOutputStream.
     testImplementation(libs.commons.compress)
     testImplementation(libs.tukaani.xz)

@@ -19,6 +19,7 @@ picocli         = { group = "info.picocli", artifact = "picocli",            ver
 jline-terminal-ffm = { group = "org.jline", artifact = "jline-terminal-ffm", version = "4.1.2" }
 
 [dependencies.test]
+jk-supply-chain-testkit = { group = "dev.jkbuild",        artifact = "jk-supply-chain-testkit", version = "0.6.0-SNAPSHOT" }
 assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
 junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
 junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }

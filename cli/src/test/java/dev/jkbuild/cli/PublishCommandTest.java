@@ -2,7 +2,7 @@
 package dev.jkbuild.cli;
 
 import com.sun.net.httpserver.HttpServer;
-import dev.jkbuild.publish.GpgTestFixture;
+import dev.jkbuild.publish.testkit.GpgTestFixture;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

@@ -26,6 +26,7 @@ include(
     ":toolchain",
     ":engine",
     ":supply-chain",
+    ":supply-chain-testkit",
     ":image",
     ":compat",
     ":test-runner",

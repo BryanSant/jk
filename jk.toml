@@ -7,4 +7,4 @@ jdk      = 25
 java     = 25
 
 [workspace]
-members = ["core", "io", "resolver", "toolchain", "engine", "supply-chain", "image", "compat", "cli"]
+members = ["core", "io", "resolver", "toolchain", "engine", "supply-chain", "supply-chain-testkit", "image", "compat", "cli"]
