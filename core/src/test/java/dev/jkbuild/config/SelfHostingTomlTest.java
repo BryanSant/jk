@@ -52,17 +52,19 @@ class SelfHostingTomlTest {
         assertThat(cli.project().main()).isEqualTo("dev.jkbuild.cli.Jk");
         assertThat(cli.project().isRunnable()).isTrue();
 
-        // Workspace siblings declared as `name.workspace = true` parse as
-        // synthetic `workspace:<name>` placeholders. Verify the raw shape...
-        List<String> unmergedModules = cli.dependencies().of(Scope.MAIN).stream()
+        // The project's jk.toml files declare sibling coordinates
+        // explicitly (no `.workspace = true` shorthand) so member builds
+        // can resolve lock-time + classpath without needing the parser
+        // to apply WorkspaceMerge.
+        List<String> mainModules = cli.dependencies().of(Scope.MAIN).stream()
                 .map(d -> d.module()).toList();
-        assertThat(unmergedModules).contains(
-                "workspace:jk-core",
-                "workspace:jk-engine",
+        assertThat(mainModules).contains(
+                "dev.jkbuild:jk-core",
+                "dev.jkbuild:jk-engine",
                 "info.picocli:picocli");
 
-        // ...then merge with the root manifest's siblings to confirm the
-        // placeholders rewrite to real coords.
+        // Confirm the workspace-root merge still rewrites/dedupes the
+        // member coords cleanly when invoked from the root.
         JkBuild root = JkBuildParser.parse(REPO.resolve("jk.toml"));
         JkBuild merged = WorkspaceMerge.merge(
                 root, WorkspaceLoader.loadMembers(REPO, root).values());

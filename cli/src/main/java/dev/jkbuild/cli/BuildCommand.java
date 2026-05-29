@@ -183,11 +183,11 @@ public final class BuildCommand implements Callable<Integer> {
 
                     List<Path> mainCp = new ArrayList<>(
                             resolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
-                    WorkspaceClasspath.Result siblings =
+                    WorkspaceClasspath.Result mainSiblings =
                             WorkspaceClasspath.resolve(dir, project, Set.of(Scope.MAIN));
-                    mainCp.addAll(siblings.jars());
-                    if (!siblings.missingSiblingJars().isEmpty()) {
-                        for (String missing : siblings.missingSiblingJars())
+                    mainCp.addAll(mainSiblings.jars());
+                    if (!mainSiblings.missingSiblingJars().isEmpty()) {
+                        for (String missing : mainSiblings.missingSiblingJars())
                             ctx.error("workspace", "sibling not built — " + missing);
                         throw new RuntimeException("missing workspace siblings");
                     }
@@ -195,8 +195,21 @@ public final class BuildCommand implements Callable<Integer> {
                     Profile profile = CompileCommand.resolveProfile(project.profiles(), profileName);
                     ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
                     ctx.put(CLASSPATH, mainCp);
-                    ctx.put(COMPILE_TEST_CP, resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
-                    ctx.put(TEST_RUNTIME_CP, resolver.classpathFor(lock, ClasspathResolver.TEST));
+
+                    // Tests link against MAIN siblings (a member's tests use its
+                    // main-scope deps) plus any TEST-only siblings the member
+                    // declared. Resolve both, then merge into the test
+                    // classpaths read from the lockfile.
+                    WorkspaceClasspath.Result testSiblings =
+                            WorkspaceClasspath.resolve(dir, project, Set.of(Scope.MAIN, Scope.TEST));
+                    List<Path> compileTestCp = new ArrayList<>(
+                            resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
+                    compileTestCp.addAll(testSiblings.jars());
+                    List<Path> testRuntimeCp = new ArrayList<>(
+                            resolver.classpathFor(lock, ClasspathResolver.TEST));
+                    testRuntimeCp.addAll(testSiblings.jars());
+                    ctx.put(COMPILE_TEST_CP, compileTestCp);
+                    ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
                     ctx.put(JAVA_SOURCES, CompileCommand.collectJavaSources(dir.resolve("src/main/java")));
                     ctx.put(KOTLIN_SOURCES, CompileCommand.collectKotlinSources(dir));
                     ctx.put(RELEASE, project.project().javaRelease());

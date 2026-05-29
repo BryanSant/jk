@@ -4,6 +4,7 @@ package dev.jkbuild.cli;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
+import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
@@ -63,19 +64,38 @@ final class LockFlow {
             return new Result(2, null, null, 0);
         }
 
-        // Workspace: load each member's jk.toml and merge deps so the
-        // workspace root produces one combined jk.lock per PRD §13.2.
+        // Workspace context: two cases.
+        //
+        //   1. parsed IS the workspace root → merge every member's deps
+        //      into the root and lock the whole thing as one (PRD §13.2).
+        //   2. parsed is a member of an enclosing workspace → resolve any
+        //      `workspace:*` placeholders and filter out coords that
+        //      match a sibling. WorkspaceClasspath at compile time will
+        //      inject sibling jars from the shared target/.
+        //
+        // Both paths run before RepoGroupBuilder so the dep list reaching
+        // the resolver contains only external Maven coords.
         JkBuild effective = parsed;
         int memberCount = 0;
-        if (parsed.isWorkspaceRoot()) {
-            try {
+        try {
+            if (parsed.isWorkspaceRoot()) {
                 var members = WorkspaceLoader.loadMembers(dir, parsed);
                 effective = WorkspaceMerge.merge(parsed, members.values());
                 memberCount = members.size();
-            } catch (RuntimeException e) {
-                System.err.println(cmdLabel + ": " + e.getMessage());
-                return new Result(2, null, null, 0);
+            } else {
+                var rootOpt = WorkspaceLocator.findRoot(dir);
+                if (rootOpt.isPresent()) {
+                    JkBuild rootManifest = JkBuildParser.parse(
+                            rootOpt.get().resolve("jk.toml"));
+                    var members = WorkspaceLoader.loadMembers(rootOpt.get(), rootManifest);
+                    effective = WorkspaceMerge.applyToMember(
+                            rootManifest, parsed, members.values());
+                    memberCount = members.size();
+                }
             }
+        } catch (RuntimeException e) {
+            System.err.println(cmdLabel + ": " + e.getMessage());
+            return new Result(2, null, null, 0);
         }
 
         RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, new Cas(cache));

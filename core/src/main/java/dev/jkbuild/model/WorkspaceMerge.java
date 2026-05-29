@@ -34,6 +34,53 @@ public final class WorkspaceMerge {
 
     private WorkspaceMerge() {}
 
+    /**
+     * Apply workspace context to a single member's manifest. Resolves any
+     * {@code workspace:*} placeholders against the workspace siblings and
+     * the root's {@code [workspace.dependencies]}, then filters out any
+     * dep whose resolved coordinate matches a workspace sibling — those
+     * are not on Maven Central; their jars are injected by
+     * {@link dev.jkbuild.config.WorkspaceClasspath} at compile time from
+     * the workspace's shared {@code target/} directory.
+     *
+     * <p>Returns a JkBuild shaped like {@code member} (same project,
+     * repositories, profiles, features) but with the dep list trimmed to
+     * only external Maven coords. Lock orchestration sees a clean,
+     * resolvable set; classpath construction (which keeps the original
+     * parsed member) still sees the sibling refs.
+     */
+    public static JkBuild applyToMember(
+            JkBuild root, JkBuild member, Collection<JkBuild> allMembers) {
+        if (allMembers.isEmpty()) return member;
+
+        Map<String, JkBuild.Project> siblingByArtifact = new LinkedHashMap<>();
+        Set<String> internal = new HashSet<>();
+        for (JkBuild m : allMembers) {
+            siblingByArtifact.put(m.project().artifact(), m.project());
+            internal.add(m.project().group() + ":" + m.project().artifact());
+        }
+        Map<String, Workspace.WorkspaceDependency> wsDeps = root.workspace() != null
+                ? root.workspace().dependencies() : Map.of();
+
+        Map<Scope, List<Dependency>> resolvedByScope = new EnumMap<>(Scope.class);
+        for (Scope scope : Scope.values()) {
+            List<Dependency> resolved = new ArrayList<>();
+            for (Dependency d : member.dependencies().of(scope)) {
+                Dependency r = resolve(d, siblingByArtifact, wsDeps);
+                if (internal.contains(r.module())) continue;
+                resolved.add(r);
+            }
+            if (!resolved.isEmpty()) resolvedByScope.put(scope, resolved);
+        }
+        return new JkBuild(
+                member.project(),
+                new JkBuild.Dependencies(resolvedByScope),
+                member.repositories(),
+                member.profiles(),
+                member.features(),
+                member.workspace());
+    }
+
     public static JkBuild merge(JkBuild root, Collection<JkBuild> members) {
         if (members.isEmpty()) return root;
 
