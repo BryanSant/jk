@@ -7,7 +7,7 @@ java     = 25
 
 [dependencies.main]
 typesafe-config            = { group = "com.typesafe", artifact = "config", version = "1.4.8" }
-tomlj                      = { group = "org.tomlj",    version = "1.1.1" }
+tomlj                      = "1.1.1"   # registry → org.tomlj:tomlj
 jackson-databind.workspace = true
 
 [dependencies.test]

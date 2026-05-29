@@ -414,14 +414,41 @@ when the user-supplied key (or the artifactId-derived default) differs
 from the artifactId, so this footgun only fires on hand-edited
 manifests.
 
+## Bundled short-name registry
+
+jk ships a curated `name → group:artifact` index at
+`core/src/main/resources/dev/jkbuild/registry/aliases.toml`, loaded
+lazily via `dev.jkbuild.registry.AliasRegistry.bundled()`. When a dep's
+short name matches a curated entry, the user can drop the coord:
+
+```toml
+[dependencies.main]
+# String shorthand — cargo-style one-liner.
+picocli = "4.7.7"
+jackson-databind = "2.18.2"
+
+# Table form with no `group` — same registry lookup.
+junit-jupiter = { version = "6.1.0" }
+```
+
+Resolution rules:
+
+- **Explicit `group` always wins.** Writing `picocli = { group = "io.fork", version = "..." }` overrides the registry — useful for forks and ambiguous artifacts.
+- **`path` / `git` sources still require explicit `group`.** The registry only resolves version-based deps; path/git overrides are deliberate enough that defaulting silently would be surprising.
+- **Unknown names get a parse error pointing at this section.**
+- **Tooling emits the shorthand when it can.** `jk add picocli --ver 4.7.7` writes `picocli = "4.7.7"` to the manifest; `jk add picocli --group io.fork --ver 4.7.7` writes the structured form.
+
+The bundled index is intentionally version-free — it's a name-to-coord index, not a curated catalog. Version pinning is the project's responsibility.
+
+`jk add <name>` consults the registry too: with a known short name the user only supplies `--ver` (no `--group` needed). Unknown names still require explicit `--group`.
+
 ## Out of scope for v0.7
 
 These are intentionally deferred — the format leaves room for them but
 the parser does not enforce or honor them yet.
 
-- **Curated short-name registry** (the `jk add jackson-databind`
-  experience). Requires a bundled name → coord index, an update
-  mechanism, and conflict resolution rules. Tracked separately.
+- **User-defined alias overrides.** A future `~/.jk/aliases.toml` or `[aliases]` table in `jk.toml` would let projects shadow or extend the bundled set.
+- **Registry update mechanism.** `jk registry update` to pull a refreshed index from a curated source; for now the index is whatever the binary shipped with.
 - **PEP 621-style `[project]`** with `authors`, `license`, `urls`,
   `readme`, `keywords`. Adds option value but no immediate feature
   unlock.

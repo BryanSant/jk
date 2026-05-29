@@ -5,7 +5,10 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
+import dev.jkbuild.registry.AliasRegistry;
 import org.junit.jupiter.api.Test;
+
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -273,14 +276,16 @@ class JkBuildParserTest {
     }
 
     @Test
-    void dep_value_must_be_inline_table() {
-        // The v0.6 string-array form is gone; raw strings are rejected.
+    void dep_string_value_is_registry_shorthand_not_v0_6_coord_string() {
+        // A string value is now treated as the version shorthand for a
+        // registry-known name. Pasting the old v0.6 coord-string form
+        // ("group:artifact:version") trips the unknown-short-name error.
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
-                bad = "org.foo:bar:1.0"
+                "org.foo:bar" = "1.0"
                 """))
                 .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("inline table");
+                .hasMessageContaining("unknown short name");
     }
 
     @Test
@@ -415,6 +420,86 @@ class JkBuildParserTest {
                 """);
         assertThat(parsed.profiles().byName().get("dev").javacArgs()).contains("-g");
         assertThat(parsed.profiles().byName().get("ci").inherits()).isEqualTo("dev");
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    //  Alias-registry shorthand
+    // ───────────────────────────────────────────────────────────────
+
+    /** Synthetic registry used so the tests don't drift with the bundled set. */
+    private static final AliasRegistry TEST_REGISTRY = AliasRegistry.of(Map.of(
+            "jackson-databind", new AliasRegistry.Module("tools.jackson.core", "jackson-databind"),
+            "picocli", new AliasRegistry.Module("info.picocli", "picocli")));
+
+    @Test
+    void shorthand_string_value_resolves_through_registry() {
+        // The cargo-add experience: `name = "1.0.0"` looks up the coord in
+        // the bundled registry and treats the version as caret-floating.
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                jackson-databind = "2.18.2"
+                """, TEST_REGISTRY);
+        var deps = parsed.dependencies().of(Scope.MAIN);
+        assertThat(deps).hasSize(1);
+        assertThat(deps.getFirst().name()).isEqualTo("jackson-databind");
+        assertThat(deps.getFirst().module())
+                .isEqualTo("tools.jackson.core:jackson-databind");
+        assertThat(deps.getFirst().version())
+                .isInstanceOf(VersionSelector.Caret.class);
+    }
+
+    @Test
+    void shorthand_table_without_group_resolves_through_registry() {
+        // A dep table that lists only `version` (no `group`) falls back to
+        // the registry the same way the string shorthand does.
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                picocli = { version = "4.7.7" }
+                """, TEST_REGISTRY);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.module()).isEqualTo("info.picocli:picocli");
+    }
+
+    @Test
+    void explicit_group_overrides_registry() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                jackson-databind = { group = "io.fork", version = "2.18.2" }
+                """, TEST_REGISTRY);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.module()).isEqualTo("io.fork:jackson-databind");
+    }
+
+    @Test
+    void unknown_shorthand_string_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                some-unknown-thing = "1.0.0"
+                """, TEST_REGISTRY))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("unknown short name");
+    }
+
+    @Test
+    void unknown_table_without_group_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                also-unknown = { version = "1.0.0" }
+                """, TEST_REGISTRY))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("must set a `group`");
+    }
+
+    @Test
+    void path_source_still_requires_explicit_group_even_for_registry_name() {
+        // Registry shorthand is name → version; path/git sources are
+        // out-of-registry by construction. Force the user to be explicit.
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                picocli = { path = "../picocli" }
+                """, TEST_REGISTRY))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("must set a `group` explicitly");
     }
 
     @Test

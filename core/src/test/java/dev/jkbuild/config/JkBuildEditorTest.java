@@ -49,13 +49,41 @@ class JkBuildEditorTest {
 
     @Test
     void add_omits_artifact_when_it_matches_name() {
+        // `acme-thing` is deliberately not in the bundled registry — that
+        // way this test exercises the structured-form artifact-omission
+        // branch, not the registry-shorthand branch tested below.
+        String result = JkBuildEditor.addDependency(
+                BASE, Scope.MAIN, "acme-thing", "com.acme", "acme-thing", "1.0.0");
+
+        assertThat(result).contains("acme-thing = { group = \"com.acme\", version = \"1.0.0\" }");
+        assertThat(result).doesNotContain(", artifact =");
+    }
+
+    @Test
+    void add_emits_shorthand_for_registry_known_names() {
+        // picocli is in the bundled registry → cargo-style one-liner.
         String result = JkBuildEditor.addDependency(
                 BASE, Scope.MAIN, "picocli", "info.picocli", "picocli", "4.7.7");
 
-        assertThat(result).contains("picocli = { group = \"info.picocli\", version = \"4.7.7\" }");
-        // Only the [project] block carries `artifact = "..."`; the rendered
-        // dep line omits it because key == artifactId.
-        assertThat(result).doesNotContain(", artifact =");
+        assertThat(result).contains("picocli = \"4.7.7\"");
+        assertThat(result).doesNotContain("group = \"info.picocli\"");
+
+        // Round-trips through the parser to the same coord.
+        JkBuild parsed = JkBuildParser.parse(result);
+        Dependency d = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(d.name()).isEqualTo("picocli");
+        assertThat(d.module()).isEqualTo("info.picocli:picocli");
+    }
+
+    @Test
+    void add_uses_structured_form_when_group_disagrees_with_registry() {
+        // Same name as a registry entry but a deliberately different group:
+        // the user is overriding the registry, so the structured form is
+        // emitted (the shorthand would lie about the resolved coord).
+        String result = JkBuildEditor.addDependency(
+                BASE, Scope.MAIN, "picocli", "io.fork", "picocli", "4.7.7");
+
+        assertThat(result).contains("picocli = { group = \"io.fork\", version = \"4.7.7\" }");
     }
 
     @Test
@@ -86,7 +114,7 @@ class JkBuildEditorTest {
                 start, Scope.MAIN, "tomlj", "org.tomlj", "tomlj", "1.1.1");
 
         assertThat(result).contains("picocli = { group = \"info.picocli\", version = \"4.7.7\" }");
-        assertThat(result).contains("tomlj = { group = \"org.tomlj\", version = \"1.1.1\" }");
+        assertThat(result).contains("tomlj = \"1.1.1\"");
         // Both entries appear under [dependencies.main]; no second header.
         int firstHeader = result.indexOf("[dependencies.main]");
         int lastHeader = result.lastIndexOf("[dependencies.main]");
@@ -130,7 +158,7 @@ class JkBuildEditorTest {
 
         // Should extend the flat table, not create [dependencies.main].
         assertThat(result).doesNotContain("[dependencies.main]");
-        assertThat(result).contains("tomlj = { group = \"org.tomlj\", version = \"1.1.1\" }");
+        assertThat(result).contains("tomlj = \"1.1.1\"");
 
         JkBuild parsed = JkBuildParser.parse(result);
         assertThat(parsed.dependencies().of(Scope.MAIN)).hasSize(2);
@@ -288,7 +316,7 @@ class JkBuildEditorTest {
         assertThat(result).contains("# Inline comment about picocli.");
         assertThat(result).contains("# Trailing comment block.");
         assertThat(result).contains("[profiles.dev]");
-        assertThat(result).contains("tomlj = { group = \"org.tomlj\", version = \"1.1.1\" }");
+        assertThat(result).contains("tomlj = \"1.1.1\"");
     }
 
     @Test

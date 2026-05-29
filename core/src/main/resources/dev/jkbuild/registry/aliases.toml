@@ -1,0 +1,150 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# jk bundled short-name registry.
+#
+# Maps a curated short identifier to a Maven `group:artifact` pair. When a
+# project's jk.toml references a known short name, jk fills in the
+# coordinate automatically — the user only supplies a version:
+#
+#     [dependencies.main]
+#     jackson-databind = "2.18.2"           # parser resolves via this table
+#
+# Unknown short names fall back to the structured form
+# `{ group = "...", version = "..." }`. Workspace-defined aliases in
+# `[workspace.dependencies]` take precedence over the bundled list.
+#
+# Versions are deliberately NOT pinned here — that's the user's call per
+# project. This is a name-to-coordinate index, not a curated catalog.
+#
+# Curation policy:
+#   - Java/Kotlin ecosystem only (matches jk's v1 scope).
+#   - One canonical short name per artifact. If a project already uses a
+#     different short name idiomatically, set it explicitly via
+#     `artifact = "..."` in the dep table.
+#   - When the artifactId is already short and unambiguous (e.g. `picocli`,
+#     `guava`), prefer that as the short name.
+#   - Spring Boot starter prefix retained (`spring-boot-starter-*`) — it's
+#     load-bearing for grep / muscle-memory; no abbreviation.
+
+[aliases]
+
+# Jackson 3 (tools.jackson.*)
+jackson-databind             = "tools.jackson.core:jackson-databind"
+jackson-core                 = "tools.jackson.core:jackson-core"
+jackson-annotations          = "tools.jackson.core:jackson-annotations"
+jackson-module-kotlin        = "tools.jackson.module:jackson-module-kotlin"
+jackson-dataformat-yaml      = "tools.jackson.dataformat:jackson-dataformat-yaml"
+jackson-datatype-jsr310      = "tools.jackson.datatype:jackson-datatype-jsr310"
+
+# JUnit
+junit-jupiter                = "org.junit.jupiter:junit-jupiter"
+junit-jupiter-api            = "org.junit.jupiter:junit-jupiter-api"
+junit-jupiter-params         = "org.junit.jupiter:junit-jupiter-params"
+junit-platform-launcher      = "org.junit.platform:junit-platform-launcher"
+junit-platform-engine        = "org.junit.platform:junit-platform-engine"
+
+# Assertions + mocking
+assertj-core                 = "org.assertj:assertj-core"
+mockito-core                 = "org.mockito:mockito-core"
+mockito-junit-jupiter        = "org.mockito:mockito-junit-jupiter"
+mockk                        = "io.mockk:mockk"
+
+# Logging
+slf4j-api                    = "org.slf4j:slf4j-api"
+slf4j-simple                 = "org.slf4j:slf4j-simple"
+logback-classic              = "ch.qos.logback:logback-classic"
+
+# Spring Boot starters (load-bearing prefix retained — no abbreviation)
+spring-boot-starter          = "org.springframework.boot:spring-boot-starter"
+spring-boot-starter-web      = "org.springframework.boot:spring-boot-starter-web"
+spring-boot-starter-webflux  = "org.springframework.boot:spring-boot-starter-webflux"
+spring-boot-starter-data-jpa = "org.springframework.boot:spring-boot-starter-data-jpa"
+spring-boot-starter-security = "org.springframework.boot:spring-boot-starter-security"
+spring-boot-starter-actuator = "org.springframework.boot:spring-boot-starter-actuator"
+spring-boot-starter-test     = "org.springframework.boot:spring-boot-starter-test"
+spring-boot-dependencies     = "org.springframework.boot:spring-boot-dependencies"
+
+# Kotlin
+kotlin-stdlib                = "org.jetbrains.kotlin:kotlin-stdlib"
+kotlin-reflect               = "org.jetbrains.kotlin:kotlin-reflect"
+kotlin-test                  = "org.jetbrains.kotlin:kotlin-test"
+kotlinx-coroutines-core      = "org.jetbrains.kotlinx:kotlinx-coroutines-core"
+kotlinx-serialization-json   = "org.jetbrains.kotlinx:kotlinx-serialization-json"
+
+# Database / persistence
+postgresql                   = "org.postgresql:postgresql"
+mysql-connector-j            = "com.mysql:mysql-connector-j"
+hikaricp                     = "com.zaxxer:HikariCP"
+flyway-core                  = "org.flywaydb:flyway-core"
+liquibase-core               = "org.liquibase:liquibase-core"
+hibernate-core               = "org.hibernate.orm:hibernate-core"
+
+# Apache Commons
+commons-lang3                = "org.apache.commons:commons-lang3"
+commons-compress             = "org.apache.commons:commons-compress"
+commons-io                   = "commons-io:commons-io"
+commons-codec                = "commons-codec:commons-codec"
+commons-text                 = "org.apache.commons:commons-text"
+
+# Google
+guava                        = "com.google.guava:guava"
+gson                         = "com.google.code.gson:gson"
+auto-service                 = "com.google.auto.service:auto-service"
+jib-core                     = "com.google.cloud.tools:jib-core"
+
+# Configuration
+typesafe-config              = "com.typesafe:config"
+tomlj                        = "org.tomlj:tomlj"
+
+# Bytecode
+asm                          = "org.ow2.asm:asm"
+asm-tree                     = "org.ow2.asm:asm-tree"
+asm-util                     = "org.ow2.asm:asm-util"
+asm-commons                  = "org.ow2.asm:asm-commons"
+
+# HTTP
+okhttp                       = "com.squareup.okhttp3:okhttp"
+retrofit                     = "com.squareup.retrofit2:retrofit"
+
+# Containers / testing
+testcontainers               = "org.testcontainers:testcontainers"
+testcontainers-postgresql    = "org.testcontainers:postgresql"
+testcontainers-mysql         = "org.testcontainers:mysql"
+
+# Reactor / RxJava
+reactor-core                 = "io.projectreactor:reactor-core"
+rxjava3                      = "io.reactivex.rxjava3:rxjava"
+
+# Metrics / observability
+micrometer-core              = "io.micrometer:micrometer-core"
+micrometer-registry-prometheus = "io.micrometer:micrometer-registry-prometheus"
+opentelemetry-api            = "io.opentelemetry:opentelemetry-api"
+
+# Code generation / annotation processors
+mapstruct                    = "org.mapstruct:mapstruct"
+mapstruct-processor          = "org.mapstruct:mapstruct-processor"
+lombok                       = "org.projectlombok:lombok"
+immutables-value             = "org.immutables:value"
+
+# Build / supply chain
+maven-artifact               = "org.apache.maven:maven-artifact"
+sigstore-java                = "dev.sigstore:sigstore-java"
+cyclonedx-core-java          = "org.cyclonedx:cyclonedx-core-java"
+spdx-java                    = "org.spdx:java-spdx-library"
+
+# Git
+jgit                         = "org.eclipse.jgit:org.eclipse.jgit"
+
+# Crypto
+bcpg-jdk18on                 = "org.bouncycastle:bcpg-jdk18on"
+bcprov-jdk18on               = "org.bouncycastle:bcprov-jdk18on"
+
+# CLI
+picocli                      = "info.picocli:picocli"
+picocli-codegen              = "info.picocli:picocli-codegen"
+jline                        = "org.jline:jline"
+
+# Servlet / Jakarta
+jakarta-servlet-api          = "jakarta.servlet:jakarta.servlet-api"
+jakarta-persistence-api      = "jakarta.persistence:jakarta.persistence-api"
+jakarta-annotation-api       = "jakarta.annotation:jakarta.annotation-api"

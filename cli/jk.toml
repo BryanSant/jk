@@ -15,7 +15,7 @@ jk-io.workspace           = true
 jk-resolver.workspace     = true
 jk-supply-chain.workspace = true
 jk-toolchain.workspace    = true
-picocli                   = { group = "info.picocli", version = "4.7.7" }
+picocli                   = "4.7.7"   # registry-resolved → info.picocli:picocli
 
 [dependencies.test]
 assertj-core.workspace            = true

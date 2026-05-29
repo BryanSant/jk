@@ -243,6 +243,16 @@ public final class JkBuildEditor {
 
     /** Render a single dep-entry line. Omits {@code artifact} when it matches the key. */
     private static String renderEntry(String name, String group, String artifact, String versionLiteral) {
+        // Cargo-style one-liner when the user's name + coord matches a curated
+        // registry entry — `picocli = "4.7.7"` reads better in big manifests
+        // than the full structured form. Falls back to the structured form
+        // otherwise.
+        var hit = dev.jkbuild.registry.AliasRegistry.bundled().lookup(name);
+        if (hit.isPresent()
+                && hit.get().group().equals(group)
+                && hit.get().artifact().equals(artifact)) {
+            return name + " = \"" + escape(versionLiteral) + "\"";
+        }
         StringBuilder sb = new StringBuilder(name).append(" = { group = \"")
                 .append(escape(group)).append("\"");
         if (!artifact.equals(name)) {

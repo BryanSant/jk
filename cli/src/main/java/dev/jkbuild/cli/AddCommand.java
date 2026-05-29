@@ -147,18 +147,25 @@ public final class AddCommand implements Callable<Integer> {
             int atSign = coord.indexOf('@');
 
             if (firstColon < 0 && atSign < 0) {
-                // Bare short name; structured flags must supply the rest.
-                if (groupFlag == null || groupFlag.isBlank()) {
+                // Bare short name. The bundled registry can supply group +
+                // artifact for curated names; the user still picks the
+                // version. Explicit flags always override the registry.
+                String name = nonBlank(nameFlag, coord);
+                var registryHit = dev.jkbuild.registry.AliasRegistry.bundled().lookup(coord);
+                String group = nonBlank(groupFlag,
+                        registryHit.map(dev.jkbuild.registry.AliasRegistry.Module::group).orElse(null));
+                String artifact = nonBlank(artifactFlag,
+                        registryHit.map(dev.jkbuild.registry.AliasRegistry.Module::artifact).orElse(name));
+                if (group == null || group.isBlank()) {
                     throw new IllegalArgumentException(
-                            "bare name `" + coord + "` requires --group and --ver");
+                            "bare name `" + coord + "` is not in the bundled registry; "
+                                    + "supply --group (and optionally --artifact) explicitly");
                 }
                 if (versionFlag == null || versionFlag.isBlank()) {
                     throw new IllegalArgumentException(
                             "bare name `" + coord + "` requires --ver");
                 }
-                String name = nonBlank(nameFlag, coord);
-                String artifact = nonBlank(artifactFlag, name);
-                return new ParsedDep(name, groupFlag, artifact, versionFlag, false);
+                return new ParsedDep(name, group, artifact, versionFlag, false);
             }
 
             // Maven-coord shorthand. Three forms:

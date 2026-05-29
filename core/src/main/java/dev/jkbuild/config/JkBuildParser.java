@@ -3,6 +3,7 @@ package dev.jkbuild.config;
 
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.registry.AliasRegistry;
 import dev.jkbuild.model.Feature;
 import dev.jkbuild.model.Features;
 import dev.jkbuild.model.GitRefSpec;
@@ -67,7 +68,16 @@ public final class JkBuildParser {
     }
 
     public static JkBuild parse(String toml) {
+        return parse(toml, AliasRegistry.bundled());
+    }
+
+    /**
+     * Test seam: parse against a synthetic alias registry instead of the
+     * bundled one. Production calls go through {@link #parse(String)}.
+     */
+    public static JkBuild parse(String toml, AliasRegistry registry) {
         Objects.requireNonNull(toml, "toml");
+        Objects.requireNonNull(registry, "registry");
         TomlParseResult result = Toml.parse(toml);
         if (result.hasErrors()) {
             throw new JkBuildParseException(
@@ -75,7 +85,7 @@ public final class JkBuildParser {
         }
         JkBuild.Project project = parseProject(result);
         Workspace workspace = parseWorkspace(result);
-        JkBuild.Dependencies deps = parseDependencies(result, workspace);
+        JkBuild.Dependencies deps = parseDependencies(result, workspace, registry);
         List<RepositorySpec> repos = parseRepositories(result);
         Profiles profiles = parseProfiles(result);
         Features features = parseFeatures(result);
@@ -147,7 +157,8 @@ public final class JkBuildParser {
     // Dependencies
     // ---------------------------------------------------------------------
 
-    private static JkBuild.Dependencies parseDependencies(TomlTable root, Workspace workspace) {
+    private static JkBuild.Dependencies parseDependencies(
+            TomlTable root, Workspace workspace, AliasRegistry registry) {
         TomlTable deps = root.getTable("dependencies");
         if (deps == null) return JkBuild.Dependencies.empty();
         EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
@@ -177,7 +188,7 @@ public final class JkBuildParser {
         if (!flatDepKeys.isEmpty()) {
             // Default-scope shorthand: [dependencies] with only inline-table
             // children is treated as [dependencies.main].
-            List<Dependency> parsed = parseScopeTable(deps, flatDepKeys, Scope.MAIN, workspace);
+            List<Dependency> parsed = parseScopeTable(deps, flatDepKeys, Scope.MAIN, workspace, registry);
             if (!parsed.isEmpty()) byScope.put(Scope.MAIN, parsed);
         }
 
@@ -189,7 +200,7 @@ public final class JkBuildParser {
                         "dependencies." + scopeKey + " must be a table of name → dep entries");
             }
             List<Dependency> parsed = parseScopeTable(scopeTable,
-                    new ArrayList<>(scopeTable.keySet()), scope, workspace);
+                    new ArrayList<>(scopeTable.keySet()), scope, workspace, registry);
             if (!parsed.isEmpty()) byScope.put(scope, parsed);
         }
         return new JkBuild.Dependencies(byScope);
@@ -210,22 +221,52 @@ public final class JkBuildParser {
     }
 
     private static List<Dependency> parseScopeTable(
-            TomlTable scopeTable, List<String> keys, Scope scope, Workspace workspace) {
+            TomlTable scopeTable, List<String> keys, Scope scope,
+            Workspace workspace, AliasRegistry registry) {
         List<Dependency> result = new ArrayList<>(keys.size());
         for (String name : keys) {
             Object value = scopeTable.get(List.of(name));
+            if (value instanceof String versionShorthand) {
+                // Cargo-style one-liner: `name = "1.0.0"`. Resolve the
+                // coord via the bundled registry; the user provides only
+                // the version selector.
+                result.add(parseShorthandEntry(name, versionShorthand, scope, registry));
+                continue;
+            }
             if (!(value instanceof TomlTable entry)) {
                 throw new JkBuildParseException(
                         "dependencies." + scope.canonical() + "." + name
-                                + " must be an inline table (e.g. { group = \"...\", artifact = \"...\", version = \"...\" })");
+                                + " must be an inline table (e.g. { group = \"...\", version = \"...\" })"
+                                + " or a version-string shorthand for a registry-known name");
             }
-            result.add(parseDepEntry(name, entry, scope, workspace));
+            result.add(parseDepEntry(name, entry, scope, workspace, registry));
         }
         return result;
     }
 
+    /**
+     * Resolve a {@code name = "version-spec"} shorthand by looking the
+     * short name up in the bundled alias registry.
+     */
+    private static Dependency parseShorthandEntry(
+            String name, String versionRaw, Scope scope, AliasRegistry registry) {
+        String displayPath = "dependencies." + scope.canonical() + "." + name;
+        if (versionRaw.isBlank()) {
+            throw new JkBuildParseException(displayPath + " has an empty version string");
+        }
+        AliasRegistry.Module mod = registry.lookup(name).orElseThrow(() ->
+                new JkBuildParseException(displayPath
+                        + " — unknown short name `" + name + "`. "
+                        + "Either spell out the coord as `{ group = \"...\", version = \"...\" }`, "
+                        + "or pick a curated name from the bundled registry "
+                        + "(see docs/artifact-coord-design.md)."));
+        VersionSelector selector = VersionSelector.parseFloating(versionRaw);
+        return Dependency.of(name, mod.moduleKey(), selector);
+    }
+
     private static Dependency parseDepEntry(
-            String name, TomlTable entry, Scope scope, Workspace workspace) {
+            String name, TomlTable entry, Scope scope,
+            Workspace workspace, AliasRegistry registry) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
@@ -258,18 +299,29 @@ public final class JkBuildParser {
             return resolveWorkspaceDep(name, displayPath, workspace);
         }
 
-        // For non-workspace deps, artifact defaults to the key name.
-        String artifact = entry.getString("artifact");
-        if (artifact == null) artifact = name;
-        if (artifact.isBlank()) {
+        // For non-workspace deps, group/artifact may come from the table or
+        // fall back to the bundled registry (which keys off the short name).
+        // path/git sources still REQUIRE explicit `group` — they're inherently
+        // user-controlled overrides where defaulting silently would be
+        // surprising.
+        String groupExplicit = entry.getString("group");
+        String artifactExplicit = entry.getString("artifact");
+        AliasRegistry.Module registryHit = (groupExplicit == null)
+                ? registry.lookup(name).orElse(null) : null;
+
+        String group = groupExplicit != null ? groupExplicit
+                : (registryHit != null ? registryHit.group() : null);
+        String artifact = artifactExplicit != null ? artifactExplicit
+                : (registryHit != null ? registryHit.artifact() : name);
+        if (artifact != null && artifact.isBlank()) {
             throw new JkBuildParseException(displayPath + ".artifact must not be blank");
         }
 
         if (hasPath) {
-            String group = entry.getString("group");
-            if (group == null || group.isBlank()) {
+            if (groupExplicit == null || groupExplicit.isBlank()) {
                 throw new JkBuildParseException(displayPath
-                        + " with `path = ...` must set a `group`");
+                        + " with `path = ...` must set a `group` explicitly "
+                        + "(registry shorthand applies only to version-based deps)");
             }
             String path = entry.getString("path");
             if (path == null || path.isBlank()) {
@@ -279,19 +331,19 @@ public final class JkBuildParser {
         }
 
         if (hasGit) {
-            String group = entry.getString("group");
-            if (group == null || group.isBlank()) {
+            if (groupExplicit == null || groupExplicit.isBlank()) {
                 throw new JkBuildParseException(displayPath
-                        + " with `git = ...` must set a `group`");
+                        + " with `git = ...` must set a `group` explicitly "
+                        + "(registry shorthand applies only to version-based deps)");
             }
             GitSource source = parseGitSource(entry, displayPath);
             return Dependency.git(name, group + ":" + artifact, source);
         }
 
         // version-only.
-        String group = entry.getString("group");
         if (group == null || group.isBlank()) {
-            throw new JkBuildParseException(displayPath + " must set a `group`");
+            throw new JkBuildParseException(displayPath
+                    + " must set a `group` (or use a registry-known short name)");
         }
         String versionRaw = entry.getString("version");
         if (versionRaw == null || versionRaw.isBlank()) {
