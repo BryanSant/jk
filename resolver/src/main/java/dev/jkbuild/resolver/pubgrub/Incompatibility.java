@@ -33,8 +33,19 @@ public record Incompatibility(List<Term> terms, Cause cause) {
         /** "Package {@code from} {@code fromVersions} depends on {@code to}." */
         record Dependency(Term from, Term to) implements Cause {}
 
-        /** No versions of {@code package_} satisfy the requested set. */
-        record NoVersions(String pkg, VersionSet requested) implements Cause {}
+        /**
+         * No versions of {@code pkg} satisfy the requested set. {@code unknownPackage}
+         * is {@code true} when the package source returned an empty version list
+         * (typically a 404 on the artifact's {@code maven-metadata.xml}), and
+         * {@code false} when some versions exist but none satisfy the constraint.
+         * The diagnostic renderer uses this to decide whether to emit the
+         * artifact-defaulting hint.
+         */
+        record NoVersions(String pkg, VersionSet requested, boolean unknownPackage) implements Cause {
+            public NoVersions(String pkg, VersionSet requested) {
+                this(pkg, requested, false);
+            }
+        }
 
         /**
          * Conflict-resolution derived this from two prior incompatibilities.

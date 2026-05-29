@@ -4,6 +4,7 @@ package dev.jkbuild.resolver.pubgrub;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
@@ -131,5 +132,77 @@ class DiagnosticsTest {
         // The shared leaf should be numbered (it has >1 incoming edges) and
         // referenced by number on its second mention.
         assertThat(rendered).contains("(see #");
+    }
+
+    @Test
+    void artifact_defaulting_hint_fires_when_unknown_package_matches_root_name() {
+        // User wrote: postgres = { group = "org.postgresql", version = "42.7.4" }
+        // The parser defaults artifact = "postgres", producing the module
+        // "org.postgresql:postgres" — which doesn't exist on Maven Central.
+        // The diagnostic should explain the defaulting and suggest setting
+        // `artifact = "..."` explicitly.
+        PackageSource src = InMemoryPackageSource.builder().build();   // no packages exist
+
+        try {
+            new PubGrubSolver(src).solve("root", "1.0",
+                    List.of(Term.positive("org.postgresql:postgres", VersionSet.exact("42.7.4"))));
+            fail("expected UnsatisfiableException");
+        } catch (UnsatisfiableException e) {
+            String rendered = Diagnostics.render(
+                    e.rootCause(),
+                    Map.of("org.postgresql:postgres", "postgres"));
+            assertThat(rendered).contains("Hint: the dep `postgres` resolves to `org.postgresql:postgres`");
+            assertThat(rendered).contains("set\n`artifact` explicitly");
+            assertThat(rendered).contains("postgres = { group = \"org.postgresql\", artifact = \"<correct-artifact>\"");
+            assertThat(rendered).contains("docs/artifact-coord-design.md");
+        } catch (Exception e) {
+            fail("expected UnsatisfiableException, got: " + e);
+        }
+    }
+
+    @Test
+    void artifact_defaulting_hint_skipped_when_artifact_was_explicit() {
+        // User wrote: postgres-jdbc = { group = "org.postgresql", artifact = "postgresql", ... }
+        // The artifact ("postgresql") doesn't match the name ("postgres-jdbc"),
+        // so the hint is irrelevant — the user clearly typed the artifact on
+        // purpose. We should NOT pester them with the defaulting note.
+        PackageSource src = InMemoryPackageSource.builder().build();
+
+        try {
+            new PubGrubSolver(src).solve("root", "1.0",
+                    List.of(Term.positive("org.postgresql:postgresql", VersionSet.exact("42.7.4"))));
+            fail("expected UnsatisfiableException");
+        } catch (UnsatisfiableException e) {
+            String rendered = Diagnostics.render(
+                    e.rootCause(),
+                    Map.of("org.postgresql:postgresql", "postgres-jdbc"));
+            assertThat(rendered).doesNotContain("Hint: the dep");
+            assertThat(rendered).doesNotContain("artifact-coord-design");
+        } catch (Exception e) {
+            fail("expected UnsatisfiableException, got: " + e);
+        }
+    }
+
+    @Test
+    void artifact_defaulting_hint_skipped_when_versions_exist_but_constraint_unmet() {
+        // The artifact exists; the user just asked for a version that
+        // doesn't. This is a constraint problem, not an artifact-name
+        // problem — the hint would mislead.
+        PackageSource src = InMemoryPackageSource.builder()
+                .version("org.postgresql:postgresql", "42.7.4")
+                .build();
+
+        try {
+            new PubGrubSolver(src).solve("root", "1.0",
+                    List.of(Term.positive("org.postgresql:postgresql", VersionSet.exact("99.9.9"))));
+            fail("expected UnsatisfiableException");
+        } catch (UnsatisfiableException e) {
+            String rendered = Diagnostics.render(
+                    e.rootCause(),
+                    Map.of("org.postgresql:postgresql", "postgresql"));
+            assertThat(rendered).doesNotContain("Hint: the dep");
+        } catch (Exception e) {
+            fail("expected UnsatisfiableException, got: " + e);
+        }
     }
 }

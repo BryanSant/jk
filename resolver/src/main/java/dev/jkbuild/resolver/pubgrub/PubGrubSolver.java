@@ -227,9 +227,15 @@ public class PubGrubSolver {
             String pick = chooseVersion(pkg, allowed);
             if (pick == null) {
                 // No available version of pkg satisfies the constraints.
+                // Distinguish "package doesn't exist anywhere" (empty version
+                // list from the source) from "package exists but no version
+                // matches" — the diagnostic renderer needs the difference to
+                // surface the artifact-defaulting hint only when the artifact
+                // itself wasn't found.
+                boolean unknownPackage = source.versions(pkg).isEmpty();
                 Incompatibility noVersions = new Incompatibility(
                         List.of(Term.positive(pkg, allowed)),
-                        new Incompatibility.Cause.NoVersions(pkg, allowed));
+                        new Incompatibility.Cause.NoVersions(pkg, allowed, unknownPackage));
                 addIncompatibility(noVersions);
                 // Propagating this inco will surface the conflict on the next loop.
                 return pkg;

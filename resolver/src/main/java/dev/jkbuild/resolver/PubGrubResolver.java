@@ -56,15 +56,22 @@ public final class PubGrubResolver implements Resolver {
     @Override
     public Resolution resolve(List<Dependency> roots) throws IOException, InterruptedException {
         List<Term> rootTerms = new ArrayList<>(roots.size());
+        Map<String, String> rootDepNames = new HashMap<>();
         for (Dependency dep : roots) {
             rootTerms.add(Term.positive(dep.module(), VersionSelectors.toVersionSet(dep.version())));
+            // Skip workspace placeholders — they never hit the network so
+            // the artifact-defaulting hint would be misleading there.
+            if (!dep.module().startsWith("workspace:")) {
+                rootDepNames.put(dep.module(), dep.name());
+            }
         }
 
         Map<String, String> decisions;
         try {
             decisions = new PubGrubSolver(source).solve(ROOT_PKG, ROOT_VERSION, rootTerms);
         } catch (UnsatisfiableException e) {
-            throw new UnsatisfiableException(Diagnostics.render(e.rootCause()), e.rootCause());
+            throw new UnsatisfiableException(
+                    Diagnostics.render(e.rootCause(), rootDepNames), e.rootCause());
         }
 
         // Drop the synthetic root from the result and build the per-module dep lists.
