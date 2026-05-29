@@ -414,12 +414,29 @@ when the user-supplied key (or the artifactId-derived default) differs
 from the artifactId, so this footgun only fires on hand-edited
 manifests.
 
-## Bundled short-name registry
+## Short-name registry
 
-jk ships a curated `name → group:artifact` index at
-`core/src/main/resources/dev/jkbuild/registry/aliases.toml`, loaded
-lazily via `dev.jkbuild.registry.AliasRegistry.bundled()`. When a dep's
-short name matches a curated entry, the user can drop the coord:
+jk ships a curated `name → group:artifact` index and resolves manifest
+shorthand against it. The registry is layered — the same name can be
+defined in multiple places, and the topmost layer wins.
+
+### Layers (highest precedence first)
+
+| Layer | Source | Updated by |
+|--|--|--|
+| **project** | `[aliases]` table in the project's `jk.toml` | Hand-edited |
+| **user** | `~/.jk/aliases.toml` | Hand-edited |
+| **downloaded** | `~/.jk/registry/aliases.toml` | `jk registry update` |
+| **bundled** | classpath resource at `dev/jkbuild/registry/aliases.toml` | Shipped with the binary |
+
+Only the bundled layer is guaranteed to exist. The user file lights up
+when present; the downloaded file lights up after the first
+`jk registry update`. Project-level overrides apply only to the
+manifest they're declared in.
+
+### Shorthand forms it enables
+
+When a dep's short name matches a curated entry, the user can drop the coord:
 
 ```toml
 [dependencies.main]
@@ -442,13 +459,42 @@ The bundled index is intentionally version-free — it's a name-to-coord index, 
 
 `jk add <name>` consults the registry too: with a known short name the user only supplies `--ver` (no `--group` needed). Unknown names still require explicit `--group`.
 
+### `jk registry` subcommands
+
+- **`jk registry update`** pulls `https://raw.githubusercontent.com/BryanSant/jk-registry/main/aliases.toml` and replaces `~/.jk/registry/aliases.toml`. The previous file is preserved at `aliases.toml.prev`. A malformed or HTTP-failed response never replaces a good cache.
+- **`jk registry list`** prints every alias with its source layer. `--layer <name>` filters (e.g. `--layer project`).
+
+### Curation policy (`BryanSant/jk-registry`)
+
+- The repo's `main` branch is the source of truth — `jk registry update` always pulls HEAD; there's no client-side pinning. Every team is on the same revision globally.
+- Only BryanSant can commit for now. Future maintainers join via CODEOWNERS once the curation surface justifies it.
+- First-PR-wins for short-name conflicts. If `foo` is the natural short name for two different artifacts, whichever PR lands first claims it; the other artifact must use an explicit `group =` in `jk.toml` or a project-level `[aliases]` override.
+- The bundled `aliases.toml` shipped with each jk release seeds the floor. Once downloaded layers exist they take precedence — but the binary is never useless on a fresh machine.
+
+### Local overrides
+
+Projects can shadow registry entries — useful for forks of upstream
+libraries or internal artifacts that aren't in the curated set:
+
+```toml
+[aliases]
+picocli = "io.fork:picocli"        # local fork wins over bundled
+internal-widget = "com.acme:internal-widget"
+
+[dependencies.main]
+picocli = "4.7.7"
+internal-widget = "0.1.0"
+```
+
+User-global overrides live in `~/.jk/aliases.toml` (same schema). The
+file is read at parser invocation time; no daemon caching.
+
 ## Out of scope for v0.7
 
 These are intentionally deferred — the format leaves room for them but
 the parser does not enforce or honor them yet.
 
-- **User-defined alias overrides.** A future `~/.jk/aliases.toml` or `[aliases]` table in `jk.toml` would let projects shadow or extend the bundled set.
-- **Registry update mechanism.** `jk registry update` to pull a refreshed index from a curated source; for now the index is whatever the binary shipped with.
+- **Sigstore verification of `jk registry update`.** Wire the same verifier `jk audit` uses; pinned identity is `*.jkbuild.dev` via GitHub OIDC.
 - **PEP 621-style `[project]`** with `authors`, `license`, `urls`,
   `readme`, `keywords`. Adds option value but no immediate feature
   unlock.

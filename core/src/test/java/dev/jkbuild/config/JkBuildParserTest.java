@@ -503,6 +503,45 @@ class JkBuildParserTest {
     }
 
     @Test
+    void project_aliases_table_overrides_passed_in_registry() {
+        // The project-local [aliases] table is the top of the lookup chain;
+        // it shadows the registry passed by callers (including the bundled
+        // one in production).
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [aliases]
+                picocli = "io.fork:picocli"
+
+                [dependencies.main]
+                picocli = "4.7.7"
+                """, TEST_REGISTRY);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.module()).isEqualTo("io.fork:picocli");
+    }
+
+    @Test
+    void project_aliases_can_introduce_a_brand_new_short_name() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [aliases]
+                internal-widget = "com.acme:internal-widget"
+
+                [dependencies.main]
+                internal-widget = "0.1.0"
+                """, TEST_REGISTRY);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.module()).isEqualTo("com.acme:internal-widget");
+    }
+
+    @Test
+    void project_aliases_with_versioned_coord_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [aliases]
+                bad = "com.acme:bad:1.0.0"
+                """, TEST_REGISTRY))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("carries a version");
+    }
+
+    @Test
     void parses_features_block_with_dep_names() {
         // Feature `deps` are now dep names (not coord strings). Resolution
         // happens at activation time, against [dependencies.*].

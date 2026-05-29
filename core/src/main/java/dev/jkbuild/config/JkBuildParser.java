@@ -68,12 +68,13 @@ public final class JkBuildParser {
     }
 
     public static JkBuild parse(String toml) {
-        return parse(toml, AliasRegistry.bundled());
+        return parse(toml, AliasRegistry.layered());
     }
 
     /**
      * Test seam: parse against a synthetic alias registry instead of the
-     * bundled one. Production calls go through {@link #parse(String)}.
+     * default layered one. The manifest's own {@code [aliases]} table is
+     * still layered on top via {@link AliasRegistry#withProjectOverrides}.
      */
     public static JkBuild parse(String toml, AliasRegistry registry) {
         Objects.requireNonNull(toml, "toml");
@@ -85,11 +86,27 @@ public final class JkBuildParser {
         }
         JkBuild.Project project = parseProject(result);
         Workspace workspace = parseWorkspace(result);
-        JkBuild.Dependencies deps = parseDependencies(result, workspace, registry);
+        AliasRegistry effective = registry.withProjectOverrides(parseProjectAliases(result));
+        JkBuild.Dependencies deps = parseDependencies(result, workspace, effective);
         List<RepositorySpec> repos = parseRepositories(result);
         Profiles profiles = parseProfiles(result);
         Features features = parseFeatures(result);
         return new JkBuild(project, deps, repos, profiles, features, workspace);
+    }
+
+    /**
+     * Parse the optional top-level {@code [aliases]} table. Empty map when
+     * absent. Validated through {@link AliasRegistry#parseAliasesTable} so
+     * the schema matches the bundled and user files.
+     */
+    private static java.util.Map<String, AliasRegistry.Module> parseProjectAliases(TomlTable root) {
+        TomlTable aliases = root.getTable("aliases");
+        if (aliases == null) return java.util.Map.of();
+        try {
+            return AliasRegistry.parseAliasesTable(aliases, "jk.toml");
+        } catch (IllegalStateException e) {
+            throw new JkBuildParseException(e.getMessage(), e);
+        }
     }
 
     private static JkBuild.Project parseProject(TomlTable root) {
