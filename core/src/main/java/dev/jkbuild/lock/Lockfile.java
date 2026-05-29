@@ -61,7 +61,8 @@ public record Lockfile(
             String checksum,
             String path,
             List<Scope> scopes,
-            List<String> deps) {
+            List<String> deps,
+            String pinnedBy) {
 
         public Package {
             Objects.requireNonNull(name, "name");
@@ -76,11 +77,22 @@ public record Lockfile(
             deps = List.copyOf(deps);
         }
 
+        /**
+         * Back-compat constructor without {@code pinnedBy} — for callers that
+         * don't track BOM provenance. Equivalent to passing {@code null}.
+         */
+        public Package(
+                String name, String version, String source,
+                String checksum, String path,
+                List<Scope> scopes, List<String> deps) {
+            this(name, version, source, checksum, path, scopes, deps, null);
+        }
+
         /** Convenience constructor for callers that don't care about scopes (defaults to MAIN). */
         public Package(
                 String name, String version, String source,
                 String checksum, String path, List<String> deps) {
-            this(name, version, source, checksum, path, List.of(Scope.MAIN), deps);
+            this(name, version, source, checksum, path, List.of(Scope.MAIN), deps, null);
         }
 
         public boolean inAnyScope(Set<Scope> include) {

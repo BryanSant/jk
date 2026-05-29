@@ -70,6 +70,7 @@ public final class LockfileReader {
         String source = requireString(table, "source");
         String checksum = table.getString("checksum");
         String path = table.getString("path");
+        String pinnedBy = table.getString("pinned-by"); // optional
 
         List<Scope> scopes = new ArrayList<>();
         TomlArray scopesArray = table.getArray("scopes");
@@ -91,7 +92,7 @@ public final class LockfileReader {
                 deps.add(depsArray.getString(i));
             }
         }
-        return new Lockfile.Package(name, version, source, checksum, path, scopes, deps);
+        return new Lockfile.Package(name, version, source, checksum, path, scopes, deps, pinnedBy);
     }
 
     private static String requireString(TomlParseResult result, String key) {
