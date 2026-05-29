@@ -56,7 +56,7 @@ public final class ImageCommand implements Callable<Integer> {
 
     @Option(names = "--tarball", arity = "0..1", fallbackValue = "",
             description = "Write an OCI tarball instead of pushing. Optional <path>; "
-                    + "defaults to target/images/<artifact>.oci.tar.")
+                    + "defaults to target/<artifact>.oci.tar.")
     String tarballArg;
 
     @Option(names = "--cache-dir", hidden = true,

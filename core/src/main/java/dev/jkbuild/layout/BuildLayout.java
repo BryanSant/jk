@@ -166,9 +166,18 @@ public final class BuildLayout {
         return targetDir().resolve(artifact);
     }
 
-    /** {@code target/images/<artifact>.oci.tar} — default Jib OCI tarball. */
+    /**
+     * {@code target/<artifact>.oci.tar} — default Jib OCI tarball.
+     *
+     * <p>Flat at the root of {@code target/} for the same reason as
+     * {@link #nativeBinary()}: a single high-value artifact users grab to
+     * push to a registry shouldn't be hidden under a subdir. Filename
+     * extensions disambiguate from the native binary and the jar.
+     * Per-platform variants (if we ever emit them) would land as
+     * {@code <artifact>-linux-amd64.oci.tar} etc. at the same level.
+     */
     public Path ociImageTar() {
-        return targetDir().resolve("images").resolve(artifact + ".oci.tar");
+        return targetDir().resolve(artifact + ".oci.tar");
     }
 
     /** {@code target/reports/<member>/} — JUnit reports for a workspace member. */

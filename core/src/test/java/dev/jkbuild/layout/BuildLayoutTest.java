@@ -46,7 +46,7 @@ class BuildLayoutTest {
         assertThat(layout.sourcesJar()).isEqualTo(dir.resolve("target/widget-1.2.3-sources.jar"));
         assertThat(layout.javadocJar()).isEqualTo(dir.resolve("target/widget-1.2.3-javadoc.jar"));
         assertThat(layout.nativeBinary()).isEqualTo(dir.resolve("target/widget"));
-        assertThat(layout.ociImageTar()).isEqualTo(dir.resolve("target/images/widget.oci.tar"));
+        assertThat(layout.ociImageTar()).isEqualTo(dir.resolve("target/widget.oci.tar"));
         assertThat(layout.testReportsDir("core")).isEqualTo(dir.resolve("target/reports/core"));
         assertThat(layout.sbomDir()).isEqualTo(dir.resolve("target/sbom"));
         assertThat(layout.provenanceDir()).isEqualTo(dir.resolve("target/provenance"));
