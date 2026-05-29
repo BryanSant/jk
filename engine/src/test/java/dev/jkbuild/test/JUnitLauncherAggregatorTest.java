@@ -82,6 +82,43 @@ class JUnitLauncherAggregatorTest {
     }
 
     @Test
+    void dynamic_registered_events_mark_subsequent_finished_as_non_static() {
+        // The aggregator must remember every id it saw via dynamic_registered
+        // (TEST type) and stamp wasStatic=false on the matching finished
+        // event. Plain @Test methods are not preceded by dynamic_registered
+        // and should arrive as wasStatic=true.
+        var captured = new java.util.ArrayList<boolean[]>();   // [isTest, wasStatic]
+        var listener = new TestProgressListener() {
+            @Override
+            public void onTestFinished(String id, String display, String status,
+                                       boolean isTest, boolean wasStatic,
+                                       long durationMs, int workerId) {
+                captured.add(new boolean[]{isTest, wasStatic});
+            }
+        };
+        var agg = new JUnitLauncher.ResultAggregator(listener, 0);
+
+        // Plain static test — no preceding dynamic_registered.
+        agg.accept("{\"e\":\"finished\",\"id\":\"static-1\","
+                + "\"type\":\"TEST\",\"status\":\"SUCCESSFUL\"}");
+        // Parameterized invocation — preceded by dynamic_registered.
+        agg.accept("{\"e\":\"dynamic_registered\",\"id\":\"dyn-1\",\"type\":\"TEST\"}");
+        agg.accept("{\"e\":\"finished\",\"id\":\"dyn-1\","
+                + "\"type\":\"TEST\",\"status\":\"SUCCESSFUL\"}");
+        // CONTAINER-typed dynamic_registered must NOT count as a dynamic
+        // test id — its later finished (also CONTAINER) shouldn't affect
+        // progress regardless.
+        agg.accept("{\"e\":\"dynamic_registered\",\"id\":\"c-1\",\"type\":\"CONTAINER\"}");
+        agg.accept("{\"e\":\"finished\",\"id\":\"c-1\","
+                + "\"type\":\"CONTAINER\",\"status\":\"SUCCESSFUL\"}");
+
+        assertThat(captured).hasSize(3);
+        assertThat(captured.get(0)).containsExactly(true,  true);    // static @Test
+        assertThat(captured.get(1)).containsExactly(true,  false);   // parameterized
+        assertThat(captured.get(2)).containsExactly(false, false);   // container
+    }
+
+    @Test
     void non_zero_exit_with_empty_results_reports_a_run_level_failure() {
         // Worker crashed before emitting any tests — we still want a non-zero
         // pass/fail signal.

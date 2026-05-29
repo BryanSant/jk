@@ -31,12 +31,29 @@ public interface TestProgressListener {
     /** A test method or container is about to execute. */
     default void onTestStarted(String id, String display, boolean isTest, int workerId) {}
 
-    /** A test method or container finished — exactly one fires per started node. */
+    /**
+     * A test method or container finished — exactly one fires per started node.
+     *
+     * <p>{@code wasStatic} is {@code true} when the test's id was present in
+     * the static plan emitted by discovery. {@code false} marks invocations
+     * registered dynamically at execute-time
+     * ({@code @ParameterizedTest} / {@code @TestFactory} /
+     * {@code @TestTemplate} / {@code @RepeatedTest}). UIs that want a stable
+     * "of N" denominator should only advance their numerator when
+     * {@code wasStatic} is true; dynamics are counted in the pass/fail tally
+     * but not in the bar.
+     */
     default void onTestFinished(
-            String id, String display, String status, boolean isTest, long durationMs, int workerId) {}
+            String id, String display, String status,
+            boolean isTest, boolean wasStatic, long durationMs, int workerId) {}
 
-    /** A test was skipped (e.g. {@code @Disabled}). */
-    default void onTestSkipped(String id, String display, String reason, boolean isTest, int workerId) {}
+    /**
+     * A test was skipped (e.g. {@code @Disabled}). See
+     * {@link #onTestFinished} for the meaning of {@code wasStatic}.
+     */
+    default void onTestSkipped(
+            String id, String display, String reason,
+            boolean isTest, boolean wasStatic, int workerId) {}
 
     /** A non-protocol line came back from the child — user's {@code System.out} write, mostly. */
     default void onUserOutput(int workerId, String line) {}

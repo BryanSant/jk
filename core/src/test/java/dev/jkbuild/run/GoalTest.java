@@ -53,6 +53,46 @@ class GoalTest {
     }
 
     @Test
+    void interleaved_progress_and_update_scope_never_overshoot() {
+        // Regression for the "318 of 161" bug: when a phase calls
+        // updateScope(1) followed by progress(1) repeatedly (jk test's
+        // per-test bridge), numerator must never exceed denominator
+        // mid-phase. An earlier implementation advanced the numerator
+        // proportionally inside updateScope to "preserve the fraction,"
+        // which compounded into a 2× overshoot.
+        AtomicInteger maxNumOverDen = new AtomicInteger(0);
+        var goal = Goal.builder("interleaved")
+                .addListener(new GoalListener() {
+                    @Override public void progress(String phase, int delta, GoalView view) {
+                        if (view.numerator() > view.denominator()) {
+                            maxNumOverDen.updateAndGet(prev -> Math.max(prev,
+                                    (int) (view.numerator() - view.denominator())));
+                        }
+                    }
+                    @Override public void scopeUpdate(String phase, int delta, GoalView view) {
+                        if (view.numerator() > view.denominator()) {
+                            maxNumOverDen.updateAndGet(prev -> Math.max(prev,
+                                    (int) (view.numerator() - view.denominator())));
+                        }
+                    }
+                })
+                .addPhase(Phase.builder("loop").scope(0)
+                        .execute(ctx -> {
+                            for (int i = 0; i < 100; i++) {
+                                ctx.updateScope(1);
+                                ctx.progress(1);
+                            }
+                        }).build())
+                .build();
+
+        var result = goal.run();
+        assertThat(result.success()).isTrue();
+        assertThat(maxNumOverDen).hasValue(0);
+        assertThat(goal.snapshot().numerator()).isEqualTo(100);
+        assertThat(goal.snapshot().denominator()).isEqualTo(100);
+    }
+
+    @Test
     void update_scope_grows_denominator() {
         var listener = new RecordingListener();
         var goal = Goal.builder("growing")

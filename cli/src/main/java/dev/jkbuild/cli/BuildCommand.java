@@ -260,6 +260,9 @@ public final class BuildCommand implements Callable<Integer> {
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
         Path buildFile = dir.resolve("jk.toml");
         int workerCount = workers != null && workers > 0 ? workers : 1;
+        // Lexical pre-discovery so the runTests phase's scope is known
+        // before any phase runs — see TestCommand.estimateTestCount.
+        int estimatedTestCount = TestCommand.estimateTestCount(dir.resolve("src/test/java"));
 
         if (!Files.exists(buildFile)) {
             System.err.println("jk build: no jk.toml in " + dir);
@@ -566,7 +569,7 @@ public final class BuildCommand implements Callable<Integer> {
                 .label("Testing")
                 .kind(PhaseKind.IO)
                 .requires("compile-test", "copy-resources")
-                .scope(0)
+                .scope(estimatedTestCount)
                 .execute(ctx -> {
                     if (ctx.get(NO_TEST_SOURCES).orElse(false)) {
                         ctx.label("no tests to run");
@@ -578,8 +581,8 @@ public final class BuildCommand implements Callable<Integer> {
                     runtimeCp.add(ctx.require(MAIN_CLASSES));
                     runtimeCp.addAll(testRtCp);
 
-                    var progress = dev.jkbuild.cli.tui.TestProgress.start(System.out);
-                    TestProgressListener listener = TestCommand.bridgeListener(ctx, progress, workerCount);
+                    TestProgressListener listener =
+                            TestCommand.bridgeListener(ctx, workerCount, global.verbose);
                     JUnitLauncher.Result result;
                     try {
                         result = new JUnitLauncher().run(
@@ -587,21 +590,14 @@ public final class BuildCommand implements Callable<Integer> {
                                 runtimeCp, cache, workerCount, listener);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        progress.writeAbove("jk build: interrupted");
-                        progress.close();
                         ctx.error("test", "interrupted");
                         throw new RuntimeException(e);
                     } catch (IOException e) {
-                        progress.writeAbove("jk build: " + e.getMessage());
-                        progress.close();
                         ctx.error("test", e.getMessage());
                         throw e;
                     }
                     ctx.put(TEST_RESULT, result);
-                    if (result.allPassed()) {
-                        progress.finishSuccess();
-                    } else {
-                        progress.finishFailure(result.failed());
+                    if (!result.allPassed()) {
                         throw new RuntimeException(result.failed() + " test failure"
                                 + (result.failed() == 1 ? "" : "s"));
                     }

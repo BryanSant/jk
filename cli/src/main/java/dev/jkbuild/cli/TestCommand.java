@@ -34,6 +34,8 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Callable;
+import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * {@code jk test} — compile main + test sources and run JUnit Platform tests.
@@ -52,11 +54,11 @@ import java.util.concurrent.Callable;
  *       grows the denominator via {@code updateScope}.</li>
  * </ol>
  *
- * <p>{@code Goal.interactive} is true: the pinned {@link
- * dev.jkbuild.cli.tui.TestProgress} widget owns the foreground
- * rendering, so the Goal framework's ProgressBarListener stays out of
- * the way. The structured event log captures everything regardless of
- * what's rendered to the terminal.
+ * <p>Output renders through the shared {@link
+ * dev.jkbuild.cli.run.ProgressBarListener} — same bar shape as
+ * {@code jk compile} and {@code jk build}. {@link #bridgeListener}
+ * translates the test-runner's NDJSON events into {@code progress},
+ * {@code label}, and {@code error} calls on the {@link PhaseContext}.
  */
 @Command(name = "test", description = "Compile and run tests")
 public final class TestCommand implements Callable<Integer> {
@@ -113,6 +115,14 @@ public final class TestCommand implements Callable<Integer> {
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Cas cas = new Cas(cache);
         int workerCount = workers != null && workers > 0 ? workers : 1;
+
+        // Pre-discover an estimated test count by scanning src/test/java
+        // for @Test (and friends). The runTests phase is built with this
+        // count as its scope, so the goal's denominator is set ONCE
+        // up-front and never has to be reshaped mid-run. Bar climbs
+        // smoothly from 0 across all phases instead of flashing 100%
+        // when the early compile phases finish.
+        int estimatedTestCount = estimateTestCount(dir.resolve("src/test/java"));
 
         Phase parseBuild = Phase.builder("parse-build")
                 .scope(1)
@@ -197,9 +207,14 @@ public final class TestCommand implements Callable<Integer> {
                 .build();
 
         Phase runTests = Phase.builder("run-tests")
+                .label("Testing")
                 .kind(PhaseKind.IO)
                 .requires("compile-test")
-                .scope(0)            // grown via updateScope on discovery total
+                // Scope is the upfront lexical estimate. We deliberately
+                // don't reshape this via updateScope at runtime — the
+                // numerator climbs through static-only test finishes and
+                // the phase-end auto-fill closes any residual gap.
+                .scope(estimatedTestCount)
                 .execute(ctx -> {
                     if (ctx.get(NO_TEST_SOURCES).orElse(false)) {
                         ctx.label("no tests to run");
@@ -211,12 +226,8 @@ public final class TestCommand implements Callable<Integer> {
                     runtimeClasspath.add(ctx.require(MAIN_CLASSES));
                     runtimeClasspath.addAll(testRuntimeCp);
 
-                    // TestProgress is the foreground rendering owner —
-                    // pinned status row + writeAbove for user output /
-                    // failures. The Goal framework stays out of the way
-                    // because the goal is marked interactive.
-                    var progress = dev.jkbuild.cli.tui.TestProgress.start(System.out);
-                    TestProgressListener listener = bridgeListener(ctx, progress, workerCount);
+                    TestProgressListener listener =
+                            bridgeListener(ctx, workerCount, global.verbose);
 
                     JUnitLauncher.Result result;
                     try {
@@ -227,25 +238,19 @@ public final class TestCommand implements Callable<Integer> {
                                 cache, workerCount, listener);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
-                        progress.writeAbove("jk test: interrupted");
-                        progress.close();
                         ctx.error("test", "interrupted");
                         throw new RuntimeException(e);
                     } catch (IOException e) {
-                        progress.writeAbove("jk test: " + e.getMessage());
-                        progress.close();
                         ctx.error("test", e.getMessage());
                         throw e;
                     }
 
                     ctx.put(TEST_RESULT, result);
-                    if (result.allPassed()) {
-                        progress.finishSuccess();
-                    } else {
-                        progress.finishFailure(result.failed());
-                        // Throwing here marks the phase FAIL so the
-                        // event log captures the verdict; the outer
-                        // exit-code logic still distinguishes "test
+                    if (!result.allPassed()) {
+                        // Throw to mark the phase FAIL so the event log
+                        // captures the verdict and ProgressBarListener
+                        // repaints the bar in the failure gradient. The
+                        // outer exit-code logic still distinguishes "test
                         // failure" (exit 4) from "phase exception".
                         throw new RuntimeException(result.failed() + " test failure"
                                 + (result.failed() == 1 ? "" : "s"));
@@ -254,7 +259,6 @@ public final class TestCommand implements Callable<Integer> {
                 .build();
 
         Goal goal = Goal.builder("test")
-                .interactive(true)   // TestProgress owns the foreground
                 .addPhase(parseBuild)
                 .addPhase(compileMain)
                 .addPhase(compileTest)
@@ -264,6 +268,7 @@ public final class TestCommand implements Callable<Integer> {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
 
         if (result.success()) {
+            printTestSuccess(goal, result);
             return 0;
         }
         // Test failures get exit 4 (PRD §6); compile / launcher errors are
@@ -277,57 +282,137 @@ public final class TestCommand implements Callable<Integer> {
     }
 
     /**
-     * Wraps both the {@link dev.jkbuild.cli.tui.TestProgress} widget
-     * (pinned-row UI) and the Goal's {@link PhaseContext} (structured
-     * events). Each test completion ticks both: the widget's counter
-     * advances and the goal's numerator grows. The discovery total
-     * grows the goal's denominator via {@code updateScope} so the
-     * event log has accurate scope numbers even though the visual UI
-     * is owned by TestProgress.
+     * Compile-style success line printed after the bar wipes:
+     * {@code ✓ Passed N tests in 32s}. Skipped when no tests ran
+     * (e.g. compile-only project with no src/test/java) — the bar
+     * already cleared cleanly and there's nothing meaningful to count.
+     */
+    private void printTestSuccess(Goal goal, GoalResult result) {
+        if (global.outputIsJson()) return;
+        var testResult = goal.get(TEST_RESULT).orElse(null);
+        if (testResult == null) return;
+        long total = testResult.total();
+        if (total == 0) return;
+        String check  = dev.jkbuild.cli.tui.Theme.colorize(
+                "✓", dev.jkbuild.cli.tui.Theme.brightGreen().bold());
+        String passed = dev.jkbuild.cli.tui.Theme.colorize(
+                "Passed", dev.jkbuild.cli.tui.Theme.focused());
+        String inTime = dev.jkbuild.cli.tui.Theme.colorize(
+                "in " + BuildCommand.fmtDuration(result.duration()),
+                dev.jkbuild.cli.tui.Theme.darkGray());
+        System.out.println(check + " " + passed + " " + total
+                + " test" + (total == 1 ? "" : "s") + " " + inTime);
+    }
+
+    /**
+     * Up-front lexical estimate of the test count for the runTests phase's
+     * scope. Counts {@code @Test}, {@code @ParameterizedTest},
+     * {@code @TestFactory}, {@code @TestTemplate}, and {@code @RepeatedTest}
+     * occurrences across every {@code .java} file under {@code src/test/java}.
+     *
+     * <p>The estimate is intentionally generous: each parameterized /
+     * factory / template method counts as 1 regardless of the runtime
+     * invocation count, and an {@code @Test} mentioned in a Javadoc is
+     * over-counted. Both biases are safe because the numerator is gated
+     * on the static plan (see {@code wasStatic} in {@code bridgeListener}),
+     * so over-estimation just means the bar reaches ~98% and phase-end
+     * auto-fill closes the rest. Under-estimation would be worse — the
+     * regex catches every {@code @Test*}-prefixed annotation precisely
+     * to avoid it.
+     */
+    private static final Pattern TEST_ANNOTATION_REGEX = Pattern.compile(
+            "@(?:Test|ParameterizedTest|TestFactory|TestTemplate|RepeatedTest)\\b");
+
+    static int estimateTestCount(Path testSrcDir) {
+        if (!Files.isDirectory(testSrcDir)) return 0;
+        int count = 0;
+        try (Stream<Path> walk = Files.walk(testSrcDir)) {
+            for (Path file : (Iterable<Path>) walk
+                    .filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().endsWith(".java"))::iterator) {
+                try {
+                    String content = Files.readString(file);
+                    count += (int) TEST_ANNOTATION_REGEX.matcher(content).results().count();
+                } catch (IOException ignored) {
+                    // best-effort: skip unreadable files, keep counting
+                }
+            }
+        } catch (IOException ignored) {
+            // best-effort: zero estimate falls back to a flat (empty) bar
+            // through the test phase, which is honest if pessimistic.
+        }
+        return count;
+    }
+
+    /**
+     * Translate {@link TestProgressListener} events into Goal-framework
+     * calls so the shared {@code ProgressBarListener} renders the same
+     * bar {@code jk compile} and {@code jk build} use.
+     *
+     * <ul>
+     *   <li>{@code onDiscoveryTotal} grows the denominator via {@link
+     *       PhaseContext#updateScope}.</li>
+     *   <li>Each {@code onTestFinished} / {@code onTestSkipped} ticks
+     *       the numerator with {@code ctx.progress(1)} and sets the
+     *       bar's step-message via {@code ctx.label}.</li>
+     *   <li>Failures route through {@code ctx.error}, which the bar
+     *       listener hoists above the pinned row in the same
+     *       {@code ✗ Error [phase/code]: ...} format compile uses for
+     *       javac diagnostics.</li>
+     *   <li>Test-process stdout/stderr is muted by default and only
+     *       surfaced under {@code --verbose} — that mode swaps the bar
+     *       for {@code VerboseListener}, so direct {@code println} is
+     *       safe (no pinned row to corrupt).</li>
+     * </ul>
      */
     static TestProgressListener bridgeListener(
             PhaseContext ctx,
-            dev.jkbuild.cli.tui.TestProgress progress,
-            int workerCount) {
+            int workerCount,
+            boolean verbose) {
         return new TestProgressListener() {
-            @Override
-            public void onDiscoveryTotal(int classes, int tests) {
-                progress.setTotal(tests);
-                if (tests > 0) ctx.updateScope(tests);
-            }
+            // Progress strategy: the runTests phase was built with its
+            // scope baked in from an upfront lexical scan, so the goal's
+            // denominator is fixed before any phase runs. We don't react
+            // to the runner's discovery_total at all (would reshape the
+            // bar after the early phases had already moved). The numerator
+            // ticks only for tests that were in the static plan (i.e.,
+            // wasStatic=true). Dynamic invocations run and are counted in
+            // the pass/fail tally but never advance the bar — for
+            // parameterized-heavy suites that means the bar saturates
+            // near 99% before execution ends; phase-end auto-fill snaps
+            // it to 100% on success.
 
             @Override
             public void onTestFinished(String id, String display, String status,
-                                       boolean isTest, long durationMs, int workerId) {
+                                       boolean isTest, boolean wasStatic,
+                                       long durationMs, int workerId) {
                 if (!isTest) return;
-                progress.incrementCompleted();
-                ctx.progress(1);
+                if (wasStatic) ctx.progress(1);
                 ctx.label(display);
             }
 
             @Override
             public void onTestSkipped(String id, String display, String reason,
-                                      boolean isTest, int workerId) {
+                                      boolean isTest, boolean wasStatic, int workerId) {
                 if (!isTest) return;
-                progress.incrementCompleted();
-                ctx.progress(1);
+                if (wasStatic) ctx.progress(1);
             }
 
             @Override
             public void onFailure(String id, String display, String exClass,
                                   String message, int workerId) {
-                progress.writeAbove("FAIL: " + display + " — " + exClass
-                        + (message.isEmpty() ? "" : ": " + message));
                 ctx.error("test", display + ": " + exClass
                         + (message.isEmpty() ? "" : " — " + message));
             }
 
             @Override
             public void onUserOutput(int workerId, String line) {
+                // Muted by default; --verbose surfaces it. Under verbose
+                // mode GoalConsole picks VerboseListener (no pinned bar),
+                // so println straight to stdout is safe.
+                if (!verbose) return;
                 String prefix = workerCount > 1 ? "[w" + workerId + "] " : "";
-                progress.writeAbove(prefix + line);
-                // Deliberately NOT routed to the event log — test
-                // println output would drown the structured stream.
+                System.out.println(prefix + line);
             }
         };
     }

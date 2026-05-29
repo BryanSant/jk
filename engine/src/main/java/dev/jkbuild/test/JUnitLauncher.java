@@ -374,6 +374,12 @@ public final class JUnitLauncher {
         private long failed;
         private long skipped;
         private final List<Failure> failures = new ArrayList<>();
+        // Tests whose `dynamic_registered` event we observed at execute-time
+        // — i.e., @ParameterizedTest / @TestFactory / @TestTemplate /
+        // @RepeatedTest invocations that weren't in the static plan. Used
+        // to mark their later `finished`/`skipped` events as wasStatic=false
+        // so progress UIs can keep a stable static-plan denominator.
+        private final java.util.Set<String> dynamicIds = new java.util.HashSet<>();
 
         /** Test-friendly ctor: no listener, no worker id. */
         ResultAggregator() {
@@ -405,6 +411,11 @@ public final class JUnitLauncher {
                 case "discovery_total" -> listener.onDiscoveryTotal(
                         node.path("classes").asInt(0),
                         node.path("tests").asInt(0));
+                case "dynamic_registered" -> {
+                    if ("TEST".equals(node.path("type").asString())) {
+                        dynamicIds.add(node.path("id").asString());
+                    }
+                }
                 case "started" -> onStarted(node);
                 case "finished" -> onFinished(node);
                 case "skipped" -> onSkipped(node);
@@ -423,9 +434,11 @@ public final class JUnitLauncher {
 
         private void onFinished(JsonNode node) {
             boolean isTest = "TEST".equals(node.path("type").asString());
+            String id = node.path("id").asString();
             String status = node.path("status").asString();
-            String display = node.path("display").asString(node.path("id").asString());
+            String display = node.path("display").asString(id);
             long duration = node.path("duration_ms").asLong(0);
+            boolean wasStatic = isTest && !dynamicIds.contains(id);
             if (isTest) {
                 switch (status) {
                     case "SUCCESSFUL" -> succeeded++;
@@ -435,24 +448,26 @@ public final class JUnitLauncher {
                         String exClass = throwable.path("class").asString("?");
                         String message = throwable.path("message").asString("");
                         failures.add(new Failure(display, exClass + ": " + message));
-                        listener.onFailure(node.path("id").asString(), display, exClass, message, workerId);
+                        listener.onFailure(id, display, exClass, message, workerId);
                     }
                     case "ABORTED" -> skipped++;
                     default -> {}
                 }
             }
-            listener.onTestFinished(
-                    node.path("id").asString(), display, status, isTest, duration, workerId);
+            listener.onTestFinished(id, display, status, isTest, wasStatic, duration, workerId);
         }
 
         private void onSkipped(JsonNode node) {
             boolean isTest = "TEST".equals(node.path("type").asString());
+            String id = node.path("id").asString();
+            boolean wasStatic = isTest && !dynamicIds.contains(id);
             if (isTest) skipped++;
             listener.onTestSkipped(
-                    node.path("id").asString(),
+                    id,
                     node.path("display").asString(),
                     node.path("reason").asString(""),
                     isTest,
+                    wasStatic,
                     workerId);
         }
 
