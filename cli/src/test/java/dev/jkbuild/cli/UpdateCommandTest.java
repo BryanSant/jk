@@ -2,6 +2,7 @@
 package dev.jkbuild.cli;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import org.junit.jupiter.api.AfterEach;
@@ -45,7 +46,35 @@ class UpdateCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+        ActiveConfig.reset();
+    }
+
+    @Test
+    void update_offline_resolves_from_journal(@TempDir Path tempDir) throws Exception {
+        registerMetadata("com.foo", "leaf", "1.0");
+        registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
+        registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
+        Path cache = tempDir.resolve("cache");
+
+        // Warm cache + journal online.
+        run("new", tempDir.toString());
+        run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
+        assertThat(run("update", "-C", tempDir.toString(),
+                "--repo-url", base.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        Files.delete(tempDir.resolve("jk.lock"));
+
+        // Offline re-solve must come entirely from the journal.
+        server.stop(0);
+        int exit = run("update", "--offline", "-C", tempDir.toString(),
+                "--cache-dir", cache.toString());
+        assertThat(exit).isEqualTo(0);
+
+        Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
+        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+                .containsExactly("com.foo:leaf");
+    }
 
     @Test
     void update_rewrites_lockfile_after_dep_added(@TempDir Path tempDir) throws Exception {

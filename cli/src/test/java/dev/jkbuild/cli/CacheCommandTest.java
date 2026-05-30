@@ -119,6 +119,34 @@ class CacheCommandTest {
         assertThat(stdout).contains("nothing to clean");
     }
 
+    @Test
+    void search_lists_cached_coordinates_with_versions(@TempDir Path tempDir) {
+        Path cache = tempDir.resolve("cache");
+        dev.jkbuild.cache.Journal journal = new dev.jkbuild.cache.Journal(cache);
+        journal.record(dev.jkbuild.model.Coordinate.of("com.fasterxml.jackson.core",
+                "jackson-databind", "2.18.2"), "pom", "a", 1, "central", "u");
+        journal.record(dev.jkbuild.model.Coordinate.of("com.fasterxml.jackson.core",
+                "jackson-databind", "2.17.1"), "jar", "b", 1, "central", "u");
+        journal.record(dev.jkbuild.model.Coordinate.of("com.google.guava",
+                "guava", "33.0.0-jre"), "pom", "c", 1, "central", "u");
+
+        String stdout = capture(() -> run("cache", "search", "jackson",
+                "--cache-dir", cache.toString()));
+
+        assertThat(stdout).contains("com.fasterxml.jackson.core:jackson-databind");
+        // newest-first version ordering
+        assertThat(stdout).contains("2.18.2, 2.17.1");
+        assertThat(stdout).doesNotContain("guava");
+        assertThat(stdout).contains("1 coordinate, 2 versions cached");
+    }
+
+    @Test
+    void search_with_no_matches_returns_nonzero(@TempDir Path tempDir) {
+        Path cache = tempDir.resolve("cache");
+        int exit = run("cache", "search", "nonexistent", "--cache-dir", cache.toString());
+        assertThat(exit).isEqualTo(1);
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static Path writeBlob(Path file, byte[] body) throws Exception {

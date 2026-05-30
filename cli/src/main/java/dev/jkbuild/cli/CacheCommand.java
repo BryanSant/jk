@@ -1,17 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cache.Journal;
+import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Option;
+import picocli.CommandLine.Parameters;
 import picocli.CommandLine.Spec;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Callable;
 
 /**
@@ -29,6 +34,7 @@ import java.util.concurrent.Callable;
         subcommands = {
                 CacheCommand.Dir.class,
                 CacheCommand.Info.class,
+                CacheCommand.Search.class,
                 CacheCommand.Prune.class,
                 CacheCommand.Clean.class,
         })
@@ -81,6 +87,81 @@ public final class CacheCommand implements Callable<Integer> {
             System.out.printf("  Total:         %s files, %s%n",
                     fmtCount(sha.files + actions.files), fmtBytes(sha.bytes + actions.bytes));
             return 0;
+        }
+    }
+
+    @Command(name = "search",
+            description = "Search locally-cached artifacts by group/artifact substring")
+    public static final class Search implements Callable<Integer> {
+
+        @Parameters(arity = "1..*", paramLabel = "<term>",
+                description = "One or more substrings. All must match (in group or artifact).")
+        List<String> terms;
+
+        @Option(names = "--limit",
+                description = "Cap the number of coordinates displayed (default: no cap).")
+        Integer limit;
+
+        @Option(names = "--cache-dir", hidden = true,
+                description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
+        Path cacheDir;
+
+        @Override
+        public Integer call() {
+            Journal journal = new Journal(resolveCacheRoot(cacheDir));
+            List<String> lowerTerms = new ArrayList<>(terms.size());
+            for (String t : terms) lowerTerms.add(t.toLowerCase(Locale.ROOT));
+
+            List<Journal.Module> hits = journal.modules().stream()
+                    .filter(m -> allMatch(lowerTerms,
+                            m.group().toLowerCase(Locale.ROOT),
+                            m.artifact().toLowerCase(Locale.ROOT)))
+                    .sorted(Comparator.comparing(Journal.Module::moduleKey))
+                    .toList();
+
+            if (hits.isEmpty()) {
+                System.out.println("No cached coordinates match: " + String.join(" ", terms));
+                return 1;
+            }
+
+            int total = hits.size();
+            int shown = limit != null && limit > 0 && total > limit ? limit : total;
+            int keyWidth = 0;
+            for (int i = 0; i < shown; i++) {
+                keyWidth = Math.max(keyWidth, hits.get(i).moduleKey().length());
+            }
+
+            long versionCount = 0;
+            for (int i = 0; i < shown; i++) {
+                Journal.Module m = hits.get(i);
+                List<String> versions = new ArrayList<>(m.versions());
+                versions.sort((a, b) -> Versions.compare(b, a)); // newest first
+                versionCount += versions.size();
+                System.out.println(pad(m.moduleKey(), keyWidth) + "  " + String.join(", ", versions));
+            }
+            if (shown < total) {
+                System.out.println("… and " + (total - shown) + " more "
+                        + "(pass --limit " + total + " or refine the search)");
+            }
+            System.out.printf("%s coordinate%s, %s version%s cached%n",
+                    fmtCount(shown), shown == 1 ? "" : "s",
+                    fmtCount(versionCount), versionCount == 1 ? "" : "s");
+            return 0;
+        }
+
+        private static boolean allMatch(List<String> terms, String... fields) {
+            for (String t : terms) {
+                boolean found = false;
+                for (String f : fields) {
+                    if (f.contains(t)) { found = true; break; }
+                }
+                if (!found) return false;
+            }
+            return true;
+        }
+
+        private static String pad(String s, int width) {
+            return s.length() >= width ? s : s + " ".repeat(width - s.length());
         }
     }
 

@@ -4,7 +4,6 @@ package dev.jkbuild.resolver;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.repo.EffectivePom;
 import dev.jkbuild.repo.EffectivePomBuilder;
-import dev.jkbuild.repo.MavenMetadata;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.Pom;
 import dev.jkbuild.repo.RepoGroup;
@@ -14,7 +13,6 @@ import dev.jkbuild.resolver.pubgrub.VersionSet;
 import dev.jkbuild.util.JkThreads;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -95,18 +93,16 @@ public final class MavenPackageSource implements PackageSource {
         }
         List<String> cached = versionCache.get(pkg);
         if (cached != null) return cached;
-        Coordinate metadataCoord = withVersion(pkg, "any");
-        RepoGroup.RepoFetched hit = repos.tryFetchMetadata(metadataCoord).orElse(null);
-        if (hit == null) {
-            versionCache.put(pkg, List.of());
-            return List.of();
-        }
-        MavenMetadata metadata = MavenMetadata.parse(Files.readAllBytes(hit.fetched().cachePath()));
+        // Online this merges each repo's maven-metadata.xml; offline it returns
+        // only the versions actually present in the local journal, so PubGrub
+        // never picks a version whose POM/jar we can't read without a network.
+        List<String> available = repos.availableVersions(withVersion(pkg, "any"));
         // PubGrub picks the first version that satisfies — order highest first.
-        List<String> sorted = new ArrayList<>(metadata.versions());
+        List<String> sorted = new ArrayList<>(available);
         sorted.sort((a, b) -> Versions.compare(b, a));
-        versionCache.put(pkg, sorted);
-        return sorted;
+        List<String> result = List.copyOf(sorted);
+        versionCache.put(pkg, result);
+        return result;
     }
 
     @Override

@@ -2,8 +2,10 @@
 package dev.jkbuild.cli;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
+import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.util.Hashing;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -18,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,6 +51,7 @@ class LockCommandTest {
     @AfterEach
     void stop() {
         server.stop(0);
+        ActiveConfig.reset();
     }
 
     @Test
@@ -184,10 +188,116 @@ class LockCommandTest {
                 .doesNotContain("com.acme:libb");
     }
 
+    @Test
+    void offline_reuses_a_satisfiable_lock(@TempDir Path tempDir) throws Exception {
+        registerRootLeafGraph();
+        Path cache = tempDir.resolve("cache");
+
+        run("new", tempDir.toString());
+        run("add", "com.foo:root:1.0", "-C", tempDir.toString());
+        assertThat(run("lock", "-C", tempDir.toString(),
+                "--repo-url", base.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+
+        // Stop the server so any network attempt would fail; offline must not need it.
+        server.stop(0);
+        int exit = run("lock", "--offline", "-C", tempDir.toString(),
+                "--cache-dir", cache.toString());
+        assertThat(exit).isEqualTo(0);
+
+        Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
+        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+                .containsExactly("com.foo:leaf", "com.foo:root");
+    }
+
+    @Test
+    void offline_hard_fails_when_declared_dep_missing_from_lock(@TempDir Path tempDir) throws Exception {
+        // jk.toml declares com.foo:root, but the lockfile has no such package.
+        writeProjectWithRootDep(tempDir);
+        LockfileWriter.write(
+                new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
+                        Lockfile.RESOLUTION_ALGORITHM, List.of()),
+                tempDir.resolve("jk.lock"));
+
+        int exit = run("lock", "--offline", "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(6);
+    }
+
+    @Test
+    void offline_hard_fails_when_locked_blob_not_cached(@TempDir Path tempDir) throws Exception {
+        writeProjectWithRootDep(tempDir);
+        // Lock references a checksum whose blob is absent from the (empty) cache.
+        Lockfile.Package root = new Lockfile.Package(
+                "com.foo:root", "1.0", "central+" + base, "sha256:" + "00".repeat(32),
+                null, List.of(), List.of(), null);
+        LockfileWriter.write(
+                new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
+                        Lockfile.RESOLUTION_ALGORITHM, List.of(root)),
+                tempDir.resolve("jk.lock"));
+
+        int exit = run("lock", "--offline", "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(6);
+    }
+
+    @Test
+    void offline_solves_from_journal_when_no_lock_exists(@TempDir Path tempDir) throws Exception {
+        registerRootLeafGraph();
+        Path cache = tempDir.resolve("cache");
+
+        // Warm the shared cache + journal with an online lock in one project.
+        Path online = Files.createDirectories(tempDir.resolve("online"));
+        run("new", online.toString());
+        run("add", "com.foo:root:1.0", "-C", online.toString());
+        assertThat(run("lock", "-C", online.toString(),
+                "--repo-url", base.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+
+        // Fresh project, no lockfile, offline — must resolve from the journal.
+        Path fresh = Files.createDirectories(tempDir.resolve("fresh"));
+        writeProjectWithRootDep(fresh);
+        server.stop(0);
+        int exit = run("lock", "--offline", "-C", fresh.toString(),
+                "--cache-dir", cache.toString());
+        assertThat(exit).isEqualTo(0);
+
+        Lockfile lock = LockfileReader.read(fresh.resolve("jk.lock"));
+        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+                .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static int run(String... args) {
         return Jk.execute(args);
+    }
+
+    /** Register a root -> leaf graph (metadata + pom + jar for each) on the test repo. */
+    private void registerRootLeafGraph() {
+        registerMetadata("com.foo", "leaf", "1.0");
+        registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
+        registerJar("com.foo", "leaf", "1.0", "leaf-jar".getBytes(StandardCharsets.UTF_8));
+        registerMetadata("com.foo", "root", "1.0");
+        registerPom("com.foo", "root", "1.0", pom("com.foo", "root", "1.0", """
+                <dependency>
+                  <groupId>com.foo</groupId>
+                  <artifactId>leaf</artifactId>
+                  <version>1.0</version>
+                </dependency>
+                """));
+        registerJar("com.foo", "root", "1.0", "root-jar".getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static void writeProjectWithRootDep(Path dir) throws IOException {
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                artifact = "app"
+                version = "0.1.0"
+
+                [dependencies.main]
+                root = { group = "com.foo", artifact = "root", version = "1.0" }
+                """);
     }
 
     private static Lockfile.Package pkg(Lockfile lock, String module) {

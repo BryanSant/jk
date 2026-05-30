@@ -2,6 +2,7 @@
 package dev.jkbuild.resolver;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cache.Journal;
 import dev.jkbuild.http.HostRateLimiter;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
@@ -33,10 +34,14 @@ public final class CacheSync {
 
     private final Cas cas;
     private final Http http;
+    private final Journal journal;
 
     public CacheSync(Cas cas, Http http) {
         this.cas = Objects.requireNonNull(cas, "cas");
         this.http = Objects.requireNonNull(http, "http");
+        // Populate the coordinate→hash index as `jk sync` downloads artifacts,
+        // so an offline resolve later has them addressable by coordinate.
+        this.journal = new Journal(cas.root());
     }
 
     public Report sync(Lockfile lock) throws IOException, InterruptedException {
@@ -169,7 +174,7 @@ public final class CacheSync {
         }
         String name = source.substring(0, plus);
         URI url = URI.create(source.substring(plus + 1));
-        MavenRepo repo = new MavenRepo(name, url, http, cas);
+        MavenRepo repo = new MavenRepo(name, url, http, cas, journal);
         cache.put(source, repo);
         return repo;
     }

@@ -2,6 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cache.Journal;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
@@ -27,16 +28,19 @@ final class RepoGroupBuilder {
 
     static RepoGroup buildFor(JkBuild project, URI overrideUrl, Cas cas) {
         Http http = new Http();
+        // Coordinate→hash index over the CAS, so fetches are recorded and an
+        // offline run can resolve from what's already on disk.
+        Journal journal = new Journal(cas.root());
         List<MavenRepo> repos = new ArrayList<>();
         if (overrideUrl != null) {
             // Tests pin one URL; project-declared repos are ignored.
-            repos.add(new MavenRepo("central", overrideUrl, http, cas));
+            repos.add(new MavenRepo("central", overrideUrl, http, cas, journal));
         } else if (project.repositories().isEmpty()) {
             repos.add(new MavenRepo(RepositorySpec.MAVEN_CENTRAL.name(),
-                    RepositorySpec.MAVEN_CENTRAL.url(), http, cas));
+                    RepositorySpec.MAVEN_CENTRAL.url(), http, cas, journal));
         } else {
             for (RepositorySpec spec : project.repositories()) {
-                repos.add(new MavenRepo(spec.name(), spec.url(), http, cas));
+                repos.add(new MavenRepo(spec.name(), spec.url(), http, cas, journal));
             }
         }
         return new RepoGroup(repos);

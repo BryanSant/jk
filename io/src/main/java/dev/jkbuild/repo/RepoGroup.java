@@ -46,6 +46,20 @@ public final class RepoGroup {
         return tryFetch(coord, MavenRepo::fetchMetadata);
     }
 
+    /**
+     * Union of the versions of {@code coord}'s {@code group:artifact}
+     * available across all repos, de-duplicated, preserving first-seen order.
+     * Online this merges each repo's {@code maven-metadata.xml}; offline it
+     * merges what each repo's journal holds locally.
+     */
+    public List<String> availableVersions(Coordinate coord) throws IOException, InterruptedException {
+        java.util.LinkedHashSet<String> union = new java.util.LinkedHashSet<>();
+        for (MavenRepo repo : repos) {
+            union.addAll(repo.availableVersions(coord));
+        }
+        return List.copyOf(union);
+    }
+
     private Optional<RepoFetched> tryFetch(Coordinate coord, Fetcher fetcher)
             throws IOException, InterruptedException {
         for (MavenRepo repo : repos) {

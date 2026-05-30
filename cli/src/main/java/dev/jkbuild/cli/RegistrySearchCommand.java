@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cache.Journal;
 import dev.jkbuild.registry.AliasRegistry;
+import dev.jkbuild.resolver.Versions;
+import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -34,11 +38,16 @@ public final class RegistrySearchCommand implements Callable<Integer> {
             description = "Cap the number of results displayed (default: no cap).")
     Integer limit;
 
+    @Option(names = "--cache-dir", hidden = true,
+            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
+    Path cacheDir;
+
     @Mixin GlobalOptions global;
 
     @Override
     public Integer call() {
         AliasRegistry registry = AliasRegistry.layered();
+        Journal journal = new Journal(cacheDir != null ? cacheDir : JkDirs.cache());
         List<String> lowerTerms = new ArrayList<>(terms.size());
         for (String t : terms) lowerTerms.add(t.toLowerCase(Locale.ROOT));
 
@@ -48,13 +57,19 @@ public final class RegistrySearchCommand implements Callable<Integer> {
             String lowerName = name.toLowerCase(Locale.ROOT);
             String lowerGroup = src.module().group().toLowerCase(Locale.ROOT);
             String lowerArtifact = src.module().artifact().toLowerCase(Locale.ROOT);
-            if (allMatch(lowerTerms, lowerName, lowerGroup, lowerArtifact)) {
-                hits.add(new Hit(name, src));
-            }
+            if (!allMatch(lowerTerms, lowerName, lowerGroup, lowerArtifact)) continue;
+            // Annotate with what's actually cached locally; offline keeps only
+            // coords we can use without a network.
+            List<String> cached = new ArrayList<>(
+                    journal.versions(src.module().group(), src.module().artifact()));
+            cached.sort((a, b) -> Versions.compare(b, a)); // newest first
+            if (global.offline && cached.isEmpty()) continue;
+            hits.add(new Hit(name, src, cached));
         }
 
         if (hits.isEmpty()) {
-            System.out.println("No matches for: " + String.join(" ", terms));
+            String suffix = global.offline ? " (cached locally)" : "";
+            System.out.println("No matches" + suffix + " for: " + String.join(" ", terms));
             return 1;
         }
 
@@ -70,10 +85,12 @@ public final class RegistrySearchCommand implements Callable<Integer> {
 
         for (int i = 0; i < shown; i++) {
             Hit h = hits.get(i);
+            String cached = h.cached.isEmpty()
+                    ? "" : "  (cached: " + String.join(", ", h.cached) + ")";
             System.out.println(
                     pad(h.name, nameWidth) + "  ["
                             + pad(h.src.layer(), layerWidth) + "]  "
-                            + h.src.module().moduleKey());
+                            + h.src.module().moduleKey() + cached);
         }
         if (shown < total) {
             System.out.println("… and " + (total - shown) + " more "
@@ -98,5 +115,5 @@ public final class RegistrySearchCommand implements Callable<Integer> {
         return s + " ".repeat(width - s.length());
     }
 
-    private record Hit(String name, AliasRegistry.Source src) {}
+    private record Hit(String name, AliasRegistry.Source src, List<String> cached) {}
 }

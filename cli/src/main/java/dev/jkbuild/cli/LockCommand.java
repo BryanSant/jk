@@ -6,8 +6,10 @@ import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.lock.Lockfile;
+import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
@@ -147,7 +149,25 @@ public final class LockCommand implements Callable<Integer> {
                 .execute(ctx -> {
                     ctx.label("Resolving");
                     JkBuild effective = ctx.require(EFFECTIVE);
-                    RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, new Cas(cache));
+                    Cas cas = new Cas(cache);
+                    // Offline fast path: if a lockfile exists, honor it from
+                    // the local CAS instead of re-solving. Hard-fail (no
+                    // partial locks) when the cache can't satisfy it. With no
+                    // lockfile we fall through to a normal solve, which the
+                    // journal-backed repos serve offline automatically.
+                    if (global.offline && Files.exists(lockFile)) {
+                        try {
+                            Lockfile existing = LockfileReader.read(lockFile);
+                            requireOfflineSatisfiable(effective, existing, cas);
+                            ctx.progress(existing.packages().size());
+                            ctx.put(LOCKFILE, existing);
+                            return;
+                        } catch (Exception e) {
+                            ctx.error("resolve", e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
                     LockOrchestrator orchestrator = new LockOrchestrator(repos);
                     dev.jkbuild.resolver.ResolveObserver observer =
                             new dev.jkbuild.resolver.ResolveObserver() {
@@ -228,5 +248,36 @@ public final class LockCommand implements Callable<Integer> {
                     + (pkgs == 1 ? "y" : "ies") + suffix + " " + inTime);
         }
         return 0;
+    }
+
+    /**
+     * Throw if an existing lockfile can't be honored entirely from the local
+     * CAS while offline: every declared (non-platform) coordinate must be a
+     * locked package, and every checksummed package's blob must be present.
+     */
+    private static void requireOfflineSatisfiable(JkBuild effective, Lockfile lock, Cas cas) {
+        java.util.Set<String> locked = new java.util.HashSet<>();
+        for (Lockfile.Package pkg : lock.packages()) {
+            locked.add(pkg.name());
+        }
+        for (var entry : effective.dependencies().byScope().entrySet()) {
+            if (entry.getKey() == Scope.PLATFORM) continue; // BOMs aren't resolved packages
+            for (var dep : entry.getValue()) {
+                if (!locked.contains(dep.module())) {
+                    throw new IllegalStateException("offline: " + dep.module()
+                            + " is declared in jk.toml but not in jk.lock; run `jk lock` online first");
+                }
+            }
+        }
+        for (Lockfile.Package pkg : lock.packages()) {
+            String checksum = pkg.checksum();
+            if (checksum == null) continue;
+            String hex = checksum.startsWith("sha256:")
+                    ? checksum.substring("sha256:".length()) : checksum;
+            if (!cas.contains(hex)) {
+                throw new IllegalStateException("offline: " + pkg.name() + ":" + pkg.version()
+                        + " is locked but its artifact isn't cached; run `jk sync` online first");
+            }
+        }
     }
 }
