@@ -4,9 +4,11 @@ package dev.jkbuild.cli;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
 import dev.jkbuild.run.Goal;
@@ -61,18 +63,25 @@ public final class UpdateCommand implements Callable<Integer> {
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
-    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    private static final GoalKey<JkBuild> EFFECTIVE = GoalKey.of("effective-build", JkBuild.class);
     private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
 
     @Override
     public Integer call() throws Exception {
-        Path dir = global.workingDir();
-        Path buildFile = dir.resolve("jk.toml");
-        Path lockFile = dir.resolve("jk.lock");
-        if (!Files.exists(buildFile)) {
-            System.err.println("jk update: no jk.toml in " + dir);
+        Path invokedDir = global.workingDir();
+        if (!Files.exists(invokedDir.resolve("jk.toml"))) {
+            System.err.println("jk update: no jk.toml in " + invokedDir);
             return 2;
         }
+        // Re-resolve the whole workspace into the root jk.lock: when invoked
+        // from a member, redirect to the enclosing workspace root (Cargo/uv).
+        Path dir = WorkspaceRedirect.effectiveDir(invokedDir);
+        if (!dir.equals(invokedDir) && !global.outputIsJson()) {
+            System.err.println("jk update: updating workspace root " + dir
+                    + " (from member " + invokedDir.getFileName() + ")");
+        }
+        Path buildFile = dir.resolve("jk.toml");
+        Path lockFile = dir.resolve("jk.lock");
         if (precise != null && !precise.isBlank()) {
             System.err.println("jk update: --precise is recognized but not yet implemented; "
                     + "performing a full re-resolve instead.");
@@ -92,7 +101,18 @@ public final class UpdateCommand implements Callable<Integer> {
                         ctx.error("toml", e.getMessage());
                         throw new RuntimeException(e);
                     }
-                    ctx.put(PROJECT, parsed);
+                    JkBuild effective = parsed;
+                    if (parsed.isWorkspaceRoot()) {
+                        ctx.label("merge workspace members");
+                        try {
+                            var members = WorkspaceLoader.loadMembers(dir, parsed);
+                            effective = WorkspaceMerge.merge(parsed, members.values());
+                        } catch (RuntimeException e) {
+                            ctx.error("workspace", e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                    }
+                    ctx.put(EFFECTIVE, effective);
                     ctx.progress(1);
                 })
                 .build();
@@ -103,11 +123,12 @@ public final class UpdateCommand implements Callable<Integer> {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("re-resolve dependencies");
+                    JkBuild effective = ctx.require(EFFECTIVE);
                     RepoGroup repos = RepoGroupBuilder.buildFor(
-                            ctx.require(PROJECT), repoUrl, new Cas(cache));
+                            effective, repoUrl, new Cas(cache));
                     LockOrchestrator orchestrator = new LockOrchestrator(repos);
                     try {
-                        Lockfile lock = orchestrator.lock(ctx.require(PROJECT),
+                        Lockfile lock = orchestrator.lock(effective,
                                 Jk.VERSION, features, !noDefaultFeatures);
                         ctx.put(LOCKFILE, lock);
                     } catch (Exception e) {

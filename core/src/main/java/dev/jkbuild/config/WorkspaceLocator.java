@@ -25,6 +25,38 @@ public final class WorkspaceLocator {
     private WorkspaceLocator() {}
 
     /**
+     * Return the nearest enclosing workspace root above {@code dir}, or
+     * empty if there is none.
+     *
+     * <p>Unlike {@link #findRoot}, this does <em>not</em> require {@code dir}
+     * to already appear in {@code workspace.members} — it's used by verbs
+     * that are about to create or register a member ({@code jk new},
+     * {@code jk init}, {@code jk add <path>}), so the member may not be
+     * listed (or even exist) yet. We search strict ancestors only, so a
+     * workspace root is never reported as enclosing itself.
+     */
+    public static Optional<Path> findEnclosingWorkspace(Path dir) throws IOException {
+        Path normalized = dir.toAbsolutePath().normalize();
+        Path candidate = normalized;
+        for (int depth = 0; depth < MAX_DEPTH; depth++) {
+            Path parent = candidate.getParent();
+            if (parent == null) break;
+            Path rootJkToml = parent.resolve("jk.toml");
+            if (Files.exists(rootJkToml)) {
+                try {
+                    if (JkBuildParser.parse(rootJkToml).isWorkspaceRoot()) {
+                        return Optional.of(parent);
+                    }
+                } catch (RuntimeException ignored) {
+                    // Unparseable ancestor manifest — keep walking up.
+                }
+            }
+            candidate = parent;
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Return the workspace root that owns {@code memberDir}, or empty if
      * {@code memberDir} is not inside a workspace.
      */

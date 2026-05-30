@@ -98,6 +98,52 @@ class UpdateCommandTest {
         assertThat(exit).isEqualTo(2);
     }
 
+    @Test
+    void update_from_member_dir_rewrites_workspace_root_lock(@TempDir Path tempDir) throws Exception {
+        registerMetadata("com.foo", "leaf", "1.0");
+        registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
+        registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
+
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                artifact = "ws"
+                version = "0.1.0"
+
+                [workspace]
+                members = ["app", "libb"]
+                """);
+        Path app = Files.createDirectories(tempDir.resolve("app"));
+        Files.writeString(app.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                artifact = "app"
+                version = "0.1.0"
+
+                [dependencies.main]
+                libb = { group = "com.acme", artifact = "libb", version = "0.1.0" }
+                leaf = { group = "com.foo",  artifact = "leaf", version = "1.0" }
+                """);
+        Path libb = Files.createDirectories(tempDir.resolve("libb"));
+        Files.writeString(libb.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                artifact = "libb"
+                version = "0.1.0"
+                """);
+
+        int exit = run("update",
+                "-C", app.toString(),
+                "--repo-url", base.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(0);
+
+        assertThat(Files.exists(app.resolve("jk.lock"))).isFalse();
+        Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
+        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+                .containsExactly("com.foo:leaf");
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static int run(String... args) {

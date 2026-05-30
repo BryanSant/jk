@@ -69,15 +69,21 @@ public final class LockCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        Path dir = global.workingDir();
+        Path invokedDir = global.workingDir();
+        if (!Files.exists(invokedDir.resolve("jk.toml"))) {
+            System.err.println("jk lock: no jk.toml in " + invokedDir);
+            return 2;
+        }
+        // Lock the whole workspace into the root jk.lock: when invoked from
+        // a member, redirect to the enclosing workspace root (Cargo/uv).
+        Path dir = WorkspaceRedirect.effectiveDir(invokedDir);
+        if (!dir.equals(invokedDir) && !global.outputIsJson()) {
+            System.err.println("jk lock: locking workspace root " + dir
+                    + " (from member " + invokedDir.getFileName() + ")");
+        }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
-
-        if (!Files.exists(buildFile)) {
-            System.err.println("jk lock: no jk.toml in " + dir);
-            return 2;
-        }
         Files.createDirectories(cache);
 
         AtomicInteger memberCount = new AtomicInteger(0);
