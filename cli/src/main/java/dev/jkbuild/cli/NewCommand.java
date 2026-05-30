@@ -2,6 +2,9 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.config.JkBuildEditor;
+import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.cli.tui.Wizard;
@@ -39,8 +42,15 @@ import java.util.concurrent.Callable;
  * interactive wizard (see {@code dev.jkbuild.cli.tui}). Otherwise reads from
  * flags with sane defaults. Both paths converge on {@link NewInputs} +
  * {@link NewScaffolder#write(NewInputs)}.
+ *
+ * <p>Run inside an existing workspace, the new project is registered as a
+ * member: its path is appended to the root {@code [workspace].members}, its
+ * group is inherited from the workspace root, and no per-member
+ * {@code jk.lock} is written (the root lock owns resolution). Mirrors
+ * {@code cargo new} / {@code uv init}.
  */
-@Command(name = "new", aliases = {"create"}, description = "Create a new jk project in a new directory")
+@Command(name = "new", aliases = {"create"},
+        description = "Create a new jk project (registers it as a workspace member when run inside a workspace)")
 public final class NewCommand implements Callable<Integer> {
 
     @Option(names = "--name", description = "Project name (target directory).")
@@ -87,6 +97,10 @@ public final class NewCommand implements Callable<Integer> {
     private static final GoalKey<Answers> ANSWERS = GoalKey.of("answers", Answers.class);
     private static final GoalKey<NewJdkCandidate> PICKED = GoalKey.of("picked", NewJdkCandidate.class);
     private static final GoalKey<NewInputs> INPUTS = GoalKey.of("inputs", NewInputs.class);
+
+    /** Set during scaffold when the new project was registered as a workspace member. */
+    private record Member(Path root, String rel) {}
+    private volatile Member registered;
 
     @Override
     public Integer call() throws IOException {
@@ -237,7 +251,7 @@ public final class NewCommand implements Callable<Integer> {
                     }
                     ctx.label("scaffold " + inputs.name());
                     Files.createDirectories(inputs.directory());
-                    NewScaffolder.write(inputs);
+                    scaffoldAndRegister(inputs);
                     ctx.put(INPUTS, inputs);
                     ctx.progress(1);
                 })
@@ -277,8 +291,8 @@ public final class NewCommand implements Callable<Integer> {
 
             NewInputs inputs = goal.get(INPUTS).orElseThrow();
             goal.get(TERMINAL).ifPresentOrElse(
-                    t -> emitSuccessOnTerminal(inputs, t),
-                    () -> emitSuccessPlain(inputs));
+                    t -> emitSuccessOnTerminal(inputs, t, registered),
+                    () -> emitSuccessPlain(inputs, registered));
             return 0;
         } finally {
             goal.get(TERMINAL).ifPresent(t -> {
@@ -309,7 +323,7 @@ public final class NewCommand implements Callable<Integer> {
                 .execute(ctx -> {
                     ctx.label("scaffold " + inputs.name());
                     Files.createDirectories(inputs.directory());
-                    NewScaffolder.write(inputs);
+                    scaffoldAndRegister(inputs);
                     ctx.progress(1);
                 })
                 .build();
@@ -320,7 +334,7 @@ public final class NewCommand implements Callable<Integer> {
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) return 1;
-        if (!global.outputIsJson()) emitSuccessPlain(inputs);
+        if (!global.outputIsJson()) emitSuccessPlain(inputs, registered);
         return 0;
     }
 
@@ -356,16 +370,55 @@ public final class NewCommand implements Callable<Integer> {
                 || kotlinModule != null;
     }
 
+    /**
+     * Scaffold the project, then — if it lands inside an existing workspace —
+     * skip the per-member {@code jk.lock} and register the new member in the
+     * root {@code [workspace].members} (Cargo/uv: {@code cargo new} /
+     * {@code uv init} edit the workspace manifest). Records the registration
+     * for the success message.
+     */
+    private void scaffoldAndRegister(NewInputs inputs) throws IOException {
+        Optional<Path> rootOpt = WorkspaceLocator.findEnclosingWorkspace(inputs.directory());
+        NewScaffolder.write(inputs, rootOpt.isEmpty());
+        if (rootOpt.isPresent()) {
+            Path root = rootOpt.get();
+            String rel = root.relativize(inputs.directory()).toString().replace('\\', '/');
+            Path rootToml = root.resolve("jk.toml");
+            Files.writeString(rootToml,
+                    JkBuildEditor.addWorkspaceMember(Files.readString(rootToml), rel));
+            registered = new Member(root, rel);
+        }
+    }
+
+    /**
+     * Default group for a member: the enclosing workspace root's
+     * {@code [project].group}, so members are coordinated like their
+     * siblings. Empty when {@code target} isn't inside a workspace.
+     */
+    private static Optional<String> workspaceGroup(Path target) {
+        try {
+            Optional<Path> root = WorkspaceLocator.findEnclosingWorkspace(target);
+            if (root.isPresent()) {
+                String g = JkBuildParser.parse(root.get().resolve("jk.toml")).project().group();
+                if (g != null && !g.isBlank()) return Optional.of(g);
+            }
+        } catch (IOException | RuntimeException ignored) {
+            // Fall through to the standard group guess.
+        }
+        return Optional.empty();
+    }
+
     private NewInputs fromFlags(Path cwd) {
         var presetName = wizardPresetName(directory, cwd);
         var resolvedName = (name != null && !name.isBlank())
                 ? name
                 : presetName.orElse("untitled");
         var resolvedArtifact = (artifact != null && !artifact.isBlank()) ? artifact : resolvedName;
+        Path target = resolveTarget(directory, cwd, resolvedName);
         var resolvedGroup = (group != null && !group.isBlank())
                 ? group
-                : NewGroupGuess.guess(cwd,
-                        Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null));
+                : workspaceGroup(target).orElseGet(() -> NewGroupGuess.guess(cwd,
+                        Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null)));
         var resolvedJdk = (jdk != null && !jdk.isBlank()) ? jdk : "25";
         int resolvedJdkMajor = parseJdkMajorOrDefault(resolvedJdk);
         var resolvedLang = parseLanguage(lang);
@@ -377,7 +430,6 @@ public final class NewCommand implements Callable<Integer> {
         var resolvedKotlinModule = (kotlinModule != null && !kotlinModule.isBlank())
                 ? Optional.of(kotlinModule)
                 : Optional.<String>empty();
-        Path target = resolveTarget(directory, cwd, resolvedName);
         return new NewInputs(
                 resolvedGroup, resolvedName, resolvedArtifact,
                 resolvedJdk, resolvedJdkMajor,
@@ -679,9 +731,10 @@ public final class NewCommand implements Callable<Integer> {
         var resolvedArtifact = answers.has("artifact") && !answers.get("artifact").isBlank()
                 ? answers.get("artifact")
                 : resolvedName;
+        Path target = resolveTarget(directory, cwd, resolvedName);
         var resolvedGroup = answers.has("group") && !answers.get("group").isBlank()
                 ? answers.get("group")
-                : "com.example";
+                : workspaceGroup(target).orElse("com.example");
 
         var resolvedJdk = String.valueOf(pickedOpt.major());
         int resolvedJdkMajor = pickedOpt.major();
@@ -715,7 +768,6 @@ public final class NewCommand implements Callable<Integer> {
                 ? Optional.of(deriveMainFqcn(resolvedGroup, resolvedLang, resolvedKotlinCompact))
                 : Optional.<String>empty();
 
-        Path target = resolveTarget(directory, cwd, resolvedName);
         return new NewInputs(
                 resolvedGroup, resolvedName, resolvedArtifact,
                 resolvedJdk, resolvedJdkMajor,
@@ -725,8 +777,16 @@ public final class NewCommand implements Callable<Integer> {
                 deps, true, target);
     }
 
-    private static void emitSuccessOnTerminal(NewInputs inputs, Terminal terminal) {
+    private static void emitSuccessOnTerminal(NewInputs inputs, Terminal terminal, Member member) {
         var writer = terminal.writer();
+        if (member != null) {
+            writer.println(new AttributedStringBuilder()
+                    .append("Registered member ", Theme.dim())
+                    .append("'" + member.rel() + "'", Theme.success())
+                    .append(" in workspace " + member.root(), Theme.dim())
+                    .toAttributedString()
+                    .toAnsi(terminal));
+        }
         writer.println(headline("Done. Next:").toAnsi(terminal));
         for (var line : nextSteps(inputs)) {
             writer.println(new AttributedStringBuilder()
@@ -738,9 +798,14 @@ public final class NewCommand implements Callable<Integer> {
         writer.flush();
     }
 
-    private static void emitSuccessPlain(NewInputs inputs) {
+    private static void emitSuccessPlain(NewInputs inputs, Member member) {
         System.out.println("Created " + inputs.directory().resolve("jk.toml"));
-        System.out.println("Created " + inputs.directory().resolve("jk.lock"));
+        if (member == null) {
+            System.out.println("Created " + inputs.directory().resolve("jk.lock"));
+        } else {
+            System.out.println("Registered member '" + member.rel()
+                    + "' in workspace " + member.root());
+        }
         System.out.println();
         System.out.println("Done. Next:");
         for (var line : nextSteps(inputs)) {

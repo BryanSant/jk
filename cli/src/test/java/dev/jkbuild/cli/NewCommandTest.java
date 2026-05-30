@@ -196,6 +196,36 @@ class NewCommandTest {
     }
 
     @Test
+    void new_inside_workspace_registers_member_and_skips_lock(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "dev.jkbuild"
+                artifact = "jk"
+                version  = "0.1.0"
+
+                [workspace]
+                members = ["core"]
+                """);
+        Path app = tempDir.resolve("app");
+
+        int exit = Jk.execute("new", "--name", "app", app.toString());
+        assertThat(exit).isEqualTo(0);
+
+        // Member project scaffolded, but with NO per-member lock (root owns it).
+        assertThat(app.resolve("jk.toml")).exists();
+        assertThat(app.resolve("jk.lock")).doesNotExist();
+
+        // Group inherited from the workspace root.
+        JkBuild member = JkBuildParser.parse(app.resolve("jk.toml"));
+        assertThat(member.project().group()).isEqualTo("dev.jkbuild");
+        assertThat(member.project().artifact()).isEqualTo("app");
+
+        // Registered in the root [workspace].members.
+        JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThat(root.workspace().members()).containsExactly("core", "app");
+    }
+
+    @Test
     void non_tty_skips_wizard(@TempDir Path tempDir) throws IOException {
         var captured = new ByteArrayOutputStream();
         var prevOut = System.out;

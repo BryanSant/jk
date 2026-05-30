@@ -45,6 +45,15 @@ public final class JkBuildEditor {
     /** Any TOML table header. */
     private static final Pattern ANY_HEADER = Pattern.compile("^\\s*\\[[^]]+]\\s*$");
 
+    /** Header line for the {@code [workspace]} table. */
+    private static final Pattern WORKSPACE_HEADER = Pattern.compile("^(\\s*)\\[workspace]\\s*$");
+
+    /** The {@code members = ...} assignment within {@code [workspace]}. */
+    private static final Pattern MEMBERS_KEY = Pattern.compile("^\\s*members\\s*=.*$");
+
+    /** A double-quoted string literal element. */
+    private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
+
     /** A dep entry line: {@code key = { ... }} or {@code key.workspace = true}. Captures key in group 2. */
     private static final Pattern DEP_ENTRY = Pattern.compile(
             "^(\\s*)([A-Za-z][A-Za-z0-9_-]*)(?:\\.[a-zA-Z][a-zA-Z0-9_-]*)?\\s*=.*$");
@@ -139,6 +148,115 @@ public final class JkBuildEditor {
         }
         lines.remove(hit);
         return validated(join(lines));
+    }
+
+    /**
+     * Append {@code memberPath} to the root manifest's
+     * {@code [workspace].members} array, preserving the array's existing
+     * shape (single-line vs multi-line) and any surrounding comments.
+     *
+     * <p>Idempotent: if the path is already a member the content is
+     * returned unchanged. Used by {@code jk new}/{@code jk init}/
+     * {@code jk add <path>} to register a new member, the way
+     * {@code cargo new} / {@code uv init} edit the workspace manifest.
+     *
+     * @throws IllegalStateException if there is no {@code [workspace]} table.
+     */
+    public static String addWorkspaceMember(String content, String memberPath) {
+        if (memberPath == null || memberPath.isBlank()) {
+            throw new IllegalArgumentException("member path must not be blank");
+        }
+        String path = memberPath.replace('\\', '/');
+
+        List<String> lines = splitPreservingTerminator(content);
+        int wsHeader = -1;
+        String wsIndent = "";
+        for (int i = 0; i < lines.size(); i++) {
+            Matcher m = WORKSPACE_HEADER.matcher(lines.get(i));
+            if (m.matches()) {
+                wsHeader = i;
+                wsIndent = m.group(1);
+                break;
+            }
+        }
+        if (wsHeader < 0) {
+            throw new IllegalStateException("no [workspace] table in jk.toml");
+        }
+
+        int end = endOfTable(lines, wsHeader);
+        int membersLine = -1;
+        for (int i = wsHeader + 1; i < end; i++) {
+            if (MEMBERS_KEY.matcher(lines.get(i)).matches()) {
+                membersLine = i;
+                break;
+            }
+        }
+        // No members key yet — add one right under the header.
+        if (membersLine < 0) {
+            lines.add(wsHeader + 1, wsIndent + "members = [\"" + escape(path) + "\"]");
+            return validated(join(lines));
+        }
+
+        // Find the line carrying the array's closing ']'. String elements
+        // never contain ']', so the first ']' at/after membersLine closes it.
+        int closeLine = -1;
+        for (int i = membersLine; i < end; i++) {
+            if (lines.get(i).indexOf(']') >= 0) { closeLine = i; break; }
+        }
+        if (closeLine < 0) {
+            throw new IllegalStateException("malformed members array in [workspace]");
+        }
+
+        // Idempotency: collect existing elements across the array's lines.
+        StringBuilder arrayText = new StringBuilder();
+        for (int i = membersLine; i <= closeLine; i++) arrayText.append(lines.get(i)).append('\n');
+        Matcher q = QUOTED.matcher(arrayText);
+        while (q.find()) {
+            if (q.group(1).equals(path)) return content; // already a member
+        }
+
+        if (membersLine == closeLine) {
+            insertInlineMember(lines, closeLine, path);
+        } else {
+            insertMultilineMember(lines, membersLine, closeLine, path);
+        }
+        return validated(join(lines));
+    }
+
+    /** Insert {@code "path"} before the {@code ]} on a single-line members array. */
+    private static void insertInlineMember(List<String> lines, int lineIdx, String path) {
+        String line = lines.get(lineIdx);
+        int close = line.lastIndexOf(']');
+        int j = close - 1;
+        while (j >= 0 && Character.isWhitespace(line.charAt(j))) j--;
+        char prev = j >= 0 ? line.charAt(j) : '\0';
+        String insertion = switch (prev) {
+            case '[' -> "\"" + escape(path) + "\"";       // empty array
+            case ',' -> " \"" + escape(path) + "\"";       // trailing comma already present
+            default  -> ", \"" + escape(path) + "\"";
+        };
+        lines.set(lineIdx, line.substring(0, close) + insertion + line.substring(close));
+    }
+
+    /** Insert a new element line just before the {@code ]} of a multi-line array. */
+    private static void insertMultilineMember(List<String> lines, int membersLine, int closeLine, String path) {
+        // Ensure the last element line carries a trailing comma.
+        for (int i = closeLine - 1; i > membersLine - 1; i--) {
+            String t = lines.get(i);
+            String trimmed = t.stripTrailing();
+            if (trimmed.isEmpty() || trimmed.stripLeading().startsWith("#")) continue;
+            if (!trimmed.endsWith(",") && !trimmed.endsWith("[")) {
+                lines.set(i, trimmed + ",");
+            }
+            break;
+        }
+        // Indent like the first element line if there is one, else 4 spaces.
+        String indent = "    ";
+        if (membersLine + 1 < closeLine) {
+            String el = lines.get(membersLine + 1);
+            indent = el.substring(0, el.length() - el.stripLeading().length());
+        }
+        lines.add(closeLine, indent + "\"" + escape(path) + "\",");
     }
 
     // --- internals ---------------------------------------------------------

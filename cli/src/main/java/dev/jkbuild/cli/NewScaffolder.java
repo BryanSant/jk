@@ -56,21 +56,33 @@ public final class NewScaffolder {
     private NewScaffolder() {}
 
     public static void write(NewInputs inputs) throws IOException {
+        write(inputs, true);
+    }
+
+    /**
+     * Scaffold the project tree. When {@code writeLock} is false the
+     * per-project {@code jk.lock} is skipped — used when the project is a
+     * workspace member, since the single workspace-root {@code jk.lock}
+     * owns resolution (Cargo/uv: members never carry their own lock).
+     */
+    public static void write(NewInputs inputs, boolean writeLock) throws IOException {
         var dir = inputs.directory();
         Files.createDirectories(dir);
 
         var buildFile = dir.resolve("jk.toml");
         Files.writeString(buildFile, NewJkBuildRenderer.render(inputs), StandardCharsets.UTF_8);
 
-        var lockFile = dir.resolve("jk.lock");
-        // Stamp the resolved JDK identifier (from the wizard pick) into the
-        // lockfile so subsequent `jk` invocations see a pinned install. Falls
-        // back to an unpinned empty lockfile when the flag path didn't
-        // resolve to a specific install.
-        var lock = inputs.jdkIdentifier()
-                .map(id -> Lockfile.empty(Jk.VERSION, id))
-                .orElseGet(() -> Lockfile.empty(Jk.VERSION));
-        LockfileWriter.write(lock, lockFile);
+        if (writeLock) {
+            var lockFile = dir.resolve("jk.lock");
+            // Stamp the resolved JDK identifier (from the wizard pick) into the
+            // lockfile so subsequent `jk` invocations see a pinned install. Falls
+            // back to an unpinned empty lockfile when the flag path didn't
+            // resolve to a specific install.
+            var lock = inputs.jdkIdentifier()
+                    .map(id -> Lockfile.empty(Jk.VERSION, id))
+                    .orElseGet(() -> Lockfile.empty(Jk.VERSION));
+            LockfileWriter.write(lock, lockFile);
+        }
 
         writeGitignore(dir);
 

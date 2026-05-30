@@ -19,8 +19,15 @@ import java.util.concurrent.Callable;
  * and source stubs into the <em>current</em> directory rather than a new
  * sub-directory. Errors immediately when a {@code jk.toml} already exists.
  * All wizard and flag options are identical to {@code jk new}.
+ *
+ * <p>Run inside an existing workspace, the directory is registered as a
+ * member (path appended to the root {@code [workspace].members}, group
+ * inherited, no per-member {@code jk.lock}) — the same behaviour as
+ * {@code jk new}.
  */
-@Command(name = "init", description = "Initialize a jk project in the current directory")
+@Command(name = "init",
+        description = "Initialize a jk project in the current directory "
+                + "(registers it as a workspace member when inside a workspace)")
 public final class InitCommand implements Callable<Integer> {
 
     @Option(names = "--name", description = "Project name (artifact). Defaults to the current directory name.")

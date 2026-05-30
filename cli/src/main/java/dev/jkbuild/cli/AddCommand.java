@@ -3,8 +3,11 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.config.JkBuildEditor;
+import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.model.RepositorySpec;
@@ -18,29 +21,38 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk add &lt;coord&gt;} — add a dependency to {@code jk.toml}.
+ * {@code jk add &lt;coord|path&gt;} — add a dependency (or a local workspace
+ * member) to {@code jk.toml}.
  *
- * <p>The argument may be either:
+ * <p>The argument may be:
  * <ul>
  *   <li>A Maven-coord shorthand: {@code group:artifact:version} (pinned) or
  *       {@code group:artifact@version} (floating caret). The short {@code name}
  *       defaults to the artifactId; override with {@code --name}.</li>
- *   <li>A bare short name (e.g. {@code spring-web}) when paired with
- *       {@code --group}, optionally {@code --artifact}, and {@code --version}.
- *       This is the structured form intended for curated short names.</li>
+ *   <li>A bare short name (e.g. {@code spring-web}), resolved against the
+ *       alias registry; combine with {@code --group}/{@code --ver} for names
+ *       not in the registry.</li>
+ *   <li>A local workspace member, when the argument begins with {@code :}
+ *       ({@code :widget}) or contains a path separator ({@code ./widget},
+ *       {@code ../widget}, {@code libs/widget}, {@code widget/}). jk adds a
+ *       dependency edge on the sibling — pinned to its {@code [project].version}
+ *       — and registers its path in the workspace root's
+ *       {@code [workspace].members} (≈ {@code uv add ./lib}).</li>
  * </ul>
  *
  * <p>Pass {@code --ping} to check availability without modifying anything.
  */
-@Command(name = "add", description = "Add a dependency to jk.toml")
+@Command(name = "add", description = "Add a dependency, or a local workspace member, to jk.toml")
 public final class AddCommand implements Callable<Integer> {
 
-    @Parameters(arity = "1", paramLabel = "[dep]",
+    @Parameters(arity = "1", paramLabel = "[dep|path]",
             description = "group:artifact:version (pinned), group:artifact@version (floating), "
-                    + "or a bare short name combined with --group/--version.")
+                    + "a bare short name combined with --group/--ver, or a local workspace "
+                    + "member (:name or a ./ ../ libs/ path).")
     String coord;
 
     @Option(names = "--name",
@@ -84,6 +96,18 @@ public final class AddCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws IOException, InterruptedException {
+        Path dir = global.workingDir();
+
+        // Local workspace sibling (uv's `uv add ./lib`): a dependency edge into
+        // the current project plus registration in the workspace root's
+        // [workspace].members. Anything else — a Maven coord or a registry
+        // alias — is resolved by ParsedDep.parse below.
+        if (isLocalPathArg(coord)) {
+            Scope scope = resolveScope();
+            if (scope == null) return 64;
+            return addMember(dir, scope);
+        }
+
         ParsedDep parsed;
         try {
             parsed = ParsedDep.parse(coord, nameFlag, groupFlag, artifactFlag, versionFlag);
@@ -96,23 +120,13 @@ public final class AddCommand implements Callable<Integer> {
             return runPing(parsed.toCoord());
         }
 
-        Path dir = global.workingDir();
         Path file = dir.resolve("jk.toml");
         if (!Files.exists(file)) {
             System.err.println("jk add: no jk.toml in current directory");
             return 2; // EX_CONFIG
         }
-        int selected = (test ? 1 : 0) + (runtime ? 1 : 0)
-                + (provided ? 1 : 0) + (processor ? 1 : 0);
-        if (selected > 1) {
-            System.err.println("jk add: --test / --runtime / --provided / --processor are mutually exclusive");
-            return 64;
-        }
-        Scope scope = test ? Scope.TEST
-                : runtime ? Scope.RUNTIME
-                : provided ? Scope.PROVIDED
-                : processor ? Scope.PROCESSOR
-                : Scope.MAIN;
+        Scope scope = resolveScope();
+        if (scope == null) return 64;
         String original = Files.readString(file);
         String updated;
         try {
@@ -127,6 +141,117 @@ public final class AddCommand implements Callable<Integer> {
                 + parsed.group() + ":" + parsed.artifact() + " " + parsed.versionLiteral()
                 + ") to dependencies." + scope.canonical());
         System.out.println("Run `jk lock` to resolve (not yet implemented).");
+        return 0;
+    }
+
+    /** The selected dependency scope, or {@code null} if more than one flag was given. */
+    private Scope resolveScope() {
+        int selected = (test ? 1 : 0) + (runtime ? 1 : 0)
+                + (provided ? 1 : 0) + (processor ? 1 : 0);
+        if (selected > 1) {
+            System.err.println(
+                    "jk add: --test / --runtime / --provided / --processor are mutually exclusive");
+            return null;
+        }
+        return test ? Scope.TEST
+                : runtime ? Scope.RUNTIME
+                : provided ? Scope.PROVIDED
+                : processor ? Scope.PROCESSOR
+                : Scope.MAIN;
+    }
+
+    /**
+     * Whether the positional argument denotes a local workspace member rather
+     * than a Maven coord or registry alias. True when it begins with
+     * {@code :} (an explicit local marker, e.g. {@code :jackson}) or looks
+     * like a filesystem path — i.e. contains a {@code /} or {@code \}
+     * separator ({@code ./m}, {@code ../m}, {@code backend/m}, {@code m/},
+     * {@code ..\..\m}).
+     *
+     * <p>A bare name with none of these (e.g. {@code jackson}) is a registry
+     * alias and is resolved as a coord — never treated as a path, even if a
+     * directory by that name happens to exist. A Maven coord
+     * ({@code group:artifact:version}) has its {@code :} after the group, not
+     * at the start, so it is not mistaken for a local marker.
+     */
+    private static boolean isLocalPathArg(String arg) {
+        if (arg.isEmpty()) return false;
+        return arg.charAt(0) == ':' || arg.indexOf('/') >= 0 || arg.indexOf('\\') >= 0;
+    }
+
+    /**
+     * Add a local sibling as a dependency of the current project (pinned to
+     * the sibling's declared version) and register it in the enclosing
+     * workspace root's {@code [workspace].members}.
+     */
+    private int addMember(Path cwd, Scope scope) throws IOException {
+        Path currentToml = cwd.resolve("jk.toml");
+        if (!Files.exists(currentToml)) {
+            System.err.println("jk add: no jk.toml in current directory");
+            return 2;
+        }
+        // Strip the optional leading ':' marker and normalise Windows-style
+        // separators so `:jackson`, `jackson/`, and `..\..\jackson` all resolve.
+        String raw = coord.charAt(0) == ':' ? coord.substring(1) : coord;
+        raw = raw.replace('\\', '/');
+        if (raw.isBlank()) {
+            System.err.println("jk add: empty member path");
+            return 64;
+        }
+        Path target = cwd.resolve(raw).normalize();
+        Path targetToml = target.resolve("jk.toml");
+        if (!Files.exists(targetToml)) {
+            System.err.println("jk add: no jk.toml in " + target);
+            return 2;
+        }
+        JkBuild member;
+        try {
+            member = JkBuildParser.parse(targetToml);
+        } catch (RuntimeException e) {
+            System.err.println("jk add: " + e.getMessage());
+            return 1;
+        }
+        String group = member.project().group();
+        String artifact = member.project().artifact();
+        String version = member.project().version();
+        String name = (nameFlag != null && !nameFlag.isBlank()) ? nameFlag : artifact;
+
+        // 1. Dependency edge into the current project, pinned to the member's
+        //    version — matching how this repo's own members reference siblings.
+        String original = Files.readString(currentToml);
+        String updated;
+        try {
+            updated = JkBuildEditor.addDependency(
+                    original, scope, name, group, artifact, "=" + version);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            System.err.println("jk add: " + e.getMessage());
+            return 1;
+        }
+        Files.writeString(currentToml, updated, StandardCharsets.UTF_8);
+        System.out.println("Added " + name + " (" + group + ":" + artifact + " ="
+                + version + ") to dependencies." + scope.canonical());
+
+        // 2. Register membership in the enclosing workspace root (cwd itself
+        //    when cwd is the root).
+        Path root = WorkspaceLocator.findEnclosingWorkspace(cwd).orElse(cwd);
+        Path rootToml = root.resolve("jk.toml");
+        try {
+            if (!target.startsWith(root)) {
+                System.err.println("jk add: " + raw
+                        + " is outside the workspace root " + root
+                        + "; added the dependency but not registering it as a member.");
+            } else if (Files.exists(rootToml) && JkBuildParser.parse(rootToml).isWorkspaceRoot()) {
+                String rel = root.relativize(target).toString().replace('\\', '/');
+                String rootContent = Files.readString(rootToml);
+                String newRoot = JkBuildEditor.addWorkspaceMember(rootContent, rel);
+                if (!newRoot.equals(rootContent)) {
+                    Files.writeString(rootToml, newRoot, StandardCharsets.UTF_8);
+                    System.out.println("Registered member '" + rel + "' in workspace " + root);
+                }
+            }
+        } catch (RuntimeException e) {
+            System.err.println("jk add: could not register workspace member: " + e.getMessage());
+        }
         return 0;
     }
 
