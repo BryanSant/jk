@@ -104,6 +104,16 @@ assertj-core            = { group = "org.assertj", artifact = "assertj-core", ve
 For workspace siblings, the resolved coord uses the sibling's
 `[project].group`, `[project].artifact`, and `[project].version`.
 
+**Registering members.** The `members` array is not hand-edited. Run inside
+a workspace, `jk new <path>` and `jk init` scaffold a member and append its
+root-relative path here (inheriting the root `[project].group`, and writing
+no per-member `jk.lock`). `jk add <path>` — where the argument starts with
+`:` or contains a path separator (`:widget`, `./widget`, `libs/widget`,
+`widget/`) — registers a local sibling **and** adds the dependency edge,
+pinned to the sibling's `[project].version`. A bare name (`jk add jackson`)
+is a registry alias / Maven coord, never a path. All edits preserve the
+array's formatting and comments.
+
 ### `[dependencies.<scope>]` — name-as-key sub-tables
 
 Six scopes, identical to v0.6: `main`, `provided`, `runtime`, `test`,

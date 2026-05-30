@@ -73,6 +73,33 @@ jk mvn package
 `jk nativeCompile` → `jk native`, …) are documented in
 [`docs/aliases.md`](docs/aliases.md).
 
+## Workspaces
+
+A workspace is a root `jk.toml` with a `[workspace]` table listing members.
+There is one `jk.lock` at the root, and `jk lock` / `jk build` run from any
+member resolve the whole workspace — Cargo/uv semantics.
+
+Like `cargo new` and `uv init`, the project commands register members for
+you when run inside a workspace, so you never hand-edit
+`[workspace].members`:
+
+```bash
+# Scaffold a new member; appends "libs/widget" to [workspace].members,
+# inherits the workspace group, and writes no per-member jk.lock.
+jk new libs/widget
+
+# Same, but initialise the current directory as a member.
+cd libs/widget-core && jk init
+
+# Depend on a local member from another member: adds the dependency edge
+# AND registers the path as a workspace member (≈ `uv add ./lib`).
+jk add ../widget          # path form
+jk add :widget            # ':' marks a local member by name
+```
+
+A bare name with no `:` and no path separator (e.g. `jk add jackson`) is
+treated as a registry alias / Maven coordinate, not a local path.
+
 ## Why another build tool
 
 - **Native binary, no daemon.** `jk --help` is a sub-50ms cold start. No JVM warmup tax, no daemon to restart when configuration cache breaks.

@@ -237,9 +237,9 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 
 | Command | Purpose |
 |---|---|
-| `jk new <name> [--lib\|--bin]` | Create a new project from a template. |
-| `jk init` | Initialize jk in an existing directory (with optional `--from pom.xml` / `--from build.gradle`). |
-| `jk add <coord> [--test] [--processor] [--runtime] [--provided] [--features=...]` | Add a dependency. |
+| `jk new <name> [--lib\|--bin]` | Create a new project from a template. Inside a workspace, also registers it in the root `[workspace].members`. |
+| `jk init` | Initialize jk in an existing directory (with optional `--from pom.xml` / `--from build.gradle`). Inside a workspace, registers the directory as a member. |
+| `jk add <coord\|path> [--test] [--processor] [--runtime] [--provided] [--features=...]` | Add a dependency. A path or `:name` argument adds a local workspace member (dependency edge + `[workspace].members` registration). |
 | `jk remove <coord>` | Remove a dependency. |
 | `jk lock` | Re-resolve and write `jk.lock`. |
 | `jk sync [--locked\|--frozen] [--offline-prepare]` | Reconcile cache/`.jk/` to the lockfile. `--offline-prepare` downloads everything without building (CI-friendly). |
@@ -790,7 +790,26 @@ widget-core.workspace = true
 - **Glob members** (`libs/*`) to avoid hand-listing.
 - **Affected-by-change**: `jk build --affected-since=origin/main` computes the changed set via git + reverse dep graph.
 
-### 13.3 Composite-build semantics
+### 13.3 Adding members from the CLI
+
+Members are never hand-registered. Like `cargo new` / `uv init`, the project
+verbs edit `[workspace].members` for you (preserving formatting and comments)
+when run inside a workspace:
+
+- **`jk new <path>`** scaffolds a member, appends its root-relative path to
+  `[workspace].members`, inherits the workspace root's `[project].group`, and
+  writes **no** per-member `jk.lock` (the root lock owns resolution).
+- **`jk init`** does the same for the current directory.
+- **`jk add <path>`** (≈ `uv add ./lib`) adds a dependency edge on a local
+  sibling — pinned to the sibling's `[project].version` — and registers its
+  path as a member. The argument is treated as a local member when it begins
+  with `:` (`:widget`, a name marker) or contains a path separator
+  (`./widget`, `../widget`, `libs/widget`, `widget/`). A bare name with
+  neither (`jk add jackson`) is resolved as a registry alias / Maven coord, not
+  a path. A path outside the workspace root adds the edge but is not
+  registered as a member.
+
+### 13.4 Composite-build semantics
 
 `[workspace.substitute]` lets a workspace member replace any binary dep (including a git dep) at build time:
 
