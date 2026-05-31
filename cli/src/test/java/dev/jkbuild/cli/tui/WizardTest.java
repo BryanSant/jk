@@ -395,6 +395,136 @@ class WizardTest {
     }
 
     @Test
+    void radio_vertical_custom_option_records_typed_text() throws Exception {
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.RadioStep.vertical("fruit", "Pick a fruit")
+                        .choice("apple", "Apple")
+                        .choice("banana", "Banana")
+                        .choice("grape", "Grape")
+                        .customOption("Enter your own fruit")
+                        .build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Down 3× from apple(0) → custom row (index 3), type "mango", Enter.
+            for (int i = 0; i < 3; i++) {
+                write(h.input(), (byte) 0x1B, (byte) '[', (byte) 'B');
+                Thread.sleep(50);
+            }
+            write(h.input(), (byte) 'm', (byte) 'a', (byte) 'n', (byte) 'g', (byte) 'o');
+            Thread.sleep(50);
+            write(h.input(), (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.get("fruit")).isEqualTo("mango");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
+
+    @Test
+    void radio_vertical_custom_option_present_still_selects_a_choice_id() throws Exception {
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.RadioStep.vertical("fruit", "Pick a fruit")
+                        .choice("apple", "Apple")
+                        .choice("banana", "Banana")
+                        .choice("grape", "Grape")
+                        .customOption("Enter your own fruit")
+                        .build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Down once → banana, Enter → the choice id, not custom text.
+            write(h.input(), (byte) 0x1B, (byte) '[', (byte) 'B');
+            Thread.sleep(50);
+            write(h.input(), (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.get("fruit")).isEqualTo("banana");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
+
+    @Test
+    void radio_vertical_custom_option_rejects_empty_then_accepts_text() throws Exception {
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.RadioStep.vertical("fruit", "Pick a fruit")
+                        .choice("apple", "Apple")
+                        .customOption("Enter your own fruit")
+                        .build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Move to the (empty) custom row and press Enter — must NOT advance.
+            write(h.input(), (byte) 0x1B, (byte) '[', (byte) 'B');
+            Thread.sleep(50);
+            write(h.input(), (byte) 0x0A);
+            Thread.sleep(STEP_TIMEOUT_MS);
+            assertThat(result.isDone()).isFalse();
+            // Now type a value and Enter — it commits the typed text.
+            write(h.input(), (byte) 'k', (byte) 'i', (byte) 'w', (byte) 'i');
+            Thread.sleep(50);
+            write(h.input(), (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.get("fruit")).isEqualTo("kiwi");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
+
+    @Test
+    void multi_select_custom_option_appends_typed_text() throws Exception {
+        var h = newHarness();
+        var wizard = Wizard.builder()
+                .title("Test")
+                .step(WizardStep.MultiSelectStep.vertical("fruit", "Pick fruits")
+                        .choice("apple", "Apple")
+                        .choice("banana", "Banana")
+                        .choice("grape", "Grape")
+                        .customOption("Enter your own fruit")
+                        .build())
+                .build();
+
+        var exec = Executors.newSingleThreadExecutor();
+        try {
+            Future<Optional<Answers>> result = exec.submit(() -> wizard.run(h.terminal()));
+            Thread.sleep(STEP_TIMEOUT_MS);
+            // Space → check apple(0); Down 3× → custom row; type "kiwi"; Enter.
+            write(h.input(), (byte) 0x20);
+            Thread.sleep(50);
+            for (int i = 0; i < 3; i++) {
+                write(h.input(), (byte) 0x1B, (byte) '[', (byte) 'B');
+                Thread.sleep(50);
+            }
+            write(h.input(), (byte) 'k', (byte) 'i', (byte) 'w', (byte) 'i');
+            Thread.sleep(50);
+            write(h.input(), (byte) 0x0A);
+            var answers = await(result).orElseThrow();
+            assertThat(answers.getList("fruit")).containsExactly("apple", "kiwi");
+        } finally {
+            exec.shutdownNow();
+            h.terminal().close();
+        }
+    }
+
+    @Test
     void right_arrow_is_a_noop_when_placeholder_is_empty() throws Exception {
         // No placeholder → Right is ignored (Enter falls through to default
         // value, which here is also empty, so input is just "").
