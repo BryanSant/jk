@@ -39,8 +39,10 @@ import java.util.TreeSet;
  *   <li>Source set or classpath set differs from what the stamp recorded
  *       (file added or removed) → not fresh.</li>
  *   <li>Any input file is missing now → not fresh.</li>
- *   <li>Any input file's mtime is newer than the stamp's recorded write
- *       time → not fresh.</li>
+ *   <li>Any input file's mtime is at or after the stamp's recorded write
+ *       time → not fresh. (At-or-after, not strictly-after: mtimes are
+ *       millisecond-truncated, so a same-millisecond edit must be treated as
+ *       a possible change and pushed to the content-hash layer.)</li>
  *   <li>Otherwise → fresh; skip the compile.</li>
  * </ol>
  *
@@ -166,6 +168,13 @@ public final class FreshnessStamp {
 
     private static boolean newerThan(Path file, long stampMillis) throws IOException {
         if (!Files.exists(file)) return true; // disappearing input → treat as changed
-        return Files.getLastModifiedTime(file).toMillis() > stampMillis;
+        // Use >= , not > : filesystem mtimes are millisecond-truncated, and a
+        // build can finish writing its stamp in the same millisecond a source
+        // is edited (fast disks, tiny projects). Treating "mtime == stampMillis"
+        // as potentially-changed means we distrust the cheap stat at that
+        // boundary and fall through to the content-hashing action cache, which
+        // decides correctly. With strict > , a same-millisecond edit is silently
+        // skipped — a stale-build bug, not just a test flake.
+        return Files.getLastModifiedTime(file).toMillis() >= stampMillis;
     }
 }

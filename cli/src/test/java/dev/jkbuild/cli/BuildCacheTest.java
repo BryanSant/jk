@@ -11,6 +11,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
 import java.util.function.IntSupplier;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -31,6 +32,12 @@ class BuildCacheTest {
         // First build: stamp is absent, action cache misses, real compile.
         int first = run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString());
         assertThat(first).isEqualTo(0);
+
+        // Backdate the source so its mtime is unambiguously older than the
+        // freshness stamp. Without this the test races filesystem mtime
+        // granularity (a coarse mount can truncate the source's mtime into the
+        // same second as the stamp), making the fast-skip nondeterministic.
+        Files.setLastModifiedTime(src, FileTime.fromMillis(System.currentTimeMillis() - 5_000));
 
         // Second build: stamp is fresh, no input newer → fast skip without
         // even hashing source content for an action-key lookup.
@@ -92,6 +99,12 @@ class BuildCacheTest {
                 package example;
                 public class Hello { public static String greet() { return "ho"; } }
                 """);
+        // Forward-date the edit so its mtime is unambiguously newer than the
+        // freshness stamp. Without this the test races filesystem mtime
+        // granularity (a coarse mount truncates the edit into the same second
+        // as the stamp, comparing below the millisecond-precise stamp clock),
+        // which let a real content change look "up to date".
+        Files.setLastModifiedTime(src, FileTime.fromMillis(System.currentTimeMillis() + 5_000));
 
         String stdout = captureStdout(() ->
                 run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));

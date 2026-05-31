@@ -94,6 +94,17 @@ class MavenPublisherTest {
     }
 
     @Test
+    void bearer_credential_attaches_bearer_header() throws Exception {
+        MavenPublisher publisher = new MavenPublisher(base,
+                new dev.jkbuild.credential.RepoCredential.Bearer("tok-123"));
+        publisher.publish(
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21),
+                List.of(new MavenPublisher.Artifact(".jar", new byte[] {1, 2, 3})));
+
+        assertThat(authHeaders.values()).isNotEmpty().allMatch(h -> h.equals("Bearer tok-123"));
+    }
+
+    @Test
     void signed_publish_emits_asc_files_with_checksums(@TempDir
                                                        Path tempDir) throws Exception {
         var key = GpgTestFixture.generate(tempDir, "test-pass");

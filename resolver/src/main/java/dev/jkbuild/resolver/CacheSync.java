@@ -35,10 +35,17 @@ public final class CacheSync {
     private final Cas cas;
     private final Http http;
     private final Journal journal;
+    private final dev.jkbuild.repo.RepoCredentialResolver creds;
 
     public CacheSync(Cas cas, Http http) {
+        this(cas, http, new dev.jkbuild.repo.RepoCredentialResolver());
+    }
+
+    /** Visible for tests — inject a credential resolver. */
+    public CacheSync(Cas cas, Http http, dev.jkbuild.repo.RepoCredentialResolver creds) {
         this.cas = Objects.requireNonNull(cas, "cas");
         this.http = Objects.requireNonNull(http, "http");
+        this.creds = Objects.requireNonNull(creds, "creds");
         // Populate the coordinate→hash index as `jk sync` downloads artifacts,
         // so an offline resolve later has them addressable by coordinate.
         this.journal = new Journal(cas.root());
@@ -174,7 +181,8 @@ public final class CacheSync {
         }
         String name = source.substring(0, plus);
         URI url = URI.create(source.substring(plus + 1));
-        MavenRepo repo = new MavenRepo(name, url, http, cas, journal);
+        var cred = creds.resolve(name, url, java.util.Optional.empty());
+        MavenRepo repo = new MavenRepo(name, url, http, cas, journal, cred);
         cache.put(source, repo);
         return repo;
     }

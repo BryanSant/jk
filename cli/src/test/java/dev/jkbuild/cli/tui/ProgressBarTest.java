@@ -35,20 +35,53 @@ class ProgressBarTest {
     }
 
     @Test
-    void diff_only_repaints_changed_segment_range() {
+    void advancing_fill_repaints_the_whole_glyph_row() {
         var buf = new ByteArrayOutputStream();
         try (var pb = ProgressBar.show(stream(buf))) {
             pb.update(50, "step");   // 20 filled (out of 40)
             buf.reset();
-            pb.update(60, "step");   // 24 filled — segments 20..23 should flip
+            pb.update(60, "step");   // 24 filled
         }
         String diff = stripAnsi(buf.toString(StandardCharsets.UTF_8));
-        // The second update should print exactly four ▰ chars (the four
-        // segments that just flipped) and not redraw any ▱ segments.
+        // The moving gradient re-colors every filled glyph when the frontier
+        // advances, so the row is repainted whole: 24 ▰ + 16 ▱.
         long filled = diff.chars().filter(c -> c == '▰').count();
         long empty = diff.chars().filter(c -> c == '▱').count();
-        assertThat(filled).isEqualTo(4);
-        assertThat(empty).isZero();
+        assertThat(filled).isEqualTo(24);
+        assertThat(empty).isEqualTo(16);
+    }
+
+    @Test
+    void unchanged_fill_does_not_repaint_the_glyph_row() {
+        var buf = new ByteArrayOutputStream();
+        try (var pb = ProgressBar.show(stream(buf))) {
+            pb.update(60, "step");   // round(60 * 40 / 100) = 24 filled
+            buf.reset();
+            pb.update(61, "step");   // round(61 * 40 / 100) = 24 filled (unchanged)
+        }
+        String diff = stripAnsi(buf.toString(StandardCharsets.UTF_8));
+        // No fill change → no glyphs redrawn (only the OSC progress update).
+        assertThat(diff.chars().filter(c -> c == '▰' || c == '▱').count()).isZero();
+    }
+
+    @Test
+    void rightmost_filled_glyph_is_always_the_gradient_end() {
+        // The frontier glyph is pinned to the gradient end (orange #ff8b1a)
+        // at every fill level; the band trails leftward toward magenta.
+        assertThat(frontierColor(5)).isEqualTo("38;2;255;139;26");
+        assertThat(frontierColor(50)).isEqualTo("38;2;255;139;26");
+        assertThat(frontierColor(100)).isEqualTo("38;2;255;139;26");
+    }
+
+    @Test
+    void single_filled_glyph_uses_only_the_orange_end() {
+        // 2.5% → 1 filled glyph: it must be the orange end, not magenta.
+        var buf = new ByteArrayOutputStream();
+        try (var pb = ProgressBar.show(stream(buf))) {
+            pb.update(2, "x");   // round(2 * 40 / 100) = 1 filled
+        }
+        var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));
+        assertThat(colors).containsExactly("38;2;255;139;26");
     }
 
     @Test
@@ -139,18 +172,38 @@ class ProgressBarTest {
     }
 
     @Test
-    void gradient_runs_from_violet_to_coral() {
+    void gradient_runs_from_magenta_to_orange() {
         var colors = ProgressBar.buildGradient(20);
         assertThat(colors).hasSize(20);
-        // Reverse of the wizard title: violet #8150fe → coral #e3475b.
+        // Reverse of the wizard title: magenta #e600ff → orange #ff8b1a.
         String first = colors[0].toAnsi();
         String last = colors[19].toAnsi();
-        assertThat(first).isEqualTo("38;2;129;80;254");  // #8150fe
-        assertThat(last).isEqualTo("38;2;227;71;91");    // #e3475b
+        assertThat(first).isEqualTo("38;2;230;0;255");   // #e600ff
+        assertThat(last).isEqualTo("38;2;255;139;26");   // #ff8b1a
     }
 
     private static PrintStream stream(ByteArrayOutputStream buf) {
         return new PrintStream(buf, true, StandardCharsets.UTF_8);
+    }
+
+    /** SGR of the right-most filled glyph (the frontier) at {@code percent}. */
+    private static String frontierColor(int percent) {
+        var buf = new ByteArrayOutputStream();
+        try (var pb = ProgressBar.show(stream(buf))) {
+            pb.update(percent, "x");
+        }
+        var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));
+        return colors.isEmpty() ? null : colors.get(colors.size() - 1);
+    }
+
+    /** In-order truecolor SGRs of each filled (▰) glyph in {@code raw}. */
+    private static java.util.List<String> filledGlyphColors(String raw) {
+        var out = new java.util.ArrayList<String>();
+        var m = java.util.regex.Pattern
+                .compile("\033\\[(38;2;\\d+;\\d+;\\d+)m▰")
+                .matcher(raw);
+        while (m.find()) out.add(m.group(1));
+        return out;
     }
 
     /** Drop CSI escapes so we can assert on the visible characters. */

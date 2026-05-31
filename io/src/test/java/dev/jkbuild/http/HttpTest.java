@@ -201,6 +201,138 @@ class HttpTest {
         }
     }
 
+    @Test
+    void post_form_sends_urlencoded_body_and_accepts_json() throws Exception {
+        AtomicReference<String> seenContentType = new AtomicReference<>();
+        AtomicReference<String> seenAccept = new AtomicReference<>();
+        AtomicReference<String> seenBody = new AtomicReference<>();
+        server.createContext("/device/code", exchange -> {
+            seenContentType.set(exchange.getRequestHeaders().getFirst("Content-Type"));
+            seenAccept.set(exchange.getRequestHeaders().getFirst("Accept"));
+            seenBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            byte[] body = "{\"ok\":true}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        // LinkedHashMap to keep the encoded order deterministic for the assertion.
+        var form = new java.util.LinkedHashMap<String, String>();
+        form.put("client_id", "Iv1.abc");
+        form.put("scope", "read:packages");
+        HttpResponse<byte[]> response = http().postForm(base.resolve("/device/code"), form);
+
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(seenContentType.get()).isEqualTo("application/x-www-form-urlencoded");
+        assertThat(seenAccept.get()).isEqualTo("application/json");
+        assertThat(seenBody.get()).isEqualTo("client_id=Iv1.abc&scope=read%3Apackages");
+    }
+
+    @Test
+    void post_form_returns_4xx_body_without_throwing() throws Exception {
+        // The device-flow poll loop depends on this: GitHub signals
+        // authorization_pending with a non-2xx status + JSON error body.
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/device/token", exchange -> {
+            calls.incrementAndGet();
+            byte[] body = "{\"error\":\"authorization_pending\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(400, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        HttpResponse<byte[]> response = http().postForm(base.resolve("/device/token"),
+                java.util.Map.of("grant_type", "device_code"));
+        assertThat(response.statusCode()).isEqualTo(400);
+        assertThat(new String(response.body(), StandardCharsets.UTF_8))
+                .contains("authorization_pending");
+        assertThat(calls.get()).isEqualTo(1);   // 4xx is not retried
+    }
+
+    @Test
+    void post_form_retries_on_503_then_succeeds() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/flaky-post", exchange -> {
+            int n = calls.incrementAndGet();
+            // Drain the request body so the connection can be reused.
+            exchange.getRequestBody().readAllBytes();
+            if (n < 3) {
+                exchange.sendResponseHeaders(503, -1);
+                exchange.close();
+                return;
+            }
+            byte[] body = "{\"access_token\":\"gho_x\"}".getBytes(StandardCharsets.UTF_8);
+            exchange.sendResponseHeaders(200, body.length);
+            exchange.getResponseBody().write(body);
+            exchange.close();
+        });
+
+        HttpResponse<byte[]> response = http().postForm(base.resolve("/flaky-post"),
+                java.util.Map.of("client_id", "Iv1.abc"));
+        assertThat(response.statusCode()).isEqualTo(200);
+        assertThat(calls.get()).isEqualTo(3);
+    }
+
+    @Test
+    void put_sends_body_and_headers() throws Exception {
+        AtomicReference<String> seenAuth = new AtomicReference<>();
+        AtomicReference<String> seenMethod = new AtomicReference<>();
+        AtomicReference<byte[]> seenBody = new AtomicReference<>();
+        server.createContext("/repo/artifact.jar", exchange -> {
+            seenMethod.set(exchange.getRequestMethod());
+            seenAuth.set(exchange.getRequestHeaders().getFirst("Authorization"));
+            seenBody.set(exchange.getRequestBody().readAllBytes());
+            exchange.sendResponseHeaders(201, -1);
+            exchange.close();
+        });
+
+        byte[] payload = "jar-bytes".getBytes(StandardCharsets.UTF_8);
+        HttpResponse<byte[]> response = http().put(base.resolve("/repo/artifact.jar"), payload,
+                java.util.Map.of("Authorization", "Basic dTpw", "Content-Type", "application/java-archive"));
+
+        assertThat(response.statusCode()).isEqualTo(201);
+        assertThat(seenMethod.get()).isEqualTo("PUT");
+        assertThat(seenAuth.get()).isEqualTo("Basic dTpw");
+        assertThat(seenBody.get()).isEqualTo(payload);
+    }
+
+    @Test
+    void put_returns_4xx_without_throwing() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/repo/denied.jar", exchange -> {
+            calls.incrementAndGet();
+            exchange.getRequestBody().readAllBytes();
+            exchange.sendResponseHeaders(401, -1);
+            exchange.close();
+        });
+
+        HttpResponse<byte[]> response = http().put(base.resolve("/repo/denied.jar"),
+                new byte[]{1, 2, 3}, java.util.Map.of());
+        assertThat(response.statusCode()).isEqualTo(401);
+        assertThat(calls.get()).isEqualTo(1);   // 4xx is not retried
+    }
+
+    @Test
+    void put_retries_on_503_then_succeeds() throws Exception {
+        AtomicInteger calls = new AtomicInteger();
+        server.createContext("/repo/flaky.jar", exchange -> {
+            int n = calls.incrementAndGet();
+            exchange.getRequestBody().readAllBytes();
+            if (n < 3) {
+                exchange.sendResponseHeaders(503, -1);
+                exchange.close();
+                return;
+            }
+            exchange.sendResponseHeaders(201, -1);
+            exchange.close();
+        });
+
+        HttpResponse<byte[]> response = http().put(base.resolve("/repo/flaky.jar"),
+                new byte[]{9}, java.util.Map.of());
+        assertThat(response.statusCode()).isEqualTo(201);
+        assertThat(calls.get()).isEqualTo(3);
+    }
+
     private static byte[] gzip(byte[] raw) throws IOException {
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
         try (var gz = new GZIPOutputStream(buf)) {

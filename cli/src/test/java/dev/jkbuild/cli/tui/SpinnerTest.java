@@ -59,12 +59,12 @@ class SpinnerTest {
     }
 
     @Test
-    void gradient_runs_from_violet_to_coral() {
+    void gradient_runs_from_magenta_to_orange() {
         var colors = Spinner.buildGradient(Spinner.FRAMES.length);
-        // First frame: violet #8150fe; last frame: coral #e3475b
+        // First frame: magenta #e600ff; last frame: orange #ff8b1a
         // (reverse of the title gradient).
-        assertThat(colors[0].toAnsi()).isEqualTo("38;2;129;80;254");
-        assertThat(colors[colors.length - 1].toAnsi()).isEqualTo("38;2;227;71;91");
+        assertThat(colors[0].toAnsi()).isEqualTo("38;2;230;0;255");
+        assertThat(colors[colors.length - 1].toAnsi()).isEqualTo("38;2;255;139;26");
     }
 
     @Test

@@ -44,13 +44,13 @@ public final class Theme {
         };
     }
 
-    // Gradient endpoints: coral #e3475b → violet #8150fe.
-    private static final int GRAD_START_R = 0xe3;
-    private static final int GRAD_START_G = 0x47;
-    private static final int GRAD_START_B = 0x5b;
-    private static final int GRAD_END_R = 0x81;
-    private static final int GRAD_END_G = 0x50;
-    private static final int GRAD_END_B = 0xfe;
+    // Gradient endpoints: orange #ff8b1a → magenta #e600ff.
+    private static final int GRAD_START_R = 0xff;
+    private static final int GRAD_START_G = 0x8b;
+    private static final int GRAD_START_B = 0x1a;
+    private static final int GRAD_END_R = 0xe6;
+    private static final int GRAD_END_G = 0x00;
+    private static final int GRAD_END_B = 0xff;
 
     // Active rail / bullet: cyan #22d3ee.
     private static final int ACTIVE_R = 0x22;
@@ -153,7 +153,7 @@ public final class Theme {
         return withColor(AttributedStyle.DEFAULT, r, g, b);
     }
 
-    /** Per-codepoint truecolor lerp from {@code #e3475b} to {@code #8150fe}, bold on each char. */
+    /** Per-codepoint truecolor lerp from {@code #ff8b1a} to {@code #e600ff}, bold on each char. */
     public static AttributedString gradientHeader(String text) {
         var sb = new AttributedStringBuilder();
         var codepoints = text.codePoints().toArray();

@@ -13,14 +13,21 @@ import java.util.concurrent.atomic.AtomicReference;
  * <p>Layout: {@code ▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  62%: <status>}
  *
  * <ul>
- *   <li>40 segments. Filled segments use a per-position gradient from
- *       violet {@code #8150fe} to coral {@code #e3475b} (the reverse of
- *       the wizard title gradient); empty segments are faint.</li>
+ *   <li>40 segments. Filled segments use a <em>moving</em> gradient
+ *       anchored to the progress frontier: the right-most filled glyph is
+ *       always the gradient end (orange {@code #ff8b1a}) and the glyphs to
+ *       its left trail back toward the gradient start (magenta
+ *       {@code #e600ff}). Only the right end of the pre-computed 40-color
+ *       gradient is used at first; the magenta end is introduced gradually
+ *       as the bar fills, so the gradient looks pushed rightward as
+ *       progress advances. Empty segments are faint.</li>
  *   <li>The percent is right-aligned to 4 chars so the status doesn't
  *       jump columns as it advances.</li>
- *   <li>Redraws are surgical: only the segments that flipped, only the
- *       part of the line that changed. Shrinking status overwrites the
- *       previous trailing chars with spaces (no further).</li>
+ *   <li>Percent and status redraws are surgical — only the part of the
+ *       line that changed; shrinking status overwrites the previous
+ *       trailing chars with spaces (no further). The glyph row, by
+ *       contrast, is repainted whole whenever the fill count changes,
+ *       because the moving gradient re-colors every filled glyph at once.</li>
  *   <li>Cursor is hidden between {@link #show(PrintStream)} and
  *       {@link #close()} and restored on exit.</li>
  * </ul>
@@ -41,9 +48,9 @@ public final class ProgressBar implements AutoCloseable {
     static final String GAP = "  ";
     static final String SEPARATOR = ": ";
 
-    // Gradient: reverse of the wizard title — violet #8150fe → coral #e3475b.
-    private static final int START_R = 0x81, START_G = 0x50, START_B = 0xfe;
-    private static final int END_R = 0xe3, END_G = 0x47, END_B = 0x5b;
+    // Gradient: reverse of the wizard title — magenta #e600ff → orange #ff8b1a.
+    private static final int START_R = 0xe6, START_G = 0x00, START_B = 0xff;
+    private static final int END_R = 0xff, END_G = 0x8b, END_B = 0x1a;
 
     // Failure gradient: dark red #7f1d1d → bright red #ef4444 (tailwind
     // red-900 → red-500). Used by renderFailed so the bar reads as
@@ -287,12 +294,12 @@ public final class ProgressBar implements AutoCloseable {
     }
 
     private void renderDiff(int filled, String percent, String status) {
-        // Segments: redraw only the range that actually changed.
+        // Segments: the moving gradient re-colors every filled glyph when
+        // the frontier advances, so there's no surgical sub-range to redraw.
+        // Jump to the first glyph and overwrite the whole row in place.
         if (filled != lastFilled) {
-            int from = Math.min(lastFilled, filled);
-            int to = Math.max(lastFilled, filled);
-            moveToCol(1 + from);
-            renderSegments(from, to, filled);
+            moveToCol(1);
+            renderSegments(0, SEGMENTS, filled);
         }
         // Percent: repaint the 4-char block (it's already fixed-width).
         if (!percent.equals(lastPercent)) {
@@ -312,9 +319,22 @@ public final class ProgressBar implements AutoCloseable {
         for (int i = from; i < to; i++) {
             boolean isFilled = i < filled;
             char c = isFilled ? FILLED_CHAR : EMPTY_CHAR;
-            AttributedStyle style = isFilled ? segmentColors[i] : emptyStyle;
+            AttributedStyle style = isFilled ? filledColor(i, filled) : emptyStyle;
             out.print(Theme.colorize(String.valueOf(c), style));
         }
+    }
+
+    /**
+     * Color for the filled glyph at zero-based position {@code i} when
+     * {@code filled} glyphs are lit. The right-most filled glyph
+     * ({@code i == filled - 1}) maps to the last pre-computed color (the
+     * gradient end, orange); each glyph to the left steps one entry back
+     * toward the gradient start (magenta). With {@code filled} small only
+     * the orange tail of the gradient shows; the magenta head appears as
+     * the bar fills, so the band looks pushed rightward by the frontier.
+     */
+    private AttributedStyle filledColor(int i, int filled) {
+        return segmentColors[SEGMENTS - filled + i];
     }
 
     private static int statusCol() {

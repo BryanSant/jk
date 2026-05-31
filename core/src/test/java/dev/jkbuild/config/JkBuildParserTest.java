@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
+import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.Scope;
@@ -394,6 +395,53 @@ class JkBuildParserTest {
         assertThat(parsed.repositories())
                 .extracting(r -> r.name())
                 .containsExactlyInAnyOrder("central", "internal");
+        // No inline credential on either repo.
+        assertThat(parsed.repositories()).allSatisfy(r -> assertThat(r.credential()).isEmpty());
+    }
+
+    @Test
+    void parses_inline_token_and_basic_credentials() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [repositories.ghp]
+                url = "https://maven.pkg.github.com/jkbuild/jk"
+                token = "ghp_literaltoken"
+
+                [repositories.nexus]
+                url = "https://nexus.example/repository/maven-releases/"
+                username = "deployer"
+                password = "s3cr3t"
+                """);
+
+        var ghp = parsed.repositories().stream().filter(r -> r.name().equals("ghp")).findFirst().orElseThrow();
+        assertThat(ghp.credential()).contains(new RepoCredential.Bearer("ghp_literaltoken"));
+
+        var nexus = parsed.repositories().stream().filter(r -> r.name().equals("nexus")).findFirst().orElseThrow();
+        assertThat(nexus.credential()).contains(new RepoCredential.Basic("deployer", "s3cr3t"));
+    }
+
+    @Test
+    void interpolates_env_var_in_inline_credential() {
+        // PATH is reliably set in the test environment; use it as a stand-in secret.
+        String path = System.getenv("PATH");
+        org.junit.jupiter.api.Assumptions.assumeTrue(path != null && !path.isBlank());
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [repositories.r]
+                url = "https://nexus.example/repo/"
+                token = "${PATH}"
+                """);
+        assertThat(parsed.repositories().get(0).credential())
+                .contains(new RepoCredential.Bearer(path));
+    }
+
+    @Test
+    void unset_env_var_in_credential_is_an_error() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [repositories.r]
+                url = "https://nexus.example/repo/"
+                token = "${JK_DEFINITELY_UNSET_VAR_XYZ}"
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("JK_DEFINITELY_UNSET_VAR_XYZ");
     }
 
     @Test

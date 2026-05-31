@@ -4,7 +4,10 @@ package dev.jkbuild.cli;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.layout.BuildLayout;
+import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.repo.RepoCredentialResolver;
 import dev.jkbuild.publish.Checksums;
 import dev.jkbuild.publish.GpgSigner;
 import dev.jkbuild.publish.KeylessSigstoreSigner;
@@ -36,6 +39,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 
@@ -228,10 +232,8 @@ public final class PublishCommand implements Callable<Integer> {
                     @SuppressWarnings("unchecked")
                     List<MavenPublisher.Artifact> artifacts =
                             (List<MavenPublisher.Artifact>) ctx.require(ARTIFACTS);
-                    String user = username != null ? username : System.getenv("PUBLISH_USER");
-                    String pass = password != null ? password : System.getenv("PUBLISH_PASSWORD");
                     ctx.label("upload to " + repoUrl);
-                    MavenPublisher publisher = new MavenPublisher(repoUrl, user, pass);
+                    MavenPublisher publisher = new MavenPublisher(repoUrl, resolvePublishCredential(project));
                     try {
                         MavenPublisher.Result result = publisher.publish(
                                 project.project(), artifacts, ctx.require(SIGNING));
@@ -282,6 +284,36 @@ public final class PublishCommand implements Callable<Integer> {
                     + (signing.isNoop() ? "" : ", signed") + ")");
         }
         return 0;
+    }
+
+    /**
+     * Credential for the publish upload. Explicit {@code --user}/{@code --password}
+     * (or {@code PUBLISH_USER}/{@code PUBLISH_PASSWORD}) win for back-compat;
+     * otherwise resolve through the shared chain. If {@code --repo-url} matches
+     * a repository declared in {@code jk.toml}, its name (for env/store/settings)
+     * and inline credential apply; the forge-token bridge always applies by host
+     * (so publishing to GitHub Packages reuses a `jk auth login` token).
+     */
+    private RepoCredential resolvePublishCredential(JkBuild project) {
+        String user = username != null ? username : System.getenv("PUBLISH_USER");
+        if (user != null && !user.isBlank()) {
+            String pass = password != null ? password : System.getenv("PUBLISH_PASSWORD");
+            return new RepoCredential.Basic(user, pass == null ? "" : pass);
+        }
+
+        String matchedName = null;
+        Optional<RepoCredential> inline = Optional.empty();
+        String target = repoUrl.toString();
+        for (RepositorySpec spec : project.repositories()) {
+            String base = spec.url().toString();
+            String basePrefix = base.endsWith("/") ? base : base + "/";
+            if (target.equals(base) || target.startsWith(basePrefix)) {
+                matchedName = spec.name();
+                inline = spec.credential();
+                break;
+            }
+        }
+        return new RepoCredentialResolver().resolve(matchedName, repoUrl, inline);
     }
 
     private void printDryRunPlan(JkBuild project, List<MavenPublisher.Artifact> artifacts) {
