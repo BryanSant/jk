@@ -2,7 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Journal;
-import dev.jkbuild.registry.AliasRegistry;
+import dev.jkbuild.alias.AliasCatalog;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
@@ -17,18 +17,18 @@ import java.util.Locale;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk registry search <term>...} — substring match against name,
- * group, and artifact across every layer of the alias registry. Multiple
+ * {@code jk alias search <term>...} — substring match against name,
+ * group, and artifact across every layer of the alias catalog. Multiple
  * terms are ANDed (each must appear somewhere in name/group/artifact).
  * Matches are case-insensitive.
  *
- * <p>Output shape mirrors {@code jk registry list}: {@code name [layer]
+ * <p>Output shape mirrors {@code jk alias list}: {@code name [layer]
  * group:artifact}. The layer tag lets the user see when a project- or
  * user-level override is shadowing the bundled coord.
  */
 @Command(name = "search",
-        description = "Find registry entries by substring of name, group, or artifact")
-public final class RegistrySearchCommand implements Callable<Integer> {
+        description = "Find alias entries by substring of name, group, or artifact")
+public final class AliasSearchCommand implements Callable<Integer> {
 
     @Parameters(arity = "1..*", paramLabel = "<term>",
             description = "One or more substrings. All must match (in name, group, or artifact).")
@@ -46,14 +46,14 @@ public final class RegistrySearchCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        AliasRegistry registry = AliasRegistry.layered();
+        AliasCatalog catalog = AliasCatalog.layered();
         Journal journal = new Journal(cacheDir != null ? cacheDir : JkDirs.cache());
         List<String> lowerTerms = new ArrayList<>(terms.size());
         for (String t : terms) lowerTerms.add(t.toLowerCase(Locale.ROOT));
 
         List<Hit> hits = new ArrayList<>();
-        for (String name : registry.names()) {
-            var src = registry.source(name).orElseThrow();
+        for (String name : catalog.names()) {
+            var src = catalog.source(name).orElseThrow();
             String lowerName = name.toLowerCase(Locale.ROOT);
             String lowerGroup = src.module().group().toLowerCase(Locale.ROOT);
             String lowerArtifact = src.module().artifact().toLowerCase(Locale.ROOT);
@@ -115,5 +115,5 @@ public final class RegistrySearchCommand implements Callable<Integer> {
         return s + " ".repeat(width - s.length());
     }
 
-    private record Hit(String name, AliasRegistry.Source src, List<String> cached) {}
+    private record Hit(String name, AliasCatalog.Source src, List<String> cached) {}
 }

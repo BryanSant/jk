@@ -108,10 +108,10 @@ class AddRemoveCommandTest {
     }
 
     @Test
-    void add_unknown_bare_name_suggests_close_registry_matches(@TempDir Path tempDir) throws Exception {
+    void add_unknown_bare_name_suggests_close_catalog_matches(@TempDir Path tempDir) throws Exception {
         // `picocl` is a typo for `picocli`, which IS in the bundled
-        // registry. The "not in registry" error should surface the
-        // suggestion via AliasRegistry.suggestionsFor — matching the
+        // catalog. The "not in catalog" error should surface the
+        // suggestion via AliasCatalog.suggestionsFor — matching the
         // did-you-mean behavior of the parser.
         run("new", tempDir.toString());
 
@@ -126,7 +126,7 @@ class AddRemoveCommandTest {
         }
         assertThat(exit).isEqualTo(64);
         String msg = stderr.toString(StandardCharsets.UTF_8);
-        assertThat(msg).contains("not in the registry");
+        assertThat(msg).contains("not in the alias catalog");
         assertThat(msg).contains("Did you mean:");
         assertThat(msg).contains("picocli");
     }

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# jk bundled short-name registry.
+# jk bundled short-name alias catalog.
 #
 # Maps a curated short identifier to a Maven `group:artifact` pair. When a
 # project's jk.toml references a known short name, jk fills in the
@@ -30,7 +30,7 @@
 #     tools.jackson.*). The bundled set deliberately does NOT pick a
 #     default — both `jackson2-databind` and `jackson3-databind` are
 #     curated; the unprefixed `jackson-databind` is intentionally absent
-#     so a registry adopter never gets a silent major-version bump.
+#     so an alias-catalog adopter never gets a silent major-version bump.
 #     Within-coord major bumps (Spring Boot 2 vs 3 — same GAV, different
 #     version selector) keep one alias; the user's version field does the
 #     work.

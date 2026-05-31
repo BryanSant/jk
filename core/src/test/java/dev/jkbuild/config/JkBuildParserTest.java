@@ -6,7 +6,7 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
-import dev.jkbuild.registry.AliasRegistry;
+import dev.jkbuild.alias.AliasCatalog;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -277,9 +277,9 @@ class JkBuildParserTest {
     }
 
     @Test
-    void dep_string_value_is_registry_shorthand_not_v0_6_coord_string() {
+    void dep_string_value_is_catalog_shorthand_not_v0_6_coord_string() {
         // A string value is now treated as the version shorthand for a
-        // registry-known name. Pasting the old v0.6 coord-string form
+        // catalog-known name. Pasting the old v0.6 coord-string form
         // ("group:artifact:version") trips the unknown-short-name error.
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
@@ -471,22 +471,22 @@ class JkBuildParserTest {
     }
 
     // ───────────────────────────────────────────────────────────────
-    //  Alias-registry shorthand
+    //  Alias-catalog shorthand
     // ───────────────────────────────────────────────────────────────
 
-    /** Synthetic registry used so the tests don't drift with the bundled set. */
-    private static final AliasRegistry TEST_REGISTRY = AliasRegistry.of(Map.of(
-            "jackson-databind", new AliasRegistry.Module("tools.jackson.core", "jackson-databind"),
-            "picocli", new AliasRegistry.Module("info.picocli", "picocli")));
+    /** Synthetic catalog used so the tests don't drift with the bundled set. */
+    private static final AliasCatalog TEST_CATALOG = AliasCatalog.of(Map.of(
+            "jackson-databind", new AliasCatalog.Module("tools.jackson.core", "jackson-databind"),
+            "picocli", new AliasCatalog.Module("info.picocli", "picocli")));
 
     @Test
-    void shorthand_string_value_resolves_through_registry() {
+    void shorthand_string_value_resolves_through_catalog() {
         // The cargo-add experience: `name = "1.0.0"` looks up the coord in
-        // the bundled registry and treats the version as caret-floating.
+        // the bundled catalog and treats the version as caret-floating.
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
                 jackson-databind = "2.18.2"
-                """, TEST_REGISTRY);
+                """, TEST_CATALOG);
         var deps = parsed.dependencies().of(Scope.MAIN);
         assertThat(deps).hasSize(1);
         assertThat(deps.getFirst().name()).isEqualTo("jackson-databind");
@@ -497,23 +497,23 @@ class JkBuildParserTest {
     }
 
     @Test
-    void shorthand_table_without_group_resolves_through_registry() {
+    void shorthand_table_without_group_resolves_through_catalog() {
         // A dep table that lists only `version` (no `group`) falls back to
-        // the registry the same way the string shorthand does.
+        // the catalog the same way the string shorthand does.
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
                 picocli = { version = "4.7.7" }
-                """, TEST_REGISTRY);
+                """, TEST_CATALOG);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.module()).isEqualTo("info.picocli:picocli");
     }
 
     @Test
-    void explicit_group_overrides_registry() {
+    void explicit_group_overrides_catalog() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
                 jackson-databind = { group = "io.fork", version = "2.18.2" }
-                """, TEST_REGISTRY);
+                """, TEST_CATALOG);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.module()).isEqualTo("io.fork:jackson-databind");
     }
@@ -523,7 +523,7 @@ class JkBuildParserTest {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
                 some-unknown-thing = "1.0.0"
-                """, TEST_REGISTRY))
+                """, TEST_CATALOG))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("unknown short name");
     }
@@ -531,11 +531,11 @@ class JkBuildParserTest {
     @Test
     void unknown_shorthand_surfaces_did_you_mean_for_split_families() {
         // The parser's unknown-alias message includes suggestions drawn
-        // from the registry. For the Jackson family this means typing the
+        // from the catalog. For the Jackson family this means typing the
         // unprefixed name surfaces both major-version flavors.
-        AliasRegistry splitFamily = AliasRegistry.of(Map.of(
-                "jackson2-databind", new AliasRegistry.Module("com.fasterxml.jackson.core", "jackson-databind"),
-                "jackson3-databind", new AliasRegistry.Module("tools.jackson.core", "jackson-databind")));
+        AliasCatalog splitFamily = AliasCatalog.of(Map.of(
+                "jackson2-databind", new AliasCatalog.Module("com.fasterxml.jackson.core", "jackson-databind"),
+                "jackson3-databind", new AliasCatalog.Module("tools.jackson.core", "jackson-databind")));
 
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
@@ -553,27 +553,27 @@ class JkBuildParserTest {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
                 also-unknown = { version = "1.0.0" }
-                """, TEST_REGISTRY))
+                """, TEST_CATALOG))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("must set a `group`");
     }
 
     @Test
-    void path_source_still_requires_explicit_group_even_for_registry_name() {
-        // Registry shorthand is name → version; path/git sources are
-        // out-of-registry by construction. Force the user to be explicit.
+    void path_source_still_requires_explicit_group_even_for_catalog_name() {
+        // Catalog shorthand is name → version; path/git sources are
+        // out-of-catalog by construction. Force the user to be explicit.
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
                 picocli = { path = "../picocli" }
-                """, TEST_REGISTRY))
+                """, TEST_CATALOG))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("must set a `group` explicitly");
     }
 
     @Test
-    void project_aliases_table_overrides_passed_in_registry() {
+    void project_aliases_table_overrides_passed_in_catalog() {
         // The project-local [aliases] table is the top of the lookup chain;
-        // it shadows the registry passed by callers (including the bundled
+        // it shadows the catalog passed by callers (including the bundled
         // one in production).
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [aliases]
@@ -581,7 +581,7 @@ class JkBuildParserTest {
 
                 [dependencies.main]
                 picocli = "4.7.7"
-                """, TEST_REGISTRY);
+                """, TEST_CATALOG);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.module()).isEqualTo("io.fork:picocli");
     }
@@ -594,7 +594,7 @@ class JkBuildParserTest {
 
                 [dependencies.main]
                 internal-widget = "0.1.0"
-                """, TEST_REGISTRY);
+                """, TEST_CATALOG);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.module()).isEqualTo("com.acme:internal-widget");
     }
@@ -604,7 +604,7 @@ class JkBuildParserTest {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [aliases]
                 bad = "com.acme:bad:1.0.0"
-                """, TEST_REGISTRY))
+                """, TEST_CATALOG))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("carries a version");
     }

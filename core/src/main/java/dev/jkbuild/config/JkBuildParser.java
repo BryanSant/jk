@@ -3,7 +3,7 @@ package dev.jkbuild.config;
 
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
-import dev.jkbuild.registry.AliasRegistry;
+import dev.jkbuild.alias.AliasCatalog;
 import dev.jkbuild.model.Feature;
 import dev.jkbuild.model.Features;
 import dev.jkbuild.model.GitRefSpec;
@@ -70,17 +70,17 @@ public final class JkBuildParser {
     }
 
     public static JkBuild parse(String toml) {
-        return parse(toml, AliasRegistry.layered());
+        return parse(toml, AliasCatalog.layered());
     }
 
     /**
-     * Test seam: parse against a synthetic alias registry instead of the
+     * Test seam: parse against a synthetic alias catalog instead of the
      * default layered one. The manifest's own {@code [aliases]} table is
-     * still layered on top via {@link AliasRegistry#withProjectOverrides}.
+     * still layered on top via {@link AliasCatalog#withProjectOverrides}.
      */
-    public static JkBuild parse(String toml, AliasRegistry registry) {
+    public static JkBuild parse(String toml, AliasCatalog catalog) {
         Objects.requireNonNull(toml, "toml");
-        Objects.requireNonNull(registry, "registry");
+        Objects.requireNonNull(catalog, "catalog");
         TomlParseResult result = Toml.parse(toml);
         if (result.hasErrors()) {
             throw new JkBuildParseException(
@@ -88,7 +88,7 @@ public final class JkBuildParser {
         }
         JkBuild.Project project = parseProject(result);
         Workspace workspace = parseWorkspace(result);
-        AliasRegistry effective = registry.withProjectOverrides(parseProjectAliases(result));
+        AliasCatalog effective = catalog.withProjectOverrides(parseProjectAliases(result));
         JkBuild.Dependencies deps = parseDependencies(result, workspace, effective);
         List<RepositorySpec> repos = parseRepositories(result);
         Profiles profiles = parseProfiles(result);
@@ -98,14 +98,14 @@ public final class JkBuildParser {
 
     /**
      * Parse the optional top-level {@code [aliases]} table. Empty map when
-     * absent. Validated through {@link AliasRegistry#parseAliasesTable} so
+     * absent. Validated through {@link AliasCatalog#parseAliasesTable} so
      * the schema matches the bundled and user files.
      */
-    private static java.util.Map<String, AliasRegistry.Module> parseProjectAliases(TomlTable root) {
+    private static java.util.Map<String, AliasCatalog.Module> parseProjectAliases(TomlTable root) {
         TomlTable aliases = root.getTable("aliases");
         if (aliases == null) return java.util.Map.of();
         try {
-            return AliasRegistry.parseAliasesTable(aliases, "jk.toml");
+            return AliasCatalog.parseAliasesTable(aliases, "jk.toml");
         } catch (IllegalStateException e) {
             throw new JkBuildParseException(e.getMessage(), e);
         }
@@ -177,7 +177,7 @@ public final class JkBuildParser {
     // ---------------------------------------------------------------------
 
     private static JkBuild.Dependencies parseDependencies(
-            TomlTable root, Workspace workspace, AliasRegistry registry) {
+            TomlTable root, Workspace workspace, AliasCatalog catalog) {
         TomlTable deps = root.getTable("dependencies");
         if (deps == null) return JkBuild.Dependencies.empty();
         EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
@@ -207,7 +207,7 @@ public final class JkBuildParser {
         if (!flatDepKeys.isEmpty()) {
             // Default-scope shorthand: [dependencies] with only inline-table
             // children is treated as [dependencies.main].
-            List<Dependency> parsed = parseScopeTable(deps, flatDepKeys, Scope.MAIN, workspace, registry);
+            List<Dependency> parsed = parseScopeTable(deps, flatDepKeys, Scope.MAIN, workspace, catalog);
             if (!parsed.isEmpty()) byScope.put(Scope.MAIN, parsed);
         }
 
@@ -219,7 +219,7 @@ public final class JkBuildParser {
                         "dependencies." + scopeKey + " must be a table of name → dep entries");
             }
             List<Dependency> parsed = parseScopeTable(scopeTable,
-                    new ArrayList<>(scopeTable.keySet()), scope, workspace, registry);
+                    new ArrayList<>(scopeTable.keySet()), scope, workspace, catalog);
             if (!parsed.isEmpty()) byScope.put(scope, parsed);
         }
         return new JkBuild.Dependencies(byScope);
@@ -241,66 +241,66 @@ public final class JkBuildParser {
 
     private static List<Dependency> parseScopeTable(
             TomlTable scopeTable, List<String> keys, Scope scope,
-            Workspace workspace, AliasRegistry registry) {
+            Workspace workspace, AliasCatalog catalog) {
         List<Dependency> result = new ArrayList<>(keys.size());
         for (String name : keys) {
             Object value = scopeTable.get(List.of(name));
             if (value instanceof String versionShorthand) {
                 // Cargo-style one-liner: `name = "1.0.0"`. Resolve the
-                // coord via the bundled registry; the user provides only
+                // coord via the bundled catalog; the user provides only
                 // the version selector.
-                result.add(parseShorthandEntry(name, versionShorthand, scope, registry));
+                result.add(parseShorthandEntry(name, versionShorthand, scope, catalog));
                 continue;
             }
             if (!(value instanceof TomlTable entry)) {
                 throw new JkBuildParseException(
                         "dependencies." + scope.canonical() + "." + name
                                 + " must be an inline table (e.g. { group = \"...\", version = \"...\" })"
-                                + " or a version-string shorthand for a registry-known name");
+                                + " or a version-string shorthand for a catalog-known name");
             }
-            result.add(parseDepEntry(name, entry, scope, workspace, registry));
+            result.add(parseDepEntry(name, entry, scope, workspace, catalog));
         }
         return result;
     }
 
     /**
      * Resolve a {@code name = "version-spec"} shorthand by looking the
-     * short name up in the bundled alias registry.
+     * short name up in the bundled alias catalog.
      */
     private static Dependency parseShorthandEntry(
-            String name, String versionRaw, Scope scope, AliasRegistry registry) {
+            String name, String versionRaw, Scope scope, AliasCatalog catalog) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
         if (versionRaw.isBlank()) {
             throw new JkBuildParseException(displayPath + " has an empty version string");
         }
-        AliasRegistry.Module mod = registry.lookup(name).orElseThrow(() ->
-                new JkBuildParseException(unknownAliasMessage(displayPath, name, registry)));
+        AliasCatalog.Module mod = catalog.lookup(name).orElseThrow(() ->
+                new JkBuildParseException(unknownAliasMessage(displayPath, name, catalog)));
         VersionSelector selector = VersionSelector.parseFloating(versionRaw);
         return Dependency.of(name, mod.moduleKey(), selector);
     }
 
     /**
      * Compose the error shown when a short name doesn't resolve. Appends
-     * a "did you mean" line when the registry has plausible alternatives —
+     * a "did you mean" line when the catalog has plausible alternatives —
      * particularly useful for major-version-split families like Jackson 2
      * vs 3, where typing the unprefixed name silently fails by design.
      */
-    private static String unknownAliasMessage(String displayPath, String name, AliasRegistry registry) {
+    private static String unknownAliasMessage(String displayPath, String name, AliasCatalog catalog) {
         StringBuilder msg = new StringBuilder(displayPath)
                 .append(" — unknown short name `").append(name).append("`. ");
-        List<String> suggestions = registry.suggestionsFor(name, 5);
+        List<String> suggestions = catalog.suggestionsFor(name, 5);
         if (!suggestions.isEmpty()) {
             msg.append("Did you mean: ").append(String.join(", ", suggestions)).append("? ");
         }
         msg.append("Either spell out the coord as `{ group = \"...\", version = \"...\" }`, ")
-                .append("or pick a curated name from the registry ")
+                .append("or pick a curated name from the catalog ")
                 .append("(see docs/artifact-coord-design.md).");
         return msg.toString();
     }
 
     private static Dependency parseDepEntry(
             String name, TomlTable entry, Scope scope,
-            Workspace workspace, AliasRegistry registry) {
+            Workspace workspace, AliasCatalog catalog) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
@@ -334,19 +334,19 @@ public final class JkBuildParser {
         }
 
         // For non-workspace deps, group/artifact may come from the table or
-        // fall back to the bundled registry (which keys off the short name).
+        // fall back to the bundled catalog (which keys off the short name).
         // path/git sources still REQUIRE explicit `group` — they're inherently
         // user-controlled overrides where defaulting silently would be
         // surprising.
         String groupExplicit = entry.getString("group");
         String artifactExplicit = entry.getString("artifact");
-        AliasRegistry.Module registryHit = (groupExplicit == null)
-                ? registry.lookup(name).orElse(null) : null;
+        AliasCatalog.Module catalogHit = (groupExplicit == null)
+                ? catalog.lookup(name).orElse(null) : null;
 
         String group = groupExplicit != null ? groupExplicit
-                : (registryHit != null ? registryHit.group() : null);
+                : (catalogHit != null ? catalogHit.group() : null);
         String artifact = artifactExplicit != null ? artifactExplicit
-                : (registryHit != null ? registryHit.artifact() : name);
+                : (catalogHit != null ? catalogHit.artifact() : name);
         if (artifact != null && artifact.isBlank()) {
             throw new JkBuildParseException(displayPath + ".artifact must not be blank");
         }
@@ -355,7 +355,7 @@ public final class JkBuildParser {
             if (groupExplicit == null || groupExplicit.isBlank()) {
                 throw new JkBuildParseException(displayPath
                         + " with `path = ...` must set a `group` explicitly "
-                        + "(registry shorthand applies only to version-based deps)");
+                        + "(catalog shorthand applies only to version-based deps)");
             }
             String path = entry.getString("path");
             if (path == null || path.isBlank()) {
@@ -368,7 +368,7 @@ public final class JkBuildParser {
             if (groupExplicit == null || groupExplicit.isBlank()) {
                 throw new JkBuildParseException(displayPath
                         + " with `git = ...` must set a `group` explicitly "
-                        + "(registry shorthand applies only to version-based deps)");
+                        + "(catalog shorthand applies only to version-based deps)");
             }
             GitSource source = parseGitSource(entry, displayPath);
             return Dependency.git(name, group + ":" + artifact, source);
@@ -377,7 +377,7 @@ public final class JkBuildParser {
         // version-only.
         if (group == null || group.isBlank()) {
             throw new JkBuildParseException(displayPath
-                    + " must set a `group` (or use a registry-known short name)");
+                    + " must set a `group` (or use a catalog-known short name)");
         }
         String versionRaw = entry.getString("version");
         if (versionRaw == null || versionRaw.isBlank()) {

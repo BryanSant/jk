@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class RegistryUpdateCommandTest {
+class AliasUpdateCommandTest {
 
     private HttpServer server;
     private URI base;
@@ -125,7 +125,7 @@ class RegistryUpdateCommandTest {
 
     private int run(Path cacheFile) {
         return new CommandLine(new Jk()).execute(
-                "registry", "update",
+                "alias", "update",
                 "--source", base.toString(),
                 "--cache-file", cacheFile.toString());
     }

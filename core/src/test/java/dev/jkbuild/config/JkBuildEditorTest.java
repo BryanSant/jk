@@ -49,9 +49,9 @@ class JkBuildEditorTest {
 
     @Test
     void add_omits_artifact_when_it_matches_name() {
-        // `acme-thing` is deliberately not in the bundled registry — that
+        // `acme-thing` is deliberately not in the bundled catalog — that
         // way this test exercises the structured-form artifact-omission
-        // branch, not the registry-shorthand branch tested below.
+        // branch, not the catalog-shorthand branch tested below.
         String result = JkBuildEditor.addDependency(
                 BASE, Scope.MAIN, "acme-thing", "com.acme", "acme-thing", "1.0.0");
 
@@ -60,8 +60,8 @@ class JkBuildEditorTest {
     }
 
     @Test
-    void add_emits_shorthand_for_registry_known_names() {
-        // picocli is in the bundled registry → cargo-style one-liner.
+    void add_emits_shorthand_for_catalog_known_names() {
+        // picocli is in the bundled catalog → cargo-style one-liner.
         String result = JkBuildEditor.addDependency(
                 BASE, Scope.MAIN, "picocli", "info.picocli", "picocli", "4.7.7");
 
@@ -76,9 +76,9 @@ class JkBuildEditorTest {
     }
 
     @Test
-    void add_uses_structured_form_when_group_disagrees_with_registry() {
-        // Same name as a registry entry but a deliberately different group:
-        // the user is overriding the registry, so the structured form is
+    void add_uses_structured_form_when_group_disagrees_with_catalog() {
+        // Same name as a catalog entry but a deliberately different group:
+        // the user is overriding the catalog, so the structured form is
         // emitted (the shorthand would lie about the resolved coord).
         String result = JkBuildEditor.addDependency(
                 BASE, Scope.MAIN, "picocli", "io.fork", "picocli", "4.7.7");
