@@ -110,11 +110,23 @@ public sealed interface WizardStep
             Function<Answers, List<Choice>> choicesFn,
             String defaultChoice,
             Orientation orientation,
+            String customPlaceholder,
             Predicate<Answers> shouldRun)
             implements WizardStep {
 
         public RadioStep {
             choices = List.copyOf(choices);
+            if (customPlaceholder == null) customPlaceholder = "";
+        }
+
+        /**
+         * Whether this step appends a free-form "enter your own" row after the
+         * fixed choices. Only honored for {@link Orientation#VERTICAL} lists.
+         * When selected, the typed text becomes the answer verbatim (in place
+         * of a choice id).
+         */
+        public boolean hasCustomOption() {
+            return !customPlaceholder.isEmpty();
         }
 
         /**
@@ -147,6 +159,7 @@ public sealed interface WizardStep
             private final List<Choice> choices = new ArrayList<>();
             private Function<Answers, List<Choice>> choicesFn;
             private String defaultChoice = "";
+            private String customPlaceholder = "";
             private Predicate<Answers> shouldRun = ALWAYS;
 
             private Builder(String key, String prompt, Orientation orientation) {
@@ -167,6 +180,17 @@ public sealed interface WizardStep
 
             public Builder choice(String id, String label, Function<Answers, String> hintFn) {
                 this.choices.add(new Choice(id, label, hintFn));
+                return this;
+            }
+
+            /**
+             * Append a free-form text row after the fixed choices (vertical
+             * lists only). {@code placeholder} is shown as dim example text
+             * the user can type over, like an input step. Selecting this row
+             * stores the typed text as the answer instead of a choice id.
+             */
+            public Builder customOption(String placeholder) {
+                this.customPlaceholder = placeholder == null ? "" : placeholder;
                 return this;
             }
 
@@ -195,7 +219,8 @@ public sealed interface WizardStep
                 var resolved = defaultChoice.isEmpty() && !choices.isEmpty()
                         ? choices.getFirst().id()
                         : defaultChoice;
-                return new RadioStep(key, prompt, choices, choicesFn, resolved, orientation, shouldRun);
+                return new RadioStep(key, prompt, choices, choicesFn, resolved, orientation,
+                        customPlaceholder, shouldRun);
             }
         }
     }
@@ -206,12 +231,24 @@ public sealed interface WizardStep
             List<Choice> choices,
             Set<String> defaults,
             Orientation orientation,
+            String customPlaceholder,
             Predicate<Answers> shouldRun)
             implements WizardStep {
 
         public MultiSelectStep {
             choices = List.copyOf(choices);
             defaults = Set.copyOf(defaults);
+            if (customPlaceholder == null) customPlaceholder = "";
+        }
+
+        /**
+         * Whether this step appends a free-form "enter your own" checkbox row
+         * after the fixed choices (vertical lists only). The row counts as
+         * checked while it holds text; that text is appended to the selected
+         * list verbatim on commit.
+         */
+        public boolean hasCustomOption() {
+            return !customPlaceholder.isEmpty();
         }
 
         public static Builder horizontal(String key, String prompt) {
@@ -232,6 +269,7 @@ public sealed interface WizardStep
             private final Orientation orientation;
             private final List<Choice> choices = new ArrayList<>();
             private final Set<String> defaults = new LinkedHashSet<>();
+            private String customPlaceholder = "";
             private Predicate<Answers> shouldRun = ALWAYS;
 
             private Builder(String key, String prompt, Orientation orientation) {
@@ -267,13 +305,25 @@ public sealed interface WizardStep
                 return this;
             }
 
+            /**
+             * Append a free-form text checkbox row after the fixed choices
+             * (vertical lists only). {@code placeholder} is shown as dim
+             * example text the user can type over. When non-blank on commit,
+             * the typed text is appended to the selected list verbatim.
+             */
+            public Builder customOption(String placeholder) {
+                this.customPlaceholder = placeholder == null ? "" : placeholder;
+                return this;
+            }
+
             public Builder when(Predicate<Answers> shouldRun) {
                 this.shouldRun = shouldRun;
                 return this;
             }
 
             public MultiSelectStep build() {
-                return new MultiSelectStep(key, prompt, choices, defaults, orientation, shouldRun);
+                return new MultiSelectStep(key, prompt, choices, defaults, orientation,
+                        customPlaceholder, shouldRun);
             }
         }
     }

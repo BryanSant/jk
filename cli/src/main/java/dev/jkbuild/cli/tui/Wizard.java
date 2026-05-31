@@ -384,11 +384,17 @@ public final class Wizard {
                 if (selected.isEmpty()) {
                     yield List.of(answerLine("(none selected)", answerStyle));
                 }
-                var labels = new ArrayList<AttributedString>();
+                // Map known choice ids to their labels; entries with no match
+                // (a free-form custom value) render verbatim. Iterate the
+                // stored list so selection order — including the appended
+                // custom value — is preserved.
+                var byId = new java.util.HashMap<String, String>();
                 for (var c : ms.choices()) {
-                    if (selected.contains(c.id())) {
-                        labels.add(answerLine(c.label(), answerStyle));
-                    }
+                    byId.put(c.id(), c.label());
+                }
+                var labels = new ArrayList<AttributedString>();
+                for (var v : selected) {
+                    labels.add(answerLine(byId.getOrDefault(v, v), answerStyle));
                 }
                 yield labels;
             }
@@ -533,13 +539,38 @@ public final class Wizard {
         }
 
         private boolean handleRadio(WizardStep.RadioStep rs, KeyReader.Key key) {
-            int size = rs.choicesFor(snapshot).size();
+            int choiceCount = rs.choicesFor(snapshot).size();
+            boolean customEnabled = rs.hasCustomOption() && rs.orientation() == Orientation.VERTICAL;
+            int size = choiceCount + (customEnabled ? 1 : 0);
+            boolean onCustom = customEnabled && focus == choiceCount;
             return switch (key) {
-                case KeyReader.Key.Enter e -> true;
+                case KeyReader.Key.Enter e -> {
+                    if (onCustom && input.length() == 0) {
+                        error = "Type a value or pick an option above.";
+                        yield false;
+                    }
+                    error = "";
+                    yield true;
+                }
                 case KeyReader.Key.Up u -> moveFocus(-1, size, rs.orientation() == Orientation.VERTICAL);
                 case KeyReader.Key.Down d -> moveFocus(1, size, rs.orientation() == Orientation.VERTICAL);
                 case KeyReader.Key.Left l -> moveFocus(-1, size, rs.orientation() == Orientation.HORIZONTAL);
                 case KeyReader.Key.Right r -> moveFocus(1, size, rs.orientation() == Orientation.HORIZONTAL);
+                case KeyReader.Key.Backspace b when onCustom -> {
+                    if (input.length() > 0) input.deleteCharAt(input.length() - 1);
+                    error = "";
+                    yield false;
+                }
+                case KeyReader.Key.Space s when onCustom -> {
+                    input.append(' ');
+                    error = "";
+                    yield false;
+                }
+                case KeyReader.Key.Char(char c) when onCustom -> {
+                    input.append(c);
+                    error = "";
+                    yield false;
+                }
                 default -> false;
             };
         }
@@ -553,22 +584,40 @@ public final class Wizard {
         }
 
         private boolean handleMulti(WizardStep.MultiSelectStep ms, KeyReader.Key key) {
-            var size = ms.choices().size();
+            int choiceCount = ms.choices().size();
+            boolean customEnabled = ms.hasCustomOption() && ms.orientation() == Orientation.VERTICAL;
+            int size = choiceCount + (customEnabled ? 1 : 0);
+            boolean onCustom = customEnabled && focus == choiceCount;
             return switch (key) {
                 case KeyReader.Key.Enter e -> true;
+                // On the free-form row, Space / chars / Backspace edit the
+                // buffer instead of toggling — the row is "checked" whenever
+                // it holds text, so there's nothing to toggle.
+                case KeyReader.Key.Backspace b when onCustom -> {
+                    if (input.length() > 0) input.deleteCharAt(input.length() - 1);
+                    yield false;
+                }
                 case KeyReader.Key.Space s -> {
-                    var c = ms.choices().get(focus);
-                    if (!selected.add(c.id())) {
-                        selected.remove(c.id());
+                    if (onCustom) {
+                        input.append(' ');
+                    } else {
+                        var c = ms.choices().get(focus);
+                        if (!selected.add(c.id())) {
+                            selected.remove(c.id());
+                        }
                     }
                     yield false;
                 }
-                case KeyReader.Key.Char(char ch) when ch == 'a' -> {
-                    if (selected.size() == size) {
-                        selected.clear();
-                    } else {
-                        for (var c : ms.choices()) {
-                            selected.add(c.id());
+                case KeyReader.Key.Char(char ch) -> {
+                    if (onCustom) {
+                        input.append(ch);
+                    } else if (ch == 'a') {
+                        if (selected.size() == choiceCount) {
+                            selected.clear();
+                        } else {
+                            for (var c : ms.choices()) {
+                                selected.add(c.id());
+                            }
                         }
                     }
                     yield false;
@@ -584,13 +633,25 @@ public final class Wizard {
         void commit(Map<String, Object> answers) {
             switch (step) {
                 case WizardStep.InputStep is -> answers.put(is.key(), input.toString());
-                case WizardStep.RadioStep rs -> answers.put(rs.key(), rs.choicesFor(snapshot).get(focus).id());
+                case WizardStep.RadioStep rs -> {
+                    var choices = rs.choicesFor(snapshot);
+                    boolean customEnabled = rs.hasCustomOption() && rs.orientation() == Orientation.VERTICAL;
+                    if (customEnabled && focus == choices.size()) {
+                        answers.put(rs.key(), input.toString());
+                    } else {
+                        answers.put(rs.key(), choices.get(focus).id());
+                    }
+                }
                 case WizardStep.MultiSelectStep ms -> {
                     var ordered = new ArrayList<String>();
                     for (var c : ms.choices()) {
                         if (selected.contains(c.id())) {
                             ordered.add(c.id());
                         }
+                    }
+                    boolean customEnabled = ms.hasCustomOption() && ms.orientation() == Orientation.VERTICAL;
+                    if (customEnabled && !input.toString().isBlank()) {
+                        ordered.add(input.toString());
                     }
                     answers.put(ms.key(), List.copyOf(ordered));
                 }
@@ -658,8 +719,39 @@ public final class Wizard {
                     appendHint(sb, c.hintFor(snapshot));
                     lines.add(sb.toAttributedString());
                 }
+                if (rs.hasCustomOption()) {
+                    var isFocused = focus == choices.size();
+                    var sb = new AttributedStringBuilder()
+                            .append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
+                                    isFocused ? Theme.completedStep() : Theme.dim())
+                            .append(" ");
+                    appendCustomField(sb, isFocused, rs.customPlaceholder());
+                    lines.add(sb.toAttributedString());
+                    appendError(lines);
+                }
             }
             return lines;
+        }
+
+        /**
+         * Render the editable free-form field: the placeholder as dim italic
+         * example text while empty (overwrite-able), or the typed text in the
+         * focused/dim style once the user starts typing.
+         */
+        private void appendCustomField(AttributedStringBuilder sb, boolean focused, String placeholder) {
+            if (input.length() == 0) {
+                sb.append(placeholder, Theme.dim().italic());
+            } else {
+                sb.append(input.toString(), focused ? Theme.focused() : Theme.dim());
+            }
+        }
+
+        private void appendError(List<AttributedString> lines) {
+            if (!error.isEmpty()) {
+                lines.add(new AttributedStringBuilder()
+                        .append(error, Theme.error())
+                        .toAttributedString());
+            }
         }
 
         private static void appendHint(AttributedStringBuilder sb, String hint) {
@@ -689,6 +781,19 @@ public final class Wizard {
                         sb.append(c.label(), labelStyle);
                     }
                     appendHint(sb, c.hintFor(snapshot));
+                    lines.add(sb.toAttributedString());
+                }
+                if (ms.hasCustomOption()) {
+                    var isFocused = focus == ms.choices().size();
+                    var isChecked = input.length() > 0;  // checked while it holds text
+                    var glyph = isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF;
+                    var glyphStyle = isChecked
+                            ? Theme.completedStep()
+                            : (isFocused ? Theme.activeStep() : Theme.dim());
+                    var sb = new AttributedStringBuilder()
+                            .append(glyph, glyphStyle)
+                            .append(" ");
+                    appendCustomField(sb, isFocused, ms.customPlaceholder());
                     lines.add(sb.toAttributedString());
                 }
             } else {
