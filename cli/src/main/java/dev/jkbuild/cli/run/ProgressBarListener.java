@@ -44,9 +44,9 @@ public final class ProgressBarListener implements GoalListener {
     private static final String[] SPIN_FRAMES = {"·", "✢", "✳", "✶", "✻", "✽"};
     private static final long FRAME_MS = 120L;
 
-    // Gradient: violet #8150fe → coral #e3475b
-    private static final int GRAD_SR = 0x81, GRAD_SG = 0x50, GRAD_SB = 0xfe;
-    private static final int GRAD_ER = 0xe3, GRAD_EG = 0x47, GRAD_EB = 0x5b;
+    // Gradient: magenta #e600ff → orange #ff8b1a
+    private static final int GRAD_SR = 0xe6, GRAD_SG = 0x00, GRAD_SB = 0xff;
+    private static final int GRAD_ER = 0xff, GRAD_EG = 0x8b, GRAD_EB = 0x1a;
 
     // Failure gradient: dark red #7f1d1d → bright red #ef4444
     private static final int FAIL_SR = 0x7f, FAIL_SG = 0x1d, FAIL_SB = 0x1d;

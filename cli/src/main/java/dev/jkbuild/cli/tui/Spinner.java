@@ -9,7 +9,7 @@ import java.io.PrintStream;
  * Single-line animated spinner widget for indeterminate-progress CLI
  * operations. Cycles through {@code · ✢ ✳ ✶ ✻ ✽} on a daemon thread,
  * one frame every {@value #FRAME_MS} ms. Each frame is rendered in its
- * own color along a blue → magenta gradient (the reverse of the
+ * own color along a magenta → orange gradient (the reverse of the
  * {@code jk init} title gradient).
  *
  * <p>Layout: {@code <frame> <message>} on the current line.
@@ -28,9 +28,9 @@ public final class Spinner implements AutoCloseable {
     /** Interval between frames. */
     static final long FRAME_MS = 120L;
 
-    // Reverse of the title gradient: violet #8150fe → coral #e3475b.
-    private static final int START_R = 0x81, START_G = 0x50, START_B = 0xfe;
-    private static final int END_R = 0xe3, END_G = 0x47, END_B = 0x5b;
+    // Reverse of the title gradient: magenta #e600ff → orange #ff8b1a.
+    private static final int START_R = 0xe6, START_G = 0x00, START_B = 0xff;
+    private static final int END_R = 0xff, END_G = 0x8b, END_B = 0x1a;
 
     private static final String HIDE_CURSOR = "\033[?25l";
     private static final String SHOW_CURSOR = "\033[?25h";
