@@ -67,6 +67,7 @@ import java.util.Set;
                 ToolCommand.class,
                 RegistryCommand.class,
                 AuthCommand.class,
+                RepoCommand.class,
                 DoctorCommand.class,
                 CacheCommand.class,
         })

@@ -79,29 +79,29 @@ credential lookup (matching Maven's `settings.xml` `<server><id>` convention).
 
 ## Credential resolution chain
 
-`RepoCredentialResolver.resolve(repo)` walks sources in precedence order and
-returns a `RepoCredential` (`Anonymous | Basic | Bearer | <cloud>`):
+`RepoCredentialResolver.resolve(repoId, url, inline)` walks sources in
+precedence order and returns a `RepoCredential` (`Anonymous | Basic | Bearer
+| <cloud>`). **Explicit configuration wins; the forge bridge is the
+convenience fallback** so it can never shadow a credential the user set on
+purpose:
 
-1. **Forge bridge** — if the host is a known package-registry host
-   (`maven.pkg.github.com` → GitHub, a GitLab `…/packages/maven` path →
-   GitLab), borrow the token from `ForgeAuth.resolveSilently(kind, forgeHost)`.
-   This is what makes package-registry access "just work" after `jk auth
-   login`. *(Per-registry header conventions need verification — see below.)*
-2. **Environment variables** — `JK_REPO_<NAME>_USERNAME` / `_PASSWORD` /
-   `_TOKEN` (name upper-cased, non-alphanumerics → `_`). CI-friendly, never
-   committed.
-3. **Inline jk.toml** — `[repositories.<name>]` `username`/`password`/`token`,
+1. **Inline jk.toml** — `[repositories.<name>]` `username`/`password`/`token`,
    with `${ENV}` interpolation. Convenient; raw secrets discouraged.
-4. **jk credential store** — `~/.jk/repo-credentials/<id>` (a `jk repo login`
+2. **Environment variables** — `JK_REPO_<NAME>_TOKEN`, or
+   `JK_REPO_<NAME>_USERNAME` + `_PASSWORD` (name upper-cased, non-alphanumerics
+   → `_`). CI-friendly, never committed.
+3. **jk credential store** — `~/.jk/repo-credentials/<id>` (the `jk repo login`
    flow, mirroring forge `TokenStore`), `0600`.
-5. **`~/.m2/settings.xml`** — `<servers>` matched by `<id>` == repo name. Lets
+4. **`~/.m2/settings.xml`** — `<servers>` matched by `<id>` == repo name. Lets
    teams already on Maven work with zero reconfiguration.
+5. **Forge bridge** — for a known package-registry host
+   (`maven.pkg.github.com` → GitHub; a GitLab host → GitLab), borrow the token
+   a prior `jk auth login` stored, via `ForgeAuth.resolveSilently`. Makes
+   package-registry access "just work" after logging in once. *(Per-registry
+   header conventions need verification — see below.)*
 6. **Cloud-native chains** (object stores only) — AWS default chain (env,
    `~/.aws/credentials` + `AWS_PROFILE`, instance/container roles); GCS ADC;
    Azure default. Used when no explicit cloud keys were supplied above.
-
-(Precedence is the proposed default; the forge bridge is first so logging in
-once to GitHub immediately unlocks GitHub Packages. Open to reordering.)
 
 ## Transport SPI
 
@@ -151,12 +151,21 @@ sources** where they overlap (env, store, cloud chains) but needs a distinct
 - `MavenSettings` (`:core`) — parse `~/.m2/settings.xml` `<servers>`.
 - `Http.put(URI, byte[], headers)` (`:io`) — shared retry/offline policy.
 
-**Phase 2 — HTTP auth end-to-end (next):**
-- `RepoCredentialResolver` (sources 1–5 + forge bridge).
-- `HttpTransport`; wire credentials into `MavenRepo` (resolve) and
-  `MavenPublisher` (publish). Delivers Nexus/Artifactory/WebDAV + GitHub/GitLab
-  package registries.
-- `[repositories.<name>]` auth fields in `JkBuildParser`; `jk repo login`.
+**Phase 2 — HTTP auth end-to-end (complete):**
+- ✅ `RepoCredentialResolver` (inline / env / store / settings.xml + forge
+  bridge), `RepoCredentialStore` (`~/.jk/repo-credentials/`), `AuthHeaders`
+  (credential → `Authorization` header).
+- ✅ `jk repo login` / `jk repo logout` (secret read from stdin; `--username`
+  → Basic, else Bearer).
+- ✅ Resolve auth: `MavenRepo` takes an optional `RepoCredential` and sends the
+  header on every fetch; wired in `RepoGroupBuilder` (build/resolve) and
+  `CacheSync` (`jk sync`). Public repos → `ANONYMOUS`, so Maven Central is
+  unaffected.
+- ✅ Publish auth: `MavenPublisher` accepts a `RepoCredential` (Basic/Bearer);
+  `jk publish` resolves it (explicit `--user`/`--password` and `PUBLISH_*` env
+  still win, then the chain by matched repo name / host bridge).
+- ✅ Inline `[repositories.<name>]` `token` / `username` / `password` parsed by
+  `JkBuildParser`, with `${ENV}` interpolation (unset var → parse error).
 
 **Phase 3 — object storage:**
 - `S3Transport` with hand-rolled SigV4; AWS default credential chain; endpoint

@@ -10,6 +10,7 @@ import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
+import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
@@ -25,6 +26,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Optional;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
@@ -459,6 +461,7 @@ public final class JkBuildParser {
         for (String name : repos.keySet()) {
             Object value = repos.get(name);
             String url;
+            Optional<RepoCredential> credential = Optional.empty();
             if (value instanceof String s) {
                 url = s;
             } else if (value instanceof TomlTable t) {
@@ -468,18 +471,60 @@ public final class JkBuildParser {
                             "repositories." + name + " requires a string `url` field");
                 }
                 url = u;
+                credential = parseRepoCredential(name, t);
             } else {
                 throw new JkBuildParseException(
                         "repositories." + name + " must be a URL string or an inline table with `url`");
             }
             try {
-                result.add(new RepositorySpec(name, URI.create(url)));
+                result.add(new RepositorySpec(name, URI.create(url), credential));
             } catch (IllegalArgumentException e) {
                 throw new JkBuildParseException(
                         "repositories." + name + " has malformed URL: " + url, e);
             }
         }
         return result;
+    }
+
+    /**
+     * Optional inline credential on a {@code [repositories.<name>]} table:
+     * {@code token = "..."} (bearer) or {@code username}/{@code password}
+     * (basic). Values support {@code ${ENV}} interpolation so secrets need not
+     * be committed literally; an unset referenced variable is an error so a
+     * typo fails loudly rather than silently authenticating anonymously.
+     */
+    private static Optional<RepoCredential> parseRepoCredential(String name, TomlTable t) {
+        String token = interpolateEnv(name, t.getString("token"));
+        String username = interpolateEnv(name, t.getString("username"));
+        String password = interpolateEnv(name, t.getString("password"));
+        if (token != null && !token.isBlank()) {
+            return Optional.of(new RepoCredential.Bearer(token));
+        }
+        if (username != null && !username.isBlank()) {
+            return Optional.of(new RepoCredential.Basic(username, password == null ? "" : password));
+        }
+        return Optional.empty();
+    }
+
+    private static final java.util.regex.Pattern ENV_REF =
+            java.util.regex.Pattern.compile("\\$\\{([A-Za-z_][A-Za-z0-9_]*)}");
+
+    /** Expand {@code ${VAR}} against the environment; missing var → parse error. */
+    private static String interpolateEnv(String repoName, String raw) {
+        if (raw == null) return null;
+        java.util.regex.Matcher m = ENV_REF.matcher(raw);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String var = m.group(1);
+            String val = System.getenv(var);
+            if (val == null) {
+                throw new JkBuildParseException("repositories." + repoName
+                        + " references unset environment variable ${" + var + "}");
+            }
+            m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(val));
+        }
+        m.appendTail(out);
+        return out.toString();
     }
 
     private static Profiles parseProfiles(TomlTable root) {

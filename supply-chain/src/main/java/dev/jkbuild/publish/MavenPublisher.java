@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.publish;
 
+import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.repo.AuthHeaders;
 
 import java.io.IOException;
 import java.net.URI;
@@ -10,7 +12,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
-import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -25,27 +26,33 @@ import java.util.Objects;
  *                                       + .md5, .sha1, .sha256, .sha512 per file
  * </pre>
  *
- * <p>v0.6 first cut: HTTP Basic auth via optional {@code username}/{@code password}.
- * GPG signatures (.asc), Sigstore, SLSA provenance, and SBOMs arrive in
- * follow-up slices.
+ * <p>Authentication is supplied as a {@link RepoCredential} (Basic, Bearer, or
+ * anonymous), resolved by the caller through the shared credential chain
+ * (docs/artifact-repos.md). GPG signatures (.asc), Sigstore, SLSA provenance,
+ * and SBOMs are layered on by the signing options.
  */
 public final class MavenPublisher {
 
     private final HttpClient http;
     private final URI repoBase;
-    private final String authHeader;
+    private final Map<String, String> authHeaders;
 
-    public MavenPublisher(URI repoBase, String username, String password) {
+    /** Authenticate with an explicit credential (anonymous → no auth header). */
+    public MavenPublisher(URI repoBase, RepoCredential credential) {
         this.repoBase = normalize(Objects.requireNonNull(repoBase, "repoBase"));
-        this.authHeader = (username == null || username.isEmpty()) ? null
-                : "Basic " + Base64.getEncoder().encodeToString(
-                        (username + ":" + (password == null ? "" : password))
-                                .getBytes(StandardCharsets.UTF_8));
+        this.authHeaders = AuthHeaders.of(Objects.requireNonNull(credential, "credential"));
         this.http = HttpClient.newBuilder()
                 .version(HttpClient.Version.HTTP_2)
                 .followRedirects(HttpClient.Redirect.NORMAL)
                 .connectTimeout(Duration.ofSeconds(15))
                 .build();
+    }
+
+    /** Convenience for HTTP Basic auth; a blank username means anonymous. */
+    public MavenPublisher(URI repoBase, String username, String password) {
+        this(repoBase, (username == null || username.isEmpty())
+                ? RepoCredential.ANONYMOUS
+                : new RepoCredential.Basic(username, password == null ? "" : password));
     }
 
     public record Artifact(String filenameSuffix, byte[] body) {
@@ -131,7 +138,7 @@ public final class MavenPublisher {
                 .timeout(Duration.ofMinutes(2))
                 .header("Content-Type", contentType)
                 .PUT(HttpRequest.BodyPublishers.ofByteArray(body));
-        if (authHeader != null) rb.header("Authorization", authHeader);
+        authHeaders.forEach(rb::header);
         HttpResponse<String> response = http.send(rb.build(),
                 HttpResponse.BodyHandlers.ofString());
         int status = response.statusCode();

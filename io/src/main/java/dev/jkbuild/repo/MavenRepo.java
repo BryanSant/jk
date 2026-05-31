@@ -4,6 +4,7 @@ package dev.jkbuild.repo;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Journal;
 import dev.jkbuild.config.ActiveConfig;
+import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.util.Hashing;
@@ -14,6 +15,7 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -40,6 +42,7 @@ public final class MavenRepo {
     private final Http http;
     private final Cas cas;
     private final Journal journal;
+    private final Map<String, String> authHeaders;
 
     /** Without a journal — offline resolve is unavailable through this repo. */
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas) {
@@ -47,11 +50,18 @@ public final class MavenRepo {
     }
 
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas, Journal journal) {
+        this(name, baseUrl, http, cas, journal, RepoCredential.ANONYMOUS);
+    }
+
+    /** With an explicit credential — anonymous repos pass {@link RepoCredential#ANONYMOUS}. */
+    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, Journal journal,
+                     RepoCredential credential) {
         this.name = Objects.requireNonNull(name, "name");
         this.baseUrl = normalize(Objects.requireNonNull(baseUrl, "baseUrl"));
         this.http = Objects.requireNonNull(http, "http");
         this.cas = Objects.requireNonNull(cas, "cas");
         this.journal = Objects.requireNonNull(journal, "journal");
+        this.authHeaders = AuthHeaders.of(Objects.requireNonNull(credential, "credential"));
         if (!"https".equalsIgnoreCase(baseUrl.getScheme())
                 && !"http".equalsIgnoreCase(baseUrl.getScheme())) {
             throw new IllegalArgumentException("Maven repo must be http(s): " + baseUrl);
@@ -104,7 +114,7 @@ public final class MavenRepo {
             return fetchOffline(coord, kind);
         }
         URI uri = baseUrl.resolve(relativePath);
-        HttpResponse<byte[]> response = http.get(uri);
+        HttpResponse<byte[]> response = http.get(uri, authHeaders);
         int status = response.statusCode();
         if (status == 404) {
             throw new ArtifactNotFoundException("404 from " + name + ": " + uri);

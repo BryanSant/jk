@@ -3,10 +3,12 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Journal;
+import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.repo.MavenRepo;
+import dev.jkbuild.repo.RepoCredentialResolver;
 import dev.jkbuild.repo.RepoGroup;
 
 import java.net.URI;
@@ -39,8 +41,13 @@ final class RepoGroupBuilder {
             repos.add(new MavenRepo(RepositorySpec.MAVEN_CENTRAL.name(),
                     RepositorySpec.MAVEN_CENTRAL.url(), http, cas, journal));
         } else {
+            // Resolve credentials per declared repo (env / store / settings.xml /
+            // forge-token bridge). Public repos resolve to ANONYMOUS, so this is
+            // transparent for Maven Central and other open mirrors.
+            RepoCredentialResolver creds = new RepoCredentialResolver();
             for (RepositorySpec spec : project.repositories()) {
-                repos.add(new MavenRepo(spec.name(), spec.url(), http, cas, journal));
+                RepoCredential cred = creds.resolve(spec.name(), spec.url(), spec.credential());
+                repos.add(new MavenRepo(spec.name(), spec.url(), http, cas, journal, cred));
             }
         }
         return new RepoGroup(repos);
