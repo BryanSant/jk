@@ -176,13 +176,23 @@ sources** where they overlap (env, store, cloud chains) but needs a distinct
 - `OciRegistryAuth` (Docker token protocol, `config.json`, cloud helpers),
   wired into the `image` module.
 
-## Verification flags (confirm before shipping each)
+## Package-registry auth shapes (forge bridge)
 
-- **Package-registry headers**: GitHub Packages Maven wants HTTP **Basic**
-  (username + PAT-as-password), not Bearer; GitLab accepts `Private-Token` /
-  `Deploy-Token` / `Job-Token` headers or Basic. The bridge must emit the
-  right shape per registry — verify against current docs (same caution as the
-  forge device-flow endpoints).
+The forge bridge now emits the shape each registry expects:
+
+- **GitHub Packages** (`maven.pkg.github.com`) — HTTP **Basic** with the
+  account **login** as username and the token as password. The login is
+  resolved via the GitHub API (`GET /user`, `ForgeIdentity`), cached, and
+  offline-safe; if it can't be resolved we fall back to Bearer (no worse than
+  before). This is the common private-registry case and now works after a
+  single `jk auth login github`.
+- **GitLab Package Registry** — **Bearer**. The device-flow login yields an
+  OAuth access token, which GitLab's package API accepts. (A *personal* access
+  token used via env/store/`settings.xml` may instead want the `PRIVATE-TOKEN`
+  header — add a `RepoCredential.Header` variant if that case comes up.)
+- **Gitea/Forgejo** — Bearer; still worth a smoke test against a real instance.
+
+## Verification flags (confirm before shipping each)
 - **GCS via S3 XML API**: requires HMAC keys and the `storage.googleapis.com`
   endpoint; confirm signing version (SigV4 vs the legacy V2).
 - **Azure SharedKey**: canonicalized-header signing is fiddly; SAS tokens may
