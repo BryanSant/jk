@@ -51,6 +51,24 @@ class FreshnessStampTest {
     }
 
     @Test
+    void input_modified_in_the_same_millisecond_as_the_stamp_is_not_fresh(@TempDir Path tempDir)
+            throws IOException {
+        // Regression: a build that finishes writing its stamp in the same
+        // millisecond a source is edited must NOT be treated as fresh — it has
+        // to fall through to the content-hashing action cache. (This is the
+        // race BuildCacheTest.editing_a_source_invalidates_cache hit on fast disks.)
+        Path classes = tempDir.resolve("classes");
+        Files.createDirectories(classes);
+        Path src = writeFile(tempDir.resolve("A.java"), "class A {}");
+        FreshnessStamp.write(classes, "compile-main", "key123", List.of(src), List.of());
+
+        long stampMillis = FreshnessStamp.read(classes).orElseThrow().stampMillis();
+        Files.setLastModifiedTime(src, FileTime.fromMillis(stampMillis));
+
+        assertThat(FreshnessStamp.isFresh(classes, List.of(src), List.of())).isFalse();
+    }
+
+    @Test
     void added_source_invalidates_stamp(@TempDir Path tempDir) throws IOException {
         Path classes = tempDir.resolve("classes");
         Files.createDirectories(classes);
