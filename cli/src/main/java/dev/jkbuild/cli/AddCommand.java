@@ -34,8 +34,8 @@ import java.util.concurrent.Callable;
  *       {@code group:artifact@version} (floating caret). The short {@code name}
  *       defaults to the artifactId; override with {@code --name}.</li>
  *   <li>A bare short name (e.g. {@code spring-web}), resolved against the
- *       alias registry; combine with {@code --group}/{@code --ver} for names
- *       not in the registry.</li>
+ *       alias catalog; combine with {@code --group}/{@code --ver} for names
+ *       not in the catalog.</li>
  *   <li>A local workspace member, when the argument begins with {@code :}
  *       ({@code :widget}) or contains a path separator ({@code ./widget},
  *       {@code ../widget}, {@code libs/widget}, {@code widget/}). jk adds a
@@ -100,7 +100,7 @@ public final class AddCommand implements Callable<Integer> {
 
         // Local workspace sibling (uv's `uv add ./lib`): a dependency edge into
         // the current project plus registration in the workspace root's
-        // [workspace].members. Anything else — a Maven coord or a registry
+        // [workspace].members. Anything else — a Maven coord or a catalog
         // alias — is resolved by ParsedDep.parse below.
         if (isLocalPathArg(coord)) {
             Scope scope = resolveScope();
@@ -162,13 +162,13 @@ public final class AddCommand implements Callable<Integer> {
 
     /**
      * Whether the positional argument denotes a local workspace member rather
-     * than a Maven coord or registry alias. True when it begins with
+     * than a Maven coord or catalog alias. True when it begins with
      * {@code :} (an explicit local marker, e.g. {@code :jackson}) or looks
      * like a filesystem path — i.e. contains a {@code /} or {@code \}
      * separator ({@code ./m}, {@code ../m}, {@code backend/m}, {@code m/},
      * {@code ..\..\m}).
      *
-     * <p>A bare name with none of these (e.g. {@code jackson}) is a registry
+     * <p>A bare name with none of these (e.g. {@code jackson}) is a catalog
      * alias and is resolved as a coord — never treated as a path, even if a
      * directory by that name happens to exist. A Maven coord
      * ({@code group:artifact:version}) has its {@code :} after the group, not
@@ -273,26 +273,26 @@ public final class AddCommand implements Callable<Integer> {
             int atSign = coord.indexOf('@');
 
             if (firstColon < 0 && atSign < 0) {
-                // Bare short name. The layered registry (project + user +
+                // Bare short name. The layered alias catalog (project + user +
                 // downloaded + bundled) supplies group + artifact for
                 // curated names; the user still picks the version.
-                // Explicit flags always override the registry.
+                // Explicit flags always override the catalog.
                 String name = nonBlank(nameFlag, coord);
-                var registry = dev.jkbuild.registry.AliasRegistry.layered();
-                var registryHit = registry.lookup(coord);
+                var catalog = dev.jkbuild.alias.AliasCatalog.layered();
+                var catalogHit = catalog.lookup(coord);
                 String group = nonBlank(groupFlag,
-                        registryHit.map(dev.jkbuild.registry.AliasRegistry.Module::group).orElse(null));
+                        catalogHit.map(dev.jkbuild.alias.AliasCatalog.Module::group).orElse(null));
                 String artifact = nonBlank(artifactFlag,
-                        registryHit.map(dev.jkbuild.registry.AliasRegistry.Module::artifact).orElse(name));
+                        catalogHit.map(dev.jkbuild.alias.AliasCatalog.Module::artifact).orElse(name));
                 if (group == null || group.isBlank()) {
                     StringBuilder msg = new StringBuilder("bare name `")
-                            .append(coord).append("` is not in the registry. ");
-                    List<String> suggestions = registry.suggestionsFor(coord, 5);
+                            .append(coord).append("` is not in the alias catalog. ");
+                    List<String> suggestions = catalog.suggestionsFor(coord, 5);
                     if (!suggestions.isEmpty()) {
                         msg.append("Did you mean: ")
                                 .append(String.join(", ", suggestions)).append("? ");
                     }
-                    msg.append("Either pick a registry name or supply --group ")
+                    msg.append("Either pick an alias name or supply --group ")
                             .append("(and optionally --artifact) explicitly.");
                     throw new IllegalArgumentException(msg.toString());
                 }

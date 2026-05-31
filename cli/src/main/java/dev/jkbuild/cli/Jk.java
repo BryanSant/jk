@@ -65,7 +65,7 @@ import java.util.Set;
                 NativeCommand.class,
                 VerifyBuildCommand.class,
                 ToolCommand.class,
-                RegistryCommand.class,
+                AliasCommand.class,
                 AuthCommand.class,
                 RepoCommand.class,
                 DoctorCommand.class,

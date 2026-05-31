@@ -805,7 +805,7 @@ when run inside a workspace:
   path as a member. The argument is treated as a local member when it begins
   with `:` (`:widget`, a name marker) or contains a path separator
   (`./widget`, `../widget`, `libs/widget`, `widget/`). A bare name with
-  neither (`jk add jackson`) is resolved as a registry alias / Maven coord, not
+  neither (`jk add jackson`) is resolved as an alias-catalog name / Maven coord, not
   a path. A path outside the workspace root adds the edge but is not
   registered as a member.
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.registry;
+package dev.jkbuild.alias;
 
 import dev.jkbuild.util.JkDirs;
 import org.tomlj.Toml;
@@ -24,19 +24,20 @@ import java.util.TreeSet;
 /**
  * Curated mapping of short names to {@code group:artifact} pairs.
  *
- * <p>The registry is layered. Each layer shadows the ones below it on a
+ * <p>The catalog is layered. Each layer shadows the ones below it on a
  * per-name basis, so a project can locally override a single entry without
  * losing the rest of the curated set. Highest precedence first:
  *
  * <ol>
  *   <li><b>Project</b> — the {@code [aliases]} table in the project's
  *       {@code jk.toml}. Passed in by the parser.</li>
- *   <li><b>User</b> — {@code ~/.jk/aliases.toml} (per-user overrides).</li>
- *   <li><b>Downloaded</b> — {@code ~/.jk/registry/aliases.toml}, refreshed
- *       by {@code jk registry update} from
- *       {@code github.com/BryanSant/jk-registry}.</li>
+ *   <li><b>Local</b> — {@code ~/.jk/aliases.local.toml} (per-user overrides,
+ *       hand-edited).</li>
+ *   <li><b>Global</b> — {@code ~/.jk/aliases.global.toml}, refreshed
+ *       by {@code jk alias update} from
+ *       {@code github.com/jkbuild/jk-alias-registry}.</li>
  *   <li><b>Bundled</b> — classpath resource shipped with the jk binary
- *       ({@code dev/jkbuild/registry/aliases.toml}). Acts as the floor so
+ *       ({@code dev/jkbuild/alias/aliases.toml}). Acts as the floor so
  *       lookups still work offline before any update has run.</li>
  * </ol>
  *
@@ -44,73 +45,82 @@ import java.util.TreeSet;
  * bundled layer is the only one guaranteed to exist; the others light up
  * when their files appear on disk.
  */
-public final class AliasRegistry {
+public final class AliasCatalog {
 
-    private static final String BUNDLED_RESOURCE = "/dev/jkbuild/registry/aliases.toml";
+    private static final String BUNDLED_RESOURCE = "/dev/jkbuild/alias/aliases.toml";
 
-    /** Filename used for both the user-global file and the downloaded copy. */
-    public static final String FILE_NAME = "aliases.toml";
-
-    private static volatile AliasRegistry bundled;
+    private static volatile AliasCatalog bundled;
 
     private final List<Layer> layers;
 
-    private AliasRegistry(List<Layer> layers) {
+    private AliasCatalog(List<Layer> layers) {
         this.layers = List.copyOf(Objects.requireNonNull(layers, "layers"));
     }
 
+    /** Per-user manual override layer: {@code ~/.jk/aliases.local.toml}. */
+    public static Path userFile() {
+        return JkDirs.home().resolve("aliases.local.toml");
+    }
+
     /**
-     * The bundled-only registry. Loaded once on first call; subsequent
+     * The downloaded layer, refreshed by {@code jk alias update}:
+     * {@code ~/.jk/aliases.global.toml}.
+     */
+    public static Path downloadedFile() {
+        return JkDirs.home().resolve("aliases.global.toml");
+    }
+
+    /**
+     * The bundled-only catalog. Loaded once on first call; subsequent
      * calls are O(1). Use this when other layers shouldn't apply
      * (renderer-side defaulting, where local overrides would create
      * file-vs-tool consistency surprises).
      */
-    public static AliasRegistry bundled() {
-        AliasRegistry local = bundled;
+    public static AliasCatalog bundled() {
+        AliasCatalog local = bundled;
         if (local != null) return local;
-        synchronized (AliasRegistry.class) {
+        synchronized (AliasCatalog.class) {
             if (bundled != null) return bundled;
-            bundled = new AliasRegistry(List.of(loadBundledLayer()));
+            bundled = new AliasCatalog(List.of(loadBundledLayer()));
             return bundled;
         }
     }
 
     /**
-     * The full read-only chain: user overrides → downloaded → bundled.
+     * The full read-only chain: local overrides → global → bundled.
      * Project overrides aren't applied here — the parser layers them on
      * top via {@link #withProjectOverrides}.
      */
-    public static AliasRegistry layered() {
+    public static AliasCatalog layered() {
         List<Layer> chain = new ArrayList<>();
-        loadFileLayer(JkDirs.home().resolve(FILE_NAME), "user").ifPresent(chain::add);
-        loadFileLayer(JkDirs.home().resolve("registry").resolve(FILE_NAME), "downloaded")
-                .ifPresent(chain::add);
+        loadFileLayer(userFile(), "local").ifPresent(chain::add);
+        loadFileLayer(downloadedFile(), "global").ifPresent(chain::add);
         chain.add(loadBundledLayer());
-        return new AliasRegistry(chain);
+        return new AliasCatalog(chain);
     }
 
-    /** Test seam: build a registry from a single in-memory map. */
-    public static AliasRegistry of(Map<String, Module> aliases) {
-        return new AliasRegistry(List.of(new Layer("test", Map.copyOf(aliases))));
+    /** Test seam: build a catalog from a single in-memory map. */
+    public static AliasCatalog of(Map<String, Module> aliases) {
+        return new AliasCatalog(List.of(new Layer("test", Map.copyOf(aliases))));
     }
 
     /** Test seam: parse a single layer from a TOML string. */
-    public static AliasRegistry parse(String toml) {
-        return new AliasRegistry(List.of(new Layer("inline", parseTable(toml, "inline"))));
+    public static AliasCatalog parse(String toml) {
+        return new AliasCatalog(List.of(new Layer("inline", parseTable(toml, "inline"))));
     }
 
     /**
      * Returns a new view with {@code projectAliases} as the top-priority
-     * layer. The original registry is unchanged. Used by the parser to
+     * layer. The original catalog is unchanged. Used by the parser to
      * make {@code [aliases]} from the current {@code jk.toml} the
      * authoritative source for that file.
      */
-    public AliasRegistry withProjectOverrides(Map<String, Module> projectAliases) {
+    public AliasCatalog withProjectOverrides(Map<String, Module> projectAliases) {
         if (projectAliases == null || projectAliases.isEmpty()) return this;
         List<Layer> chain = new ArrayList<>(layers.size() + 1);
         chain.add(new Layer("project", Map.copyOf(projectAliases)));
         chain.addAll(layers);
-        return new AliasRegistry(chain);
+        return new AliasCatalog(chain);
     }
 
     /**
@@ -160,7 +170,7 @@ public final class AliasRegistry {
     /**
      * Best-effort name suggestions for an unknown alias. Splits the
      * candidate on {@code -} and returns up to {@code maxResults}
-     * registry names that contain every non-empty part as a substring
+     * catalog names that contain every non-empty part as a substring
      * (case-insensitive). Useful for "did you mean" diagnostics — typing
      * {@code jackson-databind} surfaces {@code jackson2-databind} and
      * {@code jackson3-databind} since both contain "jackson" and
@@ -210,13 +220,13 @@ public final class AliasRegistry {
         }
     }
 
-    /** Where a lookup resolved — used by {@code jk registry list}. */
+    /** Where a lookup resolved — used by {@code jk alias list}. */
     public record Source(String layer, Module module) {}
 
     private record Layer(String name, Map<String, Module> aliases) {}
 
     private static Layer loadBundledLayer() {
-        try (InputStream in = AliasRegistry.class.getResourceAsStream(BUNDLED_RESOURCE)) {
+        try (InputStream in = AliasCatalog.class.getResourceAsStream(BUNDLED_RESOURCE)) {
             if (in == null) {
                 throw new IOException("missing classpath resource: " + BUNDLED_RESOURCE);
             }
@@ -224,7 +234,7 @@ public final class AliasRegistry {
             return new Layer("bundled", parseTable(text, BUNDLED_RESOURCE));
         } catch (IOException e) {
             throw new UncheckedIOException(
-                    "failed to load bundled alias registry from " + BUNDLED_RESOURCE, e);
+                    "failed to load bundled alias catalog from " + BUNDLED_RESOURCE, e);
         }
     }
 
@@ -236,11 +246,11 @@ public final class AliasRegistry {
         } catch (IOException e) {
             // Fail soft: a malformed user/downloaded layer should warn,
             // not break every jk invocation. Surface via stderr and skip.
-            System.err.println("warning: ignoring alias registry layer at "
+            System.err.println("warning: ignoring alias catalog layer at "
                     + file + " — " + e.getMessage());
             return Optional.empty();
         } catch (IllegalStateException e) {
-            System.err.println("warning: ignoring alias registry layer at "
+            System.err.println("warning: ignoring alias catalog layer at "
                     + file + " — " + e.getMessage());
             return Optional.empty();
         }
@@ -280,7 +290,7 @@ public final class AliasRegistry {
             }
             if (coord.indexOf(':', sep + 1) >= 0) {
                 throw new IllegalStateException(displayPath + ".aliases." + name
-                        + " carries a version — strip it; the registry is name→coord only: "
+                        + " carries a version — strip it; the catalog is name→coord only: "
                         + coord);
             }
             out.put(name, new Module(coord.substring(0, sep), coord.substring(sep + 1)));

@@ -98,7 +98,7 @@ jk add :widget            # ':' marks a local member by name
 ```
 
 A bare name with no `:` and no path separator (e.g. `jk add jackson`) is
-treated as a registry alias / Maven coordinate, not a local path.
+treated as an alias-catalog name / Maven coordinate, not a local path.
 
 ## Why another build tool
 

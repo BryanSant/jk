@@ -8,25 +8,25 @@ import picocli.CommandLine.Spec;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk registry} parent verb. The short-name alias registry is a
+ * {@code jk alias} parent verb. The short-name alias catalog is a
  * layered name → {@code group:artifact} index used to resolve manifest
  * shorthands like {@code picocli = "4.7.7"}. Subcommands here manage the
  * downloaded layer and surface lookups.
  *
  * <p>Layered lookup order (highest → lowest): the current project's
- * {@code [aliases]} table, the user's {@code ~/.jk/aliases.toml}, the
- * downloaded {@code ~/.jk/registry/aliases.toml} (refreshed by
- * {@link RegistryUpdateCommand}), then the bundled floor that ships with
+ * {@code [aliases]} table, the user's {@code ~/.jk/aliases.local.toml}, the
+ * downloaded {@code ~/.jk/aliases.global.toml} (refreshed by
+ * {@link AliasUpdateCommand}), then the bundled floor that ships with
  * the binary.
  */
-@Command(name = "registry",
-        description = "Manage the short-name → coordinate alias registry",
+@Command(name = "alias",
+        description = "Manage the short-name → coordinate alias catalog",
         subcommands = {
-                RegistryUpdateCommand.class,
-                RegistryListCommand.class,
-                RegistrySearchCommand.class,
+                AliasUpdateCommand.class,
+                AliasListCommand.class,
+                AliasSearchCommand.class,
         })
-public final class RegistryCommand implements Callable<Integer> {
+public final class AliasCommand implements Callable<Integer> {
 
     @Spec CommandSpec spec;
 

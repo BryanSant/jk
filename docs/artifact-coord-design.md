@@ -32,7 +32,7 @@ resolution detail** unlocks a chain of downstream wins:
   overrides) becomes natural table fields, not coord-suffix hacks.
 - Renaming a coordinate (group change, artifact rename) is a one-line
   edit; every reference is unaffected.
-- A bundled curated registry of common short names → coords can later
+- A bundled curated catalog of common short names → coords can later
   enable `jk add jackson-databind` without typing groupIds.
 - Lockfile entries become readable: humans see `spring-web` got bumped,
   not a wall of GAVs.
@@ -111,7 +111,7 @@ no per-member `jk.lock`). `jk add <path>` — where the argument starts with
 `:` or contains a path separator (`:widget`, `./widget`, `libs/widget`,
 `widget/`) — registers a local sibling **and** adds the dependency edge,
 pinned to the sibling's `[project].version`. A bare name (`jk add jackson`)
-is a registry alias / Maven coord, never a path. All edits preserve the
+is a catalog alias / Maven coord, never a path. All edits preserve the
 array's formatting and comments.
 
 ### `[dependencies.<scope>]` — name-as-key sub-tables
@@ -378,7 +378,7 @@ creates one specific failure mode worth knowing about.
 
 If the user picks a short name that **differs** from the Maven artifactId
 and forgets to set `artifact = ...`, the parser builds a coordinate that
-doesn't exist on the registry:
+doesn't exist on the catalog:
 
 ```toml
 # WRONG — defaults artifact to "postgres", but the Maven artifact is "postgresql"
@@ -424,10 +424,10 @@ when the user-supplied key (or the artifactId-derived default) differs
 from the artifactId, so this footgun only fires on hand-edited
 manifests.
 
-## Short-name registry
+## Short-name alias catalog
 
 jk ships a curated `name → group:artifact` index and resolves manifest
-shorthand against it. The registry is layered — the same name can be
+shorthand against it. The catalog is layered — the same name can be
 defined in multiple places, and the topmost layer wins.
 
 ### Layers (highest precedence first)
@@ -435,13 +435,13 @@ defined in multiple places, and the topmost layer wins.
 | Layer | Source | Updated by |
 |--|--|--|
 | **project** | `[aliases]` table in the project's `jk.toml` | Hand-edited |
-| **user** | `~/.jk/aliases.toml` | Hand-edited |
-| **downloaded** | `~/.jk/registry/aliases.toml` | `jk registry update` |
-| **bundled** | classpath resource at `dev/jkbuild/registry/aliases.toml` | Shipped with the binary |
+| **local** | `~/.jk/aliases.local.toml` | Hand-edited |
+| **global** | `~/.jk/aliases.global.toml` | `jk alias update` |
+| **bundled** | classpath resource at `dev/jkbuild/alias/aliases.toml` | Shipped with the binary |
 
-Only the bundled layer is guaranteed to exist. The user file lights up
-when present; the downloaded file lights up after the first
-`jk registry update`. Project-level overrides apply only to the
+Only the bundled layer is guaranteed to exist. The local file lights up
+when present; the global file lights up after the first
+`jk alias update`. Project-level overrides apply only to the
 manifest they're declared in.
 
 ### Shorthand forms it enables
@@ -454,37 +454,37 @@ When a dep's short name matches a curated entry, the user can drop the coord:
 picocli = "4.7.7"
 jackson-databind = "2.18.2"
 
-# Table form with no `group` — same registry lookup.
+# Table form with no `group` — same catalog lookup.
 junit-jupiter = { version = "6.1.0" }
 ```
 
 Resolution rules:
 
-- **Explicit `group` always wins.** Writing `picocli = { group = "io.fork", version = "..." }` overrides the registry — useful for forks and ambiguous artifacts.
-- **`path` / `git` sources still require explicit `group`.** The registry only resolves version-based deps; path/git overrides are deliberate enough that defaulting silently would be surprising.
+- **Explicit `group` always wins.** Writing `picocli = { group = "io.fork", version = "..." }` overrides the catalog — useful for forks and ambiguous artifacts.
+- **`path` / `git` sources still require explicit `group`.** The catalog only resolves version-based deps; path/git overrides are deliberate enough that defaulting silently would be surprising.
 - **Unknown names get a parse error pointing at this section.**
 - **Tooling emits the shorthand when it can.** `jk add picocli --ver 4.7.7` writes `picocli = "4.7.7"` to the manifest; `jk add picocli --group io.fork --ver 4.7.7` writes the structured form.
 
 The bundled index is intentionally version-free — it's a name-to-coord index, not a curated catalog. Version pinning is the project's responsibility.
 
-`jk add <name>` consults the registry too: with a known short name the user only supplies `--ver` (no `--group` needed). Unknown names still require explicit `--group`.
+`jk add <name>` consults the catalog too: with a known short name the user only supplies `--ver` (no `--group` needed). Unknown names still require explicit `--group`.
 
-### `jk registry` subcommands
+### `jk alias` subcommands
 
-- **`jk registry update`** pulls `https://raw.githubusercontent.com/BryanSant/jk-registry/main/aliases.toml` and replaces `~/.jk/registry/aliases.toml`. The previous file is preserved at `aliases.toml.prev`. A malformed or HTTP-failed response never replaces a good cache.
-- **`jk registry list`** prints every alias with its source layer. `--layer <name>` filters (e.g. `--layer project`).
-- **`jk registry search <term>...`** substring-matches against name, group, and artifact across every layer. Multiple terms are AND-ed (each must appear in at least one of the three fields). Case-insensitive. `--limit N` caps the result count for noisy queries.
+- **`jk alias update`** pulls `https://raw.githubusercontent.com/jkbuild/jk-alias-registry/main/aliases.toml` and replaces `~/.jk/aliases.global.toml`. The previous file is preserved at `aliases.global.toml.prev`. A malformed or HTTP-failed response never replaces a good cache.
+- **`jk alias list`** prints every alias with its source layer. `--layer <name>` filters (e.g. `--layer project`).
+- **`jk alias search <term>...`** substring-matches against name, group, and artifact across every layer. Multiple terms are AND-ed (each must appear in at least one of the three fields). Case-insensitive. `--limit N` caps the result count for noisy queries.
 
-### Curation policy (`BryanSant/jk-registry`)
+### Curation policy (`jkbuild/jk-alias-registry`)
 
-- The repo's `main` branch is the source of truth — `jk registry update` always pulls HEAD; there's no client-side pinning. Every team is on the same revision globally.
+- The repo's `main` branch is the source of truth — `jk alias update` always pulls HEAD; there's no client-side pinning. Every team is on the same revision globally.
 - Only BryanSant can commit for now. Future maintainers join via CODEOWNERS once the curation surface justifies it.
 - First-PR-wins for short-name conflicts. If `foo` is the natural short name for two different artifacts, whichever PR lands first claims it; the other artifact must use an explicit `group =` in `jk.toml` or a project-level `[aliases]` override.
 - The bundled `aliases.toml` shipped with each jk release seeds the floor. Once downloaded layers exist they take precedence — but the binary is never useless on a fresh machine.
 
 ### Local overrides
 
-Projects can shadow registry entries — useful for forks of upstream
+Projects can shadow catalog entries — useful for forks of upstream
 libraries or internal artifacts that aren't in the curated set:
 
 ```toml
@@ -505,7 +505,7 @@ file is read at parser invocation time; no daemon caching.
 These are intentionally deferred — the format leaves room for them but
 the parser does not enforce or honor them yet.
 
-- **Sigstore verification of `jk registry update`.** Wire the same verifier `jk audit` uses; pinned identity is `*.jkbuild.dev` via GitHub OIDC.
+- **Sigstore verification of `jk alias update`.** Wire the same verifier `jk audit` uses; pinned identity is `*.jkbuild.dev` via GitHub OIDC.
 - **PEP 621-style `[project]`** with `authors`, `license`, `urls`,
   `readme`, `keywords`. Adds option value but no immediate feature
   unlock.
@@ -526,7 +526,7 @@ the parser does not enforce or honor them yet.
    blog post. Do we accept `spring-web = "org.springframework:spring-web:6.2.0"`
    as a degenerate one-string form, or reject it to force the structured
    shape? Recommendation: **reject** — the structured form is the only
-   form, paste-friction is small, and the registry will eventually
+   form, paste-friction is small, and the catalog will eventually
    eliminate the paste case.
 2. **`artifact` defaulting to key.** Trivial collision: a user names a
    dep `spring-web` but the artifact is `spring-boot-starter-web`. The
