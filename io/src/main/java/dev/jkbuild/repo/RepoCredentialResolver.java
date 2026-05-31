@@ -4,7 +4,9 @@ package dev.jkbuild.repo;
 import dev.jkbuild.credential.MavenSettings;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.forge.ForgeAuth;
+import dev.jkbuild.forge.ForgeIdentity;
 import dev.jkbuild.forge.ForgeKind;
+import dev.jkbuild.forge.ResolvedToken;
 
 import java.net.URI;
 import java.util.Locale;
@@ -36,17 +38,21 @@ public final class RepoCredentialResolver {
     private final MavenSettings settings;
     private final RepoCredentialStore store;
     private final ForgeAuth forgeAuth;
+    private final ForgeIdentity identity;
 
     public RepoCredentialResolver() {
-        this(System::getenv, MavenSettings.load(), new RepoCredentialStore(), new ForgeAuth());
+        this(System::getenv, MavenSettings.load(), new RepoCredentialStore(),
+                new ForgeAuth(), ForgeIdentity.real());
     }
 
     public RepoCredentialResolver(Function<String, String> env, MavenSettings settings,
-                                  RepoCredentialStore store, ForgeAuth forgeAuth) {
+                                  RepoCredentialStore store, ForgeAuth forgeAuth,
+                                  ForgeIdentity identity) {
         this.env = env;
         this.settings = settings;
         this.store = store;
         this.forgeAuth = forgeAuth;
+        this.identity = identity;
     }
 
     /**
@@ -100,11 +106,18 @@ public final class RepoCredentialResolver {
     }
 
     /**
-     * If {@code url}'s host is a known forge package registry, reuse the
-     * stored forge token. NOTE: the exact auth shape per registry needs
-     * verification (GitHub Packages Maven wants HTTP Basic with the token as
-     * password; GitLab accepts several header styles) — see
-     * docs/artifact-repos.md. We emit Bearer as a best-effort default for now.
+     * If {@code url}'s host is a known forge package registry, reuse the token
+     * a prior {@code jk auth login} stored, in the auth shape that registry
+     * expects:
+     * <ul>
+     *   <li><b>GitHub Packages</b> ({@code maven.pkg.github.com}) — HTTP Basic
+     *       with the account login as username and the token as password.
+     *       The login is looked up via the GitHub API; if that can't be
+     *       resolved (offline / error) we fall back to Bearer, which is no
+     *       worse than before.</li>
+     *   <li><b>GitLab / Gitea</b> — Bearer. The device-flow login yields an
+     *       OAuth access token, which these accept on their package APIs.</li>
+     * </ul>
      */
     private Optional<RepoCredential> forgeBridge(URI url) {
         if (url == null || url.getHost() == null) return Optional.empty();
@@ -121,8 +134,18 @@ public final class RepoCredentialResolver {
             kind = inferred.get();
             forgeHost = host;
         }
-        return forgeAuth.resolveSilently(kind, forgeHost)
-                .map(t -> new RepoCredential.Bearer(t.value()));
+
+        Optional<ResolvedToken> token = forgeAuth.resolveSilently(kind, forgeHost);
+        if (token.isEmpty()) return Optional.empty();
+        String tok = token.get().value();
+
+        if (kind == ForgeKind.GITHUB) {
+            URI userEndpoint = URI.create(kind.apiBase(forgeHost).toString() + "/user");
+            return Optional.of(identity.login(userEndpoint, "login", tok)
+                    .map(login -> (RepoCredential) new RepoCredential.Basic(login, tok))
+                    .orElseGet(() -> new RepoCredential.Bearer(tok)));
+        }
+        return Optional.of(new RepoCredential.Bearer(tok));
     }
 
     private static String sanitizeEnv(String repoId) {
