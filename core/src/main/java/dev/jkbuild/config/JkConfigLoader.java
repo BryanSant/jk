@@ -49,10 +49,14 @@ public final class JkConfigLoader {
     private static final String ENV_VERBOSE = "JK_VERBOSE";
     private static final String ENV_NO_COLOR = "NO_COLOR";
 
-    /** Discoverable file paths, in order (lowest precedence to highest within "files"). */
-    private static final Path USER_CONFIG = Paths.get(
+    /**
+     * Discoverable file paths, in order (lowest precedence to highest within "files").
+     * Package-private so sibling slice parsers (e.g. {@link ForgeAuthConfig}) reuse the
+     * same locations and precedence rather than re-deriving them.
+     */
+    static final Path USER_CONFIG = Paths.get(
             System.getProperty("user.home", ""), ".config", "jk", "jk.toml");
-    private static final Path SYSTEM_CONFIG = Paths.get("/etc/jk/jk.toml");
+    static final Path SYSTEM_CONFIG = Paths.get("/etc/jk/jk.toml");
 
     private JkConfigLoader() {}
 

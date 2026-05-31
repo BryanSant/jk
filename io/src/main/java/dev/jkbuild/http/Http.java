@@ -6,11 +6,13 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandler;
 import java.net.http.HttpResponse.BodySubscribers;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
@@ -147,6 +149,109 @@ public final class Http {
                     + (backoffs.length + 1) + " attempts", lastIo);
         }
         throw new IOException("GET " + uri + " returned " + lastStatus
+                + " after " + (backoffs.length + 1) + " attempts");
+    }
+
+    /**
+     * POST an {@code application/x-www-form-urlencoded} body and ask for a
+     * JSON reply. Same retry/offline policy as {@link #get(URI)}: retries
+     * on connect failures and 5xx, never on 4xx, max 5 attempts.
+     *
+     * <p>Responses below 500 are returned to the caller as-is — including
+     * 4xx. The OAuth device flow (docs/gh-integration.md) relies on this:
+     * GitHub signals {@code authorization_pending} / {@code slow_down}
+     * with a non-2xx status plus a JSON {@code error} field, so the poll
+     * loop needs the body, not an exception. The form values ride the wire
+     * URL-encoded; callers must use https URIs for anything sensitive.
+     */
+    public HttpResponse<byte[]> postForm(URI uri, Map<String, String> form)
+            throws IOException, InterruptedException {
+        checkOffline(uri);
+        HttpRequest request = HttpRequest.newBuilder(uri)
+                .POST(HttpRequest.BodyPublishers.ofString(urlEncode(form)))
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Accept", "application/json")
+                .timeout(Duration.ofSeconds(60))
+                .build();
+
+        IOException lastIo = null;
+        int lastStatus = -1;
+        for (int attempt = 0; attempt < backoffs.length + 1; attempt++) {
+            if (attempt > 0) {
+                Thread.sleep(jittered(backoffs[attempt - 1]));
+            }
+            try {
+                HttpResponse<byte[]> response = client.send(request, gzipAwareByteArray());
+                int status = response.statusCode();
+                if (status < 500) {
+                    return response;
+                }
+                lastStatus = status;
+            } catch (IOException e) {
+                lastIo = e;
+            }
+        }
+        if (lastIo != null) {
+            throw new IOException("POST " + uri + " failed after "
+                    + (backoffs.length + 1) + " attempts", lastIo);
+        }
+        throw new IOException("POST " + uri + " returned " + lastStatus
+                + " after " + (backoffs.length + 1) + " attempts");
+    }
+
+    private static String urlEncode(Map<String, String> form) {
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, String> e : form.entrySet()) {
+            if (sb.length() > 0) sb.append('&');
+            sb.append(URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8))
+              .append('=')
+              .append(URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * PUT a byte body with caller-supplied headers (e.g. {@code Authorization},
+     * {@code Content-Type}) — the upload primitive for publishing to Maven
+     * repositories and object stores (docs/artifact-repos.md). Same offline
+     * guard and retry policy as {@link #get(URI)}: PUT is idempotent, so
+     * retrying on connect failures and 5xx is safe; 4xx is returned to the
+     * caller as-is (auth failures, 409 conflicts, etc.).
+     */
+    public HttpResponse<byte[]> put(URI uri, byte[] body, Map<String, String> headers)
+            throws IOException, InterruptedException {
+        checkOffline(uri);
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(body))
+                .timeout(Duration.ofMinutes(15));   // large artifacts on slow links
+        for (Map.Entry<String, String> e : headers.entrySet()) {
+            builder.header(e.getKey(), e.getValue());
+        }
+        HttpRequest request = builder.build();
+
+        IOException lastIo = null;
+        int lastStatus = -1;
+        for (int attempt = 0; attempt < backoffs.length + 1; attempt++) {
+            if (attempt > 0) {
+                Thread.sleep(jittered(backoffs[attempt - 1]));
+            }
+            try {
+                HttpResponse<byte[]> response =
+                        client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                int status = response.statusCode();
+                if (status < 500) {
+                    return response;
+                }
+                lastStatus = status;
+            } catch (IOException e) {
+                lastIo = e;
+            }
+        }
+        if (lastIo != null) {
+            throw new IOException("PUT " + uri + " failed after "
+                    + (backoffs.length + 1) + " attempts", lastIo);
+        }
+        throw new IOException("PUT " + uri + " returned " + lastStatus
                 + " after " + (backoffs.length + 1) + " attempts");
     }
 

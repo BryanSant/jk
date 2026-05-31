@@ -126,6 +126,8 @@ JVM-mode entry point ships as `./gradlew :cli:run`.
 - [Comparison with uv / Cargo / Gradle / Maven](docs/comparison.md)
 - [Tool discovery design](docs/tool-discovery-plan.md) — good-neighbor probing for Maven/Gradle/Kotlin (JDKs are sourced directly from IntelliJ's JDK directory and the JetBrains feed)
 - [Verb aliases](docs/aliases.md) — migration shortcuts from Maven/Gradle/npm
+- [Forge authentication](docs/forge-auth.md) — `jk auth` across GitHub/GitLab/Gitea/Bitbucket: token resolution + OAuth device flow
+- [Artifact repository backends](docs/artifact-repos.md) — unified credentials + transports for Nexus/Artifactory/HTTP/WebDAV/S3/GCS/Azure and package registries (phased)
 
 ## License
 

@@ -66,6 +66,7 @@ import java.util.Set;
                 VerifyBuildCommand.class,
                 ToolCommand.class,
                 RegistryCommand.class,
+                AuthCommand.class,
                 DoctorCommand.class,
                 CacheCommand.class,
         })
