@@ -11,11 +11,9 @@ import dev.jkbuild.util.Hashing;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -39,10 +37,10 @@ public final class MavenRepo {
 
     private final String name;
     private final URI baseUrl;
-    private final Http http;
+    private final RepoTransport transport;
     private final Cas cas;
     private final Journal journal;
-    private final Map<String, String> authHeaders;
+    private final RepoCredential credential;
 
     /** Without a journal — offline resolve is unavailable through this repo. */
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas) {
@@ -53,19 +51,30 @@ public final class MavenRepo {
         this(name, baseUrl, http, cas, journal, RepoCredential.ANONYMOUS);
     }
 
-    /** With an explicit credential — anonymous repos pass {@link RepoCredential#ANONYMOUS}. */
+    /**
+     * HTTP convenience constructor: selects an {@link HttpTransport} for the
+     * URL's scheme via {@link RepoTransports} (which rejects non-http(s)), and
+     * authenticates with {@code credential} (anonymous repos pass
+     * {@link RepoCredential#ANONYMOUS}).
+     */
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas, Journal journal,
+                     RepoCredential credential) {
+        this(name, baseUrl, RepoTransports.forUrl(baseUrl, Objects.requireNonNull(http, "http")),
+                cas, journal, credential);
+    }
+
+    /**
+     * General constructor over any {@link RepoTransport} — the entry point for
+     * non-HTTP backends (s3://, file://, …) selected by the caller.
+     */
+    public MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas, Journal journal,
                      RepoCredential credential) {
         this.name = Objects.requireNonNull(name, "name");
         this.baseUrl = normalize(Objects.requireNonNull(baseUrl, "baseUrl"));
-        this.http = Objects.requireNonNull(http, "http");
+        this.transport = Objects.requireNonNull(transport, "transport");
         this.cas = Objects.requireNonNull(cas, "cas");
         this.journal = Objects.requireNonNull(journal, "journal");
-        this.authHeaders = AuthHeaders.of(Objects.requireNonNull(credential, "credential"));
-        if (!"https".equalsIgnoreCase(baseUrl.getScheme())
-                && !"http".equalsIgnoreCase(baseUrl.getScheme())) {
-            throw new IllegalArgumentException("Maven repo must be http(s): " + baseUrl);
-        }
+        this.credential = Objects.requireNonNull(credential, "credential");
     }
 
     public String name() {
@@ -114,15 +123,11 @@ public final class MavenRepo {
             return fetchOffline(coord, kind);
         }
         URI uri = baseUrl.resolve(relativePath);
-        HttpResponse<byte[]> response = http.get(uri, authHeaders);
-        int status = response.statusCode();
-        if (status == 404) {
-            throw new ArtifactNotFoundException("404 from " + name + ": " + uri);
+        Optional<byte[]> fetched = transport.fetch(uri, credential);
+        if (fetched.isEmpty()) {
+            throw new ArtifactNotFoundException("not found in " + name + ": " + uri);
         }
-        if (status >= 400) {
-            throw new IOException("HTTP " + status + " from " + name + ": " + uri);
-        }
-        byte[] body = response.body();
+        byte[] body = fetched.get();
         Path path = cas.put(body);
         String sha = Hashing.sha256Hex(body);
         if (journalable) {

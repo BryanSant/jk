@@ -2,16 +2,14 @@
 package dev.jkbuild.publish;
 
 import dev.jkbuild.credential.RepoCredential;
+import dev.jkbuild.http.Http;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.repo.AuthHeaders;
+import dev.jkbuild.repo.RepoTransport;
+import dev.jkbuild.repo.RepoTransports;
 
 import java.io.IOException;
 import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
-import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -33,19 +31,17 @@ import java.util.Objects;
  */
 public final class MavenPublisher {
 
-    private final HttpClient http;
     private final URI repoBase;
-    private final Map<String, String> authHeaders;
+    private final RepoTransport transport;
+    private final RepoCredential credential;
 
     /** Authenticate with an explicit credential (anonymous → no auth header). */
     public MavenPublisher(URI repoBase, RepoCredential credential) {
         this.repoBase = normalize(Objects.requireNonNull(repoBase, "repoBase"));
-        this.authHeaders = AuthHeaders.of(Objects.requireNonNull(credential, "credential"));
-        this.http = HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_2)
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .connectTimeout(Duration.ofSeconds(15))
-                .build();
+        this.credential = Objects.requireNonNull(credential, "credential");
+        // Route through the shared transport SPI; non-http(s) targets (s3://, …)
+        // become available once those transports land in Phase 3.
+        this.transport = RepoTransports.forUrl(this.repoBase, new Http());
     }
 
     /** Convenience for HTTP Basic auth; a blank username means anonymous. */
@@ -131,21 +127,11 @@ public final class MavenPublisher {
     private void put(String relPath, byte[] body, String contentType, Map<String, Integer> out)
             throws IOException, InterruptedException {
         URI uri = repoBase.resolve(relPath);
-        if (dev.jkbuild.config.ActiveConfig.get().offlineOr(false)) {
-            throw new dev.jkbuild.http.OfflineException(uri);
-        }
-        HttpRequest.Builder rb = HttpRequest.newBuilder(uri)
-                .timeout(Duration.ofMinutes(2))
-                .header("Content-Type", contentType)
-                .PUT(HttpRequest.BodyPublishers.ofByteArray(body));
-        authHeaders.forEach(rb::header);
-        HttpResponse<String> response = http.send(rb.build(),
-                HttpResponse.BodyHandlers.ofString());
-        int status = response.statusCode();
+        // The transport carries the offline guard, auth header, and retry policy.
+        int status = transport.put(uri, body, contentType, credential);
         out.put(relPath, status);
         if (status < 200 || status >= 300) {
-            throw new IOException("PUT " + uri + " returned " + status
-                    + (response.body().isEmpty() ? "" : ": " + response.body()));
+            throw new IOException("PUT " + uri + " returned " + status);
         }
     }
 
