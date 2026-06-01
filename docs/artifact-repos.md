@@ -167,7 +167,7 @@ sources** where they overlap (env, store, cloud chains) but needs a distinct
 - ✅ Inline `[repositories.<name>]` `token` / `username` / `password` parsed by
   `JkBuildParser`, with `${ENV}` interpolation (unset var → parse error).
 
-**Phase 3 — object storage (S3 + GCS done; Azure next):**
+**Phase 3 — object storage (S3 + GCS + file:// done; Azure next):**
 - ✅ `S3Transport` (`s3://`, path-style) with hand-rolled `SigV4Signer`
   (verified against the AWS `aws-sig-v4-test-suite` `get-vanilla` vector),
   `AwsCredentialChain` (env → `~/.aws/credentials`+`config` profiles; region
@@ -177,6 +177,8 @@ sources** where they overlap (env, store, cloud chains) but needs a distinct
   pointed at `storage.googleapis.com` with HMAC keys (AWS env chain), region
   `auto`. ⚠️ Confirm the GCS V4 region/service against a real bucket before
   relying on it.
+- ✅ `file://` via `FileTransport` — local directory tree as a Maven repo
+  (offline mirrors, tests, air-gapped); reads/writes the filesystem directly.
 - ⬜ `AzureBlobTransport` (SharedKey / SAS — genuinely different signing).
 - ⬜ Per-repo region/endpoint in `[repositories.<name>]` (today via the AWS
   env); virtual-host addressing (path-style only for now).
