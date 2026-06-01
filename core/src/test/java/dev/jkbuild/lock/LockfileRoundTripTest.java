@@ -22,6 +22,27 @@ class LockfileRoundTripTest {
     }
 
     @Test
+    void git_source_package_round_trips() {
+        Lockfile.Package.GitInfo git = new Lockfile.Package.GitInfo(
+                "https://github.com/acme/widgets", "3f2a9c1b4d5e6f70819203a4b5c6d7e8f9012345", "tag:v1.4.0");
+        Lockfile lock = new Lockfile(
+                Lockfile.CURRENT_VERSION, "jk test", Lockfile.RESOLUTION_ALGORITHM,
+                List.of(new Lockfile.Package(
+                        "com.acme:widgets", "1.4.0", "git+https://github.com/acme/widgets",
+                        "sha256:abcd", null, List.of(dev.jkbuild.model.Scope.MAIN), List.of(), null, git)));
+
+        String rendered = LockfileWriter.render(lock);
+        assertThat(rendered)
+                .contains("git      = \"https://github.com/acme/widgets\"")
+                .contains("rev      = \"3f2a9c1b4d5e6f70819203a4b5c6d7e8f9012345\"")
+                .contains("ref      = \"tag:v1.4.0\"");
+
+        Lockfile reparsed = LockfileReader.parse(rendered);
+        assertThat(reparsed.packages()).singleElement().satisfies(p ->
+                assertThat(p.git()).isEqualTo(git));
+    }
+
+    @Test
     void packages_render_sorted_by_name_then_version() {
         Lockfile lock = new Lockfile(
                 Lockfile.CURRENT_VERSION,

@@ -33,9 +33,16 @@ import java.util.Objects;
 public final class GitFetcher {
 
     private final Path gitRoot;
+    private final GitCredentials credentials;
 
     public GitFetcher(Path gitRoot) {
+        this(gitRoot, GitCredentials.NONE);
+    }
+
+    /** With credentials for private clones (e.g. {@link ForgeGitCredentials}). */
+    public GitFetcher(Path gitRoot, GitCredentials credentials) {
         this.gitRoot = Objects.requireNonNull(gitRoot, "gitRoot");
+        this.credentials = Objects.requireNonNull(credentials, "credentials");
     }
 
     public record Fetched(String sha, Path checkoutPath) {
@@ -93,13 +100,15 @@ public final class GitFetcher {
                 // Force-update tags so a rewritten tag's ref refreshes locally.
                 // Default fetch doesn't override an existing tag; the explicit
                 // `+refs/tags/*` refspec replicates `git fetch --tags --force`.
-                git.fetch()
+                var fetch = git.fetch()
                         .setRemote("origin")
                         .setRemoveDeletedRefs(true)
                         .setTagOpt(TagOpt.FETCH_TAGS)
                         .setRefSpecs(new RefSpec("+refs/heads/*:refs/heads/*"),
-                                new RefSpec("+refs/tags/*:refs/tags/*"))
-                        .call();
+                                new RefSpec("+refs/tags/*:refs/tags/*"));
+                var cp = credentials.forRemote(source.canonicalUrl());
+                if (cp != null) fetch.setCredentialsProvider(cp);
+                fetch.call();
             } catch (GitAPIException e) {
                 throw new IOException("git fetch failed for " + source.canonicalUrl()
                         + ": " + e.getMessage(), e);
@@ -114,12 +123,13 @@ public final class GitFetcher {
             throw new IOException("invalid git URL: " + source.canonicalUrl(), e);
         }
         try {
-            Git.cloneRepository()
+            var clone = Git.cloneRepository()
                     .setBare(true)
                     .setURI(source.canonicalUrl())
-                    .setDirectory(bareDir.toFile())
-                    .call()
-                    .close();
+                    .setDirectory(bareDir.toFile());
+            var cp = credentials.forRemote(source.canonicalUrl());
+            if (cp != null) clone.setCredentialsProvider(cp);
+            clone.call().close();
         } catch (GitAPIException e) {
             // Clean up partially-cloned dir.
             deleteRecursively(bareDir);
