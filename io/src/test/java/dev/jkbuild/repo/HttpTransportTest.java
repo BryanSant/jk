@@ -105,9 +105,11 @@ class HttpTransportTest {
     }
 
     @Test
-    void s3_scheme_resolves_to_an_s3_transport() {
-        // s3:// is now supported (credentials resolved from the AWS env at use time).
+    void s3_and_gs_schemes_resolve_to_an_s3_transport() {
+        // Both resolve credentials from the environment lazily at use time.
         assertThat(RepoTransports.forUrl(URI.create("s3://my-bucket/maven"), new Http()))
+                .isInstanceOf(dev.jkbuild.repo.s3.S3Transport.class);
+        assertThat(RepoTransports.forUrl(URI.create("gs://my-bucket/maven"), new Http()))
                 .isInstanceOf(dev.jkbuild.repo.s3.S3Transport.class);
     }
 }

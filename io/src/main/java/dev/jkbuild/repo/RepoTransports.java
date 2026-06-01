@@ -11,11 +11,11 @@ import java.util.Locale;
 /**
  * Selects a {@link RepoTransport} for a repository URL by scheme — the single
  * place new transports are registered. {@code http}/{@code https} use
- * {@link HttpTransport}; {@code s3://} (and S3-compatible stores) use
- * {@link S3Transport}. {@code gs://}, {@code azblob://}, and {@code file://}
- * register here next (see docs/artifact-repos.md). Keeping the dispatch in one
- * spot is what lets each backend drop in without touching {@link MavenRepo} or
- * the publisher.
+ * {@link HttpTransport}; {@code s3://} and {@code gs://} (GCS via its
+ * S3-compatible XML API) use {@link S3Transport}; {@code file://} uses
+ * {@link FileTransport}. {@code azblob://} registers here next (see
+ * docs/artifact-repos.md). Keeping the dispatch in one spot is what lets each
+ * backend drop in without touching {@link MavenRepo} or the publisher.
  */
 public final class RepoTransports {
 
@@ -32,9 +32,11 @@ public final class RepoTransports {
         return switch (scheme) {
             case "http", "https" -> new HttpTransport(http);
             case "s3" -> S3Transport.fromEnv(http, url, new AwsCredentialChain(), System::getenv);
+            case "gs" -> S3Transport.forGcs(http, url, new AwsCredentialChain(), System::getenv);
+            case "file" -> new FileTransport();
             default -> throw new IllegalArgumentException(
                     "no repository transport for scheme '" + scheme + "' in " + url
-                            + " (gs/azblob/file arrive in a later slice)");
+                            + " (azblob arrives in a later slice)");
         };
     }
 }
