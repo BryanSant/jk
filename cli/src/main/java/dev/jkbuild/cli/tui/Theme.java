@@ -44,70 +44,60 @@ public final class Theme {
         };
     }
 
-    // Gradient endpoints: orange #ff8b1a → magenta #e600ff.
-    private static final int GRAD_START_R = 0xff;
-    private static final int GRAD_START_G = 0x8b;
-    private static final int GRAD_START_B = 0x1a;
-    private static final int GRAD_END_R = 0xe6;
-    private static final int GRAD_END_G = 0x00;
-    private static final int GRAD_END_B = 0xff;
-
-    // Active rail / bullet — highlighted-section accent #5769f7.
-    private static final int ACTIVE_R = 0x57;
-    private static final int ACTIVE_G = 0x69;
-    private static final int ACTIVE_B = 0xf7;
-
-    // Completed bullet / selected option: green #22c55e.
-    private static final int OK_R = 0x22;
-    private static final int OK_G = 0xc5;
-    private static final int OK_B = 0x5e;
-
-    /** Error / cancellation red #ff0000 — the standard SGR 91 bright red,
-     *  emitted as a fixed truecolor so it never picks up the user's palette. */
-    private static final int ERR_R = 0xff;
-    private static final int ERR_G = 0x00;
-    private static final int ERR_B = 0x00;
-
-    /** Attention / highlight yellow #facc15 — used for "default" status, etc. */
-    private static final int WARN_R = 0xfa;
-    private static final int WARN_G = 0xcc;
-    private static final int WARN_B = 0x15;
+    // --- gradients --------------------------------------------------------
+    // Named gradients, each independently tunable (all from the Jk Dark scheme):
+    // title bright-blue → accent; spinner primary → accent; progress green →
+    // bright-green.
+    /** Gradient for {@code jk init}/wizard titles — Jk Dark bright-blue → accent. */
+    public static final Gradient TITLE_GRADIENT = new Gradient(JkDark.BRIGHT_BLUE, JkDark.ACCENT);
+    /** Gradient for the {@link ProgressBar} fill — Jk Dark green → bright-green. */
+    public static final Gradient PROGRESS_GRADIENT = new Gradient(JkDark.NORMAL_GREEN, JkDark.BRIGHT_GREEN);
+    /** Gradient for the {@link Spinner} frames — Jk Dark primary → accent. */
+    public static final Gradient SPINNER_GRADIENT = new Gradient(JkDark.PRIMARY, JkDark.ACCENT);
+    /** Gradient a failed progress bar repaints in: dark red #7f1d1d → bright red #ef4444. */
+    public static final Gradient FAILURE_GRADIENT = new Gradient(Rgb.hex(0x7f1d1d), Rgb.hex(0xef4444));
 
     /** Apply a foreground color unless the resolved {@code --color} choice disables it. */
     private static AttributedStyle withColor(AttributedStyle base, int r, int g, int b) {
         return colorEnabled() ? base.foreground(r, g, b) : base;
     }
 
+    /** {@link Rgb} overload of {@link #withColor(AttributedStyle, int, int, int)}. */
+    private static AttributedStyle withColor(AttributedStyle base, Rgb c) {
+        return withColor(base, c.r(), c.g(), c.b());
+    }
+
     public static AttributedStyle dim() {
         return AttributedStyle.DEFAULT.faint();
     }
 
-    /** Dark gray #6b7280; used for inactive/completed rail glyphs (┌ │ └) and completed step prompts. */
+    /** Inactive/completed rail glyphs (┌ │ └) and completed step prompts — Jk Dark bright black. */
     public static AttributedStyle darkGray() {
-        return withColor(AttributedStyle.DEFAULT, 0x6b, 0x72, 0x80);
+        return withColor(AttributedStyle.DEFAULT, JkDark.BRIGHT_BLACK);
     }
 
-    /** Normal gray #9ca3af; used for de-emphasised body text adjacent to bright labels. */
+    /** De-emphasised body text adjacent to bright labels — Jk Dark primary-light. */
     public static AttributedStyle normalGray() {
-        return withColor(AttributedStyle.DEFAULT, 0x9c, 0xa3, 0xaf);
+        return withColor(AttributedStyle.DEFAULT, JkDark.PRIMARY_LIGHT);
     }
 
+    /** Active rail / step bullet — the highlight accent (Jk Dark accent). */
     public static AttributedStyle activeStep() {
-        return withColor(AttributedStyle.DEFAULT, ACTIVE_R, ACTIVE_G, ACTIVE_B);
+        return withColor(AttributedStyle.DEFAULT, JkDark.ACCENT);
     }
 
     public static AttributedStyle completedStep() {
-        return withColor(AttributedStyle.DEFAULT, OK_R, OK_G, OK_B);
+        return withColor(AttributedStyle.DEFAULT, JkDark.NORMAL_GREEN);
     }
 
     /** Bold + bright white; used for focused option labels and the input buffer. */
     public static AttributedStyle focused() {
-        return withColor(AttributedStyle.DEFAULT.bold(), 0xff, 0xff, 0xff);
+        return withColor(AttributedStyle.DEFAULT.bold(), JkDark.BRIGHT_WHITE);
     }
 
-    /** Plain white (not bold, not dim); used for settled answer text. */
+    /** Plain foreground (not bold, not dim); used for settled answer text. */
     public static AttributedStyle settled() {
-        return withColor(AttributedStyle.DEFAULT, 0xff, 0xff, 0xff);
+        return withColor(AttributedStyle.DEFAULT, JkDark.FOREGROUND);
     }
 
     /** Alias for {@link #settled} — plain white with no weight modifier. */
@@ -125,36 +115,41 @@ public final class Theme {
         return darkGray();
     }
 
-    /** Red; used for inline error messages and cancellation closers. */
+    /** Red; used for inline error messages and cancellation closers (distinct from the accent). */
     public static AttributedStyle error() {
-        return withColor(AttributedStyle.DEFAULT, ERR_R, ERR_G, ERR_B);
+        return withColor(AttributedStyle.DEFAULT, JkDark.NORMAL_RED);
     }
 
     /** Bold + green; used for success-banner text. */
     public static AttributedStyle success() {
-        return withColor(AttributedStyle.DEFAULT.bold(), OK_R, OK_G, OK_B);
+        return withColor(AttributedStyle.DEFAULT.bold(), JkDark.NORMAL_GREEN);
     }
 
     /** Yellow; used to call attention to state like "default" / current selection. */
     public static AttributedStyle warning() {
-        return withColor(AttributedStyle.DEFAULT, WARN_R, WARN_G, WARN_B);
+        return withColor(AttributedStyle.DEFAULT, JkDark.NORMAL_YELLOW);
     }
 
-    /** Blue #3b82f6 — used elsewhere; no longer a gradient endpoint. */
+    /** Blue — used elsewhere; no longer a gradient endpoint. */
     public static AttributedStyle blue() {
-        return withColor(AttributedStyle.DEFAULT, 0x3b, 0x82, 0xf6);
+        return withColor(AttributedStyle.DEFAULT, JkDark.BRIGHT_BLUE);
     }
 
-    /** Bright green #4ade80 — used for the settled-answer arrow and "➜" prefixes. */
+    /** Bright green — used for the settled-answer arrow and "➜" prefixes. */
     public static AttributedStyle brightGreen() {
-        return withColor(AttributedStyle.DEFAULT, 0x4a, 0xde, 0x80);
+        return withColor(AttributedStyle.DEFAULT, JkDark.BRIGHT_GREEN);
     }
 
     public static AttributedStyle bright(int r, int g, int b) {
         return withColor(AttributedStyle.DEFAULT, r, g, b);
     }
 
-    /** Per-codepoint truecolor lerp from {@code #ff8b1a} to {@code #e600ff}, bold on each char. */
+    /** {@link Rgb} overload of {@link #bright(int, int, int)}. */
+    public static AttributedStyle bright(Rgb c) {
+        return withColor(AttributedStyle.DEFAULT, c);
+    }
+
+    /** Per-codepoint truecolor lerp across {@link #TITLE_GRADIENT}, bold on each char. */
     public static AttributedString gradientHeader(String text) {
         var sb = new AttributedStringBuilder();
         var codepoints = text.codePoints().toArray();
@@ -168,10 +163,9 @@ public final class Theme {
         }
         for (var i = 0; i < n; i++) {
             var t = n == 1 ? 0.0 : (double) i / (n - 1);
-            var r = (int) Math.round(GRAD_START_R + t * (GRAD_END_R - GRAD_START_R));
-            var g = (int) Math.round(GRAD_START_G + t * (GRAD_END_G - GRAD_START_G));
-            var b = (int) Math.round(GRAD_START_B + t * (GRAD_END_B - GRAD_START_B));
-            sb.append(new String(Character.toChars(codepoints[i])), AttributedStyle.DEFAULT.bold().foreground(r, g, b));
+            Rgb c = TITLE_GRADIENT.at(t);
+            sb.append(new String(Character.toChars(codepoints[i])),
+                    AttributedStyle.DEFAULT.bold().foreground(c.r(), c.g(), c.b()));
         }
         return sb.toAttributedString();
     }
@@ -192,10 +186,8 @@ public final class Theme {
         var sb = new StringBuilder();
         for (var i = 0; i < n; i++) {
             var t = n == 1 ? 0.0 : (double) i / (n - 1);
-            var r = (int) Math.round(GRAD_START_R + t * (GRAD_END_R - GRAD_START_R));
-            var g = (int) Math.round(GRAD_START_G + t * (GRAD_END_G - GRAD_START_G));
-            var b = (int) Math.round(GRAD_START_B + t * (GRAD_END_B - GRAD_START_B));
-            sb.append("\033[1;38;2;").append(r).append(';').append(g).append(';').append(b).append('m');
+            Rgb c = TITLE_GRADIENT.at(t);
+            sb.append("\033[1;38;2;").append(c.r()).append(';').append(c.g()).append(';').append(c.b()).append('m');
             sb.append(new String(Character.toChars(codepoints[i])));
         }
         sb.append("\033[0m");

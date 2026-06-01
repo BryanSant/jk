@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.jkbuild.cli.tui;
+
+import org.junit.jupiter.api.Test;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+class GradientTest {
+
+    private static final Rgb ORANGE = Rgb.hex(0xff8b1a);
+    private static final Rgb MAGENTA = Rgb.hex(0xe600ff);
+
+    @Test
+    void rgb_hex_unpacks_channels() {
+        assertThat(Rgb.hex(0xff8b1a)).isEqualTo(new Rgb(0xff, 0x8b, 0x1a));
+    }
+
+    @Test
+    void endpoints_and_midpoint() {
+        Gradient g = new Gradient(ORANGE, MAGENTA);
+        assertThat(g.at(0.0)).isEqualTo(ORANGE);
+        assertThat(g.at(1.0)).isEqualTo(MAGENTA);
+        // Midpoint is the rounded average of each channel.
+        assertThat(g.at(0.5)).isEqualTo(new Rgb(
+                Math.round((0xff + 0xe6) / 2f),
+                Math.round((0x8b + 0x00) / 2f),
+                Math.round((0x1a + 0xff) / 2f)));
+    }
+
+    @Test
+    void t_is_clamped() {
+        Gradient g = new Gradient(ORANGE, MAGENTA);
+        assertThat(g.at(-1.0)).isEqualTo(ORANGE);
+        assertThat(g.at(2.0)).isEqualTo(MAGENTA);
+    }
+
+    @Test
+    void reversed_swaps_ends() {
+        Gradient g = new Gradient(ORANGE, MAGENTA);
+        assertThat(g.reversed()).isEqualTo(new Gradient(MAGENTA, ORANGE));
+        assertThat(g.reversed().at(0.0)).isEqualTo(MAGENTA);
+    }
+
+    @Test
+    void title_runs_bright_blue_to_accent() {
+        assertThat(Theme.TITLE_GRADIENT)
+                .isEqualTo(new Gradient(JkDark.BRIGHT_BLUE, JkDark.ACCENT));
+    }
+
+    @Test
+    void progress_runs_green_to_bright_green() {
+        assertThat(Theme.PROGRESS_GRADIENT)
+                .isEqualTo(new Gradient(JkDark.NORMAL_GREEN, JkDark.BRIGHT_GREEN));
+    }
+
+    @Test
+    void spinner_runs_primary_to_accent() {
+        assertThat(Theme.SPINNER_GRADIENT).isEqualTo(new Gradient(JkDark.PRIMARY, JkDark.ACCENT));
+        assertThat(Theme.SPINNER_GRADIENT).isNotEqualTo(Theme.PROGRESS_GRADIENT);
+    }
+}

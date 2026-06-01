@@ -23,14 +23,10 @@ import java.io.PrintStream;
 public final class Spinner implements AutoCloseable {
 
     /** Animation frames, cycled in order. */
-    static final String[] FRAMES = {"·", "✢", "✳", "✶", "✻", "✽"};
+    static final String[] FRAMES = {"·", "✶", "✸", "✹", "✺", "✹", "✷", "✶", "·"};
 
     /** Interval between frames. */
     static final long FRAME_MS = 120L;
-
-    // Reverse of the title gradient: magenta #e600ff → orange #ff8b1a.
-    private static final int START_R = 0xe6, START_G = 0x00, START_B = 0xff;
-    private static final int END_R = 0xff, END_G = 0x8b, END_B = 0x1a;
 
     private static final String HIDE_CURSOR = "\033[?25l";
     private static final String SHOW_CURSOR = "\033[?25h";
@@ -135,13 +131,12 @@ public final class Spinner implements AutoCloseable {
     }
 
     static AttributedStyle[] buildGradient(int n) {
+        // Primary → accent (Jk Dark).
+        Gradient gradient = Theme.SPINNER_GRADIENT;
         AttributedStyle[] a = new AttributedStyle[n];
         for (int i = 0; i < n; i++) {
             double t = n <= 1 ? 0.0 : (double) i / (n - 1);
-            int r = (int) Math.round(START_R + t * (END_R - START_R));
-            int g = (int) Math.round(START_G + t * (END_G - START_G));
-            int b = (int) Math.round(START_B + t * (END_B - START_B));
-            a[i] = Theme.bright(r, g, b);
+            a[i] = Theme.bright(gradient.at(t));
         }
         return a;
     }

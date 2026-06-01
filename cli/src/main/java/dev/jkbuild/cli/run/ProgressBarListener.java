@@ -41,16 +41,8 @@ import java.util.concurrent.ConcurrentMap;
 public final class ProgressBarListener implements GoalListener {
 
     private static final int BAR_SEGS = 24;
-    private static final String[] SPIN_FRAMES = {"·", "✢", "✳", "✶", "✻", "✽"};
+    private static final String[] SPIN_FRAMES = {"·", "✶", "✸", "✹", "✺", "✹", "✷", "✶", "·"};
     private static final long FRAME_MS = 120L;
-
-    // Gradient: magenta #e600ff → orange #ff8b1a
-    private static final int GRAD_SR = 0xe6, GRAD_SG = 0x00, GRAD_SB = 0xff;
-    private static final int GRAD_ER = 0xff, GRAD_EG = 0x8b, GRAD_EB = 0x1a;
-
-    // Failure gradient: dark red #7f1d1d → bright red #ef4444
-    private static final int FAIL_SR = 0x7f, FAIL_SG = 0x1d, FAIL_SB = 0x1d;
-    private static final int FAIL_ER = 0xef, FAIL_EG = 0x44, FAIL_EB = 0x44;
 
     private static final char FILLED = '▰';
     private static final char EMPTY  = '▱';
@@ -88,12 +80,10 @@ public final class ProgressBarListener implements GoalListener {
         for (Phase p : phases) labels.put(p.name(), p.label());
         this.phaseLabels = Map.copyOf(labels);
         this.silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
-        this.spinColors = buildGradient(SPIN_FRAMES.length,
-                GRAD_SR, GRAD_SG, GRAD_SB, GRAD_ER, GRAD_EG, GRAD_EB);
-        this.barColors = buildGradient(BAR_SEGS,
-                GRAD_SR, GRAD_SG, GRAD_SB, GRAD_ER, GRAD_EG, GRAD_EB);
-        this.failColors = buildGradient(BAR_SEGS,
-                FAIL_SR, FAIL_SG, FAIL_SB, FAIL_ER, FAIL_EG, FAIL_EB);
+        // spinner = primary→accent; bar = green→bright-green; fail = dark→bright red.
+        this.spinColors = buildGradient(SPIN_FRAMES.length, Theme.SPINNER_GRADIENT);
+        this.barColors = buildGradient(BAR_SEGS, Theme.PROGRESS_GRADIENT);
+        this.failColors = buildGradient(BAR_SEGS, Theme.FAILURE_GRADIENT);
     }
 
     @Override
@@ -399,15 +389,11 @@ public final class ProgressBarListener implements GoalListener {
                 ? Character.toUpperCase(first) + s.substring(1) : s;
     }
 
-    private static AttributedStyle[] buildGradient(int n,
-            int sr, int sg, int sb, int er, int eg, int eb) {
+    private static AttributedStyle[] buildGradient(int n, dev.jkbuild.cli.tui.Gradient gradient) {
         AttributedStyle[] a = new AttributedStyle[n];
         for (int i = 0; i < n; i++) {
             double t = n <= 1 ? 0.0 : (double) i / (n - 1);
-            int r = (int) Math.round(sr + t * (er - sr));
-            int g = (int) Math.round(sg + t * (eg - sg));
-            int b = (int) Math.round(sb + t * (eb - sb));
-            a[i] = Theme.bright(r, g, b);
+            a[i] = Theme.bright(gradient.at(t));
         }
         return a;
     }

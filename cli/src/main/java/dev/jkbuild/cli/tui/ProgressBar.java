@@ -48,16 +48,6 @@ public final class ProgressBar implements AutoCloseable {
     static final String GAP = "  ";
     static final String SEPARATOR = ": ";
 
-    // Gradient: reverse of the wizard title — magenta #e600ff → orange #ff8b1a.
-    private static final int START_R = 0xe6, START_G = 0x00, START_B = 0xff;
-    private static final int END_R = 0xff, END_G = 0x8b, END_B = 0x1a;
-
-    // Failure gradient: dark red #7f1d1d → bright red #ef4444 (tailwind
-    // red-900 → red-500). Used by renderFailed so the bar reads as
-    // "this didn't finish" even when no segments were filled in.
-    private static final int FAIL_START_R = 0x7f, FAIL_START_G = 0x1d, FAIL_START_B = 0x1d;
-    private static final int FAIL_END_R = 0xef, FAIL_END_G = 0x44, FAIL_END_B = 0x44;
-
     private static final String HIDE_CURSOR = "\033[?25l";
     private static final String SHOW_CURSOR = "\033[?25h";
 
@@ -99,11 +89,9 @@ public final class ProgressBar implements AutoCloseable {
     private ProgressBar(PrintStream out, boolean silent) {
         this.out = out;
         this.silent = silent;
-        this.segmentColors = buildGradient(SEGMENTS,
-                START_R, START_G, START_B, END_R, END_G, END_B);
-        this.failColors = buildGradient(SEGMENTS,
-                FAIL_START_R, FAIL_START_G, FAIL_START_B,
-                FAIL_END_R, FAIL_END_G, FAIL_END_B);
+        // The fill runs green → bright-green (bright-green pinned at the frontier).
+        this.segmentColors = buildGradient(SEGMENTS, Theme.PROGRESS_GRADIENT);
+        this.failColors = buildGradient(SEGMENTS, Theme.FAILURE_GRADIENT);
     }
 
     /**
@@ -347,18 +335,14 @@ public final class ProgressBar implements AutoCloseable {
     }
 
     static AttributedStyle[] buildGradient(int n) {
-        return buildGradient(n, START_R, START_G, START_B, END_R, END_G, END_B);
+        return buildGradient(n, Theme.PROGRESS_GRADIENT);
     }
 
-    static AttributedStyle[] buildGradient(int n,
-            int sr, int sg, int sb, int er, int eg, int eb) {
+    static AttributedStyle[] buildGradient(int n, Gradient gradient) {
         AttributedStyle[] a = new AttributedStyle[n];
         for (int i = 0; i < n; i++) {
             double t = n <= 1 ? 0.0 : (double) i / (n - 1);
-            int r = (int) Math.round(sr + t * (er - sr));
-            int g = (int) Math.round(sg + t * (eg - sg));
-            int b = (int) Math.round(sb + t * (eb - sb));
-            a[i] = Theme.bright(r, g, b);
+            a[i] = Theme.bright(gradient.at(t));
         }
         return a;
     }

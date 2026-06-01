@@ -312,7 +312,7 @@ public final class Jk implements Runnable {
         if (ex instanceof dev.jkbuild.http.OfflineException) {
             var err = cmd.getErr();
             boolean ansi = cmd.getColorScheme().ansi().enabled();
-            String label = ansi ? "\033[1;91merror:\033[0m " : "error: ";
+            String label = ansi ? "\033[1;38;2;233;30;99merror:\033[0m " : "error: ";
             err.println(label + ex.getMessage());
             return cmd.getCommandSpec().exitCodeOnExecutionException();
         }
@@ -567,8 +567,8 @@ public final class Jk implements Runnable {
         suffix.append(" [OPTIONS]");
         String nl = System.lineSeparator();
         if (ansi) {
-            // Command-name theme color #f96853: name bold, suffix plain.
-            return "\033[1;38;2;249;104;83m" + name + "\033[0m\033[38;2;249;104;83m" + suffix + "\033[0m" + nl;
+            // Command name uses Jk Dark primary (#3F51B5): name bold, suffix plain.
+            return "\033[1;38;2;63;81;181m" + name + "\033[0m\033[38;2;63;81;181m" + suffix + "\033[0m" + nl;
         }
         return name + suffix + nl;
     }
@@ -638,7 +638,7 @@ public final class Jk implements Runnable {
             String label = positionalLabel(p);
             String desc = p.description().length > 0 ? p.description()[0] : "";
             sb.append("  ")
-                    .append(ansi ? "\033[96m" + label + "\033[0m" : label)
+                    .append(ansi ? "\033[38;2;63;81;181m" + label + "\033[0m" : label)
                     .append(" ".repeat(width - label.length()))
                     .append(desc)
                     .append(nl);
@@ -704,24 +704,23 @@ public final class Jk implements Runnable {
             String desc = options.get(i).description().length > 0 ? options.get(i).description()[0] : "";
             sb.append("  ").append(brightCyan(row.namePart, ansi));
             if (!row.labelPart.isEmpty()) {
-                sb.append(" ").append(ansi ? "\033[96m" + row.labelPart + "\033[0m" : row.labelPart);
+                sb.append(" ").append(ansi ? "\033[38;2;63;81;181m" + row.labelPart + "\033[0m" : row.labelPart);
             }
             sb.append(" ".repeat(width - row.width())).append(desc).append(nl);
         }
         return sb.toString();
     }
 
-    // Help-screen accents as fixed truecolor (so they never pick up the
-    // user's palette), sampled from the orange→magenta wizard gradient:
-    // section headers take the 75% point #ec23c6 (magenta-leaning), command/
-    // param names take the 25% point #f96853 (orange-leaning). Both keep
-    // the bold (1;) prefix.
+    // Help-screen accents as fixed truecolor (so they never pick up the user's
+    // palette), from the Jk Dark scheme: section headers take the accent
+    // (#FF4081 pink), command/param names take primary (#3F51B5 indigo). Both
+    // keep the bold (1;) prefix. (Method names are historical.)
     private static String brightGreen(String text, boolean ansi) {
-        return ansi ? "\033[1;38;2;236;35;198m" + text + "\033[0m" : text;
+        return ansi ? "\033[1;38;2;255;64;129m" + text + "\033[0m" : text;
     }
 
     private static String brightCyan(String text, boolean ansi) {
-        return ansi ? "\033[1;38;2;249;104;83m" + text + "\033[0m" : text;
+        return ansi ? "\033[1;38;2;63;81;181m" + text + "\033[0m" : text;
     }
 
     /**
@@ -769,7 +768,7 @@ public final class Jk implements Runnable {
 
     private static String formatErrorLine(boolean ansi, String label, String value) {
         if (ansi) {
-            return "\033[1;91merror:\033[0m " + label + " '\033[33m" + value + "\033[0m'";
+            return "\033[1;38;2;233;30;99merror:\033[0m " + label + " '\033[38;2;255;193;7m" + value + "\033[0m'";
         }
         return "error: " + label + " '" + value + "'";
     }
@@ -784,9 +783,9 @@ public final class Jk implements Runnable {
     private static String formatUsageLine(boolean ansi, String name) {
         String suffix = " <COMMAND> [OPTIONS]";
         if (ansi) {
-            // Theme: "Usage:" header #ec23c6; name (bold) + suffix (plain) #f96853.
-            return "\033[1;38;2;236;35;198mUsage:\033[0m \033[1;38;2;249;104;83m" + name
-                    + "\033[0m\033[38;2;249;104;83m" + suffix + "\033[0m";
+            // Jk Dark: "Usage:" header = accent #FF4081; name + suffix = primary #3F51B5.
+            return "\033[1;38;2;255;64;129mUsage:\033[0m \033[1;38;2;63;81;181m" + name
+                    + "\033[0m\033[38;2;63;81;181m" + suffix + "\033[0m";
         }
         return "Usage: " + name + suffix;
     }
@@ -849,9 +848,9 @@ public final class Jk implements Runnable {
         out.println();
         String qualifiedName = rootSpec.qualifiedName();
         if (ansi) {
-            // Theme: "Usage:" header #ec23c6; name (bold) + suffix (plain) #f96853.
-            out.println("\033[1;38;2;236;35;198mUsage:\033[0m \033[1;38;2;249;104;83m" + qualifiedName
-                    + "\033[0m\033[38;2;249;104;83m <COMMAND> [OPTIONS]\033[0m");
+            // Jk Dark: "Usage:" header = accent #FF4081; name + suffix = primary #3F51B5.
+            out.println("\033[1;38;2;255;64;129mUsage:\033[0m \033[1;38;2;63;81;181m" + qualifiedName
+                    + "\033[0m\033[38;2;63;81;181m <COMMAND> [OPTIONS]\033[0m");
         } else {
             out.println("Usage: " + qualifiedName + " <COMMAND> [OPTIONS]");
         }
@@ -888,7 +887,7 @@ public final class Jk implements Runnable {
         String ellipsisPad = " ".repeat(descCol - 2 - ellipsis.length());
         String prefix = "See all commands and options by running ";
         String helpCmd = "jk --help";
-        String coloredHelp = ansi ? "\033[33m" + helpCmd + "\033[0m" : helpCmd;
+        String coloredHelp = ansi ? "\033[38;2;255;193;7m" + helpCmd + "\033[0m" : helpCmd;
         out.println("  " + brightCyan(ellipsis, ansi) + ellipsisPad + prefix + coloredHelp);
     }
 }

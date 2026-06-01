@@ -66,22 +66,22 @@ class ProgressBarTest {
 
     @Test
     void rightmost_filled_glyph_is_always_the_gradient_end() {
-        // The frontier glyph is pinned to the gradient end (orange #ff8b1a)
-        // at every fill level; the band trails leftward toward magenta.
-        assertThat(frontierColor(5)).isEqualTo("38;2;255;139;26");
-        assertThat(frontierColor(50)).isEqualTo("38;2;255;139;26");
-        assertThat(frontierColor(100)).isEqualTo("38;2;255;139;26");
+        // The frontier glyph is pinned to the gradient end (bright-green #69F0AE)
+        // at every fill level; the band trails leftward toward green.
+        assertThat(frontierColor(5)).isEqualTo("38;2;105;240;174");
+        assertThat(frontierColor(50)).isEqualTo("38;2;105;240;174");
+        assertThat(frontierColor(100)).isEqualTo("38;2;105;240;174");
     }
 
     @Test
-    void single_filled_glyph_uses_only_the_orange_end() {
-        // 2.5% → 1 filled glyph: it must be the orange end, not magenta.
+    void single_filled_glyph_uses_only_the_gradient_end() {
+        // 2.5% → 1 filled glyph: it must be the bright-green end, not green.
         var buf = new ByteArrayOutputStream();
         try (var pb = ProgressBar.show(stream(buf))) {
             pb.update(2, "x");   // round(2 * 40 / 100) = 1 filled
         }
         var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));
-        assertThat(colors).containsExactly("38;2;255;139;26");
+        assertThat(colors).containsExactly("38;2;105;240;174");
     }
 
     @Test
@@ -172,14 +172,14 @@ class ProgressBarTest {
     }
 
     @Test
-    void gradient_runs_from_magenta_to_orange() {
+    void gradient_runs_from_green_to_bright_green() {
         var colors = ProgressBar.buildGradient(20);
         assertThat(colors).hasSize(20);
-        // Reverse of the wizard title: magenta #e600ff → orange #ff8b1a.
+        // Jk Dark green #4CAF50 → bright-green #69F0AE.
         String first = colors[0].toAnsi();
         String last = colors[19].toAnsi();
-        assertThat(first).isEqualTo("38;2;230;0;255");   // #e600ff
-        assertThat(last).isEqualTo("38;2;255;139;26");   // #ff8b1a
+        assertThat(first).isEqualTo("38;2;76;175;80");    // #4CAF50
+        assertThat(last).isEqualTo("38;2;105;240;174");   // #69F0AE
     }
 
     private static PrintStream stream(ByteArrayOutputStream buf) {
