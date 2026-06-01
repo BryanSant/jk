@@ -2,6 +2,7 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.http.Http;
+import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.repo.s3.AwsCredentialChain;
 import dev.jkbuild.repo.s3.S3Transport;
 
@@ -28,11 +29,21 @@ public final class RepoTransports {
      * a mistyped or not-yet-supported URL fails loudly.
      */
     public static RepoTransport forUrl(URI url, Http http) {
+        return forUrl(url, http, ObjectStoreConfig.EMPTY);
+    }
+
+    /**
+     * As {@link #forUrl(URI, Http)} but with per-repo {@link ObjectStoreConfig}
+     * (region/endpoint/keys from {@code jk.toml}) applied to object-store
+     * backends; ignored for {@code http(s)} and {@code file://}.
+     */
+    public static RepoTransport forUrl(URI url, Http http, ObjectStoreConfig objectStore) {
+        ObjectStoreConfig cfg = objectStore == null ? ObjectStoreConfig.EMPTY : objectStore;
         String scheme = url.getScheme() == null ? "" : url.getScheme().toLowerCase(Locale.ROOT);
         return switch (scheme) {
             case "http", "https" -> new HttpTransport(http);
-            case "s3" -> S3Transport.fromEnv(http, url, new AwsCredentialChain(), System::getenv);
-            case "gs" -> S3Transport.forGcs(http, url, new AwsCredentialChain(), System::getenv);
+            case "s3" -> S3Transport.forS3(http, url, cfg, new AwsCredentialChain(), System::getenv);
+            case "gs" -> S3Transport.forGcs(http, url, cfg, new AwsCredentialChain(), System::getenv);
             case "file" -> new FileTransport();
             default -> throw new IllegalArgumentException(
                     "no repository transport for scheme '" + scheme + "' in " + url

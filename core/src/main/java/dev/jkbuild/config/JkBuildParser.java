@@ -11,6 +11,7 @@ import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
 import dev.jkbuild.credential.RepoCredential;
+import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
@@ -510,6 +511,7 @@ public final class JkBuildParser {
             Object value = repos.get(name);
             String url;
             Optional<RepoCredential> credential = Optional.empty();
+            Optional<ObjectStoreConfig> objectStore = Optional.empty();
             if (value instanceof String s) {
                 url = s;
             } else if (value instanceof TomlTable t) {
@@ -520,18 +522,42 @@ public final class JkBuildParser {
                 }
                 url = u;
                 credential = parseRepoCredential(name, t);
+                objectStore = parseObjectStore(name, t);
             } else {
                 throw new JkBuildParseException(
                         "repositories." + name + " must be a URL string or an inline table with `url`");
             }
             try {
-                result.add(new RepositorySpec(name, URI.create(url), credential));
+                result.add(new RepositorySpec(name, URI.create(url), credential, objectStore));
             } catch (IllegalArgumentException e) {
                 throw new JkBuildParseException(
                         "repositories." + name + " has malformed URL: " + url, e);
             }
         }
         return result;
+    }
+
+    /**
+     * Optional object-store config on a {@code [repositories.<name>]} table for
+     * {@code s3://}/{@code gs://} backends: {@code region}, {@code endpoint},
+     * {@code access-key}, {@code secret-key}, {@code session-token}. All
+     * support {@code ${ENV}} interpolation (so keys aren't committed literally);
+     * any unset field falls back to the AWS environment / default chain.
+     */
+    private static Optional<ObjectStoreConfig> parseObjectStore(String name, TomlTable t) {
+        String region = interpolateEnv(name, t.getString("region"));
+        String endpoint = interpolateEnv(name, t.getString("endpoint"));
+        String accessKey = interpolateEnv(name, t.getString("access-key"));
+        String secretKey = interpolateEnv(name, t.getString("secret-key"));
+        String sessionToken = interpolateEnv(name, t.getString("session-token"));
+        ObjectStoreConfig cfg = new ObjectStoreConfig(
+                blankToNull(region), blankToNull(endpoint),
+                blankToNull(accessKey), blankToNull(secretKey), blankToNull(sessionToken));
+        return cfg.isEmpty() ? Optional.empty() : Optional.of(cfg);
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s;
     }
 
     /**

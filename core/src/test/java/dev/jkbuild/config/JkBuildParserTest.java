@@ -420,6 +420,49 @@ class JkBuildParserTest {
     }
 
     @Test
+    void parses_object_store_config_for_s3_repo() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [repositories.s3-releases]
+                url = "s3://acme-artifacts/releases"
+                region = "us-west-2"
+                endpoint = "https://minio.internal:9000"
+                access-key = "AKID"
+                secret-key = "SEKRIT"
+                """);
+        var spec = parsed.repositories().get(0);
+        assertThat(spec.objectStore()).hasValueSatisfying(c -> {
+            assertThat(c.region()).isEqualTo("us-west-2");
+            assertThat(c.endpoint()).isEqualTo("https://minio.internal:9000");
+            assertThat(c.accessKey()).isEqualTo("AKID");
+            assertThat(c.secretKey()).isEqualTo("SEKRIT");
+            assertThat(c.hasExplicitCredentials()).isTrue();
+        });
+    }
+
+    @Test
+    void object_store_config_absent_when_no_keys() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [repositories.plain]
+                url = "https://repo.example/maven"
+                """);
+        assertThat(parsed.repositories().get(0).objectStore()).isEmpty();
+    }
+
+    @Test
+    void object_store_access_key_interpolates_env() {
+        String path = System.getenv("PATH");
+        org.junit.jupiter.api.Assumptions.assumeTrue(path != null && !path.isBlank());
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [repositories.s3]
+                url = "s3://bucket/maven"
+                access-key = "${PATH}"
+                secret-key = "literal-secret"
+                """);
+        assertThat(parsed.repositories().get(0).objectStore())
+                .hasValueSatisfying(c -> assertThat(c.accessKey()).isEqualTo(path));
+    }
+
+    @Test
     void interpolates_env_var_in_inline_credential() {
         // PATH is reliably set in the test environment; use it as a stand-in secret.
         String path = System.getenv("PATH");

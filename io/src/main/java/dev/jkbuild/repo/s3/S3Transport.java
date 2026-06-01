@@ -3,6 +3,7 @@ package dev.jkbuild.repo.s3;
 
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.repo.RepoTransport;
 
 import java.io.IOException;
@@ -55,11 +56,22 @@ public final class S3Transport implements RepoTransport {
     /** Resolve endpoint/region/credentials from the AWS environment for an {@code s3://} URL. */
     public static S3Transport fromEnv(Http http, URI s3Url, AwsCredentialChain chain,
                                       Function<String, String> env) {
-        Optional<AwsCredentials> creds = chain.resolve(null);
-        String region = creds.map(AwsCredentials::region).orElse(null);
-        if (region == null || region.isBlank()) region = "us-east-1";
-        String endpointOverride = env.apply("AWS_ENDPOINT_URL");
-        URI endpoint = (endpointOverride != null && !endpointOverride.isBlank())
+        return forS3(http, s3Url, ObjectStoreConfig.EMPTY, chain, env);
+    }
+
+    /**
+     * Transport for an {@code s3://} URL, merging explicit per-repo
+     * {@link ObjectStoreConfig} (from {@code jk.toml}) over the AWS environment
+     * / default chain. Region: config → chain (env/profile) → {@code us-east-1}.
+     * Endpoint: config → {@code AWS_ENDPOINT_URL} → {@code s3.<region>.amazonaws.com}.
+     * Credentials: explicit config keys → chain → none (unsigned/public).
+     */
+    public static S3Transport forS3(Http http, URI s3Url, ObjectStoreConfig cfg,
+                                    AwsCredentialChain chain, Function<String, String> env) {
+        String region = firstNonBlank(cfg.region(), chain.resolve(cfg.region()).map(AwsCredentials::region).orElse(null), "us-east-1");
+        Optional<AwsCredentials> creds = resolveCreds(cfg, chain, region);
+        String endpointOverride = firstNonBlank(cfg.endpoint(), env.apply("AWS_ENDPOINT_URL"));
+        URI endpoint = endpointOverride != null
                 ? URI.create(endpointOverride.strip())
                 : URI.create("https://s3." + region + ".amazonaws.com");
         return new S3Transport(http, endpoint, region, creds, Instant::now);
@@ -68,22 +80,47 @@ public final class S3Transport implements RepoTransport {
     /**
      * Transport for a {@code gs://} URL via Google Cloud Storage's
      * S3-compatible XML API: the same SigV4 machinery pointed at
-     * {@code storage.googleapis.com} with GCS HMAC keys (configured through
-     * the AWS env/credentials chain, the documented S3-interop path). Region
-     * is fixed to {@code auto} as GCS's V4 interop expects; an
-     * {@code AWS_ENDPOINT_URL} override is still honoured (proxies/tests).
+     * {@code storage.googleapis.com} with GCS HMAC keys (explicit config keys
+     * or the AWS env/credentials chain). Region is fixed to {@code auto} as
+     * GCS's V4 interop expects; {@code endpoint}/{@code AWS_ENDPOINT_URL}
+     * overrides are honoured (proxies/tests).
      *
      * <p>NOTE: confirm the GCS V4 region/service against a real bucket before
      * relying on it — see docs/artifact-repos.md.
      */
     public static S3Transport forGcs(Http http, URI gsUrl, AwsCredentialChain chain,
                                      Function<String, String> env) {
-        Optional<AwsCredentials> creds = chain.resolve("auto");
-        String endpointOverride = env.apply("AWS_ENDPOINT_URL");
-        URI endpoint = (endpointOverride != null && !endpointOverride.isBlank())
+        return forGcs(http, gsUrl, ObjectStoreConfig.EMPTY, chain, env);
+    }
+
+    /** {@link #forGcs(Http, URI, AwsCredentialChain, Function)} with explicit per-repo config. */
+    public static S3Transport forGcs(Http http, URI gsUrl, ObjectStoreConfig cfg,
+                                     AwsCredentialChain chain, Function<String, String> env) {
+        Optional<AwsCredentials> creds = resolveCreds(cfg, chain, "auto");
+        String endpointOverride = firstNonBlank(cfg.endpoint(), env.apply("AWS_ENDPOINT_URL"));
+        URI endpoint = endpointOverride != null
                 ? URI.create(endpointOverride.strip())
                 : URI.create("https://storage.googleapis.com");
         return new S3Transport(http, endpoint, "auto", creds, Instant::now);
+    }
+
+    /** Explicit config credentials win; otherwise the AWS default chain; both stamped with {@code region}. */
+    private static Optional<AwsCredentials> resolveCreds(ObjectStoreConfig cfg,
+                                                         AwsCredentialChain chain, String region) {
+        if (cfg.hasExplicitCredentials()) {
+            String token = (cfg.sessionToken() != null && !cfg.sessionToken().isBlank())
+                    ? cfg.sessionToken() : null;
+            return Optional.of(new AwsCredentials(cfg.accessKey(), cfg.secretKey(), token, region));
+        }
+        return chain.resolve(region).map(c -> new AwsCredentials(
+                c.accessKeyId(), c.secretAccessKey(), c.sessionToken(), region));
+    }
+
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v.strip();
+        }
+        return null;
     }
 
     @Override

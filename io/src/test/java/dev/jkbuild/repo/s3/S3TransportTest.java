@@ -123,6 +123,30 @@ class S3TransportTest {
     }
 
     @Test
+    void forS3_applies_explicit_config_over_env() throws Exception {
+        AtomicReference<String> auth = new AtomicReference<>();
+        server.createContext("/cfg-bucket/x.jar", ex -> {
+            auth.set(ex.getRequestHeaders().getFirst("Authorization"));
+            byte[] b = "ok".getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, b.length);
+            ex.getResponseBody().write(b);
+            ex.close();
+        });
+
+        var cfg = new dev.jkbuild.model.ObjectStoreConfig(
+                "eu-central-1", endpoint.toString(), "CFGAK", "cfgsk", null);
+        // Empty chain + empty env: config must supply region/endpoint/creds.
+        var chain = new AwsCredentialChain(k -> null, java.nio.file.Path.of("/nonexistent"));
+        S3Transport t = S3Transport.forS3(new Http(), URI.create("s3://cfg-bucket/x.jar"),
+                cfg, chain, k -> null);
+
+        assertThat(t.fetch(URI.create("s3://cfg-bucket/x.jar"), RepoCredential.ANONYMOUS)).isPresent();
+        assertThat(auth.get())
+                .contains("Credential=CFGAK/")
+                .contains("/eu-central-1/s3/aws4_request");
+    }
+
+    @Test
     void anonymous_when_no_credentials_sends_no_authorization() throws Exception {
         AtomicReference<String> auth = new AtomicReference<>();
         auth.set("unset");
