@@ -4,6 +4,7 @@ package dev.jkbuild.cli;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.compile.ClasspathResolver;
+import dev.jkbuild.compile.ShadowPackager;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
 import dev.jkbuild.compile.JarPackager;
@@ -454,7 +455,8 @@ public final class BuildCommand implements Callable<Integer> {
                             .outputDir(classes).release(ctx.require(RELEASE))
                             .extraOptions(javacArgs).javaHome(ctx.require(JAVA_HOME))
                             .build();
-                    String taskId = "compile-main";
+                    // Project-qualify so the tasks/ pointer is unique per module.
+                    String taskId = ActionKey.qualifiedTaskId("compile-main", classes);
                     String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
                     ctx.put(ACTION_KEY, actionKey);
                     java.util.Optional<ActionCache.ActionRecord> cached =
@@ -502,7 +504,8 @@ public final class BuildCommand implements Callable<Integer> {
                     List<Path> kotlincCp = new ArrayList<>(classpath);
                     kotlincCp.add(classes);
                     ctx.label("compiling " + ktSources.size() + " Kotlin sources");
-                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
+                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cache,
+                            CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT)));
                     KotlincResult ktResult = new KotlincDriver().compile(
                             KotlincRequest.builder()
                                     .sources(ktSources).classpath(kotlincCp)
@@ -622,6 +625,8 @@ public final class BuildCommand implements Callable<Integer> {
                     String mainClass = project.project().main();
                     if (mainClass != null && !mainClass.isBlank())
                         jarRequest = jarRequest.withMainClass(mainClass);
+                    if (!project.manifest().isEmpty())
+                        jarRequest = jarRequest.withAttributes(project.manifest());
                     new JarPackager().packageJar(jarRequest);
                     ctx.put(JAR_PATH, jarPath);
                     ctx.progress(1);
@@ -665,9 +670,13 @@ public final class BuildCommand implements Callable<Integer> {
                 .addPhase(packageJar)
                 .addPhase(writeStamp);
 
-        // native = "always" → add native-image phase after package-jar
+        // shadow = true → add a fat-jar phase after package-jar;
+        // native = "always" → add native-image phase after package-jar.
         try {
             JkBuild project = JkBuildParser.parse(buildFile);
+            if (project.project().shadow()) {
+                goalBuilder.addPhase(buildShadowPhase(cache, lockFile));
+            }
             if (project.project().nativeMode() == JkBuild.NativeMode.ALWAYS) {
                 goalBuilder.addPhase(buildNativePhase(dir, cache, lockFile));
             }
@@ -693,6 +702,32 @@ public final class BuildCommand implements Callable<Integer> {
     }
 
     // ---- native-image phase factory ------------------------------------
+
+    private static Phase buildShadowPhase(Path cache, Path lockFile) {
+        return Phase.builder("package-shadow")
+                .label("Shadow")
+                .kind(PhaseKind.CPU)
+                .requires("package-jar")
+                .scope(1)
+                .execute(ctx -> {
+                    JkBuild project = ctx.require(PROJECT);
+                    BuildLayout layout = ctx.require(LAYOUT);
+                    Path classes = ctx.require(MAIN_CLASSES);
+                    Path shadowJar = layout.shadowJar();
+                    ctx.label("package " + shadowJar.getFileName());
+                    List<Path> depJars = List.of();
+                    if (Files.exists(lockFile)) {
+                        Lockfile lock = LockfileReader.read(lockFile);
+                        depJars = new ClasspathResolver(new Cas(cache))
+                                .classpathFor(lock, ClasspathResolver.RUNTIME);
+                    }
+                    new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
+                            classes, depJars, shadowJar,
+                            project.project().main(), project.manifest(), 0L));
+                    ctx.progress(1);
+                })
+                .build();
+    }
 
     private static Phase buildNativePhase(Path dir, Path cache, Path lockFile) {
         return Phase.builder("native-image")

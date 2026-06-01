@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.model;
 
+import java.util.Collections;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,7 +20,8 @@ public record JkBuild(
         List<RepositorySpec> repositories,
         Profiles profiles,
         Features features,
-        Workspace workspace) {
+        Workspace workspace,
+        Map<String, String> manifest) {
 
     public JkBuild {
         Objects.requireNonNull(project, "project");
@@ -27,6 +30,18 @@ public record JkBuild(
         Objects.requireNonNull(profiles, "profiles");
         Objects.requireNonNull(features, "features");
         repositories = List.copyOf(repositories);
+        // Custom jar-manifest attributes (the [manifest] table). Insertion
+        // order preserved for faithful round-tripping. Main-Class is NOT here —
+        // it derives from project.main.
+        manifest = manifest == null || manifest.isEmpty()
+                ? Map.of()
+                : Collections.unmodifiableMap(new LinkedHashMap<>(manifest));
+    }
+
+    /** Back-compat constructor for callers that don't set manifest attributes. */
+    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
+                   Profiles profiles, Features features, Workspace workspace) {
+        this(project, dependencies, repositories, profiles, features, workspace, Map.of());
     }
 
     /** Project + deps only — no repos, no profiles, no features, no workspace. */
@@ -56,6 +71,11 @@ public record JkBuild(
                 Profiles.empty(), Features.empty(), null);
     }
 
+    /** Return a copy with the given custom jar-manifest attributes. */
+    public JkBuild withManifest(Map<String, String> manifest) {
+        return new JkBuild(project, dependencies, repositories, profiles, features, workspace, manifest);
+    }
+
     /** True iff this is a workspace root (has a non-empty {@code workspace} block). */
     public boolean isWorkspaceRoot() {
         return workspace != null && !workspace.isEmpty();
@@ -75,8 +95,11 @@ public record JkBuild(
      *       in {@code jk.lock}.</li>
      *   <li>{@code java} — Java compiler language/bytecode level (major). Non-zero
      *       only for Java projects; mutually exclusive with {@code kotlin}.</li>
-     *   <li>{@code kotlin} — Kotlin compiler major version. Non-zero only for
-     *       Kotlin projects; mutually exclusive with {@code java}.</li>
+     *   <li>{@code kotlin} — Kotlin compiler version selector (floating by
+     *       default, {@code =}-pinnable, range-capable — like a dependency
+     *       version). Resolved to a concrete version in {@code jk.lock}.
+     *       Non-{@code null} only for Kotlin projects; mutually exclusive with
+     *       {@code java}.</li>
      *   <li>{@code main} — fully qualified main class of a runnable project,
      *       or {@code null} for a library.</li>
      *   <li>{@code shadow} — bundle an all-in-one (shadow / fat) jar.</li>
@@ -88,6 +111,13 @@ public record JkBuild(
      *   <li>{@code description} — free-form human-readable description.
      *       Surfaces as {@code <description>} in {@code jk publish} POMs and
      *       {@code jk export pom.xml}; {@code null} when omitted.</li>
+     *   <li>{@code application} — when true, {@code jk install} also performs a
+     *       {@code make install} (launcher / native binary under {@code ~/.jk}).
+     *       Defaults to {@code main != null}; the {@code application} key
+     *       overrides (e.g. {@code application = false} with a {@code main}).</li>
+     *   <li>{@code m2install} — when true, {@code jk install} additionally
+     *       hard-links/copies the jar+pom into {@code ~/.m2/repository}. Default
+     *       false.</li>
      * </ul>
      *
      * <p>Exactly one of {@code java}/{@code kotlin} must be set; the parser
@@ -107,9 +137,9 @@ public record JkBuild(
     }
 
     public record Project(String group, String artifact, String version,
-                          int jdk, int java, int kotlin,
+                          int jdk, int java, VersionSelector kotlin,
                           String main, boolean shadow, NativeMode nativeMode,
-                          String description) {
+                          String description, boolean application, boolean m2install) {
 
         public Project {
             Objects.requireNonNull(group, "group");
@@ -118,10 +148,10 @@ public record JkBuild(
             if (group.isBlank()) throw new IllegalArgumentException("project.group must not be blank");
             if (artifact.isBlank()) throw new IllegalArgumentException("project.artifact must not be blank");
             if (version.isBlank()) throw new IllegalArgumentException("project.version must not be blank");
-            if (java < 0 || kotlin < 0 || jdk < 0) {
-                throw new IllegalArgumentException("project.jdk/java/kotlin must be non-negative");
+            if (java < 0 || jdk < 0) {
+                throw new IllegalArgumentException("project.jdk/java must be non-negative");
             }
-            if (java > 0 && kotlin > 0) {
+            if (java > 0 && kotlin != null) {
                 throw new IllegalArgumentException(
                         "project must set exactly one of `java` or `kotlin`, not both");
             }
@@ -129,9 +159,22 @@ public record JkBuild(
             if (description != null && description.isBlank()) description = null;
         }
 
+        /**
+         * Back-compat constructor (pre-{@code application}/{@code m2install}).
+         * Defaults {@code application} to "is there a main class?" — matching
+         * the rule that a runnable project is an application unless told
+         * otherwise — and {@code m2install} to false.
+         */
+        public Project(String group, String artifact, String version,
+                       int jdk, int java, VersionSelector kotlin,
+                       String main, boolean shadow, NativeMode nativeMode, String description) {
+            this(group, artifact, version, jdk, java, kotlin, main, shadow, nativeMode,
+                    description, main != null, false);
+        }
+
         /** Library project — no main, no shadow, no native; defaults to a Java project. */
         public Project(String group, String artifact, String version, int jdk) {
-            this(group, artifact, version, jdk, jdk, 0, null, false, NativeMode.DISABLED, null);
+            this(group, artifact, version, jdk, jdk, null, null, false, NativeMode.DISABLED, null);
         }
 
         /** Backward-compat: true when native mode is not DISABLED. */
@@ -142,9 +185,19 @@ public record JkBuild(
             return main != null;
         }
 
-        /** True when this is a Kotlin project (i.e. {@code kotlin > 0}). */
+        /**
+         * True when this project is an <em>application</em> — {@code jk install}
+         * additionally performs a {@code make install} (launcher / native binary
+         * under {@code ~/.jk}). Defaults to whether a {@code main} is set; the
+         * {@code application} key overrides either way.
+         */
+        public boolean isApplication() {
+            return application;
+        }
+
+        /** True when this is a Kotlin project (i.e. a {@code kotlin} version is set). */
         public boolean isKotlin() {
-            return kotlin > 0;
+            return kotlin != null;
         }
 
         /** The {@code java} compiler release to target. For Kotlin projects, falls back to {@code jdk}. */

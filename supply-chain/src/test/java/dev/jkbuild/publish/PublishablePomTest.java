@@ -94,7 +94,7 @@ class PublishablePomTest {
     @Test
     void project_description_is_emitted_when_metadata_omits_it() {
         JkBuild.Project p = new JkBuild.Project("com.example", "widget", "1.0.0", 21,
-                21, 0, null, false, JkBuild.NativeMode.DISABLED,
+                21, null, null, false, JkBuild.NativeMode.DISABLED,
                 "A widget from jk.toml.");
         String xml = PublishablePom.render(
                 new JkBuild(p, JkBuild.Dependencies.empty()), null).xml();
@@ -104,7 +104,7 @@ class PublishablePomTest {
     @Test
     void metadata_description_overrides_project_description() {
         JkBuild.Project p = new JkBuild.Project("com.example", "widget", "1.0.0", 21,
-                21, 0, null, false, JkBuild.NativeMode.DISABLED,
+                21, null, null, false, JkBuild.NativeMode.DISABLED,
                 "from jk.toml");
         var meta = new PublishablePom.Metadata(
                 null, "from publish call", null, List.of(), List.of(), null);

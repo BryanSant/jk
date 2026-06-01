@@ -22,15 +22,19 @@ import java.util.stream.Stream;
  * Persistent action cache (PRD §17.1). Maps an {@link ActionKey}-style
  * hash to the file outputs the action produced. Outputs themselves live
  * in the {@link Cas}; this class stores the {@code action_key → outputs}
- * mapping alongside a {@code last-by-task → action_key} pointer so
+ * mapping alongside a {@code task → action_key} pointer so a future
  * {@code jk why-rebuilt} can diff a task's current inputs against its
  * most recent recorded run.
  *
  * <p>On-disk layout:
  * <pre>{@code
- *   <root>/by-key/<actionKey>           one ActionRecord per cached action
- *   <root>/last-by-task/<taskId>        plain text — the most recent actionKey
+ *   <root>/keys/<actionKey>     one ActionRecord per cached action
+ *   <root>/tasks/<taskId>       plain text — the most recent actionKey
  * }</pre>
+ *
+ * <p>{@code taskId} is expected to be project-qualified by the caller (see
+ * {@link ActionKey#qualifiedTaskId}) so the {@code tasks/} pointer for, say,
+ * {@code compile-main} doesn't collide across projects / workspace members.
  */
 public final class ActionCache {
 
@@ -43,13 +47,13 @@ public final class ActionCache {
     }
 
     public Optional<ActionRecord> lookup(String actionKey) throws IOException {
-        Path file = byKeyDir().resolve(actionKey);
+        Path file = keysDir().resolve(actionKey);
         if (!Files.exists(file)) return Optional.empty();
         return Optional.of(parse(Files.readString(file)));
     }
 
     public Optional<ActionRecord> lastFor(String taskId) throws IOException {
-        Path pointer = lastByTaskDir().resolve(taskId);
+        Path pointer = tasksDir().resolve(taskId);
         if (!Files.exists(pointer)) return Optional.empty();
         String actionKey = Files.readString(pointer).trim();
         return lookup(actionKey);
@@ -104,11 +108,11 @@ public final class ActionCache {
             String actionKey,
             Map<String, String> inputs,
             Map<String, String> outputs) throws IOException {
-        Files.createDirectories(byKeyDir());
-        Files.createDirectories(lastByTaskDir());
+        Files.createDirectories(keysDir());
+        Files.createDirectories(tasksDir());
         ActionRecord record = new ActionRecord(taskId, actionKey, inputs, outputs);
-        Files.writeString(byKeyDir().resolve(actionKey), render(record));
-        Files.writeString(lastByTaskDir().resolve(taskId), actionKey);
+        Files.writeString(keysDir().resolve(actionKey), render(record));
+        Files.writeString(tasksDir().resolve(taskId), actionKey);
         return record;
     }
 
@@ -191,12 +195,12 @@ public final class ActionCache {
                 inputs, outputs);
     }
 
-    private Path byKeyDir() {
-        return root.resolve("by-key");
+    private Path keysDir() {
+        return root.resolve("keys");
     }
 
-    private Path lastByTaskDir() {
-        return root.resolve("last-by-task");
+    private Path tasksDir() {
+        return root.resolve("tasks");
     }
 
     private static void deleteRecursively(Path target) throws IOException {

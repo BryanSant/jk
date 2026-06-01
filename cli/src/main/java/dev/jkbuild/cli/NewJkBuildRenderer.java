@@ -24,14 +24,17 @@ import java.util.Map;
  * <ul>
  *   <li>{@code jdk = <major>} — integer feature release; resolved to a concrete
  *       install identifier in {@code jk.lock}.</li>
- *   <li>{@code java = <major>} or {@code kotlin = <major>} (mutually exclusive)
- *       — the compiler-level language indicator.</li>
+ *   <li>{@code java = <major>} (integer) or {@code kotlin = "<version>"}
+ *       (compiler version string) — mutually exclusive language indicator.</li>
  * </ul>
  */
 public final class NewJkBuildRenderer {
 
-    /** Current Kotlin major when language=kotlin. Bumped when we settle on a new floor. */
-    private static final int DEFAULT_KOTLIN_MAJOR = 2;
+    /**
+     * Default Kotlin compiler version selector when language=kotlin. Floating
+     * (caret) so {@code jk lock} pins it to the latest compatible release.
+     */
+    private static final String DEFAULT_KOTLIN_VERSION = dev.jkbuild.kotlin.KotlinResolver.DEFAULT_VERSION;
 
     private NewJkBuildRenderer() {}
 
@@ -44,7 +47,7 @@ public final class NewJkBuildRenderer {
         sb.append("jdk      = ").append(inputs.jdkMajor()).append('\n');
         switch (inputs.lang()) {
             case JAVA -> sb.append("java     = ").append(inputs.jdkMajor()).append('\n');
-            case KOTLIN -> sb.append("kotlin   = ").append(DEFAULT_KOTLIN_MAJOR).append('\n');
+            case KOTLIN -> sb.append("kotlin   = \"").append(DEFAULT_KOTLIN_VERSION).append("\"\n");
         }
         if (inputs.main().isPresent()) {
             sb.append("main     = \"").append(inputs.main().get()).append("\"\n");

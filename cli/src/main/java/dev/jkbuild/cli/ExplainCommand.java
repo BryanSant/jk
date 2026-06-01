@@ -90,7 +90,9 @@ public final class ExplainCommand implements Callable<Integer> {    @Option(name
                 .outputDir(outputDir)
                 .release(release)
                 .build();
-        String key = ActionKey.forJavac(taskId, request, Jk.VERSION);
+        // Qualify identically to the build so the looked-up key matches.
+        String key = ActionKey.forJavac(
+                ActionKey.qualifiedTaskId(taskId, outputDir), request, Jk.VERSION);
         String status = cache.lookup(key).isPresent() ? "HIT" : "MISS";
         System.out.println("  " + taskId + ": " + sources.size()
                 + " source" + (sources.size() == 1 ? "" : "s")

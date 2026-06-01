@@ -26,6 +26,9 @@ public final class ClasspathResolver {
     /** Scopes used to build the runtime / test runtime classpath. */
     public static final Set<Scope> TEST = EnumSet.of(Scope.MAIN, Scope.RUNTIME, Scope.TEST);
 
+    /** Scopes bundled into a runnable app (shadow jar / installed libexec). */
+    public static final Set<Scope> RUNTIME = EnumSet.of(Scope.MAIN, Scope.RUNTIME);
+
     /** Scopes visible while compiling main sources. */
     public static final Set<Scope> COMPILE_MAIN = EnumSet.of(Scope.MAIN, Scope.PROVIDED);
 

@@ -39,7 +39,7 @@ class PomExporterTest {
     @Test
     void emits_description_when_project_sets_it() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 21, 0,
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 21, null,
                         null, false, JkBuild.NativeMode.DISABLED,
                         "A widget for widgeting."),
                 JkBuild.Dependencies.empty());

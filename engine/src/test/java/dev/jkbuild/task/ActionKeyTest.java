@@ -77,4 +77,18 @@ class ActionKeyTest {
         assertThat(ActionKey.forJavac("compile-main", base, "0.1.0"))
                 .isNotEqualTo(ActionKey.forJavac("compile-main", other, "0.1.0"));
     }
+
+    @Test
+    void qualified_task_id_differs_per_module_and_is_stable() {
+        Path a = Path.of("/work/projA/build/classes/main");
+        Path b = Path.of("/work/projB/build/classes/main");
+        String qa = ActionKey.qualifiedTaskId("compile-main", a);
+        String qb = ActionKey.qualifiedTaskId("compile-main", b);
+
+        assertThat(qa).startsWith("compile-main@");
+        assertThat(qa).isNotEqualTo(qb);                 // different modules → no pointer collision
+        assertThat(qa).isEqualTo(ActionKey.qualifiedTaskId("compile-main", a)); // stable
+        // compile-main vs compile-test in the same module stay distinct too.
+        assertThat(qa).isNotEqualTo(ActionKey.qualifiedTaskId("compile-test", a));
+    }
 }

@@ -36,7 +36,7 @@ class CacheCommandTest {
     void info_reports_blob_counts_and_sizes(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
         writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), "hello".getBytes(StandardCharsets.UTF_8));
-        writeBlob(cache.resolve("actions/by-key/some-task"), new byte[2048]);
+        writeBlob(cache.resolve("actions/keys/some-task"), new byte[2048]);
 
         String stdout = capture(() -> run("cache", "info", "--cache-dir", cache.toString()));
         assertThat(stdout).contains("CAS blobs:     1 files, 5 B");
@@ -47,8 +47,8 @@ class CacheCommandTest {
     @Test
     void prune_removes_stale_action_entries_and_tmp_files(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
-        Path stale = writeBlob(cache.resolve("actions/by-key/old"), new byte[256]);
-        Path fresh = writeBlob(cache.resolve("actions/by-key/new"), new byte[256]);
+        Path stale = writeBlob(cache.resolve("actions/keys/old"), new byte[256]);
+        Path fresh = writeBlob(cache.resolve("actions/keys/new"), new byte[256]);
         Path leftoverTmp = writeBlob(cache.resolve("sha256/ab/cd/.put-abc.tmp"), new byte[128]);
         Path keptBlob = writeBlob(cache.resolve("sha256/ab/cd/realblob"), new byte[128]);
 
@@ -72,7 +72,7 @@ class CacheCommandTest {
     @Test
     void prune_dry_run_does_not_delete(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
-        Path stale = writeBlob(cache.resolve("actions/by-key/old"), new byte[1024]);
+        Path stale = writeBlob(cache.resolve("actions/keys/old"), new byte[1024]);
         Files.setLastModifiedTime(stale,
                 FileTime.from(Instant.now().minus(60, ChronoUnit.DAYS)));
 
@@ -89,7 +89,7 @@ class CacheCommandTest {
     void clean_wipes_contents_but_keeps_root(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
         writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), new byte[4096]);
-        writeBlob(cache.resolve("actions/by-key/task1"), new byte[1024]);
+        writeBlob(cache.resolve("actions/keys/task1"), new byte[1024]);
 
         String stdout = capture(() -> run("cache", "clean", "--cache-dir", cache.toString()));
 

@@ -75,6 +75,7 @@ public final class JkDirs {
     public static Path state()          { return current().stateDir(); }
     public static Path data()           { return current().dataDir(); }
     public static Path binDir()         { return current().binDirectory(); }
+    public static Path libexec()        { return current().libexecDir(); }
     public static Path jdks()           { return current().jdksDir(); }
 
     /**
@@ -117,6 +118,16 @@ public final class JkDirs {
      */
     public Path binDirectory() {
         return resolve("JK_BIN_DIR", "bin");
+    }
+
+    /**
+     * Where {@code jk install} places an application's jar(s) — the app jar and
+     * its hard-linked runtime dependencies, or a single fat jar. Defaults to
+     * {@code ~/.jk/libexec/}. Override via {@code JK_LIBEXEC_DIR}. Launchers in
+     * {@link #binDirectory()} reference jars here by absolute path.
+     */
+    public Path libexecDir() {
+        return resolve("JK_LIBEXEC_DIR", "libexec");
     }
 
     /**

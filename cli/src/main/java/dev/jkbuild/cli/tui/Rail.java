@@ -31,7 +31,9 @@ public final class Rail {
     private static final String OPEN_CHAR = "╭";
     private static final String MID_CHAR = "│";
     private static final String CLOSE_CHAR = "╰";
+    /** Filled box for the active step; empty box for completed/inactive steps. */
     private static final String BULLET_CHAR = "■";
+    private static final String BULLET_CHAR_EMPTY = "□";
 
     /** Horizontal bars drawn after the corner glyph on the top/bottom of the frame. */
     private static final String CORNER_DASHES = "──";
@@ -104,15 +106,20 @@ public final class Rail {
         return sb.toAttributedString();
     }
 
-    /** Step header bullet: {@code ■} for every state; cyan when active, otherwise dark-gray. */
+    /**
+     * Step header bullet: filled {@code ■} only for the active step, empty
+     * {@code □} for completed/inactive steps. Coloring is unchanged — accent
+     * when active, dark-gray otherwise.
+     */
     public static AttributedString stepBullet(StepState state, String prompt) {
         var promptStyle = switch (state) {
             case ACTIVE -> Theme.focused();
             case COMPLETED -> Theme.completedPrompt();
             case INACTIVE -> Theme.dim();
         };
+        var bullet = state == StepState.ACTIVE ? BULLET_CHAR : BULLET_CHAR_EMPTY;
         return new AttributedStringBuilder()
-                .append(BULLET_CHAR, Theme.railStyle(state, RailGlyph.BULLET))
+                .append(bullet, Theme.railStyle(state, RailGlyph.BULLET))
                 .append("  ")
                 .append(prompt, promptStyle)
                 .toAttributedString();

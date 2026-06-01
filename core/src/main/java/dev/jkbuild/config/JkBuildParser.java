@@ -93,7 +93,32 @@ public final class JkBuildParser {
         List<RepositorySpec> repos = parseRepositories(result);
         Profiles profiles = parseProfiles(result);
         Features features = parseFeatures(result);
-        return new JkBuild(project, deps, repos, profiles, features, workspace);
+        Map<String, String> manifest = parseManifest(result);
+        return new JkBuild(project, deps, repos, profiles, features, workspace, manifest);
+    }
+
+    /**
+     * Parse the optional top-level {@code [manifest]} table — string-valued
+     * custom jar-manifest attributes (e.g. {@code "Implementation-Title"}).
+     * {@code Main-Class} is intentionally <em>not</em> read here; it derives
+     * from {@code project.main}.
+     */
+    private static Map<String, String> parseManifest(TomlParseResult root) {
+        TomlTable table = root.getTable("manifest");
+        if (table == null) return Map.of();
+        Map<String, String> attrs = new java.util.LinkedHashMap<>();
+        for (String key : table.keySet()) {
+            String value = table.getString(key);
+            if (value == null) {
+                throw new JkBuildParseException("manifest." + key + " must be a string");
+            }
+            if (key.equalsIgnoreCase("Main-Class")) {
+                throw new JkBuildParseException(
+                        "manifest.Main-Class is not allowed; set project.main instead");
+            }
+            attrs.put(key, value);
+        }
+        return attrs;
     }
 
     /**
@@ -121,10 +146,10 @@ public final class JkBuildParser {
         String version = requireString(project, "version", "project.version");
         int jdk = intOrZero(project, "jdk", "project.jdk");
         int java = intOrZero(project, "java", "project.java");
-        int kotlin = intOrZero(project, "kotlin", "project.kotlin");
+        VersionSelector kotlin = parseKotlinVersion(project);
         requireSupportedMajor("project.jdk", jdk);
         requireSupportedMajor("project.java", java);
-        if (java > 0 && kotlin > 0) {
+        if (java > 0 && kotlin != null) {
             throw new JkBuildParseException(
                     "project must set exactly one of `java` or `kotlin`, not both");
         }
@@ -142,8 +167,15 @@ public final class JkBuildParser {
             nativeMode = JkBuild.NativeMode.DISABLED;
         }
         String description = project.getString("description");
+        // application defaults to "has a main class"; an explicit key overrides
+        // (e.g. application = false for a runnable project that shouldn't be
+        // make-installed). m2install defaults to false.
+        boolean application = project.contains("application")
+                ? Boolean.TRUE.equals(project.getBoolean("application"))
+                : main != null;
+        boolean m2install = Boolean.TRUE.equals(project.getBoolean("m2install"));
         return new JkBuild.Project(group, artifact, version, jdk, java, kotlin,
-                main, shadow, nativeMode, description);
+                main, shadow, nativeMode, description, application, m2install);
     }
 
     private static int intOrZero(TomlTable table, String key, String path) {
@@ -156,6 +188,22 @@ public final class JkBuildParser {
             throw new JkBuildParseException(path + " out of range: " + value);
         }
         return value.intValue();
+    }
+
+    /**
+     * {@code project.kotlin} is a Kotlin compiler version selector (string),
+     * parsed the same way as a floating dependency version: bare {@code 2.3.21}
+     * → caret, {@code =2.3.21} pins. Absent → {@code null} (a Java project).
+     */
+    private static VersionSelector parseKotlinVersion(TomlTable project) {
+        if (!project.contains("kotlin")) return null;
+        String raw = project.getString("kotlin");
+        if (raw == null) {
+            throw new JkBuildParseException(
+                    "project.kotlin must be a version string, e.g. \"2.3.21\"");
+        }
+        if (raw.isBlank()) return null;
+        return VersionSelector.parseFloating(raw);
     }
 
     /**

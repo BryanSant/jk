@@ -67,6 +67,38 @@ class PubGrubSolverTest {
     }
 
     @Test
+    void skips_a_higher_pre_release_for_a_floating_constraint() throws Exception {
+        // 3.0.0-RC1 is the highest version, but a floating >=1.0 constraint
+        // must resolve to the highest *stable* version, 2.0.0.
+        PackageSource src = InMemoryPackageSource.builder()
+                .version("widget", "1.0.0")
+                .version("widget", "2.0.0")
+                .version("widget", "3.0.0-RC1")
+                .build();
+
+        PubGrubSolver solver = new PubGrubSolver(src);
+        Map<String, String> solution = solver.solve("root", "1.0",
+                List.of(Term.positive("widget", VersionSet.atLeast("1.0.0", true))));
+
+        assertThat(solution).containsEntry("widget", "2.0.0");
+    }
+
+    @Test
+    void selects_a_pre_release_when_no_stable_version_satisfies() throws Exception {
+        // Only pre-releases exist — the solver must still resolve.
+        PackageSource src = InMemoryPackageSource.builder()
+                .version("widget", "3.0.0-RC1")
+                .version("widget", "3.0.0-RC2")
+                .build();
+
+        PubGrubSolver solver = new PubGrubSolver(src);
+        Map<String, String> solution = solver.solve("root", "1.0",
+                List.of(Term.positive("widget", VersionSet.atLeast("1.0.0", true))));
+
+        assertThat(solution).containsEntry("widget", "3.0.0-RC2");
+    }
+
+    @Test
     void diamond_with_compatible_versions() throws Exception {
         // root -> a -> shared >= 1.0
         // root -> b -> shared <= 2.0

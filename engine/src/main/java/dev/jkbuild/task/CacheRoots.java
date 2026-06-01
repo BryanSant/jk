@@ -19,7 +19,7 @@ import java.util.stream.Stream;
  *
  * <p>Roots scanned:
  * <ul>
- *   <li>{@code actions/by-key/<key>} — compile manifests. INPUT and
+ *   <li>{@code actions/keys/<key>} — compile manifests. INPUT and
  *       OUTPUT lines name shas directly; CP lines embed shas in the
  *       absolute path they hand to javac.</li>
  *   <li>{@code actions/synced/<projectId>} — sync manifests (per-project
@@ -45,8 +45,8 @@ public final class CacheRoots {
      */
     public static Set<String> collect(Cas cas, Path actionsDir, Path toolsDir) throws IOException {
         Set<String> refs = new HashSet<>();
-        if (Files.isDirectory(actionsDir.resolve("by-key"))) {
-            scanTextFilesRecursively(actionsDir.resolve("by-key"), cas, refs);
+        if (Files.isDirectory(actionsDir.resolve("keys"))) {
+            scanTextFilesRecursively(actionsDir.resolve("keys"), cas, refs);
         }
         if (Files.isDirectory(actionsDir.resolve(Sweep.SYNCED_SUBDIR))) {
             scanTextFilesRecursively(actionsDir.resolve(Sweep.SYNCED_SUBDIR), cas, refs);

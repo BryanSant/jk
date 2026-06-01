@@ -15,6 +15,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Callable;
@@ -31,8 +32,14 @@ import java.util.concurrent.Callable;
 @Command(name = "import", description = "Convert a Maven or Gradle build to jk.toml")
 public final class ImportCommand implements Callable<Integer> {
 
-    @Parameters(arity = "1", paramLabel = "<file>",
-            description = "Source file: pom.xml, build.gradle, or build.gradle.kts.")
+    /** Auto-detect order when {@code <file>} is omitted (most specific first). */
+    private static final List<String> AUTO_DETECT_ORDER =
+            List.of("build.gradle.kts", "build.gradle", "pom.xml");
+
+    @picocli.CommandLine.Mixin GlobalOptions global;
+
+    @Parameters(arity = "0..1", paramLabel = "file",
+            description = "The specific build file to import (optional)")
     Path source;
 
     @Option(names = "--out", description = "Path to write jk.toml. Default: <source-dir>/jk.toml.")
@@ -47,9 +54,23 @@ public final class ImportCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws IOException {
-        if (!Files.exists(source)) {
-            System.err.println("jk import: source not found: " + source);
-            return 66; // EX_NOINPUT
+        Path baseDir = global.workingDir();
+
+        if (source == null) {
+            source = autoDetectSource(baseDir);
+            if (source == null) {
+                System.err.println("jk import: no build file found in " + baseDir
+                        + " (looked for build.gradle.kts, build.gradle, pom.xml). "
+                        + "Pass a source file explicitly.");
+                return 66; // EX_NOINPUT
+            }
+            System.out.println("Importing " + baseDir.relativize(source));
+        } else {
+            source = source.isAbsolute() ? source : baseDir.resolve(source);
+            if (!Files.exists(source)) {
+                System.err.println("jk import: source not found: " + source);
+                return 66; // EX_NOINPUT
+            }
         }
 
         String filename = source.getFileName().toString().toLowerCase(Locale.ROOT);
@@ -101,6 +122,20 @@ public final class ImportCommand implements Callable<Integer> {
                     + (importable.report.hasErrors() ? " (includes Tier 3 errors)" : ""));
         }
         return 0;
+    }
+
+    /**
+     * Find the first build file in {@code dir} matching {@link #AUTO_DETECT_ORDER}
+     * (build.gradle.kts → build.gradle → pom.xml), or {@code null} if none exist.
+     */
+    private static Path autoDetectSource(Path dir) {
+        for (String name : AUTO_DETECT_ORDER) {
+            Path candidate = dir.resolve(name);
+            if (Files.isRegularFile(candidate)) {
+                return candidate;
+            }
+        }
+        return null;
     }
 
     private record Importable(JkBuild root, Map<String, JkBuild> members, ImportReport report) {}

@@ -77,6 +77,27 @@ class JarPackagerTest {
     }
 
     @Test
+    void custom_manifest_attributes_are_written(@TempDir Path tempDir) throws IOException {
+        Path input = tempDir.resolve("classes");
+        Files.createDirectories(input);
+        Files.writeString(input.resolve("x.txt"), "data");
+
+        Path jar = tempDir.resolve("out.jar");
+        new JarPackager().packageJar(JarPackager.JarRequest.of(input, jar)
+                .withMainClass("com.example.Main")
+                .withAttributes(java.util.Map.of(
+                        "Implementation-Title", "widget",
+                        "Implementation-Version", "1.0.0")));
+
+        try (JarFile jf = new JarFile(jar.toFile())) {
+            Attributes attrs = jf.getManifest().getMainAttributes();
+            assertThat(attrs.getValue(Attributes.Name.MAIN_CLASS)).isEqualTo("com.example.Main");
+            assertThat(attrs.getValue("Implementation-Title")).isEqualTo("widget");
+            assertThat(attrs.getValue("Implementation-Version")).isEqualTo("1.0.0");
+        }
+    }
+
+    @Test
     void entry_contents_round_trip(@TempDir Path tempDir) throws IOException {
         Path input = tempDir.resolve("classes");
         Files.createDirectories(input);

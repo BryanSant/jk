@@ -184,7 +184,8 @@ public final class CompileCommand implements Callable<Integer> {
                     int release = project.project().javaRelease();
                     List<Path> kotlincCp = new ArrayList<>(classpath);
                     kotlincCp.add(scratch);
-                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cache);
+                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cache,
+                            CompileToolchain.kotlinVersionFor(ctx.require(LOCK), project));
                     KotlincResult result = new KotlincDriver().compile(
                             KotlincRequest.builder()
                                     .sources(ktSources)

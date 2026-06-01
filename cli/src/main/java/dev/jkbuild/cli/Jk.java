@@ -487,11 +487,14 @@ public final class Jk implements Runnable {
         String nl = System.lineSeparator();
         // Separate this section from the preceding options block.
         out.append(nl);
+        boolean firstGroup = true;
         for (CommandGroup group : COMMAND_GROUPS) {
             List<String> visible = group.names().stream()
                     .filter(byName::containsKey)
                     .toList();
             if (visible.isEmpty()) continue;
+            if (!firstGroup) out.append(nl);
+            firstGroup = false;
             out.append(brightGreen(group.heading(), ansi)).append(nl);
             for (String name : visible) {
                 appendCommandRow(out, name, byName.get(name), width, ansi);
@@ -504,6 +507,7 @@ public final class Jk implements Runnable {
                 .sorted()
                 .toList();
         if (!leftover.isEmpty()) {
+            if (!firstGroup) out.append(nl);
             out.append(brightGreen("Shell integration commands:", ansi)).append(nl);
             for (String name : leftover) {
                 appendCommandRow(out, name, byName.get(name), width, ansi);
@@ -536,6 +540,17 @@ public final class Jk implements Runnable {
      * {@code <name> <COMMAND> [OPTIONS]}; leaves include any visible positional
      * parameters in declaration order before {@code [OPTIONS]}.
      */
+    /**
+     * Display form for a positional parameter, per CLI convention:
+     * {@code <name>} when required, {@code [name]} when optional. Any
+     * brackets/angles already in the stored paramLabel are stripped first,
+     * so we never emit {@code [<name>]} or {@code [[name]]}.
+     */
+    private static String positionalLabel(picocli.CommandLine.Model.PositionalParamSpec p) {
+        String bare = p.paramLabel().replaceAll("[<>\\[\\]]", "");
+        return p.arity().min() == 0 ? "[" + bare + "]" : "<" + bare + ">";
+    }
+
     private static String renderSynopsis(Help help) {
         boolean ansi = help.colorScheme().ansi().enabled();
         String name = help.commandSpec().qualifiedName();
@@ -546,13 +561,14 @@ public final class Jk implements Runnable {
         } else {
             for (var p : help.commandSpec().positionalParameters()) {
                 if (p.hidden()) continue;
-                suffix.append(" ").append(p.paramLabel());
+                suffix.append(" ").append(positionalLabel(p));
             }
         }
         suffix.append(" [OPTIONS]");
         String nl = System.lineSeparator();
         if (ansi) {
-            return "\033[1;96m" + name + "\033[0m\033[96m" + suffix + "\033[0m" + nl;
+            // Command-name theme color #f96853: name bold, suffix plain.
+            return "\033[1;38;2;249;104;83m" + name + "\033[0m\033[38;2;249;104;83m" + suffix + "\033[0m" + nl;
         }
         return name + suffix + nl;
     }
@@ -615,11 +631,11 @@ public final class Jk implements Runnable {
                 .filter(p -> !p.hidden())
                 .toList();
         if (params.isEmpty()) return "";
-        int width = params.stream().mapToInt(p -> p.paramLabel().length()).max().orElse(0) + 2;
+        int width = params.stream().mapToInt(p -> positionalLabel(p).length()).max().orElse(0) + 2;
         var sb = new StringBuilder();
         String nl = System.lineSeparator();
         for (var p : params) {
-            String label = p.paramLabel();
+            String label = positionalLabel(p);
             String desc = p.description().length > 0 ? p.description()[0] : "";
             sb.append("  ")
                     .append(ansi ? "\033[96m" + label + "\033[0m" : label)
@@ -695,12 +711,17 @@ public final class Jk implements Runnable {
         return sb.toString();
     }
 
+    // Help-screen accents as fixed truecolor (so they never pick up the
+    // user's palette), sampled from the orange→magenta wizard gradient:
+    // section headers take the 75% point #ec23c6 (magenta-leaning), command/
+    // param names take the 25% point #f96853 (orange-leaning). Both keep
+    // the bold (1;) prefix.
     private static String brightGreen(String text, boolean ansi) {
-        return ansi ? "\033[1;92m" + text + "\033[0m" : text;
+        return ansi ? "\033[1;38;2;236;35;198m" + text + "\033[0m" : text;
     }
 
     private static String brightCyan(String text, boolean ansi) {
-        return ansi ? "\033[1;96m" + text + "\033[0m" : text;
+        return ansi ? "\033[1;38;2;249;104;83m" + text + "\033[0m" : text;
     }
 
     /**
@@ -763,7 +784,9 @@ public final class Jk implements Runnable {
     private static String formatUsageLine(boolean ansi, String name) {
         String suffix = " <COMMAND> [OPTIONS]";
         if (ansi) {
-            return "\033[1;92mUsage:\033[0m \033[1;96m" + name + "\033[0m\033[96m" + suffix + "\033[0m";
+            // Theme: "Usage:" header #ec23c6; name (bold) + suffix (plain) #f96853.
+            return "\033[1;38;2;236;35;198mUsage:\033[0m \033[1;38;2;249;104;83m" + name
+                    + "\033[0m\033[38;2;249;104;83m" + suffix + "\033[0m";
         }
         return "Usage: " + name + suffix;
     }
@@ -826,8 +849,9 @@ public final class Jk implements Runnable {
         out.println();
         String qualifiedName = rootSpec.qualifiedName();
         if (ansi) {
-            out.println("\033[1;92mUsage:\033[0m \033[1;96m" + qualifiedName
-                    + "\033[0m\033[96m <COMMAND> [OPTIONS]\033[0m");
+            // Theme: "Usage:" header #ec23c6; name (bold) + suffix (plain) #f96853.
+            out.println("\033[1;38;2;236;35;198mUsage:\033[0m \033[1;38;2;249;104;83m" + qualifiedName
+                    + "\033[0m\033[38;2;249;104;83m <COMMAND> [OPTIONS]\033[0m");
         } else {
             out.println("Usage: " + qualifiedName + " <COMMAND> [OPTIONS]");
         }
@@ -842,7 +866,10 @@ public final class Jk implements Runnable {
         }
         int descCol = 2 + nameWidth + 4;
 
+        boolean firstGroup = true;
         for (CommandGroup group : SHORT_COMMAND_GROUPS) {
+            if (!firstGroup) out.println();
+            firstGroup = false;
             out.println(brightGreen(group.heading(), ansi));
             for (String n : group.names()) {
                 CommandLine sub = subs.get(n);
@@ -855,12 +882,13 @@ public final class Jk implements Runnable {
             }
         }
 
+        out.println();
         out.println(brightGreen("More commands:", ansi));
         String ellipsis = "...";
-        String ellipsisPad = " ".repeat(descCol - 4 - ellipsis.length());
+        String ellipsisPad = " ".repeat(descCol - 2 - ellipsis.length());
         String prefix = "See all commands and options by running ";
         String helpCmd = "jk --help";
         String coloredHelp = ansi ? "\033[33m" + helpCmd + "\033[0m" : helpCmd;
-        out.println("    " + brightCyan(ellipsis, ansi) + ellipsisPad + prefix + coloredHelp);
+        out.println("  " + brightCyan(ellipsis, ansi) + ellipsisPad + prefix + coloredHelp);
     }
 }

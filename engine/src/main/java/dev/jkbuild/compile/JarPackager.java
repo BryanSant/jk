@@ -11,6 +11,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
@@ -68,6 +69,11 @@ public final class JarPackager {
         if (request.mainClass() != null && !request.mainClass().isBlank()) {
             attrs.put(Attributes.Name.MAIN_CLASS, request.mainClass());
         }
+        // Custom attributes from the [manifest] table (Implementation-*, etc.).
+        for (Map.Entry<String, String> e : request.attributes().entrySet()) {
+            if (e.getKey() == null || e.getKey().isBlank() || e.getValue() == null) continue;
+            attrs.put(new Attributes.Name(e.getKey()), e.getValue());
+        }
         return manifest;
     }
 
@@ -89,19 +95,31 @@ public final class JarPackager {
             Path inputDir,
             Path outputJar,
             String mainClass,
-            long timestampEpochSeconds) {
+            long timestampEpochSeconds,
+            Map<String, String> attributes) {
 
         public JarRequest {
             Objects.requireNonNull(inputDir, "inputDir");
             Objects.requireNonNull(outputJar, "outputJar");
+            attributes = attributes == null ? Map.of() : Map.copyOf(attributes);
+        }
+
+        /** Back-compat constructor without custom manifest attributes. */
+        public JarRequest(Path inputDir, Path outputJar, String mainClass, long timestampEpochSeconds) {
+            this(inputDir, outputJar, mainClass, timestampEpochSeconds, Map.of());
         }
 
         public static JarRequest of(Path inputDir, Path outputJar) {
-            return new JarRequest(inputDir, outputJar, null, 0L);
+            return new JarRequest(inputDir, outputJar, null, 0L, Map.of());
         }
 
         public JarRequest withMainClass(String mainClass) {
-            return new JarRequest(inputDir, outputJar, mainClass, timestampEpochSeconds);
+            return new JarRequest(inputDir, outputJar, mainClass, timestampEpochSeconds, attributes);
+        }
+
+        /** Custom jar-manifest attributes from the project's {@code [manifest]} table. */
+        public JarRequest withAttributes(Map<String, String> attributes) {
+            return new JarRequest(inputDir, outputJar, mainClass, timestampEpochSeconds, attributes);
         }
     }
 }

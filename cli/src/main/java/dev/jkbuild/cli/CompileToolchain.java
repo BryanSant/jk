@@ -12,6 +12,7 @@ import dev.jkbuild.compat.ToolRegistry;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.kotlin.KotlinResolver;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.util.JkDirs;
 
 import java.io.IOException;
@@ -80,6 +81,23 @@ final class CompileToolchain {
      */
     static Path resolveKotlinHome(Path cacheDir) {
         return resolveKotlinHome(cacheDir, null);
+    }
+
+    /**
+     * Pick the Kotlin compiler version to provision: the version pinned in
+     * {@code jk.lock} (resolved by {@code jk lock}) if present, else an exact
+     * {@code project.kotlin} pin, else {@code null} — which falls back to the
+     * bundled default distribution.
+     */
+    static String kotlinVersionFor(dev.jkbuild.lock.Lockfile lock, JkBuild project) {
+        if (lock != null && lock.kotlin() != null && !lock.kotlin().isBlank()) {
+            return lock.kotlin();
+        }
+        if (project != null
+                && project.project().kotlin() instanceof dev.jkbuild.model.VersionSelector.Exact exact) {
+            return exact.version();
+        }
+        return null;
     }
 
     /**

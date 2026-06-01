@@ -34,6 +34,9 @@ public final class LockfileWriter {
         if (lockfile.jdk() != null) {
             out.append("jdk = ").append(quote(lockfile.jdk())).append('\n');
         }
+        if (lockfile.kotlin() != null) {
+            out.append("kotlin = ").append(quote(lockfile.kotlin())).append('\n');
+        }
 
         List<Lockfile.Package> sorted = new ArrayList<>(lockfile.packages());
         sorted.sort(Comparator

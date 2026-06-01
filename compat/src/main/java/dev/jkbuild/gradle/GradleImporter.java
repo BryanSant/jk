@@ -7,6 +7,7 @@ import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
+import dev.jkbuild.kotlin.KotlinResolver;
 
 import java.io.IOException;
 import java.net.URI;
@@ -50,6 +51,9 @@ public final class GradleImporter {
             "(?m)^\\s*group\\s*[=]?\\s*" + STR);
     private static final Pattern VERSION_ASSIGN = Pattern.compile(
             "(?m)^\\s*version\\s*[=]?\\s*" + STR);
+    // description = "..." / description "..." (optionally project.description).
+    private static final Pattern DESCRIPTION_ASSIGN = Pattern.compile(
+            "(?m)^\\s*(?:project\\.)?description\\s*[=]?\\s*" + STR);
     private static final Pattern ROOT_NAME = Pattern.compile(
             "(?m)^\\s*rootProject\\.name\\s*=\\s*" + STR);
 
@@ -58,12 +62,42 @@ public final class GradleImporter {
             "id\\s*\\(?\\s*" + STR + "\\s*\\)?");
     private static final Pattern PLUGIN_KOTLIN = Pattern.compile(
             "kotlin\\s*\\(\\s*" + STR + "\\s*\\)");
+    // kotlin("jvm") version "2.3.21" — version is groups 3/4 (after the plugin arg).
+    private static final Pattern KOTLIN_PLUGIN_VERSION = Pattern.compile(
+            "kotlin\\s*\\(\\s*" + STR + "\\s*\\)\\s*version\\s*" + STR);
+    // id("org.jetbrains.kotlin.jvm") [version "2.3.21"]
+    private static final Pattern KOTLIN_ID = Pattern.compile(
+            "id\\s*\\(?\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']");
+    private static final Pattern KOTLIN_ID_VERSION = Pattern.compile(
+            "id\\s*\\(\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']\\s*\\)\\s*version\\s*" + STR);
 
-    // dependencies entries: implementation("g:a:v") or testImplementation 'g:a:v'
+    // application { mainClass.set("X") } / mainClass = "X" — groups 1/2 (set) or 3/4 (=).
+    private static final Pattern APPLICATION_MAIN_CLASS = Pattern.compile(
+            "mainClass\\s*(?:\\.set\\s*\\(\\s*" + STR + "\\s*\\)|=\\s*" + STR + ")");
+    // Groovy / older DSL: mainClassName = "X".
+    private static final Pattern MAIN_CLASS_NAME = Pattern.compile(
+            "(?m)^\\s*mainClassName\\s*[=]?\\s*" + STR);
+
+    // A manifest attribute pair inside a `manifest { attributes(...) }` block, in
+    // either Kotlin (`"K" to V`) or Groovy (`"K": V`) form. Value is a string
+    // literal (groups 3/4) or a bare expression like project.version (group 5).
+    private static final Pattern MANIFEST_ATTR = Pattern.compile(
+            STR + "\\s*(?:to|:)\\s*(?:" + STR + "|([A-Za-z_][\\w.]*))");
+
+    // dependencies entries: implementation("g:a:v"), testImplementation 'g:a:v',
+    // or the unquoted Groovy catalog form `implementation libs.junit.jupiter`.
     private static final Pattern DEP_ENTRY = Pattern.compile(
             "(?m)^\\s*(?<config>[a-zA-Z][a-zA-Z0-9_]*)\\s*"
-                    + "(?:\\(\\s*(?<paren>.+?)\\s*\\)|" + STR + ")"
+                    + "(?:\\(\\s*(?<paren>.+?)\\s*\\)|" + STR
+                    + "|(?<accessor>[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+))"
                     + "\\s*$");
+
+    // A type-safe version-catalog accessor, e.g. libs.junit.platform.launcher.
+    private static final Pattern CATALOG_ACCESSOR = Pattern.compile(
+            "[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+");
+    // platform(libs.spring.bom) — a catalog accessor wrapped in platform(...).
+    private static final Pattern PLATFORM_ACCESSOR = Pattern.compile(
+            "platform\\s*\\(\\s*(" + CATALOG_ACCESSOR.pattern() + ")\\s*\\)");
 
     // java { sourceCompatibility = JavaVersion.VERSION_21 }
     private static final Pattern JAVA_VERSION_TOKEN = Pattern.compile(
@@ -80,31 +114,32 @@ public final class GradleImporter {
     public static Result importFrom(Path script) throws IOException {
         String text = Files.readString(script);
         String defaultArtifact = defaultArtifactFor(script);
-        return importFromString(text, defaultArtifact);
+        Path projectDir = script.toAbsolutePath().getParent();
+        GradleVersionCatalog catalog = GradleVersionCatalog.forProject(projectDir).orElse(null);
+        return importFromString(text, defaultArtifact, catalog);
     }
 
     public static Result importFromString(String text, String defaultArtifact) {
+        return importFromString(text, defaultArtifact, null);
+    }
+
+    public static Result importFromString(String text, String defaultArtifact, GradleVersionCatalog catalog) {
         String stripped = stripComments(text);
         ImportReport.Builder report = ImportReport.builder();
 
         String group = firstString(GROUP_ASSIGN, stripped).orElse("com.example");
         String version = firstString(VERSION_ASSIGN, stripped).orElse("0.1.0");
+        String description = firstString(DESCRIPTION_ASSIGN, stripped).orElse(null);
         int jdk = detectJdk(stripped).flatMap(GradleImporter::parseInt).orElse(25);
-        boolean kotlinDsl = false;
 
-        // plugins block — for diagnostics only; kotlin/java/application are accepted.
+        // plugins block — the Kotlin plugin marks a Kotlin project (and carries
+        // its compiler version); other ids are diagnostics only.
         String pluginsBody = extractBlock(stripped, "plugins").orElse("");
-        for (Matcher m = PLUGIN_KOTLIN.matcher(pluginsBody); m.find();) {
-            kotlinDsl = true;
-            String pluginName = firstNonNull(m.group(1), m.group(2));
-            if (pluginName != null && !pluginName.isBlank()) {
-                report.warning("Kotlin plugin `" + pluginName + "` recognised; jk supports Kotlin natively"
-                        + " (PRD §3). No jk.toml flag is needed.");
-            }
-        }
+        VersionSelector kotlin = detectKotlinVersion(pluginsBody, report);
         for (Matcher m = PLUGIN_ID.matcher(pluginsBody); m.find();) {
             String pluginId = firstNonNull(m.group(1), m.group(2));
             if (pluginId == null || pluginId.isBlank()) continue;
+            if (pluginId.startsWith("org.jetbrains.kotlin")) continue; // handled as a Kotlin project
             switch (pluginId) {
                 case "java", "java-library", "application" -> {
                     // implicit in jk — nothing to say.
@@ -114,13 +149,126 @@ public final class GradleImporter {
             }
         }
 
-        Map<Scope, List<Dependency>> deps = parseDependencies(stripped, report);
+        // Jar-manifest attributes from `jar { manifest { attributes(...) } }`
+        // (or tasks.jar / tasks.named("jar")). Main-Class routes to project.main.
+        Map<String, String> manifest = detectManifestAttributes(stripped, group, defaultArtifact, version, report);
+        String mainClass = detectMainClass(stripped);
+        String manifestMain = manifest.remove("Main-Class");
+        if (mainClass == null) mainClass = manifestMain;
+
+        Map<Scope, List<Dependency>> deps = parseDependencies(stripped, catalog, report);
         List<RepositorySpec> repos = parseRepositories(stripped, report);
         warnUnsupportedSections(stripped, report);
 
-        JkBuild.Project project = new JkBuild.Project(group, defaultArtifact, version, jdk);
+        // A Kotlin project sets `kotlin` (a version) and leaves `java` at 0 —
+        // the two are mutually exclusive. javaRelease() falls back to jdk.
+        int java = kotlin != null ? 0 : jdk;
+        JkBuild.Project project = new JkBuild.Project(group, defaultArtifact, version, jdk, java, kotlin,
+                mainClass, false, JkBuild.NativeMode.DISABLED, description);
         JkBuild jkBuild = new JkBuild(project, new JkBuild.Dependencies(deps), repos);
+        if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());
+    }
+
+    /**
+     * Parse manifest attributes from a {@code manifest { attributes(...) }}
+     * block (inside {@code jar}/{@code tasks.jar}/{@code tasks.named("jar")}).
+     * Supports Kotlin ({@code "K" to V}) and Groovy ({@code "K": V}) forms.
+     * String-literal values pass through; the common Gradle expressions
+     * {@code project.version}/{@code name}/{@code group} resolve to the imported
+     * coordinates; other expressions are skipped with a report note. The
+     * returned map preserves declaration order and may contain {@code Main-Class}
+     * (the caller routes it to {@code project.main}).
+     */
+    private static Map<String, String> detectManifestAttributes(
+            String text, String group, String artifact, String version, ImportReport.Builder report) {
+        String body = extractBlock(text, "manifest").orElse(null);
+        if (body == null) return new java.util.LinkedHashMap<>();
+        Map<String, String> attrs = new java.util.LinkedHashMap<>();
+        for (Matcher m = MANIFEST_ATTR.matcher(body); m.find();) {
+            String key = firstNonNull(m.group(1), m.group(2));
+            if (key == null) continue;
+            String literal = firstNonNull(m.group(3), m.group(4));
+            String value;
+            if (literal != null) {
+                value = literal;
+            } else {
+                String expr = m.group(5);
+                value = resolveGradleExpr(expr, group, artifact, version);
+                if (value == null) {
+                    report.warning("manifest attribute `" + key + "` uses the Gradle expression `"
+                            + expr + "`, which jk import can't resolve; the attribute was dropped."
+                            + " Add it to the [manifest] table in jk.toml if needed.");
+                    continue;
+                }
+            }
+            attrs.put(key, value);
+        }
+        return attrs;
+    }
+
+    /** Resolve common Gradle property expressions used in manifest values; null if unknown. */
+    private static String resolveGradleExpr(String expr, String group, String artifact, String version) {
+        if (expr == null) return null;
+        String lower = expr.toLowerCase(Locale.ROOT);
+        if (lower.endsWith("version")) return version;
+        if (lower.endsWith("name")) return artifact;
+        if (lower.endsWith("group")) return group;
+        return null;
+    }
+
+    /**
+     * Detect the Kotlin compiler version from the {@code plugins {}} block.
+     * Recognises {@code kotlin("jvm") version "X"} and
+     * {@code id("org.jetbrains.kotlin.jvm") version "X"}. When the Kotlin plugin
+     * is applied without an explicit version, defaults to a floating
+     * {@link KotlinResolver#DEFAULT_VERSION} (pinned later by {@code jk lock}).
+     * Returns {@code null} for a non-Kotlin (Java) project.
+     */
+    private static VersionSelector detectKotlinVersion(String pluginsBody, ImportReport.Builder report) {
+        Matcher m = KOTLIN_PLUGIN_VERSION.matcher(pluginsBody);
+        if (m.find()) {
+            return VersionSelector.parseFloating(firstNonNull(m.group(3), m.group(4)));
+        }
+        Matcher mid = KOTLIN_ID_VERSION.matcher(pluginsBody);
+        if (mid.find()) {
+            return VersionSelector.parseFloating(firstNonNull(mid.group(1), mid.group(2)));
+        }
+        boolean kotlinApplied = PLUGIN_KOTLIN.matcher(pluginsBody).find()
+                || KOTLIN_ID.matcher(pluginsBody).find();
+        if (kotlinApplied) {
+            report.warning("Kotlin plugin recognised without an explicit version; defaulted"
+                    + " project.kotlin to " + KotlinResolver.DEFAULT_VERSION + " (floating)."
+                    + " `jk lock` pins it — edit jk.toml to change.");
+            return VersionSelector.parseFloating(KotlinResolver.DEFAULT_VERSION);
+        }
+        return null;
+    }
+
+    /**
+     * Extract the application main class from {@code application { mainClass.set("X") }}
+     * / {@code mainClass = "X"} (Kotlin DSL) or a top-level {@code mainClassName = "X"}
+     * (Groovy). Returns {@code null} when none is declared.
+     */
+    private static String detectMainClass(String text) {
+        String appBody = extractBlock(text, "application").orElse(null);
+        if (appBody != null) {
+            Matcher m = APPLICATION_MAIN_CLASS.matcher(appBody);
+            if (m.find()) {
+                String v = firstNonNull(m.group(1), m.group(2), m.group(3), m.group(4));
+                if (v != null) return v;
+            }
+        }
+        Matcher anywhere = APPLICATION_MAIN_CLASS.matcher(text);
+        if (anywhere.find()) {
+            String v = firstNonNull(anywhere.group(1), anywhere.group(2), anywhere.group(3), anywhere.group(4));
+            if (v != null) return v;
+        }
+        Matcher legacy = MAIN_CLASS_NAME.matcher(text);
+        if (legacy.find()) {
+            return firstNonNull(legacy.group(1), legacy.group(2));
+        }
+        return null;
     }
 
     private static String defaultArtifactFor(Path script) {
@@ -134,7 +282,8 @@ public final class GradleImporter {
 
     // --- dependency block ---------------------------------------------------
 
-    private static Map<Scope, List<Dependency>> parseDependencies(String text, ImportReport.Builder report) {
+    private static Map<Scope, List<Dependency>> parseDependencies(
+            String text, GradleVersionCatalog catalog, ImportReport.Builder report) {
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         String body = extractBlock(text, "dependencies").orElse(null);
         if (body == null) return byScope;
@@ -152,6 +301,7 @@ public final class GradleImporter {
             }
             String configuration = m.group("config");
             String paren = m.group("paren");
+            String accessor = m.group("accessor");
             String s1 = m.group(3);
             String s2 = m.group(4);
             String quoted = firstNonNull(s1, s2);
@@ -163,7 +313,19 @@ public final class GradleImporter {
                 continue;
             }
 
+            // Unquoted Groovy catalog form: `implementation libs.junit.jupiter`.
+            if (accessor != null) {
+                resolveCatalogAccessor(accessor, scope, byScope, catalog, report);
+                continue;
+            }
+
             if (paren != null) {
+                // platform(libs.x) — version-catalog accessor wrapped in platform().
+                Matcher platformAccessor = PLATFORM_ACCESSOR.matcher(paren);
+                if (platformAccessor.find()) {
+                    resolveCatalogAccessor(platformAccessor.group(1), Scope.PLATFORM, byScope, catalog, report);
+                    continue;
+                }
                 // Could be platform("g:a:v"), project(":core"), kotlin("test"), or a bare "g:a:v".
                 Matcher platform = Pattern.compile("platform\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);
                 if (platform.find()) {
@@ -189,6 +351,11 @@ public final class GradleImporter {
                 if (bareString.find()) {
                     String coord = firstNonNull(bareString.group(1), bareString.group(2));
                     addDependency(byScope, scope, coord, report);
+                    continue;
+                }
+                // implementation(libs.junit.platform.launcher) — catalog accessor.
+                if (CATALOG_ACCESSOR.matcher(paren.trim()).matches()) {
+                    resolveCatalogAccessor(paren.trim(), scope, byScope, catalog, report);
                     continue;
                 }
                 report.error("complex dependency expression `" + line + "` not understood;"
@@ -223,6 +390,52 @@ public final class GradleImporter {
         // Default the v0.7 short `name` to the Gradle dep's artifactId.
         byScope.computeIfAbsent(scope, s -> new ArrayList<>())
                 .add(Dependency.of(artifactId, module, selector));
+    }
+
+    /**
+     * Resolve a version-catalog accessor (e.g. {@code libs.junit.platform.launcher}
+     * or {@code libs.bundles.testing}) against the located catalog and add the
+     * resulting coordinate(s). The leading segment is the catalog name and is
+     * stripped before lookup. Unresolvable accessors — missing catalog, unknown
+     * alias, or a version/plugin accessor that isn't a dependency — are reported.
+     */
+    private static void resolveCatalogAccessor(String accessor, Scope scope,
+            Map<Scope, List<Dependency>> byScope, GradleVersionCatalog catalog, ImportReport.Builder report) {
+        if (catalog == null) {
+            report.error("dependency `" + accessor + "` references a Gradle version catalog, but no"
+                    + " gradle/libs.versions.toml was found (searched the project dir and its parent)."
+                    + " Declare the coordinate directly in jk.toml.");
+            return;
+        }
+        int firstDot = accessor.indexOf('.');
+        String rest = accessor.substring(firstDot + 1); // drop the catalog name (e.g. "libs.")
+
+        if (rest.startsWith("bundles.")) {
+            String bundle = rest.substring("bundles.".length());
+            Optional<List<String>> coords = catalog.resolveBundle(bundle);
+            if (coords.isEmpty() || coords.get().isEmpty()) {
+                report.error("bundle `" + accessor + "` was not found in the version catalog"
+                        + " (or none of its libraries resolved); dropped.");
+                return;
+            }
+            for (String coord : coords.get()) {
+                addDependency(byScope, scope, coord, report);
+            }
+            return;
+        }
+        if (rest.startsWith("versions.") || rest.startsWith("plugins.")) {
+            report.warning("catalog accessor `" + accessor + "` refers to a version/plugin, not a"
+                    + " library; jk import only maps library and bundle accessors. Skipped.");
+            return;
+        }
+
+        Optional<String> coord = catalog.resolveLibrary(rest);
+        if (coord.isEmpty()) {
+            report.error("library `" + accessor + "` was not found in the version catalog"
+                    + " (or has no resolvable version); dropped. Declare it directly in jk.toml.");
+            return;
+        }
+        addDependency(byScope, scope, coord.get(), report);
     }
 
     private static Scope mapConfiguration(String configuration) {
