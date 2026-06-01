@@ -98,16 +98,29 @@ final class LockFlow {
             return new Result(2, null, null, 0);
         }
 
-        RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, new Cas(cache));
-        LockOrchestrator orchestrator = new LockOrchestrator(repos);
+        Cas cas = new Cas(cache);
+        RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+
+        // Git-source deps: materialize each into a local file:// repo and rewrite
+        // them to exact coordinate pins before the solver runs (git-source-deps.md).
+        GitSourceResolution.Prepared prep;
+        try {
+            prep = GitSourceResolution.prepare(
+                    effective, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
+        } catch (Exception e) {
+            System.err.println(cmdLabel + ": " + e.getMessage());
+            return new Result(6, null, effective, memberCount);
+        }
+        LockOrchestrator orchestrator = new LockOrchestrator(prep.repos());
 
         Lockfile lock;
         try {
-            lock = orchestrator.lock(effective, Jk.VERSION, features, !noDefaultFeatures);
+            lock = orchestrator.lock(prep.project(), Jk.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
             System.err.println(cmdLabel + ": " + e.getMessage());
             return new Result(6, null, effective, memberCount);
         }
+        lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
         LockfileWriter.write(lock, lockFile);
         return new Result(0, lock, effective, memberCount);
     }
