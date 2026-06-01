@@ -99,8 +99,15 @@ class HttpTransportTest {
 
     @Test
     void unsupported_scheme_is_rejected() {
-        assertThatThrownBy(() -> RepoTransports.forUrl(URI.create("s3://bucket/key"), new Http()))
+        assertThatThrownBy(() -> RepoTransports.forUrl(URI.create("azblob://acct/container"), new Http()))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("s3");
+                .hasMessageContaining("azblob");
+    }
+
+    @Test
+    void s3_scheme_resolves_to_an_s3_transport() {
+        // s3:// is now supported (credentials resolved from the AWS env at use time).
+        assertThat(RepoTransports.forUrl(URI.create("s3://my-bucket/maven"), new Http()))
+                .isInstanceOf(dev.jkbuild.repo.s3.S3Transport.class);
     }
 }

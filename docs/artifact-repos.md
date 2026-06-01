@@ -167,10 +167,17 @@ sources** where they overlap (env, store, cloud chains) but needs a distinct
 - ✅ Inline `[repositories.<name>]` `token` / `username` / `password` parsed by
   `JkBuildParser`, with `${ENV}` interpolation (unset var → parse error).
 
-**Phase 3 — object storage:**
-- `S3Transport` with hand-rolled SigV4; AWS default credential chain; endpoint
-  override for MinIO; `gs://` via GCS XML API + HMAC.
-- `AzureBlobTransport` (SharedKey / SAS).
+**Phase 3 — object storage (S3 done; GCS/Azure next):**
+- ✅ `S3Transport` (`s3://`, path-style) with hand-rolled `SigV4Signer`
+  (verified against the AWS `aws-sig-v4-test-suite` `get-vanilla` vector),
+  `AwsCredentialChain` (env → `~/.aws/credentials`+`config` profiles; region
+  override), `AWS_ENDPOINT_URL` override for MinIO/S3-compatible, and unsigned
+  fallback for public buckets. Registered in `RepoTransports.forUrl`.
+- ⬜ `gs://` via the GCS XML API + HMAC keys (reuses `SigV4Signer` with the
+  `storage.googleapis.com` endpoint).
+- ⬜ `AzureBlobTransport` (SharedKey / SAS — different signing).
+- ⬜ Per-repo region/endpoint in `[repositories.<name>]` (today via the AWS
+  env); virtual-host addressing (path-style only for now).
 
 **Phase 4 — OCI registries:**
 - `OciRegistryAuth` (Docker token protocol, `config.json`, cloud helpers),
