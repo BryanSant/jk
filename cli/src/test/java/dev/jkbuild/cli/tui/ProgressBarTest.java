@@ -66,22 +66,22 @@ class ProgressBarTest {
 
     @Test
     void rightmost_filled_glyph_is_always_the_gradient_end() {
-        // The frontier glyph is pinned to the gradient end (bright-green #69F0AE)
-        // at every fill level; the band trails leftward toward green.
-        assertThat(frontierColor(5)).isEqualTo("38;2;105;240;174");
-        assertThat(frontierColor(50)).isEqualTo("38;2;105;240;174");
-        assertThat(frontierColor(100)).isEqualTo("38;2;105;240;174");
+        // The frontier glyph is pinned to the gradient end (bright-green +10%)
+        // at every fill level; the band trails leftward toward the darker green.
+        assertThat(frontierColor(5)).isEqualTo("38;2;116;255;191");
+        assertThat(frontierColor(50)).isEqualTo("38;2;116;255;191");
+        assertThat(frontierColor(100)).isEqualTo("38;2;116;255;191");
     }
 
     @Test
     void single_filled_glyph_uses_only_the_gradient_end() {
-        // 2.5% → 1 filled glyph: it must be the bright-green end, not green.
+        // 2.5% → 1 filled glyph: it must be the bright-green end, not the dark green.
         var buf = new ByteArrayOutputStream();
         try (var pb = ProgressBar.show(stream(buf))) {
             pb.update(2, "x");   // round(2 * 40 / 100) = 1 filled
         }
         var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));
-        assertThat(colors).containsExactly("38;2;105;240;174");
+        assertThat(colors).containsExactly("38;2;116;255;191");
     }
 
     @Test
@@ -175,11 +175,11 @@ class ProgressBarTest {
     void gradient_runs_from_green_to_bright_green() {
         var colors = ProgressBar.buildGradient(20);
         assertThat(colors).hasSize(20);
-        // Jk Dark green #4CAF50 → bright-green #69F0AE.
+        // Jk Dark green #4CAF50 −30% → bright-green #69F0AE +10%.
         String first = colors[0].toAnsi();
         String last = colors[19].toAnsi();
-        assertThat(first).isEqualTo("38;2;76;175;80");    // #4CAF50
-        assertThat(last).isEqualTo("38;2;105;240;174");   // #69F0AE
+        assertThat(first).isEqualTo("38;2;53;122;56");     // #4CAF50 × 0.70
+        assertThat(last).isEqualTo("38;2;116;255;191");    // #69F0AE × 1.10 (G clamped)
     }
 
     private static PrintStream stream(ByteArrayOutputStream buf) {
