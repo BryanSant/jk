@@ -71,6 +71,14 @@ public final class PublishCommand implements Callable<Integer> {
             interactive = false, arity = "0..1")
     String password;
 
+    @Option(names = "--region", paramLabel = "<REGION>",
+            description = "Object-store region for s3:// / gs:// targets (else the AWS env).")
+    String region;
+
+    @Option(names = "--endpoint", paramLabel = "<URL>",
+            description = "Object-store endpoint override for s3:// (MinIO/S3-compatible).")
+    String endpoint;
+
     @Option(names = "--jar",
             description = "Override the main jar path. Default: target/<artifact>-<version>.jar.")
     Path jarPath;
@@ -233,7 +241,11 @@ public final class PublishCommand implements Callable<Integer> {
                     List<MavenPublisher.Artifact> artifacts =
                             (List<MavenPublisher.Artifact>) ctx.require(ARTIFACTS);
                     ctx.label("upload to " + repoUrl);
-                    MavenPublisher publisher = new MavenPublisher(repoUrl, resolvePublishCredential(project));
+                    dev.jkbuild.model.ObjectStoreConfig objectStore =
+                            new dev.jkbuild.model.ObjectStoreConfig(
+                                    blankToNull(region), blankToNull(endpoint), null, null, null);
+                    MavenPublisher publisher = MavenPublisher.withObjectStore(
+                            repoUrl, resolvePublishCredential(project), objectStore);
                     try {
                         MavenPublisher.Result result = publisher.publish(
                                 project.project(), artifacts, ctx.require(SIGNING));
@@ -314,6 +326,10 @@ public final class PublishCommand implements Callable<Integer> {
             }
         }
         return new RepoCredentialResolver().resolve(matchedName, repoUrl, inline);
+    }
+
+    private static String blankToNull(String s) {
+        return (s == null || s.isBlank()) ? null : s.strip();
     }
 
     private void printDryRunPlan(JkBuild project, List<MavenPublisher.Artifact> artifacts) {

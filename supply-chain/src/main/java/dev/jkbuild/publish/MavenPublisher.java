@@ -37,11 +37,7 @@ public final class MavenPublisher {
 
     /** Authenticate with an explicit credential (anonymous → no auth header). */
     public MavenPublisher(URI repoBase, RepoCredential credential) {
-        this.repoBase = normalize(Objects.requireNonNull(repoBase, "repoBase"));
-        this.credential = Objects.requireNonNull(credential, "credential");
-        // Route through the shared transport SPI; non-http(s) targets (s3://, …)
-        // become available once those transports land in Phase 3.
-        this.transport = RepoTransports.forUrl(this.repoBase, new Http());
+        this(repoBase, credential, dev.jkbuild.model.ObjectStoreConfig.EMPTY);
     }
 
     /** Convenience for HTTP Basic auth; a blank username means anonymous. */
@@ -49,6 +45,25 @@ public final class MavenPublisher {
         this(repoBase, (username == null || username.isEmpty())
                 ? RepoCredential.ANONYMOUS
                 : new RepoCredential.Basic(username, password == null ? "" : password));
+    }
+
+    /**
+     * As {@link #MavenPublisher(URI, RepoCredential)} but with per-target
+     * object-store config (region/endpoint/keys) applied to {@code s3://} /
+     * {@code gs://} destinations; ignored for {@code http(s)}. A factory rather
+     * than a constructor so {@code (URI, null, null)} stays unambiguous against
+     * the Basic-auth constructor.
+     */
+    public static MavenPublisher withObjectStore(URI repoBase, RepoCredential credential,
+                                                 dev.jkbuild.model.ObjectStoreConfig objectStore) {
+        return new MavenPublisher(repoBase, credential, objectStore);
+    }
+
+    private MavenPublisher(URI repoBase, RepoCredential credential,
+                           dev.jkbuild.model.ObjectStoreConfig objectStore) {
+        this.repoBase = normalize(Objects.requireNonNull(repoBase, "repoBase"));
+        this.credential = Objects.requireNonNull(credential, "credential");
+        this.transport = RepoTransports.forUrl(this.repoBase, new Http(), objectStore);
     }
 
     public record Artifact(String filenameSuffix, byte[] body) {

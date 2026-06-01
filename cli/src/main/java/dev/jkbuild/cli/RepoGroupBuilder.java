@@ -6,10 +6,13 @@ import dev.jkbuild.cache.Journal;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoCredentialResolver;
 import dev.jkbuild.repo.RepoGroup;
+import dev.jkbuild.repo.RepoTransport;
+import dev.jkbuild.repo.RepoTransports;
 
 import java.net.URI;
 import java.util.ArrayList;
@@ -47,7 +50,11 @@ final class RepoGroupBuilder {
             RepoCredentialResolver creds = new RepoCredentialResolver();
             for (RepositorySpec spec : project.repositories()) {
                 RepoCredential cred = creds.resolve(spec.name(), spec.url(), spec.credential());
-                repos.add(new MavenRepo(spec.name(), spec.url(), http, cas, journal, cred));
+                // Per-repo object-store config (region/endpoint/keys) flows to the
+                // transport; HTTP credentials still ride the MavenRepo credential.
+                RepoTransport transport = RepoTransports.forUrl(
+                        spec.url(), http, spec.objectStore().orElse(ObjectStoreConfig.EMPTY));
+                repos.add(new MavenRepo(spec.name(), spec.url(), transport, cas, journal, cred));
             }
         }
         return new RepoGroup(repos);

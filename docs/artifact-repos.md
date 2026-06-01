@@ -179,9 +179,15 @@ sources** where they overlap (env, store, cloud chains) but needs a distinct
   relying on it.
 - ✅ `file://` via `FileTransport` — local directory tree as a Maven repo
   (offline mirrors, tests, air-gapped); reads/writes the filesystem directly.
-- ⬜ `AzureBlobTransport` (SharedKey / SAS — genuinely different signing).
-- ⬜ Per-repo region/endpoint in `[repositories.<name>]` (today via the AWS
-  env); virtual-host addressing (path-style only for now).
+- ✅ Per-repo object-store config in `[repositories.<name>]`:
+  `region` / `endpoint` / `access-key` / `secret-key` / `session-token`, all
+  with `${ENV}` interpolation; any unset field falls back to the AWS env /
+  default chain (zero-config still works). `ObjectStoreConfig` carried on
+  `RepositorySpec`, applied via `RepoTransports.forUrl(url, http, cfg)` and the
+  `S3Transport.forS3`/`forGcs` factories; `jk publish` gains `--region` /
+  `--endpoint`. Precedence: config → AWS env → built-in default.
+- ⬜ `AzureBlobTransport` (SharedKey / SAS — skipped for now).
+- ⬜ Virtual-host addressing (path-style only for now).
 
 **Phase 4 — OCI registries:**
 - `OciRegistryAuth` (Docker token protocol, `config.json`, cloud helpers),
