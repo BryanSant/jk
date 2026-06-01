@@ -102,6 +102,14 @@ final class GitSourceMaterializer {
             Files.writeString(pomPath, built.pomXml());
         }
 
+        // maven-metadata.xml lets the resolver enumerate this artifact's
+        // versions through the file:// repo (one version per commit dir).
+        Path metaPath = repo.resolve(group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml");
+        if (!Files.isRegularFile(metaPath)) {
+            Files.createDirectories(metaPath.getParent());
+            Files.writeString(metaPath, metadataXml(group, artifact, version));
+        }
+
         Lockfile.Package.GitInfo gitInfo =
                 new Lockfile.Package.GitInfo(source.canonicalUrl(), sha, source.ref().token());
         return new Materialized(group, artifact, version, repo.toUri(), gitInfo);
@@ -123,5 +131,22 @@ final class GitSourceMaterializer {
 
     private static String shortSha(String sha) {
         return sha.length() > 12 ? sha.substring(0, 12) : sha;
+    }
+
+    private static String metadataXml(String group, String artifact, String version) {
+        return """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <metadata>
+                  <groupId>%s</groupId>
+                  <artifactId>%s</artifactId>
+                  <versioning>
+                    <latest>%s</latest>
+                    <release>%s</release>
+                    <versions>
+                      <version>%s</version>
+                    </versions>
+                  </versioning>
+                </metadata>
+                """.formatted(group, artifact, version, version, version);
     }
 }

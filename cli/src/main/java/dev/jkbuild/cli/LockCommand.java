@@ -172,7 +172,20 @@ public final class LockCommand implements Callable<Integer> {
                             throw new RuntimeException(e);
                         }
                     }
-                    RepoGroup repos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+                    // Git-source deps: materialize → local file:// repo + exact
+                    // coordinate pin, so the solver resolves them like any coord
+                    // (docs/git-source-deps.md).
+                    GitSourceResolution.Prepared prep;
+                    try {
+                        prep = GitSourceResolution.prepare(
+                                effective, baseRepos, cas,
+                                CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
+                    } catch (Exception e) {
+                        ctx.error("resolve", e.getMessage());
+                        throw new RuntimeException(e);
+                    }
+                    RepoGroup repos = prep.repos();
                     LockOrchestrator orchestrator = new LockOrchestrator(repos);
                     dev.jkbuild.resolver.ResolveObserver observer =
                             new dev.jkbuild.resolver.ResolveObserver() {
@@ -203,7 +216,8 @@ public final class LockCommand implements Callable<Integer> {
                     };
                     try {
                         Lockfile lock = orchestrator.lock(
-                                effective, Jk.VERSION, features, !noDefaultFeatures, observer);
+                                prep.project(), Jk.VERSION, features, !noDefaultFeatures, observer);
+                        lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         // Resolve + pin the Kotlin compiler version, like a dep.
                         String kotlinVersion = resolveKotlinVersion(effective, repos);
                         if (kotlinVersion != null) {
