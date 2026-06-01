@@ -469,6 +469,117 @@ class PomImporterTest {
                 .anyMatch(i -> i.message().contains("missing"));
     }
 
+    @Test
+    void kotlin_maven_plugin_version_and_main_class_imported() {
+        var result = importPom("""
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>widget</artifactId>
+                  <version>1.0.0</version>
+                  <build>
+                    <plugins>
+                      <plugin>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-plugin</artifactId>
+                        <version>2.3.21</version>
+                      </plugin>
+                      <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <configuration>
+                          <archive><manifest>
+                            <mainClass>com.example.MainKt</mainClass>
+                          </manifest></archive>
+                        </configuration>
+                      </plugin>
+                    </plugins>
+                  </build>
+                </project>
+                """);
+        var p = result.jkBuild().project();
+        assertThat(p.isKotlin()).isTrue();
+        assertThat(p.kotlin()).isEqualTo(VersionSelector.parseFloating("2.3.21"));
+        assertThat(p.java()).isZero();
+        assertThat(p.main()).isEqualTo("com.example.MainKt");
+    }
+
+    @Test
+    void kotlin_version_resolved_from_property_placeholder() {
+        var result = importPom("""
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>widget</artifactId>
+                  <version>1.0.0</version>
+                  <properties>
+                    <kotlin.version>2.1.0</kotlin.version>
+                  </properties>
+                  <build>
+                    <plugins>
+                      <plugin>
+                        <groupId>org.jetbrains.kotlin</groupId>
+                        <artifactId>kotlin-maven-plugin</artifactId>
+                        <version>${kotlin.version}</version>
+                      </plugin>
+                    </plugins>
+                  </build>
+                </project>
+                """);
+        assertThat(result.jkBuild().project().kotlin())
+                .isEqualTo(VersionSelector.parseFloating("2.1.0"));
+    }
+
+    @Test
+    void no_kotlin_plugin_stays_java_project() {
+        var result = importPom("""
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>com.example</groupId>
+                  <artifactId>widget</artifactId>
+                  <version>1.0.0</version>
+                </project>
+                """);
+        assertThat(result.jkBuild().project().isKotlin()).isFalse();
+        assertThat(result.jkBuild().project().kotlin()).isNull();
+    }
+
+    @Test
+    void jar_plugin_manifest_main_class_and_entries_imported() {
+        var result = importPom("""
+                <project>
+                  <modelVersion>4.0.0</modelVersion>
+                  <groupId>dev.jkbuild</groupId>
+                  <artifactId>jk-test-runner</artifactId>
+                  <version>1.0.0</version>
+                  <build>
+                    <plugins>
+                      <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-jar-plugin</artifactId>
+                        <configuration>
+                          <archive>
+                            <manifest>
+                              <mainClass>dev.jkbuild.test.runner.JkRunner</mainClass>
+                            </manifest>
+                            <manifestEntries>
+                              <Implementation-Title>jk-test-runner</Implementation-Title>
+                              <Implementation-Version>1.0.0</Implementation-Version>
+                            </manifestEntries>
+                          </archive>
+                        </configuration>
+                      </plugin>
+                    </plugins>
+                  </build>
+                </project>
+                """);
+        var jk = result.jkBuild();
+        assertThat(jk.project().main()).isEqualTo("dev.jkbuild.test.runner.JkRunner");
+        assertThat(jk.manifest()).containsExactly(
+                org.assertj.core.api.Assertions.entry("Implementation-Title", "jk-test-runner"),
+                org.assertj.core.api.Assertions.entry("Implementation-Version", "1.0.0"));
+    }
+
     private static PomImporter.Result importPom(String xml) {
         return PomImporter.importFromBytes(xml.getBytes(StandardCharsets.UTF_8));
     }

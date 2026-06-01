@@ -77,4 +77,17 @@ public final class ActionKey {
         result.put("options", String.join(",", request.extraOptions()));
         return result;
     }
+
+    /**
+     * Qualify a base task id (e.g. {@code compile-main}) with a stable tag
+     * derived from a module-unique directory (the compile output dir), so the
+     * {@link ActionCache} {@code tasks/<taskId>} pointer doesn't collide across
+     * projects or workspace members that share the same base task name. The
+     * action key itself is already project-unique (it hashes absolute source
+     * and classpath paths); this only disambiguates the per-task pointer.
+     */
+    public static String qualifiedTaskId(String base, Path moduleDir) {
+        String tag = Hashing.sha256Hex(moduleDir.toAbsolutePath().normalize().toString());
+        return base + "@" + tag.substring(0, 12);
+    }
 }

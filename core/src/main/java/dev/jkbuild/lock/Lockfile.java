@@ -21,12 +21,18 @@ import java.util.Set;
  * built against (e.g. {@code temurin-25.0.3}), stamped by {@code jk new}
  * and refreshed by {@code jk lock}. Optional; {@code null} for legacy
  * lockfiles produced before the field existed.
+ *
+ * <p>{@code kotlin} is the resolved Kotlin compiler version (e.g.
+ * {@code 2.3.21}) that the floating {@code project.kotlin} selector locked to,
+ * stamped by {@code jk lock}. Optional; {@code null} for Java projects or when
+ * resolution was skipped (offline).
  */
 public record Lockfile(
         int version,
         String generatedBy,
         String resolutionAlgorithm,
         String jdk,
+        String kotlin,
         List<Package> packages) {
 
     public static final int CURRENT_VERSION = 1;
@@ -40,9 +46,20 @@ public record Lockfile(
         packages = List.copyOf(packages);
     }
 
+    /** Back-compat constructor for callers that stamp a JDK but no Kotlin version. */
+    public Lockfile(int version, String generatedBy, String resolutionAlgorithm,
+                    String jdk, List<Package> packages) {
+        this(version, generatedBy, resolutionAlgorithm, jdk, null, packages);
+    }
+
     /** Back-compat constructor for callers that don't yet stamp a JDK. */
     public Lockfile(int version, String generatedBy, String resolutionAlgorithm, List<Package> packages) {
-        this(version, generatedBy, resolutionAlgorithm, null, packages);
+        this(version, generatedBy, resolutionAlgorithm, null, null, packages);
+    }
+
+    /** Return a copy with the resolved Kotlin compiler version stamped in. */
+    public Lockfile withKotlin(String kotlinVersion) {
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlinVersion, packages);
     }
 
     public static Lockfile empty(String jkVersion) {
@@ -51,7 +68,7 @@ public record Lockfile(
 
     /** Empty package set with a resolved JDK pinned for the project. */
     public static Lockfile empty(String jkVersion, String jdk) {
-        return new Lockfile(CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, jdk, List.of());
+        return new Lockfile(CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, jdk, null, List.of());
     }
 
     public record Package(

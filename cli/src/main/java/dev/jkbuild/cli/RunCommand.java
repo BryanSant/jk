@@ -78,7 +78,7 @@ import java.util.concurrent.Callable;
  * main class, etc.) we exit without forking.
  */
 @Command(name = "run",
-        description = "Run a script (.java/.kt/.kts), a jar, or the current project")
+        description = "Run the current project's main artifact")
 public final class RunCommand implements Callable<Integer> {
 
     @Parameters(arity = "0..*", paramLabel = "<args>",

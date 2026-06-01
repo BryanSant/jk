@@ -265,6 +265,63 @@ class LockCommandTest {
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
     }
 
+    @Test
+    void kotlin_project_lock_pins_floating_compiler_version(@TempDir Path tempDir) throws Exception {
+        // 2.4.0-RC2 is higher than 2.3.21 and also in range, but a floating
+        // selector must skip the pre-release and pin the highest stable.
+        registerMetadata("org.jetbrains.kotlin", "kotlin-compiler-embeddable",
+                "2.0.21", "2.3.0", "2.3.21", "2.4.0-RC2", "3.0.0");
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                artifact = "app"
+                version = "0.1.0"
+                kotlin = "^2.3.0"
+                """);
+
+        int exit = run("lock", "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(0);
+
+        // ^2.3.0 → >=2.3.0, <3.0.0; highest *stable* match is 2.3.21 (not 2.4.0-RC2).
+        Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
+        assertThat(lock.kotlin()).isEqualTo("2.3.21");
+    }
+
+    @Test
+    void kotlin_exact_pin_locks_without_metadata(@TempDir Path tempDir) throws Exception {
+        // No kotlin-compiler-embeddable metadata registered — an exact pin
+        // must short-circuit and lock without hitting the repo.
+        Files.createDirectories(tempDir);
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                artifact = "app"
+                version = "0.1.0"
+                kotlin = "=2.1.0"
+                """);
+
+        int exit = run("lock", "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(0);
+
+        Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
+        assertThat(lock.kotlin()).isEqualTo("2.1.0");
+    }
+
+    @Test
+    void java_project_lock_has_no_kotlin_version(@TempDir Path tempDir) throws Exception {
+        run("new", tempDir.toString());
+        int exit = run("lock", "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(LockfileReader.read(tempDir.resolve("jk.lock")).kotlin()).isNull();
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static int run(String... args) {

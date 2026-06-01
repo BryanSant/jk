@@ -47,7 +47,7 @@ public final class SyncManifest {
 
     /**
      * Write a manifest for {@code lock} into the standard location.
-     * {@code actionRoot} is the parent of {@code by-key/} —
+     * {@code actionRoot} is the parent of {@code keys/} —
      * {@link Sweep#SYNCED_SUBDIR} sits beside it.
      */
     public static Path write(Path actionRoot, Path lockFile, Lockfile lock) throws IOException {

@@ -440,6 +440,9 @@ public final class TestCommand implements Callable<Integer> {
             return true;
         }
 
+        // Project-qualify so the `tasks/<taskId>` pointer is unique per module
+        // (display labels keep the plain base name).
+        String cacheTaskId = ActionKey.qualifiedTaskId(taskId, outputDir);
         CompileRequest request = CompileRequest.builder()
                 .sources(sources)
                 .classpath(classpath)
@@ -448,7 +451,7 @@ public final class TestCommand implements Callable<Integer> {
                 .extraOptions(javacArgs)
                 .javaHome(javaHome)
                 .build();
-        String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
+        String actionKey = ActionKey.forJavac(cacheTaskId, request, Jk.VERSION);
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
 
         boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
@@ -465,7 +468,7 @@ public final class TestCommand implements Callable<Integer> {
             ctx.error("javac", d.render());
         }
         if (!result.success() || result.hasErrors()) return false;
-        actionCache.store(taskId, actionKey, ActionKey.snapshotInputs(request), outputDir);
+        actionCache.store(cacheTaskId, actionKey, ActionKey.snapshotInputs(request), outputDir);
         return true;
     }
 }

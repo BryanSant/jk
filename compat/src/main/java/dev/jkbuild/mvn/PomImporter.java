@@ -10,6 +10,7 @@ import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.Workspace;
+import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.repo.Pom;
 import dev.jkbuild.repo.PomParseException;
 import dev.jkbuild.repo.PomParser;
@@ -92,7 +93,34 @@ public final class PomImporter {
 
         JkBuild.Dependencies dependencies = new JkBuild.Dependencies(byScope);
         JkBuild jkBuild = new JkBuild(project, dependencies, repos);
+        Map<String, String> manifest = manifestFromPom(doc);
+        if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());
+    }
+
+    /**
+     * Custom jar-manifest attributes from a build plugin's
+     * {@code <archive><manifestEntries>} (maven-jar / assembly / shade).
+     * {@code Main-Class} is excluded — it routes to {@code project.main} via
+     * {@link #mainClassFromPom}. Unresolved {@code ${...}} property values and
+     * blanks are skipped. Insertion order preserved.
+     */
+    private static Map<String, String> manifestFromPom(Document doc) {
+        Map<String, String> attrs = new LinkedHashMap<>();
+        NodeList entries = doc.getElementsByTagName("manifestEntries");
+        for (int i = 0; i < entries.getLength(); i++) {
+            if (!(entries.item(i) instanceof Element entriesEl)) continue;
+            for (Element child : childElements(entriesEl)) {
+                String name = child.getTagName();
+                String value = child.getTextContent();
+                if (name == null || name.isBlank() || value == null) continue;
+                value = value.trim();
+                if (value.isEmpty() || value.startsWith("${")) continue;
+                if (name.equalsIgnoreCase("Main-Class")) continue; // routed to project.main
+                attrs.put(name, value);
+            }
+        }
+        return attrs;
     }
 
     /**
@@ -188,8 +216,73 @@ public final class PomImporter {
         int jdk = jdkFromCompilerPlugin(doc).flatMap(PomImporter::parseInt).orElse(25);
         String description = childText(doc.getDocumentElement(), "description");
         if (description != null && description.isBlank()) description = null;
-        return new JkBuild.Project(group, pom.artifactId(), version, jdk, jdk, 0,
-                null, false, JkBuild.NativeMode.DISABLED, description);
+        VersionSelector kotlin = kotlinFromPom(doc, report);
+        String mainClass = mainClassFromPom(doc);
+        // A Kotlin project sets `kotlin` and leaves `java` at 0 (mutually exclusive).
+        int java = kotlin != null ? 0 : jdk;
+        return new JkBuild.Project(group, pom.artifactId(), version, jdk, java, kotlin,
+                mainClass, false, JkBuild.NativeMode.DISABLED, description);
+    }
+
+    /**
+     * Detect the Kotlin compiler version from the {@code kotlin-maven-plugin}.
+     * The version comes from the plugin's {@code <version>} (resolving a
+     * {@code ${kotlin.version}} placeholder against {@code <properties>}), else
+     * the {@code kotlin.version} property, else a floating
+     * {@link KotlinResolver#DEFAULT_VERSION} (pinned later by {@code jk lock}).
+     * Returns {@code null} when the plugin is absent (a Java project).
+     */
+    private static VersionSelector kotlinFromPom(Document doc, ImportReport.Builder report) {
+        Element root = doc.getDocumentElement();
+        Element properties = childElement(root, "properties");
+        String propVersion = null;
+        if (properties != null) {
+            for (String key : new String[] {"kotlin.version", "kotlin.compiler.version"}) {
+                String v = childText(properties, key);
+                if (v != null && !v.isBlank()) { propVersion = v.trim(); break; }
+            }
+        }
+        Element plugins = childElement(childElement(root, "build"), "plugins");
+        boolean present = false;
+        String pluginVersion = null;
+        if (plugins != null) {
+            for (Element plugin : childElements(plugins, "plugin")) {
+                if (!"kotlin-maven-plugin".equals(childText(plugin, "artifactId"))) continue;
+                present = true;
+                String v = childText(plugin, "version");
+                if (v != null && !v.isBlank()) pluginVersion = v.trim();
+            }
+        }
+        if (!present) return null; // only the plugin marks a Kotlin project
+        String resolved = (pluginVersion != null && !pluginVersion.startsWith("${"))
+                ? pluginVersion : propVersion;
+        if (resolved == null || resolved.isBlank()) {
+            resolved = KotlinResolver.DEFAULT_VERSION;
+            report.warning("kotlin-maven-plugin recognised without a resolvable version; defaulted"
+                    + " project.kotlin to " + resolved + " (floating). `jk lock` pins it.");
+        }
+        return VersionSelector.parseFloating(resolved);
+    }
+
+    /**
+     * Best-effort application main class: the first non-placeholder
+     * {@code <mainClass>} element (jar/assembly/shade/exec plugin configs), or a
+     * {@code start-class}/{@code exec.mainClass}/{@code main.class} property.
+     */
+    private static String mainClassFromPom(Document doc) {
+        NodeList nodes = doc.getElementsByTagName("mainClass");
+        for (int i = 0; i < nodes.getLength(); i++) {
+            String v = nodes.item(i).getTextContent();
+            if (v != null && !v.isBlank() && !v.trim().startsWith("${")) return v.trim();
+        }
+        Element properties = childElement(doc.getDocumentElement(), "properties");
+        if (properties != null) {
+            for (String key : new String[] {"start-class", "exec.mainClass", "main.class", "mainClass"}) {
+                String v = childText(properties, key);
+                if (v != null && !v.isBlank() && !v.trim().startsWith("${")) return v.trim();
+            }
+        }
+        return null;
     }
 
     private static Optional<Integer> parseInt(String s) {

@@ -8,11 +8,16 @@ import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.LockfileWriter;
+import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
+import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
+import dev.jkbuild.resolver.VersionSelectors;
+import dev.jkbuild.resolver.Versions;
+import dev.jkbuild.resolver.pubgrub.VersionSet;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
@@ -199,6 +204,12 @@ public final class LockCommand implements Callable<Integer> {
                     try {
                         Lockfile lock = orchestrator.lock(
                                 effective, Jk.VERSION, features, !noDefaultFeatures, observer);
+                        // Resolve + pin the Kotlin compiler version, like a dep.
+                        String kotlinVersion = resolveKotlinVersion(effective, repos);
+                        if (kotlinVersion != null) {
+                            ctx.label("resolved kotlin " + kotlinVersion);
+                            lock = lock.withKotlin(kotlinVersion);
+                        }
                         ctx.put(LOCKFILE, lock);
                     } catch (Exception e) {
                         ctx.error("resolve", e.getMessage());
@@ -248,6 +259,43 @@ public final class LockCommand implements Callable<Integer> {
                     + (pkgs == 1 ? "y" : "ies") + suffix + " " + inTime);
         }
         return 0;
+    }
+
+    /**
+     * Resolve the project's {@code kotlin} version selector to a concrete
+     * Kotlin compiler release, the same way a dependency version is resolved:
+     * an {@code =}-pin short-circuits; a floating selector is matched against
+     * the versions of {@code kotlin-compiler-embeddable} on Maven Central, and
+     * the highest match wins. Returns {@code null} for a Java project, or when
+     * resolution can't complete (offline with nothing cached, or no match) —
+     * the build then falls back to its default Kotlin version.
+     */
+    private static String resolveKotlinVersion(JkBuild effective, RepoGroup repos) {
+        if (!effective.project().isKotlin()) return null;
+        VersionSelector selector = effective.project().kotlin();
+        if (selector instanceof VersionSelector.Exact exact) {
+            return exact.version();
+        }
+        VersionSet set = VersionSelectors.toVersionSet(selector);
+        Coordinate coord = Coordinate.of(
+                "org.jetbrains.kotlin", "kotlin-compiler-embeddable", "any");
+        List<String> available;
+        try {
+            available = repos.availableVersions(coord);
+        } catch (java.io.IOException e) {
+            return null;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return null;
+        }
+        // Prefer the highest stable match; fall back to a pre-release only when
+        // no stable version satisfies (consistent with dependency resolution).
+        return available.stream()
+                .filter(set::contains)
+                .filter(Versions::isStable)
+                .max(Versions::compare)
+                .or(() -> available.stream().filter(set::contains).max(Versions::compare))
+                .orElse(null);
     }
 
     /**

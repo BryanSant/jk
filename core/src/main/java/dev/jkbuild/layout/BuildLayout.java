@@ -163,6 +163,11 @@ public final class BuildLayout {
         return targetDir().resolve(artifact + "-" + version + ".jar");
     }
 
+    /** {@code target/<artifact>-<version>-all.jar} — the shadow (fat) jar. */
+    public Path shadowJar() {
+        return targetDir().resolve(artifact + "-" + version + "-all.jar");
+    }
+
     /** {@code target/<artifact>-<version>-sources.jar}. */
     public Path sourcesJar() {
         return targetDir().resolve(artifact + "-" + version + "-sources.jar");

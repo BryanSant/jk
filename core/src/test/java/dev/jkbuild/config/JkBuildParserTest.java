@@ -624,4 +624,36 @@ class JkBuildParserTest {
         assertThat(parsed.features().byName().get("postgres").deps())
                 .containsExactly("postgres-jdbc", "hikari");
     }
+
+    // --- application / m2install -------------------------------------------
+
+    @Test
+    void application_defaults_false_without_main() {
+        assertThat(JkBuildParser.parse(PROJECT).project().isApplication()).isFalse();
+    }
+
+    @Test
+    void application_defaults_true_when_main_is_set() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + "main = \"com.example.Main\"\n");
+        assertThat(parsed.project().isApplication()).isTrue();
+    }
+
+    @Test
+    void explicit_application_false_overrides_main_default() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT
+                + "main = \"com.example.Main\"\napplication = false\n");
+        assertThat(parsed.project().isApplication()).isFalse();
+    }
+
+    @Test
+    void explicit_application_true_without_main() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + "application = true\n");
+        assertThat(parsed.project().isApplication()).isTrue();
+    }
+
+    @Test
+    void m2install_parsed_default_false() {
+        assertThat(JkBuildParser.parse(PROJECT).project().m2install()).isFalse();
+        assertThat(JkBuildParser.parse(PROJECT + "m2install = true\n").project().m2install()).isTrue();
+    }
 }

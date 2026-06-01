@@ -40,11 +40,12 @@ class JkBuildRendererTest {
     @Test
     void renders_main_shadow_and_native_when_set() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 0, 2,
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 0,
+                        VersionSelector.parseFloating("=2.3.21"),
                         "com.example.App", true, JkBuild.NativeMode.SUPPORTED, null),
                 JkBuild.Dependencies.empty());
         String out = JkBuildRenderer.render(model);
-        assertThat(out).contains("kotlin   = 2");
+        assertThat(out).contains("kotlin   = \"=2.3.21\"");
         assertThat(out).contains("main     = \"com.example.App\"");
         assertThat(out).contains("shadow   = true");
         assertThat(out).contains("native   = true");
@@ -53,7 +54,7 @@ class JkBuildRendererTest {
     @Test
     void renders_description_when_set() {
         JkBuild model = new JkBuild(
-                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 21, 0,
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21, 21, null,
                         null, false, JkBuild.NativeMode.DISABLED,
                         "A tiny widget library."),
                 JkBuild.Dependencies.empty());
@@ -62,6 +63,53 @@ class JkBuildRendererTest {
 
         JkBuild reparsed = JkBuildParser.parse(out);
         assertThat(reparsed.project().description()).isEqualTo("A tiny widget library.");
+    }
+
+    @Test
+    void application_false_with_main_round_trips() {
+        // main is set (would imply application=true) but explicitly false.
+        JkBuild model = JkBuild.of(new JkBuild.Project(
+                "com.example", "widget", "1.0.0", 21, 21, null,
+                "com.example.Main", false, JkBuild.NativeMode.DISABLED, null,
+                /*application*/ false, /*m2install*/ true));
+        String out = JkBuildRenderer.render(model);
+        assertThat(out).contains("application = false");
+        assertThat(out).contains("m2install = true");
+
+        JkBuild reparsed = JkBuildParser.parse(out);
+        assertThat(reparsed.project().isApplication()).isFalse();
+        assertThat(reparsed.project().m2install()).isTrue();
+    }
+
+    @Test
+    void derived_application_is_not_emitted() {
+        // main set → application derives true → no explicit key emitted.
+        JkBuild withMain = JkBuild.of(new JkBuild.Project("com.example", "app", "1.0.0", 21,
+                21, null, "com.example.Main", false, JkBuild.NativeMode.DISABLED, null));
+        assertThat(JkBuildRenderer.render(withMain)).doesNotContain("application =");
+        // library (no main) → application derives false → no explicit key.
+        JkBuild lib = JkBuild.of(new JkBuild.Project("com.example", "lib", "1.0.0", 21));
+        assertThat(JkBuildRenderer.render(lib)).doesNotContain("application =");
+    }
+
+    @Test
+    void renders_and_round_trips_manifest_table() {
+        var manifest = new java.util.LinkedHashMap<String, String>();
+        manifest.put("Implementation-Title", "jk-test-runner");
+        manifest.put("Implementation-Version", "1.0.0");
+        JkBuild model = JkBuild.of(
+                new JkBuild.Project("com.example", "widget", "1.0.0", 21))
+                .withManifest(manifest);
+
+        String out = JkBuildRenderer.render(model);
+        assertThat(out).contains("[manifest]");
+        assertThat(out).contains("\"Implementation-Title\" = \"jk-test-runner\"");
+        assertThat(out).contains("\"Implementation-Version\" = \"1.0.0\"");
+
+        JkBuild reparsed = JkBuildParser.parse(out);
+        assertThat(reparsed.manifest()).containsExactly(
+                java.util.Map.entry("Implementation-Title", "jk-test-runner"),
+                java.util.Map.entry("Implementation-Version", "1.0.0"));
     }
 
     @Test

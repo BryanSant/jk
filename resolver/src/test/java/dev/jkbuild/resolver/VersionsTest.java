@@ -101,4 +101,30 @@ class VersionsTest {
         assertThat(Versions.compare("1.0-rc10", "1.0-rc2")).isPositive();
         assertThat(Versions.compare("1.0-alpha10", "1.0-alpha2")).isPositive();
     }
+
+    @Test
+    void pre_releases_are_unstable() {
+        for (String v : new String[] {
+                "2.4.0-RC2", "2.4.0-rc1", "1.0-alpha", "1.0-beta", "2.0.0-M1",
+                "1.0-milestone-3", "1.0-cr1", "1.0-pre", "1.0-SNAPSHOT",
+                "1.0.0.RC2", "1.0.0-beta.1", "1.0-20260520.123456-7", "3.0.0-dev"}) {
+            assertThat(Versions.isStable(v)).as(v).isFalse();
+        }
+    }
+
+    @Test
+    void releases_and_release_synonyms_are_stable() {
+        for (String v : new String[] {
+                "2.4.0", "1.0", "1.0.0", "1.10.5", "32.1.3-jre", "1.0-ga",
+                "1.0.Final", "1.0-final", "1.0-release", "1.0-sp1", "1.0.0-android",
+                "20260520"}) {
+            assertThat(Versions.isStable(v)).as(v).isTrue();
+        }
+    }
+
+    @Test
+    void non_numeric_versions_are_unstable() {
+        assertThat(Versions.isStable("RELEASE")).isFalse();
+        assertThat(Versions.isStable("latest")).isFalse();
+    }
 }

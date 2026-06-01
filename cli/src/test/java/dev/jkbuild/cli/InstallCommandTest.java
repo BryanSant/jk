@@ -60,31 +60,41 @@ class InstallCommandTest {
     }
 
     @Test
-    void no_args_in_library_project_returns_usage_error(@TempDir Path tempDir) throws IOException {
+    void library_project_does_cache_install_only(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
                 artifact = "lib-only"
                 version  = "0.1.0"
+                jdk      = 25
+                java     = 25
                 """);
+        Path src = tempDir.resolve("src/main/java/com/example/Lib.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, "package com.example; public final class Lib {}\n");
+
+        Path bin = tempDir.resolve("bin");
+        Path cache = tempDir.resolve("cache");
         int exit = Jk.execute("install", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString(),
+                "--cache-dir", cache.toString(),
                 "--state-dir", tempDir.resolve("state").toString(),
-                "--bin-dir", tempDir.resolve("bin").toString());
-        assertThat(exit).isEqualTo(64);
+                "--bin-dir", bin.toString(),
+                "--libexec-dir", tempDir.resolve("libexec").toString());
+        // A library is not a usage error any more — it cache-installs.
+        assertThat(exit).isEqualTo(0);
+        assertThat(bin.resolve("lib-only")).doesNotExist(); // no launcher
+        // Journal recorded the local install so other projects can resolve it.
+        assertThat(cache.resolve("journal/maven/com/example/lib-only/0.1.0.toml")).exists();
     }
 
     @Test
     @DisabledOnOs(OS.WINDOWS) // POSIX launcher only.
-    void no_args_installs_current_project_after_building(@TempDir Path tempDir) throws Exception {
-        // Scaffold a tiny runnable project.
+    void application_install_writes_libexec_layout_and_launcher(@TempDir Path tempDir) throws Exception {
         Jk.execute("new",
                 "--group", "com.example",
                 "--name", "widget",
                 "--executable",
                 tempDir.toString());
-        // init generates a Main.java sample; overwrite it with a no-op main
-        // so the launcher's classpath/entrypoint test is hermetic.
         Path src = tempDir.resolve("src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
@@ -95,19 +105,50 @@ class InstallCommandTest {
                 """);
 
         Path bin = tempDir.resolve("bin");
-        Path state = tempDir.resolve("state");
-        // No source argument — install builds and writes a launcher named after the artifact.
+        Path libexec = tempDir.resolve("libexec");
         int exit = Jk.execute("install",
                 "-C", tempDir.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString(),
-                "--state-dir", state.toString(),
-                "--bin-dir", bin.toString());
+                "--state-dir", tempDir.resolve("state").toString(),
+                "--bin-dir", bin.toString(),
+                "--libexec-dir", libexec.toString());
         assertThat(exit).isEqualTo(0);
 
         Path launcher = bin.resolve("widget");
-        Path envJson = state.resolve("tools/envs/widget/env.json");
+        Path appJar = libexec.resolve("widget-0.1.0.jar");
         assertThat(launcher).exists();
-        assertThat(envJson).exists();
-        assertThat(Files.readString(launcher)).contains("com.example.Main");
+        assertThat(appJar).exists();
+        String script = Files.readString(launcher);
+        assertThat(script).contains("com.example.Main");
+        assertThat(script).contains(appJar.toString()); // classpath points at libexec
+    }
+
+    @Test
+    void m2install_writes_jar_and_pom_to_local_maven_repo(@TempDir Path tempDir) throws IOException {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group     = "com.example"
+                artifact  = "lib-only"
+                version   = "0.1.0"
+                jdk       = 25
+                java      = 25
+                m2install = true
+                """);
+        Path src = tempDir.resolve("src/main/java/com/example/Lib.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, "package com.example; public final class Lib {}\n");
+
+        Path m2 = tempDir.resolve("m2");
+        int exit = Jk.execute("install", "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString(),
+                "--state-dir", tempDir.resolve("state").toString(),
+                "--bin-dir", tempDir.resolve("bin").toString(),
+                "--libexec-dir", tempDir.resolve("libexec").toString(),
+                "--m2-dir", m2.toString());
+        assertThat(exit).isEqualTo(0);
+
+        Path repo = m2.resolve("repository/com/example/lib-only/0.1.0");
+        assertThat(repo.resolve("lib-only-0.1.0.jar")).exists();
+        assertThat(repo.resolve("lib-only-0.1.0.pom")).exists();
     }
 }

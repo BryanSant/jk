@@ -46,10 +46,20 @@ public final class JkBuildRenderer {
         Objects.requireNonNull(jkBuild, "jkBuild");
         StringBuilder sb = new StringBuilder();
         renderProject(sb, jkBuild.project());
+        renderManifest(sb, jkBuild.manifest());
         renderWorkspace(sb, jkBuild);
         renderRepositories(sb, jkBuild.repositories());
         renderDependencies(sb, jkBuild);
         return sb.toString();
+    }
+
+    /** {@code [manifest]} table — custom jar-manifest attributes, in insertion order. */
+    private static void renderManifest(StringBuilder sb, Map<String, String> manifest) {
+        if (manifest == null || manifest.isEmpty()) return;
+        sb.append("\n[manifest]\n");
+        for (Map.Entry<String, String> e : manifest.entrySet()) {
+            sb.append(quote(e.getKey())).append(" = ").append(quote(e.getValue())).append('\n');
+        }
     }
 
     private static void renderProject(StringBuilder sb, JkBuild.Project p) {
@@ -65,13 +75,19 @@ public final class JkBuildRenderer {
             sb.append("jdk      = ").append(p.jdk()).append('\n');
         }
         if (p.isKotlin()) {
-            sb.append("kotlin   = ").append(p.kotlin()).append('\n');
+            sb.append("kotlin   = ").append(quote(versionLiteral(p.kotlin()))).append('\n');
         } else if (p.java() > 0) {
             sb.append("java     = ").append(p.java()).append('\n');
         }
         if (p.main() != null) {
             sb.append("main     = ").append(quote(p.main())).append('\n');
         }
+        // application defaults to (main != null); emit only when it differs.
+        boolean derivedApplication = p.main() != null;
+        if (p.isApplication() != derivedApplication) {
+            sb.append("application = ").append(p.isApplication()).append('\n');
+        }
+        if (p.m2install()) sb.append("m2install = true\n");
         if (p.shadow()) sb.append("shadow   = true\n");
         if (p.nativeImage()) sb.append("native   = true\n");
     }

@@ -74,4 +74,22 @@ class LockfileRoundTripTest {
         assertThat(parsed.packages().getFirst().name()).isEqualTo("com.example:widget");
         assertThat(parsed.packages().getFirst().deps()).containsExactly("com.example:dep@2.0.0");
     }
+
+    @Test
+    void kotlin_version_round_trips() {
+        Lockfile original = Lockfile.empty("0.1.0-SNAPSHOT", "temurin-25.0.3").withKotlin("2.3.21");
+        String rendered = LockfileWriter.render(original);
+        assertThat(rendered).contains("kotlin = \"2.3.21\"");
+
+        Lockfile parsed = LockfileReader.parse(rendered);
+        assertThat(parsed.kotlin()).isEqualTo("2.3.21");
+        assertThat(parsed.jdk()).isEqualTo("temurin-25.0.3");
+    }
+
+    @Test
+    void absent_kotlin_is_not_rendered() {
+        String rendered = LockfileWriter.render(Lockfile.empty("0.1.0-SNAPSHOT"));
+        assertThat(rendered).doesNotContain("kotlin =");
+        assertThat(LockfileReader.parse(rendered).kotlin()).isNull();
+    }
 }

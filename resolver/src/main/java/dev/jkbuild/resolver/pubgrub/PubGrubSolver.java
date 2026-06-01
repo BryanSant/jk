@@ -257,10 +257,19 @@ public class PubGrubSolver {
 
     private String chooseVersion(String pkg, VersionSet allowed)
             throws IOException, InterruptedException {
+        // versions() is highest-first. Prefer the highest stable version that
+        // satisfies the constraint; only fall back to a pre-release when no
+        // stable version does (e.g. an explicit `=2.4.0-RC2` pin, a BOM pin, or
+        // a package that has only ever published pre-releases). This keeps
+        // floating constraints (^/~/ranges/latest) off alphas/betas/RCs/
+        // snapshots while still resolving when a pre-release is the only option.
+        String prerelease = null;
         for (String version : source.versions(pkg)) {
-            if (allowed.contains(version)) return version;
+            if (!allowed.contains(version)) continue;
+            if (dev.jkbuild.resolver.Versions.isStable(version)) return version;
+            if (prerelease == null) prerelease = version;
         }
-        return null;
+        return prerelease;
     }
 
     // --- helpers -----------------------------------------------------------

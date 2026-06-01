@@ -52,20 +52,21 @@ public final class Theme {
     private static final int GRAD_END_G = 0x00;
     private static final int GRAD_END_B = 0xff;
 
-    // Active rail / bullet: cyan #22d3ee.
-    private static final int ACTIVE_R = 0x22;
-    private static final int ACTIVE_G = 0xd3;
-    private static final int ACTIVE_B = 0xee;
+    // Active rail / bullet — highlighted-section accent #5769f7.
+    private static final int ACTIVE_R = 0x57;
+    private static final int ACTIVE_G = 0x69;
+    private static final int ACTIVE_B = 0xf7;
 
     // Completed bullet / selected option: green #22c55e.
     private static final int OK_R = 0x22;
     private static final int OK_G = 0xc5;
     private static final int OK_B = 0x5e;
 
-    /** Error / cancellation red #ef4444. */
-    private static final int ERR_R = 0xef;
-    private static final int ERR_G = 0x44;
-    private static final int ERR_B = 0x44;
+    /** Error / cancellation red #ff0000 — the standard SGR 91 bright red,
+     *  emitted as a fixed truecolor so it never picks up the user's palette. */
+    private static final int ERR_R = 0xff;
+    private static final int ERR_G = 0x00;
+    private static final int ERR_B = 0x00;
 
     /** Attention / highlight yellow #facc15 — used for "default" status, etc. */
     private static final int WARN_R = 0xfa;
