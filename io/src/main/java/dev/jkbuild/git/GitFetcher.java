@@ -9,6 +9,8 @@ import org.eclipse.jgit.api.errors.GitAPIException;
 import org.eclipse.jgit.lib.ObjectId;
 import org.eclipse.jgit.lib.Ref;
 import org.eclipse.jgit.lib.Repository;
+import org.eclipse.jgit.revwalk.RevCommit;
+import org.eclipse.jgit.revwalk.RevWalk;
 import org.eclipse.jgit.transport.RefSpec;
 import org.eclipse.jgit.transport.TagOpt;
 import org.eclipse.jgit.transport.URIish;
@@ -17,7 +19,11 @@ import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * JGit-backed git resolver (PRD §11). Layout (PRD §11.5), relative to the
@@ -86,6 +92,51 @@ public final class GitFetcher {
         if (!actual.equalsIgnoreCase(expectedSha)) {
             throw new TagRewriteException(source, expectedSha, actual);
         }
+    }
+
+    /**
+     * Resolve {@code source.ref()} to its commit SHA plus the metadata
+     * git-source versioning needs: the commit's timestamp and the nearest
+     * reachable tag ({@code git describe}). Feeds {@code GitVersion} — a tag
+     * coerces to SemVer, a branch becomes {@code -SNAPSHOT}, and an untagged
+     * commit becomes a {@code <nearest-tag>-<ts>-<sha>} pseudo-version.
+     */
+    public RefInfo resolveRef(GitSource source) throws IOException {
+        Objects.requireNonNull(source, "source");
+        Path bareDir = ensureBareClone(source);
+        String sha = resolveRefSha(source, bareDir);
+        try (Git git = Git.open(bareDir.toFile());
+             RevWalk walk = new RevWalk(git.getRepository())) {
+            ObjectId id = ObjectId.fromString(sha);
+            RevCommit commit = walk.parseCommit(id);
+            Instant commitTime = Instant.ofEpochSecond(commit.getCommitTime());
+            Optional<String> nearestTag = describeNearestTag(git, id);
+            return new RefInfo(sha, commitTime, nearestTag);
+        } catch (GitAPIException e) {
+            throw new IOException("git describe failed for " + source.canonicalUrl()
+                    + ": " + e.getMessage(), e);
+        }
+    }
+
+    /** Resolved ref: commit SHA, commit timestamp, and the nearest reachable tag (if any). */
+    public record RefInfo(String sha, Instant commitTime, Optional<String> nearestTag) {
+        public RefInfo {
+            Objects.requireNonNull(sha, "sha");
+            Objects.requireNonNull(commitTime, "commitTime");
+            Objects.requireNonNull(nearestTag, "nearestTag");
+        }
+    }
+
+    private static final Pattern DESCRIBE_SUFFIX =
+            Pattern.compile("^(.*)-\\d+-g[0-9a-fA-F]+$");
+
+    /** Nearest tag reachable from {@code target}, stripping git-describe's {@code -<n>-g<sha>} suffix. */
+    private static Optional<String> describeNearestTag(Git git, ObjectId target)
+            throws GitAPIException, IOException {
+        String describe = git.describe().setTarget(target).setTags(true).call();
+        if (describe == null || describe.isBlank()) return Optional.empty();
+        Matcher m = DESCRIBE_SUFFIX.matcher(describe);
+        return Optional.of(m.matches() ? m.group(1) : describe);
     }
 
     // --- internals -------------------------------------------------------
