@@ -68,6 +68,17 @@ final class GitSourceMaterializer {
         this.credentials = credentials;
     }
 
+    /**
+     * Fail loudly if {@code source}'s ref no longer resolves to
+     * {@code expectedSha} — the tag/branch was force-moved since the lockfile
+     * was written (docs/git-source-deps.md §"Supply-chain safety"). Callers use
+     * this on {@code jk lock} for immutable (tag/rev) refs; {@code jk update}
+     * skips it to accept the new commit.
+     */
+    void verifyLocked(GitSource source, String expectedSha) throws IOException {
+        new GitFetcher(gitRoot, credentials).verifyLocked(source, expectedSha);
+    }
+
     Materialized materialize(GitSource source) throws IOException, InterruptedException {
         GitFetcher fetcher = new GitFetcher(gitRoot, credentials);
         GitFetcher.Fetched fetched = fetcher.fetch(source);

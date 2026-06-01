@@ -32,6 +32,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -175,12 +176,23 @@ public final class LockCommand implements Callable<Integer> {
                     RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
                     // Git-source deps: materialize → local file:// repo + exact
                     // coordinate pin, so the solver resolves them like any coord
-                    // (docs/git-source-deps.md).
+                    // (docs/git-source-deps.md). Re-locking verifies immutable
+                    // (tag/rev) git refs against the prior lock — a force-moved
+                    // tag fails loudly; `jk update` is the way to accept it.
+                    Map<String, String> lockedShas = Map.of();
+                    if (Files.exists(lockFile)) {
+                        try {
+                            lockedShas = GitSourceResolution.lockedImmutableShas(
+                                    LockfileReader.read(lockFile));
+                        } catch (Exception ignored) {
+                            // Unreadable prior lock → nothing to verify against.
+                        }
+                    }
                     GitSourceResolution.Prepared prep;
                     try {
                         prep = GitSourceResolution.prepare(
                                 effective, baseRepos, cas,
-                                CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
+                                CompileToolchain.resolveJavaHome(dir), Jk.VERSION, lockedShas);
                     } catch (Exception e) {
                         ctx.error("resolve", e.getMessage());
                         throw new RuntimeException(e);

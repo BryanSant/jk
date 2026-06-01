@@ -124,12 +124,19 @@ public final class UpdateCommand implements Callable<Integer> {
                 .execute(ctx -> {
                     ctx.label("re-resolve dependencies");
                     JkBuild effective = ctx.require(EFFECTIVE);
-                    RepoGroup repos = RepoGroupBuilder.buildFor(
-                            effective, repoUrl, new Cas(cache));
-                    LockOrchestrator orchestrator = new LockOrchestrator(repos);
+                    Cas cas = new Cas(cache);
+                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
                     try {
-                        Lockfile lock = orchestrator.lock(effective,
-                                Jk.VERSION, features, !noDefaultFeatures);
+                        // Git-source deps: re-materialize against the current ref
+                        // tip and accept any movement (update is the "accept the
+                        // new commit" path — no tag-rewrite check; see
+                        // docs/git-source-deps.md).
+                        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
+                                effective, baseRepos, cas,
+                                CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
+                        Lockfile lock = new LockOrchestrator(prep.repos()).lock(
+                                prep.project(), Jk.VERSION, features, !noDefaultFeatures);
+                        lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         ctx.put(LOCKFILE, lock);
                     } catch (Exception e) {
                         ctx.error("resolve", e.getMessage());

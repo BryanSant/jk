@@ -2,6 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Dependency;
@@ -23,6 +24,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * End-to-end (offline) wiring of a git-source dependency through the resolver
@@ -105,5 +107,41 @@ class GitSourceResolutionTest {
         assertThat(widgets.git().rev()).hasSize(40);
         assertThat(widgets.git().ref()).isEqualTo("tag=v1.0.0");
         assertThat(widgets.git().url()).isEqualTo(lib.canonicalUrl());
+    }
+
+    @Test
+    void relocking_detects_a_force_moved_tag(@TempDir Path tmp) throws Exception {
+        Path libDir = tmp.resolve("lib");
+        GitSource lib = buildLibraryRepo(libDir);
+        Cas cas = new Cas(tmp.resolve("cas"));
+        RepoGroup baseRepos = RepoGroup.of(new MavenRepo(
+                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        Path javaHome = Path.of(System.getProperty("java.home"));
+
+        // First lock: capture the immutable-ref provenance.
+        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
+                consumer(lib), baseRepos, cas, javaHome, "test");
+        Lockfile lock = GitSourceResolution.stamp(
+                new LockOrchestrator(prep.repos()).lock(prep.project(), "test", List.of(), true),
+                prep.gitInfoByKey());
+        Map<String, String> lockedShas = GitSourceResolution.lockedImmutableShas(lock);
+        assertThat(lockedShas).isNotEmpty();
+
+        // Force-move v1.0.0 to a new commit, simulating an upstream tag rewrite.
+        try (Git git = Git.open(libDir.toFile())) {
+            Files.writeString(libDir.resolve("src/main/java/acme/Widget.java"), """
+                    package acme;
+                    public class Widget { public static String name() { return "tampered"; } }
+                    """);
+            git.add().addFilepattern(".").call();
+            var c2 = git.commit().setMessage("rewrite").setAuthor("t", "t@e").setCommitter("t", "t@e").call();
+            git.tag().setName("v1.0.0").setObjectId(c2).setAnnotated(false).setForceUpdate(true).call();
+        }
+
+        // Re-locking against the recorded SHA must fail loudly.
+        assertThatThrownBy(() -> GitSourceResolution.prepare(
+                consumer(lib), baseRepos, cas, javaHome, "test", lockedShas))
+                .isInstanceOf(GitFetcher.TagRewriteException.class)
+                .hasMessageContaining("rewrite detected");
     }
 }
