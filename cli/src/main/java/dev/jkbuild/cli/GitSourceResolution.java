@@ -144,10 +144,19 @@ final class GitSourceResolution {
                 lock.jdk(), lock.kotlin(), out);
     }
 
-    /** Identity of a git source: same URL + ref + subpath → one materialization. */
+    /**
+     * Identity of a git source: same URL + ref + subpath + overrides → one
+     * materialization. Overrides are part of the key so two deps on the same
+     * commit that relabel it differently each get their own published artifact.
+     */
     private static String sourceKey(GitSource source) {
-        String path = source.path() == null ? "" : source.path();
-        return source.canonicalUrl() + "|" + source.ref().token() + "|" + path;
+        return String.join("|",
+                source.canonicalUrl(),
+                source.ref().token(),
+                source.path() == null ? "" : source.path(),
+                source.overrideGroup() == null ? "" : source.overrideGroup(),
+                source.overrideArtifact() == null ? "" : source.overrideArtifact(),
+                source.overrideVersion() == null ? "" : source.overrideVersion());
     }
 
     private static String provenanceKey(String coordinate, String version) {
