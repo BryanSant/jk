@@ -44,22 +44,23 @@ version from the ref:
   `1.2.0`), preserve pre-release/build metadata (`1.2.3-rc1`, `1.2.3+build`).
   If it can't be coerced to SemVer, fall back to the **raw tag string** as the
   version (Maven version strings are permissive) and warn.
-- **Explicit commit (`rev`) → next-version Go-style pseudo-version
-  (immutable).** Using the cloned history + tags, find the nearest tag
-  reachable from the commit (`git describe` semantics) and base the
-  pseudo-version on the *next* logical version:
-  - nearest tag is a **release** `v1.2.3` → `1.2.4-0.<ts>-<sha>` (bump patch,
-    pre-release prefix `0.`)
-  - nearest tag is a **pre-release** `v1.2.4-rc1` → `1.2.4-rc1.0.<ts>-<sha>`
-    (append, don't bump)
-  - **no tag** in history → `0.0.0-<ts>-<sha>`
+- **Explicit commit (`rev`) → pseudo-version anchored to the nearest tag
+  (immutable):** `<nearest-tag>-<yyyyMMdd.HHmmss>-<shortsha>`. Using the cloned
+  history + tags, find the nearest tag reachable from the commit (`git describe`
+  semantics) and attach the commit's UTC timestamp + 12-char short SHA:
+  - nearest **release** `v1.2.3` → `1.2.3-20260601.134752-3f2a9c1b4d5e`
+  - nearest **pre-release** `v1.2.4-rc1` → `1.2.4-rc1-20260601.134752-3f2a9c1b4d5e`
+  - **no tag** → `0.0.0-20260601.134752-3f2a9c1b4d5e`
 
-  where `<ts>` = commit UTC timestamp, `<sha>` = 12-char short hash. The `-0.`
-  prefix is deliberate: under SemVer precedence `1.2.4-0.<ts>` sorts **above
-  `1.2.3`** and **below the real `1.2.4`** (and its RCs) — i.e. "an untagged
-  commit heading toward 1.2.4". This is Go's pseudo-version algorithm, and it's
-  free here because `GitFetcher` already does a full bare clone (all heads +
-  tags), so tag-distance is available without a deeper fetch.
+  **Why anchor to the prior tag (not bump the patch):** validated against jk's
+  comparator (`resolver/Versions.java` → Maven `ComparableVersion`), a numeric
+  *timestamp* qualifier sorts **above** the same-core release but **below** a
+  higher core. So `1.2.3-<ts>-<sha>` lands between `1.2.3` and `1.2.4`, sorts
+  chronologically, and the SHA tie-breaks — all under the real comparator. (My
+  first instinct, the Go-style `1.2.4-0.<ts>` "bump," sorted *above* `1.2.4`
+  under ComparableVersion — see the load-bearing `GitVersionOrderingTest`.)
+  Free here because `GitFetcher` keeps a full bare clone, so tag-distance is
+  available without a deeper fetch.
 - **Branch → `<branch>-SNAPSHOT` (mutable):** e.g. `main-SNAPSHOT`. The
   `-SNAPSHOT` suffix tells the resolver/cache it's mutable; the **exact commit
   SHA is pinned in `jk.lock`**, so a locked build is fully reproducible and
@@ -68,17 +69,15 @@ version from the ref:
 ### Recommendation for "no tag"
 **Do not use a bare git hash as the version** — a hash is opaque and
 **unorderable**, which breaks version comparison, conflict resolution, and any
-"is this newer?" logic the resolver relies on. Use the **next-version
-pseudo-version** above for a pinned `rev` (immutable, sortable, informed by the
-nearest tag), and **`<branch>-SNAPSHOT`** with a lockfile-pinned SHA for branch
-tracking. (JitPack uses bare branch-`SNAPSHOT`/commit hashes; this is strictly
-better for a resolver because it sorts, is immutable, and reflects the next
-release line.)
+"is this newer?" logic the resolver relies on. Use the **tag-anchored
+timestamp pseudo-version** above for a pinned `rev` (immutable, sortable,
+carries the SHA), and **`<branch>-SNAPSHOT`** with a lockfile-pinned SHA for
+branch tracking.
 
-> ⚠️ **Ordering caveat:** the `1.2.4-0.<ts>` shape sorts correctly under strict
-> SemVer, but `jk`'s comparator (`resolver/Versions.java`) is Maven-style.
-> Validate that the chosen format orders as intended there (Maven treats
-> qualifiers differently); tweak the format if needed before shipping.
+> **Implemented & validated:** `GitVersion` (core) derives these and
+> `GitVersionOrderingTest` (resolver) asserts the orderings against
+> `Versions.compare` — the format above is the one that actually sorts
+> correctly under Maven's comparator (the earlier SemVer-style guess did not).
 
 ## Coordinate discovery
 
@@ -202,9 +201,11 @@ build at resolve time.
 - Build sandboxing; signed-tag enforcement by default.
 
 ## Decisions (resolved)
-- **`rev` pseudo-version:** next-version Go-style, computed from the nearest
-  reachable tag (`v1.2.3` → `1.2.4-0.<ts>-<sha>`). The full bare clone makes
-  this free. ⚠️ Validate ordering against `resolver/Versions.java`.
+- **`rev` pseudo-version:** tag-anchored timestamp form (`v1.2.3` →
+  `1.2.3-<yyyyMMdd.HHmmss>-<shortsha>`), validated to sort between the tag and
+  the next release under `resolver/Versions.java`. Implemented in `GitVersion`
+  (the earlier Go-style `1.2.4-0.<ts>` guess sorted wrong under Maven's
+  comparator).
 - **Coordinate / version:** discover from `[project]` by default; `group` /
   `artifact` / `version` keys on the git table override (the ref still selects
   the commit; `version` only relabels).
