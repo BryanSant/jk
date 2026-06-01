@@ -98,6 +98,31 @@ class S3TransportTest {
     }
 
     @Test
+    void gcs_via_endpoint_override_signs_with_auto_region() throws Exception {
+        AtomicReference<String> auth = new AtomicReference<>();
+        server.createContext("/gcs-bucket/maven/x.jar", ex -> {
+            auth.set(ex.getRequestHeaders().getFirst("Authorization"));
+            byte[] b = "obj".getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, b.length);
+            ex.getResponseBody().write(b);
+            ex.close();
+        });
+        // HMAC keys via the AWS env chain; AWS_ENDPOINT_URL points at our server.
+        var chain = new AwsCredentialChain(k -> switch (k) {
+            case "AWS_ACCESS_KEY_ID" -> "GOOGAK";
+            case "AWS_SECRET_ACCESS_KEY" -> "googsk";
+            default -> null;
+        }, java.nio.file.Path.of("/nonexistent"));
+        var gcs = S3Transport.forGcs(new Http(), URI.create("gs://gcs-bucket/maven/x.jar"),
+                chain, k -> "AWS_ENDPOINT_URL".equals(k) ? endpoint.toString() : null);
+
+        var body = gcs.fetch(URI.create("gs://gcs-bucket/maven/x.jar"), RepoCredential.ANONYMOUS);
+        assertThat(body).isPresent();
+        // GCS V4 interop scope: region "auto", service "s3".
+        assertThat(auth.get()).contains("/auto/s3/aws4_request");
+    }
+
+    @Test
     void anonymous_when_no_credentials_sends_no_authorization() throws Exception {
         AtomicReference<String> auth = new AtomicReference<>();
         auth.set("unset");

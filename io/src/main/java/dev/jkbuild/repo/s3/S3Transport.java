@@ -65,6 +65,27 @@ public final class S3Transport implements RepoTransport {
         return new S3Transport(http, endpoint, region, creds, Instant::now);
     }
 
+    /**
+     * Transport for a {@code gs://} URL via Google Cloud Storage's
+     * S3-compatible XML API: the same SigV4 machinery pointed at
+     * {@code storage.googleapis.com} with GCS HMAC keys (configured through
+     * the AWS env/credentials chain, the documented S3-interop path). Region
+     * is fixed to {@code auto} as GCS's V4 interop expects; an
+     * {@code AWS_ENDPOINT_URL} override is still honoured (proxies/tests).
+     *
+     * <p>NOTE: confirm the GCS V4 region/service against a real bucket before
+     * relying on it — see docs/artifact-repos.md.
+     */
+    public static S3Transport forGcs(Http http, URI gsUrl, AwsCredentialChain chain,
+                                     Function<String, String> env) {
+        Optional<AwsCredentials> creds = chain.resolve("auto");
+        String endpointOverride = env.apply("AWS_ENDPOINT_URL");
+        URI endpoint = (endpointOverride != null && !endpointOverride.isBlank())
+                ? URI.create(endpointOverride.strip())
+                : URI.create("https://storage.googleapis.com");
+        return new S3Transport(http, endpoint, "auto", creds, Instant::now);
+    }
+
     @Override
     public Optional<byte[]> fetch(URI uri, RepoCredential ignored)
             throws IOException, InterruptedException {
