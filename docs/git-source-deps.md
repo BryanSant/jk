@@ -1,8 +1,15 @@
 # Git-Source Dependencies (build-from-source, JitPack-style)
 
-**Status:** Proposed (design only). Resolve-only — `jk` builds a dependency
+**Status:** Implemented (v1). Resolve-only — `jk` builds a dependency
 from a git repo on demand and resolves the result; it does not publish
 git-sourced libraries anywhere.
+
+> **Implemented:** `jk.toml`-based git deps now parse (discovery + override),
+> materialize into a per-commit `file://` repo, rewrite to an exact coordinate
+> pin, resolve through the normal solver, and stamp git provenance into
+> `jk.lock`. `jk lock` detects force-moved tags; `jk update` accepts them.
+> The "Later" list below (transitive git deps, non-`jk` source builds, build
+> sandboxing, signed-tag-by-default) remains future work.
 
 **Scope:** A dependency may point at a git repository instead of a Maven
 coordinate. `jk` clones it (reusing forge auth; `GitFetcher` keeps a full bare
@@ -26,13 +33,14 @@ The declaration grammar and most plumbing are already in the tree:
   + `Journal`, and the `file://` `FileTransport` from the repo-transport work.
 - **Auth:** `ForgeKind.inferFromHost` + `ForgeAuth.resolveSilently`.
 
-**Three real gaps to close:**
-1. Resolution ignores git deps — they'd reach the PubGrub solver as a coord
-   with an unparseable `"=git"` version and fail. Need a materialization step.
-2. `GitFetcher` has no credential auth — needs a jgit `CredentialsProvider`
-   fed from `ForgeAuth` for private repos.
-3. The lockfile `Package` record has no git URL / commit SHA fields — needs
-   them for reproducibility.
+**Three gaps closed in v1:**
+1. ~~Resolution ignores git deps~~ → `GitSourceResolution` materializes each
+   git dep into a `file://` repo and rewrites it to an exact coordinate pin
+   before the PubGrub solve (wired into lock / build-first-run / update).
+2. ~~`GitFetcher` has no credential auth~~ → `ForgeGitCredentials` feeds jgit a
+   `CredentialsProvider` from `ForgeAuth` for private clones.
+3. ~~The lockfile `Package` has no git fields~~ → `Package.GitInfo` records the
+   canonical URL, resolved SHA, and ref token; stamped at resolve time.
 
 ## Version derivation (the core decision)
 

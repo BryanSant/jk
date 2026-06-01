@@ -358,11 +358,15 @@ public final class JkBuildParser {
 
         int sourceCount = (hasVersion ? 1 : 0) + (hasPath ? 1 : 0)
                 + (hasGit ? 1 : 0) + (hasWorkspace ? 1 : 0);
+        // `version` alongside `git` is the one legal pairing: it overrides the
+        // version derived from the ref (docs/git-source-deps.md §"Discovery with
+        // override"). Every other multi-source combination is ambiguous.
+        boolean gitWithVersionOverride = hasGit && hasVersion && !hasPath && !hasWorkspace;
         if (sourceCount == 0) {
             throw new JkBuildParseException(displayPath
                     + " must set exactly one of `version`, `path`, `git`, or `workspace = true`");
         }
-        if (sourceCount > 1) {
+        if (sourceCount > 1 && !gitWithVersionOverride) {
             throw new JkBuildParseException(displayPath
                     + " sets more than one of `version` / `path` / `git` / `workspace`; "
                     + "pick exactly one");
@@ -414,13 +418,31 @@ public final class JkBuildParser {
         }
 
         if (hasGit) {
-            if (groupExplicit == null || groupExplicit.isBlank()) {
-                throw new JkBuildParseException(displayPath
-                        + " with `git = ...` must set a `group` explicitly "
-                        + "(catalog shorthand applies only to version-based deps)");
+            // Discovery is the default: with no `group`, the coordinate is read
+            // from the cloned repo's [project] at materialization. An explicit
+            // `group` overrides the coordinate (artifact defaults to the dep
+            // name, as for version deps); `version` overrides the derived
+            // version (docs/git-source-deps.md §"Discovery with override").
+            GitSource base = parseGitSource(entry, displayPath);
+            String versionOverride = entry.getString("version");
+            if (hasVersion && (versionOverride == null || versionOverride.isBlank())) {
+                throw new JkBuildParseException(displayPath + ".version must not be blank");
             }
-            GitSource source = parseGitSource(entry, displayPath);
-            return Dependency.git(name, group + ":" + artifact, source);
+            if (groupExplicit != null && !groupExplicit.isBlank()) {
+                // Coordinate fully overridden — pin the module now.
+                GitSource source = base.withOverrides(groupExplicit, artifact, versionOverride);
+                return Dependency.git(name, groupExplicit + ":" + artifact, source);
+            }
+            if (artifactExplicit != null) {
+                throw new JkBuildParseException(displayPath
+                        + " sets `artifact` without `group`; set `group` too to override the "
+                        + "discovered coordinate, or omit both to discover it from the repo");
+            }
+            // Pure discovery (modulo an optional version override): a synthetic
+            // module placeholder that GitSourceResolution rewrites to the
+            // discovered coordinate, mirroring the workspace-dep placeholder.
+            GitSource source = base.withOverrides(null, null, versionOverride);
+            return Dependency.git(name, "git:" + name, source);
         }
 
         // version-only.

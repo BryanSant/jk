@@ -82,6 +82,32 @@ class GitSourceMaterializerTest {
     }
 
     @Test
+    void honors_coordinate_and_version_overrides(@TempDir Path tmp) throws Exception {
+        GitSource base = buildLibraryRepo(tmp.resolve("lib"));
+        // Relabel the discovered com.acme:widgets:1.0.0 → org.fork:widgetz:9.9.9-fork.
+        GitSource overridden = base.withOverrides("org.fork", "widgetz", "9.9.9-fork");
+
+        Cas cas = new Cas(tmp.resolve("cas"));
+        RepoGroup buildRepos = RepoGroup.of(new MavenRepo(
+                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        var materializer = new GitSourceMaterializer(
+                tmp.resolve("git"), tmp.resolve("git-artifacts"),
+                cas, buildRepos, Path.of(System.getProperty("java.home")), "test", GitCredentials.NONE);
+
+        GitSourceMaterializer.Materialized m = materializer.materialize(overridden);
+
+        assertThat(m.group()).isEqualTo("org.fork");
+        assertThat(m.artifact()).isEqualTo("widgetz");
+        assertThat(m.version()).isEqualTo("9.9.9-fork");
+        Path repoDir = Path.of(m.repoUrl());
+        assertThat(repoDir.resolve("org/fork/widgetz/9.9.9-fork/widgetz-9.9.9-fork.jar")).exists();
+        assertThat(Files.readString(repoDir.resolve("org/fork/widgetz/9.9.9-fork/widgetz-9.9.9-fork.pom")))
+                .contains("<groupId>org.fork</groupId>")
+                .contains("<artifactId>widgetz</artifactId>")
+                .contains("<version>9.9.9-fork</version>");
+    }
+
+    @Test
     void is_idempotent_on_a_cache_hit(@TempDir Path tmp) throws Exception {
         GitSource source = buildLibraryRepo(tmp.resolve("lib"));
         Cas cas = new Cas(tmp.resolve("cas"));

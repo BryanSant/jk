@@ -247,6 +247,59 @@ class JkBuildParserTest {
     }
 
     @Test
+    void git_source_without_group_discovers_the_coordinate() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                mylib = { git = "https://github.com/acme/widgets", tag = "v1.4.0" }
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isGit()).isTrue();
+        // Discovery: a placeholder module the resolver rewrites once the repo's
+        // [project] coordinate is known; no override carried.
+        assertThat(dep.module()).isEqualTo("git:mylib");
+        assertThat(dep.gitSource().hasOverrides()).isFalse();
+        assertThat(dep.gitSource().overrideGroup()).isNull();
+    }
+
+    @Test
+    void git_source_honors_coordinate_and_version_overrides() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                fork = { git = "https://github.com/me/widgets-fork", branch = "main", \
+                         group = "com.acme", artifact = "widgets", version = "1.4.0-acme" }
+                """);
+        var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
+        assertThat(dep.isGit()).isTrue();
+        assertThat(dep.module()).isEqualTo("com.acme:widgets");
+        var src = dep.gitSource();
+        assertThat(src.overrideGroup()).isEqualTo("com.acme");
+        assertThat(src.overrideArtifact()).isEqualTo("widgets");
+        assertThat(src.overrideVersion()).isEqualTo("1.4.0-acme");
+    }
+
+    @Test
+    void git_source_group_override_defaults_artifact_to_dep_name() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                codec = { group = "com.acme", git = "https://github.com/acme/codec", tag = "v0.9.1" }
+                """);
+        var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
+        assertThat(src.overrideGroup()).isEqualTo("com.acme");
+        assertThat(src.overrideArtifact()).isEqualTo("codec");   // defaults to the dep name
+        assertThat(src.overrideVersion()).isNull();              // version still derived from the tag
+    }
+
+    @Test
+    void git_source_artifact_without_group_is_rejected() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                bad = { git = "https://github.com/acme/widgets", tag = "v1", artifact = "widgets" }
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("`artifact` without `group`");
+    }
+
+    @Test
     void multiple_sources_on_dep_is_rejected() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]

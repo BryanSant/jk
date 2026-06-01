@@ -6,6 +6,7 @@ import dev.jkbuild.cache.Journal;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
@@ -55,12 +56,30 @@ final class GitSourceResolution {
 
     /**
      * Materialize every git dependency in {@code effective}, augment
-     * {@code baseRepos}, and rewrite git deps to coordinate pins. The git
-     * artifacts are themselves built (with {@code javaHome}) resolving their own
-     * dependencies against {@code baseRepos}.
+     * {@code baseRepos}, and rewrite git deps to coordinate pins, accepting any
+     * upstream ref movement. Used on first-run resolve and {@code jk update}.
      */
     static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas,
                             Path javaHome, String jkVersion)
+            throws IOException, InterruptedException {
+        return prepare(effective, baseRepos, cas, javaHome, jkVersion, Map.of());
+    }
+
+    /**
+     * As {@link #prepare(JkBuild, RepoGroup, Cas, Path, String)}, but first
+     * verifies each immutable (tag/rev) git ref still resolves to its
+     * lockfile-recorded SHA — failing with a {@code TagRewriteException} if an
+     * upstream tag was force-moved since the lock (docs/git-source-deps.md
+     * §"Supply-chain safety"). {@code lockedShas} maps {@code url|ref-token} to
+     * the locked SHA (see {@link #lockedImmutableShas}); an empty map disables
+     * the check (the {@code jk update} / first-run behavior).
+     *
+     * <p>The git artifacts are themselves built (with {@code javaHome}),
+     * resolving their own dependencies against {@code baseRepos}.
+     */
+    static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas,
+                            Path javaHome, String jkVersion,
+                            Map<String, String> lockedShas)
             throws IOException, InterruptedException {
         Map<Scope, List<Dependency>> byScope = effective.dependencies().byScope();
         boolean anyGit = byScope.values().stream().flatMap(List::stream).anyMatch(Dependency::isGit);
@@ -81,6 +100,9 @@ final class GitSourceResolution {
                 if (!d.isGit()) continue;
                 String key = sourceKey(d.gitSource());
                 if (bySource.containsKey(key)) continue;
+                // Tag-rewrite canary: an immutable ref must still point where the
+                // lockfile says before we build it.
+                verifyImmutableRef(materializer, d.gitSource(), lockedShas);
                 GitSourceMaterializer.Materialized m = materializer.materialize(d.gitSource());
                 bySource.put(key, m);
                 extraRepos.add(new MavenRepo(
@@ -144,10 +166,53 @@ final class GitSourceResolution {
                 lock.jdk(), lock.kotlin(), out);
     }
 
-    /** Identity of a git source: same URL + ref + subpath → one materialization. */
+    /**
+     * Verify an immutable (tag/rev) ref still resolves to its locked SHA.
+     * Branches are mutable by design, so they're never checked here — their
+     * tip is simply re-resolved. No locked SHA for this ref → nothing to check.
+     */
+    private static void verifyImmutableRef(GitSourceMaterializer materializer,
+                                           GitSource source, Map<String, String> lockedShas)
+            throws IOException {
+        if (lockedShas.isEmpty()) return;
+        GitRefSpec ref = source.ref();
+        if (!(ref instanceof GitRefSpec.Tag) && !(ref instanceof GitRefSpec.Rev)) return;
+        String expected = lockedShas.get(source.canonicalUrl() + "|" + ref.token());
+        if (expected != null) {
+            materializer.verifyLocked(source, expected);
+        }
+    }
+
+    /**
+     * Build the {@code url|ref-token → SHA} map of immutable git refs recorded
+     * in {@code lock}, for {@link #prepare}'s tag-rewrite check. Branch refs are
+     * excluded — they're expected to move.
+     */
+    static Map<String, String> lockedImmutableShas(Lockfile lock) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Lockfile.Package p : lock.packages()) {
+            Lockfile.Package.GitInfo g = p.git();
+            if (g == null || g.ref() == null) continue;
+            if (g.ref().startsWith("tag=") || g.ref().startsWith("rev=")) {
+                out.put(g.url() + "|" + g.ref(), g.rev());
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Identity of a git source: same URL + ref + subpath + overrides → one
+     * materialization. Overrides are part of the key so two deps on the same
+     * commit that relabel it differently each get their own published artifact.
+     */
     private static String sourceKey(GitSource source) {
-        String path = source.path() == null ? "" : source.path();
-        return source.canonicalUrl() + "|" + source.ref().token() + "|" + path;
+        return String.join("|",
+                source.canonicalUrl(),
+                source.ref().token(),
+                source.path() == null ? "" : source.path(),
+                source.overrideGroup() == null ? "" : source.overrideGroup(),
+                source.overrideArtifact() == null ? "" : source.overrideArtifact(),
+                source.overrideVersion() == null ? "" : source.overrideVersion());
     }
 
     private static String provenanceKey(String coordinate, String version) {

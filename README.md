@@ -100,6 +100,36 @@ jk add :widget            # ':' marks a local member by name
 A bare name with no `:` and no path separator (e.g. `jk add jackson`) is
 treated as an alias-catalog name / Maven coordinate, not a local path.
 
+## Git-source dependencies
+
+Depend on a git repository instead of a published coordinate — the JitPack
+model, but first-class and built with `jk`'s own pipeline. `jk` clones the
+repo (reusing forge auth), builds it from its `jk.toml`, locally publishes
+the artifact, and hands the resolver an exact coordinate pin — so the solver
+resolves it like any other dependency, transitive deps and all.
+
+```toml
+[dependencies.main]
+# Coordinate is discovered from the repo's own [project]; the version is
+# derived from the ref — a tag coerces to SemVer, a branch becomes
+# <branch>-SNAPSHOT, a rev becomes a tag-anchored pseudo-version.
+mylib  = { git = "https://github.com/acme/widgets", tag = "v1.4.0" }
+edge   = { git = "https://gitlab.com/acme/edge",     branch = "main" }
+pinned = { git = "https://github.com/acme/widgets",  rev = "3f2a9c1…" }
+submod = { git = "https://github.com/acme/monorepo", tag = "v2.0.0", path = "libs/core" }
+
+# Override the discovered coordinate / derived version (handy for forks):
+fork   = { git = "https://github.com/me/widgets-fork", branch = "main",
+           group = "com.acme", artifact = "widgets", version = "1.4.0-acme" }
+```
+
+The resolved commit SHA is pinned in `jk.lock`, so a locked build is
+reproducible and offline-friendly — `jk build` never re-clones. `jk lock`
+fails loudly if an upstream **tag** was force-moved since the lock;
+`jk update` re-resolves branch tips (and accepts moved tags) and rebuilds
+only when the SHA changed. Only `jk.toml`-based source builds are supported
+for now. See [`docs/git-source-deps.md`](docs/git-source-deps.md).
+
 ## Why another build tool
 
 - **Native binary, no daemon.** `jk --help` is a sub-50ms cold start. No JVM warmup tax, no daemon to restart when configuration cache breaks.

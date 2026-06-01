@@ -68,11 +68,26 @@ final class GitSourceMaterializer {
         this.credentials = credentials;
     }
 
+    /**
+     * Fail loudly if {@code source}'s ref no longer resolves to
+     * {@code expectedSha} — the tag/branch was force-moved since the lockfile
+     * was written (docs/git-source-deps.md §"Supply-chain safety"). Callers use
+     * this on {@code jk lock} for immutable (tag/rev) refs; {@code jk update}
+     * skips it to accept the new commit.
+     */
+    void verifyLocked(GitSource source, String expectedSha) throws IOException {
+        new GitFetcher(gitRoot, credentials).verifyLocked(source, expectedSha);
+    }
+
     Materialized materialize(GitSource source) throws IOException, InterruptedException {
         GitFetcher fetcher = new GitFetcher(gitRoot, credentials);
         GitFetcher.Fetched fetched = fetcher.fetch(source);
         String sha = fetched.sha();
-        String version = deriveVersion(fetcher, source, sha);
+        // An explicit `version` override relabels the artifact without touching
+        // the ref → commit selection, so we can skip ref-derived versioning.
+        String version = source.overrideVersion() != null
+                ? source.overrideVersion()
+                : deriveVersion(fetcher, source, sha);
 
         Path projectDir = source.path() != null && !source.path().isBlank()
                 ? fetched.checkoutPath().resolve(source.path())
@@ -84,8 +99,12 @@ final class GitSourceMaterializer {
                     + " (only jk.toml builds are supported)");
         }
         JkBuild project = JkBuildParser.parse(Files.readString(buildFile));
-        String group = project.project().group();
-        String artifact = project.project().artifact();
+        // Discovery with override: explicit group/artifact replace the
+        // coordinate read from the repo's [project] (docs/git-source-deps.md).
+        String group = source.overrideGroup() != null
+                ? source.overrideGroup() : project.project().group();
+        String artifact = source.overrideArtifact() != null
+                ? source.overrideArtifact() : project.project().artifact();
 
         // Per-commit local Maven repo; reused on a cache hit (immutable tag/rev).
         Path repo = artifactsRoot.resolve(GitUrl.canonicalHash(source.canonicalUrl()))
