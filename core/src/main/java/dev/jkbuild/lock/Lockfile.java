@@ -79,7 +79,8 @@ public record Lockfile(
             String path,
             List<Scope> scopes,
             List<String> deps,
-            String pinnedBy) {
+            String pinnedBy,
+            GitInfo git) {
 
         public Package {
             Objects.requireNonNull(name, "name");
@@ -94,6 +95,14 @@ public record Lockfile(
             deps = List.copyOf(deps);
         }
 
+        /** Without git provenance — the common Maven-coordinate case. */
+        public Package(
+                String name, String version, String source,
+                String checksum, String path,
+                List<Scope> scopes, List<String> deps, String pinnedBy) {
+            this(name, version, source, checksum, path, scopes, deps, pinnedBy, null);
+        }
+
         /**
          * Back-compat constructor without {@code pinnedBy} — for callers that
          * don't track BOM provenance. Equivalent to passing {@code null}.
@@ -102,19 +111,31 @@ public record Lockfile(
                 String name, String version, String source,
                 String checksum, String path,
                 List<Scope> scopes, List<String> deps) {
-            this(name, version, source, checksum, path, scopes, deps, null);
+            this(name, version, source, checksum, path, scopes, deps, null, null);
         }
 
         /** Convenience constructor for callers that don't care about scopes (defaults to MAIN). */
         public Package(
                 String name, String version, String source,
                 String checksum, String path, List<String> deps) {
-            this(name, version, source, checksum, path, List.of(Scope.MAIN), deps, null);
+            this(name, version, source, checksum, path, List.of(Scope.MAIN), deps, null, null);
         }
 
         public boolean inAnyScope(Set<Scope> include) {
             for (Scope s : scopes) if (include.contains(s)) return true;
             return false;
+        }
+
+        /**
+         * Provenance for a git-source package: the canonical repo URL, the
+         * resolved commit SHA, and the original ref token (e.g. {@code tag:v1}).
+         * Present only for git-built artifacts; null for Maven coordinates.
+         */
+        public record GitInfo(String url, String rev, String ref) {
+            public GitInfo {
+                Objects.requireNonNull(url, "url");
+                Objects.requireNonNull(rev, "rev");
+            }
         }
     }
 }

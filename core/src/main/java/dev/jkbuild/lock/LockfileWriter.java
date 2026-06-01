@@ -58,6 +58,13 @@ public final class LockfileWriter {
             if (pkg.path() != null) {
                 out.append("path     = ").append(quote(pkg.path())).append('\n');
             }
+            if (pkg.git() != null) {
+                out.append("git      = ").append(quote(pkg.git().url())).append('\n');
+                out.append("rev      = ").append(quote(pkg.git().rev())).append('\n');
+                if (pkg.git().ref() != null) {
+                    out.append("ref      = ").append(quote(pkg.git().ref())).append('\n');
+                }
+            }
             if (!pkg.scopes().isEmpty()) {
                 List<Scope> sortedScopes = new ArrayList<>(pkg.scopes());
                 sortedScopes.sort(Comparator.naturalOrder());
