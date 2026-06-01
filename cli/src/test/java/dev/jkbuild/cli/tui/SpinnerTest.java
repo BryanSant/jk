@@ -59,12 +59,11 @@ class SpinnerTest {
     }
 
     @Test
-    void gradient_runs_from_magenta_to_orange() {
+    void gradient_runs_from_primary_to_accent() {
         var colors = Spinner.buildGradient(Spinner.FRAMES.length);
-        // First frame: magenta #e600ff; last frame: orange #ff8b1a
-        // (reverse of the title gradient).
-        assertThat(colors[0].toAnsi()).isEqualTo("38;2;230;0;255");
-        assertThat(colors[colors.length - 1].toAnsi()).isEqualTo("38;2;255;139;26");
+        // First frame: Jk Dark primary #3F51B5; last frame: accent #FF4081.
+        assertThat(colors[0].toAnsi()).isEqualTo("38;2;63;81;181");
+        assertThat(colors[colors.length - 1].toAnsi()).isEqualTo("38;2;255;64;129");
     }
 
     @Test
