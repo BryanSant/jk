@@ -33,9 +33,10 @@ import java.util.concurrent.Callable;
  *   <li>A Maven-coord shorthand: {@code group:artifact:version} (pinned) or
  *       {@code group:artifact@version} (floating caret). The short {@code name}
  *       defaults to the artifactId; override with {@code --name}.</li>
- *   <li>A bare short name (e.g. {@code spring-web}), resolved against the
- *       alias catalog; combine with {@code --group}/{@code --ver} for names
- *       not in the catalog.</li>
+ *   <li>A bare short name (e.g. {@code spring-web}), optionally with an
+ *       {@code @version} suffix ({@code spring-web@3.4.0}), resolved against the
+ *       alias catalog. The version defaults to {@code latest} when omitted.
+ *       Combine with {@code --group}/{@code --ver} for names not in the catalog.</li>
  *   <li>A local workspace member, when the argument begins with {@code :}
  *       ({@code :widget}) or contains a path separator ({@code ./widget},
  *       {@code ../widget}, {@code libs/widget}, {@code widget/}). jk adds a
@@ -46,13 +47,14 @@ import java.util.concurrent.Callable;
  *
  * <p>Pass {@code --ping} to check availability without modifying anything.
  */
-@Command(name = "add", description = "Add a dependency, or a local workspace member, to jk.toml")
+@Command(name = "add", description = "Add a dependency, or workspace member, to jk.toml")
 public final class AddCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "[dep|path]",
-            description = "group:artifact:version (pinned), group:artifact@version (floating), "
-                    + "a bare short name combined with --group/--ver, or a local workspace "
-                    + "member (:name or a ./ ../ libs/ path).")
+            description = {
+                    "A dependency by its short-name, group:artifact@version, or group:artifact:version",
+                    "...or a local workspace member (:name or a relative path like ./foo/bar)."
+            })
     String coord;
 
     @Option(names = "--name",
@@ -137,10 +139,17 @@ public final class AddCommand implements Callable<Integer> {
             return 1;
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
-        System.out.println("Added " + parsed.name() + " ("
-                + parsed.group() + ":" + parsed.artifact() + " " + parsed.versionLiteral()
-                + ") to dependencies." + scope.canonical());
-        System.out.println("Run `jk lock` to resolve (not yet implemented).");
+        String check = Theme.colorize("✓", Theme.success());
+        System.out.println(check + " Added "
+                + Theme.colorize(parsed.name(), Theme.activeStep())
+                + " (" + Theme.colorize(parsed.group(), Theme.primary())
+                + ":" + Theme.colorize(parsed.artifact(), Theme.activeStep())
+                + "@" + Theme.colorize(parsed.versionLiteral(), Theme.warning())
+                + ") to " + Theme.colorize("dependency", Theme.cyan())
+                + "." + Theme.colorize(scope.canonical(), Theme.cyan()));
+        System.out.println();
+        System.out.println("Run " + Theme.colorize("jk lock", Theme.warning())
+                + " to lock your dependencies to hard versions");
         return 0;
     }
 
@@ -272,22 +281,33 @@ public final class AddCommand implements Callable<Integer> {
             int firstColon = coord.indexOf(':');
             int atSign = coord.indexOf('@');
 
-            if (firstColon < 0 && atSign < 0) {
-                // Bare short name. The layered alias catalog (project + user +
-                // downloaded + bundled) supplies group + artifact for
-                // curated names; the user still picks the version.
-                // Explicit flags always override the catalog.
-                String name = nonBlank(nameFlag, coord);
+            if (firstColon < 0) {
+                // Bare short name, optionally with an `@version` suffix
+                // (e.g. `jackson3-core` or `jackson3-core@3.1.0`). The layered
+                // alias catalog (project + user + downloaded + bundled) supplies
+                // group + artifact for curated names. The version comes from
+                // --ver, else the `@version` suffix (caret-floating, like the
+                // group:artifact@version coord form), else defaults to floating
+                // "latest". All are resolved at `jk lock`. Flags override the catalog.
+                String aliasKey = atSign >= 0 ? coord.substring(0, atSign) : coord;
+                String atVersion = atSign >= 0 ? coord.substring(atSign + 1) : null;
+                if (aliasKey.isBlank()) {
+                    throw new IllegalArgumentException("empty name before '@' in: " + coord);
+                }
+                if (atVersion != null && atVersion.isBlank()) {
+                    throw new IllegalArgumentException("empty version after '@' in: " + coord);
+                }
+                String name = nonBlank(nameFlag, aliasKey);
                 var catalog = dev.jkbuild.alias.AliasCatalog.layered();
-                var catalogHit = catalog.lookup(coord);
+                var catalogHit = catalog.lookup(aliasKey);
                 String group = nonBlank(groupFlag,
                         catalogHit.map(dev.jkbuild.alias.AliasCatalog.Module::group).orElse(null));
                 String artifact = nonBlank(artifactFlag,
                         catalogHit.map(dev.jkbuild.alias.AliasCatalog.Module::artifact).orElse(name));
                 if (group == null || group.isBlank()) {
                     StringBuilder msg = new StringBuilder("bare name `")
-                            .append(coord).append("` is not in the alias catalog. ");
-                    List<String> suggestions = catalog.suggestionsFor(coord, 5);
+                            .append(aliasKey).append("` is not in the alias catalog. ");
+                    List<String> suggestions = catalog.suggestionsFor(aliasKey, 5);
                     if (!suggestions.isEmpty()) {
                         msg.append("Did you mean: ")
                                 .append(String.join(", ", suggestions)).append("? ");
@@ -296,21 +316,16 @@ public final class AddCommand implements Callable<Integer> {
                             .append("(and optionally --artifact) explicitly.");
                     throw new IllegalArgumentException(msg.toString());
                 }
-                if (versionFlag == null || versionFlag.isBlank()) {
-                    throw new IllegalArgumentException(
-                            "bare name `" + coord + "` requires --ver");
-                }
-                return new ParsedDep(name, group, artifact, versionFlag, false);
+                boolean hasFlagVersion = versionFlag != null && !versionFlag.isBlank();
+                String versionLiteral = hasFlagVersion ? versionFlag
+                        : atVersion != null ? atVersion : "latest";
+                return new ParsedDep(name, group, artifact, versionLiteral, !hasFlagVersion);
             }
 
-            // Maven-coord shorthand. Three forms:
+            // Maven-coord shorthand (has a colon). Three forms:
             //   group:artifact            → version="latest", floating=true
             //   group:artifact@version    → caret-floating
             //   group:artifact:version    → pinned (versionLiteral prefixed with `=`)
-            if (firstColon < 0) {
-                throw new IllegalArgumentException(
-                        "expected group:artifact[@version] or group:artifact:version, got: " + coord);
-            }
             int nextColon = coord.indexOf(':', firstColon + 1);
             int versionMark = atSign >= 0 && (nextColon < 0 || atSign < nextColon) ? atSign : nextColon;
 
@@ -381,7 +396,7 @@ public final class AddCommand implements Callable<Integer> {
 
         if (response.statusCode() == 200) {
             URI artifactUri = repoBase.resolve(MavenLayout.artifactPath(coord));
-            System.out.println(Theme.colorize("✓", Theme.brightGreen().bold())
+            System.out.println(Theme.colorize("✓", Theme.success())
                     + " " + coordStr + " is available.");
             System.out.println(osc8Link(artifactUri.toString()));
             return 0;

@@ -139,6 +139,16 @@ public final class Theme {
         return withColor(AttributedStyle.DEFAULT, JkDark.BRIGHT_BLUE);
     }
 
+    /** Indigo primary — the brand base color (Jk Dark primary). */
+    public static AttributedStyle primary() {
+        return withColor(AttributedStyle.DEFAULT, JkDark.PRIMARY);
+    }
+
+    /** Cyan — used to label structural keys like scopes (Jk Dark cyan). */
+    public static AttributedStyle cyan() {
+        return withColor(AttributedStyle.DEFAULT, JkDark.NORMAL_CYAN);
+    }
+
     /** Bright green — used for the settled-answer arrow and "➜" prefixes. */
     public static AttributedStyle brightGreen() {
         return withColor(AttributedStyle.DEFAULT, JkDark.BRIGHT_GREEN);
@@ -208,7 +218,9 @@ public final class Theme {
      */
     public static String colorize(String text, AttributedStyle style) {
         String sgr = style.toAnsi();
-        return sgr.isEmpty() ? text : "\033[" + sgr + "m" + text + "\033[0m";
+        // A style with no attributes renders as a blank SGR body (JLine emits a
+        // single space, not ""), which would otherwise produce a stray `\033[ m`.
+        return sgr.isBlank() ? text : "\033[" + sgr + "m" + text + "\033[0m";
     }
 
     /** Maps (state, glyph) to the style used to render that rail glyph. */
