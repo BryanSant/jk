@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.cli.theme.Gradient;
+import dev.jkbuild.cli.theme.JkDarkTheme;
+import dev.jkbuild.cli.theme.Rgb;
+import dev.jkbuild.cli.theme.Theme;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -43,26 +47,26 @@ class GradientTest {
 
     @Test
     void title_runs_bright_blue_to_accent() {
-        assertThat(Theme.TITLE_GRADIENT)
-                .isEqualTo(new Gradient(JkDark.BRIGHT_BLUE, JkDark.ACCENT));
+        assertThat(Theme.active().titleGradient())
+                .isEqualTo(new Gradient(JkDarkTheme.BRIGHT_BLUE, JkDarkTheme.ACCENT));
     }
 
     @Test
     void rgb_darker_and_brighter_scale_and_clamp() {
         // #4CAF50 (76,175,80) × 0.70 ; #69F0AE (105,240,174) × 1.10 (G clamps).
-        assertThat(JkDark.NORMAL_GREEN.darker(0.30)).isEqualTo(new Rgb(53, 122, 56));
-        assertThat(JkDark.BRIGHT_GREEN.brighter(0.10)).isEqualTo(new Rgb(116, 255, 191));
+        assertThat(JkDarkTheme.NORMAL_GREEN.darker(0.30)).isEqualTo(new Rgb(53, 122, 56));
+        assertThat(JkDarkTheme.BRIGHT_GREEN.brighter(0.10)).isEqualTo(new Rgb(116, 255, 191));
     }
 
     @Test
     void progress_runs_green_30pct_darker_to_bright_green_10pct_brighter() {
-        assertThat(Theme.PROGRESS_GRADIENT)
+        assertThat(Theme.active().progressGradient())
                 .isEqualTo(new Gradient(new Rgb(53, 122, 56), new Rgb(116, 255, 191)));
     }
 
     @Test
     void spinner_runs_primary_to_accent() {
-        assertThat(Theme.SPINNER_GRADIENT).isEqualTo(new Gradient(JkDark.PRIMARY, JkDark.ACCENT));
-        assertThat(Theme.SPINNER_GRADIENT).isNotEqualTo(Theme.PROGRESS_GRADIENT);
+        assertThat(Theme.active().spinnerGradient()).isEqualTo(new Gradient(JkDarkTheme.PRIMARY, JkDarkTheme.ACCENT));
+        assertThat(Theme.active().spinnerGradient()).isNotEqualTo(Theme.active().progressGradient());
     }
 }

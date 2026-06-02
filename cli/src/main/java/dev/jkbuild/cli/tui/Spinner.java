@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.cli.Ansi;
+import dev.jkbuild.cli.theme.Gradient;
+import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedStyle;
 
 import java.io.PrintStream;
@@ -28,16 +31,16 @@ public final class Spinner implements AutoCloseable {
     /** Interval between frames. */
     static final long FRAME_MS = 120L;
 
-    private static final String HIDE_CURSOR = "\033[?25l";
-    private static final String SHOW_CURSOR = "\033[?25h";
-    private static final String CLEAR_LINE = "\r\033[K";
+    private static final String HIDE_CURSOR = Ansi.HIDE_CURSOR;
+    private static final String SHOW_CURSOR = Ansi.SHOW_CURSOR;
+    private static final String CLEAR_LINE = Ansi.CLEAR_LINE;
 
     // OSC 9;4 — taskbar/tab status indicator (ConEmu, Windows Terminal,
     // WezTerm, ghostty, kitty ≥0.31, etc.). State 3 = indeterminate; the
     // host can show a pulsing/marquee animation while we spin. State 0
     // clears the indicator. Unsupported terminals swallow the sequence.
-    static final String OSC_INDETERMINATE = "\033]9;4;3\007";
-    static final String OSC_CLEAR = "\033]9;4;0\007";
+    static final String OSC_INDETERMINATE = Ansi.TASKBAR_INDETERMINATE;
+    static final String OSC_CLEAR = Ansi.TASKBAR_CLEAR;
 
     private final PrintStream out;
     private final AttributedStyle[] frameColors;
@@ -132,11 +135,11 @@ public final class Spinner implements AutoCloseable {
 
     static AttributedStyle[] buildGradient(int n) {
         // Primary → accent (Jk Dark).
-        Gradient gradient = Theme.SPINNER_GRADIENT;
+        Gradient gradient = Theme.active().spinnerGradient();
         AttributedStyle[] a = new AttributedStyle[n];
         for (int i = 0; i < n; i++) {
             double t = n <= 1 ? 0.0 : (double) i / (n - 1);
-            a[i] = Theme.bright(gradient.at(t));
+            a[i] = Theme.active().bright(gradient.at(t));
         }
         return a;
     }

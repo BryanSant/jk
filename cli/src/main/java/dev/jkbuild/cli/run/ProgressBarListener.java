@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
-import dev.jkbuild.cli.tui.Theme;
+import dev.jkbuild.cli.Ansi;
+import dev.jkbuild.cli.theme.Gradient;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
@@ -47,10 +49,9 @@ public final class ProgressBarListener implements GoalListener {
     private static final char FILLED = '▰';
     private static final char EMPTY  = '▱';
 
-    private static final String HIDE_CURSOR    = "\033[?25l";
-    private static final String SHOW_CURSOR    = "\033[?25h";
-    private static final String OSC_CLEAR        = "\033]9;4;0\007";
-    private static final String OSC_PROGRESS_FMT = "\033]9;4;1;%d\007";
+    private static final String HIDE_CURSOR    = Ansi.HIDE_CURSOR;
+    private static final String SHOW_CURSOR    = Ansi.SHOW_CURSOR;
+    private static final String OSC_CLEAR        = Ansi.TASKBAR_CLEAR;
 
     private final PrintStream out;
     private final PrintStream err;
@@ -81,9 +82,9 @@ public final class ProgressBarListener implements GoalListener {
         this.phaseLabels = Map.copyOf(labels);
         this.silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
         // spinner = primary→accent; bar = green→bright-green; fail = dark→bright red.
-        this.spinColors = buildGradient(SPIN_FRAMES.length, Theme.SPINNER_GRADIENT);
-        this.barColors = buildGradient(BAR_SEGS, Theme.PROGRESS_GRADIENT);
-        this.failColors = buildGradient(BAR_SEGS, Theme.FAILURE_GRADIENT);
+        this.spinColors = buildGradient(SPIN_FRAMES.length, Theme.active().spinnerGradient());
+        this.barColors = buildGradient(BAR_SEGS, Theme.active().progressGradient());
+        this.failColors = buildGradient(BAR_SEGS, Theme.active().failureGradient());
     }
 
     @Override
@@ -122,7 +123,7 @@ public final class ProgressBarListener implements GoalListener {
         currentNumerator   = view.numerator();
         currentDenominator = view.denominator();
         if (!silent) {
-            out.print(String.format(OSC_PROGRESS_FMT, Math.min(99, view.percent())));
+            out.print(Ansi.taskbarProgress(Math.min(99, view.percent())));
             out.flush();
         }
     }
@@ -144,13 +145,13 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void warn(String phase, String code, String message) {
-        writeAboveInternal(renderDiagnostic("⚠ Warning", Theme.warning().bold(),
+        writeAboveInternal(renderDiagnostic("⚠ Warning", Theme.active().warning().bold(),
                 phase, code, message));
     }
 
     @Override
     public synchronized void error(String phase, String code, String message) {
-        writeAboveInternal(renderDiagnostic("✗ Error", Theme.error().bold(),
+        writeAboveInternal(renderDiagnostic("✗ Error", Theme.active().error().bold(),
                 phase, code, message));
     }
 
@@ -159,7 +160,7 @@ public final class ProgressBarListener implements GoalListener {
             err.println(line);
             return;
         }
-        if (drawn) out.print("\r\033[K");
+        if (drawn) out.print(Ansi.CLEAR_LINE);
         out.println(line);
         drawn = false;
         renderLine();
@@ -181,7 +182,7 @@ public final class ProgressBarListener implements GoalListener {
         } else if (!result.success()) {
             renderFailed();
         } else {
-            if (drawn) out.print("\r\033[K");
+            if (drawn) out.print(Ansi.CLEAR_LINE);
             out.print(OSC_CLEAR);
             out.print(SHOW_CURSOR);
             out.flush();
@@ -214,28 +215,28 @@ public final class ProgressBarListener implements GoalListener {
         for (int i = 0; i < BAR_SEGS; i++) {
             boolean filled = i < segs;
             char c = filled ? FILLED : EMPTY;
-            AttributedStyle style = filled ? barColors[i] : Theme.dim();
+            AttributedStyle style = filled ? barColors[i] : Theme.active().dim();
             out.print(Theme.colorize(String.valueOf(c), style));
         }
         out.print(" ");
 
         // Percent box: [dark-gray-bracket bold-white-pct dark-gray-bracket]
         String pctStr = String.format("%3d%%", pct);
-        out.print(Theme.colorize("[", Theme.darkGray()));
-        out.print(Theme.colorize(pctStr, Theme.focused()));
-        out.print(Theme.colorize("]", Theme.darkGray()));
+        out.print(Theme.colorize("[", Theme.active().darkGray()));
+        out.print(Theme.colorize(pctStr, Theme.active().focused()));
+        out.print(Theme.colorize("]", Theme.active().darkGray()));
         out.print(" ");
 
         // N of M — normal-gray, not fixed-width.
         String countStr = num + " of " + (den <= 0 ? "—" : String.valueOf(den));
-        out.print(Theme.colorize(countStr, Theme.normalGray()));
+        out.print(Theme.colorize(countStr, Theme.active().normalGray()));
         out.print(" ");
 
         // › Goal › Phase step-message
-        String sep = Theme.colorize("›", Theme.darkGray());
+        String sep = Theme.colorize("›", Theme.active().darkGray());
         out.print(sep);
         out.print(" ");
-        out.print(Theme.colorize(goalDisplayName, Theme.brightGreen().bold()));
+        out.print(Theme.colorize(goalDisplayName, Theme.active().brightGreen().bold()));
         out.print(" ");
         out.print(sep);
         out.print(" ");
@@ -243,7 +244,7 @@ public final class ProgressBarListener implements GoalListener {
         out.print(Theme.colorize(phaseDisplay, AttributedStyle.DEFAULT.bold()));
         if (!stepMsg.isEmpty()) {
             out.print(" ");
-            out.print(Theme.colorize(stepMsg, Theme.normalGray()));
+            out.print(Theme.colorize(stepMsg, Theme.active().normalGray()));
         }
 
         // Shrink: step message may get shorter.
@@ -280,35 +281,35 @@ public final class ProgressBarListener implements GoalListener {
 
         // Percent box (unchanged).
         String pctStr = String.format("%3d%%", pct);
-        out.print(Theme.colorize("[", Theme.darkGray()));
-        out.print(Theme.colorize(pctStr, Theme.focused()));
-        out.print(Theme.colorize("]", Theme.darkGray()));
+        out.print(Theme.colorize("[", Theme.active().darkGray()));
+        out.print(Theme.colorize(pctStr, Theme.active().focused()));
+        out.print(Theme.colorize("]", Theme.active().darkGray()));
         out.print(" ");
 
         // N of M (unchanged).
         String countStr = num + " of " + (den <= 0 ? "—" : String.valueOf(den));
-        out.print(Theme.colorize(countStr, Theme.normalGray()));
+        out.print(Theme.colorize(countStr, Theme.active().normalGray()));
         out.print(" ");
 
         // › — unchanged.
-        out.print(Theme.colorize("›", Theme.darkGray()));
+        out.print(Theme.colorize("›", Theme.active().darkGray()));
         out.print(" ");
 
         // Goal label: bold + bright-red + strikethrough.
-        AttributedStyle failGoal = Theme.error().bold().crossedOut();
+        AttributedStyle failGoal = Theme.active().error().bold().crossedOut();
         out.print(Theme.colorize(goalDisplayName, failGoal));
         out.print(" ");
 
         // Everything after goal label is struck through.
-        AttributedStyle strike = Theme.dim().crossedOut();
-        out.print(Theme.colorize("›", Theme.darkGray().crossedOut()));
+        AttributedStyle strike = Theme.active().dim().crossedOut();
+        out.print(Theme.colorize("›", Theme.active().darkGray().crossedOut()));
         out.print(" ");
         out.print(Theme.colorize(phaseDisplay, strike));
         if (!stepMsg.isEmpty()) {
             out.print(" ");
             out.print(Theme.colorize(stepMsg, strike));
         }
-        out.print("\033[K");
+        out.print(Ansi.ERASE_LINE_TO_END);
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.println();
@@ -322,7 +323,7 @@ public final class ProgressBarListener implements GoalListener {
         String phase        = currentPhase;
         String phaseDisplay = phaseLabels.getOrDefault(phase, phase);
         String stepMsg      = activeLabels.getOrDefault(phase, "");
-        AttributedStyle redStyle = Theme.error();
+        AttributedStyle redStyle = Theme.active().error();
 
         out.print("\r");
         int f = (spinFrame == 0 ? SPIN_FRAMES.length : spinFrame) - 1;
@@ -334,25 +335,25 @@ public final class ProgressBarListener implements GoalListener {
         }
         out.print(" ");
         String pctStr = String.format("%3d%%", pct);
-        out.print(Theme.colorize("[", Theme.darkGray()));
-        out.print(Theme.colorize(pctStr, Theme.focused()));
-        out.print(Theme.colorize("]", Theme.darkGray()));
+        out.print(Theme.colorize("[", Theme.active().darkGray()));
+        out.print(Theme.colorize(pctStr, Theme.active().focused()));
+        out.print(Theme.colorize("]", Theme.active().darkGray()));
         out.print(" ");
-        out.print(Theme.colorize(num + " of " + (den <= 0 ? "—" : den), Theme.normalGray()));
+        out.print(Theme.colorize(num + " of " + (den <= 0 ? "—" : den), Theme.active().normalGray()));
         out.print(" ");
-        AttributedStyle strike = Theme.dim().crossedOut();
-        out.print(Theme.colorize("›", Theme.darkGray()));
+        AttributedStyle strike = Theme.active().dim().crossedOut();
+        out.print(Theme.colorize("›", Theme.active().darkGray()));
         out.print(" ");
-        out.print(Theme.colorize(goalDisplayName, Theme.warning().bold().crossedOut()));
+        out.print(Theme.colorize(goalDisplayName, Theme.active().warning().bold().crossedOut()));
         out.print(" ");
-        out.print(Theme.colorize("›", Theme.darkGray().crossedOut()));
+        out.print(Theme.colorize("›", Theme.active().darkGray().crossedOut()));
         out.print(" ");
         out.print(Theme.colorize(phaseDisplay, strike));
         if (!stepMsg.isEmpty()) {
             out.print(" ");
             out.print(Theme.colorize(stepMsg, strike));
         }
-        out.print("\033[K");
+        out.print(Ansi.ERASE_LINE_TO_END);
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.flush();
@@ -372,8 +373,8 @@ public final class ProgressBarListener implements GoalListener {
         var sb = new org.jline.utils.AttributedStringBuilder();
         sb.append(prefix, prefixStyle);
         sb.append(" [").append(phase).append("/").append(code).append("]: ");
-        sb.append(summary, Theme.focused());
-        if (detail != null) sb.append(" — ").append(detail, Theme.activeStep());
+        sb.append(summary, Theme.active().focused());
+        if (detail != null) sb.append(" — ").append(detail, Theme.active().activeStep());
         return sb.toAnsi();
     }
 
@@ -389,11 +390,11 @@ public final class ProgressBarListener implements GoalListener {
                 ? Character.toUpperCase(first) + s.substring(1) : s;
     }
 
-    private static AttributedStyle[] buildGradient(int n, dev.jkbuild.cli.tui.Gradient gradient) {
+    private static AttributedStyle[] buildGradient(int n, Gradient gradient) {
         AttributedStyle[] a = new AttributedStyle[n];
         for (int i = 0; i < n; i++) {
             double t = n <= 1 ? 0.0 : (double) i / (n - 1);
-            a[i] = Theme.bright(gradient.at(t));
+            a[i] = Theme.active().bright(gradient.at(t));
         }
         return a;
     }

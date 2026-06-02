@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
-import dev.jkbuild.cli.tui.Theme;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
@@ -118,11 +118,11 @@ public final class GoalConsole {
         Signals.register("INT", () -> {
             if (goal.snapshot().cancelled()) {
                 // Second Ctrl-C → halt now.
-                System.err.print("\n" + Theme.colorize("𝘅 Force-canceled", Theme.error()) + "\n");
+                System.err.print("\n" + Theme.colorize("𝘅 Force-canceled", Theme.active().error()) + "\n");
                 Runtime.getRuntime().halt(130);
             }
             goal.requestCancel();
-            System.err.print("\n" + Theme.colorize("⌫ Canceling…", Theme.warning())
+            System.err.print("\n" + Theme.colorize("⌫ Canceling…", Theme.active().warning())
                     + " (Ctrl-C again to force)\n");
         });
     }

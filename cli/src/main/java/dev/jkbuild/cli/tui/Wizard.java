@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.cli.Ansi;
+import dev.jkbuild.cli.theme.Theme;
 import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
@@ -37,10 +39,10 @@ import java.util.Optional;
  */
 public final class Wizard {
 
-    private static final String HIDE_CURSOR = "\033[?25l";
-    private static final String SHOW_CURSOR = "\033[?25h";
-    private static final String RESET_SGR = "\033[0m";
-    private static final String CLEAR_TO_END = "\033[0J";
+    private static final String HIDE_CURSOR = Ansi.HIDE_CURSOR;
+    private static final String SHOW_CURSOR = Ansi.SHOW_CURSOR;
+    private static final String RESET_SGR = Ansi.RESET;
+    private static final String CLEAR_TO_END = Ansi.ERASE_DISPLAY_TO_END;
 
     /** Display width of the rail prefix "│  " in columns. */
     private static final int RAIL_PREFIX_WIDTH = 3;
@@ -180,11 +182,11 @@ public final class Wizard {
      */
     public static void printCancellation(Terminal terminal, String message) {
         var writer = terminal.writer();
-        writer.print("\033[2F"); // up 2 lines, col 1 — lands at the active ╰
-        writer.print("\033[" + RAIL_PREFIX_WIDTH + "C"); // skip past "╰──"
-        writer.print("\033[0J"); // erase residue beyond
+        writer.print(Ansi.cursorPrevLine(2)); // up 2 lines, col 1 — lands at the active ╰
+        writer.print(Ansi.cursorForward(RAIL_PREFIX_WIDTH)); // skip past "╰──"
+        writer.print(Ansi.ERASE_DISPLAY_TO_END); // erase residue beyond
         var line = new AttributedStringBuilder()
-                .append(" " + message, Theme.error()) // leading space separates from ╰──
+                .append(" " + message, Theme.active().error()) // leading space separates from ╰──
                 .toAttributedString();
         writer.print(line.toAnsi(terminal));
         writer.println();
@@ -200,7 +202,7 @@ public final class Wizard {
     private static void moveBelowCloser(PrintWriter writer, int regionLines, int cursorOffset) {
         int linesDown = regionLines - cursorOffset;
         if (linesDown > 0) {
-            writer.print("\033[" + linesDown + "B");
+            writer.print(Ansi.cursorDown(linesDown));
         }
         writer.print("\r");
         writer.flush();
@@ -291,7 +293,7 @@ public final class Wizard {
         // `\r\n` to land the shell prompt on a fresh line, so a println here
         // would leave a blank gap between the wizard and whatever the caller
         // emits next (e.g. a progress bar).
-        writer.print(Rail.closer("", Theme.dim()).toAnsi(terminal));
+        writer.print(Rail.closer("", Theme.active().dim()).toAnsi(terminal));
         writer.flush();
         return Answers.of(Map.copyOf(answers));
     }
@@ -306,7 +308,7 @@ public final class Wizard {
         // └ hook one line below the interactive content; gets erased on commit
         // and re-emitted (with the next step's content above it) on each step.
         // Cyan matches the active rail above it.
-        writer.println(Rail.closer("", Theme.dim(), Rail.StepState.ACTIVE).toAnsi(terminal));
+        writer.println(Rail.closer("", Theme.active().dim(), Rail.StepState.ACTIVE).toAnsi(terminal));
         return 1 + interactive.size() + 1;
     }
 
@@ -329,7 +331,7 @@ public final class Wizard {
         // ESC[<n>F = cursor previous line: moves up n lines AND to column 0.
         // (ESC[<n>A only moves up, preserving column — that left the redraw
         // starting mid-line and pasting the new bullet onto the old text.)
-        writer.print("\033[" + rows + "F");
+        writer.print(Ansi.cursorPrevLine(rows));
         writer.print(CLEAR_TO_END);
     }
 
@@ -351,10 +353,10 @@ public final class Wizard {
         // line, then to the column just past the last typed character.
         var linesUp = regionLines - 1;
         if (linesUp > 0) {
-            writer.print("\033[" + linesUp + "A");
+            writer.print(Ansi.cursorUp(linesUp));
         }
         var col = RAIL_PREFIX_WIDTH + state.input.length() + 1;
-        writer.print("\033[" + col + "G");
+        writer.print(Ansi.cursorToColumn(col));
         writer.print(SHOW_CURSOR);
         return 1;
     }
@@ -368,12 +370,12 @@ public final class Wizard {
      */
     private String headerLine(Terminal terminal) {
         var cornerWithSpace = Rail.opener("", Rail.StepState.INACTIVE).toAnsi(terminal);
-        var titleAnsi = Theme.gradientHeaderAnsi(title.isEmpty() ? "Wizard" : title);
+        var titleAnsi = Theme.active().gradientHeaderAnsi(title.isEmpty() ? "Wizard" : title);
         return cornerWithSpace + titleAnsi;
     }
 
     private static List<AttributedString> summarize(WizardStep step, Map<String, Object> answers) {
-        var answerStyle = Theme.settled().italic();
+        var answerStyle = Theme.active().settled().italic();
         return switch (step) {
             case WizardStep.InputStep is -> List.of(
                     answerLine(answers.getOrDefault(is.key(), "").toString(), answerStyle));
@@ -399,14 +401,14 @@ public final class Wizard {
                 yield labels;
             }
             case WizardStep.OutputStep os -> os.render().apply(Answers.of(answers)).stream()
-                    .map(s -> plain(s, Theme.dim()))
+                    .map(s -> plain(s, Theme.active().dim()))
                     .toList();
         };
     }
 
     private static AttributedString answerLine(String text, AttributedStyle textStyle) {
         return new AttributedStringBuilder()
-                .append("➜ ", Theme.brightGreen())
+                .append("➜ ", Theme.active().brightGreen())
                 .append(text, textStyle)
                 .toAttributedString();
     }
@@ -674,16 +676,16 @@ public final class Wizard {
             var sb = new AttributedStringBuilder();
             if (input.length() == 0) {
                 if (!is.placeholder().isEmpty()) {
-                    sb.append(is.placeholder(), Theme.dim().italic());
+                    sb.append(is.placeholder(), Theme.active().dim().italic());
                 }
             } else {
-                sb.append(input.toString(), Theme.focused());
+                sb.append(input.toString(), Theme.active().focused());
             }
             var lines = new ArrayList<AttributedString>();
             lines.add(sb.toAttributedString());
             if (!error.isEmpty()) {
                 lines.add(new AttributedStringBuilder()
-                        .append(error, Theme.error())
+                        .append(error, Theme.active().error())
                         .toAttributedString());
             }
             return lines;
@@ -698,9 +700,9 @@ public final class Wizard {
                     var c = choices.get(i);
                     var isFocused = i == focus;
                     sb.append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
-                            isFocused ? Theme.completedStep() : Theme.dim());
+                            isFocused ? Theme.active().completedStep() : Theme.active().dim());
                     sb.append(" ");
-                    sb.append(c.label(), isFocused ? Theme.focused() : Theme.dim());
+                    sb.append(c.label(), isFocused ? Theme.active().focused() : Theme.active().dim());
                     appendHint(sb, c.hintFor(snapshot));
                     if (i < choices.size() - 1) {
                         sb.append("  ");
@@ -713,9 +715,9 @@ public final class Wizard {
                     var isFocused = i == focus;
                     var sb = new AttributedStringBuilder()
                             .append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
-                                    isFocused ? Theme.completedStep() : Theme.dim())
+                                    isFocused ? Theme.active().completedStep() : Theme.active().dim())
                             .append(" ")
-                            .append(c.label(), isFocused ? Theme.focused() : Theme.dim());
+                            .append(c.label(), isFocused ? Theme.active().focused() : Theme.active().dim());
                     appendHint(sb, c.hintFor(snapshot));
                     lines.add(sb.toAttributedString());
                 }
@@ -723,7 +725,7 @@ public final class Wizard {
                     var isFocused = focus == choices.size();
                     var sb = new AttributedStringBuilder()
                             .append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
-                                    isFocused ? Theme.completedStep() : Theme.dim())
+                                    isFocused ? Theme.active().completedStep() : Theme.active().dim())
                             .append(" ");
                     appendCustomField(sb, isFocused, rs.customPlaceholder());
                     lines.add(sb.toAttributedString());
@@ -740,16 +742,16 @@ public final class Wizard {
          */
         private void appendCustomField(AttributedStringBuilder sb, boolean focused, String placeholder) {
             if (input.length() == 0) {
-                sb.append(placeholder, Theme.dim().italic());
+                sb.append(placeholder, Theme.active().dim().italic());
             } else {
-                sb.append(input.toString(), focused ? Theme.focused() : Theme.dim());
+                sb.append(input.toString(), focused ? Theme.active().focused() : Theme.active().dim());
             }
         }
 
         private void appendError(List<AttributedString> lines) {
             if (!error.isEmpty()) {
                 lines.add(new AttributedStringBuilder()
-                        .append(error, Theme.error())
+                        .append(error, Theme.active().error())
                         .toAttributedString());
             }
         }
@@ -757,7 +759,7 @@ public final class Wizard {
         private static void appendHint(AttributedStringBuilder sb, String hint) {
             if (hint == null || hint.isEmpty()) return;
             sb.append("  ");
-            sb.append(hint, Theme.darkGray());
+            sb.append(hint, Theme.active().darkGray());
         }
 
         private List<AttributedString> renderMulti(WizardStep.MultiSelectStep ms) {
@@ -769,9 +771,9 @@ public final class Wizard {
                     var isChecked = selected.contains(c.id());
                     var glyph = isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF;
                     var glyphStyle = isChecked
-                            ? Theme.completedStep()
-                            : (isFocused ? Theme.activeStep() : Theme.dim());
-                    var labelStyle = isFocused ? Theme.focused() : Theme.dim();
+                            ? Theme.active().completedStep()
+                            : (isFocused ? Theme.active().activeStep() : Theme.active().dim());
+                    var labelStyle = isFocused ? Theme.active().focused() : Theme.active().dim();
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
                             .append(" ");
@@ -788,8 +790,8 @@ public final class Wizard {
                     var isChecked = input.length() > 0;  // checked while it holds text
                     var glyph = isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF;
                     var glyphStyle = isChecked
-                            ? Theme.completedStep()
-                            : (isFocused ? Theme.activeStep() : Theme.dim());
+                            ? Theme.active().completedStep()
+                            : (isFocused ? Theme.active().activeStep() : Theme.active().dim());
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
                             .append(" ");
@@ -803,9 +805,9 @@ public final class Wizard {
                     var isFocused = i == focus;
                     var isChecked = selected.contains(c.id());
                     var glyphStyle = isChecked
-                            ? Theme.completedStep()
-                            : (isFocused ? Theme.activeStep() : Theme.dim());
-                    var labelStyle = isFocused ? Theme.focused() : Theme.dim();
+                            ? Theme.active().completedStep()
+                            : (isFocused ? Theme.active().activeStep() : Theme.active().dim());
+                    var labelStyle = isFocused ? Theme.active().focused() : Theme.active().dim();
                     sb.append(isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF, glyphStyle);
                     sb.append(" ");
                     sb.append(c.label(), labelStyle);
@@ -823,7 +825,7 @@ public final class Wizard {
             var pieces = os.render().apply(Answers.of(Map.of()));
             var lines = new ArrayList<AttributedString>();
             for (var s : pieces) {
-                lines.add(plain(s, Theme.dim()));
+                lines.add(plain(s, Theme.active().dim()));
             }
             return lines;
         }

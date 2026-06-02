@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
 import org.jline.utils.AttributedStyle;
@@ -45,18 +46,18 @@ public final class Rail {
 
     /** {@code ╭── <title>} — first line of the frame. */
     public static AttributedString opener(String title, StepState state) {
-        var cornerStyle = Theme.railStyle(state, RailGlyph.OPEN);
+        var cornerStyle = Theme.active().railStyle(state, RailGlyph.OPEN);
         return new AttributedStringBuilder()
                 .append(OPEN_CHAR, cornerStyle)
                 .append(CORNER_DASHES, cornerStyle)
                 .append(" ")
-                .append(title, Theme.focused())
+                .append(title, Theme.active().focused())
                 .toAttributedString();
     }
 
     /** Same as {@link #opener(String, StepState)} but the title carries its own styling. */
     public static AttributedString opener(AttributedString styledTitle, StepState state) {
-        var cornerStyle = Theme.railStyle(state, RailGlyph.OPEN);
+        var cornerStyle = Theme.active().railStyle(state, RailGlyph.OPEN);
         return new AttributedStringBuilder()
                 .append(OPEN_CHAR, cornerStyle)
                 .append(CORNER_DASHES, cornerStyle)
@@ -68,7 +69,7 @@ public final class Rail {
     /** {@code │  <text>} — interior line, with text styled by caller. */
     public static AttributedString mid(AttributedString text, StepState state) {
         return new AttributedStringBuilder()
-                .append(MID_CHAR, Theme.railStyle(state, RailGlyph.MID))
+                .append(MID_CHAR, Theme.active().railStyle(state, RailGlyph.MID))
                 .append("  ")
                 .append(text)
                 .toAttributedString();
@@ -76,7 +77,7 @@ public final class Rail {
 
     public static AttributedString mid(String text, StepState state, AttributedStyle textStyle) {
         return new AttributedStringBuilder()
-                .append(MID_CHAR, Theme.railStyle(state, RailGlyph.MID))
+                .append(MID_CHAR, Theme.active().railStyle(state, RailGlyph.MID))
                 .append("  ")
                 .append(text, textStyle)
                 .toAttributedString();
@@ -85,7 +86,7 @@ public final class Rail {
     /** Bare {@code │} (no following text). */
     public static AttributedString midBlank(StepState state) {
         return new AttributedStringBuilder()
-                .append(MID_CHAR, Theme.railStyle(state, RailGlyph.MID))
+                .append(MID_CHAR, Theme.active().railStyle(state, RailGlyph.MID))
                 .toAttributedString();
     }
 
@@ -96,7 +97,7 @@ public final class Rail {
 
     /** {@code ╰── [text]} with explicit rail state (controls the corner-glyph color). */
     public static AttributedString closer(String text, AttributedStyle textStyle, StepState state) {
-        var cornerStyle = Theme.railStyle(state, RailGlyph.CLOSE);
+        var cornerStyle = Theme.active().railStyle(state, RailGlyph.CLOSE);
         var sb = new AttributedStringBuilder()
                 .append(CLOSE_CHAR, cornerStyle)
                 .append(CORNER_DASHES, cornerStyle);
@@ -113,13 +114,13 @@ public final class Rail {
      */
     public static AttributedString stepBullet(StepState state, String prompt) {
         var promptStyle = switch (state) {
-            case ACTIVE -> Theme.focused();
-            case COMPLETED -> Theme.completedPrompt();
-            case INACTIVE -> Theme.dim();
+            case ACTIVE -> Theme.active().focused();
+            case COMPLETED -> Theme.active().completedPrompt();
+            case INACTIVE -> Theme.active().dim();
         };
         var bullet = state == StepState.ACTIVE ? BULLET_CHAR : BULLET_CHAR_EMPTY;
         return new AttributedStringBuilder()
-                .append(bullet, Theme.railStyle(state, RailGlyph.BULLET))
+                .append(bullet, Theme.active().railStyle(state, RailGlyph.BULLET))
                 .append("  ")
                 .append(prompt, promptStyle)
                 .toAttributedString();

@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.cli.Ansi;
+import dev.jkbuild.cli.theme.Gradient;
+import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedStyle;
 
 import java.io.PrintStream;
@@ -48,8 +51,8 @@ public final class ProgressBar implements AutoCloseable {
     static final String GAP = "  ";
     static final String SEPARATOR = ": ";
 
-    private static final String HIDE_CURSOR = "\033[?25l";
-    private static final String SHOW_CURSOR = "\033[?25h";
+    private static final String HIDE_CURSOR = Ansi.HIDE_CURSOR;
+    private static final String SHOW_CURSOR = Ansi.SHOW_CURSOR;
 
     // OSC 9;4 — ConEmu-introduced taskbar/tab progress indicator, now
     // supported by Windows Terminal, WezTerm, ghostty, kitty (≥0.31),
@@ -59,8 +62,7 @@ public final class ProgressBar implements AutoCloseable {
     // (clear) on close. BEL terminator is more universally honored
     // than ST in OSC handling. Terminals that don't recognise OSC 9;4
     // silently swallow the sequence in their OSC parser.
-    static final String OSC_CLEAR = "\033]9;4;0\007";
-    static final String OSC_PROGRESS_FMT = "\033]9;4;1;%d\007";
+    static final String OSC_CLEAR = Ansi.TASKBAR_CLEAR;
 
     /**
      * The bar currently on screen, if any. Read by the global Ctrl-C handler
@@ -77,7 +79,7 @@ public final class ProgressBar implements AutoCloseable {
     private final PrintStream out;
     private final AttributedStyle[] segmentColors;
     private final AttributedStyle[] failColors;
-    private final AttributedStyle emptyStyle = Theme.dim();
+    private final AttributedStyle emptyStyle = Theme.active().dim();
     private final boolean silent;
 
     private int lastFilled = 0;
@@ -90,8 +92,8 @@ public final class ProgressBar implements AutoCloseable {
         this.out = out;
         this.silent = silent;
         // The fill runs green → bright-green (bright-green pinned at the frontier).
-        this.segmentColors = buildGradient(SEGMENTS, Theme.PROGRESS_GRADIENT);
-        this.failColors = buildGradient(SEGMENTS, Theme.FAILURE_GRADIENT);
+        this.segmentColors = buildGradient(SEGMENTS, Theme.active().progressGradient());
+        this.failColors = buildGradient(SEGMENTS, Theme.active().failureGradient());
     }
 
     /**
@@ -121,7 +123,7 @@ public final class ProgressBar implements AutoCloseable {
         String percentStr = String.format("%3d%%", clamped);
         String statusStr = status == null ? "" : status;
 
-        out.printf(OSC_PROGRESS_FMT, clamped);
+        out.print(Ansi.taskbarProgress(clamped));
         if (!drawn) {
             renderInitial(filled, percentStr, statusStr);
         } else {
@@ -144,7 +146,7 @@ public final class ProgressBar implements AutoCloseable {
         // CR + erase-line, a partial bar (e.g. a goal that failed
         // before any progress) would stay in the transcript next to
         // the failure summary that follows.
-        if (drawn) out.print("\r\033[K");
+        if (drawn) out.print(Ansi.CLEAR_LINE);
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.flush();
@@ -168,7 +170,7 @@ public final class ProgressBar implements AutoCloseable {
             out.flush();
             return;
         }
-        out.print("\r\033[K");      // clear the bar line
+        out.print(Ansi.CLEAR_LINE);      // clear the bar line
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.println(message);
@@ -194,15 +196,15 @@ public final class ProgressBar implements AutoCloseable {
             out.flush();
             return;
         }
-        out.print("\r\033[K");           // wipe the bar line
+        out.print(Ansi.CLEAR_LINE);           // wipe the bar line
         out.println(line);                // emit the hoisted message
         // Force a fresh full redraw at the same position. Without resetting
         // `drawn`, renderDiff would no-op on identical state and the bar
         // wouldn't reappear.
         drawn = false;
         renderInitial(lastFilled, lastPercent, lastStatus);
-        out.print(String.format(OSC_PROGRESS_FMT,
-                Math.round(lastFilled * 100.0 / SEGMENTS)));
+        out.print(Ansi.taskbarProgress(
+                (int) Math.round(lastFilled * 100.0 / SEGMENTS)));
         out.flush();
         drawn = true;
     }
@@ -222,9 +224,9 @@ public final class ProgressBar implements AutoCloseable {
         closed = true;
         ACTIVE.compareAndSet(this, null);
         if (silent) return;
-        AttributedStyle strikeStyle = Theme.dim().crossedOut();
+        AttributedStyle strikeStyle = Theme.active().dim().crossedOut();
         out.print("\r");
-        out.print(Theme.colorize("✗ Failed", Theme.error().bold()));
+        out.print(Theme.colorize("✗ Failed", Theme.active().error().bold()));
         out.print(" ");
         // Every segment painted with the dark-red→bright-red gradient.
         // We don't care about filled vs empty here — the bar's role at
@@ -234,10 +236,10 @@ public final class ProgressBar implements AutoCloseable {
             out.print(Theme.colorize(String.valueOf(EMPTY_CHAR), failColors[i]));
         }
         out.print(GAP);
-        out.print(Theme.colorize(lastPercent, Theme.settled()));
+        out.print(Theme.colorize(lastPercent, Theme.active().settled()));
         out.print(SEPARATOR);
         out.print(Theme.colorize(lastStatus, strikeStyle));
-        out.print("\033[K"); // wipe any residue past the (shorter) status
+        out.print(Ansi.ERASE_LINE_TO_END); // wipe any residue past the (shorter) status
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.println();
@@ -255,18 +257,18 @@ public final class ProgressBar implements AutoCloseable {
         closed = true;
         ACTIVE.compareAndSet(this, null);
         if (silent) return;
-        AttributedStyle redStyle = Theme.error();
-        AttributedStyle strikeStyle = Theme.dim().crossedOut();
+        AttributedStyle redStyle = Theme.active().error();
+        AttributedStyle strikeStyle = Theme.active().dim().crossedOut();
         out.print("\r");
         for (int i = 0; i < SEGMENTS; i++) {
             char c = i < lastFilled ? FILLED_CHAR : EMPTY_CHAR;
             out.print(Theme.colorize(String.valueOf(c), redStyle));
         }
         out.print(GAP);
-        out.print(Theme.colorize(lastPercent, Theme.settled()));
+        out.print(Theme.colorize(lastPercent, Theme.active().settled()));
         out.print(SEPARATOR);
         out.print(Theme.colorize(lastStatus, strikeStyle));
-        out.print("\033[K"); // wipe any residue past the (shorter) cancel status
+        out.print(Ansi.ERASE_LINE_TO_END); // wipe any residue past the (shorter) cancel status
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.flush();
@@ -276,9 +278,9 @@ public final class ProgressBar implements AutoCloseable {
         out.print("\r");
         renderSegments(0, SEGMENTS, filled);
         out.print(GAP);
-        out.print(Theme.colorize(percent, Theme.settled()));
+        out.print(Theme.colorize(percent, Theme.active().settled()));
         out.print(SEPARATOR);
-        out.print(Theme.colorize(status, Theme.dim()));
+        out.print(Theme.colorize(status, Theme.active().dim()));
     }
 
     private void renderDiff(int filled, String percent, String status) {
@@ -292,12 +294,12 @@ public final class ProgressBar implements AutoCloseable {
         // Percent: repaint the 4-char block (it's already fixed-width).
         if (!percent.equals(lastPercent)) {
             moveToCol(1 + SEGMENTS + GAP.length());
-            out.print(Theme.colorize(percent, Theme.settled()));
+            out.print(Theme.colorize(percent, Theme.active().settled()));
         }
         // Status: repaint; overwrite shrinkage with the exact number of spaces.
         if (!status.equals(lastStatus)) {
             moveToCol(statusCol());
-            out.print(Theme.colorize(status, Theme.dim()));
+            out.print(Theme.colorize(status, Theme.active().dim()));
             int shrink = lastStatus.length() - status.length();
             if (shrink > 0) out.print(" ".repeat(shrink));
         }
@@ -331,18 +333,18 @@ public final class ProgressBar implements AutoCloseable {
     }
 
     private void moveToCol(int col) {
-        out.print("\033[" + col + "G");
+        out.print(Ansi.cursorToColumn(col));
     }
 
     static AttributedStyle[] buildGradient(int n) {
-        return buildGradient(n, Theme.PROGRESS_GRADIENT);
+        return buildGradient(n, Theme.active().progressGradient());
     }
 
     static AttributedStyle[] buildGradient(int n, Gradient gradient) {
         AttributedStyle[] a = new AttributedStyle[n];
         for (int i = 0; i < n; i++) {
             double t = n <= 1 ? 0.0 : (double) i / (n - 1);
-            a[i] = Theme.bright(gradient.at(t));
+            a[i] = Theme.active().bright(gradient.at(t));
         }
         return a;
     }

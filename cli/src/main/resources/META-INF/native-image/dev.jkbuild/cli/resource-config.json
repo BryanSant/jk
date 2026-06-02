@@ -1,9 +1,9 @@
 {
   "resources": {
     "includes": [
-      {"pattern": "dev/jkbuild/cli/activate/.*\\.sh"},
-      {"pattern": "dev/jkbuild/cli/activate/.*\\.fish"},
-      {"pattern": "dev/jkbuild/cli/activate/.*\\.ps1"},
+      {"pattern": "activate/.*\\.sh"},
+      {"pattern": "activate/.*\\.fish"},
+      {"pattern": "activate/.*\\.ps1"},
       {"pattern": "META-INF/jk-test-runner-sha256\\.txt"},
       {"pattern": "dev/jkbuild/alias/aliases\\.toml"}
     ]

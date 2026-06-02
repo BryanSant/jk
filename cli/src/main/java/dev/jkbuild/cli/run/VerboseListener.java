@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
-import dev.jkbuild.cli.tui.Theme;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
@@ -30,15 +30,15 @@ public final class VerboseListener implements GoalListener {
 
     @Override
     public void goalStart(GoalView view) {
-        out.println(Theme.colorize("▶", Theme.activeStep())
-                + " " + Theme.colorize(view.goalName(), Theme.focused())
+        out.println(Theme.colorize("▶", Theme.active().activeStep())
+                + " " + Theme.colorize(view.goalName(), Theme.active().focused())
                 + " (" + view.phasesTotal() + " phase"
                 + (view.phasesTotal() == 1 ? "" : "s") + ")");
     }
 
     @Override
     public void phaseStart(String phase, int scope) {
-        out.println("  " + Theme.colorize("·", Theme.normalGray())
+        out.println("  " + Theme.colorize("·", Theme.active().normalGray())
                 + " " + phase + " (scope: " + scope + ")");
     }
 
@@ -50,32 +50,32 @@ public final class VerboseListener implements GoalListener {
     @Override
     public void phaseFinish(String phase, PhaseStatus status, Duration duration) {
         String glyph = switch (status) {
-            case SUCCESS -> Theme.colorize("✓", Theme.completedStep());
-            case FAIL    -> Theme.colorize("𝘅", Theme.error());
-            case CANCELLED -> Theme.colorize("·", Theme.normalGray());
+            case SUCCESS -> Theme.colorize("✓", Theme.active().completedStep());
+            case FAIL    -> Theme.colorize("𝘅", Theme.active().error());
+            case CANCELLED -> Theme.colorize("·", Theme.active().normalGray());
             default      -> "·";
         };
         out.println("  " + glyph + " " + phase + "  "
-                + Theme.colorize(fmtDuration(duration), Theme.darkGray()));
+                + Theme.colorize(fmtDuration(duration), Theme.active().darkGray()));
     }
 
     @Override
     public void warn(String phase, String code, String message) {
-        err.println("    " + Theme.colorize("⚠", Theme.warning())
+        err.println("    " + Theme.colorize("⚠", Theme.active().warning())
                 + " " + phase + "/" + code + ": " + message);
     }
 
     @Override
     public void error(String phase, String code, String message) {
-        err.println("    " + Theme.colorize("✗", Theme.error())
+        err.println("    " + Theme.colorize("✗", Theme.active().error())
                 + " " + phase + "/" + code + ": " + message);
     }
 
     @Override
     public void goalFinish(GoalResult result) {
         String summary = result.success()
-                ? Theme.colorize("✓ done", Theme.completedStep())
-                : Theme.colorize("𝘅 failed", Theme.error());
+                ? Theme.colorize("✓ done", Theme.active().completedStep())
+                : Theme.colorize("𝘅 failed", Theme.active().error());
         out.println(summary + " (" + fmtDuration(result.duration()) + ")");
     }
 
