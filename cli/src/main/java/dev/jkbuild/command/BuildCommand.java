@@ -6,8 +6,10 @@ import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.AggregateContext;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.ShadowPackager;
@@ -185,18 +187,49 @@ public final class BuildCommand implements Callable<Integer> {
             return 0;
         }
         List<Path> sorted = topoSortMembers(membersByDir);
-        for (int i = 0; i < sorted.size(); i++) {
-            Path memberDir = sorted.get(i);
-            System.out.println();
-            System.out.println("══ " + workspaceRoot.relativize(memberDir)
-                    + " (" + (i + 1) + "/" + sorted.size() + ") ══");
-            int exit = runForDir(memberDir);
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+
+        // --output json / --verbose keep per-member rendering (NDJSON streams,
+        // verbose wants the full per-phase log). Banners separate the members.
+        if (mode != GoalConsole.Mode.AUTO && mode != GoalConsole.Mode.QUIET) {
+            for (int i = 0; i < sorted.size(); i++) {
+                Path memberDir = sorted.get(i);
+                System.out.println();
+                System.out.println("══ " + workspaceRoot.relativize(memberDir)
+                        + " (" + (i + 1) + "/" + sorted.size() + ") ══");
+                int exit = runForDir(memberDir);
+                if (exit != 0) {
+                    System.err.println("jk build: " + workspaceRoot.relativize(memberDir)
+                            + " failed (exit " + exit + ")");
+                    return exit;
+                }
+            }
+            return 0;
+        }
+
+        // AUTO / QUIET: every member feeds ONE aggregate view (spinner header +
+        // single bar + merged phase list). Settle it once after the last member.
+        boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
+        CommandManager view = CommandManager.goal(System.out, "Building", animate);
+        AggregateContext agg = new AggregateContext(view);
+        int built = 0;
+        for (Path memberDir : sorted) {
+            String member = workspaceRoot.relativize(memberDir).toString();
+            int exit;
+            try {
+                exit = runForDir(memberDir, agg);
+            } catch (Exception e) {
+                view.finishFailure("Build failed in " + member);
+                throw e;
+            }
             if (exit != 0) {
-                System.err.println("jk build: " + workspaceRoot.relativize(memberDir)
-                        + " failed (exit " + exit + ")");
+                view.finishFailure("Build failed in " + member);
+                System.err.println("jk build: " + member + " failed (exit " + exit + ")");
                 return exit;
             }
+            built++;
         }
+        view.finishSuccess("Built " + built + " member" + (built == 1 ? "" : "s"));
         return 0;
     }
 
@@ -262,6 +295,15 @@ public final class BuildCommand implements Callable<Integer> {
     }
 
     private int runForDir(Path dir) throws Exception {
+        return runForDir(dir, null);
+    }
+
+    /**
+     * Build one project directory. When {@code agg} is non-null this is a
+     * workspace member whose events feed the shared aggregate view rather than
+     * a per-member progress display.
+     */
+    private int runForDir(Path dir, AggregateContext agg) throws Exception {
         Path cache  = cacheDir != null ? cacheDir : JkDirs.cache();
         Cas cas     = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
@@ -676,10 +718,16 @@ public final class BuildCommand implements Callable<Integer> {
         Goal goal = goalBuilder.build();
 
         String target = buildTarget(buildFile, dir);
-        ConsoleSpec spec = new ConsoleSpec("Building",
-                r -> successMessage(goal, r),
-                r -> failureMessage(goal, r));
-        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, target);
+        GoalResult result;
+        if (agg != null) {
+            // Workspace member: feed the one shared aggregate view.
+            result = GoalConsole.runGoalInto(goal, cache, target, agg);
+        } else {
+            ConsoleSpec spec = new ConsoleSpec("Building",
+                    r -> successMessage(goal, r),
+                    r -> failureMessage(goal, r));
+            result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, target);
+        }
 
         if (result.success()) {
             try {

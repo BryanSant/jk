@@ -310,7 +310,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * control, no output. Package-private for tests; the {@code frame} field
      * and {@code elapsedMillis} are passed/read so tests are deterministic.
      */
-    List<String> renderGoalLines(int cols, long elapsedMillis) {
+    public List<String> renderGoalLines(int cols, long elapsedMillis) {
         AttributedStyle dim = Theme.active().darkGray();
         String sep = Theme.colorize("›", dim);
         List<String> lines = new ArrayList<>();

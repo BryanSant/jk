@@ -146,7 +146,22 @@ public final class GoalConsole {
         };
     }
 
-    private static boolean isInteractiveTerminal() {
+    /**
+     * Run a workspace member's goal into a shared {@link AggregateContext} — its
+     * events feed the one aggregate {@link dev.jkbuild.cli.tui.CommandManager}
+     * (bar + phase list) instead of a per-member view. The shared view is
+     * settled by the caller after the last member. Always records the event log.
+     */
+    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String member,
+                                         AggregateContext agg) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+        goal.addListener(new AggregateMemberListener(agg, member, goal.phases()));
+        return goal.run();
+    }
+
+    /** True when stdout is an interactive terminal (not a pipe, dumb, or CI). */
+    public static boolean isInteractiveTerminal() {
         return System.console() != null
                 && !"dumb".equals(System.getenv("TERM"))
                 && System.getenv("CI") == null;
