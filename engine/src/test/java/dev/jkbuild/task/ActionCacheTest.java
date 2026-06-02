@@ -98,4 +98,42 @@ class ActionCacheTest {
         assertThat(cache.lookup("nonexistent")).isEmpty();
         assertThat(cache.lastFor("compile-main")).isEmpty();
     }
+
+    @Test
+    void units_round_trip_through_record(@TempDir Path tempDir) throws IOException {
+        Cas cas = new Cas(tempDir.resolve("cas"));
+        ActionCache cache = new ActionCache(cas, tempDir.resolve("actions"));
+
+        Map<String, String> outputs = Map.of(
+                "com/example/Foo.class", "sha-foo",
+                "com/example/Foo$Inner.class", "sha-inner",
+                "com/example/Bar.class", "sha-bar");
+        Map<String, List<String>> units = Map.of(
+                "/abs/src/com/example/Foo.java",
+                List.of("com/example/Foo.class", "com/example/Foo$Inner.class"),
+                "/abs/src/com/example/Bar.java",
+                List.of("com/example/Bar.class"));
+
+        cache.storeWithOutputs("compile-main@x", "k", Map.of(), outputs, units);
+
+        var record = cache.lookup("k").orElseThrow();
+        assertThat(record.units()).containsOnlyKeys(
+                "/abs/src/com/example/Foo.java", "/abs/src/com/example/Bar.java");
+        assertThat(record.units().get("/abs/src/com/example/Foo.java"))
+                .containsExactlyInAnyOrder("com/example/Foo.class", "com/example/Foo$Inner.class");
+        assertThat(record.units().get("/abs/src/com/example/Bar.java"))
+                .containsExactly("com/example/Bar.class");
+    }
+
+    @Test
+    void record_without_units_parses_as_empty(@TempDir Path tempDir) throws IOException {
+        Cas cas = new Cas(tempDir.resolve("cas"));
+        ActionCache cache = new ActionCache(cas, tempDir.resolve("actions"));
+        // The 4-arg store writes no UNIT lines (legacy / full-rebuild shape).
+        cache.storeWithOutputs("compile-main@x", "k", Map.of(), Map.of("a.class", "sha-a"));
+
+        var record = cache.lookup("k").orElseThrow();
+        assertThat(record.units()).isEmpty();
+        assertThat(record.outputs()).containsEntry("a.class", "sha-a");
+    }
 }

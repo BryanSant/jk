@@ -9,6 +9,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -108,9 +109,19 @@ public final class ActionCache {
             String actionKey,
             Map<String, String> inputs,
             Map<String, String> outputs) throws IOException {
+        return storeWithOutputs(taskId, actionKey, inputs, outputs, Map.of());
+    }
+
+    /** As above, plus the per-source {@code units} grouping (incremental builds). */
+    public ActionRecord storeWithOutputs(
+            String taskId,
+            String actionKey,
+            Map<String, String> inputs,
+            Map<String, String> outputs,
+            Map<String, List<String>> units) throws IOException {
         Files.createDirectories(keysDir());
         Files.createDirectories(tasksDir());
-        ActionRecord record = new ActionRecord(taskId, actionKey, inputs, outputs);
+        ActionRecord record = new ActionRecord(taskId, actionKey, inputs, outputs, units);
         Files.writeString(keysDir().resolve(actionKey), render(record));
         Files.writeString(tasksDir().resolve(taskId), actionKey);
         return record;
@@ -145,13 +156,25 @@ public final class ActionCache {
             String taskId,
             String actionKey,
             Map<String, String> inputs,
-            Map<String, String> outputs) {
+            Map<String, String> outputs,
+            Map<String, List<String>> units) {
 
         public ActionRecord {
             Objects.requireNonNull(taskId, "taskId");
             Objects.requireNonNull(actionKey, "actionKey");
             inputs = Map.copyOf(inputs);
             outputs = Map.copyOf(outputs);
+            // units: source-abs-path → output relPaths it produced. Populated by
+            // an incremental compiler; empty for full rebuilds / legacy records.
+            Map<String, List<String>> u = new LinkedHashMap<>();
+            if (units != null) units.forEach((k, v) -> u.put(k, List.copyOf(v)));
+            units = Map.copyOf(u);
+        }
+
+        /** Back-compat: a record with no per-source unit grouping. */
+        public ActionRecord(String taskId, String actionKey,
+                            Map<String, String> inputs, Map<String, String> outputs) {
+            this(taskId, actionKey, inputs, outputs, Map.of());
         }
     }
 
@@ -165,6 +188,15 @@ public final class ActionCache {
         for (Map.Entry<String, String> e : new TreeMap<>(record.outputs()).entrySet()) {
             sb.append("OUTPUT ").append(e.getValue()).append(' ').append(e.getKey()).append('\n');
         }
+        // UNIT <relPath> <sourceAbsPath> — relPath is space-free (Java class
+        // path), source is the rest of the line so it may contain spaces.
+        for (Map.Entry<String, List<String>> e : new TreeMap<>(record.units()).entrySet()) {
+            List<String> rels = new java.util.ArrayList<>(e.getValue());
+            rels.sort(Comparator.naturalOrder());
+            for (String rel : rels) {
+                sb.append("UNIT ").append(rel).append(' ').append(e.getKey()).append('\n');
+            }
+        }
         return sb.toString();
     }
 
@@ -173,6 +205,7 @@ public final class ActionCache {
         String actionKey = null;
         Map<String, String> inputs = new LinkedHashMap<>();
         Map<String, String> outputs = new LinkedHashMap<>();
+        Map<String, List<String>> units = new LinkedHashMap<>();
         for (String line : content.split("\n")) {
             if (line.isBlank()) continue;
             if (line.startsWith("TASK ")) {
@@ -187,12 +220,19 @@ public final class ActionCache {
                 String body = line.substring("OUTPUT ".length());
                 int sp = body.indexOf(' ');
                 outputs.put(body.substring(sp + 1), body.substring(0, sp));
+            } else if (line.startsWith("UNIT ")) {
+                // UNIT <relPath> <sourceAbsPath> — absent in legacy records.
+                String body = line.substring("UNIT ".length());
+                int sp = body.indexOf(' ');
+                String rel = body.substring(0, sp);
+                String source = body.substring(sp + 1);
+                units.computeIfAbsent(source, k -> new ArrayList<>()).add(rel);
             }
         }
         return new ActionRecord(
                 Objects.requireNonNull(taskId, "taskId in record"),
                 Objects.requireNonNull(actionKey, "actionKey in record"),
-                inputs, outputs);
+                inputs, outputs, units);
     }
 
     private Path keysDir() {
