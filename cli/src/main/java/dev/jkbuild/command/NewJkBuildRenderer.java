@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.jkbuild.command;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * Emits a {@code jk.toml} document from {@link NewInputs}. The schema reflects
+ * the v0.7 name-as-key sub-table form:
+ *
+ * <pre>{@code
+ *   [project]
+ *   group    = "..."
+ *   artifact = "..."
+ *   version  = "0.1.0"
+ *   jdk      = 25
+ *   java     = 25
+ *
+ *   [dependencies.test]
+ *   junit-jupiter = { group = "org.junit.jupiter", version = "6.1.0" }
+ * }</pre>
+ *
+ * <ul>
+ *   <li>{@code jdk = <major>} — integer feature release; resolved to a concrete
+ *       install identifier in {@code jk.lock}.</li>
+ *   <li>{@code java = <major>} (integer) or {@code kotlin = "<version>"}
+ *       (compiler version string) — mutually exclusive language indicator.</li>
+ * </ul>
+ */
+public final class NewJkBuildRenderer {
+
+    /**
+     * Default Kotlin compiler version selector when language=kotlin. Floating
+     * (caret) so {@code jk lock} pins it to the latest compatible release.
+     */
+    private static final String DEFAULT_KOTLIN_VERSION = dev.jkbuild.kotlin.KotlinResolver.DEFAULT_VERSION;
+
+    private NewJkBuildRenderer() {}
+
+    public static String render(NewInputs inputs) {
+        var sb = new StringBuilder();
+        sb.append("[project]\n");
+        sb.append("group    = \"").append(inputs.group()).append("\"\n");
+        sb.append("artifact = \"").append(inputs.artifact()).append("\"\n");
+        sb.append("version  = \"0.1.0\"\n");
+        sb.append("jdk      = ").append(inputs.jdkMajor()).append('\n');
+        switch (inputs.lang()) {
+            case JAVA -> sb.append("java     = ").append(inputs.jdkMajor()).append('\n');
+            case KOTLIN -> sb.append("kotlin   = \"").append(DEFAULT_KOTLIN_VERSION).append("\"\n");
+        }
+        if (inputs.main().isPresent()) {
+            sb.append("main     = \"").append(inputs.main().get()).append("\"\n");
+        }
+        if (inputs.shadow()) {
+            sb.append("shadow   = true\n");
+        }
+        if (inputs.nativeImage()) {
+            sb.append("native   = true\n");
+        }
+        if (inputs.kotlinCompact()) {
+            sb.append("compact  = true\n");
+        }
+        inputs.kotlinModuleName().ifPresent(m ->
+                sb.append("module   = \"").append(m).append("\"\n"));
+
+        var picks = resolvePicks(inputs.deps());
+        if (picks.isEmpty()) return sb.toString();
+
+        // Emit scopes in the order they show up in the curated catalog: the
+        // wizard's display order should roughly match the rendered file.
+        renderScope(sb, "main", picks.getOrDefault("main", List.of()));
+        renderScope(sb, "processor", picks.getOrDefault("processor", List.of()));
+        renderScope(sb, "provided", picks.getOrDefault("provided", List.of()));
+        renderScope(sb, "test", picks.getOrDefault("test", List.of()));
+        return sb.toString();
+    }
+
+    private static void renderScope(StringBuilder sb, String scope, List<NewScaffolder.CuratedEntry> entries) {
+        if (entries.isEmpty()) return;
+        sb.append('\n');
+        sb.append("[dependencies.").append(scope).append("]\n");
+        for (var e : entries) {
+            sb.append(formatEntry(e)).append('\n');
+        }
+    }
+
+    /**
+     * Render a single curated dep as an inline table. The short name is the
+     * artifactId (the part after the colon in {@code group:artifact}); the
+     * {@code artifact} field is omitted because it equals the key. The
+     * version uses the curated major directly — bare-string version is
+     * caret-floating per the v1 default ({@code ^1} → 1.x.x).
+     */
+    private static String formatEntry(NewScaffolder.CuratedEntry e) {
+        int colon = e.coord().indexOf(':');
+        String group = e.coord().substring(0, colon);
+        String artifact = e.coord().substring(colon + 1);
+        return artifact + " = { group = \"" + group + "\", version = \"" + e.version() + "\" }";
+    }
+
+    /**
+     * Group selected dep ids by scope. Returns a nested map of scope ->
+     * curated entries, preserving insertion order so generated files have a
+     * stable shape and de-duping by short name (artifactId) within a scope.
+     */
+    private static Map<String, List<NewScaffolder.CuratedEntry>> resolvePicks(List<String> deps) {
+        Map<String, Map<String, NewScaffolder.CuratedEntry>> byScope = new LinkedHashMap<>();
+        for (var id : deps) {
+            var entries = NewScaffolder.CURATED_DEPS.get(id);
+            if (entries == null) continue;
+            for (var e : entries) {
+                String shortName = e.coord().substring(e.coord().indexOf(':') + 1);
+                byScope.computeIfAbsent(e.scope(), _ -> new LinkedHashMap<>())
+                        .putIfAbsent(shortName, e);
+            }
+        }
+        Map<String, List<NewScaffolder.CuratedEntry>> out = new LinkedHashMap<>();
+        byScope.forEach((scope, entries) -> out.put(scope, List.copyOf(entries.values())));
+        return out;
+    }
+}

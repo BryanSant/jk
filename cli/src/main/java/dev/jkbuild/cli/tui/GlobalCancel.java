@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.cli.Ansi;
+import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.Signals;
 
 /**
@@ -31,8 +33,8 @@ public final class GlobalCancel {
                 active.renderCanceled();
             }
             var err = System.err;
-            err.print("\n\033[31m𝘅 Canceled\033[0m\n");
-            err.print("\033[0m"); // explicit SGR reset beyond the inline [0m
+            err.print("\n" + Theme.colorize("𝘅 Canceled", Theme.active().error()) + "\n");
+            err.print(Ansi.RESET); // explicit SGR reset beyond the inline reset
             err.flush();
             Runtime.getRuntime().halt(2);
         });

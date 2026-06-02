@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
