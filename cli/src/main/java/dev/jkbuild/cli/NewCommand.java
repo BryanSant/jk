@@ -50,7 +50,7 @@ import java.util.concurrent.Callable;
  * {@code cargo new} / {@code uv init}.
  */
 @Command(name = "new", aliases = {"create"},
-        description = "Create a new jk project (registers it as a workspace member when run inside a workspace)")
+        description = "Create a new jk project (or workspace member)")
 public final class NewCommand implements Callable<Integer> {
 
     @Option(names = "--name", description = "Project name (target directory).")

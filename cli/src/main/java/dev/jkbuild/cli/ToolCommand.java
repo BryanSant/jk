@@ -17,7 +17,7 @@ import java.util.concurrent.Callable;
  * gradle} passthrough and are repaired via {@code jk doctor}.
  */
 @Command(name = "tool",
-        description = "Manage installed CLI tools",
+        description = "Manage tools, scripts, and commands",
         subcommands = {
                 ToolInstallCommand.class,
                 ToolListCommand.class,

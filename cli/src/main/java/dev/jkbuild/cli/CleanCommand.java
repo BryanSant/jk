@@ -30,7 +30,7 @@ import java.util.stream.Stream;
  * per-machine state, not per-project. {@code .jk/generated/} (a
  * pre-layout artefact path) is also wiped on best-effort basis.
  */
-@Command(name = "clean", description = "Delete generated build outputs (target/ and build/)")
+@Command(name = "clean", description = "Delete generated build outputs")
 public final class CleanCommand implements Callable<Integer> {
 
     @Option(names = "--keep-artifacts",
@@ -61,10 +61,10 @@ public final class CleanCommand implements Callable<Integer> {
         long elapsedMs = System.currentTimeMillis() - startMs;
 
         if (stats[0] == 0) {
-            System.out.println(Theme.colorize("✓", Theme.brightGreen().bold())
+            System.out.println(Theme.colorize("✓", Theme.success())
                     + " Nothing to remove");
         } else {
-            String check   = Theme.colorize("✓", Theme.brightGreen().bold());
+            String check   = Theme.colorize("✓", Theme.success());
             String removed = Theme.colorize("Removed", Theme.focused());
             String stats_  = String.format("%,d file%s, %s total",
                     stats[0], stats[0] == 1 ? "" : "s",

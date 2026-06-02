@@ -39,7 +39,7 @@ import java.util.concurrent.Callable;
  * <p>{@code --tarball <path>} writes an OCI archive locally instead of
  * pushing.
  */
-@Command(name = "image", description = "Build and push an OCI image for the project")
+@Command(name = "image", description = "Bundle this project into an OCI image")
 public final class ImageCommand implements Callable<Integer> {
 
     @Option(names = "--main",

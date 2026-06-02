@@ -20,7 +20,7 @@ import java.util.concurrent.Callable;
  * the binary.
  */
 @Command(name = "alias",
-        description = "Manage the short-name → coordinate alias catalog",
+        description = "Manage the short-name-to-coordinate alias catalog",
         subcommands = {
                 AliasUpdateCommand.class,
                 AliasListCommand.class,

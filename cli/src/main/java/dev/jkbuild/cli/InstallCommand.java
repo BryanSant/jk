@@ -81,7 +81,7 @@ import java.util.concurrent.Callable;
  * briefly with the outer one, a known UX wrinkle.
  */
 @Command(name = "install",
-        description = "Install the current project, a Maven coord, or a git URL")
+        description = "Install the current project or a specified target")
 public final class InstallCommand implements Callable<Integer> {
 
     @Parameters(arity = "0..1", paramLabel = "<source>",
