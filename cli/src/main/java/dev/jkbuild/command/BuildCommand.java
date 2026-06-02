@@ -6,6 +6,7 @@ import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.compile.ClasspathResolver;
@@ -674,10 +675,13 @@ public final class BuildCommand implements Callable<Integer> {
 
         Goal goal = goalBuilder.build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        String target = buildTarget(buildFile, dir);
+        ConsoleSpec spec = new ConsoleSpec("Building",
+                r -> successMessage(goal, r),
+                r -> failureMessage(goal, r));
+        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, target);
 
         if (result.success()) {
-            printSuccessSummary(goal, result);
             try {
                 var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(buildFile);
                 dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
@@ -760,35 +764,43 @@ public final class BuildCommand implements Callable<Integer> {
 
     // ---- success summary -----------------------------------------------
 
-    private void printSuccessSummary(Goal goal, GoalResult result) {
-        if (global.outputIsJson()) return;
-        String check  = Theme.colorize(
-                "✓", Theme.active().success());
-        String inTime = Theme.colorize(
-                "in " + fmtDuration(result.duration()),
-                Theme.active().darkGray());
+    /** Header member label for the goal view: the project's {@code group:artifact}. */
+    private static String buildTarget(Path buildFile, Path dir) {
+        try {
+            var p = JkBuildParser.parse(buildFile).project();
+            return p.group() + ":" + p.artifact();
+        } catch (Exception e) {
+            return dir.getFileName() == null ? "" : dir.getFileName().toString();
+        }
+    }
 
+    /** Success result line (sans the leading ✔), e.g. "Built jktest-0.1.0.jar in 717ms". */
+    private static String successMessage(Goal goal, GoalResult result) {
+        String inTime = Theme.colorize(
+                "in " + fmtDuration(result.duration()), Theme.active().darkGray());
         String outcome = goal.get(BUILD_OUTCOME).orElse("");
         if ("up-to-date".equals(outcome)) {
-            System.out.println(check + " Up to date " + inTime);
-            return;
+            return "Up to date " + inTime;
         }
-
-        String built = Theme.colorize(
-                "Built", Theme.active().focused());
-
+        String built = Theme.colorize("Built", Theme.active().focused());
         if (outcome.startsWith("cache-hit:")) {
             String jarLabel = goal.get(JAR_PATH)
                     .map(p -> p.getFileName().toString()).orElse("");
-            String suffix = jarLabel.isEmpty() ? "" : " " + jarLabel;
-            System.out.println(check + " " + built + suffix + " " + inTime);
-            return;
+            return built + (jarLabel.isEmpty() ? "" : " " + jarLabel) + " " + inTime;
         }
+        return goal.get(JAR_PATH)
+                .map(jar -> built + " " + jar.getFileName() + " " + inTime)
+                .orElse(built + " " + inTime);
+    }
 
-        goal.get(JAR_PATH).ifPresentOrElse(
-                jar -> System.out.println(check + " " + built + " " + jar.getFileName()
-                        + " " + inTime),
-                ()  -> System.out.println(check + " " + built + " " + inTime));
+    /** Failure result line (sans the leading ✗); test failures get a tailored message. */
+    private static String failureMessage(Goal goal, GoalResult result) {
+        var testResult = goal.get(TEST_RESULT).orElse(null);
+        if (testResult != null && !testResult.allPassed()) {
+            String jar = goal.get(JAR_PATH).map(p -> p.getFileName().toString()).orElse("");
+            return jar.isEmpty() ? "Tests failed" : "Tests failed while building " + jar;
+        }
+        return "Build failed";
     }
 
     static String fmtDuration(java.time.Duration d) {

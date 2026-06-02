@@ -91,6 +91,71 @@ class CommandManagerTest {
         assertThat(buf.toString(StandardCharsets.UTF_8)).isEmpty();
     }
 
+    // --- goal-oriented mode ----------------------------------------------
+
+    @Test
+    void goal_header_bar_and_rows() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
+        cm.progress(45, 100);
+        cm.addPhase("acme:api", "parse-build");
+        cm.phaseDone("acme:api", "parse-build", true);
+        cm.phaseRunning("acme:api", "compile-java");
+        cm.phaseMessage("acme:api", "compile-java", "javac 12 sources");
+
+        String all = String.join("\n", stripAll(cm.renderGoalLines(120, 112_000)));
+        // Header: name › member… (elapsed)
+        assertThat(all).contains("Building").contains("acme:api").contains("(1m 52s)");
+        // Bar with percent + count.
+        assertThat(all).contains("45%").contains("[45 of 100]");
+        // Active row (◻) on top with its message; completed row (✔) below.
+        assertThat(all).contains("◻ acme:api › Compile java › javac 12 sources");
+        assertThat(all).contains("✔ acme:api › Parse build");
+        int active = all.indexOf("Compile java");
+        int doneRow = all.indexOf("Parse build");
+        assertThat(active).isLessThan(doneRow); // outstanding floats above completed
+    }
+
+    @Test
+    void completed_rows_collapse_beyond_the_cap() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
+        for (int i = 0; i < 9; i++) {
+            cm.addPhase("m", "p" + i);
+            cm.phaseDone("m", "p" + i, true);
+        }
+        cm.phaseRunning("m", "active");
+
+        String all = String.join("\n", stripAll(cm.renderGoalLines(120, 0)));
+        assertThat(all).contains("… +3 completed"); // 1 active + 6 shown + 3 hidden = 9 done
+    }
+
+    @Test
+    void first_row_carries_the_rail_connector() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
+        cm.phaseRunning("m", "compile");
+        var lines = cm.renderGoalLines(120, 0);
+        // lines[0]=header, lines[1]=bar, lines[2]=first phase row.
+        assertThat(stripAnsi(lines.get(2))).startsWith("╰─ ◻ m › Compile");
+    }
+
+    @Test
+    void fmt_elapsed_formats_minutes_and_seconds() {
+        assertThat(CommandManager.fmtElapsed(112_000)).isEqualTo("1m 52s");
+        assertThat(CommandManager.fmtElapsed(52_000)).isEqualTo("52s");
+        assertThat(CommandManager.fmtElapsed(0)).isEqualTo("0s");
+    }
+
+    @Test
+    void truncate_visible_cuts_at_column_keeping_escapes() {
+        String colored = Theme.colorize("abcdef", Theme.active().success());
+        String cut = CommandManager.truncateVisible(colored, 3);
+        assertThat(stripAnsi(cut)).isEqualTo("abc");
+        assertThat(cut).endsWith("\033[0m"); // reset appended on truncation
+    }
+
+    private static java.util.List<String> stripAll(java.util.List<String> lines) {
+        return lines.stream().map(CommandManagerTest::stripAnsi).toList();
+    }
+
     private static PrintStream stream(ByteArrayOutputStream buf) {
         return new PrintStream(buf, true, StandardCharsets.UTF_8);
     }

@@ -107,6 +107,30 @@ public final class GoalConsole {
         return Mode.AUTO;
     }
 
+    /**
+     * Goal-oriented variant: render the goal with the new {@link CommandManagerListener}
+     * (spinner header + aggregate bar + dynamic phase list) attributed to
+     * {@code member} (the project's {@code group:artifact}), then a
+     * {@code ✔}/{@code ✗} result line from {@code spec}. {@code --output json}
+     * still emits NDJSON and {@code --verbose} still prints per-phase lines.
+     */
+    public static GoalResult runGoal(Goal goal, Mode mode, Path cacheRoot,
+                                     ConsoleSpec spec, String member) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+
+        GoalListener console = switch (mode) {
+            case JSON -> new NdjsonListener(System.out);
+            case VERBOSE -> new VerboseListener(System.out, System.err);
+            case AUTO -> new CommandManagerListener(System.out, System.err, spec, member,
+                    goal.phases(), isInteractiveTerminal());
+            case QUIET -> new CommandManagerListener(System.out, System.err, spec, member,
+                    goal.phases(), false);
+        };
+        goal.addListener(console);
+        return goal.run();
+    }
+
     private static GoalListener chooseConsoleListener(Goal goal, Mode mode) {
         // Interactive goals (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events
