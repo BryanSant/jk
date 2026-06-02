@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
@@ -292,8 +293,8 @@ public final class PublishCommand implements Callable<Integer> {
         MavenPublisher.Result pub = goal.get(PUB_RESULT).orElseThrow();
         SigningOptions signing = goal.get(SIGNING).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println("Published " + project.project().group() + ":"
-                    + project.project().artifact() + ":" + project.project().version()
+            System.out.println("Published " + Coords.gav(
+                    project.project().group(), project.project().artifact(), project.project().version())
                     + " (" + pub.statusByPath().size() + " files"
                     + (signing.isNoop() ? "" : ", signed") + ")");
         }

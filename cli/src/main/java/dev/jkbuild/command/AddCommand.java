@@ -5,6 +5,7 @@ import dev.jkbuild.cli.Ansi;
 
 import dev.jkbuild.cli.GlobalOptions;
 
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.config.JkBuildParser;
@@ -145,10 +146,8 @@ public final class AddCommand implements Callable<Integer> {
         Files.writeString(file, updated, StandardCharsets.UTF_8);
         String check = Theme.colorize("✓", Theme.active().success());
         System.out.println(check + " Added "
-                + Theme.colorize(parsed.name(), Theme.active().activeStep())
-                + " (" + Theme.colorize(parsed.group(), Theme.active().primary())
-                + ":" + Theme.colorize(parsed.artifact(), Theme.active().activeStep())
-                + "@" + Theme.colorize(parsed.versionLiteral(), Theme.active().warning())
+                + Coords.shortName(parsed.name())
+                + " (" + Coords.gav(parsed.group(), parsed.artifact(), parsed.versionLiteral())
                 + ") to " + Theme.colorize("dependency", Theme.active().cyan())
                 + "." + Theme.colorize(scope.canonical(), Theme.active().cyan()));
         System.out.println();
@@ -241,8 +240,9 @@ public final class AddCommand implements Callable<Integer> {
             return 1;
         }
         Files.writeString(currentToml, updated, StandardCharsets.UTF_8);
-        System.out.println("Added " + name + " (" + group + ":" + artifact + " ="
-                + version + ") to dependencies." + scope.canonical());
+        System.out.println("Added " + Coords.shortName(name)
+                + " (" + Coords.gav(group, artifact, version)
+                + ") to dependencies." + scope.canonical());
 
         // 2. Register membership in the enclosing workspace root (cwd itself
         //    when cwd is the root).
@@ -393,7 +393,7 @@ public final class AddCommand implements Callable<Integer> {
     private int runPing(Coordinate coord) throws IOException, InterruptedException {
         URI repoBase = RepositorySpec.MAVEN_CENTRAL.url();
         URI pomUri = repoBase.resolve(MavenLayout.pomPath(coord));
-        String coordStr = colorCoord(coord);
+        String coordStr = Coords.gav(coord);
 
         var http = new Http();
         var response = http.get(pomUri);
@@ -410,12 +410,6 @@ public final class AddCommand implements Callable<Integer> {
                 + " " + coordStr + " is unavailable.");
         System.out.println("Failed to find " + coordStr + " in any configured repo.");
         return 1;
-    }
-
-    private static String colorCoord(Coordinate coord) {
-        return Theme.colorize(coord.group(), Theme.active().activeStep())
-                + ":" + Theme.colorize(coord.artifact(), Theme.active().activeStep().bold())
-                + ":" + Theme.colorize(coord.version(), Theme.active().warning());
     }
 
     /** OSC 8 hyperlink: the URL is both the link target and the visible text. */

@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Journal;
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
@@ -137,7 +138,12 @@ public final class CacheCommand implements Callable<Integer> {
                 List<String> versions = new ArrayList<>(m.versions());
                 versions.sort((a, b) -> Versions.compare(b, a)); // newest first
                 versionCount += versions.size();
-                System.out.println(pad(m.moduleKey(), keyWidth) + "  " + String.join(", ", versions));
+                // Pad against the plain key width (color escapes have zero
+                // display width), then color the coordinate and each version.
+                String key = m.moduleKey();
+                String gap = " ".repeat(Math.max(0, keyWidth - key.length()));
+                String coloredVersions = String.join(", ", versions.stream().map(Coords::version).toList());
+                System.out.println(Coords.module(key) + gap + "  " + coloredVersions);
             }
             if (shown < total) {
                 System.out.println("… and " + (total - shown) + " more "
@@ -158,10 +164,6 @@ public final class CacheCommand implements Callable<Integer> {
                 if (!found) return false;
             }
             return true;
-        }
-
-        private static String pad(String s, int width) {
-            return s.length() >= width ? s : s + " ".repeat(width - s.length());
         }
     }
 

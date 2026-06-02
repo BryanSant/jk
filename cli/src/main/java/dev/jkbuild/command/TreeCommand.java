@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
 
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
@@ -45,26 +46,29 @@ public final class TreeCommand implements Callable<Integer> {    @Option(names =
 
         // Header line matching the wizard's gradient title.
         System.out.println(Theme.active().gradientHeaderAnsi("Jk - Project Tree"));
-        System.out.print(DependencyTree.render(project, lock, max, styling()));
+        String rendered = DependencyTree.render(project, lock, max, styling());
+        System.out.print(rendered);
+        if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
+            System.out.println();
+            System.out.println("Some dependencies are missing from your local cache. Run "
+                    + Theme.colorize("jk lock", Theme.active().warning()));
+        }
         return 0;
     }
 
     /**
-     * Color pattern for the Maven coordinate:
-     * <pre>
-     *   <cyan>group</cyan>:<b><cyan>artifact</cyan></b>:<yellow>version</yellow>
-     * </pre>
-     * Group and artifact share the cyan family — only weight (bold)
-     * distinguishes them. Rails get the same dim dark-gray the wizard
-     * uses for its settled rails. {@link Theme#colorize} respects
-     * {@code --color} / {@code NO_COLOR} / dumb terminals, so escapes
-     * are dropped cleanly when color is off.
+     * Color pattern for the Maven coordinate — the canonical
+     * {@code [blue]group[/]:[cyan]artifact[/]:[bright-blue]version[/]} from
+     * {@link Coords}. Rails get the same dim dark-gray the wizard uses for its
+     * settled rails. {@link Theme#colorize} respects {@code --color} /
+     * {@code NO_COLOR} / dumb terminals, so escapes are dropped cleanly when
+     * color is off.
      */
     private static DependencyTree.Styling styling() {
         return new DependencyTree.Styling(
                 s -> Theme.colorize(s, Theme.active().darkGray()),
-                s -> Theme.colorize(s, Theme.active().activeStep()),
-                s -> Theme.colorize(s, Theme.active().activeStep().bold()),
-                s -> Theme.colorize(s, Theme.active().warning()));
+                s -> Theme.colorize(s, Coords.groupStyle()),
+                s -> Theme.colorize(s, Coords.artifactStyle()),
+                s -> Theme.colorize(s, Coords.versionStyle()));
     }
 }

@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.deny.PolicyChecker;
@@ -103,7 +104,7 @@ public final class DenyCommand implements Callable<Integer> {
         }
         System.err.println("jk deny: " + violations.size() + " violation(s):");
         for (PolicyChecker.Violation v : violations) {
-            System.err.println("  " + v.module() + ":" + v.version() + " — " + v.reason());
+            System.err.println("  " + Coords.module(v.module(), v.version()) + " — " + v.reason());
         }
         return 1;
     }

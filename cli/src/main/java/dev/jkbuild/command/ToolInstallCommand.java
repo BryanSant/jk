@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -91,7 +92,7 @@ public final class ToolInstallCommand implements Callable<Integer> {
                 .kind(PhaseKind.IO)
                 .scope(1)
                 .execute(ctx -> {
-                    ctx.label("resolve " + primary.toGav());
+                    ctx.label("resolve " + Coords.gav(primary));
                     Cas cas = new Cas(cacheDir);
                     Http http = new Http();
                     URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
@@ -130,7 +131,7 @@ public final class ToolInstallCommand implements Callable<Integer> {
 
         Path launcher = goal.get(LAUNCHER).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println("Installed " + primary.toGav() + " → " + launcher);
+            System.out.println("Installed " + Coords.gav(primary) + " → " + launcher);
             System.out.println("Add to PATH if needed:");
             System.out.println("  export PATH=\"" + binDir + ":$PATH\"");
         }

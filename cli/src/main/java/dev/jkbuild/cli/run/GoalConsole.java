@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
-import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.util.JkDirs;
-import org.jline.utils.Signals;
 
 import java.nio.file.Path;
 
@@ -19,12 +17,11 @@ import java.nio.file.Path;
  * goal); always layers an {@link EventLogListener} on top so the run
  * lands in {@code <cacheRoot>/runs/}.
  *
- * <p>Also installs a SIGINT bridge for the goal's lifetime: Ctrl-C
- * calls {@link Goal#requestCancel} (cooperative), and after the goal
- * settles we restore the global cancel handler from
- * {@link dev.jkbuild.cli.tui.GlobalCancel}. If a phase ignores the
- * cooperative signal, the goal's own 200ms grace + thread interrupt
- * brings it down.
+ * <p>Ctrl-C during a goal is handled by the app-level
+ * {@link dev.jkbuild.cli.tui.GlobalCancel} handler (installed at startup):
+ * it repaints the in-flight progress bar as canceled, prints
+ * {@code ‼ Canceled by user}, and halts. There is no cooperative
+ * unwind — a hard cancel is immediate and predictable.
  */
 public final class GoalConsole {
 
@@ -43,9 +40,10 @@ public final class GoalConsole {
     private GoalConsole() {}
 
     /**
-     * Pick listeners + run the goal under a SIGINT bridge. Returns the
-     * goal's {@link GoalResult}; caller decides what exit code to
-     * surface based on {@code result.success()}.
+     * Pick listeners + run the goal. Ctrl-C is handled by the app-level
+     * {@link dev.jkbuild.cli.tui.GlobalCancel} handler. Returns the goal's
+     * {@link GoalResult}; caller decides what exit code to surface based on
+     * {@code result.success()}.
      */
     public static GoalResult run(Goal goal, Mode mode, Path cacheRoot) {
         // Always log every run for post-hoc debug. Best-effort: a
@@ -56,15 +54,7 @@ public final class GoalConsole {
         GoalListener console = chooseConsoleListener(goal, mode);
         if (console != null) goal.addListener(console);
 
-        installSigintBridge(goal);
-        try {
-            return goal.run();
-        } finally {
-            // Restore the global handler. JLine's Signals.register
-            // doesn't expose a "chain back to previous" API, but
-            // GlobalCancel.install() re-registers cleanly.
-            dev.jkbuild.cli.tui.GlobalCancel.install();
-        }
+        return goal.run();
     }
 
     /**
@@ -107,24 +97,6 @@ public final class GoalConsole {
                     ? new ProgressBarListener(System.out, System.err, goal.phases())
                     : new SilentListener(System.out, System.err);
         };
-    }
-
-    /**
-     * Register a Ctrl-C handler that flips the goal's cancel flag and
-     * paints a brief notice on stderr. The goal's own scheduler
-     * enforces the 200ms grace before interrupting threads.
-     */
-    private static void installSigintBridge(Goal goal) {
-        Signals.register("INT", () -> {
-            if (goal.snapshot().cancelled()) {
-                // Second Ctrl-C → halt now.
-                System.err.print("\n" + Theme.colorize("𝘅 Force-canceled", Theme.active().error()) + "\n");
-                Runtime.getRuntime().halt(130);
-            }
-            goal.requestCancel();
-            System.err.print("\n" + Theme.colorize("⌫ Canceling…", Theme.active().warning())
-                    + " (Ctrl-C again to force)\n");
-        });
     }
 
     private static boolean isInteractiveTerminal() {

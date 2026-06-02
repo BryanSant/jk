@@ -165,6 +165,11 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle brightCyan() {
+        return withColor(AttributedStyle.DEFAULT, BRIGHT_CYAN);
+    }
+
+    @Override
     public AttributedStyle bright(int r, int g, int b) {
         return withColor(AttributedStyle.DEFAULT, r, g, b);
     }
@@ -178,7 +183,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle sectionHeading() {
-        return withColor(AttributedStyle.DEFAULT.bold(), ACCENT);
+        return withColor(AttributedStyle.DEFAULT.bold(), NORMAL_GREEN);
     }
 
     @Override

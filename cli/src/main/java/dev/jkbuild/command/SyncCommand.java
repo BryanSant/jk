@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -148,7 +149,7 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                     // event log records them ordered by completion.
                     var observer = new CacheSync.ProgressObserver() {
                         @Override public void fetched(Lockfile.Package pkg) {
-                            ctx.label("fetched " + pkg.name() + ":" + pkg.version());
+                            ctx.label("fetched " + Coords.module(pkg.name(), pkg.version()));
                             ctx.progress(1);
                         }
                         @Override public void upToDate(Lockfile.Package pkg) {
@@ -158,7 +159,7 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                             ctx.progress(1);
                         }
                         @Override public void failed(Lockfile.Package pkg, String error) {
-                            ctx.error("dep", pkg.name() + ":" + pkg.version() + " — " + error);
+                            ctx.error("dep", Coords.module(pkg.name(), pkg.version()) + " — " + error);
                             ctx.progress(1);
                         }
                     };

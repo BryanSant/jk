@@ -7,6 +7,7 @@ import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -215,19 +216,7 @@ public final class LockCommand implements Callable<Integer> {
                         }
                         @Override
                         public void onPackage(String module, String version) {
-                            int colon = module.indexOf(':');
-                            String group    = module.substring(0, colon);
-                            String artifact = module.substring(colon + 1);
-                            String label = "Resolved "
-                                    + Theme.colorize(group,
-                                            Theme.active().activeStep())
-                                    + ":"
-                                    + Theme.colorize(artifact,
-                                            Theme.active().activeStep().bold())
-                                    + ":"
-                                    + Theme.colorize(version,
-                                            Theme.active().warning());
-                            ctx.label(label);
+                            ctx.label("Resolved " + Coords.module(module, version));
                             ctx.progress(1);
                         }
                     };

@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
 
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
@@ -55,7 +56,7 @@ public final class WhyCommand implements Callable<Integer> {
 
         System.out.println(Theme.active().gradientHeaderAnsi("Jk - Dependency Lookup"));
         for (Lockfile.Package target : matches) {
-            System.out.println(colorCoord(target.name(), target.version()) + " is pulled in by:");
+            System.out.println(Coords.module(target.name(), target.version()) + " is pulled in by:");
             List<Provenance.Path> paths = Provenance.pathsTo(project, lock, target.name());
             if (paths.isEmpty()) {
                 System.out.println("  (unreachable from declared dependencies — likely a stale lockfile entry)");
@@ -72,30 +73,8 @@ public final class WhyCommand implements Callable<Integer> {
     /** Format a dependency path with colored coordinates. */
     private static String renderPath(Provenance.Path path) {
         return path.steps().stream()
-                .map(s -> colorCoord(s.module(), s.version()))
+                .map(s -> Coords.module(s.module(), s.version()))
                 .collect(Collectors.joining(Theme.colorize(" -> ", Theme.active().darkGray())));
-    }
-
-    /**
-     * Color a {@code group:artifact} coordinate with an optional version:
-     * {@code [cyan]group[/]:[bold-cyan]artifact[/]:[yellow]version[/]}.
-     */
-    private static String colorCoord(String module, String version) {
-        int colon = module.indexOf(':');
-        String colored;
-        if (colon < 0) {
-            colored = Theme.colorize(module, Theme.active().activeStep().bold());
-        } else {
-            String group    = module.substring(0, colon);
-            String artifact = module.substring(colon + 1);
-            colored = Theme.colorize(group, Theme.active().activeStep())
-                    + ":"
-                    + Theme.colorize(artifact, Theme.active().activeStep().bold());
-        }
-        if (version != null && !version.isEmpty()) {
-            colored += ":" + Theme.colorize(version, Theme.active().warning());
-        }
-        return colored;
     }
 
     /** Strip the version component if present; return arg unchanged when no colon. */
