@@ -267,6 +267,54 @@ own `group:artifact`), so the code path is uniform.
 
 ---
 
+## 11b. Implementation status
+
+Delivered on this branch (all `./gradlew test` green):
+
+- ✅ `LiveRegion` + `Glyphs`; `GlobalCancel` repaints the active region.
+- ✅ `ProgressBar` → `SpinnerProgressBar` (rename); new pure `ProgressBar`
+  segmented-bar renderer.
+- ✅ `CommandManager` **simple mode** (spinner + verb → freeze-to-first-glyph +
+  `✔`/`✗` result line) and **goal mode** (spinner header + aggregate bar +
+  floating phase list, region replaced by the result line on finish).
+- ✅ Plumbing: `ConsoleSpec`, `SimpleTaskListener`, `CommandManagerListener`,
+  `GoalConsole.run(…, ConsoleSpec)` (simple) and `GoalConsole.runGoal(…, member)`
+  (goal).
+- ✅ Workspace aggregation: `AggregateContext` + `AggregateMemberListener` +
+  `GoalConsole.runGoalInto`; `BuildCommand.runWorkspaceBuild` renders ONE
+  aggregate view for AUTO/QUIET (VERBOSE/JSON keep per-member).
+- ✅ Migrated to the new view: **`jk build`** (single + workspace),
+  **`jk compile`**, **`jk test`**, **`jk native`**.
+- ✅ Migrated to simple mode: **`jk lock`**.
+- ✅ Tests: `ProgressBarTest`, `SpinnerProgressBarTest`, `CommandManagerTest`
+  (simple + goal render), `AggregateMemberListenerTest`.
+
+### Remaining follow-up (not done this session)
+
+Mechanical, same pattern as the migrated commands; left undone to avoid blind
+churn on peripheral/report-style commands:
+
+- **Simple mode wiring:** `sync`, `deny`, `update`, `install` (3 run sites),
+  `tool-install` → `GoalConsole.run(goal, mode, cache, new ConsoleSpec(verb, ok, fail))`,
+  removing their hand-rolled `✓ …` summary.
+- **Goal view wiring:** `publish`, `image` → `runGoal(…, member)` (have
+  dry-run / tarball-vs-push branches to fold into the success mapper).
+- **Report-style (`verify-build`, `audit`):** they print multi-line reports
+  (hashes / markdown), not a single result line — decide whether to keep their
+  output and only wrap the goal, or restructure. Likely keep custom output.
+- **Interactive goals** (`jk new`, `jdk install/uninstall`, `run`, `script`):
+  already get `SilentListener` via `goal.interactive()`; no bar to replace.
+- **Delete `ProgressBarListener`:** only after every *non-interactive* goal
+  command above is migrated (it's still the AUTO listener for the unmigrated
+  ones). Then drop the `ProgressBarListener` branch in
+  `GoalConsole.chooseConsoleListener`.
+- **Pre-sum member scopes** (§6): split goal construction out of
+  `BuildCommand.runForDir` so the aggregate denominator is seeded up front and
+  the bar doesn't dip as each member starts.
+- **Live `jk build` visual pass:** the multi-line region math (cursor-up/erase,
+  width truncation, float/collapse) is unit-tested but has not been eyeballed on
+  a real terminal — verify with `/run` or a manual build before merge.
+
 ## 12. Risks / open items
 
 - **Cursor math vs. line wrap** → enforce per-row truncation to terminal width (JLine width).
