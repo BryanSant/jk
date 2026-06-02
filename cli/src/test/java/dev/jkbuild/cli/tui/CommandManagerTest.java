@@ -16,7 +16,7 @@ class CommandManagerTest {
     @Test
     void tick_renders_first_glyph_and_verb() {
         var buf = new ByteArrayOutputStream();
-        var cm = new CommandManager(stream(buf), false);
+        var cm = new CommandManager(stream(buf), true);
         cm.label("Locking");
         cm.tick(); // frame 0 = "·"
         assertThat(stripAnsi(buf.toString(StandardCharsets.UTF_8))).contains("· Locking…");
@@ -25,7 +25,7 @@ class CommandManagerTest {
     @Test
     void finish_success_freezes_spinner_then_prints_green_check_line() {
         var buf = new ByteArrayOutputStream();
-        var cm = new CommandManager(stream(buf), false);
+        var cm = new CommandManager(stream(buf), true);
         cm.label("Syncing");
         cm.finishSuccess("Finished syncing 13 artifacts");
 
@@ -42,7 +42,7 @@ class CommandManagerTest {
     @Test
     void finish_failure_prints_red_cross_line() {
         var buf = new ByteArrayOutputStream();
-        var cm = new CommandManager(stream(buf), false);
+        var cm = new CommandManager(stream(buf), true);
         cm.label("Syncing");
         cm.finishFailure("Failed to sync remote artifacts");
 
@@ -54,7 +54,7 @@ class CommandManagerTest {
     @Test
     void render_canceled_settles_spinner_without_printing_the_cancel_notice() {
         var buf = new ByteArrayOutputStream();
-        var cm = new CommandManager(stream(buf), false);
+        var cm = new CommandManager(stream(buf), true);
         cm.label("Locking");
         cm.renderCanceled();
 
@@ -66,11 +66,11 @@ class CommandManagerTest {
     }
 
     @Test
-    void silent_mode_skips_the_spinner_but_still_prints_the_result() {
+    void non_animated_mode_prints_only_the_result_line() {
         var buf = new ByteArrayOutputStream();
-        var cm = new CommandManager(stream(buf), true); // --no-progress
+        var cm = new CommandManager(stream(buf), false); // pipe / --quiet
         cm.label("Locking");
-        cm.tick();                       // no-op while silent
+        cm.tick();                       // animator never runs; harmless if poked
         cm.finishSuccess("done");
 
         String raw = buf.toString(StandardCharsets.UTF_8);
@@ -82,7 +82,7 @@ class CommandManagerTest {
     @Test
     void finish_is_idempotent() {
         var buf = new ByteArrayOutputStream();
-        var cm = new CommandManager(stream(buf), false);
+        var cm = new CommandManager(stream(buf), true);
         cm.label("Building");
         cm.finishSuccess("Built x");
         buf.reset();

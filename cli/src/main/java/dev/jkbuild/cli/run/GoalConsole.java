@@ -66,6 +66,29 @@ public final class GoalConsole {
     }
 
     /**
+     * Simple-task variant: render the goal as a spinner + verb (on a TTY) and a
+     * {@code ✔}/{@code ✗} result line from {@code spec}, instead of the
+     * phase-by-phase progress bar. {@code --output json} still emits NDJSON and
+     * {@code --verbose} still prints per-phase lines; otherwise the
+     * {@link SimpleTaskListener} owns the output (animating only on a TTY).
+     */
+    public static GoalResult run(Goal goal, Mode mode, Path cacheRoot, ConsoleSpec spec) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+
+        GoalListener console = switch (mode) {
+            case JSON -> new NdjsonListener(System.out);
+            case VERBOSE -> new VerboseListener(System.out, System.err);
+            // AUTO animates only on an interactive TTY; QUIET / pipes print the
+            // result line without a spinner.
+            case AUTO -> new SimpleTaskListener(System.out, System.err, spec, isInteractiveTerminal());
+            case QUIET -> new SimpleTaskListener(System.out, System.err, spec, false);
+        };
+        goal.addListener(console);
+        return goal.run();
+    }
+
+    /**
      * Translate {@code GlobalOptions} flags into a {@link Mode}. Lives
      * here so every command picks the same precedence:
      * {@code --output json} &gt; {@code --quiet} &gt;

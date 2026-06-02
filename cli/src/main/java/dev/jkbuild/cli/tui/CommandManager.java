@@ -19,11 +19,13 @@ import java.io.PrintStream;
  *       + a dynamic phase list. (Added in a later step.)</li>
  * </ul>
  *
- * <p>Registers as the active {@link LiveRegion} so a Ctrl-C repaints it cleanly.
- * The spinner animation runs on a daemon thread; all terminal writes are guarded
- * by a single lock so concurrent progress events and the animator never
- * interleave mid-escape. The frame set, interval, and gradient are shared with
- * {@link Spinner}.
+ * <p>The {@code animate} flag decides whether the spinner is drawn: on a TTY it
+ * animates; under pipes / {@code --quiet} / {@code --no-progress} it stays put
+ * and only the final result line is printed (so a summary still reaches
+ * non-interactive consumers). Registers as the active {@link LiveRegion} so a
+ * Ctrl-C repaints it cleanly. The animator runs on a daemon thread; all writes
+ * are guarded by one lock so concurrent events never interleave mid-escape. The
+ * frame set, interval, and gradient are shared with {@link Spinner}.
  */
 public final class CommandManager implements AutoCloseable, LiveRegion {
 
@@ -32,7 +34,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private static final String ELLIPSIS = "…";
 
     private final PrintStream out;
-    private final boolean silent;
+    private final boolean animate;
     private final AttributedStyle[] frameColors = Spinner.buildGradient(FRAMES.length);
 
     private final Object lock = new Object();
@@ -46,24 +48,23 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private Thread animator;
 
     /** Package-private: tests construct directly and drive {@link #tick()} by hand. */
-    CommandManager(PrintStream out, boolean silent) {
+    CommandManager(PrintStream out, boolean animate) {
         this.out = out;
-        this.silent = silent;
+        this.animate = animate;
     }
 
     // --- simple-task mode -------------------------------------------------
 
     /**
-     * Start simple-task mode: an animated spinner followed by {@code verb}
-     * (e.g. {@code "Locking"}). Finish with {@link #finishSuccess}/
+     * Start simple-task mode: a spinner (when {@code animate}) followed by
+     * {@code verb} (e.g. {@code "Locking"}). Finish with {@link #finishSuccess}/
      * {@link #finishFailure}; use try-with-resources for the abort case.
      */
-    public static CommandManager simple(PrintStream out, String verb) {
-        boolean silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
-        CommandManager cm = new CommandManager(out, silent);
+    public static CommandManager simple(PrintStream out, String verb, boolean animate) {
+        CommandManager cm = new CommandManager(out, animate);
         cm.label = verb;
         LiveRegion.setActive(cm);
-        if (!silent) {
+        if (animate) {
             out.print(Ansi.HIDE_CURSOR);
             out.flush();
             cm.startAnimator();
@@ -94,8 +95,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             if (done) return;
             done = true;
             LiveRegion.clearActive(this);
-            if (!silent) {
-                freezeSpinnerLine();   // leaves cursor at the start of a fresh line
+            if (animate) {
+                freezeSpinnerLine();   // leaves the cursor at the start of a fresh line
                 out.print(Ansi.TASKBAR_CLEAR);
                 out.print(Ansi.SHOW_CURSOR);
             }
@@ -113,7 +114,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             if (done) return;
             done = true;
             LiveRegion.clearActive(this);
-            if (silent) return;
+            if (!animate) return;
             freezeSpinnerLine();
             out.print(Ansi.TASKBAR_CLEAR);
             out.print(Ansi.SHOW_CURSOR);
@@ -130,7 +131,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             if (done) return;
             done = true;
             LiveRegion.clearActive(this);
-            if (silent) return;
+            if (!animate) return;
             out.print(Ansi.CLEAR_LINE);
             out.print(Ansi.TASKBAR_CLEAR);
             out.print(Ansi.SHOW_CURSOR);
@@ -154,7 +155,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     /** Render one spinner frame in place and advance. Package-private for tests. */
     void tick() {
         synchronized (lock) {
-            if (done || silent) return;
+            if (done || !animate) return;
             out.print('\r');
             out.print(Theme.colorize(FRAMES[frame], frameColors[frame]));
             out.print(' ');
