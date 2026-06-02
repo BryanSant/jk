@@ -7,11 +7,11 @@ import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedStyle;
 
 import java.io.PrintStream;
-import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Single-line progress bar widget for long-running CLI operations
- * (downloading JDKs, installing JDKs, running builds).
+ * (downloading JDKs, installing JDKs). Registers as the active
+ * {@link LiveRegion} so the global Ctrl-C handler can repaint it on cancel.
  *
  * <p>Layout: {@code ▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱  62%: <status>}
  *
@@ -40,7 +40,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * worker computing progress and the main thread polling, but either
  * direction is safe.
  */
-public final class ProgressBar implements AutoCloseable {
+public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
 
     static final int SEGMENTS = 40;
     static final char FILLED_CHAR = '▰';
@@ -64,18 +64,6 @@ public final class ProgressBar implements AutoCloseable {
     // silently swallow the sequence in their OSC parser.
     static final String OSC_CLEAR = Ansi.TASKBAR_CLEAR;
 
-    /**
-     * The bar currently on screen, if any. Read by the global Ctrl-C handler
-     * (in {@link GlobalCancel}) so a cancellation can repaint the bar before
-     * halting the process.
-     */
-    private static final AtomicReference<ProgressBar> ACTIVE = new AtomicReference<>();
-
-    /** @return the visible bar, or {@code null} if none is active. */
-    public static ProgressBar active() {
-        return ACTIVE.get();
-    }
-
     private final PrintStream out;
     private final AttributedStyle[] segmentColors;
     private final AttributedStyle[] failColors;
@@ -88,7 +76,7 @@ public final class ProgressBar implements AutoCloseable {
     private boolean drawn = false;
     private boolean closed = false;
 
-    private ProgressBar(PrintStream out, boolean silent) {
+    private SpinnerProgressBar(PrintStream out, boolean silent) {
         this.out = out;
         this.silent = silent;
         // The fill runs green → bright-green (bright-green pinned at the frontier).
@@ -101,10 +89,10 @@ public final class ProgressBar implements AutoCloseable {
      * If the resolved config has {@code --no-progress}, returns a silent
      * instance whose {@link #update} / {@link #close} are no-ops.
      */
-    public static ProgressBar show(PrintStream out) {
+    public static SpinnerProgressBar show(PrintStream out) {
         boolean silent = dev.jkbuild.config.ActiveConfig.get().noProgressOr(false);
-        ProgressBar pb = new ProgressBar(out, silent);
-        ACTIVE.set(pb);
+        SpinnerProgressBar pb = new SpinnerProgressBar(out, silent);
+        LiveRegion.setActive(pb);
         if (!silent) {
             out.print(HIDE_CURSOR);
             out.flush();
@@ -140,7 +128,7 @@ public final class ProgressBar implements AutoCloseable {
     public synchronized void close() {
         if (closed) return;
         closed = true;
-        ACTIVE.compareAndSet(this, null);
+        LiveRegion.clearActive(this);
         if (silent) return;
         // Wipe the bar line entirely on the way out. Without the
         // CR + erase-line, a partial bar (e.g. a goal that failed
@@ -161,7 +149,7 @@ public final class ProgressBar implements AutoCloseable {
     public synchronized void finish(String message) {
         if (closed) return;
         closed = true;
-        ACTIVE.compareAndSet(this, null);
+        LiveRegion.clearActive(this);
         if (silent) {
             // With --no-progress the bar never drew, so we don't need to wipe
             // a line — but the final message is still useful to the user, so
@@ -222,7 +210,7 @@ public final class ProgressBar implements AutoCloseable {
     public synchronized void renderFailed() {
         if (closed) return;
         closed = true;
-        ACTIVE.compareAndSet(this, null);
+        LiveRegion.clearActive(this);
         if (silent) return;
         AttributedStyle strikeStyle = Theme.active().dim().crossedOut();
         out.print("\r");
@@ -255,7 +243,7 @@ public final class ProgressBar implements AutoCloseable {
     public synchronized void renderCanceled() {
         if (closed) return;
         closed = true;
-        ACTIVE.compareAndSet(this, null);
+        LiveRegion.clearActive(this);
         if (silent) return;
         AttributedStyle redStyle = Theme.active().error();
         AttributedStyle strikeStyle = Theme.active().dim().crossedOut();

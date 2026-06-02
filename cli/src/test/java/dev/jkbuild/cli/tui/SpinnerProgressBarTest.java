@@ -9,12 +9,12 @@ import java.nio.charset.StandardCharsets;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class ProgressBarTest {
+class SpinnerProgressBarTest {
 
     @Test
     void show_hides_cursor() {
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(0, "Starting...");
         }
         String all = buf.toString(StandardCharsets.UTF_8);
@@ -25,7 +25,7 @@ class ProgressBarTest {
     @Test
     void initial_update_renders_segments_percent_and_status() {
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(60, "Downloading");
         }
         String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
@@ -37,7 +37,7 @@ class ProgressBarTest {
     @Test
     void advancing_fill_repaints_the_whole_glyph_row() {
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(50, "step");   // 20 filled (out of 40)
             buf.reset();
             pb.update(60, "step");   // 24 filled
@@ -54,7 +54,7 @@ class ProgressBarTest {
     @Test
     void unchanged_fill_does_not_repaint_the_glyph_row() {
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(60, "step");   // round(60 * 40 / 100) = 24 filled
             buf.reset();
             pb.update(61, "step");   // round(61 * 40 / 100) = 24 filled (unchanged)
@@ -77,7 +77,7 @@ class ProgressBarTest {
     void single_filled_glyph_uses_only_the_gradient_end() {
         // 2.5% → 1 filled glyph: it must be the bright-green end, not the dark green.
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(2, "x");   // round(2 * 40 / 100) = 1 filled
         }
         var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));
@@ -87,7 +87,7 @@ class ProgressBarTest {
     @Test
     void diff_repaints_status_only_when_changed() {
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(50, "downloading");
             buf.reset();
             pb.update(50, "downloading"); // identical → no status repaint
@@ -105,7 +105,7 @@ class ProgressBarTest {
         int expectedShrink = longStatus.length() - shortStatus.length();
 
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(50, longStatus);
             buf.reset();
             pb.update(50, shortStatus);
@@ -123,7 +123,7 @@ class ProgressBarTest {
     @Test
     void update_emits_osc94_progress_indicator() {
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(0, "starting");
             pb.update(42, "downloading");
             pb.update(100, "done");
@@ -138,7 +138,7 @@ class ProgressBarTest {
     @Test
     void finish_clears_line_and_writes_replacement_message() {
         var buf = new ByteArrayOutputStream();
-        var pb = ProgressBar.show(stream(buf));
+        var pb = SpinnerProgressBar.show(stream(buf));
         pb.update(100, "downloading");
         buf.reset();
         pb.finish("✓ Download finished for Eclipse Temurin 21");
@@ -160,7 +160,7 @@ class ProgressBarTest {
     @Test
     void close_emits_osc94_clear() {
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(50, "halfway");
         }
         String all = buf.toString(StandardCharsets.UTF_8);
@@ -173,7 +173,7 @@ class ProgressBarTest {
 
     @Test
     void gradient_runs_from_green_to_bright_green() {
-        var colors = ProgressBar.buildGradient(20);
+        var colors = SpinnerProgressBar.buildGradient(20);
         assertThat(colors).hasSize(20);
         // Jk Dark green #4CAF50 −30% → bright-green #69F0AE +10%.
         String first = colors[0].toAnsi();
@@ -189,7 +189,7 @@ class ProgressBarTest {
     /** SGR of the right-most filled glyph (the frontier) at {@code percent}. */
     private static String frontierColor(int percent) {
         var buf = new ByteArrayOutputStream();
-        try (var pb = ProgressBar.show(stream(buf))) {
+        try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(percent, "x");
         }
         var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));

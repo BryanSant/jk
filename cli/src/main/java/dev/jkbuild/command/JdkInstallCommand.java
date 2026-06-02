@@ -4,7 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cli.run.GoalConsole;
-import dev.jkbuild.cli.tui.ProgressBar;
+import dev.jkbuild.cli.tui.SpinnerProgressBar;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Wizard;
@@ -49,7 +49,7 @@ import java.util.concurrent.Callable;
  * → {@code set-default} (SYNC; only when {@code --make-default}).
  *
  * <p>Marked interactive so the framework's progress widget stays out of
- * the way of the wizard, ProgressBar and Spinner — those keep ownership
+ * the way of the wizard, SpinnerProgressBar and Spinner — those keep ownership
  * of the rendered output.
  */
 @Command(name = "install", aliases = {"add"},
@@ -206,7 +206,7 @@ public final class JdkInstallCommand implements Callable<Integer> {
                     ctx.label("download " + label + " (" + hostLabel + ")");
                     String downloading = "Downloading " + label + " (" + hostLabel + ")";
                     long total = entry.archiveSize();
-                    try (ProgressBar pb = ProgressBar.show(System.out)) {
+                    try (SpinnerProgressBar pb = SpinnerProgressBar.show(System.out)) {
                         pb.update(0, downloading);
                         JdkInstaller.DownloadedArchive dl = installer.download(entry, bytes -> {
                             int pct = total > 0

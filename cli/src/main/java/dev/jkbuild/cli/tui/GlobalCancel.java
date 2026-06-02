@@ -26,9 +26,9 @@ public final class GlobalCancel {
 
     public static void install() {
         Signals.register("INT", () -> {
-            ProgressBar active = ProgressBar.active();
+            LiveRegion active = LiveRegion.active();
             if (active != null) {
-                // Repaint the in-flight bar in red + strikethrough so the
+                // Repaint the in-flight region in red + strikethrough so the
                 // user sees what was canceled, then start the next line.
                 active.renderCanceled();
             }

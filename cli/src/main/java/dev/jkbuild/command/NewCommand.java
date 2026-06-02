@@ -599,7 +599,7 @@ public final class NewCommand implements Callable<Integer> {
                     new dev.jkbuild.http.Http(), new dev.jkbuild.jdk.JdkRegistry());
             // Download (progress bar) then extract (spinner).
             var label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-            try (var pb = dev.jkbuild.cli.tui.ProgressBar.show(System.out)) {
+            try (var pb = dev.jkbuild.cli.tui.SpinnerProgressBar.show(System.out)) {
                 pb.update(0, "Downloading " + label);
                 long total = entry.archiveSize();
                 var dl = installer.download(entry, bytes -> {
