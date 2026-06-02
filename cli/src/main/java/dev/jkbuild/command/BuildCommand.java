@@ -813,7 +813,7 @@ public final class BuildCommand implements Callable<Integer> {
     // ---- success summary -----------------------------------------------
 
     /** Header member label for the goal view: the project's {@code group:artifact}. */
-    private static String buildTarget(Path buildFile, Path dir) {
+    static String buildTarget(Path buildFile, Path dir) {
         try {
             var p = JkBuildParser.parse(buildFile).project();
             return p.group() + ":" + p.artifact();

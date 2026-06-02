@@ -6,6 +6,7 @@ import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.compile.ClasspathResolver;
@@ -270,43 +271,36 @@ public final class TestCommand implements Callable<Integer> {
                 .addPhase(runTests)
                 .build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        ConsoleSpec spec = new ConsoleSpec("Testing",
+                r -> testSummary(goal, r),
+                r -> testFailureMessage(goal));
+        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
+                BuildCommand.buildTarget(buildFile, dir));
 
-        if (result.success()) {
-            printTestSuccess(goal, result);
-            return 0;
-        }
-        // Test failures get exit 4 (PRD §6); compile / launcher errors are
-        // exit 1.
+        if (result.success()) return 0;
+        // Test failures get exit 4 (PRD §6); compile / launcher errors are exit 1.
         var testResult = goal.get(TEST_RESULT).orElse(null);
-        if (testResult != null && !testResult.allPassed()) {
-            return 4;
-        }
-        // Failure UX owned by the listener.
+        if (testResult != null && !testResult.allPassed()) return 4;
         return 1;
     }
 
     /**
-     * Compile-style success line printed after the bar wipes:
-     * {@code ✓ Passed N tests in 32s}. Skipped when no tests ran
-     * (e.g. compile-only project with no src/test/java) — the bar
-     * already cleared cleanly and there's nothing meaningful to count.
+     * Success result line (sans the leading ✔): {@code Passed N tests in 32s},
+     * or {@code No tests in <t>} for a project with no {@code src/test/java}.
      */
-    private void printTestSuccess(Goal goal, GoalResult result) {
-        if (global.outputIsJson()) return;
-        var testResult = goal.get(TEST_RESULT).orElse(null);
-        if (testResult == null) return;
-        long total = testResult.total();
-        if (total == 0) return;
-        String check  = Theme.colorize(
-                "✓", Theme.active().success());
-        String passed = Theme.colorize(
-                "Passed", Theme.active().focused());
+    private String testSummary(Goal goal, GoalResult result) {
         String inTime = Theme.colorize(
-                "in " + BuildCommand.fmtDuration(result.duration()),
-                Theme.active().darkGray());
-        System.out.println(check + " " + passed + " " + total
-                + " test" + (total == 1 ? "" : "s") + " " + inTime);
+                "in " + BuildCommand.fmtDuration(result.duration()), Theme.active().darkGray());
+        var testResult = goal.get(TEST_RESULT).orElse(null);
+        if (testResult == null || testResult.total() == 0) return "No tests " + inTime;
+        long total = testResult.total();
+        String passed = Theme.colorize("Passed", Theme.active().focused());
+        return passed + " " + total + " test" + (total == 1 ? "" : "s") + " " + inTime;
+    }
+
+    private static String testFailureMessage(Goal goal) {
+        var tr = goal.get(TEST_RESULT).orElse(null);
+        return (tr != null && !tr.allPassed()) ? "Tests failed" : "Build failed";
     }
 
     /**
