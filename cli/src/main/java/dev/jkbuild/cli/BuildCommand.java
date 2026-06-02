@@ -457,33 +457,18 @@ public final class BuildCommand implements Callable<Integer> {
                             .build();
                     // Project-qualify so the tasks/ pointer is unique per module.
                     String taskId = ActionKey.qualifiedTaskId("compile-main", classes);
-                    String actionKey = ActionKey.forJavac(taskId, request, Jk.VERSION);
-                    ctx.put(ACTION_KEY, actionKey);
-                    java.util.Optional<ActionCache.ActionRecord> cached =
-                            noCache ? java.util.Optional.empty() : actionCache.lookup(actionKey);
-                    if (cached.isPresent()) {
-                        ctx.label("cache hit " + actionKey.substring(0, 8));
-                        actionCache.restore(cached.get(), classes);
-                        ctx.put(BUILD_OUTCOME, "cache-hit:" + actionKey.substring(0, 8));
-                        ctx.progress(sources.size());
-                        return;
-                    }
                     ctx.label("compiling " + sources.size() + " sources");
-                    var prewriter = dev.jkbuild.task.CasPrewriter.watching(cas, classes);
-                    CompileResult result;
-                    Map<String, String> precomputedOutputs;
-                    try {
-                        result = new JavacDriver().compile(request);
-                    } finally {
-                        precomputedOutputs = prewriter.finish();
-                    }
-                    for (CompileResult.Diagnostic d : result.diagnostics())
+                    dev.jkbuild.task.IncrementalCompile.Result r =
+                            dev.jkbuild.task.IncrementalCompile.run(
+                                    taskId, request, Jk.VERSION, !noCache, cas, actionCache);
+                    ctx.put(ACTION_KEY, r.actionKey());
+                    for (CompileResult.Diagnostic d : r.diagnostics())
                         ctx.error("javac", d.render());
-                    if (!result.success() || result.hasErrors())
+                    if (!r.success())
                         throw new RuntimeException("javac reported errors");
-                    actionCache.storeWithOutputs(taskId, actionKey,
-                            ActionKey.snapshotInputs(request), precomputedOutputs);
-                    ctx.put(BUILD_OUTCOME, "compiled");
+                    if (r.cacheHit())
+                        ctx.label("cache hit " + r.actionKey().substring(0, 8));
+                    ctx.put(BUILD_OUTCOME, r.outcome());
                     ctx.progress(sources.size());
                 })
                 .build();
@@ -773,7 +758,7 @@ public final class BuildCommand implements Callable<Integer> {
     private void printSuccessSummary(Goal goal, GoalResult result) {
         if (global.outputIsJson()) return;
         String check  = dev.jkbuild.cli.tui.Theme.colorize(
-                "✓", dev.jkbuild.cli.tui.Theme.brightGreen().bold());
+                "✓", dev.jkbuild.cli.tui.Theme.success());
         String inTime = dev.jkbuild.cli.tui.Theme.colorize(
                 "in " + fmtDuration(result.duration()),
                 dev.jkbuild.cli.tui.Theme.darkGray());
