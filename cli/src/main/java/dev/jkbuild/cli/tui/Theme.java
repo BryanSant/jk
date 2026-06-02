@@ -50,8 +50,12 @@ public final class Theme {
     // bright-green.
     /** Gradient for {@code jk init}/wizard titles — Jk Dark bright-blue → accent. */
     public static final Gradient TITLE_GRADIENT = new Gradient(JkDark.BRIGHT_BLUE, JkDark.ACCENT);
-    /** Gradient for the {@link ProgressBar} fill — Jk Dark green → bright-green. */
-    public static final Gradient PROGRESS_GRADIENT = new Gradient(JkDark.NORMAL_GREEN, JkDark.BRIGHT_GREEN);
+    /**
+     * Gradient for the {@link ProgressBar} fill — Jk Dark green (30% darker) →
+     * bright-green (10% brighter), for a punchier fill than the raw palette greens.
+     */
+    public static final Gradient PROGRESS_GRADIENT =
+            new Gradient(JkDark.NORMAL_GREEN.darker(0.30), JkDark.BRIGHT_GREEN.brighter(0.10));
     /** Gradient for the {@link Spinner} frames — Jk Dark primary → accent. */
     public static final Gradient SPINNER_GRADIENT = new Gradient(JkDark.PRIMARY, JkDark.ACCENT);
     /** Gradient a failed progress bar repaints in: dark red #7f1d1d → bright red #ef4444. */

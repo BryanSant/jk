@@ -567,8 +567,8 @@ public final class Jk implements Runnable {
         suffix.append(" [OPTIONS]");
         String nl = System.lineSeparator();
         if (ansi) {
-            // Command name uses Jk Dark primary (#3F51B5): name bold, suffix plain.
-            return "\033[1;38;2;63;81;181m" + name + "\033[0m\033[38;2;63;81;181m" + suffix + "\033[0m" + nl;
+            // Command name uses Jk Dark cyan (#00BCD4): name bold, suffix plain.
+            return "\033[1;38;2;0;188;212m" + name + "\033[0m\033[38;2;0;188;212m" + suffix + "\033[0m" + nl;
         }
         return name + suffix + nl;
     }
@@ -638,7 +638,7 @@ public final class Jk implements Runnable {
             String label = positionalLabel(p);
             String desc = p.description().length > 0 ? p.description()[0] : "";
             sb.append("  ")
-                    .append(ansi ? "\033[38;2;63;81;181m" + label + "\033[0m" : label)
+                    .append(ansi ? "\033[38;2;0;188;212m" + label + "\033[0m" : label)
                     .append(" ".repeat(width - label.length()))
                     .append(desc)
                     .append(nl);
@@ -704,7 +704,7 @@ public final class Jk implements Runnable {
             String desc = options.get(i).description().length > 0 ? options.get(i).description()[0] : "";
             sb.append("  ").append(brightCyan(row.namePart, ansi));
             if (!row.labelPart.isEmpty()) {
-                sb.append(" ").append(ansi ? "\033[38;2;63;81;181m" + row.labelPart + "\033[0m" : row.labelPart);
+                sb.append(" ").append(ansi ? "\033[38;2;0;188;212m" + row.labelPart + "\033[0m" : row.labelPart);
             }
             sb.append(" ".repeat(width - row.width())).append(desc).append(nl);
         }
@@ -713,14 +713,14 @@ public final class Jk implements Runnable {
 
     // Help-screen accents as fixed truecolor (so they never pick up the user's
     // palette), from the Jk Dark scheme: section headers take the accent
-    // (#FF4081 pink), command/param names take primary (#3F51B5 indigo). Both
+    // (#FF4081 pink), command/param names take cyan (#00BCD4). Both
     // keep the bold (1;) prefix. (Method names are historical.)
     private static String brightGreen(String text, boolean ansi) {
         return ansi ? "\033[1;38;2;255;64;129m" + text + "\033[0m" : text;
     }
 
     private static String brightCyan(String text, boolean ansi) {
-        return ansi ? "\033[1;38;2;63;81;181m" + text + "\033[0m" : text;
+        return ansi ? "\033[1;38;2;0;188;212m" + text + "\033[0m" : text;
     }
 
     /**
@@ -783,9 +783,9 @@ public final class Jk implements Runnable {
     private static String formatUsageLine(boolean ansi, String name) {
         String suffix = " <COMMAND> [OPTIONS]";
         if (ansi) {
-            // Jk Dark: "Usage:" header = accent #FF4081; name + suffix = primary #3F51B5.
-            return "\033[1;38;2;255;64;129mUsage:\033[0m \033[1;38;2;63;81;181m" + name
-                    + "\033[0m\033[38;2;63;81;181m" + suffix + "\033[0m";
+            // Jk Dark: "Usage:" header = accent #FF4081; name + suffix = cyan #00BCD4.
+            return "\033[1;38;2;255;64;129mUsage:\033[0m \033[1;38;2;0;188;212m" + name
+                    + "\033[0m\033[38;2;0;188;212m" + suffix + "\033[0m";
         }
         return "Usage: " + name + suffix;
     }
@@ -848,9 +848,9 @@ public final class Jk implements Runnable {
         out.println();
         String qualifiedName = rootSpec.qualifiedName();
         if (ansi) {
-            // Jk Dark: "Usage:" header = accent #FF4081; name + suffix = primary #3F51B5.
-            out.println("\033[1;38;2;255;64;129mUsage:\033[0m \033[1;38;2;63;81;181m" + qualifiedName
-                    + "\033[0m\033[38;2;63;81;181m <COMMAND> [OPTIONS]\033[0m");
+            // Jk Dark: "Usage:" header = accent #FF4081; name + suffix = cyan #00BCD4.
+            out.println("\033[1;38;2;255;64;129mUsage:\033[0m \033[1;38;2;0;188;212m" + qualifiedName
+                    + "\033[0m\033[38;2;0;188;212m <COMMAND> [OPTIONS]\033[0m");
         } else {
             out.println("Usage: " + qualifiedName + " <COMMAND> [OPTIONS]");
         }

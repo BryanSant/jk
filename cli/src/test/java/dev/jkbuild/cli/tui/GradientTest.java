@@ -48,9 +48,16 @@ class GradientTest {
     }
 
     @Test
-    void progress_runs_green_to_bright_green() {
+    void rgb_darker_and_brighter_scale_and_clamp() {
+        // #4CAF50 (76,175,80) × 0.70 ; #69F0AE (105,240,174) × 1.10 (G clamps).
+        assertThat(JkDark.NORMAL_GREEN.darker(0.30)).isEqualTo(new Rgb(53, 122, 56));
+        assertThat(JkDark.BRIGHT_GREEN.brighter(0.10)).isEqualTo(new Rgb(116, 255, 191));
+    }
+
+    @Test
+    void progress_runs_green_30pct_darker_to_bright_green_10pct_brighter() {
         assertThat(Theme.PROGRESS_GRADIENT)
-                .isEqualTo(new Gradient(JkDark.NORMAL_GREEN, JkDark.BRIGHT_GREEN));
+                .isEqualTo(new Gradient(new Rgb(53, 122, 56), new Rgb(116, 255, 191)));
     }
 
     @Test
