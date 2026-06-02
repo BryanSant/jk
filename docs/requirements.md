@@ -47,7 +47,7 @@ centrally by `dev.jkbuild.jdk.SupportedJdk`.
 - Produce and consume `jk.lock` with full transitive closure, checksums, and source provenance.
 - Best-effort import of `pom.xml` (Tier 1 lossless, Tier 2 best-effort, Tier 3 stub-with-diagnostic).
 - Generate `pom.xml` on publish so jk-built jars are first-class on Maven Central.
-- Subsume JBang's single-file scripting role (`jk run script.java` with header-comment deps).
+- Subsume JBang's single-file scripting role (`jk tool run script.java` with header-comment deps).
 - `jk tool install` / `jk exec` for installing and ephemerally running JVM CLIs as tools.
 - Built-in `jk audit` (OSV database) and `jk image` (Jib-style daemonless OCI images, distroless, multi-arch).
 - SLSA L3 provenance and Sigstore keyless signing by default for `jk publish` from CI.
@@ -246,7 +246,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk update [--precise <coord>@<ver>]` | Re-resolve deps, updating `jk.lock`. |
 | `jk build [-p <member>] [--profile=...] [--features=...]` | Compile and package. |
 | `jk test [-p <member>] [--filter=...]` | Run tests. |
-| `jk run [<bin>] [--with <coord>] [-- args...]` | Run a binary artifact or an inline script. |
+| `jk run [-- args...]` | Run the current project's main artifact, forwarding args to its `main`. (Loose files/tools run via `jk tool run`.) |
 | `jk check` | Type-check without producing artifacts (Kotlin/Java compile to in-memory). |
 | `jk fmt` | Format `jk.toml`/`build.toml`/`jk.lock` and (optionally) source via plugged-in formatter. |
 | `jk lint` | Run blessed linters (Checkstyle/ktlint/Spotless) emitting SARIF. |
@@ -973,7 +973,7 @@ jk owns single-file JVM scripting.
 ### 19.1 Header format
 
 ```java
-///usr/bin/env jk run "$0" "$@"; exit $?
+///usr/bin/env jk tool run "$0" "$@"; exit $?
 
 //jk jdk 21
 //jk dep com.squareup.okhttp3:okhttp:4.12.0
@@ -991,7 +991,7 @@ void main() {
 
 ### 19.2 JBang compatibility
 
-`//DEPS`, `//JAVA`, `//SOURCES`, `//JAVAC_OPTIONS`, `//JAVA_OPTIONS`, `//FILES` directives are accepted. Existing JBang scripts run unmodified under `jk run`.
+`//DEPS`, `//JAVA`, `//SOURCES`, `//JAVAC_OPTIONS`, `//JAVA_OPTIONS`, `//FILES` directives are accepted. Existing JBang scripts run unmodified under `jk tool run`.
 
 ### 19.3 Execution model
 

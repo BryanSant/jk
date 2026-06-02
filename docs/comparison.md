@@ -35,7 +35,7 @@ These commands map directly across all five tools. Differences shown in the
 | Install a tool globally | `jk tool install <coord>` | `uv tool install <pkg>` | `cargo install <crate>` | — | — | jk and cargo install the artifact's own launcher; jk writes to `$JK_BIN_DIR` (`~/.local/bin` by default), cargo to `~/.cargo/bin/`. uv creates a per-tool venv. `jk install <coord>` is a hidden alias for back-compat. |
 | Ephemeral tool exec | `jk exec <coord>` (alias: `jk jkx`; underlying: `jk tool run <coord>`) | `uvx <pkg>` | — | — | — | "Resolve, cache, run, evict LRU." `exec` is the top-level shorthand, parallel to `uvx`; `jkx` is kept as an alias for muscle-memory continuity. |
 | Repair discovered build tools | `jk doctor` | — | — | — | — | Prunes broken mvn/gradle/kotlin symlinks under `$JK_CACHE_DIR/tools/`. |
-| Single-file scripts | `jk run script.java` | `uv run script.py` | — | — | — | jk's header (`//jk dep …`) is also JBang-compatible. uv reads PEP 723 inline metadata. |
+| Single-file scripts | `jk tool run script.java` | `uv run script.py` | — | — | — | jk's header (`//jk dep …`) is also JBang-compatible. uv reads PEP 723 inline metadata. |
 
 ---
 
