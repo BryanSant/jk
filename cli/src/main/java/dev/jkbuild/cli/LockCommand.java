@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the {@link LockOrchestrator} — this is where network/CAS work happens;
  * {@code write-lockfile} (SYNC) serialises the result.
  */
-@Command(name = "lock", description = "Resolve declared dependencies and write jk.lock")
+@Command(name = "lock", description = "Resolve versions for dependencies and write jk.lock")
 public final class LockCommand implements Callable<Integer> {
 
     @Option(names = "--features", paramLabel = "<a,b,...>", split = ",",
@@ -272,7 +272,7 @@ public final class LockCommand implements Callable<Integer> {
             Lockfile lock = goal.get(LOCKFILE).orElseThrow();
             int pkgs = lock.packages().size();
             String check  = dev.jkbuild.cli.tui.Theme.colorize(
-                    "✓", dev.jkbuild.cli.tui.Theme.brightGreen().bold());
+                    "✓", dev.jkbuild.cli.tui.Theme.success());
             String inTime = dev.jkbuild.cli.tui.Theme.colorize(
                     "in " + BuildCommand.fmtDuration(result.duration()),
                     dev.jkbuild.cli.tui.Theme.darkGray());

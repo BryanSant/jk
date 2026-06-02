@@ -26,8 +26,7 @@ import java.util.concurrent.Callable;
  * {@code jk new}.
  */
 @Command(name = "init",
-        description = "Initialize a jk project in the current directory "
-                + "(registers it as a workspace member when inside a workspace)")
+        description = "Initialize the current directory into a project (or member)")
 public final class InitCommand implements Callable<Integer> {
 
     @Option(names = "--name", description = "Project name (artifact). Defaults to the current directory name.")

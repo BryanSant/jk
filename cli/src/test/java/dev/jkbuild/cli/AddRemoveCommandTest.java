@@ -96,7 +96,8 @@ class AddRemoveCommandTest {
     @Test
     void add_rejects_unparseable_coord(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        // A bare name without --group / --ver is a usage error.
+        // A bare name that is not in the alias catalog and has no --group
+        // is a usage error.
         int exit = run("add", "not-a-coord", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(64);
     }

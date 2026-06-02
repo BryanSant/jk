@@ -45,7 +45,7 @@ import java.util.stream.Stream;
  * (if Kotlin sources, after Java). The scratch output directory
  * lives under {@code $TMPDIR} and is deleted on goal completion.
  */
-@Command(name = "compile", description = "Type-check without producing artifacts")
+@Command(name = "compile", description = "Compile this project's source code")
 public final class CompileCommand implements Callable<Integer> {
 
     @Option(names = "--profile", paramLabel = "<name>",
@@ -224,7 +224,7 @@ public final class CompileCommand implements Callable<Integer> {
         int total = javaSources.size() + ktSources.size();
         if (!global.outputIsJson()) {
             String check  = dev.jkbuild.cli.tui.Theme.colorize(
-                    "✓", dev.jkbuild.cli.tui.Theme.brightGreen().bold());
+                    "✓", dev.jkbuild.cli.tui.Theme.success());
             String inTime = dev.jkbuild.cli.tui.Theme.colorize(
                     "in " + BuildCommand.fmtDuration(result.duration()),
                     dev.jkbuild.cli.tui.Theme.darkGray());

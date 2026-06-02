@@ -437,7 +437,7 @@ public final class Jk implements Runnable {
     private static final List<CommandGroup> COMMAND_GROUPS = List.of(
             new CommandGroup("Build commands:", List.of(
                     "build", "run", "clean", "image",
-                    "compile", "test", "native",
+                    "test", "compile", "native",
                     "install", "publish")),
             new CommandGroup("Project commands:", List.of(
                     "new", "init",
@@ -606,6 +606,32 @@ public final class Jk implements Runnable {
             "--output", "--config-file", "--no-config", "--directory",
             "--help", "--version");
 
+    /** One row of the canonical "Global options" help block: name(s), optional value label, description. */
+    private record GlobalOptionHelp(String names, String label, String description) {}
+
+    /**
+     * The single source of truth for the "Global options" help block. Every
+     * command and subcommand — and the top-level {@code jk --help} — renders
+     * this exact list via {@link #renderStyledGlobalOptionList}, so editing a
+     * row here changes the text everywhere at once. Kept as authored text
+     * (rather than reflected from {@link GlobalOptions}) so the wording, order,
+     * and value labels live in exactly one place. Keep the option <em>set</em>
+     * in sync with {@link GlobalOptions} and {@link #GLOBAL_OPTION_LONG_NAMES}.
+     */
+    private static final List<GlobalOptionHelp> GLOBAL_OPTION_HELP = List.of(
+            new GlobalOptionHelp("-q, --quiet", "", "Suppress informational output"),
+            new GlobalOptionHelp("-v, --verbose", "", "Print additional diagnostic output"),
+            new GlobalOptionHelp("--color", "<WHEN>", "When to colorize output: auto, always, never"),
+            new GlobalOptionHelp("--offline", "", "Disable network access for this run"),
+            new GlobalOptionHelp("--no-cache", "", "Bypass build caches for this run"),
+            new GlobalOptionHelp("--no-progress", "", "Disable all progress bars and spinners"),
+            new GlobalOptionHelp("--output", "<FORMAT>", "Output format: text (default) or json"),
+            new GlobalOptionHelp("--config-file", "<FILE>", "Use this jk.toml for configuration"),
+            new GlobalOptionHelp("--no-config", "", "Skip jk.toml discovery; use built-in defaults only"),
+            new GlobalOptionHelp("--directory", "<DIR>", "Change to this directory before running the command"),
+            new GlobalOptionHelp("-h, --help", "", "Show this help message and exit"),
+            new GlobalOptionHelp("-V, --version", "", "Print version information and exit"));
+
     /** True when this option came from the {@link GlobalOptions} mixin. */
     private static boolean isGlobal(picocli.CommandLine.Model.OptionSpec opt) {
         for (String name : opt.names()) {
@@ -624,6 +650,8 @@ public final class Jk implements Runnable {
     /**
      * Render visible positional parameters as `  <param>  description` rows.
      * Param labels are plain bright-cyan (matching the synopsis's `[OPTIONS]`).
+     * A multi-line description renders each extra line on its own row, indented
+     * to hang under the first line's text.
      */
     private static String renderStyledParameterList(Help help) {
         boolean ansi = help.colorScheme().ansi().enabled();
@@ -632,16 +660,20 @@ public final class Jk implements Runnable {
                 .toList();
         if (params.isEmpty()) return "";
         int width = params.stream().mapToInt(p -> positionalLabel(p).length()).max().orElse(0) + 2;
+        String indent = " ".repeat(2 + width); // continuation lines align under the first description char
         var sb = new StringBuilder();
         String nl = System.lineSeparator();
         for (var p : params) {
             String label = positionalLabel(p);
-            String desc = p.description().length > 0 ? p.description()[0] : "";
+            String[] desc = p.description();
             sb.append("  ")
                     .append(ansi ? "\033[38;2;0;188;212m" + label + "\033[0m" : label)
                     .append(" ".repeat(width - label.length()))
-                    .append(desc)
+                    .append(desc.length > 0 ? desc[0] : "")
                     .append(nl);
+            for (int i = 1; i < desc.length; i++) {
+                sb.append(indent).append(desc[i]).append(nl);
+            }
         }
         return sb.toString();
     }
@@ -657,12 +689,34 @@ public final class Jk implements Runnable {
         return renderOptionRows(options, help.colorScheme().ansi().enabled());
     }
 
-    /** Render the {@link GlobalOptions} mixin's options as styled rows. */
+    /**
+     * Render the canonical {@link #GLOBAL_OPTION_HELP} block as styled rows.
+     * Shared by every command/subcommand so the "Global options" section reads
+     * identically everywhere; styling matches {@link #renderOptionRows} (name
+     * block bold-cyan, value label plain cyan, description unstyled).
+     */
     private static String renderStyledGlobalOptionList(Help help) {
-        var options = help.commandSpec().options().stream()
-                .filter(o -> !o.hidden() && isGlobal(o))
-                .toList();
-        return renderOptionRows(options, help.colorScheme().ansi().enabled());
+        boolean ansi = help.colorScheme().ansi().enabled();
+        int width = 0;
+        for (GlobalOptionHelp o : GLOBAL_OPTION_HELP) {
+            width = Math.max(width, globalRowWidth(o));
+        }
+        width += 3; // gutter between name/label block and description
+        var sb = new StringBuilder();
+        String nl = System.lineSeparator();
+        for (GlobalOptionHelp o : GLOBAL_OPTION_HELP) {
+            sb.append("  ").append(brightCyan(o.names(), ansi));
+            if (!o.label().isEmpty()) {
+                sb.append(" ").append(ansi ? "\033[38;2;0;188;212m" + o.label() + "\033[0m" : o.label());
+            }
+            sb.append(" ".repeat(width - globalRowWidth(o))).append(o.description()).append(nl);
+        }
+        return sb.toString();
+    }
+
+    /** On-screen width of a global-option row's name/label block (label adds its text plus a separating space). */
+    private static int globalRowWidth(GlobalOptionHelp o) {
+        return o.names().length() + (o.label().isEmpty() ? 0 : o.label().length() + 1);
     }
 
     /**
@@ -747,19 +801,21 @@ public final class Jk implements Runnable {
             }
         }
 
-        if (wrong != null) {
+        if (ex instanceof picocli.CommandLine.MissingParameterException mpe) {
+            err.println(formatMissingParameterLine(ansi, mpe));
+        } else if (wrong != null) {
             boolean isOption = wrong.startsWith("-");
             String label = isOption ? "unrecognized option" : "unrecognized subcommand";
             err.println(formatErrorLine(ansi, label, wrong));
         } else {
-            err.println(formatErrorLine(ansi, "error", ex.getMessage()));
+            err.println(formatPlainErrorLine(ansi, ex.getMessage()));
         }
         err.println();
         if (suggestion != null) {
             err.println(formatTipLine(ansi, suggestion));
             err.println();
         }
-        err.println(formatUsageLine(ansi, cmd.getCommandSpec().qualifiedName()));
+        err.println(formatUsageLine(ansi, cmd.getCommandSpec()));
         err.println();
         err.println(formatHelpHint(ansi));
         err.flush();
@@ -773,6 +829,40 @@ public final class Jk implements Runnable {
         return "error: " + label + " '" + value + "'";
     }
 
+    /** A bold-red {@code error:} prefix followed by an already-formed message (no quoting). */
+    private static String formatPlainErrorLine(boolean ansi, String message) {
+        if (ansi) {
+            return "\033[1;38;2;233;30;99merror:\033[0m " + message;
+        }
+        return "error: " + message;
+    }
+
+    /**
+     * A missing-required-argument notice in the softer "warning" register:
+     * a yellow {@code ‼} sentinel, the plain {@code Missing required
+     * parameter(s):} text, then the missing argument label(s) in yellow
+     * (positionals as {@code <name>}, options by their longest name).
+     */
+    private static String formatMissingParameterLine(boolean ansi, picocli.CommandLine.MissingParameterException ex) {
+        List<? extends picocli.CommandLine.Model.ArgSpec> missing = ex.getMissing();
+        String labels = missing.stream().map(Jk::missingArgLabel)
+                .collect(java.util.stream.Collectors.joining(", "));
+        String text = "Missing required parameter" + (missing.size() == 1 ? ": " : "s: ");
+        if (ansi) {
+            String yellow = "\033[38;2;255;193;7m";
+            String reset = "\033[0m";
+            return yellow + "‼" + reset + " " + text + yellow + labels + reset;
+        }
+        return "‼ " + text + labels;
+    }
+
+    /** Display label for a missing argument: {@code <name>} for positionals, the longest name for options. */
+    private static String missingArgLabel(picocli.CommandLine.Model.ArgSpec arg) {
+        if (arg instanceof picocli.CommandLine.Model.PositionalParamSpec p) return positionalLabel(p);
+        if (arg instanceof picocli.CommandLine.Model.OptionSpec o) return o.longestName();
+        return arg.paramLabel();
+    }
+
     private static String formatTipLine(boolean ansi, String suggestion) {
         if (ansi) {
             return "  \033[92mtip:\033[0m did you mean '\033[92m" + suggestion + "\033[0m'?";
@@ -780,8 +870,20 @@ public final class Jk implements Runnable {
         return "  tip: did you mean '" + suggestion + "'?";
     }
 
-    private static String formatUsageLine(boolean ansi, String name) {
-        String suffix = " <COMMAND> [OPTIONS]";
+    private static String formatUsageLine(boolean ansi, CommandSpec spec) {
+        String name = spec.qualifiedName();
+        // Mirror renderSynopsis: parents show <COMMAND>, leaves list their
+        // visible positionals before [OPTIONS].
+        StringBuilder suffix = new StringBuilder();
+        if (spec.subcommands().isEmpty()) {
+            for (var p : spec.positionalParameters()) {
+                if (p.hidden()) continue;
+                suffix.append(" ").append(positionalLabel(p));
+            }
+        } else {
+            suffix.append(" <COMMAND>");
+        }
+        suffix.append(" [OPTIONS]");
         if (ansi) {
             // Jk Dark: "Usage:" header = accent #FF4081; name + suffix = cyan #00BCD4.
             return "\033[1;38;2;255;64;129mUsage:\033[0m \033[1;38;2;0;188;212m" + name

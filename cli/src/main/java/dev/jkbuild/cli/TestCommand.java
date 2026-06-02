@@ -6,7 +6,6 @@ import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
-import dev.jkbuild.compile.JavacDriver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
@@ -22,6 +21,7 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
+import dev.jkbuild.task.IncrementalCompile;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;
@@ -294,7 +294,7 @@ public final class TestCommand implements Callable<Integer> {
         long total = testResult.total();
         if (total == 0) return;
         String check  = dev.jkbuild.cli.tui.Theme.colorize(
-                "✓", dev.jkbuild.cli.tui.Theme.brightGreen().bold());
+                "✓", dev.jkbuild.cli.tui.Theme.success());
         String passed = dev.jkbuild.cli.tui.Theme.colorize(
                 "Passed", dev.jkbuild.cli.tui.Theme.focused());
         String inTime = dev.jkbuild.cli.tui.Theme.colorize(
@@ -451,24 +451,19 @@ public final class TestCommand implements Callable<Integer> {
                 .extraOptions(javacArgs)
                 .javaHome(javaHome)
                 .build();
-        String actionKey = ActionKey.forJavac(cacheTaskId, request, Jk.VERSION);
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
+        boolean useCache = !dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
 
-        boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-        java.util.Optional<ActionCache.ActionRecord> cached =
-                noCache ? java.util.Optional.empty() : actionCache.lookup(actionKey);
-        if (cached.isPresent()) {
-            actionCache.restore(cached.get(), outputDir);
-            ctx.label(taskId + ": cache hit " + actionKey.substring(0, 8));
-            return true;
-        }
-        ctx.label(taskId + ": compiling " + sources.size() + " sources");
-        CompileResult result = new JavacDriver().compile(request);
-        for (CompileResult.Diagnostic d : result.diagnostics()) {
+        ctx.label(taskId + ": " + sources.size() + " sources");
+        IncrementalCompile.Result r = IncrementalCompile.run(
+                cacheTaskId, request, Jk.VERSION, useCache, cas, actionCache);
+        for (CompileResult.Diagnostic d : r.diagnostics()) {
             ctx.error("javac", d.render());
         }
-        if (!result.success() || result.hasErrors()) return false;
-        actionCache.store(cacheTaskId, actionKey, ActionKey.snapshotInputs(request), outputDir);
+        if (!r.success()) return false;
+        ctx.label(r.cacheHit()
+                ? taskId + ": cache hit " + r.actionKey().substring(0, 8)
+                : taskId + ": compiled " + sources.size() + " sources");
         return true;
     }
 }

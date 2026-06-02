@@ -55,7 +55,7 @@ import java.util.concurrent.Callable;
  * take" diagnosis.
  */
 @Command(name = "native",
-        description = "Compile a native binary with GraalVM native-image")
+        description = "Build a native binary with GraalVM")
 public final class NativeCommand implements Callable<Integer> {
 
     @Option(names = "--main",

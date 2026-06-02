@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.cli.tui.Theme;
 import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.model.Scope;
 import picocli.CommandLine.Command;
@@ -22,7 +23,7 @@ import java.util.concurrent.Callable;
  * the artifactId is extracted and used as the short name. The
  * recommended form is the bare short name.
  */
-@Command(name = "remove", description = "Remove a dependency from jk.toml")
+@Command(name = "remove", description = "Remove a dependency, or workspace member, from jk.toml")
 public final class RemoveCommand implements Callable<Integer> {
 
     @Parameters(arity = "1", paramLabel = "[name]",
@@ -78,7 +79,10 @@ public final class RemoveCommand implements Callable<Integer> {
             return 1;
         }
         Files.writeString(file, updated, StandardCharsets.UTF_8);
-        System.out.println("Removed " + name + " from dependencies." + scope.canonical());
+        System.out.println(Theme.colorize("✗", Theme.darkGray())
+                + " Removed " + Theme.colorize(name, Theme.activeStep())
+                + " from " + Theme.colorize("dependencies", Theme.cyan())
+                + "." + Theme.colorize(scope.canonical(), Theme.cyan()));
         return 0;
     }
 

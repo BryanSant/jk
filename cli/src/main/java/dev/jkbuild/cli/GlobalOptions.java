@@ -39,9 +39,7 @@ public final class GlobalOptions {
     public boolean offline;
 
     @Option(names = "--no-cache",
-            description = "Bypass build caches for this run (deps, action cache, "
-                    + "git checkouts, tool downloads). JDKs are managed via "
-                    + "`jk jdk` and are not affected by this flag.")
+            description = "Bypass build caches for this run")
     public boolean noCache;
 
     @Option(names = "--no-progress",

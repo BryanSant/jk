@@ -26,7 +26,7 @@ import java.util.concurrent.Callable;
  * {@code status} / {@code token}.
  */
 @Command(name = "auth",
-        description = "Authenticate with a git forge (GitHub, GitLab, Gitea/Forgejo, Bitbucket)",
+        description = "Authenticate with a git forge (GitHub, GitLab, Bitbucket, etc.)",
         subcommands = {
                 AuthLoginCommand.class,
                 AuthLogoutCommand.class,

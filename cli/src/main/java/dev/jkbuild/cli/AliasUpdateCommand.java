@@ -118,7 +118,7 @@ public final class AliasUpdateCommand implements Callable<Integer> {
     }
 
     private void printSummary(Path cacheFile, int total, Diff diff) {
-        System.out.println(Theme.colorize("✓", Theme.brightGreen().bold())
+        System.out.println(Theme.colorize("✓", Theme.success())
                 + " alias catalog updated — " + total + " entries cached at " + cacheFile);
         emitList("added", diff.added);
         emitList("removed", diff.removed);

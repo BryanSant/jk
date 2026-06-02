@@ -143,6 +143,69 @@ class AddCommandTest {
     }
 
     @Test
+    void add_bare_catalog_name_without_ver_defaults_to_latest(@TempDir Path tmp) throws IOException {
+        // A bare name that IS in the alias catalog resolves group + artifact
+        // and defaults to floating "latest" when --ver is omitted, matching the
+        // group:artifact coord form. Resolution happens later at `jk lock`.
+        write(tmp.resolve("jk.toml"), """
+                [project]
+                group    = "dev.jkbuild"
+                artifact = "jk"
+                version  = "0.1.0"
+
+                [workspace]
+                members = []
+                """);
+
+        int exit = Jk.execute("add", "jackson3-core", "-C", tmp.toString());
+        assertThat(exit).isEqualTo(0);
+
+        // Because jackson3-core is a known catalog alias, the editor renders
+        // the short form (alias name = version) rather than the expanded coord.
+        String toml = Files.readString(tmp.resolve("jk.toml"));
+        assertThat(toml).contains("jackson3-core = \"latest\"");
+    }
+
+    @Test
+    void add_bare_catalog_name_with_at_version_pins_floating(@TempDir Path tmp) throws IOException {
+        // `alias@version` resolves the alias and uses the @version as a
+        // caret-floating selector, matching group:artifact@version.
+        write(tmp.resolve("jk.toml"), """
+                [project]
+                group    = "dev.jkbuild"
+                artifact = "jk"
+                version  = "0.1.0"
+
+                [workspace]
+                members = []
+                """);
+
+        int exit = Jk.execute("add", "jackson3-core@3.1.0", "-C", tmp.toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(Files.readString(tmp.resolve("jk.toml")))
+                .contains("jackson3-core = \"3.1.0\"");
+    }
+
+    @Test
+    void add_bare_catalog_name_with_at_latest_is_latest(@TempDir Path tmp) throws IOException {
+        // `alias@latest` is equivalent to omitting the version.
+        write(tmp.resolve("jk.toml"), """
+                [project]
+                group    = "dev.jkbuild"
+                artifact = "jk"
+                version  = "0.1.0"
+
+                [workspace]
+                members = []
+                """);
+
+        int exit = Jk.execute("add", "jackson3-core@latest", "-C", tmp.toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(Files.readString(tmp.resolve("jk.toml")))
+                .contains("jackson3-core = \"latest\"");
+    }
+
+    @Test
     void add_maven_coord_is_unchanged_and_leaves_workspace_alone(@TempDir Path tmp) throws IOException {
         write(tmp.resolve("jk.toml"), """
                 [project]

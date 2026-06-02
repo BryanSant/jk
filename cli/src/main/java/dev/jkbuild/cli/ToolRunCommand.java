@@ -24,38 +24,68 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk tool run <coord> -- <args>} — ephemeral exec from a Maven coord
- * (PRD §20.3). Resolves the coordinate, caches the jar under
- * {@code $JK_CACHE_DIR}, and execs its {@code Main-Class}. {@code jk activate}
- * scripts also expose this on the path as a {@code jkx} alias for
- * uvx-style muscle memory.
+ * {@code jk tool run <coord|file> -- <args>} — ephemerally run a tool or a
+ * standalone file (PRD §20.3), forwarding {@code <args>} to the program.
+ *
+ * <p>The target may be either:
+ * <ul>
+ *   <li>a Maven coordinate ({@code group:artifact:version}) — resolved,
+ *       cached under {@code $JK_CACHE_DIR}, and exec'd via its
+ *       {@code Main-Class}; or</li>
+ *   <li>a {@code .java}/{@code .kt}/{@code .kts}/{@code .jar} file — compiled
+ *       (if needed) and run via {@link ScriptRunner}.</li>
+ * </ul>
+ *
+ * <p>{@code jk activate} scripts also expose this on the path as a
+ * {@code jkx} alias for uvx-style muscle memory.
  */
-@Command(name = "run", description = "Ephemerally run a tool from a Maven coord")
+@Command(name = "run",
+        description = "Ephemerally run a tool from a Maven coord, or a .java/.kt/.kts/.jar file")
 public final class ToolRunCommand implements Callable<Integer> {
 
-    @Parameters(arity = "1", paramLabel = "<coord>",
-            description = "Maven coordinate (group:artifact:version).")
-    String coord;
+    @Parameters(index = "0", arity = "1", paramLabel = "<coord|file>",
+            description = "Maven coordinate (group:artifact:version), or a "
+                    + ".java/.kt/.kts/.jar file to execute.")
+    String target;
 
     @Option(names = "--main",
-            description = "Override the Main-Class to exec.")
+            description = "Override the Main-Class to exec (coordinate targets only).")
     String mainClass;
 
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
 
+    @Option(names = "--state-dir", hidden = true,
+            description = "Override the jk state directory. Default: $JK_STATE_DIR.")
+    Path stateDirOverride;
+
     @Option(names = "--repo-url", hidden = true,
             description = "Override the Maven repository URL (for tests).")
     URI repoUrl;
 
-    @Parameters(arity = "0..*", paramLabel = "<args>",
-            description = "Arguments forwarded to the tool (separate from jk's own flags with `--`).")
+    @Option(names = "--force-recompile",
+            description = "Ignore cached classes and recompile (file targets only).")
+    boolean forceRecompile;
+
+    @Parameters(index = "1..*", arity = "0..*", paramLabel = "<args>",
+            description = "Arguments forwarded to the program (separate from jk's own flags with `--`).")
     List<String> toolArgs = new ArrayList<>();
+
+    @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Override
     public Integer call() throws IOException, InterruptedException {
-        Coordinate primary = Coordinate.parse(coord);
+        // A file target (by extension) is compiled/run by ScriptRunner; the
+        // extension is the signal even when the file is missing, so the user
+        // gets a proper "not found" error from the matching mode handler.
+        if (ScriptRunner.isRunnableFile(target)) {
+            return new ScriptRunner(global, cacheDirOverride, stateDirOverride,
+                    repoUrl, forceRecompile)
+                    .run(Path.of(target), toolArgs);
+        }
+
+        Coordinate primary = Coordinate.parse(target);
         Path cacheDir = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
         Files.createDirectories(cacheDir);
 
