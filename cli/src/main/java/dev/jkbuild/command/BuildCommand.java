@@ -3,52 +3,25 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.runtime.BuildPipeline;
 
-import dev.jkbuild.runtime.LockFlow;
-
-import dev.jkbuild.runtime.CompileToolchain;
-
-import dev.jkbuild.cli.Jk;
-
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.AggregateContext;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.compile.ClasspathResolver;
-import dev.jkbuild.compile.ShadowPackager;
-import dev.jkbuild.compile.CompileRequest;
-import dev.jkbuild.compile.CompileResult;
-import dev.jkbuild.compile.JarPackager;
-import dev.jkbuild.compile.JavacDriver;
-import dev.jkbuild.compile.KotlincDriver;
-import dev.jkbuild.compile.KotlincRequest;
-import dev.jkbuild.compile.KotlincResult;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
-import dev.jkbuild.http.Http;
 import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Scope;
-import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.task.ActionCache;
-import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.test.JUnitLauncher;
-import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -56,7 +29,6 @@ import picocli.CommandLine.Option;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
@@ -65,7 +37,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
-import java.util.stream.Stream;
 
 /**
  * {@code jk build} — smart meta-goal that orchestrates the full pipeline:
@@ -115,34 +86,15 @@ public final class BuildCommand implements Callable<Integer> {
     @picocli.CommandLine.Mixin GlobalOptions global;
 
     // ---- GoalKeys -------------------------------------------------------
+    //
+    // BuildPipeline owns the phase DAG and all of its keys; BuildCommand only
+    // reads a few results back out of the finished goal to render its result
+    // line. GoalKeys are name-keyed, so these match BuildPipeline's by name.
 
-    private static final GoalKey<JkBuild>   PROJECT         = GoalKey.of("project",       JkBuild.class);
-    private static final GoalKey<Lockfile>  LOCKFILE        = GoalKey.of("lockfile",       Lockfile.class);
-    private static final GoalKey<Path>      JAVA_HOME       = GoalKey.of("java-home",      Path.class);
-    private static final GoalKey<Integer>   RELEASE         = GoalKey.of("release",        Integer.class);
-
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> CLASSPATH       = GoalKey.of("classpath",      List.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> JAVA_SOURCES    = GoalKey.of("java-sources",   List.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> KOTLIN_SOURCES  = GoalKey.of("kotlin-sources", List.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> JAVAC_ARGS      = GoalKey.of("javac-args",     List.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> COMPILE_TEST_CP = GoalKey.of("cp-test",        List.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> TEST_RUNTIME_CP = GoalKey.of("cp-runtime",     List.class);
-
-    private static final GoalKey<String>    ACTION_KEY      = GoalKey.of("action-key",     String.class);
-    private static final GoalKey<String>    BUILD_OUTCOME   = GoalKey.of("build-outcome",  String.class);
-    private static final GoalKey<Path>      JAR_PATH        = GoalKey.of("jar-path",       Path.class);
-    private static final GoalKey<Path>      MAIN_CLASSES    = GoalKey.of("main-classes",   Path.class);
-    private static final GoalKey<Path>      TEST_CLASSES    = GoalKey.of("test-classes",   Path.class);
-    private static final GoalKey<BuildLayout> LAYOUT        = GoalKey.of("layout",         BuildLayout.class);
+    private static final GoalKey<String> BUILD_OUTCOME = GoalKey.of("build-outcome", String.class);
+    private static final GoalKey<Path>   JAR_PATH      = GoalKey.of("jar-path",      Path.class);
     private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
             GoalKey.of("test-result", JUnitLauncher.Result.class);
-    private static final GoalKey<Boolean>   NO_TEST_SOURCES = GoalKey.of("no-test-sources", Boolean.class);
 
     // ---- Entry point ----------------------------------------------------
 
@@ -377,86 +329,6 @@ public final class BuildCommand implements Callable<Integer> {
         return 1;
     }
 
-    // ---- native-image phase factory ------------------------------------
-
-    private static Phase buildShadowPhase(Path cache, Path lockFile) {
-        return Phase.builder("package-shadow")
-                .label("Shadow")
-                .kind(PhaseKind.CPU)
-                .requires("package-jar")
-                .scope(1)
-                .execute(ctx -> {
-                    JkBuild project = ctx.require(PROJECT);
-                    BuildLayout layout = ctx.require(LAYOUT);
-                    Path classes = ctx.require(MAIN_CLASSES);
-                    Path shadowJar = layout.shadowJar();
-                    ctx.label("package " + shadowJar.getFileName());
-                    List<Path> depJars = List.of();
-                    if (Files.exists(lockFile)) {
-                        Lockfile lock = LockfileReader.read(lockFile);
-                        depJars = new ClasspathResolver(new Cas(cache))
-                                .classpathFor(lock, ClasspathResolver.RUNTIME);
-                    }
-                    new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
-                            classes, depJars, shadowJar,
-                            project.project().main(), project.manifest(), 0L));
-                    ctx.progress(1);
-                })
-                .build();
-    }
-
-    private static Phase buildNativePhase(Path dir, Path cache, Path lockFile, Path jdksDir) {
-        return Phase.builder("native-image")
-                .label("Native")
-                .kind(PhaseKind.IO)
-                .requires("package-jar")
-                .scope(1)
-                .execute(ctx -> {
-                    // Run GraalVM native-image directly as a subprocess — no
-                    // nested `jk` process; the native step is composed into this
-                    // goal as its own phase (mirrors `jk native`).
-                    JkBuild project = ctx.require(PROJECT);
-                    BuildLayout layout = ctx.require(LAYOUT);
-                    Path mainJar = layout.mainJar();
-                    if (!Files.exists(mainJar)) {
-                        ctx.error("native", "jar not found at " + mainJar);
-                        throw new RuntimeException("missing main jar for native-image");
-                    }
-                    String mainClass = project.project().main();
-                    if (mainClass == null || mainClass.isBlank()) {
-                        ctx.error("native", "native = \"always\" requires [project] main to be set");
-                        throw new RuntimeException("missing main class");
-                    }
-                    Path out = layout.nativeBinary();
-                    Files.createDirectories(out.getParent());
-
-                    // GraalVM JDK (the project's pinned JDK, else the running JVM).
-                    Path javaHome = dev.jkbuild.jdk.JdkResolver.forProject(dir, jdksDir)
-                            .map(dev.jkbuild.jdk.InstalledJdk::home)
-                            .orElseGet(CompileToolchain::runningJavaHome);
-
-                    // Classpath: the app jar plus its runtime dependencies.
-                    List<Path> classpath = new java.util.ArrayList<>();
-                    classpath.add(mainJar);
-                    if (Files.exists(lockFile)) {
-                        Lockfile lock = LockfileReader.read(lockFile);
-                        classpath.addAll(new ClasspathResolver(new Cas(cache))
-                                .classpathFor(lock, ClasspathResolver.RUNTIME));
-                    }
-
-                    ctx.label("native-image " + out.getFileName());
-                    int exit = dev.jkbuild.tool.NativeImageDriver.run(
-                            new dev.jkbuild.tool.NativeImageDriver.Request(
-                                    javaHome, classpath, mainClass, out, List.of()));
-                    if (exit != 0) {
-                        ctx.error("native", "native-image exited " + exit);
-                        throw new RuntimeException("native-image failed (exit " + exit + ")");
-                    }
-                    ctx.progress(1);
-                })
-                .build();
-    }
-
     // ---- success summary -----------------------------------------------
 
     /** Header member label for the goal view: the project's {@code group:artifact}. */
@@ -541,28 +413,5 @@ public final class BuildCommand implements Callable<Integer> {
             }
         }
         return dir.resolve("jk.lock");
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<Path> javaSources(dev.jkbuild.run.PhaseContext ctx) {
-        return (List<Path>) ctx.get(JAVA_SOURCES).orElse(List.of());
-    }
-
-    @SuppressWarnings("unchecked")
-    private static List<Path> kotlinSources(dev.jkbuild.run.PhaseContext ctx) {
-        return (List<Path>) ctx.get(KOTLIN_SOURCES).orElse(List.of());
-    }
-
-    private static void copyResources(Path resourceDir, Path classesDir) throws IOException {
-        if (!Files.exists(resourceDir)) return;
-        try (Stream<Path> stream = Files.walk(resourceDir)) {
-            for (Path source : (Iterable<Path>) stream::iterator) {
-                if (Files.isDirectory(source)) continue;
-                Path relative = resourceDir.relativize(source);
-                Path target   = classesDir.resolve(relative);
-                Files.createDirectories(target.getParent());
-                Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
-            }
-        }
     }
 }
