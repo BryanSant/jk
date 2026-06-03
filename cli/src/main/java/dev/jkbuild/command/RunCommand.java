@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
 
-import dev.jkbuild.cli.Jk;
-
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
@@ -19,10 +18,7 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -38,20 +34,22 @@ import java.util.Locale;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk run [-- <args>...]} — build (if needed) and run the current
- * project's main artifact, forwarding every argument to the project's
- * {@code main} method.
+ * {@code jk run [-- <args>...]} — build the current project through the shared
+ * {@link BuildPipeline} and run its best artifact, forwarding every argument to
+ * the program.
  *
- * <p>{@code jk run} no longer interprets file arguments. A {@code .java},
- * {@code .kt}, {@code .kts}, or {@code .jar} argument is passed straight
- * through to the program like any other argument — it is not executed by
- * jk. To run a loose file or a published tool, use {@code jk tool run}.
+ * <p>The build runs in a {@link Goal} (so progress/warnings/run-log behave like
+ * every other verb) and produces whatever {@code jk.toml} declares — a plain
+ * jar, a shadow jar, and/or a native binary. We then exec the most
+ * self-contained artifact available, in order of preference:
+ * <strong>native binary &gt; shadow jar &gt; plain jar</strong>. The subprocess
+ * starts <em>after</em> the goal returns (the progress widget has wiped itself,
+ * so the inferior owns the TTY); a native binary is exec'd directly, a jar via
+ * {@code java -cp … <main>}. We never hoist a jar into this JVM.
  *
- * <p>The preparation (build, classpath assembly) runs inside a {@link Goal}
- * so progress, warnings, and the run-log behave like every other {@code jk}
- * verb. The subprocess that exec's the program runs <i>after</i> the goal
- * returns — by then the progress widget has wiped itself, so the inferior
- * owns the TTY cleanly. If the goal fails we exit without forking.
+ * <p>{@code jk run} does not interpret file arguments — a {@code .java} /
+ * {@code .jar} argument is forwarded to the program, not executed. Use
+ * {@code jk tool run} for a loose file or a published tool.
  */
 @Command(name = "run",
         description = "Run the current project's designated target")
@@ -61,14 +59,19 @@ public final class RunCommand implements Callable<Integer> {
             description = "Arguments forwarded to the project's main method.")
     List<String> positional = new ArrayList<>();
 
+    @Option(names = "--skip-tests",
+            description = "Skip compiling and running tests before running.")
+    boolean skipTests;
+
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
 
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    @Option(names = "--jdks-dir", hidden = true,
+            description = "Override the JDK install root.")
+    Path jdksDir;
 
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> CLASSPATH = GoalKey.of("classpath", List.class);
+    @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Override
     public Integer call() throws IOException, InterruptedException {
@@ -82,8 +85,6 @@ public final class RunCommand implements Callable<Integer> {
         return runProject(projectDir, positional);
     }
 
-    // --- project mode ----------------------------------------------------
-
     private int runProject(Path projectDir, List<String> appArgs)
             throws IOException, InterruptedException {
         JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
@@ -93,83 +94,62 @@ public final class RunCommand implements Callable<Integer> {
             return 64;
         }
         BuildLayout layout = BuildLayout.of(projectDir, project);
+        Path cache = cacheDir();
 
-        // If a native binary exists, it's the fast path — skip the goal
-        // entirely and exec it directly. No prep needed.
-        Path nativeBin = layout.nativeBinary();
-        if (Files.isRegularFile(nativeBin) && Files.isExecutable(nativeBin)) {
-            List<String> command = new ArrayList<>();
-            command.add(nativeBin.toAbsolutePath().toString());
-            command.addAll(appArgs);
-            return new ProcessBuilder(command).inheritIO().start().waitFor();
-        }
+        // Build through the one pipeline, producing whatever jk.toml declares
+        // (jar always; shadow/native when configured). Cache-aware, so a clean
+        // tree is near-instant.
+        Path lockFile = projectDir.resolve("jk.lock");
+        int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
+        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
+                projectDir, cache, projectDir.resolve("jk.toml"), lockFile, projectDir,
+                1, estimatedTestCount, null, jdksDir, skipTests, global.verbose);
+        Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
+        BuildPipeline.appendDeclaredTails(builder, inputs);
+        Goal goal = builder.build();
 
-        Path jar = layout.mainJar();
-
-        Phase ensureBuilt = Phase.builder("ensure-built")
-                .kind(PhaseKind.CPU)
-                .scope(1)
-                .execute(ctx -> {
-                    if (Files.exists(jar)) {
-                        ctx.label("jar present");
-                        ctx.progress(1);
-                        return;
-                    }
-                    // The nested `jk build` invocation paints its own
-                    // progress widget; this outer goal's widget yields
-                    // for the duration. Acceptable for now — we could
-                    // model build as a sub-goal in a future commit.
-                    ctx.label("jar missing — running jk build");
-                    int rc = Jk.execute("build", "-C", projectDir.toString());
-                    if (rc != 0) {
-                        ctx.error("nested-build", "jk build exited " + rc);
-                        throw new RuntimeException("nested build failed");
-                    }
-                    if (!Files.exists(jar)) {
-                        ctx.error("missing-jar", "expected jar at " + jar
-                                + " but build did not produce it.");
-                        throw new RuntimeException("jar not produced");
-                    }
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase assembleClasspath = Phase.builder("assemble-classpath")
-                .requires("ensure-built")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("collect runtime classpath");
-                    List<Path> classpath = assembleRuntimeClasspath(projectDir, project, jar);
-                    ctx.put(CLASSPATH, classpath);
-                    ctx.progress(1);
-                })
-                .build();
-
-        Goal goal = Goal.builder("run")
-                .addPhase(ensureBuilt)
-                .addPhase(assembleClasspath)
-                .build();
-
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir());
+        ConsoleSpec spec = new ConsoleSpec("Build",
+                r -> "Built " + BuildCommand.inTime(r),
+                r -> "Build failed " + BuildCommand.inTime(r));
+        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
+                BuildCommand.buildTarget(projectDir.resolve("jk.toml"), projectDir));
         if (!result.success()) {
-            for (GoalResult.Diagnostic d : result.errors()) {
-                if ("missing-jar".equals(d.code())) return 70; // EX_SOFTWARE — build promised but didn't deliver
-                if ("nested-build".equals(d.code())) return 1;
-            }
+            var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+            if (testResult != null && !testResult.allPassed()) return 4;
             return 1;
         }
 
-        @SuppressWarnings("unchecked")
-        List<Path> classpath = (List<Path>) goal.get(CLASSPATH).orElseThrow();
-        Path java = CompileToolchain.runningJavaHome().resolve("bin")
-                .resolve(isWindows() ? "java.exe" : "java");
-        List<String> command = new ArrayList<>();
-        command.add(java.toString());
-        command.add("-cp");
-        command.add(joinClasspath(classpath));
-        command.add(project.project().main());
+        // Exec the most self-contained artifact: native > shadow > plain jar.
+        List<String> command = execCommand(projectDir, project, layout);
         command.addAll(appArgs);
         return new ProcessBuilder(command).inheritIO().start().waitFor();
+    }
+
+    /** The command line for the best available artifact (native &gt; shadow &gt; jar). */
+    private List<String> execCommand(Path projectDir, JkBuild project, BuildLayout layout)
+            throws IOException {
+        List<String> command = new ArrayList<>();
+
+        Path nativeBin = layout.nativeBinary();
+        if (Files.isRegularFile(nativeBin) && Files.isExecutable(nativeBin)) {
+            command.add(nativeBin.toAbsolutePath().toString());
+            return command;
+        }
+
+        String javaExe = CompileToolchain.runningJavaHome().resolve("bin")
+                .resolve(isWindows() ? "java.exe" : "java").toString();
+        command.add(javaExe);
+        command.add("-cp");
+
+        Path shadow = layout.shadowJar();
+        if (Files.isRegularFile(shadow)) {
+            // Shadow jar already bundles all runtime deps.
+            command.add(shadow.toAbsolutePath().toString());
+        } else {
+            command.add(joinClasspath(assembleRuntimeClasspath(projectDir, project, layout.mainJar())));
+        }
+        command.add(project.project().main());
+        return command;
     }
 
     private List<Path> assembleRuntimeClasspath(Path projectDir, JkBuild project, Path projectJar)

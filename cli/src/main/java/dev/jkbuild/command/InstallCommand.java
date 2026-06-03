@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
-
-import dev.jkbuild.cli.Jk;
 
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
@@ -105,6 +104,10 @@ public final class InstallCommand implements Callable<Integer> {
             description = "Override the Main-Class to exec.")
     String mainClass;
 
+    @Option(names = "--skip-tests",
+            description = "Skip compiling and running tests before installing.")
+    boolean skipTests;
+
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
@@ -134,7 +137,6 @@ public final class InstallCommand implements Callable<Integer> {
     // Cross-phase keys.
     private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
     private static final GoalKey<BuildLayout> LAYOUT = GoalKey.of("layout", BuildLayout.class);
-    private static final GoalKey<Path> JAR = GoalKey.of("jar", Path.class);
     private static final GoalKey<ToolEnv> TOOL_ENV = GoalKey.of("tool-env", ToolEnv.class);
     private static final GoalKey<Coordinate> PRIMARY = GoalKey.of("primary-coord", Coordinate.class);
     private static final GoalKey<Path> LAUNCHER = GoalKey.of("launcher", Path.class);
@@ -321,71 +323,38 @@ public final class InstallCommand implements Callable<Integer> {
         Path binDir = binDir();
         Path libexecDir = libexecDir();
 
-        Phase parseBuild = Phase.builder("parse-build")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("parse jk.toml");
-                    JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
-                    var p = project.project();
-                    // A non-native application needs a main class for its launcher.
-                    if (p.isApplication() && !p.nativeMode().isEnabled() && p.main() == null) {
-                        ctx.error("no-main", "application project at " + projectDir
-                                + " has no `main` class set in [project]");
-                        throw new RuntimeException("no main");
-                    }
-                    ctx.put(PROJECT, project);
-                    ctx.put(LAYOUT, BuildLayout.of(projectDir, project));
-                    ctx.put(JAR, BuildLayout.of(projectDir, project).mainJar());
-                    ctx.progress(1);
-                })
-                .build();
+        // Validate up front: a non-native application needs a main class for its
+        // launcher. (Done here, not in a phase, so we fail before building.)
+        JkBuild proj = JkBuildParser.parse(projectDir.resolve("jk.toml"));
+        var pj = proj.project();
+        if (pj.isApplication() && !pj.nativeMode().isEnabled() && pj.main() == null) {
+            System.err.println("jk install: application project at " + projectDir
+                    + " has no `main` class set in [project]");
+            return 64;
+        }
+        boolean isNative = pj.isApplication() && pj.nativeMode().isEnabled();
+        boolean needShadow = pj.isApplication() && pj.shadow() && !isNative;
 
-        Phase ensureBuilt = Phase.builder("ensure-built")
-                .kind(PhaseKind.CPU)
-                .requires("parse-build")
-                .scope(1)
-                .execute(ctx -> {
-                    JkBuild project = ctx.require(PROJECT);
-                    var p = project.project();
-                    BuildLayout layout = ctx.require(LAYOUT);
-                    boolean isNative = p.isApplication() && p.nativeMode().isEnabled();
-                    boolean needShadow = p.isApplication() && p.shadow() && !isNative;
+        // Build through the one pipeline (jar always; shadow/native per jk.toml),
+        // then install its outputs — no nested jk process.
+        Path lockFile = projectDir.resolve("jk.lock");
+        int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
+        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
+                projectDir, cacheDir, projectDir.resolve("jk.toml"), lockFile, projectDir,
+                1, estimatedTestCount, null, null, skipTests, global.verbose);
+        Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
+        BuildPipeline.appendDeclaredTails(builder, inputs);
 
-                    Path jar = layout.mainJar();
-                    if (!Files.exists(jar) || (needShadow && !Files.exists(layout.shadowJar()))) {
-                        ctx.label("running jk build");
-                        // Share install's cache so the build's deps land where
-                        // cache-install / make-install read them from.
-                        int rc = Jk.execute("build", "-C", projectDir.toString(),
-                                "--cache-dir", cacheDir.toString());
-                        if (rc != 0) {
-                            ctx.error("nested-build", "jk build exited " + rc);
-                            throw new RuntimeException("nested build failed");
-                        }
-                    }
-                    if (!Files.exists(jar)) {
-                        ctx.error("missing-jar", "expected jar at " + jar
-                                + " but build did not produce it.");
-                        throw new RuntimeException("jar not produced");
-                    }
-                    if (isNative && !Files.exists(layout.nativeBinary())) {
-                        ctx.label("running jk native");
-                        int rc = Jk.execute("native", "-C", projectDir.toString(),
-                                "--cache-dir", cacheDir.toString());
-                        if (rc != 0 || !Files.exists(layout.nativeBinary())) {
-                            ctx.error("missing-native", "expected native binary at "
-                                    + layout.nativeBinary() + " but it was not produced.");
-                            throw new RuntimeException("native binary not produced");
-                        }
-                    }
-                    ctx.progress(1);
-                })
-                .build();
+        // cache-install reads the freshly-built jar; make-install must wait for
+        // whichever runnable artifact this project produces.
+        List<String> makeRequires = new ArrayList<>(List.of("cache-install"));
+        if (isNative) makeRequires.add("native-image");
+        if (needShadow) makeRequires.add("package-shadow");
 
         // Always: install the jar + pom into jk's CAS + journal (the
         // `mvn install` equivalent), so other local projects can resolve it.
         Phase cacheInstall = Phase.builder("cache-install")
-                .requires("ensure-built")
+                .requires("package-jar")
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
@@ -406,7 +375,7 @@ public final class InstallCommand implements Callable<Integer> {
 
         // Only for applications: place a runnable artifact under ~/.jk.
         Phase makeInstall = Phase.builder("make-install")
-                .requires("cache-install")
+                .requires(makeRequires.toArray(new String[0]))
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
@@ -429,19 +398,15 @@ public final class InstallCommand implements Callable<Integer> {
                 })
                 .build();
 
-        Goal goal = Goal.builder(goalName)
-                .addPhase(parseBuild)
-                .addPhase(ensureBuilt)
+        Goal goal = builder
                 .addPhase(cacheInstall)
                 .addPhase(makeInstall)
                 .build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
         if (!result.success()) {
-            for (GoalResult.Diagnostic d : result.errors()) {
-                if ("no-main".equals(d.code())) return 64;
-                if ("missing-jar".equals(d.code()) || "missing-native".equals(d.code())) return 70;
-            }
+            var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+            if (testResult != null && !testResult.allPassed()) return 4;
             return failureExit(result, "jk install", cacheDir);
         }
 
