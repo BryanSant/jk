@@ -1,27 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.BuildPipeline;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.ImageConfigParser;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.jdk.InstalledJdk;
-import dev.jkbuild.jdk.JdkResolver;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.tool.NativeImageDriver;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -32,32 +19,17 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk native} — build a GraalVM-compiled native binary for the
- * project. Uses the project's pinned JDK (must be a GraalVM distribution);
- * classpath comes from {@code jk.lock} + the project's main jar.
+ * {@code jk native} — build a GraalVM-compiled native binary for the project,
+ * from source. Runs the full {@linkplain BuildPipeline build pipeline}
+ * (compile → test → package) and then composes the native-image tail onto the
+ * <em>same</em> goal, so there is no "run {@code jk build} first" step and no
+ * nested {@code jk} process — native-image runs as a direct subprocess.
  *
- * <p>Organised as a {@link Goal} with four phases:
- * <ol>
- *   <li>{@code parse-build} (SYNC) — validate inputs, parse jk.toml,
- *       resolve image config (main class, output path).</li>
- *   <li>{@code resolve-jdk} (IO, parallel with assemble-classpath) —
- *       find the GraalVM JDK to run native-image with.</li>
- *   <li>{@code assemble-classpath} (SYNC, parallel with resolve-jdk) —
- *       collect lockfile-referenced JARs from the CAS.</li>
- *   <li>{@code native-image} (CPU) — fork {@code native-image} subprocess
- *       and wait. This is the expensive step (30–180s typically);
- *       upstream's stdout/stderr stream through inherited IO.</li>
- * </ol>
- *
- * <p>native-image doesn't expose structured progress, so its phase
- * reports as one chunk of work that completes on subprocess exit.
- * The verbose listener still shows phase boundaries; the event log
- * records start/finish timestamps for "how long did native compile
- * take" diagnosis.
+ * <p>The GraalVM JDK is the project's pinned JDK (else the running JVM);
+ * classpath is the freshly-built main jar plus {@code jk.lock}'s runtime deps.
  */
 @Command(name = "native",
         description = "Build a native binary with GraalVM")
@@ -75,172 +47,64 @@ public final class NativeCommand implements Callable<Integer> {
             description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
 
+    @Option(names = "--skip-tests",
+            description = "Skip compiling and running tests before the native build.")
+    boolean skipTests;
+
     @Parameters(arity = "0..*", paramLabel = "<native-image-args>",
             description = "Extra arguments forwarded to native-image (after --).")
     List<String> extra = new ArrayList<>();
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
-    // Cross-phase keys.
-    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
-    private static final GoalKey<Path> MAIN_JAR = GoalKey.of("main-jar", Path.class);
-    private static final GoalKey<String> MAIN_CLASS = GoalKey.of("main-class", String.class);
-    private static final GoalKey<Path> OUTPUT_PATH = GoalKey.of("output-path", Path.class);
-    private static final GoalKey<Path> JAVA_HOME = GoalKey.of("java-home", Path.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> CLASSPATH = GoalKey.of("classpath", List.class);
-
     @Override
     public Integer call() throws IOException, InterruptedException {
         Path projectDir = global.workingDir();
-        Path jkBuildPath = projectDir.resolve("jk.toml");
+        Path buildFile = projectDir.resolve("jk.toml");
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
 
-        // Bail with the existing error shapes for misuse before the goal
-        // even starts — these don't deserve a run-log entry.
-        if (!Files.exists(jkBuildPath)) {
-            System.err.println("jk native: " + jkBuildPath + " not found.");
+        if (!Files.exists(buildFile)) {
+            System.err.println("jk native: " + buildFile + " not found.");
             return 66;
         }
 
-        Phase parseBuild = Phase.builder("parse-build")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("Parse jk.toml");
-                    JkBuild project;
-                    try {
-                        project = JkBuildParser.parse(jkBuildPath);
-                    } catch (RuntimeException e) {
-                        ctx.error("toml", e.getMessage());
-                        throw e;
-                    }
-                    ctx.put(PROJECT, project);
-                    BuildLayout layout = BuildLayout.of(projectDir, project);
+        // Resolve the main class up front: --main wins, then [image] main-class;
+        // a null here lets the native phase fall back to [project] main.
+        String resolvedMain = mainClass;
+        if (resolvedMain == null || resolvedMain.isBlank()) {
+            try {
+                resolvedMain = ImageConfigParser.parse(buildFile).mainClass();
+            } catch (RuntimeException ignored) { /* fall through to [project] main */ }
+        }
 
-                    Path mainJar = layout.mainJar();
-                    if (!Files.exists(mainJar)) {
-                        ctx.error("missing-jar", "main jar not found at " + mainJar
-                                + " — run `jk build` first.");
-                        throw new RuntimeException("missing main jar");
-                    }
-                    ctx.put(MAIN_JAR, mainJar);
+        Path lockFile = projectDir.resolve("jk.lock");
+        int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
+        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
+                projectDir, cache, buildFile, lockFile, projectDir,
+                1, estimatedTestCount, null, jdksDir, skipTests, global.verbose);
 
-                    String chosenMain = mainClass != null
-                            ? mainClass
-                            : ImageConfigParser.parse(jkBuildPath).mainClass();
-                    if (chosenMain == null || chosenMain.isBlank()) {
-                        chosenMain = project.project().main();
-                    }
-                    if (chosenMain == null || chosenMain.isBlank()) {
-                        ctx.error("no-main",
-                                "no main class — pass --main or set [project] main or [image] main-class.");
-                        throw new RuntimeException("missing main class");
-                    }
-                    ctx.put(MAIN_CLASS, chosenMain);
-
-                    Path out = layout.nativeBinary();
-                    Files.createDirectories(out.getParent());
-                    ctx.put(OUTPUT_PATH, out);
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase resolveJdk = Phase.builder("resolve-jdk")
-                .kind(PhaseKind.IO)
-                .requires("parse-build")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("locate GraalVM");
-                    Optional<InstalledJdk> jdk = JdkResolver.forProject(projectDir, jdksDir);
-                    Path javaHome = jdk.map(InstalledJdk::home)
-                            .orElseGet(CompileToolchain::runningJavaHome);
-                    if (jdk.isEmpty()) {
-                        ctx.warn("jdk-fallback",
-                                "no pinned JDK; falling back to the running JVM's java home — "
-                                        + "native-image requires GraalVM, this may fail.");
-                    }
-                    ctx.put(JAVA_HOME, javaHome);
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase assembleClasspath = Phase.builder("assemble-classpath")
-                .requires("parse-build")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("resolve classpath");
-                    List<Path> classpath = new ArrayList<>();
-                    classpath.add(ctx.require(MAIN_JAR));
-                    classpath.addAll(loadLockedJars(projectDir, cache));
-                    ctx.put(CLASSPATH, classpath);
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase nativeImage = Phase.builder("native-image")
-                .kind(PhaseKind.CPU)
-                .requires("resolve-jdk", "assemble-classpath")
-                .scope(1)
-                .execute(ctx -> {
-                    @SuppressWarnings("unchecked")
-                    List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
-                    String chosenMain = ctx.require(MAIN_CLASS);
-                    Path out = ctx.require(OUTPUT_PATH);
-                    ctx.label("compile " + out.getFileName() + " (native-image, may take minutes)");
-                    NativeImageDriver.Request request = new NativeImageDriver.Request(
-                            ctx.require(JAVA_HOME), classpath, chosenMain, out, extra);
-                    int exit = NativeImageDriver.run(request);
-                    if (exit != 0) {
-                        ctx.error("native-image", "native-image exited " + exit);
-                        throw new RuntimeException("native-image failed (exit " + exit + ")");
-                    }
-                    ctx.progress(1);
-                })
-                .build();
-
-        Goal goal = Goal.builder("native")
-                .addPhase(parseBuild)
-                .addPhase(resolveJdk)
-                .addPhase(assembleClasspath)
-                .addPhase(nativeImage)
-                .build();
+        // Core build (jar from source) + the forced native tail in one goal.
+        Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
+        builder.addPhase(BuildPipeline.nativePhase(
+                projectDir, cache, lockFile, jdksDir, resolvedMain, extra));
+        Goal goal = builder.build();
 
         ConsoleSpec spec = new ConsoleSpec("Native Build",
-                r -> goal.get(OUTPUT_PATH)
-                        .map(o -> "Built native binary " + o.getFileName())
+                r -> goal.get(BuildPipeline.LAYOUT)
+                        .map(l -> "Built native binary " + l.nativeBinary().getFileName())
                         .orElse("Built native binary") + " " + BuildCommand.inTime(r),
                 r -> "Native build failed " + BuildCommand.inTime(r));
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
-                BuildCommand.buildTarget(jkBuildPath, projectDir));
+                BuildCommand.buildTarget(buildFile, projectDir));
 
         if (result.success()) return 0;
-        // The progress-bar listener already painted the "✗ Error" line
-        // and the "Failed" bar; we just translate the diagnostic codes
-        // into the right exit status.
-        //   66 (EX_NOINPUT) for missing inputs (jar / main class)
-        //   64 (EX_USAGE)   for missing main class
-        //   1              for native-image subprocess failure
+        // Translate diagnostics into exit codes: 64 (EX_USAGE) for a missing
+        // main class, 4 for test failures, 1 otherwise.
         for (GoalResult.Diagnostic d : result.errors()) {
-            if ("missing-jar".equals(d.code())) return 66;
-            if ("no-main".equals(d.code())) return 64;
+            if ("native".equals(d.code()) && d.message().contains("main class")) return 64;
         }
+        var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+        if (testResult != null && !testResult.allPassed()) return 4;
         return 1;
-    }
-
-    private static List<Path> loadLockedJars(Path projectDir, Path cache) throws IOException {
-        Path lockPath = projectDir.resolve("jk.lock");
-        if (!Files.exists(lockPath)) return List.of();
-        Path casRoot = cache.resolve("sha256");
-        Lockfile lock = LockfileReader.read(lockPath);
-        List<Path> result = new ArrayList<>();
-        for (Lockfile.Package pkg : lock.packages()) {
-            if (pkg.checksum() == null) continue;
-            String hex = pkg.checksum().startsWith("sha256:")
-                    ? pkg.checksum().substring("sha256:".length())
-                    : pkg.checksum();
-            Path candidate = casRoot.resolve(hex.substring(0, 2)).resolve(hex);
-            if (Files.exists(candidate)) result.add(candidate);
-        }
-        return result;
     }
 }
