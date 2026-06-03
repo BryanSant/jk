@@ -59,6 +59,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private boolean done;               // a terminal render already happened
     private int frame;
     private int linesDrawn;             // goal mode: lines in the live region
+    private List<String> lastLines = List.of();  // goal mode: last painted lines, for diffing
 
     // simple mode
     private String label = "";
@@ -263,6 +264,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             if (linesDrawn > 0) out.print(Ansi.cursorUp(linesDrawn));
             out.print(Ansi.ERASE_DISPLAY_TO_END);
             linesDrawn = 0;
+            lastLines = List.of();
         } else {
             out.print(Ansi.CLEAR_LINE);
         }
@@ -290,16 +292,34 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         }
     }
 
-    /** Repaint the multi-line goal region (must hold {@link #lock}). */
+    /**
+     * Repaint the multi-line goal region (must hold {@link #lock}), rewriting
+     * only the lines that changed since the last paint to avoid flicker. The
+     * spinner header changes every frame; the bar and phase rows only on real
+     * updates, so a steady region mostly just rewrites its top line.
+     *
+     * <p>Cursor invariant: between paints the cursor is parked at the start of
+     * the line immediately below the region. We move up to the first line, walk
+     * down rewriting changed lines (and advancing past unchanged ones with a
+     * bare newline), then clear any lines a now-shorter region left behind.
+     */
     private void paintGoal() {
         List<String> lines = renderGoalLines(width, elapsedMillis());
-        if (linesDrawn > 0) out.print(Ansi.cursorUp(linesDrawn));
-        out.print(Ansi.ERASE_DISPLAY_TO_END);
-        for (String line : lines) {
-            out.print(truncateVisible(line, width));
-            out.print('\n');
+        int prev = lastLines.size();
+        if (prev > 0) out.print(Ansi.cursorUp(prev));   // to the top of the region
+        for (int i = 0; i < lines.size(); i++) {
+            boolean changed = i >= prev || !lines.get(i).equals(lastLines.get(i));
+            if (changed) {
+                out.print('\r');
+                out.print(truncateVisible(lines.get(i), width));
+                out.print(Ansi.ERASE_LINE_TO_END);  // wipe any tail from a longer prior line
+            }
+            out.print('\n');                          // advance to the next line / below region
         }
+        // A shorter region than last time: erase the orphaned lines below.
+        if (prev > lines.size()) out.print(Ansi.ERASE_DISPLAY_TO_END);
         out.print(Ansi.taskbarProgress(ProgressBar.percent(numerator, denominator)));
+        lastLines = lines;
         linesDrawn = lines.size();
     }
 
