@@ -276,6 +276,15 @@ public final class CacheCommand implements Callable<Integer> {
             var runLogReport = dev.jkbuild.task.RunLogGc.sweep(
                     root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
 
+            // Phase 2c: aggressively GC the scratch dir (~/.jk/tmp) — any file
+            // older than 7 days. Only on the default root: an explicit
+            // --cache-dir (tests, custom locations) must not touch the real
+            // scratch dir, so prune stays hermetic there.
+            var tmpReport = cacheDir == null
+                    ? dev.jkbuild.task.TmpGc.sweep(dev.jkbuild.util.JkDirs.tmp(),
+                            dev.jkbuild.task.TmpGc.DEFAULT_TTL, dryRun)
+                    : new dev.jkbuild.task.TmpGc.Report(0, 0L);
+
             // --max-size implies --sweep — there's no scenario where you
             // want LRU eviction without first dropping the GC-collectible
             // floor.
@@ -327,6 +336,10 @@ public final class CacheCommand implements Callable<Integer> {
                     fmtCount(recordsExpired), fmtBytes(recordsBytes),
                     fmtCount(tempsCleared), fmtBytes(tempsBytes),
                     fmtCount(runLogReport.deleted()), fmtBytes(runLogReport.freedBytes()));
+            if (cacheDir == null) {
+                System.out.printf(", tmp %s (%s)",
+                        fmtCount(tmpReport.deleted()), fmtBytes(tmpReport.freedBytes()));
+            }
             if (doSweep) {
                 System.out.printf(", swept %s (%s); kept %s",
                         fmtCount(sweptCount), fmtBytes(sweptBytes), fmtCount(sweptKept));

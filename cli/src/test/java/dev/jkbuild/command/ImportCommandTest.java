@@ -34,7 +34,8 @@ class ImportCommandTest {
                 </project>
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("import", pom.toString());
+        int exit = run("import", "--report",
+                tempDir.resolve("jk-import-report.md").toString(), pom.toString());
         assertThat(exit).isEqualTo(0);
 
         String jkBuild = Files.readString(tempDir.resolve("jk.toml"));
@@ -81,7 +82,8 @@ class ImportCommandTest {
                 """, StandardCharsets.UTF_8);
         Files.writeString(tempDir.resolve("jk.toml"), "[project]\ngroup = \"prior\"\n");
 
-        int exit = run("import", "--force", pom.toString());
+        int exit = run("import", "--force", "--report",
+                tempDir.resolve("report.md").toString(), pom.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(Files.readString(tempDir.resolve("jk.toml")))
                 .contains("artifact = \"widget\"")
@@ -104,7 +106,8 @@ class ImportCommandTest {
                 }
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("import", gradle.toString());
+        int exit = run("import", "--report",
+                tempDir.resolve("jk-import-report.md").toString(), gradle.toString());
         assertThat(exit).isEqualTo(0);
 
         String jkBuild = Files.readString(tempDir.resolve("jk.toml"));
@@ -172,7 +175,8 @@ class ImportCommandTest {
                 </project>
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("import", tempDir.resolve("pom.xml").toString());
+        int exit = run("import", "--report",
+                tempDir.resolve("report.md").toString(), tempDir.resolve("pom.xml").toString());
         assertThat(exit).isEqualTo(0);
 
         String root = Files.readString(tempDir.resolve("jk.toml"));
@@ -184,6 +188,26 @@ class ImportCommandTest {
                 .contains("artifact = \"widget-core\"");
         assertThat(Files.readString(tempDir.resolve("app/jk.toml")))
                 .contains("artifact = \"widget-app\"");
+    }
+
+    @Test
+    void default_report_path_names_by_coordinate_and_increments_on_collision(@TempDir Path tmp)
+            throws Exception {
+        Path first = ImportCommand.defaultReportPath(tmp, "com.example-widget-1.0.0", "pom.xml");
+        assertThat(first.getFileName().toString())
+                .isEqualTo("com.example-widget-1.0.0-1-pom.xml-import.md");
+        assertThat(first.getParent()).isEqualTo(tmp);
+
+        // Once it exists, the next call bumps n.
+        Files.writeString(first, "x");
+        Path second = ImportCommand.defaultReportPath(tmp, "com.example-widget-1.0.0", "pom.xml");
+        assertThat(second.getFileName().toString())
+                .isEqualTo("com.example-widget-1.0.0-2-pom.xml-import.md");
+
+        // Source filename is reflected (e.g. Gradle).
+        Path gradle = ImportCommand.defaultReportPath(tmp, "g-a-2.0", "build.gradle.kts");
+        assertThat(gradle.getFileName().toString())
+                .isEqualTo("g-a-2.0-1-build.gradle.kts-import.md");
     }
 
     private static int run(String... args) {

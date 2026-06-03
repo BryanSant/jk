@@ -8,6 +8,7 @@ import dev.jkbuild.compat.ImportReport;
 import dev.jkbuild.gradle.GradleImporter;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.mvn.PomImporter;
+import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -28,8 +29,10 @@ import java.util.concurrent.Callable;
  * {@code pom.xml} → {@link PomImporter} (with multi-module → workspace);
  * {@code build.gradle(.kts)} → {@link GradleImporter} (best-effort declarative).
  *
- * <p>Always writes a {@code jk.toml} and a {@code jk-import-report.md} so
- * the user has the full list of constructs that didn't carry over cleanly.
+ * <p>Always writes a {@code jk.toml} into the project and an import report into
+ * jk's scratch dir ({@code ~/.jk/tmp/}) — never the user's project tree — so the
+ * full list of constructs that didn't carry over cleanly is available without
+ * littering the imported repo. Override the location with {@code --report}.
  */
 @Command(name = "import", description = "Convert a Maven or Gradle build to jk.toml")
 public final class ImportCommand implements Callable<Integer> {
@@ -48,7 +51,8 @@ public final class ImportCommand implements Callable<Integer> {
     Path out;
 
     @Option(names = "--report",
-            description = "Path to write the import report. Default: <source-dir>/jk-import-report.md.")
+            description = "Path to write the import report. "
+                    + "Default: ~/.jk/tmp/<group-artifact-version>-<n>-<source>-import.md.")
     Path reportPath;
 
     @Option(names = "--force", description = "Overwrite existing jk.toml.")
@@ -78,7 +82,6 @@ public final class ImportCommand implements Callable<Integer> {
         String filename = source.getFileName().toString().toLowerCase(Locale.ROOT);
         Path projectDir = source.toAbsolutePath().getParent();
         Path target = out != null ? out : projectDir.resolve("jk.toml");
-        Path reportTarget = reportPath != null ? reportPath : projectDir.resolve("jk-import-report.md");
 
         if (Files.exists(target) && !force) {
             System.err.println("jk import: refusing to overwrite existing " + target
@@ -115,6 +118,18 @@ public final class ImportCommand implements Callable<Integer> {
             System.out.println("Wrote " + memberJkBuild);
         }
 
+        // The report is a transient, regenerable artifact — keep it out of the
+        // user's project tree. Default into ~/.jk/tmp/, named by coordinate +
+        // source file, with a collision counter; --report overrides. The
+        // coordinate is hyphen-joined (not group:artifact:version) so the
+        // filename is valid on Windows.
+        var proj = importable.root.project();
+        String coord = proj.group() + "-" + proj.artifact() + "-" + proj.version();
+        Path reportTarget = reportPath != null
+                ? reportPath
+                : defaultReportPath(JkDirs.tmp(), coord, source.getFileName().toString());
+        Path reportDir = reportTarget.getParent();
+        if (reportDir != null) Files.createDirectories(reportDir);
         Files.writeString(reportTarget,
                 importable.report.renderMarkdown(source.toString()),
                 StandardCharsets.UTF_8);
@@ -138,6 +153,19 @@ public final class ImportCommand implements Callable<Integer> {
             }
         }
         return null;
+    }
+
+    /**
+     * Pick {@code <tmpDir>/<coord>-<n>-<sourceFile>-import.md}, incrementing
+     * {@code n} (from 1) past any existing file so repeated imports of the same
+     * coordinate don't clobber prior reports. {@code coord} is the hyphen-joined
+     * {@code group-artifact-version} (kept filename-safe on every OS).
+     */
+    static Path defaultReportPath(Path tmpDir, String coord, String sourceFileName) {
+        for (int n = 1; ; n++) {
+            Path candidate = tmpDir.resolve(coord + "-" + n + "-" + sourceFileName + "-import.md");
+            if (!Files.exists(candidate)) return candidate;
+        }
     }
 
     private record Importable(JkBuild root, Map<String, JkBuild> members, ImportReport report) {}

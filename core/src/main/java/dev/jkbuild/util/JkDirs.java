@@ -75,6 +75,7 @@ public final class JkDirs {
     public static Path state()          { return current().stateDir(); }
     public static Path data()           { return current().dataDir(); }
     public static Path binDir()         { return current().binDirectory(); }
+    public static Path tmp()            { return current().tmpDir(); }
     public static Path libexec()        { return current().libexecDir(); }
     public static Path jdks()           { return current().jdksDir(); }
 
@@ -104,6 +105,14 @@ public final class JkDirs {
 
     public Path stateDir() {
         return resolve("JK_STATE_DIR", "state");
+    }
+
+    /**
+     * Scratch space for transient, regenerable artifacts (e.g. {@code jk import}
+     * reports). Defaults to {@code ~/.jk/tmp/}; override via {@code JK_TMP_DIR}.
+     */
+    public Path tmpDir() {
+        return resolve("JK_TMP_DIR", "tmp");
     }
 
     public Path dataDir() {
