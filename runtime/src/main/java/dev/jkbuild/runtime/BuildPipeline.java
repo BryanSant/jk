@@ -109,6 +109,18 @@ public final class BuildPipeline {
         Cas cas = new Cas(in.cache());
         ActionCache actionCache = new ActionCache(cas, in.cache().resolve("actions"));
 
+        // Only run (and show) the Kotlin step for projects that actually use
+        // Kotlin: a declared kotlin version in jk.toml, or .kt sources on disk.
+        // A Java-only project skips the phase entirely rather than no-op'ing it.
+        boolean useKotlin = false;
+        try {
+            JkBuild parsed = JkBuildParser.parse(in.buildFile());
+            useKotlin = parsed.project().isKotlin()
+                    || !CompileSupport.collectKotlinSources(in.dir()).isEmpty();
+        } catch (Exception ignored) {
+            // Unparseable/missing jk.toml — parse-build will surface the real error.
+        }
+
         // ---- parse-build ------------------------------------------------
         Phase parseBuild = Phase.builder("parse-build")
                 .label("Parsing")
@@ -325,7 +337,7 @@ public final class BuildPipeline {
         Phase copyResources = Phase.builder("copy-resources")
                 .label("Resources")
                 .kind(PhaseKind.CPU)
-                .requires("compile-kotlin")
+                .requires(useKotlin ? "compile-kotlin" : "compile-java")
                 .scope(1)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
@@ -464,9 +476,11 @@ public final class BuildPipeline {
                 .addPhase(parseBuild)
                 .addPhase(syncDeps)
                 .addPhase(ensureJdk)
-                .addPhase(compileJava)
-                .addPhase(compileKotlin)
-                .addPhase(copyResources);
+                .addPhase(compileJava);
+        if (useKotlin) {
+            b.addPhase(compileKotlin);
+        }
+        b.addPhase(copyResources);
         if (!in.skipTests()) {
             b.addPhase(compileTest).addPhase(runTests);
         }
