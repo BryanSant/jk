@@ -44,6 +44,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private static final long FRAME_MS = Spinner.FRAME_MS;
     private static final String ELLIPSIS = "…";
     private static final int DEFAULT_WIDTH = 80;
+    private static final int DEFAULT_HEIGHT = 24;
     /** Max phase rows shown before completed rows collapse into a "+N" line. */
     static final int MAX_ROWS = 8;
 
@@ -51,6 +52,13 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private final boolean animate;
     private final boolean goalMode;
     private final int width;
+    /**
+     * Terminal rows. The whole region must fit within this — a region taller
+     * than the viewport scrolls its top into scrollback, and cursor-relative
+     * repaint/wipe ({@code cursorUp(n)}) clamps at the viewport top and can no
+     * longer reach it (leaving stale lines, e.g. a lingering spinner on cancel).
+     */
+    int height = DEFAULT_HEIGHT;  // package-private: tests set it directly
     private final AttributedStyle[] frameColors = Spinner.buildGradient(FRAMES.length);
     private final ProgressBar bar = new ProgressBar();
 
@@ -116,7 +124,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * (e.g. {@code "Building"}); set the active member with {@link #target}.
      */
     public static CommandManager goal(PrintStream out, String name, boolean animate) {
-        CommandManager cm = new CommandManager(out, animate, true, animate ? detectWidth() : DEFAULT_WIDTH);
+        int[] size = animate ? detectSize() : new int[]{DEFAULT_HEIGHT, DEFAULT_WIDTH};
+        CommandManager cm = new CommandManager(out, animate, true, size[1]);
+        cm.height = size[0];
         cm.name = name;
         cm.startNanos = System.nanoTime();
         LiveRegion.setActive(cm);
@@ -357,8 +367,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         outstanding.sort((a, b) -> Boolean.compare(b.state == RowState.ACTIVE, a.state == RowState.ACTIVE));
         completed.sort((a, b) -> Long.compare(a.seq, b.seq));
 
-        int shownOutstanding = Math.min(outstanding.size(), MAX_ROWS - 1);
-        int completedSlots = Math.max(0, MAX_ROWS - 1 - shownOutstanding);
+        // Cap the phase list so the whole region (header + bar + rows + collapse)
+        // fits the viewport with a line of headroom — otherwise it scrolls and
+        // cursor-relative repaint/wipe can't reach the top. Never exceed MAX_ROWS.
+        int budget = Math.max(1, Math.min(MAX_ROWS, height - 3));
+        int shownOutstanding = Math.min(outstanding.size(), budget - 1);
+        int completedSlots = Math.max(0, budget - 1 - shownOutstanding);
         int shownCompleted = Math.min(completed.size(), completedSlots);
         // Newest completed are the most relevant; collapse the older overflow.
         int firstCompleted = completed.size() - shownCompleted;
@@ -491,15 +505,16 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Terminal width, detected once, leak-free. We deliberately do NOT build a
-     * JLine terminal here: JLine probes the terminal with capability queries
-     * (DA1 {@code \e[c}, mode reports like {@code \e[?2027$p}), and a transient
-     * build-then-close races the async replies — they arrive after we exit and
-     * the shell echoes them as garbage. Instead ask the tty directly via
-     * {@code stty size} (an ioctl, no escape sequences), then {@code $COLUMNS},
-     * then a conservative default. Only called when animating (interactive tty).
+     * Terminal size {@code {rows, cols}}, detected once, leak-free. We
+     * deliberately do NOT build a JLine terminal: JLine probes the terminal with
+     * capability queries (DA1 {@code \e[c}, mode reports like {@code \e[?2027$p}),
+     * and a transient build-then-close races the async replies — they arrive
+     * after we exit and the shell echoes them as garbage. Instead ask the tty
+     * directly via {@code stty size} (an ioctl, no escape sequences), then the
+     * {@code $LINES}/{@code $COLUMNS} env, then conservative defaults. Only
+     * called when animating (interactive tty).
      */
-    private static int detectWidth() {
+    private static int[] detectSize() {
         try {
             Process p = new ProcessBuilder("stty", "size")
                     .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/tty")))
@@ -510,22 +525,27 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             p.waitFor();
             String[] parts = out.split("\\s+"); // "<rows> <cols>"
             if (parts.length == 2) {
+                int rows = Integer.parseInt(parts[0]);
                 int cols = Integer.parseInt(parts[1]);
-                if (cols > 0) return cols;
+                if (rows > 0 && cols > 0) return new int[]{rows, cols};
             }
         } catch (Exception ignored) {
             // no /dev/tty, no stty (e.g. Windows), or unparsable — fall through
         }
+        return new int[]{envInt("LINES", DEFAULT_HEIGHT), envInt("COLUMNS", DEFAULT_WIDTH)};
+    }
+
+    private static int envInt(String name, int fallback) {
         try {
-            String cols = System.getenv("COLUMNS");
-            if (cols != null) {
-                int v = Integer.parseInt(cols.trim());
-                if (v > 0) return v;
+            String v = System.getenv(name);
+            if (v != null) {
+                int n = Integer.parseInt(v.trim());
+                if (n > 0) return n;
             }
         } catch (NumberFormatException ignored) {
-            // COLUMNS not a number — fall through
+            // not a number — use the fallback
         }
-        return DEFAULT_WIDTH;
+        return fallback;
     }
 
     private enum RowState { PENDING, ACTIVE, DONE, FAILED }
