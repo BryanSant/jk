@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
 
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.config.JkBuildParser;
@@ -202,15 +203,20 @@ public final class NativeCommand implements Callable<Integer> {
                 .addPhase(nativeImage)
                 .build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        ConsoleSpec spec = new ConsoleSpec("Building native",
+                r -> {
+                    String inTime = dev.jkbuild.cli.theme.Theme.colorize(
+                            "in " + BuildCommand.fmtDuration(r.duration()),
+                            dev.jkbuild.cli.theme.Theme.active().darkGray());
+                    return goal.get(OUTPUT_PATH)
+                            .map(o -> "Built native binary " + o.getFileName())
+                            .orElse("Built native binary") + " " + inTime;
+                },
+                r -> "Native build failed");
+        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
+                BuildCommand.buildTarget(jkBuildPath, projectDir));
 
-        if (result.success()) {
-            if (!global.outputIsJson()) {
-                goal.get(OUTPUT_PATH).ifPresent(out ->
-                        System.out.println("Built native binary " + out));
-            }
-            return 0;
-        }
+        if (result.success()) return 0;
         // The progress-bar listener already painted the "✗ Error" line
         // and the "Failed" bar; we just translate the diagnostic codes
         // into the right exit status.

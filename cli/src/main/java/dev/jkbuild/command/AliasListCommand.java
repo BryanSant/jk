@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.alias.AliasCatalog;
 import picocli.CommandLine.Command;
@@ -41,10 +42,12 @@ public final class AliasListCommand implements Callable<Integer> {
             var src = catalog.source(name).orElseThrow();
             if (layerFilter != null && !src.layer().equals(layerFilter)) continue;
             shown++;
+            // Pad against the plain name width (color escapes have zero width).
+            String namePad = " ".repeat(Math.max(0, nameWidth - name.length()));
             System.out.println(
-                    pad(name, nameWidth) + "  ["
+                    Coords.shortName(name) + namePad + "  ["
                             + pad(src.layer(), layerWidth) + "]  "
-                            + src.module().moduleKey());
+                            + Coords.module(src.module().moduleKey()));
         }
         if (shown == 0 && layerFilter != null) {
             System.out.println("(no aliases in layer `" + layerFilter + "`)");

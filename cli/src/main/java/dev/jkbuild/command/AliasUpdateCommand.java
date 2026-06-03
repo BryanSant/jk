@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
 
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.alias.AliasCatalog;
@@ -153,11 +154,12 @@ public final class AliasUpdateCommand implements Callable<Integer> {
                 String name = it.next();
                 AliasCatalog.Module b = before.get(name);
                 AliasCatalog.Module a = after.get(name);
-                if (b == null) added.add(name + " → " + a.moduleKey());
-                else if (!b.equals(a)) changed.add(name + ": " + b.moduleKey() + " → " + a.moduleKey());
+                if (b == null) added.add(Coords.shortName(name) + " → " + Coords.module(a.moduleKey()));
+                else if (!b.equals(a)) changed.add(Coords.shortName(name) + ": "
+                        + Coords.module(b.moduleKey()) + " → " + Coords.module(a.moduleKey()));
             }
             for (String name : new TreeSet<>(before.keySet())) {
-                if (!after.containsKey(name)) removed.add(name);
+                if (!after.containsKey(name)) removed.add(Coords.shortName(name));
             }
             return new Diff(added, removed, changed);
         }

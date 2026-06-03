@@ -132,8 +132,9 @@ class CacheCommandTest {
         journal.record(dev.jkbuild.model.Coordinate.of("com.google.guava",
                 "guava", "33.0.0-jre"), "pom", "c", 1, "central", "u");
 
-        String stdout = capture(() -> run("cache", "search", "jackson",
-                "--cache-dir", cache.toString()));
+        // Coordinates print in color; strip ANSI to assert on the visible text.
+        String stdout = stripAnsi(capture(() -> run("cache", "search", "jackson",
+                "--cache-dir", cache.toString())));
 
         assertThat(stdout).contains("com.fasterxml.jackson.core:jackson-databind");
         // newest-first version ordering
@@ -150,6 +151,10 @@ class CacheCommandTest {
     }
 
     // --- helpers -----------------------------------------------------------
+
+    private static String stripAnsi(String s) {
+        return s.replaceAll("\\033\\[[0-9;?]*[a-zA-Z]", "");
+    }
 
     private static Path writeBlob(Path file, byte[] body) throws Exception {
         Files.createDirectories(file.getParent());

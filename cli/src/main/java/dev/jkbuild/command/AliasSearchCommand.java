@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.cache.Journal;
 import dev.jkbuild.alias.AliasCatalog;
@@ -89,10 +90,12 @@ public final class AliasSearchCommand implements Callable<Integer> {
             Hit h = hits.get(i);
             String cached = h.cached.isEmpty()
                     ? "" : "  (cached: " + String.join(", ", h.cached) + ")";
+            // Pad against the plain name width (color escapes have zero width).
+            String namePad = " ".repeat(Math.max(0, nameWidth - h.name.length()));
             System.out.println(
-                    pad(h.name, nameWidth) + "  ["
+                    Coords.shortName(h.name) + namePad + "  ["
                             + pad(h.src.layer(), layerWidth) + "]  "
-                            + h.src.module().moduleKey() + cached);
+                            + Coords.module(h.src.module().moduleKey()) + cached);
         }
         if (shown < total) {
             System.out.println("… and " + (total - shown) + " more "

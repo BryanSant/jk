@@ -25,6 +25,13 @@ import java.util.stream.Stream;
 public final class DependencyTree {
 
     /**
+     * Suffix appended to a node whose module has no resolved {@link Lockfile.Package}
+     * — it is present in the graph but absent from the lockfile/local cache. Callers
+     * can scan rendered output for this marker to decide whether to surface a hint.
+     */
+    public static final String MISSING_SUFFIX = " (missing)";
+
+    /**
      * Optional ANSI styling for tree output. Each operator wraps the
      * matching piece of text with whatever escape sequence the caller
      * prefers. Defaults to {@link #plain()} (identity everywhere) so
@@ -115,7 +122,7 @@ public final class DependencyTree {
             // No version available — emit "group:artifact (missing)" so the
             // (missing) marker is unmistakable and stays unstyled.
             label = styling.group().apply(groupId) + ":"
-                    + styling.artifact().apply(artifactId) + " (missing)";
+                    + styling.artifact().apply(artifactId) + MISSING_SUFFIX;
         }
         boolean alreadyShown = !seen.add(module);
         String marker = alreadyShown ? " ⎋" : "";

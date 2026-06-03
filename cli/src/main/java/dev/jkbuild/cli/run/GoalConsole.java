@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
-import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.util.JkDirs;
-import org.jline.utils.Signals;
 
 import java.nio.file.Path;
 
@@ -19,12 +17,11 @@ import java.nio.file.Path;
  * goal); always layers an {@link EventLogListener} on top so the run
  * lands in {@code <cacheRoot>/runs/}.
  *
- * <p>Also installs a SIGINT bridge for the goal's lifetime: Ctrl-C
- * calls {@link Goal#requestCancel} (cooperative), and after the goal
- * settles we restore the global cancel handler from
- * {@link dev.jkbuild.cli.tui.GlobalCancel}. If a phase ignores the
- * cooperative signal, the goal's own 200ms grace + thread interrupt
- * brings it down.
+ * <p>Ctrl-C during a goal is handled by the app-level
+ * {@link dev.jkbuild.cli.tui.GlobalCancel} handler (installed at startup):
+ * it repaints the in-flight progress bar as canceled, prints
+ * {@code ‼ Canceled by user}, and halts. There is no cooperative
+ * unwind — a hard cancel is immediate and predictable.
  */
 public final class GoalConsole {
 
@@ -43,9 +40,10 @@ public final class GoalConsole {
     private GoalConsole() {}
 
     /**
-     * Pick listeners + run the goal under a SIGINT bridge. Returns the
-     * goal's {@link GoalResult}; caller decides what exit code to
-     * surface based on {@code result.success()}.
+     * Pick listeners + run the goal. Ctrl-C is handled by the app-level
+     * {@link dev.jkbuild.cli.tui.GlobalCancel} handler. Returns the goal's
+     * {@link GoalResult}; caller decides what exit code to surface based on
+     * {@code result.success()}.
      */
     public static GoalResult run(Goal goal, Mode mode, Path cacheRoot) {
         // Always log every run for post-hoc debug. Best-effort: a
@@ -56,15 +54,7 @@ public final class GoalConsole {
         GoalListener console = chooseConsoleListener(goal, mode);
         if (console != null) goal.addListener(console);
 
-        installSigintBridge(goal);
-        try {
-            return goal.run();
-        } finally {
-            // Restore the global handler. JLine's Signals.register
-            // doesn't expose a "chain back to previous" API, but
-            // GlobalCancel.install() re-registers cleanly.
-            dev.jkbuild.cli.tui.GlobalCancel.install();
-        }
+        return goal.run();
     }
 
     /**
@@ -73,6 +63,29 @@ public final class GoalConsole {
      */
     public static GoalResult run(Goal goal, Mode mode) {
         return run(goal, mode, JkDirs.cache());
+    }
+
+    /**
+     * Simple-task variant: render the goal as a spinner + verb (on a TTY) and a
+     * {@code ✔}/{@code ✗} result line from {@code spec}, instead of the
+     * phase-by-phase progress bar. {@code --output json} still emits NDJSON and
+     * {@code --verbose} still prints per-phase lines; otherwise the
+     * {@link SimpleTaskListener} owns the output (animating only on a TTY).
+     */
+    public static GoalResult run(Goal goal, Mode mode, Path cacheRoot, ConsoleSpec spec) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+
+        GoalListener console = switch (mode) {
+            case JSON -> new NdjsonListener(System.out);
+            case VERBOSE -> new VerboseListener(System.out, System.err);
+            // AUTO animates only on an interactive TTY; QUIET / pipes print the
+            // result line without a spinner.
+            case AUTO -> new SimpleTaskListener(System.out, System.err, spec, isInteractiveTerminal());
+            case QUIET -> new SimpleTaskListener(System.out, System.err, spec, false);
+        };
+        goal.addListener(console);
+        return goal.run();
     }
 
     /**
@@ -94,6 +107,30 @@ public final class GoalConsole {
         return Mode.AUTO;
     }
 
+    /**
+     * Goal-oriented variant: render the goal with the new {@link CommandManagerListener}
+     * (spinner header + aggregate bar + dynamic phase list) attributed to
+     * {@code member} (the project's {@code group:artifact}), then a
+     * {@code ✔}/{@code ✗} result line from {@code spec}. {@code --output json}
+     * still emits NDJSON and {@code --verbose} still prints per-phase lines.
+     */
+    public static GoalResult runGoal(Goal goal, Mode mode, Path cacheRoot,
+                                     ConsoleSpec spec, String member) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+
+        GoalListener console = switch (mode) {
+            case JSON -> new NdjsonListener(System.out);
+            case VERBOSE -> new VerboseListener(System.out, System.err);
+            case AUTO -> new CommandManagerListener(System.out, System.err, spec, member,
+                    goal.phases(), isInteractiveTerminal());
+            case QUIET -> new CommandManagerListener(System.out, System.err, spec, member,
+                    goal.phases(), false);
+        };
+        goal.addListener(console);
+        return goal.run();
+    }
+
     private static GoalListener chooseConsoleListener(Goal goal, Mode mode) {
         // Interactive goals (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events
@@ -110,24 +147,21 @@ public final class GoalConsole {
     }
 
     /**
-     * Register a Ctrl-C handler that flips the goal's cancel flag and
-     * paints a brief notice on stderr. The goal's own scheduler
-     * enforces the 200ms grace before interrupting threads.
+     * Run a workspace member's goal into a shared {@link AggregateContext} — its
+     * events feed the one aggregate {@link dev.jkbuild.cli.tui.CommandManager}
+     * (bar + phase list) instead of a per-member view. The shared view is
+     * settled by the caller after the last member. Always records the event log.
      */
-    private static void installSigintBridge(Goal goal) {
-        Signals.register("INT", () -> {
-            if (goal.snapshot().cancelled()) {
-                // Second Ctrl-C → halt now.
-                System.err.print("\n" + Theme.colorize("𝘅 Force-canceled", Theme.active().error()) + "\n");
-                Runtime.getRuntime().halt(130);
-            }
-            goal.requestCancel();
-            System.err.print("\n" + Theme.colorize("⌫ Canceling…", Theme.active().warning())
-                    + " (Ctrl-C again to force)\n");
-        });
+    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String member,
+                                         AggregateContext agg) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+        goal.addListener(new AggregateMemberListener(agg, member, goal.phases()));
+        return goal.run();
     }
 
-    private static boolean isInteractiveTerminal() {
+    /** True when stdout is an interactive terminal (not a pipe, dumb, or CI). */
+    public static boolean isInteractiveTerminal() {
         return System.console() != null
                 && !"dumb".equals(System.getenv("TERM"))
                 && System.getenv("CI") == null;

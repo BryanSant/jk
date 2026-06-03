@@ -6,7 +6,9 @@ import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -215,19 +217,7 @@ public final class LockCommand implements Callable<Integer> {
                         }
                         @Override
                         public void onPackage(String module, String version) {
-                            int colon = module.indexOf(':');
-                            String group    = module.substring(0, colon);
-                            String artifact = module.substring(colon + 1);
-                            String label = "Resolved "
-                                    + Theme.colorize(group,
-                                            Theme.active().activeStep())
-                                    + ":"
-                                    + Theme.colorize(artifact,
-                                            Theme.active().activeStep().bold())
-                                    + ":"
-                                    + Theme.colorize(version,
-                                            Theme.active().warning());
-                            ctx.label(label);
+                            ctx.label("Resolved " + Coords.module(module, version));
                             ctx.progress(1);
                         }
                     };
@@ -265,29 +255,28 @@ public final class LockCommand implements Callable<Integer> {
                 .addPhase(write)
                 .build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        ConsoleSpec spec = new ConsoleSpec("Locking",
+                r -> {
+                    int pkgs = goal.get(LOCKFILE).orElseThrow().packages().size();
+                    String inTime = Theme.colorize(
+                            "in " + BuildCommand.fmtDuration(r.duration()),
+                            Theme.active().darkGray());
+                    int members = memberCount.get();
+                    String suffix = members > 0
+                            ? " across " + (members + 1) + " workspace"
+                                    + (members + 1 == 1 ? "" : "s")
+                            : "";
+                    return "Resolved " + pkgs + " dependenc"
+                            + (pkgs == 1 ? "y" : "ies") + suffix + " " + inTime;
+                },
+                r -> "Failed to resolve dependencies");
+
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache, spec);
         if (!result.success()) {
             String failed = result.phases().stream()
                     .filter(p -> p.status() == PhaseStatus.FAIL)
                     .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
             return failed.equals("resolve") ? 6 : 2;
-        }
-
-        if (!global.outputIsJson()) {
-            Lockfile lock = goal.get(LOCKFILE).orElseThrow();
-            int pkgs = lock.packages().size();
-            String check  = Theme.colorize(
-                    "✓", Theme.active().success());
-            String inTime = Theme.colorize(
-                    "in " + BuildCommand.fmtDuration(result.duration()),
-                    Theme.active().darkGray());
-            int members = memberCount.get();
-            String suffix = members > 0
-                    ? " across " + (members + 1) + " workspace"
-                            + (members + 1 == 1 ? "" : "s")
-                    : "";
-            System.out.println(check + " Resolved " + pkgs + " dependenc"
-                    + (pkgs == 1 ? "y" : "ies") + suffix + " " + inTime);
         }
         return 0;
     }

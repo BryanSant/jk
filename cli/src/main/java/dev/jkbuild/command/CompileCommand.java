@@ -4,6 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.compile.ClasspathResolver;
@@ -213,34 +214,28 @@ public final class CompileCommand implements Callable<Integer> {
                 .addPhase(compileKotlin)
                 .build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        ConsoleSpec spec = new ConsoleSpec("Compiling",
+                r -> {
+                    int total = sourceCount(goal, JAVA_SOURCES) + sourceCount(goal, KT_SOURCES);
+                    String inTime = Theme.colorize(
+                            "in " + BuildCommand.fmtDuration(r.duration()), Theme.active().darkGray());
+                    if (total == 0) return "No sources found";
+                    String compiled = Theme.colorize("Compiled", Theme.active().focused());
+                    return compiled + " " + total + " source file" + (total == 1 ? "" : "s") + " " + inTime;
+                },
+                r -> "Compilation failed");
+        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
+                BuildCommand.buildTarget(buildFile, dir));
 
         // Clean up scratch regardless of outcome.
         goal.get(SCRATCH).ifPresent(CompileCommand::deleteRecursively);
 
-        if (!result.success()) return 1;
+        return result.success() ? 0 : 1;
+    }
 
-        @SuppressWarnings("unchecked")
-        List<Path> javaSources = (List<Path>) goal.get(JAVA_SOURCES).orElse(List.of());
-        @SuppressWarnings("unchecked")
-        List<Path> ktSources = (List<Path>) goal.get(KT_SOURCES).orElse(List.of());
-        int total = javaSources.size() + ktSources.size();
-        if (!global.outputIsJson()) {
-            String check  = Theme.colorize(
-                    "✓", Theme.active().success());
-            String inTime = Theme.colorize(
-                    "in " + BuildCommand.fmtDuration(result.duration()),
-                    Theme.active().darkGray());
-            if (total == 0) {
-                System.out.println(check + " No sources found");
-            } else {
-                String compiled = Theme.colorize(
-                        "Compiled", Theme.active().focused());
-                System.out.println(check + " " + compiled + " " + total
-                        + " source file" + (total == 1 ? "" : "s") + " " + inTime);
-            }
-        }
-        return 0;
+    @SuppressWarnings("unchecked")
+    private static int sourceCount(dev.jkbuild.run.Goal goal, dev.jkbuild.run.GoalKey<?> key) {
+        return goal.get(key).map(v -> ((List<Path>) v).size()).orElse(0);
     }
 
     /**

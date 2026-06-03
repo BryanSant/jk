@@ -86,6 +86,9 @@ public interface Theme {
     /** Bright green — used for the settled-answer arrow and "➜" prefixes. */
     AttributedStyle brightGreen();
 
+    /** Bright cyan — used for artifact short-names in coordinate output. */
+    AttributedStyle brightCyan();
+
     AttributedStyle bright(int r, int g, int b);
 
     /** {@link Rgb} overload of {@link #bright(int, int, int)}. */
@@ -93,7 +96,7 @@ public interface Theme {
 
     // --- help-semantic styles --------------------------------------------
 
-    /** Section heading in help output — bold accent. */
+    /** Section heading in help output — bold green. */
     AttributedStyle sectionHeading();
 
     /** Command name in help output — bold cyan. */

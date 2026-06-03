@@ -4,6 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.Jk;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Journal;
@@ -181,7 +182,7 @@ public final class InstallCommand implements Callable<Integer> {
                 .kind(PhaseKind.IO)
                 .scope(1)
                 .execute(ctx -> {
-                    ctx.label("fetch " + parsed.toGav());
+                    ctx.label("fetch " + Coords.gav(parsed));
                     Cas cas = new Cas(cacheDir);
                     Http http = new Http();
                     URI url = repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url();
@@ -220,7 +221,7 @@ public final class InstallCommand implements Callable<Integer> {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
         if (!result.success()) return failureExit(result, "jk install", cacheDir);
 
-        announceInstall(goal.get(PRIMARY).orElseThrow().toGav(),
+        announceInstall(Coords.gav(goal.get(PRIMARY).orElseThrow()),
                 goal.get(LAUNCHER).orElseThrow(), binDir);
         return 0;
     }
@@ -389,7 +390,7 @@ public final class InstallCommand implements Callable<Integer> {
                     BuildLayout layout = ctx.require(LAYOUT);
                     var p = project.project();
                     Coordinate coord = Coordinate.of(p.group(), p.artifact(), p.version());
-                    ctx.label("install " + coord.toGav() + " to cache");
+                    ctx.label("install " + Coords.gav(coord) + " to cache");
                     try {
                         cacheInstallArtifact(project, layout, cacheDir);
                     } catch (IOException e) {
@@ -442,7 +443,7 @@ public final class InstallCommand implements Callable<Integer> {
             return failureExit(result, "jk install", cacheDir);
         }
 
-        announceProjectInstall(goal.get(PRIMARY).orElseThrow().toGav(),
+        announceProjectInstall(Coords.gav(goal.get(PRIMARY).orElseThrow()),
                 goal.get(LAUNCHER).orElse(null), binDir);
         return 0;
     }
