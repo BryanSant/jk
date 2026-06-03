@@ -59,10 +59,6 @@ public final class RunCommand implements Callable<Integer> {
             description = "Arguments forwarded to the project's main method.")
     List<String> positional = new ArrayList<>();
 
-    @Option(names = "--skip-tests",
-            description = "Skip compiling and running tests before running.")
-    boolean skipTests;
-
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
@@ -70,6 +66,8 @@ public final class RunCommand implements Callable<Integer> {
     @Option(names = "--jdks-dir", hidden = true,
             description = "Override the JDK install root.")
     Path jdksDir;
+
+    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
@@ -103,7 +101,7 @@ public final class RunCommand implements Callable<Integer> {
         int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 projectDir, cache, projectDir.resolve("jk.toml"), lockFile, projectDir,
-                1, estimatedTestCount, null, jdksDir, skipTests, global.verbose);
+                1, estimatedTestCount, null, jdksDir, buildOpts.skipTests, global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();

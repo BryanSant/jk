@@ -79,9 +79,7 @@ public final class BuildCommand implements Callable<Integer> {
             description = "Override the JDK install root.")
     Path jdksDir;
 
-    @Option(names = "--skip-tests",
-            description = "Skip compiling and running tests (the test phases are left out of the build).")
-    boolean skipTests;
+    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
@@ -300,7 +298,7 @@ public final class BuildCommand implements Callable<Integer> {
 
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 dir, cache, buildFile, lockFile, lockDir,
-                workerCount, estimatedTestCount, profileName, jdksDir, skipTests, global.verbose);
+                workerCount, estimatedTestCount, profileName, jdksDir, buildOpts.skipTests, global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();

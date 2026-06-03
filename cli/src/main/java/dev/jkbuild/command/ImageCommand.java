@@ -69,9 +69,7 @@ public final class ImageCommand implements Callable<Integer> {
             description = "Override the JDK install root.")
     Path jdksDir;
 
-    @Option(names = "--skip-tests",
-            description = "Skip compiling and running tests before building the image.")
-    boolean skipTests;
+    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
@@ -94,7 +92,7 @@ public final class ImageCommand implements Callable<Integer> {
 
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 projectDir, cache, jkBuildPath, lockFile, projectDir,
-                1, estimatedTestCount, null, jdksDir, skipTests, global.verbose);
+                1, estimatedTestCount, null, jdksDir, buildOpts.skipTests, global.verbose);
 
         // image-plan reads the freshly-built jar + project off the core goal,
         // then assembles the OCI plan; write-image emits it.

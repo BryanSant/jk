@@ -47,13 +47,11 @@ public final class NativeCommand implements Callable<Integer> {
             description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
 
-    @Option(names = "--skip-tests",
-            description = "Skip compiling and running tests before the native build.")
-    boolean skipTests;
-
     @Parameters(arity = "0..*", paramLabel = "<native-image-args>",
             description = "Extra arguments forwarded to native-image (after --).")
     List<String> extra = new ArrayList<>();
+
+    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
@@ -81,7 +79,7 @@ public final class NativeCommand implements Callable<Integer> {
         int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 projectDir, cache, buildFile, lockFile, projectDir,
-                1, estimatedTestCount, null, jdksDir, skipTests, global.verbose);
+                1, estimatedTestCount, null, jdksDir, buildOpts.skipTests, global.verbose);
 
         // Core build (jar from source) + the forced native tail in one goal.
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);

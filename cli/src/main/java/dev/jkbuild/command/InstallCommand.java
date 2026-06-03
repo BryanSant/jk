@@ -104,10 +104,6 @@ public final class InstallCommand implements Callable<Integer> {
             description = "Override the Main-Class to exec.")
     String mainClass;
 
-    @Option(names = "--skip-tests",
-            description = "Skip compiling and running tests before installing.")
-    boolean skipTests;
-
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
@@ -131,6 +127,8 @@ public final class InstallCommand implements Callable<Integer> {
     @Option(names = "--repo-url", hidden = true,
             description = "Override the Maven repository URL (for tests).")
     URI repoUrl;
+
+    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
@@ -341,7 +339,7 @@ public final class InstallCommand implements Callable<Integer> {
         int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 projectDir, cacheDir, projectDir.resolve("jk.toml"), lockFile, projectDir,
-                1, estimatedTestCount, null, null, skipTests, global.verbose);
+                1, estimatedTestCount, null, null, buildOpts.skipTests, global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
 
