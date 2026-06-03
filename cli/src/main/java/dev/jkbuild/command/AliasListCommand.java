@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.cli.theme.Theme;
 
 import dev.jkbuild.alias.AliasCatalog;
 import picocli.CommandLine.Command;
@@ -36,27 +37,25 @@ public final class AliasListCommand implements Callable<Integer> {
             return 0;
         }
         int nameWidth = names.stream().mapToInt(String::length).max().orElse(0);
-        int layerWidth = catalog.layerNames().stream().mapToInt(String::length).max().orElse(0);
+        // Coordinates align at a fixed column; the gap is filled with a dotted
+        // leader so the eye can track each alias across to its coordinate. The
+        // longest name still gets a two-dot minimum.
+        int leaderColumn = nameWidth + 2;
         int shown = 0;
         for (String name : names) {
             var src = catalog.source(name).orElseThrow();
             if (layerFilter != null && !src.layer().equals(layerFilter)) continue;
             shown++;
             // Pad against the plain name width (color escapes have zero width).
-            String namePad = " ".repeat(Math.max(0, nameWidth - name.length()));
+            String leader = ".".repeat(Math.max(2, leaderColumn - name.length()));
             System.out.println(
-                    Coords.shortName(name) + namePad + "  ["
-                            + pad(src.layer(), layerWidth) + "]  "
+                    Coords.shortName(name)
+                            + Theme.colorize(leader, Theme.active().black())
                             + Coords.module(src.module().moduleKey()));
         }
         if (shown == 0 && layerFilter != null) {
             System.out.println("(no aliases in layer `" + layerFilter + "`)");
         }
         return 0;
-    }
-
-    private static String pad(String s, int width) {
-        if (s.length() >= width) return s;
-        return s + " ".repeat(width - s.length());
     }
 }

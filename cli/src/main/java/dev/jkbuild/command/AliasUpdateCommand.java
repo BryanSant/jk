@@ -8,6 +8,7 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.alias.AliasCatalog;
 import dev.jkbuild.util.JkDirs;
+import org.jline.utils.AttributedStyle;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
@@ -18,6 +19,7 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
@@ -57,6 +59,7 @@ public final class AliasUpdateCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws IOException, InterruptedException {
+        long startNanos = System.nanoTime();
         Path cacheFile = cacheFileOverride != null ? cacheFileOverride
                 : AliasCatalog.downloadedFile();
         Path previousBackup = cacheFile.resolveSibling(cacheFile.getFileName() + ".prev");
@@ -97,7 +100,7 @@ public final class AliasUpdateCommand implements Callable<Integer> {
         Files.writeString(cacheFile, body, StandardCharsets.UTF_8);
 
         Diff diff = Diff.compute(before, after);
-        printSummary(cacheFile, after.size(), diff);
+        printSummary(after.size(), diff, Duration.ofNanos(System.nanoTime() - startNanos));
         return 0;
     }
 
@@ -120,20 +123,29 @@ public final class AliasUpdateCommand implements Callable<Integer> {
         return out;
     }
 
-    private void printSummary(Path cacheFile, int total, Diff diff) {
-        System.out.println(Theme.colorize("✓", Theme.active().success())
-                + " alias catalog updated — " + total + " entries cached at " + cacheFile);
-        emitList("added", diff.added);
-        emitList("removed", diff.removed);
-        emitList("changed", diff.changed);
+    private void printSummary(int total, Diff diff, Duration elapsed) {
+        // Header: green banner, bold count, dim elapsed — matching jk's
+        // build/test result lines (see BuildCommand.fmtDuration).
+        System.out.println(
+                Theme.colorize("✓ Alias catalog updated", Theme.active().completedStep())
+                        + " — " + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
+                        + " entries cached "
+                        + Theme.colorize("in " + BuildCommand.fmtDuration(elapsed), Theme.active().darkGray()));
         if (diff.isEmpty()) {
+            System.out.println();
             System.out.println("  (no changes from previous version)");
+            return;
         }
+        emitList("Added", diff.added, Theme.active().completedStep());
+        emitList("Removed", diff.removed, Theme.active().error());
+        emitList("Changed", diff.changed, Theme.active().warning());
     }
 
-    private static void emitList(String label, List<String> items) {
+    /** Print a blank-line-separated section: a colored label with a count, then up to 10 items. */
+    private static void emitList(String label, List<String> items, AttributedStyle labelStyle) {
         if (items.isEmpty()) return;
-        System.out.println("  " + label + ": " + items.size());
+        System.out.println();
+        System.out.println("  " + Theme.colorize(label, labelStyle) + ": " + items.size());
         int shown = Math.min(items.size(), 10);
         for (int i = 0; i < shown; i++) {
             System.out.println("    " + items.get(i));

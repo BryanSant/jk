@@ -22,10 +22,12 @@ import java.util.concurrent.Callable;
  * sub-directory. Errors immediately when a {@code jk.toml} already exists.
  * All wizard and flag options are identical to {@code jk new}.
  *
- * <p>Run inside an existing workspace, the directory is registered as a
- * member (path appended to the root {@code [workspace].members}, group
- * inherited, no per-member {@code jk.lock}) — the same behaviour as
- * {@code jk new}.
+ * <p>Run inside an existing project/workspace (an enclosing {@code jk.toml}
+ * found before exiting the git repo or reaching {@code $HOME}), the directory
+ * is registered as a member — path appended to the root
+ * {@code [workspace].members}, group/JDK/language inherited, no per-member
+ * {@code jk.lock} — the same behaviour as {@code jk new}. {@code --no-member}
+ * forces a standalone project.
  */
 @Command(name = "init",
         description = "Initialize the current directory into a project (or member)")
@@ -64,6 +66,9 @@ public final class InitCommand implements Callable<Integer> {
     @Option(names = "--kotlin-module", description = "Kotlin module name; emitted as project.module in jk.toml.")
     String kotlinModule;
 
+    @Option(names = "--no-member", description = "Initialize a standalone project even inside an existing project/workspace.")
+    boolean noMember;
+
     @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Override
@@ -93,6 +98,7 @@ public final class InitCommand implements Callable<Integer> {
         delegate.depsCsv      = this.depsCsv;
         delegate.kotlinCompact = this.kotlinCompact;
         delegate.kotlinModule = this.kotlinModule;
+        delegate.noMember     = this.noMember;
         delegate.global       = this.global;
         return delegate.call();
     }

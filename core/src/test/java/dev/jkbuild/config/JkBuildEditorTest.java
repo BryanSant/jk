@@ -425,6 +425,27 @@ class JkBuildEditorTest {
     }
 
     @Test
+    void register_member_creates_the_workspace_table_for_a_plain_project() {
+        String result = JkBuildEditor.registerWorkspaceMember(BASE, "core");
+        assertThat(result).contains("[workspace]");
+        assertThat(result).contains("members = [\"core\"]");
+        // The original [project] block is preserved.
+        assertThat(result).contains("artifact = \"widget\"");
+        JkBuild parsed = JkBuildParser.parse(result);
+        assertThat(parsed.isWorkspaceRoot()).isTrue();
+        assertThat(parsed.workspace().members()).containsExactly("core");
+    }
+
+    @Test
+    void register_member_appends_to_an_existing_workspace_table() {
+        String once = JkBuildEditor.registerWorkspaceMember(BASE, "core");
+        String twice = JkBuildEditor.registerWorkspaceMember(once, "cli");
+        assertThat(JkBuildParser.parse(twice).workspace().members()).containsExactly("core", "cli");
+        // Idempotent — re-registering an existing member is a no-op.
+        assertThat(JkBuildEditor.registerWorkspaceMember(twice, "core")).isEqualTo(twice);
+    }
+
+    @Test
     void name_validation_rejects_bad_characters() {
         assertThatThrownBy(() -> JkBuildEditor.addDependency(
                 BASE, Scope.MAIN, "has spaces", "g", "a", "1.0"))

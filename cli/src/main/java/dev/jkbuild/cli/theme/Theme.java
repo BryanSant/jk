@@ -83,6 +83,9 @@ public interface Theme {
     /** Cyan — used to label structural keys like scopes (Jk Dark cyan). */
     AttributedStyle cyan();
 
+    /** Black — the darkest palette color; used for low-emphasis filler like dotted leaders (Jk Dark normal black). */
+    AttributedStyle black();
+
     /** Bright green — used for the settled-answer arrow and "➜" prefixes. */
     AttributedStyle brightGreen();
 

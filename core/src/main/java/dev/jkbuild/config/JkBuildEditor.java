@@ -163,6 +163,21 @@ public final class JkBuildEditor {
      * @throws IllegalStateException if there is no {@code [workspace]} table.
      */
     public static String addWorkspaceMember(String content, String memberPath) {
+        return addWorkspaceMember(content, memberPath, false);
+    }
+
+    /**
+     * Register a workspace member, <em>creating</em> the {@code [workspace]}
+     * table if the manifest doesn't have one yet. This is how adding the first
+     * member promotes a plain single-project {@code jk.toml} into a workspace
+     * root (Cargo/uv semantics). When a {@code [workspace]} table already
+     * exists this is identical to {@link #addWorkspaceMember(String, String)}.
+     */
+    public static String registerWorkspaceMember(String content, String memberPath) {
+        return addWorkspaceMember(content, memberPath, true);
+    }
+
+    private static String addWorkspaceMember(String content, String memberPath, boolean createTable) {
         if (memberPath == null || memberPath.isBlank()) {
             throw new IllegalArgumentException("member path must not be blank");
         }
@@ -180,7 +195,15 @@ public final class JkBuildEditor {
             }
         }
         if (wsHeader < 0) {
-            throw new IllegalStateException("no [workspace] table in jk.toml");
+            if (!createTable) {
+                throw new IllegalStateException("no [workspace] table in jk.toml");
+            }
+            // Promote a plain project into a workspace: append a [workspace]
+            // table with this member as its first entry.
+            StringBuilder sb = new StringBuilder(content);
+            if (!content.isEmpty() && !content.endsWith("\n")) sb.append('\n');
+            sb.append("\n[workspace]\nmembers = [\"").append(escape(path)).append("\"]\n");
+            return validated(sb.toString());
         }
 
         int end = endOfTable(lines, wsHeader);

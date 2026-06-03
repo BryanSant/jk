@@ -160,6 +160,11 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle black() {
+        return withColor(AttributedStyle.DEFAULT, NORMAL_BLACK);
+    }
+
+    @Override
     public AttributedStyle brightGreen() {
         return withColor(AttributedStyle.DEFAULT, BRIGHT_GREEN);
     }

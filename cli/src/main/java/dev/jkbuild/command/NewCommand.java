@@ -6,7 +6,6 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Wizard;
@@ -45,11 +44,19 @@ import java.util.concurrent.Callable;
  * flags with sane defaults. Both paths converge on {@link NewInputs} +
  * {@link NewScaffolder#write(NewInputs)}.
  *
- * <p>Run inside an existing workspace, the new project is registered as a
- * member: its path is appended to the root {@code [workspace].members}, its
- * group is inherited from the workspace root, and no per-member
- * {@code jk.lock} is written (the root lock owns resolution). Mirrors
- * {@code cargo new} / {@code uv init}.
+ * <p><b>Project vs. member.</b> We walk up from where the project will live
+ * looking for an enclosing {@code jk.toml}: the first one found is the parent
+ * and the new directory is registered as its <em>member</em>. The search stops
+ * — meaning "standalone project" — when it exits a git repo (a {@code .git}
+ * reached before any {@code jk.toml}) or reaches {@code $HOME}. {@code --no-member}
+ * forces a standalone project.
+ *
+ * <p>For a member the wizard changes shape (titled "Create a New Member for
+ * &lt;project&gt;", asking for a member name) and inherits the parent's group,
+ * JDK, and language as defaults; its path is appended to the root
+ * {@code [workspace].members} (promoting a plain project into a workspace on its
+ * first member), and no per-member {@code jk.lock} is written (the root lock
+ * owns resolution). Mirrors {@code cargo new} / {@code uv init}.
  */
 @Command(name = "new", aliases = {"create"},
         description = "Create a new jk project (or workspace member)")
@@ -88,6 +95,9 @@ public final class NewCommand implements Callable<Integer> {
     @Option(names = "--kotlin-module", description = "Kotlin module name; emitted as project.module in jk.toml.")
     String kotlinModule;
 
+    @Option(names = "--no-member", description = "Create a standalone project even inside an existing project/workspace.")
+    boolean noMember;
+
     @Parameters(arity = "0..1", description = "Target directory. Default: current directory or --name subdir.")
     Path directory;
 
@@ -104,6 +114,65 @@ public final class NewCommand implements Callable<Integer> {
     private record Member(Path root, String rel) {}
     private volatile Member registered;
 
+    /**
+     * The enclosing project/workspace this invocation will add a member to, or
+     * {@code null} when we're creating a standalone project. Resolved once in
+     * {@link #call()} and consumed by the wizard (UX + inherited defaults),
+     * the flag path, and scaffolding.
+     */
+    private ParentInfo parent;
+
+    /** Inherited context from the parent project's {@code [project]} block. */
+    private record ParentInfo(Path root, dev.jkbuild.model.JkBuild.Project project) {
+        String displayName() { return project.artifact(); }
+        String group() { return project.group(); }
+        boolean kotlin() { return project.isKotlin(); }
+        int jdkMajor() { return project.jdk() > 0 ? project.jdk() : project.javaRelease(); }
+    }
+
+    /**
+     * Decide whether we're adding a member to an existing project/workspace.
+     * Walk up from {@code startDir}: the first directory with a {@code jk.toml}
+     * is the parent. Stop (— standalone project —) on exiting a git repo (a
+     * {@code .git} dir reached before any jk.toml) or hitting {@code $HOME}.
+     * {@code --no-member} short-circuits to standalone.
+     */
+    static Optional<Path> detectParentDir(Path startDir, Path home, boolean noMember) {
+        if (noMember) return Optional.empty();
+        Path normHome = home == null ? null : home.toAbsolutePath().normalize();
+        for (Path dir = startDir.toAbsolutePath().normalize(); dir != null; dir = dir.getParent()) {
+            if (Files.exists(dir.resolve("jk.toml"))) return Optional.of(dir);
+            if (Files.isDirectory(dir.resolve(".git"))) return Optional.empty();  // exited the repo
+            if (dir.equals(normHome)) return Optional.empty();                    // hit $HOME
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * Where to begin the parent search — the directory the project will live
+     * <em>in</em> (its target's parent). For {@code jk new foo} that's the cwd;
+     * for {@code jk new /abs/foo} it's {@code /abs}; for {@code .} / no arg it's
+     * the cwd (the member is the cwd itself, or cwd/&lt;name&gt;).
+     */
+    private Path detectionStartDir(Path cwd) {
+        if (directory == null || isCurrentDirArg(directory)) return cwd;
+        Path parentDir = cwd.resolve(directory).normalize().getParent();
+        return parentDir != null ? parentDir : cwd;
+    }
+
+    /** Resolve {@link #parent} by parsing the detected parent's manifest (null if none / unparseable). */
+    private ParentInfo resolveParent(Path startDir) {
+        Path home = Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null);
+        Optional<Path> root = detectParentDir(startDir, home, noMember);
+        if (root.isEmpty()) return null;
+        try {
+            var project = JkBuildParser.parse(root.get().resolve("jk.toml")).project();
+            return new ParentInfo(root.get(), project);
+        } catch (IOException | RuntimeException e) {
+            return null;   // unreadable/unparseable parent — treat this as a standalone project
+        }
+    }
+
     @Override
     public Integer call() throws IOException {
         Path cwd = Path.of(".").toAbsolutePath().normalize();
@@ -119,6 +188,11 @@ public final class NewCommand implements Callable<Integer> {
             emitProjectExistsError(existing);
             return 2; // EX_CONFIG
         }
+
+        // Are we adding a member to an existing project/workspace, or creating
+        // a standalone project? Search up from where the project will live (the
+        // target's parent). Drives the wizard UX and inherited defaults.
+        this.parent = resolveParent(detectionStartDir(cwd));
 
         if (shouldRunWizard()) {
             return runWizardGoal(cwd);
@@ -197,7 +271,7 @@ public final class NewCommand implements Callable<Integer> {
                     var groupGuess = NewGroupGuess.guess(cwd,
                             Optional.ofNullable(System.getProperty("user.home"))
                                     .map(Path::of).orElse(null));
-                    var wizard = buildWizard(candidates, groupGuess);
+                    var wizard = buildWizard(candidates, groupGuess, parent);
                     var wizardResult = wizard.run(terminal, preset);
                     if (wizardResult.isEmpty()) {
                         // Cancelled via Ctrl-C. Wizard.printCancellation
@@ -206,7 +280,8 @@ public final class NewCommand implements Callable<Integer> {
                         // shutdown hooks — JLine's cleanup hook would block
                         // on the NonBlockingReader.
                         Wizard.printCancellation(terminal,
-                                "𝘅 Project creation canceled");
+                                parent != null ? "𝘅 Member creation canceled"
+                                        : "𝘅 Project creation canceled");
                         Runtime.getRuntime().halt(130);
                     }
                     ctx.put(ANSWERS, wizardResult.get());
@@ -380,34 +455,17 @@ public final class NewCommand implements Callable<Integer> {
      * for the success message.
      */
     private void scaffoldAndRegister(NewInputs inputs) throws IOException {
-        Optional<Path> rootOpt = WorkspaceLocator.findEnclosingWorkspace(inputs.directory());
-        NewScaffolder.write(inputs, rootOpt.isEmpty());
-        if (rootOpt.isPresent()) {
-            Path root = rootOpt.get();
+        NewScaffolder.write(inputs, parent == null);   // members skip the per-member lock
+        if (parent != null) {
+            Path root = parent.root();
             String rel = root.relativize(inputs.directory()).toString().replace('\\', '/');
             Path rootToml = root.resolve("jk.toml");
+            // Registers the member, promoting a plain project into a workspace
+            // root (creating the [workspace] table) when this is its first member.
             Files.writeString(rootToml,
-                    JkBuildEditor.addWorkspaceMember(Files.readString(rootToml), rel));
+                    JkBuildEditor.registerWorkspaceMember(Files.readString(rootToml), rel));
             registered = new Member(root, rel);
         }
-    }
-
-    /**
-     * Default group for a member: the enclosing workspace root's
-     * {@code [project].group}, so members are coordinated like their
-     * siblings. Empty when {@code target} isn't inside a workspace.
-     */
-    private static Optional<String> workspaceGroup(Path target) {
-        try {
-            Optional<Path> root = WorkspaceLocator.findEnclosingWorkspace(target);
-            if (root.isPresent()) {
-                String g = JkBuildParser.parse(root.get().resolve("jk.toml")).project().group();
-                if (g != null && !g.isBlank()) return Optional.of(g);
-            }
-        } catch (IOException | RuntimeException ignored) {
-            // Fall through to the standard group guess.
-        }
-        return Optional.empty();
     }
 
     private NewInputs fromFlags(Path cwd) {
@@ -419,11 +477,15 @@ public final class NewCommand implements Callable<Integer> {
         Path target = resolveTarget(directory, cwd, resolvedName);
         var resolvedGroup = (group != null && !group.isBlank())
                 ? group
-                : workspaceGroup(target).orElseGet(() -> NewGroupGuess.guess(cwd,
-                        Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null)));
-        var resolvedJdk = (jdk != null && !jdk.isBlank()) ? jdk : "25";
+                : parent != null ? parent.group()
+                : NewGroupGuess.guess(cwd,
+                        Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null));
+        var resolvedJdk = (jdk != null && !jdk.isBlank()) ? jdk
+                : parent != null ? String.valueOf(parent.jdkMajor()) : "25";
         int resolvedJdkMajor = parseJdkMajorOrDefault(resolvedJdk);
-        var resolvedLang = parseLanguage(lang);
+        var resolvedLang = (lang != null && !lang.isBlank()) ? parseLanguage(lang)
+                : (parent != null && parent.kotlin()) ? NewInputs.Language.KOTLIN
+                : NewInputs.Language.JAVA;
         var isExecutable = Boolean.TRUE.equals(executable) || shadow || nativeImage;
         var resolvedMain = isExecutable
                 ? Optional.of(deriveMainFqcn(resolvedGroup, resolvedLang, kotlinCompact))
@@ -641,14 +703,29 @@ public final class NewCommand implements Callable<Integer> {
         };
     }
 
-    private static Wizard buildWizard(List<NewJdkCandidate> candidates, String groupGuess) {
+    private static Wizard buildWizard(List<NewJdkCandidate> candidates, String groupGuess,
+                                      ParentInfo parent) {
+        boolean member = parent != null;
+        // Members inherit the parent's group, JDK, and language as defaults; a
+        // standalone project guesses the group and defaults to the latest LTS.
+        String effectiveGroup = member ? parent.group() : groupGuess;
+        String langDefault = (member && parent.kotlin()) ? "kotlin" : "java";
+
         // The wizard opens with the "native" toggle off, so the initial radio
         // list is whatever filter() produces for the non-native case — which
         // promotes Temurin LTS to the top. Take the default selection from
-        // there so the preselected row matches what the user sees.
+        // there so the preselected row matches what the user sees. For a
+        // member, prefer the candidate matching the parent's JDK major.
         var initial = NewJdkCandidate.filter(candidates, false, LATEST_LTS_MAJOR);
         if (initial.isEmpty()) initial = candidates;
         var defaultJdkId = initial.getFirst().id();
+        if (member) {
+            defaultJdkId = candidates.stream()
+                    .filter(c -> c.major() == parent.jdkMajor())
+                    .map(NewJdkCandidate::id)
+                    .findFirst()
+                    .orElse(defaultJdkId);
+        }
 
         var javaOptions = WizardStep.MultiSelectStep.vertical("javaOptions", "Additional project options:")
                 .choice("lombok", "Use Lombok")
@@ -692,14 +769,16 @@ public final class NewCommand implements Callable<Integer> {
                 .defaultChoice(defaultJdkId);
 
         return Wizard.builder()
-                .title("Jk - Create a New Project")
-                .step(WizardStep.InputStep.of("name", "Project name:")
+                .title(member
+                        ? "Jk - Create a New Member for " + parent.displayName()
+                        : "Jk - Create a New Project")
+                .step(WizardStep.InputStep.of("name", member ? "Member name:" : "Project name:")
                         .placeholder("untitled")
                         .defaultValue("untitled")
                         .build())
                 .step(WizardStep.InputStep.of("group", "Maven groupId:")
-                        .placeholder(groupGuess)
-                        .defaultValue(groupGuess)
+                        .placeholder(effectiveGroup)
+                        .defaultValue(effectiveGroup)
                         .build())
                 .step(WizardStep.InputStep.of("artifact", "Maven artifactId:")
                         // Pre-fill the buffer with whatever the user just
@@ -717,7 +796,7 @@ public final class NewCommand implements Callable<Integer> {
                 .step(WizardStep.RadioStep.horizontal("lang", "Project language:")
                         .choice("java", "Java")
                         .choice("kotlin", "Kotlin")
-                        .defaultChoice("java")
+                        .defaultChoice(langDefault)
                         .build())
                 .step(javaOptions)
                 .step(kotlinOptions)
@@ -734,7 +813,7 @@ public final class NewCommand implements Callable<Integer> {
         Path target = resolveTarget(directory, cwd, resolvedName);
         var resolvedGroup = answers.has("group") && !answers.get("group").isBlank()
                 ? answers.get("group")
-                : workspaceGroup(target).orElse("com.example");
+                : parent != null ? parent.group() : "com.example";
 
         var resolvedJdk = String.valueOf(pickedOpt.major());
         int resolvedJdkMajor = pickedOpt.major();
