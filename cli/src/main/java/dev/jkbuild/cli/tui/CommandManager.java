@@ -3,8 +3,6 @@ package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
 import org.jline.utils.AttributedStyle;
 
 import java.io.PrintStream;
@@ -472,12 +470,40 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         return sb.toString();
     }
 
+    /**
+     * Terminal width, detected once, leak-free. We deliberately do NOT build a
+     * JLine terminal here: JLine probes the terminal with capability queries
+     * (DA1 {@code \e[c}, mode reports like {@code \e[?2027$p}), and a transient
+     * build-then-close races the async replies — they arrive after we exit and
+     * the shell echoes them as garbage. Instead ask the tty directly via
+     * {@code stty size} (an ioctl, no escape sequences), then {@code $COLUMNS},
+     * then a conservative default. Only called when animating (interactive tty).
+     */
     private static int detectWidth() {
-        try (Terminal t = TerminalBuilder.builder().system(true).dumb(true).build()) {
-            int w = t.getWidth();
-            if (w > 0) return w;
-        } catch (Exception e) {
-            // headless / no terminal — fall through to the default
+        try {
+            Process p = new ProcessBuilder("stty", "size")
+                    .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/tty")))
+                    .redirectError(ProcessBuilder.Redirect.DISCARD)
+                    .start();
+            String out = new String(p.getInputStream().readAllBytes(),
+                    java.nio.charset.StandardCharsets.US_ASCII).trim();
+            p.waitFor();
+            String[] parts = out.split("\\s+"); // "<rows> <cols>"
+            if (parts.length == 2) {
+                int cols = Integer.parseInt(parts[1]);
+                if (cols > 0) return cols;
+            }
+        } catch (Exception ignored) {
+            // no /dev/tty, no stty (e.g. Windows), or unparsable — fall through
+        }
+        try {
+            String cols = System.getenv("COLUMNS");
+            if (cols != null) {
+                int v = Integer.parseInt(cols.trim());
+                if (v > 0) return v;
+            }
+        } catch (NumberFormatException ignored) {
+            // COLUMNS not a number — fall through
         }
         return DEFAULT_WIDTH;
     }
