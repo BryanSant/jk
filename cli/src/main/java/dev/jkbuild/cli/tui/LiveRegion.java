@@ -23,6 +23,15 @@ public interface LiveRegion {
      */
     void renderCanceled();
 
+    /**
+     * The message {@link GlobalCancel} prints after wiping this region on Ctrl-C
+     * (it prefixes {@code ‼ }). Defaults to the generic notice; the goal/simple
+     * view overrides it to name the goal ({@code "Building canceled by user"}).
+     */
+    default String canceledMessage() {
+        return "Canceled by user";
+    }
+
     /** Register {@code region} as the region currently on screen. */
     static void setActive(LiveRegion region) {
         Holder.ACTIVE.set(region);
