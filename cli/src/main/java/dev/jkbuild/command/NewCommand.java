@@ -757,17 +757,34 @@ public final class NewCommand implements Callable<Integer> {
                 .when(a -> "executable".equals(a.get("kind")))
                 .build();
 
-        // Dynamic choices: filter to GraalVM at latest LTS when the user picked
-        // the Native build output; otherwise show every candidate (installed
-        // plus auto-installable latest-LTS rows). Built once per render so a
-        // toggle on the build-output step refreshes the JDK list immediately.
-        // Empty filter result (e.g. Native + offline + no GraalVM on disk)
-        // falls back to the full list — the user can still progress and we'll
-        // surface the missing-toolchain error later if their pick is wrong.
+        // Java projects pick their language version (the `java = N` target)
+        // before choosing a JDK — it shapes the JDK list (you can't target a
+        // release newer than the toolchain). Members inherit the parent's
+        // release, so they skip this question. Kotlin projects skip it too.
+        var javaVersion = WizardStep.RadioStep.horizontal("javaVersion", "Java Language Version:")
+                .choice("25", "25")
+                .choice("21", "21")
+                .choice("17", "17")
+                .defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
+                .when(a -> "java".equals(a.get("lang")) && !member)
+                .build();
+
+        // Dynamic choices: restricted to JDKs that can compile the chosen Java
+        // release (major >= the target), then GraalVM-at-latest-LTS when Native
+        // is selected, else the full preference-ordered list (installed plus
+        // auto-installable latest-LTS rows). Rebuilt per render so changing the
+        // language version or the build output refreshes the JDK list. Empty
+        // results fall back so the user can still progress; a bad pick surfaces
+        // as a missing-toolchain error later.
         var jdkStep = WizardStep.RadioStep.vertical("jdk", "Select a JDK:")
                 .choicesFn(answers -> {
+                    int floor = jdkFloor(answers, parent);
                     var nativeSelected = answers.getList("targets").contains("native");
-                    var filtered = NewJdkCandidate.filter(candidates, nativeSelected, LATEST_LTS_MAJOR);
+                    var filtered = NewJdkCandidate.filter(candidates, nativeSelected, LATEST_LTS_MAJOR)
+                            .stream().filter(c -> c.major() >= floor).toList();
+                    if (filtered.isEmpty()) {
+                        filtered = candidates.stream().filter(c -> c.major() >= floor).toList();
+                    }
                     if (filtered.isEmpty()) filtered = candidates;
                     return filtered.stream()
                             .map(c -> new dev.jkbuild.cli.tui.Choice(c.id(), c.label(), c.hint()))
@@ -799,15 +816,34 @@ public final class NewCommand implements Callable<Integer> {
                         .defaultChoice("executable")
                         .build())
                 .step(buildTargets)
-                .step(jdkStep.build())
+                // Language first, then (for Java) the language version, then the
+                // JDK shaped by that version.
                 .step(WizardStep.RadioStep.horizontal("lang", "Project language:")
                         .choice("java", "Java")
                         .choice("kotlin", "Kotlin")
                         .defaultChoice(langDefault)
                         .build())
+                .step(javaVersion)
+                .step(jdkStep.build())
                 .step(javaOptions)
                 .step(kotlinOptions)
                 .build();
+    }
+
+    /**
+     * Lowest JDK feature-release the "Select a JDK" step may offer: a JDK can't
+     * compile a release newer than itself. A member inherits the parent's
+     * {@code java} target; a standalone Java project uses the chosen Java
+     * Language Version; Kotlin (no Java target) imposes no floor.
+     */
+    static int jdkFloor(Answers answers, ParentInfo parent) {
+        if (parent != null) return parent.javaRelease();
+        if ("kotlin".equalsIgnoreCase(answers.get("lang"))) return 0;
+        String v = answers.get("javaVersion");
+        if (v != null && !v.isBlank()) {
+            try { return Integer.parseInt(v.trim()); } catch (NumberFormatException ignored) {}
+        }
+        return LATEST_LTS_MAJOR;
     }
 
     private NewInputs fromAnswers(Answers answers, Path cwd, NewJdkOptions.Option pickedOpt) {
@@ -824,9 +860,18 @@ public final class NewCommand implements Callable<Integer> {
 
         var resolvedJdk = String.valueOf(pickedOpt.major());
         int resolvedJdkMajor = pickedOpt.major();
-        // Member inherits the parent's compile target regardless of the JDK the
-        // user picked here; a standalone project targets its chosen JDK.
-        int resolvedJavaRelease = parent != null ? parent.javaRelease() : resolvedJdkMajor;
+        // Compile target: a member inherits the parent's; a standalone Java
+        // project uses the Java Language Version it was asked for; otherwise
+        // (Kotlin) it falls back to the chosen JDK.
+        int resolvedJavaRelease;
+        if (parent != null) {
+            resolvedJavaRelease = parent.javaRelease();
+        } else if ("java".equalsIgnoreCase(answers.get("lang"))
+                && answers.has("javaVersion") && !answers.get("javaVersion").isBlank()) {
+            resolvedJavaRelease = parseJdkMajorOrDefault(answers.get("javaVersion"));
+        } else {
+            resolvedJavaRelease = resolvedJdkMajor;
+        }
 
         var resolvedLang = "kotlin".equalsIgnoreCase(answers.get("lang"))
                 ? NewInputs.Language.KOTLIN

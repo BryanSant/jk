@@ -153,4 +153,29 @@ class NewMemberTest {
     void detect_returns_empty_with_no_enclosing_project(@TempDir Path dir) {
         assertThat(NewCommand.detectParentDir(dir, null, false)).isEmpty();
     }
+
+    // ---- jdkFloor: the Java Language Version shapes the JDK list ------------
+
+    @Test
+    void jdk_floor_uses_the_chosen_java_version() {
+        assertThat(NewCommand.jdkFloor(answers("lang", "java", "javaVersion", "25"), null)).isEqualTo(25);
+        assertThat(NewCommand.jdkFloor(answers("lang", "java", "javaVersion", "17"), null)).isEqualTo(17);
+    }
+
+    @Test
+    void jdk_floor_is_unrestricted_for_kotlin() {
+        assertThat(NewCommand.jdkFloor(answers("lang", "kotlin"), null)).isZero();
+    }
+
+    @Test
+    void jdk_floor_defaults_to_latest_lts_when_unanswered() {
+        assertThat(NewCommand.jdkFloor(answers("lang", "java"), null))
+                .isEqualTo(NewCommand.LATEST_LTS_MAJOR);
+    }
+
+    private static dev.jkbuild.cli.tui.Answers answers(String... kv) {
+        var map = new java.util.HashMap<String, Object>();
+        for (int i = 0; i < kv.length; i += 2) map.put(kv[i], kv[i + 1]);
+        return dev.jkbuild.cli.tui.Answers.of(map);
+    }
 }
