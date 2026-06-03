@@ -371,52 +371,7 @@ public final class TestCommand implements Callable<Integer> {
             PhaseContext ctx,
             int workerCount,
             boolean verbose) {
-        return new TestProgressListener() {
-            // Progress strategy: the runTests phase was built with its
-            // scope baked in from an upfront lexical scan, so the goal's
-            // denominator is fixed before any phase runs. We don't react
-            // to the runner's discovery_total at all (would reshape the
-            // bar after the early phases had already moved). The numerator
-            // ticks only for tests that were in the static plan (i.e.,
-            // wasStatic=true). Dynamic invocations run and are counted in
-            // the pass/fail tally but never advance the bar — for
-            // parameterized-heavy suites that means the bar saturates
-            // near 99% before execution ends; phase-end auto-fill snaps
-            // it to 100% on success.
-
-            @Override
-            public void onTestFinished(String id, String display, String status,
-                                       boolean isTest, boolean wasStatic,
-                                       long durationMs, int workerId) {
-                if (!isTest) return;
-                if (wasStatic) ctx.progress(1);
-                ctx.label(display);
-            }
-
-            @Override
-            public void onTestSkipped(String id, String display, String reason,
-                                      boolean isTest, boolean wasStatic, int workerId) {
-                if (!isTest) return;
-                if (wasStatic) ctx.progress(1);
-            }
-
-            @Override
-            public void onFailure(String id, String display, String exClass,
-                                  String message, int workerId) {
-                ctx.error("test", display + ": " + exClass
-                        + (message.isEmpty() ? "" : " — " + message));
-            }
-
-            @Override
-            public void onUserOutput(int workerId, String line) {
-                // Muted by default; --verbose surfaces it. Under verbose
-                // mode GoalConsole picks VerboseListener (no pinned bar),
-                // so println straight to stdout is safe.
-                if (!verbose) return;
-                String prefix = workerCount > 1 ? "[w" + workerId + "] " : "";
-                System.out.println(prefix + line);
-            }
-        };
+        return dev.jkbuild.runtime.TestSupport.bridgeListener(ctx, workerCount, verbose);
     }
 
     /**
@@ -435,37 +390,7 @@ public final class TestCommand implements Callable<Integer> {
             Path javaHome,
             Cas cas,
             Path cacheRoot) throws IOException {
-
-        List<Path> sources = CompileCommand.collectJavaSources(srcDir);
-        if (sources.isEmpty()) {
-            Files.createDirectories(outputDir);
-            return true;
-        }
-
-        // Project-qualify so the `tasks/<taskId>` pointer is unique per module
-        // (display labels keep the plain base name).
-        String cacheTaskId = ActionKey.qualifiedTaskId(taskId, outputDir);
-        CompileRequest request = CompileRequest.builder()
-                .sources(sources)
-                .classpath(classpath)
-                .outputDir(outputDir)
-                .release(release)
-                .extraOptions(javacArgs)
-                .javaHome(javaHome)
-                .build();
-        ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
-        boolean useCache = !dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-
-        ctx.label(taskId + ": " + sources.size() + " sources");
-        IncrementalCompile.Result r = IncrementalCompile.run(
-                cacheTaskId, request, Jk.VERSION, useCache, cas, actionCache);
-        for (CompileResult.Diagnostic d : r.diagnostics()) {
-            ctx.error("javac", d.render());
-        }
-        if (!r.success()) return false;
-        ctx.label(r.cacheHit()
-                ? taskId + ": cache hit " + r.actionKey().substring(0, 8)
-                : taskId + ": compiled " + sources.size() + " sources");
-        return true;
+        return dev.jkbuild.runtime.TestSupport.compileWithCache(
+                ctx, taskId, srcDir, outputDir, classpath, release, javacArgs, javaHome, cas, cacheRoot);
     }
 }

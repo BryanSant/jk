@@ -265,13 +265,6 @@ public final class CompileCommand implements Callable<Integer> {
      * the {@code ci} profile is auto-selected when running on CI.
      */
     static Profile resolveProfile(Profiles profiles, String explicitName) {
-        if (explicitName != null && !explicitName.isBlank()) {
-            return profiles.resolve(explicitName);
-        }
-        String auto = Profiles.autoSelect(System.getenv());
-        if (auto != null && profiles.contains(auto)) {
-            return profiles.resolve(auto);
-        }
-        return null;
+        return dev.jkbuild.runtime.CompileSupport.resolveProfile(profiles, explicitName);
     }
 }

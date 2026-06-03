@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import dev.jkbuild.model.Profile;
+import dev.jkbuild.model.Profiles;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,6 +44,22 @@ public final class CompileSupport {
      */
     public static int kotlinJvmTarget(int release) {
         return Math.min(release, 21);
+    }
+
+    /**
+     * Pick the active profile. Explicit {@code explicitName} wins; otherwise the
+     * {@code ci} profile is auto-selected when running on CI. Returns null when
+     * no profile applies.
+     */
+    public static Profile resolveProfile(Profiles profiles, String explicitName) {
+        if (explicitName != null && !explicitName.isBlank()) {
+            return profiles.resolve(explicitName);
+        }
+        String auto = Profiles.autoSelect(System.getenv());
+        if (auto != null && profiles.contains(auto)) {
+            return profiles.resolve(auto);
+        }
+        return null;
     }
 
     private static List<Path> collectFilesWithExtension(Path root, String extension) throws IOException {

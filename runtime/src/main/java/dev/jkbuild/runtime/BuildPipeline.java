@@ -1,12 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
-import dev.jkbuild.runtime.LockFlow;
 
-import dev.jkbuild.runtime.JdkEnsure;
-import dev.jkbuild.runtime.CompileToolchain;
 
-import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
@@ -164,7 +160,7 @@ public final class BuildPipeline {
                         throw new RuntimeException("missing workspace siblings");
                     }
 
-                    Profile profile = CompileCommand.resolveProfile(project.profiles(), in.profileName());
+                    Profile profile = CompileSupport.resolveProfile(project.profiles(), in.profileName());
                     ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
                     ctx.put(CLASSPATH, mainCp);
 
@@ -178,8 +174,8 @@ public final class BuildPipeline {
                     testRuntimeCp.addAll(testSiblings.jars());
                     ctx.put(COMPILE_TEST_CP, compileTestCp);
                     ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
-                    ctx.put(JAVA_SOURCES, CompileCommand.collectJavaSources(in.dir().resolve("src/main/java")));
-                    ctx.put(KOTLIN_SOURCES, CompileCommand.collectKotlinSources(in.dir()));
+                    ctx.put(JAVA_SOURCES, CompileSupport.collectJavaSources(in.dir().resolve("src/main/java")));
+                    ctx.put(KOTLIN_SOURCES, CompileSupport.collectKotlinSources(in.dir()));
                     ctx.put(RELEASE, project.project().javaRelease());
                     ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(in.dir()));
                     ctx.put(MAIN_CLASSES, layout.classesDir());
@@ -277,7 +273,7 @@ public final class BuildPipeline {
                     ctx.label("compiling " + sources.size() + " sources");
                     dev.jkbuild.task.IncrementalCompile.Result r =
                             dev.jkbuild.task.IncrementalCompile.run(
-                                    taskId, request, Jk.VERSION, !noCache, cas, actionCache);
+                                    taskId, request, dev.jkbuild.util.JkVersion.VERSION, !noCache, cas, actionCache);
                     ctx.put(ACTION_KEY, r.actionKey());
                     for (CompileResult.Diagnostic d : r.diagnostics())
                         ctx.error("javac", d.render());
@@ -312,7 +308,7 @@ public final class BuildPipeline {
                             KotlincRequest.builder()
                                     .sources(ktSources).classpath(kotlincCp)
                                     .outputDir(classes)
-                                    .jvmTarget(CompileCommand.kotlinJvmTarget(ctx.require(RELEASE)))
+                                    .jvmTarget(CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)))
                                     .kotlinHome(kotlinHome).build());
                     if (!ktResult.success()) {
                         ctx.error("kotlinc", ktResult.output());
@@ -346,7 +342,7 @@ public final class BuildPipeline {
                 .scope(1)
                 .execute(ctx -> {
                     Path srcTest = in.dir().resolve("src/test/java");
-                    if (CompileCommand.collectJavaSources(srcTest).isEmpty()) {
+                    if (CompileSupport.collectJavaSources(srcTest).isEmpty()) {
                         ctx.label("no test sources");
                         ctx.put(NO_TEST_SOURCES, true);
                         ctx.progress(1);
@@ -359,7 +355,7 @@ public final class BuildPipeline {
                     fullCp.addAll(compileCp);
                     @SuppressWarnings("unchecked")
                     List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
-                    boolean ok = TestCommand.compileWithCache(
+                    boolean ok = TestSupport.compileWithCache(
                             ctx, "compile-test", srcTest,
                             ctx.require(TEST_CLASSES), fullCp,
                             ctx.require(RELEASE), javacArgs,
@@ -387,7 +383,7 @@ public final class BuildPipeline {
                     runtimeCp.addAll(testRtCp);
 
                     TestProgressListener listener =
-                            TestCommand.bridgeListener(ctx, in.workerCount(), in.verbose());
+                            TestSupport.bridgeListener(ctx, in.workerCount(), in.verbose());
                     JUnitLauncher.Result result;
                     try {
                         result = new JUnitLauncher().run(
