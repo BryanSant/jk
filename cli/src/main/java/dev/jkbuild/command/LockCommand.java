@@ -255,7 +255,7 @@ public final class LockCommand implements Callable<Integer> {
                 .addPhase(write)
                 .build();
 
-        ConsoleSpec spec = new ConsoleSpec("Lock",
+        ConsoleSpec spec = new ConsoleSpec("Dependency Lock",
                 r -> {
                     int pkgs = goal.get(LOCKFILE).orElseThrow().packages().size();
                     String inTime = Theme.colorize(
