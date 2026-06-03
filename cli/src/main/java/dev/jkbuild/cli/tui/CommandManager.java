@@ -196,17 +196,24 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     // --- completion -------------------------------------------------------
 
-    /** Settle with a green check and a success message. */
+    /** Settle with {@code ✔ <goal> Successful: <message>} (the head in green). */
     public void finishSuccess(String message) {
-        finish(Theme.colorize(Glyphs.CHECK, Theme.active().success()), message);
+        String head = Glyphs.CHECK + (goalName().isEmpty() ? "" : " " + goalName()) + " Successful";
+        settle(Theme.colorize(head, Theme.active().success()) + ": " + message);
     }
 
     /** Settle with a red cross and a failure message. */
     public void finishFailure(String message) {
-        finish(Theme.colorize(Glyphs.CROSS, Theme.active().error()), message);
+        settle(Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + message);
     }
 
-    private void finish(String marker, String message) {
+    /** The goal/verb name shown in the header ("Building", "Locking", …). */
+    private String goalName() {
+        String n = goalMode ? name : label;
+        return n == null ? "" : n;
+    }
+
+    private void settle(String line) {
         stopAnimator();
         synchronized (lock) {
             if (done) return;
@@ -220,9 +227,15 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                 out.print(Ansi.TASKBAR_CLEAR);
                 out.print(Ansi.SHOW_CURSOR);
             }
-            out.println(marker + " " + message);
+            out.println(line);
             out.flush();
         }
+    }
+
+    /** Cancel line text (shown by {@link GlobalCancel}): {@code <goal> canceled by user}. */
+    @Override
+    public String canceledMessage() {
+        return goalName().isEmpty() ? "Canceled by user" : goalName() + " canceled by user";
     }
 
     @Override
