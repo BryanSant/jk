@@ -102,6 +102,10 @@ public final class BuildCommand implements Callable<Integer> {
             description = "Override the JDK install root.")
     Path jdksDir;
 
+    @Option(names = "--skip-tests",
+            description = "Skip compiling and running tests (the test phases are left out of the build).")
+    boolean skipTests;
+
     @picocli.CommandLine.Mixin GlobalOptions global;
 
     // ---- GoalKeys -------------------------------------------------------
@@ -647,7 +651,9 @@ public final class BuildCommand implements Callable<Integer> {
         Phase packageJar = Phase.builder("package-jar")
                 .label("Packaging")
                 .kind(PhaseKind.CPU)
-                .requires("copy-resources", "run-tests")
+                .requires(skipTests
+                        ? new String[]{"copy-resources"}
+                        : new String[]{"copy-resources", "run-tests"})
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
@@ -700,11 +706,11 @@ public final class BuildCommand implements Callable<Integer> {
                 .addPhase(ensureJdk)
                 .addPhase(compileJava)
                 .addPhase(compileKotlin)
-                .addPhase(copyResources)
-                .addPhase(compileTest)
-                .addPhase(runTests)
-                .addPhase(packageJar)
-                .addPhase(writeStamp);
+                .addPhase(copyResources);
+        if (!skipTests) {
+            goalBuilder.addPhase(compileTest).addPhase(runTests);
+        }
+        goalBuilder.addPhase(packageJar).addPhase(writeStamp);
 
         // shadow = true → add a fat-jar phase after package-jar;
         // native = "always" → add native-image phase after package-jar.
@@ -714,7 +720,7 @@ public final class BuildCommand implements Callable<Integer> {
                 goalBuilder.addPhase(buildShadowPhase(cache, lockFile));
             }
             if (project.project().nativeMode() == JkBuild.NativeMode.ALWAYS) {
-                goalBuilder.addPhase(buildNativePhase(dir, cache, lockFile));
+                goalBuilder.addPhase(buildNativePhase(dir, cache, lockFile, jdksDir));
             }
         } catch (Exception ignored) {}
 
@@ -774,17 +780,16 @@ public final class BuildCommand implements Callable<Integer> {
                 .build();
     }
 
-    private static Phase buildNativePhase(Path dir, Path cache, Path lockFile) {
+    private static Phase buildNativePhase(Path dir, Path cache, Path lockFile, Path jdksDir) {
         return Phase.builder("native-image")
                 .label("Native")
                 .kind(PhaseKind.IO)
                 .requires("package-jar")
                 .scope(1)
                 .execute(ctx -> {
-                    ctx.label("native-image compilation");
-                    // Delegate to NativeCommand logic via a subprocess-style call.
-                    // NativeCommand reads jk.toml + the existing jar and runs
-                    // GraalVM native-image. We wire progress via ctx.label.
+                    // Run GraalVM native-image directly as a subprocess — no
+                    // nested `jk` process; the native step is composed into this
+                    // goal as its own phase (mirrors `jk native`).
                     JkBuild project = ctx.require(PROJECT);
                     BuildLayout layout = ctx.require(LAYOUT);
                     Path mainJar = layout.mainJar();
@@ -797,16 +802,30 @@ public final class BuildCommand implements Callable<Integer> {
                         ctx.error("native", "native = \"always\" requires [project] main to be set");
                         throw new RuntimeException("missing main class");
                     }
-                    ctx.label("running native-image for " + project.project().artifact());
-                    // Re-use NativeCommand.runNativeImage if accessible, or
-                    // invoke the same GraalVM driver inline here.
-                    // For now, delegate to a fresh NativeCommand invocation via
-                    // Jk.execute so we don't duplicate the driver logic.
-                    int rc = Jk.execute("native", "-C", dir.toString(),
-                            "--cache-dir", cache.toString());
-                    if (rc != 0) {
-                        ctx.error("native", "native-image exited with code " + rc);
-                        throw new RuntimeException("native-image failed");
+                    Path out = layout.nativeBinary();
+                    Files.createDirectories(out.getParent());
+
+                    // GraalVM JDK (the project's pinned JDK, else the running JVM).
+                    Path javaHome = dev.jkbuild.jdk.JdkResolver.forProject(dir, jdksDir)
+                            .map(dev.jkbuild.jdk.InstalledJdk::home)
+                            .orElseGet(CompileToolchain::runningJavaHome);
+
+                    // Classpath: the app jar plus its runtime dependencies.
+                    List<Path> classpath = new java.util.ArrayList<>();
+                    classpath.add(mainJar);
+                    if (Files.exists(lockFile)) {
+                        Lockfile lock = LockfileReader.read(lockFile);
+                        classpath.addAll(new ClasspathResolver(new Cas(cache))
+                                .classpathFor(lock, ClasspathResolver.RUNTIME));
+                    }
+
+                    ctx.label("native-image " + out.getFileName());
+                    int exit = dev.jkbuild.tool.NativeImageDriver.run(
+                            new dev.jkbuild.tool.NativeImageDriver.Request(
+                                    javaHome, classpath, mainClass, out, List.of()));
+                    if (exit != 0) {
+                        ctx.error("native", "native-image exited " + exit);
+                        throw new RuntimeException("native-image failed (exit " + exit + ")");
                     }
                     ctx.progress(1);
                 })

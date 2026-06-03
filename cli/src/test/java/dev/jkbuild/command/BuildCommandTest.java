@@ -43,6 +43,29 @@ class BuildCommandTest {
     }
 
     @Test
+    void skip_tests_leaves_the_test_phases_out_of_the_build(@TempDir Path tempDir) throws Exception {
+        run("new", "--name", "widget", tempDir.toString());
+        Path main = tempDir.resolve("src/main/java/example/Hello.java");
+        Files.createDirectories(main.getParent());
+        Files.writeString(main, "package example;\npublic class Hello {}\n");
+        // A test source that does NOT compile — only reached if the test phases run.
+        Path test = tempDir.resolve("src/test/java/example/BrokenTest.java");
+        Files.createDirectories(test.getParent());
+        Files.writeString(test, "package example;\nclass BrokenTest { void t(  // syntax error\n");
+
+        // Normal build compiles the (broken) test → fails.
+        int failed = run("build", "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(failed).isNotEqualTo(0);
+
+        // --skip-tests drops the test phases → the broken test is never compiled.
+        int ok = run("build", "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString(), "--skip-tests");
+        assertThat(ok).isEqualTo(0);
+        assertThat(tempDir.resolve("target/widget-0.1.0.jar")).exists();
+    }
+
+    @Test
     void copies_resources_into_jar(@TempDir Path tempDir) throws Exception {
         run("new", "--name", "widget", tempDir.toString());
         Path res = tempDir.resolve("src/main/resources/application.properties");
