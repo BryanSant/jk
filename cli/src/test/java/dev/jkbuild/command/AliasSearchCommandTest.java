@@ -35,12 +35,12 @@ class AliasSearchCommandTest {
 
     @Test
     void search_matches_substring_of_name_in_bundled_catalog() {
-        int exit = new CommandLine(new Jk()).execute("alias", "search", "junit");
+        int exit = new CommandLine(new Jk()).execute("alias", "search", "junit", "--show-layer");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("junit-jupiter");
         assertThat(stdout).contains("junit-platform-launcher");
-        // Layer tag is present.
+        // The layer tag is opt-in via --show-layer; with it, bundled rows are tagged.
         assertThat(stdout).contains("[bundled]");
     }
 

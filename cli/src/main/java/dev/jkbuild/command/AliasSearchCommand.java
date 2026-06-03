@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.cli.theme.Theme;
 
 import dev.jkbuild.cache.Journal;
 import dev.jkbuild.alias.AliasCatalog;
@@ -25,8 +26,10 @@ import java.util.concurrent.Callable;
  * terms are ANDed (each must appear somewhere in name/group/artifact).
  * Matches are case-insensitive.
  *
- * <p>Output shape mirrors {@code jk alias list}: {@code name [layer]
- * group:artifact}. The layer tag lets the user see when a project- or
+ * <p>Output shape mirrors {@code jk alias list}: {@code name....group:artifact},
+ * the dotted leader tracking each alias across to its coordinate. The source
+ * layer is hidden by default; surface it inline with {@code --show-layer} or as
+ * section headings with {@code --group-by-layer} to see when a project- or
  * user-level override is shadowing the bundled coord.
  */
 @Command(name = "search",
@@ -40,6 +43,14 @@ public final class AliasSearchCommand implements Callable<Integer> {
     @Option(names = "--limit",
             description = "Cap the number of results displayed (default: no cap).")
     Integer limit;
+
+    @Option(names = "--show-layer",
+            description = "Append the source layer (project, local, global, bundled) to each row.")
+    boolean showLayer;
+
+    @Option(names = "--group-by-layer",
+            description = "Group results under a heading per source layer, highest precedence first.")
+    boolean groupByLayer;
 
     @Option(names = "--cache-dir", hidden = true,
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
@@ -78,30 +89,57 @@ public final class AliasSearchCommand implements Callable<Integer> {
 
         int total = hits.size();
         int shown = limit != null && limit > 0 && total > limit ? limit : total;
-        int nameWidth = 0;
-        int layerWidth = 0;
-        for (int i = 0; i < shown; i++) {
-            Hit h = hits.get(i);
-            nameWidth = Math.max(nameWidth, h.name.length());
-            layerWidth = Math.max(layerWidth, h.src.layer().length());
+        List<Hit> visible = hits.subList(0, shown);
+        // Coordinates align at a fixed column filled with a dotted leader (see
+        // jk alias list); the column is computed over every visible hit so it
+        // lines up across layer groups too. The longest name keeps a two-dot minimum.
+        int nameWidth = visible.stream().mapToInt(h -> h.name.length()).max().orElse(0);
+        int leaderColumn = nameWidth + 2;
+
+        if (groupByLayer) {
+            renderGrouped(catalog, visible, leaderColumn);
+        } else {
+            for (Hit h : visible) System.out.println(row(h, leaderColumn));
         }
 
-        for (int i = 0; i < shown; i++) {
-            Hit h = hits.get(i);
-            String cached = h.cached.isEmpty()
-                    ? "" : "  (cached: " + String.join(", ", h.cached) + ")";
-            // Pad against the plain name width (color escapes have zero width).
-            String namePad = " ".repeat(Math.max(0, nameWidth - h.name.length()));
-            System.out.println(
-                    Coords.shortName(h.name) + namePad + "  ["
-                            + pad(h.src.layer(), layerWidth) + "]  "
-                            + Coords.module(h.src.module().moduleKey()) + cached);
-        }
         if (shown < total) {
             System.out.println("… and " + (total - shown) + " more "
                     + "(pass --limit " + total + " or refine the search)");
         }
         return 0;
+    }
+
+    private void renderGrouped(AliasCatalog catalog, List<Hit> visible, int leaderColumn) {
+        boolean firstGroup = true;
+        for (String layer : catalog.layerNames()) {
+            List<Hit> inLayer = new ArrayList<>();
+            for (Hit h : visible) {
+                if (h.src.layer().equals(layer)) inLayer.add(h);
+            }
+            if (inLayer.isEmpty()) continue;
+            if (!firstGroup) System.out.println();
+            firstGroup = false;
+            System.out.println(Theme.colorize(layer, Theme.active().cyan()));
+            for (Hit h : inLayer) System.out.println(row(h, leaderColumn));
+        }
+    }
+
+    /** A single hit row: name, dotted leader, coordinate, optional layer tag, and any cached versions. */
+    private String row(Hit h, int leaderColumn) {
+        // Pad against the plain name width (color escapes have zero width).
+        String leader = ".".repeat(Math.max(2, leaderColumn - h.name.length()));
+        String line = Coords.shortName(h.name)
+                + Theme.colorize(leader, Theme.active().black())
+                + Coords.module(h.src.module().moduleKey());
+        // When grouping, the heading already names the layer, so an inline tag
+        // would just be noise — only append it in the flat listing.
+        if (showLayer && !groupByLayer) {
+            line += "  " + Theme.colorize("[" + h.src.layer() + "]", Theme.active().cyan());
+        }
+        if (!h.cached.isEmpty()) {
+            line += "  (cached: " + String.join(", ", h.cached) + ")";
+        }
+        return line;
     }
 
     private static boolean allMatch(List<String> terms, String... fields) {
@@ -113,11 +151,6 @@ public final class AliasSearchCommand implements Callable<Integer> {
             if (!found) return false;
         }
         return true;
-    }
-
-    private static String pad(String s, int width) {
-        if (s.length() >= width) return s;
-        return s + " ".repeat(width - s.length());
     }
 
     private record Hit(String name, AliasCatalog.Source src, List<String> cached) {}
