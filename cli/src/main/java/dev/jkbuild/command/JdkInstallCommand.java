@@ -123,11 +123,12 @@ public final class JdkInstallCommand implements Callable<Integer> {
                 .execute(ctx -> {
                     ctx.label("fetch JetBrains JDK feed");
                     boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-                    JdkCatalogClient client = feedUrl != null
+                    JdkCatalogClient client = (feedUrl != null
                             ? new JdkCatalogClient(new Http(), feedUrl,
                                     cacheFile != null ? cacheFile : ephemeralCachePath(),
                                     java.time.Duration.ZERO)
-                            : new JdkCatalogClient();
+                            : new JdkCatalogClient())
+                            .onWarning(ctx::output);
                     try {
                         ctx.put(CATALOG, client.fetch(noCache));
                     } catch (Exception e) {

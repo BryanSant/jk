@@ -302,7 +302,7 @@ public final class AddCommand implements Callable<Integer> {
                     throw new IllegalArgumentException("empty version after '@' in: " + coord);
                 }
                 String name = nonBlank(nameFlag, aliasKey);
-                var catalog = dev.jkbuild.alias.AliasCatalog.layered();
+                var catalog = dev.jkbuild.alias.AliasCatalog.layered(System.err::println);
                 var catalogHit = catalog.lookup(aliasKey);
                 String group = nonBlank(groupFlag,
                         catalogHit.map(dev.jkbuild.alias.AliasCatalog.Module::group).orElse(null));

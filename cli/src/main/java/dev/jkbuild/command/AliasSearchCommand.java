@@ -49,7 +49,7 @@ public final class AliasSearchCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        AliasCatalog catalog = AliasCatalog.layered();
+        AliasCatalog catalog = AliasCatalog.layered(System.err::println);
         Journal journal = new Journal(cacheDir != null ? cacheDir : JkDirs.cache());
         List<String> lowerTerms = new ArrayList<>(terms.size());
         for (String t : terms) lowerTerms.add(t.toLowerCase(Locale.ROOT));

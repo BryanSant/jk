@@ -53,6 +53,14 @@ public final class JdkCatalogClient {
     private final Duration ttl;
     private final ObjectMapper json = JsonMapper.builder().build();
 
+    /**
+     * Where the "feed unreachable, using cached" degradation notice goes.
+     * No-op by default — only the CLI view layer owns the streams, so callers
+     * there install {@code System.err::println} via {@link #onWarning}, and
+     * in-phase callers route it to {@code PhaseContext::warn}.
+     */
+    private java.util.function.Consumer<String> warn = s -> {};
+
     public JdkCatalogClient() {
         this(new Http(), URI.create(DEFAULT_FEED_URL), defaultCachePath(), DEFAULT_TTL);
     }
@@ -62,6 +70,12 @@ public final class JdkCatalogClient {
         this.feedUri = Objects.requireNonNull(feedUri, "feedUri");
         this.cacheFile = Objects.requireNonNull(cacheFile, "cacheFile");
         this.ttl = Objects.requireNonNull(ttl, "ttl");
+    }
+
+    /** Install a sink for degradation warnings; returns {@code this} for chaining. */
+    public JdkCatalogClient onWarning(java.util.function.Consumer<String> sink) {
+        this.warn = Objects.requireNonNull(sink, "sink");
+        return this;
     }
 
     /** Default cache location: {@code $JK_CACHE_DIR/jdks.json.xz} (XDG: {@code ~/.cache/jk/jdks.json.xz}). */
@@ -114,7 +128,7 @@ public final class JdkCatalogClient {
             throw new IOException("JDK feed " + feedUri + " returned HTTP " + status);
         } catch (IOException | InterruptedException e) {
             if (Files.isRegularFile(cacheFile)) {
-                System.err.println("jk: warning — JDK feed unreachable, using cached "
+                warn.accept("jk: warning — JDK feed unreachable, using cached "
                         + cacheFile + " (" + e.getMessage() + ")");
                 return Files.readAllBytes(cacheFile);
             }

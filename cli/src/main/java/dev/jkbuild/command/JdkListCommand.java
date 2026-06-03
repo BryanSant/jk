@@ -379,11 +379,12 @@ public final class JdkListCommand implements Callable<Integer> {
         if (!HostPlatform.supported()) return null;
         try {
             boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-            JdkCatalogClient client = feedUrl != null
+            JdkCatalogClient client = (feedUrl != null
                     ? new JdkCatalogClient(new Http(), feedUrl,
                             cacheFile != null ? cacheFile : ephemeralCachePath(),
                             java.time.Duration.ZERO)
-                    : new JdkCatalogClient();
+                    : new JdkCatalogClient())
+                    .onWarning(System.err::println);
             return client.fetch(noCache);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();

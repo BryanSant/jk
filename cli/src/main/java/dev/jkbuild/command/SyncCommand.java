@@ -125,7 +125,8 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                     Lockfile lock = ctx.require(LOCKFILE);
                     JkBuild build = ctx.get(BUILD).orElse(null);
                     try {
-                        var outcome = JdkEnsure.ensure(dir, jdksDir, build, lock);
+                        var outcome = JdkEnsure.ensure(dir, jdksDir, build, lock,
+                                m -> ctx.warn("jdk", m));
                         ctx.put(JDK_OUTCOME, outcome);
                     } catch (Exception e) {
                         ctx.error("jdk", e.getMessage() == null

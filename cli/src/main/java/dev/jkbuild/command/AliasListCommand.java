@@ -29,7 +29,7 @@ public final class AliasListCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        AliasCatalog catalog = AliasCatalog.layered();
+        AliasCatalog catalog = AliasCatalog.layered(System.err::println);
         var names = catalog.names();
         if (names.isEmpty()) {
             System.out.println("(no aliases registered)");

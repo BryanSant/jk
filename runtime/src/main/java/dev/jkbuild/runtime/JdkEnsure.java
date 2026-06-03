@@ -60,7 +60,8 @@ public final class JdkEnsure {
 
     private JdkEnsure() {}
 
-    public static Outcome ensure(Path projectDir, Path jdksDirOverride, JkBuild build, Lockfile lock)
+    public static Outcome ensure(Path projectDir, Path jdksDirOverride, JkBuild build, Lockfile lock,
+                                 java.util.function.Consumer<String> warn)
             throws IOException, InterruptedException {
         // 1. Already pinned via .jdk-version → use what's there.
         Optional<InstalledJdk> resolved = JdkResolver.forProject(projectDir, jdksDirOverride);
@@ -100,7 +101,7 @@ public final class JdkEnsure {
                     + " is not covered by the JetBrains JDK feed (set JAVA_HOME explicitly)");
         }
 
-        JdkCatalog catalog = new JdkCatalogClient().fetch();
+        JdkCatalog catalog = new JdkCatalogClient().onWarning(warn).fetch();
         Optional<JdkCatalog.Entry> entry = JdkSelector.select(
                 catalog, JdkSpec.parse(spec), HostPlatform.currentOs(), HostPlatform.currentArch());
         if (entry.isEmpty()) {

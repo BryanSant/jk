@@ -396,7 +396,10 @@ public final class JUnitLauncher {
             try {
                 node = JSON.readTree(json);
             } catch (RuntimeException e) {
-                System.err.println("jk test: malformed protocol line: " + json);
+                // Not a protocol line — it's a raw write the child made to its
+                // own stdout. Surface it as user output (the view decides how),
+                // never straight to our streams.
+                listener.onUserOutput(workerId, json);
                 return;
             }
             acceptNode(node);

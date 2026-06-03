@@ -92,9 +92,18 @@ public final class AliasCatalog {
      * top via {@link #withProjectOverrides}.
      */
     public static AliasCatalog layered() {
+        return layered(w -> {});
+    }
+
+    /**
+     * As {@link #layered()}, but reports each skipped-malformed-layer warning
+     * to {@code warn} instead of a stream — only the CLI view layer owns
+     * {@code System.err}, so callers there pass {@code System.err::println}.
+     */
+    public static AliasCatalog layered(java.util.function.Consumer<String> warn) {
         List<Layer> chain = new ArrayList<>();
-        loadFileLayer(userFile(), "local").ifPresent(chain::add);
-        loadFileLayer(downloadedFile(), "global").ifPresent(chain::add);
+        loadFileLayer(userFile(), "local", warn).ifPresent(chain::add);
+        loadFileLayer(downloadedFile(), "global", warn).ifPresent(chain::add);
         chain.add(loadBundledLayer());
         return new AliasCatalog(chain);
     }
@@ -238,19 +247,17 @@ public final class AliasCatalog {
         }
     }
 
-    private static Optional<Layer> loadFileLayer(Path file, String layerName) {
+    private static Optional<Layer> loadFileLayer(Path file, String layerName,
+                                                 java.util.function.Consumer<String> warn) {
         if (!Files.isRegularFile(file)) return Optional.empty();
         try {
             String text = Files.readString(file, StandardCharsets.UTF_8);
             return Optional.of(new Layer(layerName, parseTable(text, file.toString())));
-        } catch (IOException e) {
-            // Fail soft: a malformed user/downloaded layer should warn,
-            // not break every jk invocation. Surface via stderr and skip.
-            System.err.println("warning: ignoring alias catalog layer at "
-                    + file + " — " + e.getMessage());
-            return Optional.empty();
-        } catch (IllegalStateException e) {
-            System.err.println("warning: ignoring alias catalog layer at "
+        } catch (IOException | IllegalStateException e) {
+            // Fail soft: a malformed user/downloaded layer should warn, not
+            // break every jk invocation. Hand the message to the caller's sink
+            // (the CLI routes it to stderr) and skip the layer.
+            warn.accept("warning: ignoring alias catalog layer at "
                     + file + " — " + e.getMessage());
             return Optional.empty();
         }

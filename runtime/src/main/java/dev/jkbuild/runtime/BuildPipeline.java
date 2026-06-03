@@ -227,7 +227,8 @@ public final class BuildPipeline {
                     Lockfile lock = ctx.require(LOCKFILE);
                     JkBuild project = ctx.require(PROJECT);
                     try {
-                        JdkEnsure.ensure(in.dir(), in.jdksDir(), project, lock);
+                        JdkEnsure.ensure(in.dir(), in.jdksDir(), project, lock,
+                                m -> ctx.warn("jdk", m));
                     } catch (Exception e) {
                         ctx.error("jdk", e.getMessage() == null
                                 ? e.getClass().getSimpleName() : e.getMessage());
