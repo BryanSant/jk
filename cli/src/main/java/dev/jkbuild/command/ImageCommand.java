@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.runtime.BuildPipeline;
 
+import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
-import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.image.ImageBuilder;
 import dev.jkbuild.image.ImageConfig;
@@ -17,7 +18,6 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -30,16 +30,16 @@ import java.util.List;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk image} — build an OCI image for the project (PRD §22).
+ * {@code jk image} — build an OCI image for the project, from source (PRD §22).
  *
- * <p>Goal shape: {@code parse-build} (SYNC) reads jk.toml, picks
- * main class, locates main jar; {@code load-deps} (SYNC) reads the
- * lockfile and resolves CAS paths for every MAIN/RUNTIME dependency
- * jar; {@code write-image} (IO) either writes the OCI tarball or
- * pushes to the configured registry.
+ * <p>Runs the shared {@linkplain BuildPipeline build pipeline} (compile → test →
+ * package) and then composes its own tail onto the same goal: {@code image-plan}
+ * (requires package-jar) picks the main class, resolves the dependency jars from
+ * the CAS and assembles the {@link ImageBuilder.Plan}; {@code write-image} either
+ * writes the OCI tarball or pushes to the configured registry. No prior
+ * {@code jk build} and no nested {@code jk} process.
  *
- * <p>{@code --tarball <path>} writes an OCI archive locally instead of
- * pushing.
+ * <p>{@code --tarball <path>} writes an OCI archive locally instead of pushing.
  */
 @Command(name = "image", description = "Bundle this project into an OCI image")
 public final class ImageCommand implements Callable<Integer> {
@@ -65,16 +65,19 @@ public final class ImageCommand implements Callable<Integer> {
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
 
+    @Option(names = "--jdks-dir", hidden = true,
+            description = "Override the JDK install root.")
+    Path jdksDir;
+
+    @Option(names = "--skip-tests",
+            description = "Skip compiling and running tests before building the image.")
+    boolean skipTests;
+
     @picocli.CommandLine.Mixin GlobalOptions global;
 
-    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
-    private static final GoalKey<BuildLayout> LAYOUT = GoalKey.of("layout", BuildLayout.class);
+    // Image-specific cross-phase keys (the core build's keys live on BuildPipeline).
     private static final GoalKey<ImageConfig> CONFIG = GoalKey.of("image-config", ImageConfig.class);
-    private static final GoalKey<Path> MAIN_JAR = GoalKey.of("main-jar", Path.class);
     private static final GoalKey<Path> TARBALL_PATH = GoalKey.of("tarball-path", Path.class);
-    private static final GoalKey<String> CHOSEN_MAIN = GoalKey.of("chosen-main", String.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> DEP_JARS = GoalKey.of("dep-jars", List.class);
     private static final GoalKey<ImageBuilder.Plan> PLAN = GoalKey.of("plan", ImageBuilder.Plan.class);
 
     @Override
@@ -86,27 +89,26 @@ public final class ImageCommand implements Callable<Integer> {
             return 66;
         }
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
+        Path lockFile = projectDir.resolve("jk.lock");
+        int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
 
-        Phase parseBuild = Phase.builder("parse-build")
+        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
+                projectDir, cache, jkBuildPath, lockFile, projectDir,
+                1, estimatedTestCount, null, jdksDir, skipTests, global.verbose);
+
+        // image-plan reads the freshly-built jar + project off the core goal,
+        // then assembles the OCI plan; write-image emits it.
+        Phase imagePlan = Phase.builder("image-plan")
+                .requires("package-jar")
                 .scope(1)
                 .execute(ctx -> {
-                    ctx.label("parse jk.toml + image config");
-                    JkBuild project = JkBuildParser.parse(jkBuildPath);
-                    ctx.put(PROJECT, project);
-                    BuildLayout layout = BuildLayout.of(projectDir, project);
-                    ctx.put(LAYOUT, layout);
+                    ctx.label("resolve image config");
+                    JkBuild project = ctx.require(BuildPipeline.PROJECT);
+                    BuildLayout layout = ctx.require(BuildPipeline.LAYOUT);
                     Path tarballPath = resolveTarballPath(layout);
                     if (tarballPath != null) ctx.put(TARBALL_PATH, tarballPath);
                     ImageConfig config = buildConfig(jkBuildPath);
                     ctx.put(CONFIG, config);
-
-                    Path mainJar = layout.mainJar();
-                    if (!Files.exists(mainJar)) {
-                        ctx.error("missing-jar", "main jar not found at " + mainJar
-                                + " — run `jk build` first.");
-                        throw new RuntimeException("missing main jar");
-                    }
-                    ctx.put(MAIN_JAR, mainJar);
 
                     String chosen = mainClass != null ? mainClass : config.mainClass();
                     if (chosen == null || chosen.isBlank()) {
@@ -114,29 +116,16 @@ public final class ImageCommand implements Callable<Integer> {
                                 + "set image.main-class.");
                         throw new RuntimeException("missing main class");
                     }
-                    ctx.put(CHOSEN_MAIN, chosen);
-                    ctx.progress(1);
-                })
-                .build();
 
-        Phase loadDeps = Phase.builder("load-deps")
-                .requires("parse-build")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("collect dep jars from CAS");
+                    Path mainJar = layout.mainJar();
                     List<Path> depJars = loadDependencyJars(projectDir, cache);
-                    ctx.put(DEP_JARS, depJars);
-
-                    JkBuild project = ctx.require(PROJECT);
-                    @SuppressWarnings("unchecked")
-                    List<Path> jars = depJars;
                     ImageBuilder.Plan plan = new ImageBuilder.Plan(
-                            ctx.require(CONFIG),
+                            config,
                             project.project().artifact(),
                             project.project().version(),
-                            ctx.require(CHOSEN_MAIN),
-                            ctx.require(MAIN_JAR),
-                            jars);
+                            chosen,
+                            mainJar,
+                            depJars);
                     ctx.put(PLAN, plan);
                     ctx.progress(1);
                 })
@@ -144,7 +133,7 @@ public final class ImageCommand implements Callable<Integer> {
 
         Phase writeImage = Phase.builder("write-image")
                 .kind(PhaseKind.IO)
-                .requires("load-deps")
+                .requires("image-plan")
                 .scope(1)
                 .execute(ctx -> {
                     ImageBuilder.Plan plan = ctx.require(PLAN);
@@ -166,23 +155,27 @@ public final class ImageCommand implements Callable<Integer> {
                 })
                 .build();
 
-        Goal goal = Goal.builder("image")
-                .addPhase(parseBuild)
-                .addPhase(loadDeps)
-                .addPhase(writeImage)
-                .build();
+        Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
+        builder.addPhase(imagePlan).addPhase(writeImage);
+        Goal goal = builder.build();
 
-        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
+        ConsoleSpec spec = new ConsoleSpec("Image Build",
+                r -> "Built image " + BuildCommand.inTime(r),
+                r -> "Image build failed " + BuildCommand.inTime(r));
+        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
+                BuildCommand.buildTarget(jkBuildPath, projectDir));
+
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
-                if ("missing-jar".equals(d.code())) return 66;
                 if ("no-main".equals(d.code())) return 64;
             }
+            var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
+            if (testResult != null && !testResult.allPassed()) return 4;
             return 1;
         }
 
         ImageBuilder.Plan plan = goal.get(PLAN).orElseThrow();
-        JkBuild project = goal.get(PROJECT).orElseThrow();
+        JkBuild project = goal.get(BuildPipeline.PROJECT).orElseThrow();
         ImageConfig config = goal.get(CONFIG).orElseThrow();
         Path tarballPath = goal.get(TARBALL_PATH).orElse(null);
         if (!global.outputIsJson()) {
