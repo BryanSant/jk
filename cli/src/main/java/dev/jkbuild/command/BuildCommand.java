@@ -301,7 +301,9 @@ public final class BuildCommand implements Callable<Integer> {
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 dir, cache, buildFile, lockFile, lockDir,
                 workerCount, estimatedTestCount, profileName, jdksDir, skipTests, global.verbose);
-        Goal goal = BuildPipeline.coreBuilder(inputs).build();
+        Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
+        BuildPipeline.appendDeclaredTails(builder, inputs);
+        Goal goal = builder.build();
 
         String target = buildTarget(buildFile, dir);
         GoalResult result;

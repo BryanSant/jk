@@ -471,8 +471,17 @@ public final class BuildPipeline {
             b.addPhase(compileTest).addPhase(runTests);
         }
         b.addPhase(packageJar).addPhase(writeStamp);
+        return b;
+    }
 
-        // shadow = true → fat-jar phase; native = "always" → native-image phase.
+    /**
+     * Append the artifact tails the project's {@code jk.toml} declares:
+     * {@code shadow = true} → fat-jar phase, {@code native = "always"} →
+     * native-image phase. {@code jk build} / {@code jk run} / {@code jk install}
+     * call this after {@link #coreBuilder}; {@code jk native} composes the
+     * native tail explicitly instead.
+     */
+    public static void appendDeclaredTails(Goal.Builder b, Inputs in) {
         try {
             JkBuild project = JkBuildParser.parse(in.buildFile());
             if (project.project().shadow()) {
@@ -482,14 +491,12 @@ public final class BuildPipeline {
                 b.addPhase(nativePhase(in.dir(), in.cache(), in.lockFile(), in.jdksDir()));
             }
         } catch (Exception ignored) {}
-
-        return b;
     }
 
     // ---- tail phases ----------------------------------------------------
 
     /** Fat-jar (shadow) packaging — requires package-jar. */
-    static Phase shadowPhase(Path cache, Path lockFile) {
+    public static Phase shadowPhase(Path cache, Path lockFile) {
         return Phase.builder("package-shadow")
                 .label("Shadow")
                 .kind(PhaseKind.CPU)
@@ -516,7 +523,19 @@ public final class BuildPipeline {
     }
 
     /** GraalVM native-image, run directly as a subprocess — requires package-jar. */
-    static Phase nativePhase(Path dir, Path cache, Path lockFile, Path jdksDir) {
+    public static Phase nativePhase(Path dir, Path cache, Path lockFile, Path jdksDir) {
+        return nativePhase(dir, cache, lockFile, jdksDir, null, List.of());
+    }
+
+    /**
+     * GraalVM native-image phase with an explicit main-class override and extra
+     * native-image arguments — what {@code jk native} composes onto the core
+     * build. A null/blank {@code mainOverride} falls back to {@code [project] main}.
+     * Run directly as a subprocess; requires package-jar.
+     */
+    public static Phase nativePhase(Path dir, Path cache, Path lockFile, Path jdksDir,
+                                    String mainOverride, List<String> extraArgs) {
+        List<String> extra = extraArgs == null ? List.of() : extraArgs;
         return Phase.builder("native-image")
                 .label("Native")
                 .kind(PhaseKind.IO)
@@ -530,9 +549,11 @@ public final class BuildPipeline {
                         ctx.error("native", "jar not found at " + mainJar);
                         throw new RuntimeException("missing main jar for native-image");
                     }
-                    String mainClass = project.project().main();
+                    String mainClass = (mainOverride != null && !mainOverride.isBlank())
+                            ? mainOverride : project.project().main();
                     if (mainClass == null || mainClass.isBlank()) {
-                        ctx.error("native", "native = \"always\" requires [project] main to be set");
+                        ctx.error("native", "no main class — set [project] main "
+                                + "or pass --main / [image] main-class.");
                         throw new RuntimeException("missing main class");
                     }
                     Path out = layout.nativeBinary();
@@ -553,7 +574,7 @@ public final class BuildPipeline {
                     ctx.label("native-image " + out.getFileName());
                     int exit = dev.jkbuild.tool.NativeImageDriver.run(
                             new dev.jkbuild.tool.NativeImageDriver.Request(
-                                    javaHome, classpath, mainClass, out, List.of()));
+                                    javaHome, classpath, mainClass, out, extra));
                     if (exit != 0) {
                         ctx.error("native", "native-image exited " + exit);
                         throw new RuntimeException("native-image failed (exit " + exit + ")");
