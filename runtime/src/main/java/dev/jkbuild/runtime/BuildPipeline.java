@@ -109,21 +109,16 @@ public final class BuildPipeline {
         Cas cas = new Cas(in.cache());
         ActionCache actionCache = new ActionCache(cas, in.cache().resolve("actions"));
 
-        // Compose only the language steps a project actually uses, so a
+        // Compose only the language steps the project opts into, so a
         // single-language project never shows a no-op step for the other.
-        // `java` and `kotlin` are mutually exclusive in jk.toml, so:
-        //   - a Java project always compiles Java;
-        //   - a Kotlin project compiles Java only if it has .java sources;
-        //   - either compiles the other language when sources for it exist.
+        // Java and Kotlin are independent opt-ins (see JkBuild.Project):
+        //   jdk+kotlin → Kotlin only; jdk+java+kotlin → both; jdk alone → Java.
         boolean useKotlin = false;
         boolean useJava = true;
         try {
-            JkBuild parsed = JkBuildParser.parse(in.buildFile());
-            boolean isKotlin = parsed.project().isKotlin();
-            useKotlin = isKotlin
-                    || !CompileSupport.collectKotlinSources(in.dir()).isEmpty();
-            useJava = !isKotlin
-                    || !CompileSupport.collectJavaSources(in.dir().resolve("src/main/java")).isEmpty();
+            var project = JkBuildParser.parse(in.buildFile()).project();
+            useKotlin = project.kotlinEnabled();
+            useJava = project.javaEnabled();
         } catch (Exception ignored) {
             // Unparseable/missing jk.toml — parse-build will surface the real error.
         }

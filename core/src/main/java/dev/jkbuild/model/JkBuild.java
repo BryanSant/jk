@@ -120,8 +120,20 @@ public record JkBuild(
      *       false.</li>
      * </ul>
      *
-     * <p>Exactly one of {@code java}/{@code kotlin} must be set; the parser
-     * enforces this. {@link #isKotlin()} is the cheap predicate.
+     * <p>Java and Kotlin are independent opt-ins — a project may compile both
+     * (sources under {@code src/main/java} and {@code src/main/kotlin}). The
+     * compiler keys, given a required {@code jdk}:
+     * <ul>
+     *   <li>{@code kotlin = "<ver>"} opts into Kotlin compilation
+     *       ({@link #kotlinEnabled()}).</li>
+     *   <li>{@code java = <int>} opts into Java compilation
+     *       ({@link #javaEnabled()}).</li>
+     *   <li>When <em>neither</em> {@code java} nor {@code kotlin} is set, Java
+     *       is enabled implicitly at the {@code jdk} release — a bare
+     *       {@code jdk = N} project is a Java project.</li>
+     * </ul>
+     * So {@code jdk}+{@code kotlin} ⇒ Kotlin only; {@code jdk}+{@code java}+
+     * {@code kotlin} ⇒ both; {@code jdk} alone ⇒ Java only.
      */
 
     /** Controls how native-image compilation participates in the build. */
@@ -150,10 +162,6 @@ public record JkBuild(
             if (version.isBlank()) throw new IllegalArgumentException("project.version must not be blank");
             if (java < 0 || jdk < 0) {
                 throw new IllegalArgumentException("project.jdk/java must be non-negative");
-            }
-            if (java > 0 && kotlin != null) {
-                throw new IllegalArgumentException(
-                        "project must set exactly one of `java` or `kotlin`, not both");
             }
             if (nativeMode == null) nativeMode = NativeMode.DISABLED;
             if (description != null && description.isBlank()) description = null;
@@ -200,7 +208,22 @@ public record JkBuild(
             return kotlin != null;
         }
 
-        /** The {@code java} compiler release to target. For Kotlin projects, falls back to {@code jdk}. */
+        /** True when Kotlin compilation is opted in ({@code kotlin = "<ver>"}). */
+        public boolean kotlinEnabled() {
+            return kotlin != null;
+        }
+
+        /**
+         * True when Java compilation is opted in: an explicit {@code java = <int>},
+         * or — when neither {@code java} nor {@code kotlin} is set — implicitly at
+         * the {@code jdk} release. A {@code jdk}+{@code kotlin} project (no
+         * {@code java}) disables Java.
+         */
+        public boolean javaEnabled() {
+            return java > 0 || kotlin == null;
+        }
+
+        /** The {@code java} compiler release to target. Falls back to {@code jdk} (implicit java=jdk). */
         public int javaRelease() {
             return java > 0 ? java : jdk;
         }

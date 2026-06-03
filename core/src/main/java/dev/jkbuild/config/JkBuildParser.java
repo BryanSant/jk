@@ -150,10 +150,6 @@ public final class JkBuildParser {
         VersionSelector kotlin = parseKotlinVersion(project);
         requireSupportedMajor("project.jdk", jdk);
         requireSupportedMajor("project.java", java);
-        if (java > 0 && kotlin != null) {
-            throw new JkBuildParseException(
-                    "project must set exactly one of `java` or `kotlin`, not both");
-        }
         String main = project.getString("main");
         boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
         // native = false/absent → DISABLED, native = true → SUPPORTED,
