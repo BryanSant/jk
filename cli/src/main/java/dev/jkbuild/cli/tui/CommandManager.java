@@ -5,7 +5,10 @@ import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedStyle;
 
+import java.io.ByteArrayOutputStream;
+import java.io.OutputStream;
 import java.io.PrintStream;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -82,6 +85,13 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private final Map<String, Row> rows = new LinkedHashMap<>();
 
     private Thread animator;
+
+    // output capture: while active, System.out/err are redirected so process
+    // output prints above the region (see captureOutput / restoreStreams).
+    private PrintStream savedOut;
+    private PrintStream savedErr;
+    private LineSink sink;
+    private boolean capturing;
 
     CommandManager(PrintStream out, boolean animate, boolean goalMode, int width) {
         this.out = out;
@@ -214,6 +224,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     private void settle(String line) {
+        restoreStreams();   // flush any captured output above the region first
         stopAnimator();
         synchronized (lock) {
             if (done) return;
@@ -240,7 +251,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     @Override
     public void renderCanceled() {
-        // Ctrl-C: wipe the live region; GlobalCancel prints "‼ Canceled by user".
+        // Ctrl-C: hand the streams back so GlobalCancel's notice goes to the real
+        // stderr below the wiped region, then wipe.
+        restoreStreams();
         stopAnimator();
         synchronized (lock) {
             if (done) return;
@@ -257,6 +270,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     @Override
     public void close() {
+        restoreStreams();
         stopAnimator();
         synchronized (lock) {
             if (done) return;
@@ -299,19 +313,56 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     void tick() {
         synchronized (lock) {
             if (done || !animate) return;
-            if (goalMode) {
-                paintGoal();
-            } else {
-                out.print('\r');
-                out.print(Theme.colorize(FRAMES[frame], frameColors[frame]));
-                out.print(' ');
-                out.print(label);
-                out.print(ELLIPSIS);
-                out.print(Ansi.ERASE_LINE_TO_END);
-                out.print(Ansi.TASKBAR_INDETERMINATE);
-            }
+            if (goalMode) paintGoal();
+            else paintSimple();
             out.flush();
             frame = (frame + 1) % FRAMES.length;
+        }
+    }
+
+    /** Repaint the single simple-mode spinner line in place (must hold {@link #lock}). */
+    private void paintSimple() {
+        out.print('\r');
+        out.print(Theme.colorize(FRAMES[frame], frameColors[frame]));
+        out.print(' ');
+        out.print(label);
+        out.print(ELLIPSIS);
+        out.print(Ansi.ERASE_LINE_TO_END);
+        out.print(Ansi.TASKBAR_INDETERMINATE);
+    }
+
+    /**
+     * Print {@code text} as a permanent line <em>above</em> the live region, then
+     * repaint the region just below it — so process/phase output scrolls up and
+     * the {@code CommandManager} view stays pinned to the bottom. No-op-ish
+     * (plain {@code println}) when not animating or already settled.
+     */
+    public void writeAbove(String text) {
+        synchronized (lock) {
+            if (done || !animate) {
+                out.println(text);
+                out.flush();
+                return;
+            }
+            // Erase the live region back to its top.
+            if (goalMode) {
+                if (linesDrawn > 0) out.print(Ansi.cursorUp(linesDrawn));
+                out.print(Ansi.ERASE_DISPLAY_TO_END);
+            } else {
+                out.print(Ansi.CLEAR_LINE);
+            }
+            // Emit the text where the region's top was — it becomes scrollback.
+            out.print(text);
+            out.print('\n');
+            // Repaint the region fresh, immediately below the emitted text.
+            if (goalMode) {
+                lastLines = List.of();
+                linesDrawn = 0;
+                paintGoal();
+            } else {
+                paintSimple();
+            }
+            out.flush();
         }
     }
 
@@ -559,6 +610,92 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             // not a number — use the fallback
         }
         return fallback;
+    }
+
+    /** Restores {@code System.out}/{@code System.err} when closed (no checked exception). */
+    public interface OutputScope extends AutoCloseable {
+        @Override
+        void close();
+    }
+
+    /**
+     * Redirect {@code System.out}/{@code System.err} so any process/phase output
+     * is line-buffered and printed <em>above</em> the live region via
+     * {@link #writeAbove}, keeping the region pinned to the bottom. The region
+     * itself keeps painting to the original (captured) stdout, so there's no
+     * recursion. Close the returned scope (try-with-resources) to restore the
+     * streams and flush any trailing partial line. No-op when not animating.
+     */
+    public OutputScope captureOutput() {
+        synchronized (lock) {
+            if (!animate || capturing) return () -> { };
+            savedOut = System.out;
+            savedErr = System.err;
+            sink = new LineSink(this);
+            PrintStream redirect = new PrintStream(sink, true, StandardCharsets.UTF_8);
+            System.setOut(redirect);
+            System.setErr(redirect);
+            capturing = true;
+        }
+        return this::restoreStreams;
+    }
+
+    /**
+     * Restore the real {@code System.out}/{@code System.err} and flush any
+     * trailing partial line above the region. Idempotent — called by the
+     * {@link OutputScope}, and defensively when the region settles (so a Ctrl-C
+     * mid-goal hands the streams back before {@link GlobalCancel} prints).
+     */
+    private void restoreStreams() {
+        LineSink toFlush = null;
+        synchronized (lock) {
+            if (!capturing) return;
+            capturing = false;
+            System.setOut(savedOut);
+            System.setErr(savedErr);
+            toFlush = sink;
+        }
+        if (toFlush != null) toFlush.flushPartial();  // may writeAbove (re-locks)
+    }
+
+    /** Buffers redirected bytes and forwards each completed line to {@link #writeAbove}. */
+    private static final class LineSink extends OutputStream {
+        private final CommandManager cm;
+        private final ByteArrayOutputStream buf = new ByteArrayOutputStream();
+
+        LineSink(CommandManager cm) {
+            this.cm = cm;
+        }
+
+        @Override
+        public synchronized void write(int b) {
+            if (b == '\n') emit();
+            else buf.write(b);
+        }
+
+        @Override
+        public synchronized void write(byte[] b, int off, int len) {
+            int start = off;
+            for (int i = off; i < off + len; i++) {
+                if (b[i] == '\n') {
+                    buf.write(b, start, i - start);
+                    emit();
+                    start = i + 1;
+                }
+            }
+            if (start < off + len) buf.write(b, start, off + len - start);
+        }
+
+        synchronized void flushPartial() {
+            if (buf.size() > 0) emit();
+        }
+
+        private void emit() {
+            String s = buf.toString(StandardCharsets.UTF_8);
+            buf.reset();
+            if (s.endsWith("\r")) s = s.substring(0, s.length() - 1);
+            cm.writeAbove(s);
+        }
     }
 
     private enum RowState { PENDING, ACTIVE, DONE, FAILED }

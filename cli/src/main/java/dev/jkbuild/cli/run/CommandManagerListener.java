@@ -34,6 +34,7 @@ public final class CommandManagerListener implements GoalListener {
     private final boolean animate;
 
     private CommandManager cm;
+    private CommandManager.OutputScope capture;
 
     public CommandManagerListener(PrintStream out, PrintStream err, ConsoleSpec spec,
                                   String member, List<Phase> phases, boolean animate) {
@@ -53,6 +54,8 @@ public final class CommandManagerListener implements GoalListener {
             cm.addPhaseLabeled(member, p.name(), display(p));
         }
         cm.progress(view.numerator(), view.denominator());
+        // Route phase/process output above the pinned region for the goal's lifetime.
+        capture = cm.captureOutput();
     }
 
     @Override
@@ -82,6 +85,9 @@ public final class CommandManagerListener implements GoalListener {
 
     @Override
     public void goalFinish(GoalResult result) {
+        // Restore the real streams before settling so the result line and
+        // diagnostics aren't themselves routed back above the (closing) region.
+        if (capture != null) capture.close();
         if (cm == null) cm = CommandManager.goal(out, spec.verb(), animate);
         if (result.success()) {
             cm.finishSuccess(spec.onSuccess().apply(result));

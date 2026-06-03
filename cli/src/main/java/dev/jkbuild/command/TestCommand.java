@@ -273,7 +273,7 @@ public final class TestCommand implements Callable<Integer> {
 
         ConsoleSpec spec = new ConsoleSpec("Testing",
                 r -> testSummary(goal, r),
-                r -> testFailureMessage(goal));
+                r -> testFailureMessage(goal, r));
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
                 BuildCommand.buildTarget(buildFile, dir));
 
@@ -298,9 +298,10 @@ public final class TestCommand implements Callable<Integer> {
         return passed + " " + total + " test" + (total == 1 ? "" : "s") + " " + inTime;
     }
 
-    private static String testFailureMessage(Goal goal) {
+    private static String testFailureMessage(Goal goal, GoalResult result) {
         var tr = goal.get(TEST_RESULT).orElse(null);
-        return (tr != null && !tr.allPassed()) ? "Tests failed" : "Build failed";
+        String base = (tr != null && !tr.allPassed()) ? "Tests failed" : "Build failed";
+        return base + " " + BuildCommand.inTime(result);
     }
 
     /**

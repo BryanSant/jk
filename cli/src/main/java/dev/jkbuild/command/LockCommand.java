@@ -269,7 +269,7 @@ public final class LockCommand implements Callable<Integer> {
                     return "Resolved " + pkgs + " dependenc"
                             + (pkgs == 1 ? "y" : "ies") + suffix + " " + inTime;
                 },
-                r -> "Failed to resolve dependencies");
+                r -> "Failed to resolve dependencies " + BuildCommand.inTime(r));
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache, spec);
         if (!result.success()) {
