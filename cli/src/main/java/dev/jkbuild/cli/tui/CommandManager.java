@@ -45,6 +45,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     private static final String[] FRAMES = Spinner.FRAMES;
     private static final long FRAME_MS = Spinner.FRAME_MS;
+    /** Flush a captured partial line (no newline yet) after this much quiet. */
+    private static final long STALE_FLUSH_MS = 360;
     private static final String ELLIPSIS = "…";
     private static final int DEFAULT_WIDTH = 80;
     private static final int DEFAULT_HEIGHT = 24;
@@ -90,7 +92,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     // output prints above the region (see captureOutput / restoreStreams).
     private PrintStream savedOut;
     private PrintStream savedErr;
-    private LineSink sink;
+    private volatile LineSink sink;   // read by the animator thread for stale flushing
     private boolean capturing;
 
     CommandManager(PrintStream out, boolean animate, boolean goalMode, int width) {
@@ -489,6 +491,11 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private void loop() {
         try {
             while (!stopped) {
+                // Flush a captured partial line that's gone quiet (no newline),
+                // OUTSIDE the render lock so the order matches phase writes
+                // (sink → lock) and can't deadlock with tick() (lock only).
+                LineSink s = sink;
+                if (s != null) s.maybeFlushStale(STALE_FLUSH_MS);
                 tick();
                 Thread.sleep(FRAME_MS);
             }
@@ -662,6 +669,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private static final class LineSink extends OutputStream {
         private final CommandManager cm;
         private final ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        private long lastWriteNanos;   // when the current partial line last grew
 
         LineSink(CommandManager cm) {
             this.cm = cm;
@@ -669,8 +677,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
         @Override
         public synchronized void write(int b) {
-            if (b == '\n') emit();
-            else buf.write(b);
+            if (b == '\n') {
+                emit();
+            } else {
+                buf.write(b);
+                lastWriteNanos = System.nanoTime();
+            }
         }
 
         @Override
@@ -683,7 +695,21 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                     start = i + 1;
                 }
             }
-            if (start < off + len) buf.write(b, start, off + len - start);
+            if (start < off + len) {
+                buf.write(b, start, off + len - start);
+                lastWriteNanos = System.nanoTime();
+            }
+        }
+
+        /**
+         * Flush a buffered partial line that hasn't grown for {@code ms} (a
+         * sliding window reset on each write) — so output without a trailing
+         * newline still appears in a timely manner instead of stalling.
+         */
+        synchronized void maybeFlushStale(long ms) {
+            if (buf.size() == 0) return;
+            if (System.nanoTime() - lastWriteNanos < ms * 1_000_000L) return;
+            emit();
         }
 
         synchronized void flushPartial() {
