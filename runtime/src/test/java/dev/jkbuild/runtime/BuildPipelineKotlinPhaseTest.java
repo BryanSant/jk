@@ -13,21 +13,34 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * The {@code compile-kotlin} phase is composed into the goal only for projects
- * that actually use Kotlin — a Java-only project must not show a "Kotlin" step.
+ * The {@code compile-java} / {@code compile-kotlin} phases are composed into the
+ * goal only for the languages a project actually uses, so a single-language
+ * project never shows a no-op step for the other. ({@code java} and
+ * {@code kotlin} are mutually exclusive in jk.toml.)
  */
 class BuildPipelineKotlinPhaseTest {
 
     @Test
     void java_only_project_omits_the_kotlin_phase(@TempDir Path dir) throws Exception {
         writeManifest(dir, "[project]\ngroup=\"com.example\"\nartifact=\"j\"\nversion=\"0.1.0\"\njava=21\n");
-        assertThat(phaseNames(dir)).doesNotContain("compile-kotlin");
+        assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
     }
 
     @Test
-    void project_with_declared_kotlin_version_includes_the_kotlin_phase(@TempDir Path dir) throws Exception {
+    void kotlin_only_project_omits_the_java_phase_and_stamp(@TempDir Path dir) throws Exception {
         writeManifest(dir, "[project]\ngroup=\"com.example\"\nartifact=\"k\"\nversion=\"0.1.0\"\nkotlin=\"2.0.0\"\n");
-        assertThat(phaseNames(dir)).contains("compile-kotlin");
+        assertThat(phaseNames(dir))
+                .contains("compile-kotlin")
+                .doesNotContain("compile-java", "write-stamp");
+    }
+
+    @Test
+    void kotlin_project_with_java_sources_includes_both(@TempDir Path dir) throws Exception {
+        writeManifest(dir, "[project]\ngroup=\"com.example\"\nartifact=\"k\"\nversion=\"0.1.0\"\nkotlin=\"2.0.0\"\n");
+        Path j = dir.resolve("src/main/java/Foo.java");
+        Files.createDirectories(j.getParent());
+        Files.writeString(j, "class Foo {}");
+        assertThat(phaseNames(dir)).contains("compile-java", "compile-kotlin");
     }
 
     @Test
@@ -36,7 +49,7 @@ class BuildPipelineKotlinPhaseTest {
         Path kt = dir.resolve("src/main/kotlin/Foo.kt");
         Files.createDirectories(kt.getParent());
         Files.writeString(kt, "class Foo");
-        assertThat(phaseNames(dir)).contains("compile-kotlin");
+        assertThat(phaseNames(dir)).contains("compile-java", "compile-kotlin");
     }
 
     private static void writeManifest(Path dir, String toml) throws Exception {

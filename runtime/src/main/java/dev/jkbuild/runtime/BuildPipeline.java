@@ -109,17 +109,27 @@ public final class BuildPipeline {
         Cas cas = new Cas(in.cache());
         ActionCache actionCache = new ActionCache(cas, in.cache().resolve("actions"));
 
-        // Only run (and show) the Kotlin step for projects that actually use
-        // Kotlin: a declared kotlin version in jk.toml, or .kt sources on disk.
-        // A Java-only project skips the phase entirely rather than no-op'ing it.
+        // Compose only the language steps a project actually uses, so a
+        // single-language project never shows a no-op step for the other.
+        // `java` and `kotlin` are mutually exclusive in jk.toml, so:
+        //   - a Java project always compiles Java;
+        //   - a Kotlin project compiles Java only if it has .java sources;
+        //   - either compiles the other language when sources for it exist.
         boolean useKotlin = false;
+        boolean useJava = true;
         try {
             JkBuild parsed = JkBuildParser.parse(in.buildFile());
-            useKotlin = parsed.project().isKotlin()
+            boolean isKotlin = parsed.project().isKotlin();
+            useKotlin = isKotlin
                     || !CompileSupport.collectKotlinSources(in.dir()).isEmpty();
+            useJava = !isKotlin
+                    || !CompileSupport.collectJavaSources(in.dir().resolve("src/main/java")).isEmpty();
         } catch (Exception ignored) {
             // Unparseable/missing jk.toml — parse-build will surface the real error.
         }
+        // The terminal main-compile phase downstream steps (resources, test,
+        // package) must wait on — Kotlin runs after Java when both are present.
+        String mainCompile = useKotlin ? "compile-kotlin" : "compile-java";
 
         // ---- parse-build ------------------------------------------------
         Phase parseBuild = Phase.builder("parse-build")
@@ -304,10 +314,13 @@ public final class BuildPipeline {
         Phase compileKotlin = Phase.builder("compile-kotlin")
                 .label("Kotlin")
                 .kind(PhaseKind.CPU)
-                .requires("compile-java")
+                .requires(useJava
+                        ? new String[]{"compile-java"}
+                        : new String[]{"parse-build", "sync-deps", "ensure-jdk"})
                 .scope(0)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
+                    Files.createDirectories(classes);   // compile-java may be skipped
                     List<Path> ktSources = kotlinSources(ctx);
                     if (ktSources.isEmpty()) { ctx.label("no Kotlin sources"); return; }
                     ctx.updateScope(ktSources.size());
@@ -337,7 +350,7 @@ public final class BuildPipeline {
         Phase copyResources = Phase.builder("copy-resources")
                 .label("Resources")
                 .kind(PhaseKind.CPU)
-                .requires(useKotlin ? "compile-kotlin" : "compile-java")
+                .requires(mainCompile)
                 .scope(1)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
@@ -353,7 +366,7 @@ public final class BuildPipeline {
         Phase compileTest = Phase.builder("compile-test")
                 .label("Test compile")
                 .kind(PhaseKind.CPU)
-                .requires("compile-java", "sync-deps")
+                .requires(mainCompile, "sync-deps")
                 .scope(1)
                 .execute(ctx -> {
                     Path srcTest = in.dir().resolve("src/test/java");
@@ -475,8 +488,10 @@ public final class BuildPipeline {
         Goal.Builder b = Goal.builder("build")
                 .addPhase(parseBuild)
                 .addPhase(syncDeps)
-                .addPhase(ensureJdk)
-                .addPhase(compileJava);
+                .addPhase(ensureJdk);
+        if (useJava) {
+            b.addPhase(compileJava);
+        }
         if (useKotlin) {
             b.addPhase(compileKotlin);
         }
@@ -484,7 +499,11 @@ public final class BuildPipeline {
         if (!in.skipTests()) {
             b.addPhase(compileTest).addPhase(runTests);
         }
-        b.addPhase(packageJar).addPhase(writeStamp);
+        b.addPhase(packageJar);
+        // write-stamp is the Java-compile freshness companion; only when Java ran.
+        if (useJava) {
+            b.addPhase(writeStamp);
+        }
         return b;
     }
 
