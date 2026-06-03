@@ -1,9 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
-import dev.jkbuild.runtime.CompileToolchain;
 
-import dev.jkbuild.cli.Jk;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
@@ -29,7 +27,7 @@ import java.util.List;
  * caller's command label so the user sees {@code "jk lock: ..."} vs
  * {@code "jk sync: ..."}.
  */
-final class LockFlow {
+public final class LockFlow {
 
     private LockFlow() {}
 
@@ -38,14 +36,14 @@ final class LockFlow {
      * {@link #lockfile} / {@link #build} are populated; non-zero means the
      * caller should return that exit code.
      */
-    record Result(int status, Lockfile lockfile, JkBuild build, int workspaceMemberCount) {}
+    public record Result(int status, Lockfile lockfile, JkBuild build, int workspaceMemberCount) {}
 
     /**
      * Run the lock pipeline against {@code dir}. {@code cmdLabel} is the
      * verb prefix used in error messages (e.g. {@code "jk lock"} or
      * {@code "jk sync"}).
      */
-    static Result run(
+    public static Result run(
             Path dir,
             Path cache,
             List<String> features,
@@ -110,7 +108,7 @@ final class LockFlow {
         GitSourceResolution.Prepared prep;
         try {
             prep = GitSourceResolution.prepare(
-                    effective, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
+                    effective, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), dev.jkbuild.util.JkVersion.VERSION);
         } catch (Exception e) {
             System.err.println(cmdLabel + ": " + e.getMessage());
             return new Result(6, null, effective, memberCount);
@@ -119,7 +117,7 @@ final class LockFlow {
 
         Lockfile lock;
         try {
-            lock = orchestrator.lock(prep.project(), Jk.VERSION, features, !noDefaultFeatures);
+            lock = orchestrator.lock(prep.project(), dev.jkbuild.util.JkVersion.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
             System.err.println(cmdLabel + ": " + e.getMessage());
             return new Result(6, null, effective, memberCount);

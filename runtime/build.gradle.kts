@@ -13,4 +13,7 @@ dependencies {
     implementation(project(":engine"))
     implementation(project(":toolchain"))
     implementation(project(":compat"))
+    implementation(project(":supply-chain"))
+
+    testImplementation(libs.jgit)
 }

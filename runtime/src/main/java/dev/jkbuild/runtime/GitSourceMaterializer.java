@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
@@ -32,7 +32,7 @@ import java.nio.file.Path;
  * keyed by commit SHA, so an immutable tag/rev is built once and cached, while
  * a branch rebuilds when its tip moves.
  */
-final class GitSourceMaterializer {
+public final class GitSourceMaterializer {
 
     /** Outcome: the published coordinate, the {@code file://} repo, and lock provenance. */
     record Materialized(String group, String artifact, String version,

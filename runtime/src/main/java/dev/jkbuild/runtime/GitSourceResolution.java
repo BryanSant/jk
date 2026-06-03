@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Journal;
@@ -41,7 +41,7 @@ import java.util.Map;
  * <p>A project with no git dependencies passes through untouched — same project,
  * same repos, empty provenance map — so the common path is a zero-cost no-op.
  */
-final class GitSourceResolution {
+public final class GitSourceResolution {
 
     private GitSourceResolution() {}
 
@@ -51,7 +51,7 @@ final class GitSourceResolution {
      * repo, and a map from {@code group:artifact@version} to the git provenance
      * to stamp onto the matching lockfile package.
      */
-    record Prepared(JkBuild project, RepoGroup repos,
+    public record Prepared(JkBuild project, RepoGroup repos,
                     Map<String, Lockfile.Package.GitInfo> gitInfoByKey) {}
 
     /**
@@ -59,7 +59,7 @@ final class GitSourceResolution {
      * {@code baseRepos}, and rewrite git deps to coordinate pins, accepting any
      * upstream ref movement. Used on first-run resolve and {@code jk update}.
      */
-    static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas,
+    public static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas,
                             Path javaHome, String jkVersion)
             throws IOException, InterruptedException {
         return prepare(effective, baseRepos, cas, javaHome, jkVersion, Map.of());
@@ -77,7 +77,7 @@ final class GitSourceResolution {
      * <p>The git artifacts are themselves built (with {@code javaHome}),
      * resolving their own dependencies against {@code baseRepos}.
      */
-    static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas,
+    public static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas,
                             Path javaHome, String jkVersion,
                             Map<String, String> lockedShas)
             throws IOException, InterruptedException {
@@ -150,7 +150,7 @@ final class GitSourceResolution {
      * matches a materialized git artifact gain a {@link Lockfile.Package.GitInfo};
      * everything else is copied through unchanged.
      */
-    static Lockfile stamp(Lockfile lock, Map<String, Lockfile.Package.GitInfo> gitInfoByKey) {
+    public static Lockfile stamp(Lockfile lock, Map<String, Lockfile.Package.GitInfo> gitInfoByKey) {
         if (gitInfoByKey.isEmpty()) return lock;
         List<Lockfile.Package> out = new ArrayList<>(lock.packages().size());
         for (Lockfile.Package p : lock.packages()) {
@@ -188,7 +188,7 @@ final class GitSourceResolution {
      * in {@code lock}, for {@link #prepare}'s tag-rewrite check. Branch refs are
      * excluded — they're expected to move.
      */
-    static Map<String, String> lockedImmutableShas(Lockfile lock) {
+    public static Map<String, String> lockedImmutableShas(Lockfile lock) {
         Map<String, String> out = new LinkedHashMap<>();
         for (Lockfile.Package p : lock.packages()) {
             Lockfile.Package.GitInfo g = p.git();

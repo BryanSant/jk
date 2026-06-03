@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.git.GitCredentials;

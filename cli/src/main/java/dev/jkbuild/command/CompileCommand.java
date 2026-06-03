@@ -239,33 +239,12 @@ public final class CompileCommand implements Callable<Integer> {
         return goal.get(key).map(v -> ((List<Path>) v).size()).orElse(0);
     }
 
-    /**
-     * Kotlin 2.2.0 doesn't yet emit bytecode targeting Java 25+; cap at
-     * the latest LTS (21). Resulting bytecode runs on the project's actual
-     * JDK fine because Java is bytecode-backward-compatible.
-     */
     static int kotlinJvmTarget(int release) {
-        return Math.min(release, 21);
+        return dev.jkbuild.runtime.CompileSupport.kotlinJvmTarget(release);
     }
 
     static List<Path> collectKotlinSources(Path projectDir) throws IOException {
-        List<Path> out = new ArrayList<>();
-        out.addAll(collectFilesWithExtension(projectDir.resolve("src/main/kotlin"), ".kt"));
-        // Also pick up .kt files placed under src/main/java/, a common
-        // shortcut Maven users take. kotlinc handles both layouts.
-        out.addAll(collectFilesWithExtension(projectDir.resolve("src/main/java"), ".kt"));
-        return out;
-    }
-
-    private static List<Path> collectFilesWithExtension(Path root, String extension) throws IOException {
-        if (!Files.exists(root)) return List.of();
-        List<Path> result = new ArrayList<>();
-        try (Stream<Path> stream = Files.walk(root)) {
-            stream.filter(Files::isRegularFile)
-                    .filter(p -> p.getFileName().toString().endsWith(extension))
-                    .forEach(result::add);
-        }
-        return result;
+        return dev.jkbuild.runtime.CompileSupport.collectKotlinSources(projectDir);
     }
 
     private static void deleteRecursively(Path target) {
@@ -278,14 +257,7 @@ public final class CompileCommand implements Callable<Integer> {
     }
 
     static List<Path> collectJavaSources(Path root) throws IOException {
-        if (!Files.exists(root)) return List.of();
-        List<Path> sources = new ArrayList<>();
-        try (Stream<Path> stream = Files.walk(root)) {
-            stream.filter(Files::isRegularFile)
-                    .filter(p -> p.getFileName().toString().endsWith(".java"))
-                    .forEach(sources::add);
-        }
-        return sources;
+        return dev.jkbuild.runtime.CompileSupport.collectJavaSources(root);
     }
 
     /**

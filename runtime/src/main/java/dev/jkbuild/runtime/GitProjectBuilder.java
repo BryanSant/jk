@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.ClasspathResolver;
@@ -36,7 +36,7 @@ import java.util.stream.Collectors;
  * overridden, and the git-derived version), and the rendered POM is stamped
  * with them so it matches the artifact path.
  */
-final class GitProjectBuilder {
+public final class GitProjectBuilder {
 
     private GitProjectBuilder() {}
 
@@ -66,7 +66,7 @@ final class GitProjectBuilder {
         BuildLayout layout = BuildLayout.of(projectDir, project);
         Path classes = layout.classesDir();
         Files.createDirectories(classes);
-        List<Path> sources = CompileCommand.collectJavaSources(projectDir.resolve("src/main/java"));
+        List<Path> sources = CompileSupport.collectJavaSources(projectDir.resolve("src/main/java"));
         if (!sources.isEmpty()) {
             CompileRequest request = CompileRequest.builder()
                     .sources(sources).classpath(classpath).outputDir(classes)

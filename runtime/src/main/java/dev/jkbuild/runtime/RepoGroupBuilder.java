@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Journal;
@@ -27,11 +27,11 @@ import java.util.List;
  * <p>One {@link Http} client and one {@link Cas} are shared across the
  * resulting {@link MavenRepo}s — they all back into the same cache.
  */
-final class RepoGroupBuilder {
+public final class RepoGroupBuilder {
 
     private RepoGroupBuilder() {}
 
-    static RepoGroup buildFor(JkBuild project, URI overrideUrl, Cas cas) {
+    public static RepoGroup buildFor(JkBuild project, URI overrideUrl, Cas cas) {
         Http http = new Http();
         // Coordinate→hash index over the CAS, so fetches are recorded and an
         // offline run can resolve from what's already on disk.
