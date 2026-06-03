@@ -20,6 +20,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 /**
  * Resolves the toolchain paths the subprocess compile strategies need:
@@ -80,8 +81,11 @@ public final class CompileToolchain {
      * @param cacheDir the {@link Cas} root (typically {@link JkDirs#cache()})
      */
     public static Path resolveKotlinHome(Path cacheDir) {
-        return resolveKotlinHome(cacheDir, null);
+        return resolveKotlinHome(cacheDir, null, NO_NOTICE);
     }
+
+    /** Notice sink that drops provisioning messages (no-op). */
+    private static final Consumer<String> NO_NOTICE = s -> {};
 
     /**
      * Pick the Kotlin compiler version to provision: the version pinned in
@@ -106,6 +110,16 @@ public final class CompileToolchain {
      * fall back to the bundled default distribution.
      */
     public static Path resolveKotlinHome(Path cacheDir, String versionOverride) {
+        return resolveKotlinHome(cacheDir, versionOverride, NO_NOTICE);
+    }
+
+    /**
+     * As {@link #resolveKotlinHome(Path, String)}, but reports a one-line
+     * provisioning notice ("Linked/Installed Kotlin …") to {@code notice}
+     * instead of a stream — the caller (the CLI view, or a phase's
+     * {@code PhaseContext::output}) decides how to surface it.
+     */
+    public static Path resolveKotlinHome(Path cacheDir, String versionOverride, Consumer<String> notice) {
         // ToolProvisioning already runs the EnvVarProbe (which reads
         // KOTLIN_HOME), so we don't need a separate fast-path. Going
         // through the full pipeline guarantees we leave a symlink under
@@ -127,9 +141,9 @@ public final class CompileToolchain {
             ToolProvisioning.Result result = ToolProvisioning.provision(
                     dist, registry, new Http(), /*noDiscover=*/ false, noCache);
             switch (result.source()) {
-                case LINKED -> System.err.println("Linked Kotlin " + dist.version()
+                case LINKED -> notice.accept("Linked Kotlin " + dist.version()
                         + " from " + result.detail());
-                case DOWNLOADED -> System.err.println("Installed Kotlin " + dist.version()
+                case DOWNLOADED -> notice.accept("Installed Kotlin " + dist.version()
                         + " from " + result.detail());
                 case CACHED -> { /* silent */ }
             }

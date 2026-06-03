@@ -58,6 +58,12 @@ final class DefaultPhaseContext implements PhaseContext {
     }
 
     @Override
+    public void output(String line) {
+        String s = line == null ? "" : line;
+        goal.emit(l -> l.output(phase, s));
+    }
+
+    @Override
     public void warn(String code, String message) {
         goal.warningsRef().add(new GoalResult.Diagnostic(phase, code, message));
         goal.emit(l -> l.warn(phase, code, message));

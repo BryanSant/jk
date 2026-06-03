@@ -283,7 +283,7 @@ final class ScriptRunner {
                             : "provision kotlinc");
                     try {
                         Path kotlinHome = CompileToolchain.resolveKotlinHome(
-                                paths.cacheDir, header.kotlinVersion());
+                                paths.cacheDir, header.kotlinVersion(), ctx::output);
                         ctx.put(KOTLIN_HOME, kotlinHome);
                     } catch (RuntimeException e) {
                         ctx.error("kotlinc", e.getMessage());
@@ -376,7 +376,7 @@ final class ScriptRunner {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("provision kotlinc");
-                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cacheDir, null);
+                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cacheDir, null, ctx::output);
                     Path kotlinc = kotlinHome.resolve("bin").resolve(
                             isWindows() ? "kotlinc.bat" : "kotlinc");
                     if (!Files.exists(kotlinc)) {

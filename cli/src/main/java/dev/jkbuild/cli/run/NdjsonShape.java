@@ -56,6 +56,12 @@ final class NdjsonShape {
                 + ",\"phase\":" + js(phase) + ",\"label\":" + js(label) + "}";
     }
 
+    static String output(String phase, String line) {
+        return "{\"ts\":" + nowMillis()
+                + ",\"type\":\"output\""
+                + ",\"phase\":" + js(phase) + ",\"line\":" + js(line) + "}";
+    }
+
     static String warn(String phase, String code, String msg) {
         return "{\"ts\":" + nowMillis()
                 + ",\"type\":\"warn\""

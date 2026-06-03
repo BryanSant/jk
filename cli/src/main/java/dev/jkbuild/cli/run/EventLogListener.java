@@ -78,6 +78,7 @@ public final class EventLogListener implements GoalListener {
     @Override public void progress(String phase, int delta, GoalView v)  { line(NdjsonShape.progress(phase, delta, v)); }
     @Override public void scopeUpdate(String phase, int delta, GoalView v){ line(NdjsonShape.scopeUpdate(phase, delta, v)); }
     @Override public void label(String phase, String label)              { line(NdjsonShape.label(phase, label)); }
+    @Override public void output(String phase, String line)              { line(NdjsonShape.output(phase, line)); }
     @Override public void warn(String phase, String code, String msg)    { line(NdjsonShape.warn(phase, code, msg)); }
     @Override public void error(String phase, String code, String msg)   { line(NdjsonShape.error(phase, code, msg)); }
     @Override public void phaseFinish(String phase, PhaseStatus s, Duration d) { line(NdjsonShape.phaseFinish(phase, s, d)); }

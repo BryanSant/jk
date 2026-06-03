@@ -32,6 +32,14 @@ public interface GoalListener {
 
     default void label(String phase, String label) {}
 
+    /**
+     * Free-form passthrough output line from a phase (forwarded subprocess
+     * stdout under {@code --verbose}, a provisioning notice, …). Renderers
+     * print it above any pinned progress region; structured listeners record
+     * it as an output event.
+     */
+    default void output(String phase, String line) {}
+
     default void warn(String phase, String code, String message) {}
 
     default void error(String phase, String code, String message) {}

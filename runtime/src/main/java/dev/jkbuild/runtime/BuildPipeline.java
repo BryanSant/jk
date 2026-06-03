@@ -135,9 +135,10 @@ public final class BuildPipeline {
                     if (!Files.exists(in.lockFile())) {
                         ctx.label("resolve deps (first run)");
                         var result = LockFlow.run(
-                                in.lockDir(), in.cache(), List.of(), true, null, "jk build");
+                                in.lockDir(), in.cache(), List.of(), true, null);
                         if (result.status() != 0) {
-                            ctx.error("lock", "dependency resolution failed");
+                            ctx.error("lock", result.error() != null
+                                    ? result.error() : "dependency resolution failed");
                             throw new RuntimeException("lock failed");
                         }
                         ctx.put(LOCKFILE, result.lockfile());
@@ -303,7 +304,8 @@ public final class BuildPipeline {
                     kotlincCp.add(classes);
                     ctx.label("compiling " + ktSources.size() + " Kotlin sources");
                     Path kotlinHome = CompileToolchain.resolveKotlinHome(in.cache(),
-                            CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT)));
+                            CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT)),
+                            ctx::output);
                     KotlincResult ktResult = new KotlincDriver().compile(
                             KotlincRequest.builder()
                                     .sources(ktSources).classpath(kotlincCp)

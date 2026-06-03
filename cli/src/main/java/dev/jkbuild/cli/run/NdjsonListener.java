@@ -27,6 +27,7 @@ public final class NdjsonListener implements GoalListener {
     @Override public void progress(String phase, int delta, GoalView v)  { emit(NdjsonShape.progress(phase, delta, v)); }
     @Override public void scopeUpdate(String phase, int delta, GoalView v){ emit(NdjsonShape.scopeUpdate(phase, delta, v)); }
     @Override public void label(String phase, String label)              { emit(NdjsonShape.label(phase, label)); }
+    @Override public void output(String phase, String line)              { emit(NdjsonShape.output(phase, line)); }
     @Override public void warn(String phase, String code, String msg)    { emit(NdjsonShape.warn(phase, code, msg)); }
     @Override public void error(String phase, String code, String msg)   { emit(NdjsonShape.error(phase, code, msg)); }
     @Override public void phaseFinish(String phase, PhaseStatus s, Duration d) { emit(NdjsonShape.phaseFinish(phase, s, d)); }

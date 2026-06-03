@@ -94,13 +94,14 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                     if (!Files.exists(lockFile)) {
                         ctx.label("resolve deps");
                         var result = LockFlow.run(
-                                dir, cache, List.of(), false, repoUrl, "jk sync");
+                                dir, cache, List.of(), false, repoUrl);
                         if (result.workspaceMemberCount() > 0) {
                             ctx.put(WORKSPACE_MEMBERS, result.workspaceMemberCount());
                         }
                         if (result.status() != 0) {
-                            ctx.error("lock", "lockfile resolution failed (exit "
-                                    + result.status() + ")");
+                            ctx.error("lock", result.error() != null
+                                    ? result.error()
+                                    : "lockfile resolution failed (exit " + result.status() + ")");
                             throw new RuntimeException("lock-flow failed");
                         }
                         ctx.put(LOCKFILE, result.lockfile());

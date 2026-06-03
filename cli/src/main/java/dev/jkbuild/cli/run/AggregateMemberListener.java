@@ -55,6 +55,11 @@ public final class AggregateMemberListener implements GoalListener {
     }
 
     @Override
+    public void output(String phase, String line) {
+        cm.writeAbove(line);
+    }
+
+    @Override
     public void progress(String phase, int delta, GoalView view) {
         push(view);
     }

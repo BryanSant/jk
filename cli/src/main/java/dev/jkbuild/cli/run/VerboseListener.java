@@ -48,6 +48,11 @@ public final class VerboseListener implements GoalListener {
     }
 
     @Override
+    public void output(String phase, String line) {
+        out.println(line);
+    }
+
+    @Override
     public void phaseFinish(String phase, PhaseStatus status, Duration duration) {
         String glyph = switch (status) {
             case SUCCESS -> Theme.colorize("✓", Theme.active().completedStep());

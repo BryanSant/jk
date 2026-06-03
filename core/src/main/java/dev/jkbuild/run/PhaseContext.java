@@ -43,6 +43,18 @@ public interface PhaseContext {
      */
     void label(String description);
 
+    /**
+     * Emit a free-form output line from the phase (or a subprocess it's
+     * shepherding) for the view to surface — e.g. forwarded test-process
+     * stdout under {@code --verbose}, or a one-off provisioning notice. The
+     * TUI prints it above the pinned region; logging listeners write it as a
+     * plain line. Unlike {@link #label}, this is durable passthrough output,
+     * not a transient status. Phases must route user-facing text here rather
+     * than touching {@code System.out}/{@code System.err} directly — only the
+     * CLI view layer owns those streams.
+     */
+    void output(String line);
+
     /** Accumulating warning. Surfaces in the run report. */
     void warn(String code, String message);
 

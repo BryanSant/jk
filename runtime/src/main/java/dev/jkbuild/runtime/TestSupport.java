@@ -69,11 +69,11 @@ public final class TestSupport {
 
             @Override
             public void onUserOutput(int workerId, String line) {
-                // Muted by default; --verbose surfaces it. Under verbose mode the
-                // console picks a non-pinned listener, so println is safe.
+                // Muted by default; --verbose surfaces it. We hand the line to the
+                // view via the phase context — only :cli owns the actual streams.
                 if (!verbose) return;
                 String prefix = workerCount > 1 ? "[w" + workerId + "] " : "";
-                System.out.println(prefix + line);
+                ctx.output(prefix + line);
             }
         };
     }

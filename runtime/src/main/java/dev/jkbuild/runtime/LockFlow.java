@@ -23,38 +23,34 @@ import java.util.List;
 /**
  * Shared "resolve jk.toml → write jk.lock" pipeline used by both
  * {@code jk lock} and {@code jk sync} (the latter delegating here when no
- * lockfile exists yet). Error output is written to {@code stderr} with the
- * caller's command label so the user sees {@code "jk lock: ..."} vs
- * {@code "jk sync: ..."}.
+ * lockfile exists yet). This is pure logic: failures are returned in
+ * {@link Result#error} for the caller to surface — nothing is written to
+ * {@code stderr} here, so only the CLI view layer touches the streams.
  */
 public final class LockFlow {
 
     private LockFlow() {}
 
     /**
-     * Outcome of one lock pass. {@code status == 0} means success and
-     * {@link #lockfile} / {@link #build} are populated; non-zero means the
-     * caller should return that exit code.
+     * Outcome of one lock pass. {@code status == 0} means success,
+     * {@link #error} is {@code null}, and {@link #lockfile} / {@link #build}
+     * are populated. Non-zero means the caller should return that exit code
+     * and surface {@link #error} (a bare message, no verb prefix).
      */
-    public record Result(int status, Lockfile lockfile, JkBuild build, int workspaceMemberCount) {}
+    public record Result(int status, String error, Lockfile lockfile,
+                         JkBuild build, int workspaceMemberCount) {}
 
-    /**
-     * Run the lock pipeline against {@code dir}. {@code cmdLabel} is the
-     * verb prefix used in error messages (e.g. {@code "jk lock"} or
-     * {@code "jk sync"}).
-     */
+    /** Run the lock pipeline against {@code dir}. */
     public static Result run(
             Path dir,
             Path cache,
             List<String> features,
             boolean noDefaultFeatures,
-            URI repoUrl,
-            String cmdLabel) throws Exception {
+            URI repoUrl) throws Exception {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
-            System.err.println(cmdLabel + ": no jk.toml in " + dir);
-            return new Result(2, null, null, 0);
+            return new Result(2, "no jk.toml in " + dir, null, null, 0);
         }
         Files.createDirectories(cache);
 
@@ -62,8 +58,7 @@ public final class LockFlow {
         try {
             parsed = JkBuildParser.parse(buildFile);
         } catch (RuntimeException e) {
-            System.err.println(cmdLabel + ": " + e.getMessage());
-            return new Result(2, null, null, 0);
+            return new Result(2, e.getMessage(), null, null, 0);
         }
 
         // Workspace context: two cases.
@@ -96,8 +91,7 @@ public final class LockFlow {
                 }
             }
         } catch (RuntimeException e) {
-            System.err.println(cmdLabel + ": " + e.getMessage());
-            return new Result(2, null, null, 0);
+            return new Result(2, e.getMessage(), null, null, 0);
         }
 
         Cas cas = new Cas(cache);
@@ -110,8 +104,7 @@ public final class LockFlow {
             prep = GitSourceResolution.prepare(
                     effective, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), dev.jkbuild.util.JkVersion.VERSION);
         } catch (Exception e) {
-            System.err.println(cmdLabel + ": " + e.getMessage());
-            return new Result(6, null, effective, memberCount);
+            return new Result(6, e.getMessage(), null, effective, memberCount);
         }
         LockOrchestrator orchestrator = new LockOrchestrator(prep.repos());
 
@@ -119,11 +112,10 @@ public final class LockFlow {
         try {
             lock = orchestrator.lock(prep.project(), dev.jkbuild.util.JkVersion.VERSION, features, !noDefaultFeatures);
         } catch (IOException e) {
-            System.err.println(cmdLabel + ": " + e.getMessage());
-            return new Result(6, null, effective, memberCount);
+            return new Result(6, e.getMessage(), null, effective, memberCount);
         }
         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
         LockfileWriter.write(lock, lockFile);
-        return new Result(0, lock, effective, memberCount);
+        return new Result(0, null, lock, effective, memberCount);
     }
 }

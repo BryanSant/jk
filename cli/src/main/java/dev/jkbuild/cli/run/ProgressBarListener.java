@@ -144,6 +144,11 @@ public final class ProgressBarListener implements GoalListener {
     }
 
     @Override
+    public synchronized void output(String phase, String line) {
+        writeAboveInternal(line);
+    }
+
+    @Override
     public synchronized void warn(String phase, String code, String message) {
         writeAboveInternal(renderDiagnostic("⚠ Warning", Theme.active().warning().bold(),
                 phase, code, message));

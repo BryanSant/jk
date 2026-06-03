@@ -50,20 +50,24 @@ class TestCommandUserOutputTest {
 
         listener.onUserOutput(0, "hello from a passing test");
 
+        // Neither forwarded to the context nor leaked to the stream.
+        assertThat(ctx.outputs).isEmpty();
         assertThat(captured.toString(StandardCharsets.UTF_8))
                 .doesNotContain("hello from a passing test");
     }
 
     @Test
-    void user_output_is_forwarded_when_verbose_is_true() {
+    void user_output_is_forwarded_through_the_context_when_verbose_is_true() {
         var ctx = new RecordingContext();
         TestProgressListener listener =
                 TestCommand.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ true);
 
         listener.onUserOutput(0, "hello from a passing test");
 
+        // Routed via PhaseContext.output — never touches System.out directly.
+        assertThat(ctx.outputs).containsExactly("hello from a passing test");
         assertThat(captured.toString(StandardCharsets.UTF_8))
-                .contains("hello from a passing test");
+                .doesNotContain("hello from a passing test");
     }
 
     @Test
@@ -74,8 +78,7 @@ class TestCommandUserOutputTest {
 
         listener.onUserOutput(2, "from worker two");
 
-        assertThat(captured.toString(StandardCharsets.UTF_8))
-                .contains("[w2] from worker two");
+        assertThat(ctx.outputs).containsExactly("[w2] from worker two");
     }
 
     @Test
@@ -205,6 +208,7 @@ class TestCommandUserOutputTest {
         int scopeAdded = 0;
         final List<Integer> progressTicks = new ArrayList<>();
         final List<String> labels = new ArrayList<>();
+        final List<String> outputs = new ArrayList<>();
         final List<Diag> errors = new ArrayList<>();
 
         record Diag(String code, String message) {}
@@ -212,6 +216,7 @@ class TestCommandUserOutputTest {
         @Override public void progress(int delta) { progressTicks.add(delta); }
         @Override public void updateScope(int additionalScope) { scopeAdded += additionalScope; }
         @Override public void label(String description) { labels.add(description); }
+        @Override public void output(String line) { outputs.add(line); }
         @Override public void warn(String code, String message) {}
         @Override public void error(String code, String message) { errors.add(new Diag(code, message)); }
         @Override public boolean cancelled() { return false; }

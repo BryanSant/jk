@@ -69,6 +69,11 @@ public final class CommandManagerListener implements GoalListener {
     }
 
     @Override
+    public void output(String phase, String line) {
+        cm.writeAbove(line);
+    }
+
+    @Override
     public void progress(String phase, int delta, GoalView view) {
         cm.progress(view.numerator(), view.denominator());
     }
