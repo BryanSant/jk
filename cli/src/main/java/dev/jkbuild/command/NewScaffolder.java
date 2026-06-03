@@ -53,7 +53,7 @@ public final class NewScaffolder {
             "guava", List.of(
                     new CuratedEntry("com.google.guava:guava", "33", "main")),
             "kotest", List.of(
-                    new CuratedEntry("io.kotest:kotest-runner-junit5", "5", "test")));
+                    new CuratedEntry("io.kotest:kotest-runner-junit6", "6", "test")));
 
     private NewScaffolder() {}
 

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
 
@@ -19,6 +20,44 @@ import java.util.stream.Stream;
 public final class CompileSupport {
 
     private CompileSupport() {}
+
+    /** Which languages a project compiles. */
+    public record Languages(boolean java, boolean kotlin) {}
+
+    /**
+     * Resolve which languages a project compiles. Explicit {@code jk.toml}
+     * opt-ins win: {@code java = <int>} enables Java, {@code kotlin = "<ver>"}
+     * enables Kotlin (either or both). When <em>neither</em> is declared, infer
+     * from the tree — a {@code src/main/java} dir or any {@code .java} under
+     * {@code src/} enables Java (at the jdk release); a {@code src/main/kotlin}
+     * dir or any {@code .kt} enables Kotlin (at the default release). A project
+     * with nothing to go on defaults to Java (a bare {@code jdk = N} project).
+     */
+    public static Languages resolveLanguages(JkBuild.Project project, Path projectDir) {
+        boolean javaDeclared = project.java() > 0;
+        boolean kotlinDeclared = project.isKotlin();
+        if (javaDeclared || kotlinDeclared) {
+            return new Languages(javaDeclared, kotlinDeclared);
+        }
+        Path src = projectDir.resolve("src");
+        boolean java = Files.isDirectory(projectDir.resolve("src/main/java")) || anySourceUnder(src, ".java");
+        boolean kotlin = Files.isDirectory(projectDir.resolve("src/main/kotlin")) || anySourceUnder(src, ".kt");
+        if (!java && !kotlin) {
+            return new Languages(true, false);   // nothing detected — default to Java
+        }
+        return new Languages(java, kotlin);
+    }
+
+    /** True if any regular file ending in {@code ext} exists anywhere under {@code root}. */
+    private static boolean anySourceUnder(Path root, String ext) {
+        if (!Files.isDirectory(root)) return false;
+        try (Stream<Path> stream = Files.walk(root)) {
+            return stream.anyMatch(p -> Files.isRegularFile(p)
+                    && p.getFileName().toString().endsWith(ext));
+        } catch (IOException e) {
+            return false;
+        }
+    }
 
     /** All {@code .java} files under {@code root} (empty if it doesn't exist). */
     public static List<Path> collectJavaSources(Path root) throws IOException {

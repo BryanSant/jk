@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.alias.AliasCatalog;
+
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -86,16 +88,25 @@ public final class NewJkBuildRenderer {
     }
 
     /**
-     * Render a single curated dep as an inline table. The short name is the
-     * artifactId (the part after the colon in {@code group:artifact}); the
-     * {@code artifact} field is omitted because it equals the key. The
-     * version uses the curated major directly — bare-string version is
-     * caret-floating per the v1 default ({@code ^1} → 1.x.x).
+     * Render a single curated dep. The short name is the artifactId (the part
+     * after the colon in {@code group:artifact}).
+     *
+     * <p>When that short name resolves through the bundled alias catalog to
+     * this exact coordinate, emit the Cargo-style one-liner
+     * {@code name = "latest"} — the catalog supplies group/artifact and the
+     * resolver floats to the newest release. Otherwise fall back to the
+     * explicit inline table {@code { group = "...", version = "..." }} using
+     * the curated major (bare-string version is caret-floating per the v1
+     * default — {@code ^1} → 1.x.x).
      */
     private static String formatEntry(NewScaffolder.CuratedEntry e) {
         int colon = e.coord().indexOf(':');
         String group = e.coord().substring(0, colon);
         String artifact = e.coord().substring(colon + 1);
+        var hit = AliasCatalog.bundled().lookup(artifact).orElse(null);
+        if (hit != null && hit.group().equals(group) && hit.artifact().equals(artifact)) {
+            return artifact + " = \"latest\"";
+        }
         return artifact + " = { group = \"" + group + "\", version = \"" + e.version() + "\" }";
     }
 

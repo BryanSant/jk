@@ -46,6 +46,46 @@ class BuildPipelineKotlinPhaseTest {
         assertThat(phaseNames(dir)).contains("compile-java", "compile-kotlin", "write-stamp");
     }
 
+    // ---- source detection when neither java nor kotlin is declared ----------
+
+    @Test
+    void detects_kotlin_from_src_main_kotlin(@TempDir Path dir) throws Exception {
+        writeManifest(dir, "group=\"com.example\"\nartifact=\"k\"\nversion=\"0.1.0\"\njdk=25\n");
+        Files.createDirectories(dir.resolve("src/main/kotlin"));
+        assertThat(phaseNames(dir)).contains("compile-kotlin").doesNotContain("compile-java");
+    }
+
+    @Test
+    void detects_java_from_src_main_java(@TempDir Path dir) throws Exception {
+        writeManifest(dir, "group=\"com.example\"\nartifact=\"j\"\nversion=\"0.1.0\"\njdk=25\n");
+        Files.createDirectories(dir.resolve("src/main/java"));
+        assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
+    }
+
+    @Test
+    void detects_both_from_a_stray_kt_and_java_file(@TempDir Path dir) throws Exception {
+        writeManifest(dir, "group=\"com.example\"\nartifact=\"b\"\nversion=\"0.1.0\"\njdk=25\n");
+        Path kt = dir.resolve("src/app/Foo.kt");
+        Files.createDirectories(kt.getParent());
+        Files.writeString(kt, "class Foo");
+        Files.writeString(dir.resolve("src/app/Bar.java"), "class Bar {}");
+        assertThat(phaseNames(dir)).contains("compile-java", "compile-kotlin");
+    }
+
+    @Test
+    void explicit_java_ignores_kotlin_sources(@TempDir Path dir) throws Exception {
+        // Explicit opt-in wins — stray .kt is not auto-detected when java is declared.
+        writeManifest(dir, "group=\"com.example\"\nartifact=\"j\"\nversion=\"0.1.0\"\njava=21\n");
+        Files.createDirectories(dir.resolve("src/main/kotlin"));
+        assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
+    }
+
+    @Test
+    void empty_project_defaults_to_java(@TempDir Path dir) throws Exception {
+        writeManifest(dir, "group=\"com.example\"\nartifact=\"e\"\nversion=\"0.1.0\"\njdk=25\n");
+        assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
+    }
+
     private static void writeManifest(Path dir, String projectBody) throws Exception {
         Files.writeString(dir.resolve("jk.toml"), "[project]\n" + projectBody);
     }

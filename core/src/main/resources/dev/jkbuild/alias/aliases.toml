@@ -65,6 +65,8 @@ assertj-core                 = "org.assertj:assertj-core"
 mockito-core                 = "org.mockito:mockito-core"
 mockito-junit-jupiter        = "org.mockito:mockito-junit-jupiter"
 mockk                        = "io.mockk:mockk"
+kotest-runner-junit5         = "io.kotest:kotest-runner-junit5"
+kotest-runner-junit6         = "io.kotest:kotest-runner-junit6"
 
 # Logging
 slf4j-api                    = "org.slf4j:slf4j-api"
@@ -142,6 +144,9 @@ mapstruct                    = "org.mapstruct:mapstruct"
 mapstruct-processor          = "org.mapstruct:mapstruct-processor"
 lombok                       = "org.projectlombok:lombok"
 immutables-value             = "org.immutables:value"
+
+# Annotations / nullness
+jspecify                     = "org.jspecify:jspecify"
 
 # Build / supply chain
 maven-artifact               = "org.apache.maven:maven-artifact"

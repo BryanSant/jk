@@ -95,11 +95,9 @@ class NewScaffolderTest {
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(build).contains("[dependencies.main]");
-        // Curated versions are bare majors — caret-floating per the v1 default.
-        assertThat(build).contains(
-                "commons-io = { group = \"commons-io\", version = \"2\" }");
-        assertThat(build).contains(
-                "guava = { group = \"com.google.guava\", version = \"33\" }");
+        // Catalog-known short names collapse to the `name = "latest"` one-liner.
+        assertThat(build).contains("commons-io = \"latest\"");
+        assertThat(build).contains("guava = \"latest\"");
         assertThat(build).doesNotContain("[dependencies.processor]");
         assertThat(build).doesNotContain("[dependencies.provided]");
     }
@@ -115,8 +113,7 @@ class NewScaffolderTest {
         assertThat(build).doesNotContain("[dependencies.main]");
         assertThat(build).contains("[dependencies.processor]");
         assertThat(build).contains("[dependencies.provided]");
-        assertThat(build).contains(
-                "lombok = { group = \"org.projectlombok\", version = \"1\" }");
+        assertThat(build).contains("lombok = \"latest\"");
     }
 
     @Test
@@ -128,8 +125,7 @@ class NewScaffolderTest {
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(build).contains("[dependencies.main]");
-        assertThat(build).contains(
-                "jspecify = { group = \"org.jspecify\", version = \"1\" }");
+        assertThat(build).contains("jspecify = \"latest\"");
     }
 
     @Test
@@ -141,8 +137,7 @@ class NewScaffolderTest {
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(build).contains("[dependencies.test]");
-        assertThat(build).contains(
-                "kotest-runner-junit5 = { group = \"io.kotest\", version = \"5\" }");
+        assertThat(build).contains("kotest-runner-junit6 = \"latest\"");
     }
 
     @Test
