@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.config;
 
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.model.JkBuild;
 
 import java.io.IOException;
@@ -20,7 +18,7 @@ import java.nio.file.Path;
  * §13.2) instead of trying to fetch sibling SNAPSHOT coords from Maven
  * Central.
  */
-final class WorkspaceRedirect {
+public final class WorkspaceRedirect {
 
     private WorkspaceRedirect() {}
 
@@ -33,7 +31,7 @@ final class WorkspaceRedirect {
      * unchanged so the caller's own parse phase reports the error in
      * context.
      */
-    static Path effectiveDir(Path invokedDir) throws IOException {
+    public static Path effectiveDir(Path invokedDir) throws IOException {
         Path buildFile = invokedDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) return invokedDir;
         JkBuild peek;

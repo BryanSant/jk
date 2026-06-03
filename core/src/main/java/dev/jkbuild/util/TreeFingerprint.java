@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.util;
 
-import dev.jkbuild.util.Hashing;
-import dev.jkbuild.util.JkThreads;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -31,11 +29,11 @@ import java.util.stream.Stream;
  * the original sorted order regardless of completion order so the final
  * digest stays deterministic.
  */
-final class TreeFingerprint {
+public final class TreeFingerprint {
 
     private TreeFingerprint() {}
 
-    static String compute(Path root) throws IOException {
+    public static String compute(Path root) throws IOException {
         List<Path> files = new ArrayList<>();
         try (Stream<Path> stream = Files.walk(root)) {
             stream.filter(Files::isRegularFile).forEach(files::add);

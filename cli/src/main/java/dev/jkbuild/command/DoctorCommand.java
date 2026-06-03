@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.util.TreeFingerprint;
+
 import dev.jkbuild.compat.BuildTool;
 import dev.jkbuild.compat.InstalledTool;
 import dev.jkbuild.discovery.SymlinkProvisioner;
