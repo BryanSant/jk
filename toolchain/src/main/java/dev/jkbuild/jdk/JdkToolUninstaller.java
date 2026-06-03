@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.jdk;
 
-import dev.jkbuild.jdk.JdkHit;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,13 +24,13 @@ import java.util.concurrent.TimeUnit;
  * don't go through here — those are direct deletes. IntelliJ
  * recovers from a missing JDK on its own.
  */
-final class JdkToolUninstaller {
+public final class JdkToolUninstaller {
 
     /** How long any one tool command is allowed to run before we abandon it. */
     private static final long TIMEOUT_SECONDS = 30;
 
     /** Outcome label used by the caller for the "✓ … via <tool>" line. */
-    enum Outcome { HANDLED_BY_TOOL, FALL_THROUGH }
+    public enum Outcome { HANDLED_BY_TOOL, FALL_THROUGH }
 
     private JdkToolUninstaller() {}
 
@@ -41,7 +40,7 @@ final class JdkToolUninstaller {
      * install directory is gone afterwards; {@link Outcome#FALL_THROUGH}
      * otherwise (caller should run the direct {@code purge} fallback).
      */
-    static Outcome tryUninstall(JdkHit hit, String identifier) {
+    public static Outcome tryUninstall(JdkHit hit, String identifier) {
         List<String> command = commandFor(hit, identifier);
         if (command == null) return Outcome.FALL_THROUGH;
         if (!runQuietly(command)) return Outcome.FALL_THROUGH;

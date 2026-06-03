@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.jdk;
 
-import dev.jkbuild.jdk.JdkHit;
-import dev.jkbuild.jdk.JdkVendor;
 import org.junit.jupiter.api.Test;
 
 import java.nio.file.Path;
