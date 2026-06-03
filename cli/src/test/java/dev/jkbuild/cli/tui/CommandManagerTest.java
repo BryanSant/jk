@@ -129,6 +129,22 @@ class CommandManagerTest {
     }
 
     @Test
+    void region_is_capped_to_terminal_height() {
+        // A region taller than the viewport scrolls its top off-screen, where
+        // the cursor-relative repaint/wipe can't reach it (lingering spinner on
+        // cancel). So the whole region must fit within the terminal height.
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
+        cm.height = 6;
+        for (int i = 0; i < 20; i++) cm.addPhase("m", "p" + i);
+        cm.phaseRunning("m", "p0");
+
+        var lines = cm.renderGoalLines(120, 0);
+        // header + bar + phase list, all within height (with a line of headroom).
+        assertThat(lines.size()).isLessThanOrEqualTo(6 - 1);
+        assertThat(String.join("\n", stripAll(lines))).contains("…"); // collapsed
+    }
+
+    @Test
     void first_row_carries_the_rail_connector() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
         cm.phaseRunning("m", "compile");
