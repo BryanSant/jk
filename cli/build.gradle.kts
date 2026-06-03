@@ -9,6 +9,7 @@ plugins {
 description = "jk command-line entrypoint"
 
 dependencies {
+    implementation(project(":runtime"))
     implementation(project(":core"))
     implementation(project(":io"))
     implementation(project(":resolver"))

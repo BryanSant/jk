@@ -30,5 +30,6 @@ include(
     ":image",
     ":compat",
     ":test-runner",
+    ":runtime",
     ":cli",
 )

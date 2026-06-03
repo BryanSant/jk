@@ -66,7 +66,8 @@ import java.util.Set;
         })
 public final class Jk implements Runnable {
 
-    public static final String VERSION = "0.1.0-SNAPSHOT";
+    /** Alias of {@link dev.jkbuild.util.JkVersion#VERSION} for CLI-side callers. */
+    public static final String VERSION = dev.jkbuild.util.JkVersion.VERSION;
 
     /**
      * Hidden verb aliases for ergonomic migration from other build tools.

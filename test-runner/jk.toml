@@ -1,0 +1,16 @@
+[project]
+group    = "jk"
+artifact = "test-runner"
+version  = "0.1.0"
+description = "jk-test-runner: child-JVM entry point that drives JUnit Platform and "
+jdk      = 25
+java     = 25
+main     = "dev.jkbuild.test.runner.JkRunner"
+
+[manifest]
+"Implementation-Title" = "jk-test-runner"
+"Implementation-Version" = "0.1.0"
+
+[dependencies.main]
+junit-platform-launcher = { group = "org.junit.platform", version = "=6.1.0" }
+junit-jupiter-api = "latest"

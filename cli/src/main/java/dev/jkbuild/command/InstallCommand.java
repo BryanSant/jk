@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.runtime.CompileToolchain;
+
 import dev.jkbuild.cli.Jk;
 
 import dev.jkbuild.cli.GlobalOptions;

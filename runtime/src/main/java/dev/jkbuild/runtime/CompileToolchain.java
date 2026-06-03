@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
 import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.cache.Cas;
@@ -40,11 +40,11 @@ import java.util.Optional;
  *       via {@link ToolInstaller} on first use.</li>
  * </ol>
  */
-final class CompileToolchain {
+public final class CompileToolchain {
 
     private CompileToolchain() {}
 
-    static Path resolveJavaHome(Path projectDir) {
+    public static Path resolveJavaHome(Path projectDir) {
         Optional<InstalledJdk> pinned;
         try {
             pinned = JdkResolver.forProject(projectDir, null);
@@ -60,7 +60,7 @@ final class CompileToolchain {
      * {@code java.home}). Used as the last-resort fallback when no project
      * JDK is pinned; throws an explanatory error if neither is available.
      */
-    static Path runningJavaHome() {
+    public static Path runningJavaHome() {
         String home = System.getProperty("java.home");
         if (home == null || home.isBlank()) home = System.getenv("JAVA_HOME");
         if (home == null || home.isBlank()) {
@@ -79,7 +79,7 @@ final class CompileToolchain {
      *
      * @param cacheDir the {@link Cas} root (typically {@link JkDirs#cache()})
      */
-    static Path resolveKotlinHome(Path cacheDir) {
+    public static Path resolveKotlinHome(Path cacheDir) {
         return resolveKotlinHome(cacheDir, null);
     }
 
@@ -89,7 +89,7 @@ final class CompileToolchain {
      * {@code project.kotlin} pin, else {@code null} — which falls back to the
      * bundled default distribution.
      */
-    static String kotlinVersionFor(dev.jkbuild.lock.Lockfile lock, JkBuild project) {
+    public static String kotlinVersionFor(dev.jkbuild.lock.Lockfile lock, JkBuild project) {
         if (lock != null && lock.kotlin() != null && !lock.kotlin().isBlank()) {
             return lock.kotlin();
         }
@@ -105,7 +105,7 @@ final class CompileToolchain {
      * a script's {@code //KOTLIN 2.1.0} directive). Passes {@code null} to
      * fall back to the bundled default distribution.
      */
-    static Path resolveKotlinHome(Path cacheDir, String versionOverride) {
+    public static Path resolveKotlinHome(Path cacheDir, String versionOverride) {
         // ToolProvisioning already runs the EnvVarProbe (which reads
         // KOTLIN_HOME), so we don't need a separate fast-path. Going
         // through the full pipeline guarantees we leave a symlink under

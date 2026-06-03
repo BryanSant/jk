@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.command;
+package dev.jkbuild.runtime;
 
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.HostPlatform;
@@ -47,12 +47,12 @@ import java.util.Optional;
  * parameter — anything that wants to re-resolve a JDK should go through
  * {@code jk jdk reconcile} or remove the install explicitly.
  */
-final class JdkEnsure {
+public final class JdkEnsure {
 
-    enum Source { ALREADY_PINNED, LOCKFILE_INSTALL, INSTALLED }
+    public enum Source { ALREADY_PINNED, LOCKFILE_INSTALL, INSTALLED }
 
-    record Outcome(Optional<InstalledJdk> jdk, Source source, String specUsed) {
-        Outcome {
+    public record Outcome(Optional<InstalledJdk> jdk, Source source, String specUsed) {
+        public Outcome {
             Objects.requireNonNull(jdk, "jdk");
             Objects.requireNonNull(source, "source");
         }
@@ -60,7 +60,7 @@ final class JdkEnsure {
 
     private JdkEnsure() {}
 
-    static Outcome ensure(Path projectDir, Path jdksDirOverride, JkBuild build, Lockfile lock)
+    public static Outcome ensure(Path projectDir, Path jdksDirOverride, JkBuild build, Lockfile lock)
             throws IOException, InterruptedException {
         // 1. Already pinned via .jdk-version → use what's there.
         Optional<InstalledJdk> resolved = JdkResolver.forProject(projectDir, jdksDirOverride);
