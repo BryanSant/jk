@@ -723,7 +723,7 @@ public final class BuildCommand implements Callable<Integer> {
             // Workspace member: feed the one shared aggregate view.
             result = GoalConsole.runGoalInto(goal, cache, target, agg);
         } else {
-            ConsoleSpec spec = new ConsoleSpec("Building",
+            ConsoleSpec spec = new ConsoleSpec("Build",
                     r -> successMessage(goal, r),
                     r -> failureMessage(goal, r));
             result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, target);

@@ -203,7 +203,7 @@ public final class NativeCommand implements Callable<Integer> {
                 .addPhase(nativeImage)
                 .build();
 
-        ConsoleSpec spec = new ConsoleSpec("Building native",
+        ConsoleSpec spec = new ConsoleSpec("Native",
                 r -> {
                     String inTime = dev.jkbuild.cli.theme.Theme.colorize(
                             "in " + BuildCommand.fmtDuration(r.duration()),

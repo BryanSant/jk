@@ -214,7 +214,7 @@ public final class CompileCommand implements Callable<Integer> {
                 .addPhase(compileKotlin)
                 .build();
 
-        ConsoleSpec spec = new ConsoleSpec("Compiling",
+        ConsoleSpec spec = new ConsoleSpec("Compile",
                 r -> {
                     int total = sourceCount(goal, JAVA_SOURCES) + sourceCount(goal, KT_SOURCES);
                     String inTime = Theme.colorize(

@@ -271,7 +271,7 @@ public final class TestCommand implements Callable<Integer> {
                 .addPhase(runTests)
                 .build();
 
-        ConsoleSpec spec = new ConsoleSpec("Testing",
+        ConsoleSpec spec = new ConsoleSpec("Test",
                 r -> testSummary(goal, r),
                 r -> testFailureMessage(goal));
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
