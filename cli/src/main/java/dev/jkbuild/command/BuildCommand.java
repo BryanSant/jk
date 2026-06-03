@@ -210,24 +210,27 @@ public final class BuildCommand implements Callable<Integer> {
         // AUTO / QUIET: every member feeds ONE aggregate view (spinner header +
         // single bar + merged phase list). Settle it once after the last member.
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        CommandManager view = CommandManager.goal(System.out, "Building", animate);
+        CommandManager view = CommandManager.goal(System.out, "Build", animate);
         AggregateContext agg = new AggregateContext(view);
         int built = 0;
-        for (Path memberDir : sorted) {
-            String member = workspaceRoot.relativize(memberDir).toString();
-            int exit;
-            try {
-                exit = runForDir(memberDir, agg);
-            } catch (Exception e) {
-                view.finishFailure("Build failed in " + member);
-                throw e;
+        // Route every member's phase/process output above the one shared region.
+        try (var cap = view.captureOutput()) {
+            for (Path memberDir : sorted) {
+                String member = workspaceRoot.relativize(memberDir).toString();
+                int exit;
+                try {
+                    exit = runForDir(memberDir, agg);
+                } catch (Exception e) {
+                    view.finishFailure("Build failed in " + member);
+                    throw e;
+                }
+                if (exit != 0) {
+                    view.finishFailure("Build failed in " + member);
+                    System.err.println("jk build: " + member + " failed (exit " + exit + ")");
+                    return exit;
+                }
+                built++;
             }
-            if (exit != 0) {
-                view.finishFailure("Build failed in " + member);
-                System.err.println("jk build: " + member + " failed (exit " + exit + ")");
-                return exit;
-            }
-            built++;
         }
         view.finishSuccess("Built " + built + " member" + (built == 1 ? "" : "s"));
         return 0;
@@ -822,10 +825,14 @@ public final class BuildCommand implements Callable<Integer> {
         }
     }
 
+    /** Dim {@code "in <duration>"} suffix shared by success and failure lines. */
+    static String inTime(GoalResult result) {
+        return Theme.colorize("in " + fmtDuration(result.duration()), Theme.active().darkGray());
+    }
+
     /** Success result line (sans the leading ✔), e.g. "Built jktest-0.1.0.jar in 717ms". */
     private static String successMessage(Goal goal, GoalResult result) {
-        String inTime = Theme.colorize(
-                "in " + fmtDuration(result.duration()), Theme.active().darkGray());
+        String inTime = inTime(result);
         String outcome = goal.get(BUILD_OUTCOME).orElse("");
         if ("up-to-date".equals(outcome)) {
             return "Up to date " + inTime;
@@ -841,14 +848,15 @@ public final class BuildCommand implements Callable<Integer> {
                 .orElse(built + " " + inTime);
     }
 
-    /** Failure result line (sans the leading ✗); test failures get a tailored message. */
+    /** Failure result line (sans the leading ✗): "Build failed in 387ms" (test failures tailored). */
     private static String failureMessage(Goal goal, GoalResult result) {
         var testResult = goal.get(TEST_RESULT).orElse(null);
         if (testResult != null && !testResult.allPassed()) {
             String jar = goal.get(JAR_PATH).map(p -> p.getFileName().toString()).orElse("");
-            return jar.isEmpty() ? "Tests failed" : "Tests failed while building " + jar;
+            String base = jar.isEmpty() ? "Tests failed" : "Tests failed while building " + jar;
+            return base + " " + inTime(result);
         }
-        return "Build failed";
+        return "Build failed " + inTime(result);
     }
 
     static String fmtDuration(java.time.Duration d) {

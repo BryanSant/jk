@@ -217,13 +217,12 @@ public final class CompileCommand implements Callable<Integer> {
         ConsoleSpec spec = new ConsoleSpec("Compile",
                 r -> {
                     int total = sourceCount(goal, JAVA_SOURCES) + sourceCount(goal, KT_SOURCES);
-                    String inTime = Theme.colorize(
-                            "in " + BuildCommand.fmtDuration(r.duration()), Theme.active().darkGray());
                     if (total == 0) return "No sources found";
                     String compiled = Theme.colorize("Compiled", Theme.active().focused());
-                    return compiled + " " + total + " source file" + (total == 1 ? "" : "s") + " " + inTime;
+                    return compiled + " " + total + " source file" + (total == 1 ? "" : "s")
+                            + " " + BuildCommand.inTime(r);
                 },
-                r -> "Compilation failed");
+                r -> "Compilation failed " + BuildCommand.inTime(r));
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
                 BuildCommand.buildTarget(buildFile, dir));
 

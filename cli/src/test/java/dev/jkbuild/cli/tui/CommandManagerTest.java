@@ -156,6 +156,42 @@ class CommandManagerTest {
     }
 
     @Test
+    void write_above_prints_the_line_then_repaints_the_region_below() {
+        var buf = new ByteArrayOutputStream();
+        var cm = new CommandManager(stream(buf), true, true, 80);
+        cm.progress(1, 4);
+        cm.phaseRunning("m", "compile");
+        cm.tick();          // initial region paint
+        buf.reset();
+
+        cm.writeAbove("javac: warning in Foo.java");
+
+        String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
+        // The log line appears, and the bar (region) is repainted after it.
+        int log = visible.indexOf("javac: warning in Foo.java");
+        int bar = visible.indexOf("▱");
+        assertThat(log).isGreaterThanOrEqualTo(0);
+        assertThat(bar).isGreaterThan(log); // region re-drawn below the log line
+    }
+
+    @Test
+    void capture_output_routes_system_out_above_the_region_then_restores() {
+        var buf = new ByteArrayOutputStream();
+        var cm = new CommandManager(stream(buf), true, true, 80);
+        cm.phaseRunning("m", "compile");
+        cm.tick();
+        buf.reset();
+
+        java.io.PrintStream original = System.out;
+        try (var scope = cm.captureOutput()) {
+            System.out.println("from a phase");
+        }
+        assertThat(System.out).isSameAs(original);       // streams restored
+        assertThat(stripAnsi(buf.toString(StandardCharsets.UTF_8)))
+                .contains("from a phase");               // routed to the region's real stdout
+    }
+
+    @Test
     void fmt_elapsed_formats_minutes_and_seconds() {
         assertThat(CommandManager.fmtElapsed(112_000)).isEqualTo("1m 52s");
         assertThat(CommandManager.fmtElapsed(52_000)).isEqualTo("52s");

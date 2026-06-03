@@ -204,15 +204,10 @@ public final class NativeCommand implements Callable<Integer> {
                 .build();
 
         ConsoleSpec spec = new ConsoleSpec("Native Build",
-                r -> {
-                    String inTime = dev.jkbuild.cli.theme.Theme.colorize(
-                            "in " + BuildCommand.fmtDuration(r.duration()),
-                            dev.jkbuild.cli.theme.Theme.active().darkGray());
-                    return goal.get(OUTPUT_PATH)
-                            .map(o -> "Built native binary " + o.getFileName())
-                            .orElse("Built native binary") + " " + inTime;
-                },
-                r -> "Native build failed");
+                r -> goal.get(OUTPUT_PATH)
+                        .map(o -> "Built native binary " + o.getFileName())
+                        .orElse("Built native binary") + " " + BuildCommand.inTime(r),
+                r -> "Native build failed " + BuildCommand.inTime(r));
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
                 BuildCommand.buildTarget(jkBuildPath, projectDir));
 
