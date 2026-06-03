@@ -16,8 +16,12 @@ import java.util.Optional;
  *   <li>{@code name} — project name; doubles as the target directory's leaf.</li>
  *   <li>{@code artifact} — Maven artifactId. Often equal to {@code name} but
  *       can diverge (e.g., name = {@code my-app}, artifact = {@code my-app-core}).</li>
- *   <li>{@code jdkMajor} — JDK feature-release the scaffolder targets. Drives
- *       Java 25's instance-{@code main} syntax decision.</li>
+ *   <li>{@code jdkMajor} — the JDK toolchain feature-release (which JDK runs
+ *       the build). Defaults to the parent's for a member; user-pickable.</li>
+ *   <li>{@code javaRelease} — the {@code java = N} compile target. Usually
+ *       equal to {@code jdkMajor}, but a workspace member inherits the parent's
+ *       release even when it diverges (e.g. {@code jdk = 25}, {@code java = 17}).
+ *       Drives the instance-{@code main} syntax decision.</li>
  *   <li>{@code kotlinCompact} — when {@code true} (Kotlin only), {@code Main.kt}
  *       lands at {@code ./src/Main.kt} with no package declaration.</li>
  *   <li>{@code kotlinModuleName} — when present, written as
@@ -30,6 +34,7 @@ public record NewInputs(
         String artifact,
         String jdk,
         int jdkMajor,
+        int javaRelease,
         Optional<String> jdkIdentifier,
         Optional<String> main,
         boolean shadow,
@@ -52,6 +57,20 @@ public record NewInputs(
         Objects.requireNonNull(kotlinModuleName, "kotlinModuleName");
         Objects.requireNonNull(directory, "directory");
         deps = List.copyOf(deps);
+    }
+
+    /**
+     * Back-compat constructor: {@code javaRelease} defaults to {@code jdkMajor}
+     * (the common case where the compile target equals the toolchain). Callers
+     * that inherit a divergent member release use the canonical constructor.
+     */
+    public NewInputs(
+            String group, String name, String artifact, String jdk, int jdkMajor,
+            Optional<String> jdkIdentifier, Optional<String> main, boolean shadow,
+            boolean nativeImage, Language lang, boolean kotlinCompact,
+            Optional<String> kotlinModuleName, List<String> deps, boolean sample, Path directory) {
+        this(group, name, artifact, jdk, jdkMajor, jdkMajor, jdkIdentifier, main, shadow,
+                nativeImage, lang, kotlinCompact, kotlinModuleName, deps, sample, directory);
     }
 
     public enum Language {

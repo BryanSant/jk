@@ -127,7 +127,10 @@ public final class NewCommand implements Callable<Integer> {
         String displayName() { return project.artifact(); }
         String group() { return project.group(); }
         boolean kotlin() { return project.isKotlin(); }
+        /** The JDK toolchain version (which JDK runs the build). */
         int jdkMajor() { return project.jdk() > 0 ? project.jdk() : project.javaRelease(); }
+        /** The {@code java = N} compile target, which flows through even when it diverges from {@link #jdkMajor()}. */
+        int javaRelease() { return project.javaRelease(); }
     }
 
     /**
@@ -483,6 +486,10 @@ public final class NewCommand implements Callable<Integer> {
         var resolvedJdk = (jdk != null && !jdk.isBlank()) ? jdk
                 : parent != null ? String.valueOf(parent.jdkMajor()) : "25";
         int resolvedJdkMajor = parseJdkMajorOrDefault(resolvedJdk);
+        // The compile target flows through from the parent (workspace-wide
+        // release) even when it diverges from the JDK toolchain; standalone
+        // projects target their JDK.
+        int resolvedJavaRelease = parent != null ? parent.javaRelease() : resolvedJdkMajor;
         var resolvedLang = (lang != null && !lang.isBlank()) ? parseLanguage(lang)
                 : (parent != null && parent.kotlin()) ? NewInputs.Language.KOTLIN
                 : NewInputs.Language.JAVA;
@@ -496,7 +503,7 @@ public final class NewCommand implements Callable<Integer> {
                 : Optional.<String>empty();
         return new NewInputs(
                 resolvedGroup, resolvedName, resolvedArtifact,
-                resolvedJdk, resolvedJdkMajor,
+                resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
                 Optional.<String>empty(), // flag path doesn't resolve to a specific install
                 resolvedMain, shadow, nativeImage,
                 resolvedLang, kotlinCompact, resolvedKotlinModule,
@@ -817,6 +824,9 @@ public final class NewCommand implements Callable<Integer> {
 
         var resolvedJdk = String.valueOf(pickedOpt.major());
         int resolvedJdkMajor = pickedOpt.major();
+        // Member inherits the parent's compile target regardless of the JDK the
+        // user picked here; a standalone project targets its chosen JDK.
+        int resolvedJavaRelease = parent != null ? parent.javaRelease() : resolvedJdkMajor;
 
         var resolvedLang = "kotlin".equalsIgnoreCase(answers.get("lang"))
                 ? NewInputs.Language.KOTLIN
@@ -849,7 +859,7 @@ public final class NewCommand implements Callable<Integer> {
 
         return new NewInputs(
                 resolvedGroup, resolvedName, resolvedArtifact,
-                resolvedJdk, resolvedJdkMajor,
+                resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
                 Optional.of(pickedOpt.id()),
                 resolvedMain, resolvedShadow, resolvedNative,
                 resolvedLang, resolvedKotlinCompact, resolvedKotlinModule,

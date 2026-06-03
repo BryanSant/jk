@@ -56,6 +56,28 @@ class NewMemberTest {
     }
 
     @Test
+    void member_inherits_a_divergent_java_release_from_the_parent(@TempDir Path tempDir) throws IOException {
+        // Parent runs JDK 25 but targets release 17 — the member must inherit
+        // both, even though the wizard never exposes the release choice.
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.acme"
+                artifact = "root"
+                version  = "0.1.0"
+                jdk      = 25
+                java     = 17
+                """);
+        Path member = tempDir.resolve("widget");
+
+        assertThat(Jk.execute("new", member.toString())).isZero();
+
+        String toml = Files.readString(member.resolve("jk.toml"));
+        assertThat(toml).contains("jdk      = 25");   // toolchain inherited
+        assertThat(toml).contains("java     = 17");   // compile target flowed through
+        assertThat(JkBuildParser.parse(member.resolve("jk.toml")).project().javaRelease()).isEqualTo(17);
+    }
+
+    @Test
     void member_inherits_kotlin_language(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]

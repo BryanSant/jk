@@ -48,7 +48,7 @@ public final class NewJkBuildRenderer {
         sb.append("version  = \"0.1.0\"\n");
         sb.append("jdk      = ").append(inputs.jdkMajor()).append('\n');
         switch (inputs.lang()) {
-            case JAVA -> sb.append("java     = ").append(inputs.jdkMajor()).append('\n');
+            case JAVA -> sb.append("java     = ").append(inputs.javaRelease()).append('\n');
             case KOTLIN -> sb.append("kotlin   = \"").append(DEFAULT_KOTLIN_VERSION).append("\"\n");
         }
         if (inputs.main().isPresent()) {

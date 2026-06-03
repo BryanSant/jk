@@ -129,7 +129,9 @@ public final class NewScaffolder {
             case JAVA -> {
                 var dir = inputs.directory().resolve("src/main/java/" + pkg.replace('.', '/'));
                 Files.createDirectories(dir);
-                var body = inputs.jdkMajor() >= JAVA_INSTANCE_MAIN_MIN
+                // Gate on the compile target, not the toolchain — a member that
+                // inherits java = 17 must use the traditional main even on JDK 25.
+                var body = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN
                         ? renderJavaInstanceMain(pkg)
                         : renderJavaTraditionalMain(pkg);
                 Files.writeString(dir.resolve(MAIN_CLASS + ".java"), body, StandardCharsets.UTF_8);
