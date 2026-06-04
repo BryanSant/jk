@@ -108,6 +108,55 @@ class JavaIncrementalCompileTest {
         assertThat(r.compiledSources()).isEmpty();   // nothing forked javac
     }
 
+    @Test
+    void removing_a_leaf_source_deletes_its_class_without_recompiling(@TempDir Path dir) throws Exception {
+        Project p = new Project(dir);
+        p.write("a/A.java", "package a; public class A { public int f() { return 1; } }");
+        p.write("a/B.java", "package a; public class B { public int g() { return 2; } }");  // independent
+        p.build();
+
+        p.remove("a/B.java");
+        Run r = p.build();
+        assertThat(r.outcome).isEqualTo("compiled");          // incremental, not a full rebuild
+        assertThat(r.compiledSources()).isEmpty();            // A untouched, B gone → nothing recompiled
+        assertThat(p.classExists("a/B.class")).isFalse();     // the removed class is cleaned up
+        assertThat(p.classExists("a/A.class")).isTrue();
+    }
+
+    @Test
+    void removing_a_referenced_source_recompiles_the_consumer_and_surfaces_the_break(@TempDir Path dir)
+            throws Exception {
+        Project p = new Project(dir);
+        p.write("a/B.java", "package a; public class B { public int g() { return 2; } }");
+        p.write("a/A.java", "package a; public class A { public int f() { return new B().g(); } }");
+        p.build();
+
+        // Remove B but leave A referencing it: A must be recompiled (so the now-dangling
+        // reference becomes a real compile error) rather than carried over stale.
+        p.remove("a/B.java");
+        Run r = p.tryBuild();
+        assertThat(r.outcome).isEqualTo("errors");
+        assertThat(r.compiledSources()).contains("a/A.java");
+    }
+
+    @Test
+    void removing_a_constant_holder_recompiles_remaining_sources_conservatively(@TempDir Path dir)
+            throws Exception {
+        Project p = new Project(dir);
+        // B is a constant holder: consumers inline B.X with no bytecode edge, so its
+        // removal can't be tracked precisely → recompile everything still present.
+        p.write("a/B.java", "package a; public class B { public static final int X = 1; }");
+        p.write("a/A.java", "package a; public class A { public int f() { return 5; } }");  // no edge to B
+        p.write("a/C.java", "package a; public class C { public int g() { return 6; } }");  // no edge to B
+        p.build();
+
+        p.remove("a/B.java");
+        Run r = p.build();
+        assertThat(r.outcome).isEqualTo("compiled");
+        assertThat(r.compiledSources()).containsExactlyInAnyOrder("a/A.java", "a/C.java");
+        assertThat(p.classExists("a/B.class")).isFalse();
+    }
+
     // ---- harness ----------------------------------------------------------
 
     private static final class Project {
@@ -134,11 +183,28 @@ class JavaIncrementalCompileTest {
             Files.writeString(f, body);
         }
 
+        void remove(String rel) throws IOException {
+            Files.delete(srcRoot.resolve(rel));
+        }
+
+        boolean classExists(String rel) {
+            return Files.exists(out.resolve(rel));
+        }
+
         Run build() throws IOException {
             return build(List.of());
         }
 
+        /** Build without asserting success — for tests that expect a compile error. */
+        Run tryBuild() throws IOException {
+            return build(List.of(), false);
+        }
+
         Run build(List<Path> classpath) throws IOException {
+            return build(classpath, true);
+        }
+
+        Run build(List<Path> classpath, boolean requireSuccess) throws IOException {
             List<Path> sources = new ArrayList<>();
             try (var s = Files.walk(srcRoot)) {
                 for (Path p : (Iterable<Path>) s::iterator) {
@@ -157,7 +223,9 @@ class JavaIncrementalCompileTest {
             JavaIncrementalCompile.Result result = JavaIncrementalCompile.run(
                     "compile-main", req, "jk-test", true, cas, actionCache, stateDir,
                     new JavacDriver(rec), null);
-            assertThat(result.success()).as("compile succeeded").isTrue();
+            if (requireSuccess) {
+                assertThat(result.success()).as("compile succeeded").isTrue();
+            }
             return new Run(result.outcome(), rec.compiled());
         }
     }

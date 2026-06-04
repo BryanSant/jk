@@ -75,8 +75,15 @@ public final class JavaIncrementalCompile {
         }
     }
 
-    /** Persisted per-class facts (key = internal class name, e.g. {@code a/Foo$Bar}). */
-    public record ClassFacts(String abi, List<String> deps) {
+    /**
+     * Persisted per-class facts (key = internal class name, e.g. {@code a/Foo$Bar}).
+     * {@code constants} records whether the class defines an inlinable compile-time
+     * constant — its consumers inline the value with no bytecode edge, so removing
+     * (or changing) such a class needs a conservative recompile. Absent in
+     * pre-{@code constants} state files → deserializes to {@code false}; self-heals
+     * as classes recompile.
+     */
+    public record ClassFacts(String abi, List<String> deps, boolean constants) {
         public ClassFacts {
             deps = List.copyOf(deps);
         }
@@ -167,10 +174,9 @@ public final class JavaIncrementalCompile {
         // regenerate anything) → full. (CAS paths encode content, so a processor
         // version bump shows up as a different path here.)
         if (!processorPathUnchanged(request, in)) return false;
-        Set<String> priorSources = sourceKeys(in);
-        for (String s : priorSources) {
-            if (current(request, s) == null) return false;   // a removal → full (v1)
-        }
+        // Source removals are handled incrementally (incremental() deletes the
+        // removed classes and recompiles their referencers), so they no longer
+        // force a full build.
         return true;
     }
 
@@ -244,9 +250,33 @@ public final class JavaIncrementalCompile {
         // (only populated in worker mode; empty for plain Java).
         Map<Path, Set<Path>> provenance = new TreeMap<>();
 
+        // Removed sources: delete their carried-over outputs (incl. any generated
+        // classes), drop their state, and seed the referencers of the now-vanished
+        // classes so consumers recompile — surfacing any dangling references. A
+        // removed constant holder has no bytecode edge to its inliners, so fall back
+        // to recompiling everything still present.
+        Set<String> removedClasses = new TreeSet<>();
+        boolean removedConstantHolder = false;
+        for (Map.Entry<String, List<String>> e : prior.units().entrySet()) {
+            if (current(request, e.getKey()) != null) continue;   // source still present
+            for (String rel : e.getValue()) {
+                String name = nameOf(rel);
+                ClassFacts f = facts.remove(name);
+                if (f == null || f.constants()) removedConstantHolder = true;
+                removedClasses.add(name);
+                Files.deleteIfExists(out.resolve(rel));
+            }
+            units.remove(e.getKey());
+        }
+
         // Seed: the directly edited sources, plus the sources that reference any
         // dependency class whose ABI changed since last build (classpath diff).
         Set<Path> seed = new HashSet<>(changedSources(request, prior.inputs()));
+        if (removedConstantHolder) {
+            seed.addAll(request.sources());
+        } else if (!removedClasses.isEmpty()) {
+            seed.addAll(referencers(removedClasses, facts, units, request.sources()));
+        }
         Path cpCacheDir = cas.root().resolve("cp-abi-snapshots");
         Map<String, JavaClasspathAbi.DepFacts> priorUnion = loadUnion(stateDir);
         boolean haveBaseline = priorUnion != null;
@@ -320,7 +350,7 @@ public final class JavaIncrementalCompile {
                     waveByName.put(ci.name, ci);
                     ClassFacts old = facts.get(ci.name);
                     if (old == null || !old.abi().equals(ci.abi)) abiChanged.add(ci.name);
-                    facts.put(ci.name, new ClassFacts(ci.abi, ci.deps));
+                    facts.put(ci.name, new ClassFacts(ci.abi, ci.deps, ci.constants()));
                 }
                 for (String rel : units.getOrDefault(srcKey(s), List.of())) {
                     String name = nameOf(rel);
@@ -471,7 +501,7 @@ public final class JavaIncrementalCompile {
     private static Map<String, ClassFacts> factsOf(Analysis a) {
         Map<String, ClassFacts> facts = new HashMap<>();
         a.bySource.values().forEach(list ->
-                list.forEach(ci -> facts.put(ci.name(), new ClassFacts(ci.abi(), ci.deps()))));
+                list.forEach(ci -> facts.put(ci.name(), new ClassFacts(ci.abi(), ci.deps(), ci.constants()))));
         return facts;
     }
 

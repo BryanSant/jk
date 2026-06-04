@@ -253,10 +253,13 @@ in-tree example of a processor whose handling we must get right.
    seam) using the **existing subprocess javac**; the analysis runs in jk's
    process on the output bytecode, so phase 1 needs no worker. Wired into
    `compile-java`. Delivers precise incremental for plain Java **and Lombok**
-   (Lombok output is in-bytecode → ASM sees it). Constants handled conservatively;
-   removals and classpath changes fall back to full (phases below); AP-generated
-   "orphan" classes fall back to full. The worker arrives in phase 2 only because
-   `Filer` incrementality requires in-process javac.
+   (Lombok output is in-bytecode → ASM sees it). Constants handled conservatively.
+   **Source removals are incremental** (DONE): a removed source's classes are
+   deleted and the referencers of the now-vanished classes recompile (surfacing any
+   dangling reference); a removed *constant holder* — persisted via `ClassFacts.constants`
+   — falls back to recompiling the remaining sources, since its inliners have no
+   bytecode edge. The worker arrives in phase 2 only because `Filer` incrementality
+   requires in-process javac.
 2. **Source-generating-AP incrementality.** `Filer`/`RoundEnvironment`
    isolating/aggregating tracking, gated on orphan-class detection. Unlocks
    MapStruct/Querydsl/Dagger/etc. Nothing from phase 1 is rebuilt.
