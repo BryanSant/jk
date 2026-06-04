@@ -46,9 +46,6 @@ public final class CasPrewriter implements AutoCloseable {
 
     private static final long POLL_INTERVAL_MILLIS = 100;
 
-    /** Files to exclude from the cache. Currently just the freshness stamp. */
-    private static final String FRESHNESS_STAMP = ".jk-stamp";
-
     private final Cas cas;
     private final Path outputDir;
     private final ScheduledExecutorService scheduler;
@@ -97,7 +94,7 @@ public final class CasPrewriter implements AutoCloseable {
         try (Stream<Path> stream = Files.walk(outputDir)) {
             for (Path file : (Iterable<Path>) stream::iterator) {
                 if (!Files.isRegularFile(file)) continue;
-                if (FRESHNESS_STAMP.equals(file.getFileName().toString())) continue;
+                if (FreshnessStamp.isStampFile(file.getFileName().toString())) continue;
 
                 String relPath = outputDir.relativize(file).toString()
                         .replace(File.separatorChar, '/');
@@ -135,7 +132,7 @@ public final class CasPrewriter implements AutoCloseable {
         try (Stream<Path> stream = Files.walk(outputDir)) {
             for (Path file : (Iterable<Path>) stream::iterator) {
                 if (!Files.isRegularFile(file)) continue;
-                if (FRESHNESS_STAMP.equals(file.getFileName().toString())) continue;
+                if (FreshnessStamp.isStampFile(file.getFileName().toString())) continue;
                 if (processed.containsKey(file)) continue;
                 handleCandidate(file);
             }

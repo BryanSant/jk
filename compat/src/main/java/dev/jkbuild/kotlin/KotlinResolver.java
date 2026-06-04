@@ -18,8 +18,12 @@ import java.net.URI;
  */
 public final class KotlinResolver {
 
-    /** jk's bundled default Kotlin distribution version. */
-    public static final String DEFAULT_VERSION = "2.3.21";
+    /**
+     * jk's bundled default Kotlin version. Floor is 2.4.0: the Kotlin compile
+     * path runs the Build Tools API via its {@code KotlinToolchains} entry
+     * point, which only exists in 2.4.0+.
+     */
+    public static final String DEFAULT_VERSION = "2.4.0";
 
     private static final String DEFAULT_BASE =
             "https://github.com/JetBrains/kotlin/releases/download/";

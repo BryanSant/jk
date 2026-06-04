@@ -36,14 +36,18 @@ class BuildPipelineKotlinPhaseTest {
     void jdk_plus_kotlin_is_kotlin_only(@TempDir Path dir) throws Exception {
         writeManifest(dir, "group=\"com.example\"\nartifact=\"k\"\nversion=\"0.1.0\"\njdk=25\nkotlin=\"2.3.21\"\n");
         assertThat(phaseNames(dir))
-                .contains("compile-kotlin")
-                .doesNotContain("compile-java", "write-stamp");
+                .contains("compile-kotlin", "write-stamp-kotlin")
+                // no Java ⇒ no javac phase and no assembler (Kotlin publishes directly)
+                .doesNotContain("compile-java", "write-stamp", "assemble-classes");
     }
 
     @Test
     void jdk_plus_java_plus_kotlin_enables_both(@TempDir Path dir) throws Exception {
         writeManifest(dir, "group=\"com.example\"\nartifact=\"b\"\nversion=\"0.1.0\"\njdk=25\njava=25\nkotlin=\"2.3.21\"\n");
-        assertThat(phaseNames(dir)).contains("compile-java", "compile-kotlin", "write-stamp");
+        assertThat(phaseNames(dir))
+                .contains("compile-java", "compile-kotlin", "write-stamp", "write-stamp-kotlin",
+                        // mixed modules add the assembler that merges both outputs
+                        "assemble-classes");
     }
 
     // ---- source detection when neither java nor kotlin is declared ----------

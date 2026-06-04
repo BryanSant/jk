@@ -28,9 +28,11 @@ import java.util.TreeSet;
  * even if the local stamp is stale (different machine, cleaned output
  * dir, etc.).
  *
- * <p>The stamp file lives inside {@code outputDir} as
- * {@code .jk-stamp}, so wiping the output tree automatically invalidates
- * the stamp — the build will fall through to the next layer rather than
+ * <p>The stamp file lives inside {@code outputDir} — {@link #JAVA_STAMP}
+ * for the Java compile, {@link #KOTLIN_STAMP} for Kotlin — so wiping the
+ * output tree automatically invalidates the stamp, and the two languages
+ * stamp independently into a shared output dir without clobbering each
+ * other. The build will fall through to the next layer rather than
  * trusting a stamp pointing at deleted classes.
  *
  * <p>Stale detection rules:
@@ -53,19 +55,30 @@ import java.util.TreeSet;
  */
 public final class FreshnessStamp {
 
-    /** Sentinel filename stamped into the output directory. */
-    static final String FILE_NAME = ".jk-stamp";
+    /** Sentinel stamped into the output directory by the Java compile. */
+    public static final String JAVA_STAMP = ".jstamp";
+    /** Sentinel stamped into the output directory by the Kotlin compile. */
+    public static final String KOTLIN_STAMP = ".kstamp";
 
     private FreshnessStamp() {}
+
+    /**
+     * True when {@code fileName} is one of our stamp sentinels. Used by
+     * {@link ActionCache} to exclude stamps when snapshotting outputs —
+     * a stamp is build metadata, not an action output.
+     */
+    public static boolean isStampFile(String fileName) {
+        return JAVA_STAMP.equals(fileName) || KOTLIN_STAMP.equals(fileName);
+    }
 
     /**
      * Returns {@code true} when {@code outputDir} carries a stamp whose
      * recorded source + classpath sets match the current inputs and no
      * input has been touched since the stamp was written.
      */
-    public static boolean isFresh(Path outputDir, List<Path> sources, List<Path> classpath)
-            throws IOException {
-        Optional<Stamp> read = read(outputDir);
+    public static boolean isFresh(Path outputDir, String stampName,
+            List<Path> sources, List<Path> classpath) throws IOException {
+        Optional<Stamp> read = read(outputDir, stampName);
         if (read.isEmpty()) return false;
         Stamp stamp = read.get();
 
@@ -93,6 +106,7 @@ public final class FreshnessStamp {
      */
     public static void write(
             Path outputDir,
+            String stampName,
             String taskId,
             String actionKey,
             List<Path> sources,
@@ -109,11 +123,11 @@ public final class FreshnessStamp {
         for (Path cp : sortedAbs(classpath)) {
             sb.append("CP ").append(cp).append('\n');
         }
-        Files.writeString(outputDir.resolve(FILE_NAME), sb.toString(), StandardCharsets.UTF_8);
+        Files.writeString(outputDir.resolve(stampName), sb.toString(), StandardCharsets.UTF_8);
     }
 
-    static Optional<Stamp> read(Path outputDir) throws IOException {
-        Path file = outputDir.resolve(FILE_NAME);
+    static Optional<Stamp> read(Path outputDir, String stampName) throws IOException {
+        Path file = outputDir.resolve(stampName);
         if (!Files.isRegularFile(file)) return Optional.empty();
         String content = Files.readString(file, StandardCharsets.UTF_8);
         String taskId = null;

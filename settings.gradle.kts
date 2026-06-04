@@ -30,6 +30,8 @@ include(
     ":image",
     ":compat",
     ":test-runner",
+    ":kotlin-compiler",
+    ":java-compiler",
     ":runtime",
     ":cli",
 )

@@ -8,7 +8,6 @@ import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.run.PhaseContext;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
-import dev.jkbuild.task.IncrementalCompile;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkVersion;
 
@@ -114,10 +113,12 @@ public final class TestSupport {
                 .build();
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
         boolean useCache = !ActiveConfig.get().noCacheOr(false);
+        java.nio.file.Path stateDir = cacheRoot.resolve("actions")
+                .resolve("incremental-java").resolve(cacheTaskId);
 
         ctx.label(taskId + ": " + sources.size() + " sources");
-        IncrementalCompile.Result r = IncrementalCompile.run(
-                cacheTaskId, request, JkVersion.VERSION, useCache, cas, actionCache);
+        dev.jkbuild.task.JavaIncrementalCompile.Result r = dev.jkbuild.task.JavaIncrementalCompile.run(
+                cacheTaskId, request, JkVersion.VERSION, useCache, cas, actionCache, stateDir);
         for (CompileResult.Diagnostic d : r.diagnostics()) {
             ctx.error("javac", d.render());
         }

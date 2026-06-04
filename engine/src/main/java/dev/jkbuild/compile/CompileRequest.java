@@ -20,15 +20,18 @@ public record CompileRequest(
         Path outputDir,
         int release,
         List<String> extraOptions,
-        Path javaHome) {
+        Path javaHome,
+        List<Path> processorPath) {
 
     public CompileRequest {
         Objects.requireNonNull(sources, "sources");
         Objects.requireNonNull(classpath, "classpath");
         Objects.requireNonNull(extraOptions, "extraOptions");
+        Objects.requireNonNull(processorPath, "processorPath");
         sources = List.copyOf(sources);
         classpath = List.copyOf(classpath);
         extraOptions = List.copyOf(extraOptions);
+        processorPath = List.copyOf(processorPath);
         if (release < 8) {
             throw new IllegalArgumentException("release must be >= 8, got: " + release);
         }
@@ -36,10 +39,16 @@ public record CompileRequest(
         // System.getProperty("java.home") when null.
     }
 
+    /** Back-compat constructor (no annotation-processor path). */
+    public CompileRequest(List<Path> sources, List<Path> classpath, Path outputDir,
+                          int release, List<String> extraOptions, Path javaHome) {
+        this(sources, classpath, outputDir, release, extraOptions, javaHome, List.of());
+    }
+
     /** Back-compat constructor (no explicit javaHome — strategy picks one). */
     public CompileRequest(List<Path> sources, List<Path> classpath, Path outputDir,
                           int release, List<String> extraOptions) {
-        this(sources, classpath, outputDir, release, extraOptions, null);
+        this(sources, classpath, outputDir, release, extraOptions, null, List.of());
     }
 
     public static Builder builder() {
@@ -57,6 +66,7 @@ public record CompileRequest(
         private int release = 25;
         private List<String> extraOptions = List.of();
         private Path javaHome;
+        private List<Path> processorPath = List.of();
 
         public Builder sources(List<Path> sources) { this.sources = sources; return this; }
         public Builder classpath(List<Path> classpath) { this.classpath = classpath; return this; }
@@ -64,9 +74,10 @@ public record CompileRequest(
         public Builder release(int release) { this.release = release; return this; }
         public Builder extraOptions(List<String> extraOptions) { this.extraOptions = extraOptions; return this; }
         public Builder javaHome(Path javaHome) { this.javaHome = javaHome; return this; }
+        public Builder processorPath(List<Path> processorPath) { this.processorPath = processorPath; return this; }
 
         public CompileRequest build() {
-            return new CompileRequest(sources, classpath, outputDir, release, extraOptions, javaHome);
+            return new CompileRequest(sources, classpath, outputDir, release, extraOptions, javaHome, processorPath);
         }
     }
 }

@@ -45,6 +45,32 @@ tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.add("-Aproject=dev.jkbuild.cli")
 }
 
+// Tests that fork a child-JVM worker — the jk-kotlin-compiler (Kotlin compiles)
+// and jk-test-runner (`jk test`) — locate it via a system-property override
+// until it ships to Maven Central. Resolve each worker jar and hand its path to
+// the test JVM so the tests are self-contained (no `installLocalCas` needed).
+val kotlinWorkerJar by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+val testRunnerJar by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies {
+    kotlinWorkerJar(project(":kotlin-compiler"))
+    testRunnerJar(project(":test-runner"))
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(kotlinWorkerJar, testRunnerJar)
+    doFirst {
+        systemProperty("jk.kotlin.worker.jar", kotlinWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.test.runner.jar", testRunnerJar.singleFile.absolutePath)
+    }
+}
+
 application {
     mainClass.set("dev.jkbuild.cli.Jk")
     applicationName = "jk"

@@ -84,13 +84,15 @@ class CasPrewriterTest {
         Path classes = tempDir.resolve("classes");
         Files.createDirectories(classes);
         Cas cas = new Cas(tempDir.resolve("cas"));
-        // Simulate a left-over freshness stamp from a previous build.
-        Files.writeString(classes.resolve(".jk-stamp"), "stamp body");
+        // Simulate left-over freshness stamps from a previous build.
+        Files.writeString(classes.resolve(FreshnessStamp.JAVA_STAMP), "stamp body");
+        Files.writeString(classes.resolve(FreshnessStamp.KOTLIN_STAMP), "stamp body");
 
         CasPrewriter prewriter = CasPrewriter.watching(cas, classes);
         Map<String, String> outputs = prewriter.finish();
 
-        assertThat(outputs).doesNotContainKey(".jk-stamp");
+        assertThat(outputs).doesNotContainKey(FreshnessStamp.JAVA_STAMP);
+        assertThat(outputs).doesNotContainKey(FreshnessStamp.KOTLIN_STAMP);
     }
 
     @Test

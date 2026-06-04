@@ -14,6 +14,7 @@ jgit = "7.6.0.202603022253-r"
 jline = "4.1.2"
 jib-core = "0.28.1"
 junit = "6.1.0"
+kotlin-bta = "2.4.0"
 maven-artifact = "3.9.16"
 picocli = "4.7.7"
 sigstore = "2.1.0"
@@ -35,6 +36,7 @@ jgit                   = { module = "org.eclipse.jgit:org.eclipse.jgit",        
 # build pipeline / bytecode
 asm                    = { module = "org.ow2.asm:asm",                              version.ref = "asm" }
 asm-tree               = { module = "org.ow2.asm:asm-tree",                         version.ref = "asm" }
+asm-commons            = { module = "org.ow2.asm:asm-commons",                      version.ref = "asm" }
 
 # archive formats (tar, tar.gz, xz, future OCI layer reads)
 commons-compress       = { module = "org.apache.commons:commons-compress",          version.ref = "commons-compress" }
@@ -48,6 +50,9 @@ spdx-java-library      = { module = "org.spdx:java-spdx-library",               
 
 # OCI image
 jib-core               = { module = "com.google.cloud.tools:jib-core",              version.ref = "jib-core" }
+
+# Kotlin compile worker (Build Tools API — compile-time only; impl resolved at runtime)
+kotlin-build-tools-api = { module = "org.jetbrains.kotlin:kotlin-build-tools-api",  version.ref = "kotlin-bta" }
 
 # CLI
 picocli                = { module = "info.picocli:picocli",                         version.ref = "picocli" }

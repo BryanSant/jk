@@ -29,7 +29,6 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
-import dev.jkbuild.task.IncrementalCompile;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;

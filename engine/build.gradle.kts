@@ -13,6 +13,9 @@ dependencies {
     implementation(project(":io"))
     implementation(libs.asm)
     implementation(libs.asm.tree)
+    // ClassRemapper drives a comprehensive type-reference traversal for the
+    // incremental Java compiler's dependency extraction.
+    implementation(libs.asm.commons)
     // JUnit Platform is no longer on engine's runtime classpath — `jk test`
     // forks a child JVM that runs jk-test-runner with the JUnit jars
     // sourced from the user's CAS (injected via LockOrchestrator). All
@@ -75,4 +78,21 @@ tasks.named("processResources") {
 // task→task data flow. Wire it explicitly.
 tasks.named("sourcesJar") {
     dependsOn(writeRunnerSha)
+}
+
+// WorkerJavacTest launches the jk-java-compiler worker as a subprocess; hand its
+// jar to the test JVM via the same property the runtime locator honours.
+val javaCompilerWorkerJar by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies {
+    javaCompilerWorkerJar(project(":java-compiler"))
+}
+tasks.withType<Test>().configureEach {
+    dependsOn(javaCompilerWorkerJar)
+    doFirst {
+        systemProperty("jk.java.worker.jar", javaCompilerWorkerJar.singleFile.absolutePath)
+    }
 }

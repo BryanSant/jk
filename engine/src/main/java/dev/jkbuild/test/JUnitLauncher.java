@@ -58,6 +58,9 @@ public final class JUnitLauncher {
      */
     private static final String RUNNER_SHA_RESOURCE = "/META-INF/jk-test-runner-sha256.txt";
 
+    /** Override for the jk-test-runner jar path (tests, dev). Takes precedence over the CAS lookup. */
+    static final String RUNNER_JAR_PROPERTY = "jk.test.runner.jar";
+
     private static final ObjectMapper JSON = JsonMapper.builder().build();
 
     /**
@@ -307,6 +310,16 @@ public final class JUnitLauncher {
      * spells out the exact destination path the user needs to populate.
      */
     private static Path locateRunner(Path cacheRoot) throws IOException {
+        // Override (tests / dev) wins over the CAS lookup, mirroring the Kotlin
+        // worker's jk.kotlin.worker.jar — lets a test JVM point at a freshly-built
+        // runner without side-loading it into an ephemeral cache.
+        String override = System.getProperty(RUNNER_JAR_PROPERTY);
+        if (override != null && !override.isBlank()) {
+            Path jar = Path.of(override);
+            if (Files.isRegularFile(jar)) return jar;
+            throw new IOException(RUNNER_JAR_PROPERTY + " is set to '" + override
+                    + "' but no file exists there.");
+        }
         String expectedHash = readExpectedHash();
         Cas cas = new Cas(cacheRoot);
         Path target = cas.pathFor(expectedHash);

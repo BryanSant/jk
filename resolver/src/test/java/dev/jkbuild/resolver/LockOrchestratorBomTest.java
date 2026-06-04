@@ -169,6 +169,30 @@ class LockOrchestratorBomTest {
         assertThat(widget.pinnedBy()).isEqualTo("org.example:the-bom:1.0");
     }
 
+    @Test
+    void processor_scope_dependency_is_resolved_and_tagged_processor(@TempDir Path tempDir) throws Exception {
+        serveMetadata("/com/foo/proc/maven-metadata.xml", "com.foo", "proc", List.of("1.0"));
+        servePom("com.foo", "proc", "1.0", """
+                <project>
+                  <groupId>com.foo</groupId>
+                  <artifactId>proc</artifactId>
+                  <version>1.0</version>
+                </project>
+                """);
+
+        JkBuild project = jkBuildWithDeps(Map.of(
+                Scope.PROCESSOR, List.of(
+                        new Dependency("com.foo:proc", VersionSelector.parseFloating("1.0")))));
+
+        LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
+        Lockfile lock = orchestrator.lock(project, "test");
+
+        Lockfile.Package proc = lock.packages().stream()
+                .filter(p -> p.name().equals("com.foo:proc"))
+                .findFirst().orElseThrow();   // would be absent if PROCESSOR were dropped in resolution
+        assertThat(proc.scopes()).contains(Scope.PROCESSOR);
+    }
+
     private RepoGroup repoGroup(Path tempDir) {
         Cas cas = new Cas(tempDir.resolve("cache"));
         return RepoGroup.of(new MavenRepo("local", base, new Http(), cas));

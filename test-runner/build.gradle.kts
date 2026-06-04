@@ -5,6 +5,22 @@ import java.security.MessageDigest
 
 plugins {
     id("jk.java-conventions")
+    `maven-publish`
+}
+
+// Published to the local Maven repo (`./gradlew publishToMavenLocal`) so `jk sync`
+// can pull the runner into the CAS. Coordinates + version must match
+// JkWorkerSync.GROUP / artifactId and dev.jkbuild.util.JkVersion.VERSION.
+group = "dev.jkbuild"
+version = "0.1.0-SNAPSHOT"
+
+publishing {
+    publications {
+        create<MavenPublication>("worker") {
+            artifactId = "jk-test-runner"
+            from(components["java"])
+        }
+    }
 }
 
 description = "jk-test-runner: child-JVM entry point that drives JUnit Platform and " +

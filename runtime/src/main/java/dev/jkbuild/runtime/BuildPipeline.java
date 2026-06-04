@@ -8,9 +8,7 @@ import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
 import dev.jkbuild.compile.JarPackager;
-import dev.jkbuild.compile.KotlincDriver;
 import dev.jkbuild.compile.KotlincRequest;
-import dev.jkbuild.compile.KotlincResult;
 import dev.jkbuild.compile.ShadowPackager;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
@@ -71,11 +69,14 @@ public final class BuildPipeline {
     @SuppressWarnings("rawtypes")
     public static final GoalKey<List> JAVAC_ARGS      = GoalKey.of("javac-args",     List.class);
     @SuppressWarnings("rawtypes")
+    public static final GoalKey<List> PROCESSOR_CP    = GoalKey.of("processor-cp",   List.class);
+    @SuppressWarnings("rawtypes")
     public static final GoalKey<List> COMPILE_TEST_CP = GoalKey.of("cp-test",        List.class);
     @SuppressWarnings("rawtypes")
     public static final GoalKey<List> TEST_RUNTIME_CP = GoalKey.of("cp-runtime",     List.class);
     public static final GoalKey<String>    ACTION_KEY    = GoalKey.of("action-key",     String.class);
     public static final GoalKey<String>    BUILD_OUTCOME = GoalKey.of("build-outcome",  String.class);
+    public static final GoalKey<String>    KOTLIN_OUTCOME = GoalKey.of("kotlin-outcome", String.class);
     public static final GoalKey<Path>      JAR_PATH      = GoalKey.of("jar-path",       Path.class);
     public static final GoalKey<Path>      MAIN_CLASSES  = GoalKey.of("main-classes",   Path.class);
     public static final GoalKey<Path>      TEST_CLASSES  = GoalKey.of("test-classes",   Path.class);
@@ -123,9 +124,20 @@ public final class BuildPipeline {
         } catch (Exception ignored) {
             // Unparseable/missing jk.toml — parse-build will surface the real error.
         }
-        // The terminal main-compile phase downstream steps (resources, test,
-        // package) must wait on — Kotlin runs after Java when both are present.
-        String mainCompile = useKotlin ? "compile-kotlin" : "compile-java";
+        // Effectively-final copies for the phase lambdas (useJava is reassigned above).
+        final boolean mixedWithJava = useJava;
+        // Mixed module: Kotlin compiles first (it reads Java *declarations* from
+        // source; the Kotlin compiler never emits Java bytecode), then javac
+        // against the Kotlin output, then `assemble-classes` merges both into the
+        // shared classes dir — so Java↔Kotlin references resolve in both
+        // directions. Each compiler owns a private output dir; they can't share
+        // one, because javac's content-hash action cache snapshots its whole
+        // output dir and would cache (then on restore, clobber) the other's
+        // classes. The terminal phase downstream steps wait on is the assembler
+        // when mixed, else whichever single compiler ran.
+        final boolean mixed = useJava && useKotlin;
+        String mainCompile = mixed ? "assemble-classes"
+                : (useKotlin ? "compile-kotlin" : "compile-java");
 
         // ---- parse-build ------------------------------------------------
         Phase parseBuild = Phase.builder("parse-build")
@@ -182,6 +194,11 @@ public final class BuildPipeline {
                     Profile profile = CompileSupport.resolveProfile(project.profiles(), in.profileName());
                     ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
                     ctx.put(CLASSPATH, mainCp);
+
+                    // Annotation processors live in their own scope (kept off the
+                    // compile classpath); javac discovers them via -processorpath.
+                    ctx.put(PROCESSOR_CP,
+                            new ArrayList<>(resolver.classpathFor(lock, Set.of(Scope.PROCESSOR))));
 
                     WorkspaceClasspath.Result testSiblings =
                             WorkspaceClasspath.resolve(in.dir(), project, Set.of(Scope.MAIN, Scope.TEST));
@@ -260,23 +277,44 @@ public final class BuildPipeline {
         Phase compileJava = Phase.builder("compile-java")
                 .label("Compiling")
                 .kind(PhaseKind.CPU)
-                .requires("parse-build", "sync-deps", "ensure-jdk")
+                .requires(mixed
+                        ? new String[]{"parse-build", "sync-deps", "ensure-jdk", "compile-kotlin"}
+                        : new String[]{"parse-build", "sync-deps", "ensure-jdk"})
                 .scope(0)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
+                    // In a mixed module javac writes to a private dir (the
+                    // assembler merges it into classes); its action cache snapshots
+                    // this dir, so it must never hold Kotlin's output.
+                    Path javaOut = mixed
+                            ? classes.resolveSibling(classes.getFileName() + "-java") : classes;
                     List<Path> sources = javaSources(ctx);
                     if (sources.isEmpty()) {
                         ctx.label("no Java sources");
-                        Files.createDirectories(classes);
+                        Files.createDirectories(javaOut);
                         ctx.put(BUILD_OUTCOME, "no-sources");
                         return;
                     }
                     ctx.updateScope(sources.size());
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
+                    if (mixed) {
+                        // See Kotlin's output so Java can reference Kotlin types.
+                        classpath = new ArrayList<>(classpath);
+                        classpath.add(classes.resolveSibling(classes.getFileName() + "-kotlin"));
+                    }
+                    @SuppressWarnings("unchecked")
+                    List<Path> processorCp = (List<Path>) ctx.require(PROCESSOR_CP);
                     boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    // Fold the processor path into the freshness inputs so a processor
+                    // bump busts the stamp (it isn't on the compile classpath).
+                    List<Path> stampInputs = classpath;
+                    if (!processorCp.isEmpty()) {
+                        stampInputs = new ArrayList<>(classpath);
+                        stampInputs.addAll(processorCp);
+                    }
                     if (!noCache && dev.jkbuild.task.FreshnessStamp.isFresh(
-                            classes, sources, classpath)) {
+                            javaOut, dev.jkbuild.task.FreshnessStamp.JAVA_STAMP, sources, stampInputs)) {
                         ctx.label("up to date");
                         ctx.put(BUILD_OUTCOME, "up-to-date");
                         ctx.progress(sources.size());
@@ -286,14 +324,30 @@ public final class BuildPipeline {
                     List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
                     CompileRequest request = CompileRequest.builder()
                             .sources(sources).classpath(classpath)
-                            .outputDir(classes).release(ctx.require(RELEASE))
+                            .outputDir(javaOut).release(ctx.require(RELEASE))
                             .extraOptions(javacArgs).javaHome(ctx.require(JAVA_HOME))
+                            .processorPath(processorCp)
                             .build();
-                    String taskId = ActionKey.qualifiedTaskId("compile-main", classes);
+                    String taskId = ActionKey.qualifiedTaskId("compile-main", javaOut);
+                    Path javaStateDir = in.cache().resolve("actions")
+                            .resolve("incremental-java").resolve(taskId);
+                    // With processors declared, hand the incremental compiler an AP setup:
+                    // a located worker jar (null-safe → plain javac fallback) + a stable
+                    // generated-sources dir. The engine only routes through the worker once
+                    // it has *detected* source-generating processors (the orphan signal), so
+                    // bytecode-only processors (e.g. Lombok) never need the worker.
+                    dev.jkbuild.task.JavaIncrementalCompile.ApSetup ap = null;
+                    if (!processorCp.isEmpty()) {
+                        Path genDir = ctx.require(LAYOUT).generatedSourcesDir("annotations");
+                        Files.createDirectories(genDir);
+                        ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(
+                                JavaWorkerSetup.locateWorkerJar(cas), genDir);
+                    }
                     ctx.label("compiling " + sources.size() + " sources");
-                    dev.jkbuild.task.IncrementalCompile.Result r =
-                            dev.jkbuild.task.IncrementalCompile.run(
-                                    taskId, request, dev.jkbuild.util.JkVersion.VERSION, !noCache, cas, actionCache);
+                    dev.jkbuild.task.JavaIncrementalCompile.Result r =
+                            dev.jkbuild.task.JavaIncrementalCompile.run(
+                                    taskId, request, dev.jkbuild.util.JkVersion.VERSION,
+                                    !noCache, cas, actionCache, javaStateDir, ap);
                     ctx.put(ACTION_KEY, r.actionKey());
                     for (CompileResult.Diagnostic d : r.diagnostics())
                         ctx.error("javac", d.render());
@@ -310,34 +364,99 @@ public final class BuildPipeline {
         Phase compileKotlin = Phase.builder("compile-kotlin")
                 .label("Kotlin")
                 .kind(PhaseKind.CPU)
-                .requires(useJava
-                        ? new String[]{"compile-java"}
-                        : new String[]{"parse-build", "sync-deps", "ensure-jdk"})
+                // Kotlin compiles first (reads Java declarations from source), so it
+                // only needs the base phases — javac runs after it in a mixed module.
+                .requires("parse-build", "sync-deps", "ensure-jdk")
                 .scope(0)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Files.createDirectories(classes);   // compile-java may be skipped
                     List<Path> ktSources = kotlinSources(ctx);
-                    if (ktSources.isEmpty()) { ctx.label("no Kotlin sources"); return; }
+                    if (ktSources.isEmpty()) {
+                        ctx.label("no Kotlin sources");
+                        ctx.put(KOTLIN_OUTCOME, "no-sources");
+                        return;
+                    }
                     ctx.updateScope(ktSources.size());
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
-                    List<Path> kotlincCp = new ArrayList<>(classpath);
-                    kotlincCp.add(classes);
+                    // Freshness inputs: Kotlin sources plus — in a mixed module —
+                    // the Java sources, since kotlinc compiles against the Java
+                    // output (kotlincCp includes `classes`) and a Java edit can
+                    // make our .class files stale. Unlike compile-java there is
+                    // no content-hash action cache behind this stamp, so the
+                    // check must err conservative: any Java change forces a
+                    // Kotlin recompile. The output dir itself is deliberately not
+                    // an input (directory mtimes don't track in-place .class
+                    // rewrites, and copy-resources churns it).
+                    List<Path> freshInputs = new ArrayList<>(ktSources);
+                    if (mixedWithJava) freshInputs.addAll(javaSources(ctx));
+                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    if (!noCache && dev.jkbuild.task.FreshnessStamp.isFresh(
+                            classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP, freshInputs, classpath)) {
+                        ctx.label("up to date");
+                        ctx.put(KOTLIN_OUTCOME, "up-to-date");
+                        ctx.progress(ktSources.size());
+                        return;
+                    }
                     ctx.label("compiling " + ktSources.size() + " Kotlin sources");
-                    Path kotlinHome = CompileToolchain.resolveKotlinHome(in.cache(),
-                            CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT)),
-                            ctx::output);
-                    KotlincResult ktResult = new KotlincDriver().compile(
-                            KotlincRequest.builder()
-                                    .sources(ktSources).classpath(kotlincCp)
-                                    .outputDir(classes)
-                                    .jvmTarget(CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)))
-                                    .kotlinHome(kotlinHome).build());
-                    if (!ktResult.success()) {
-                        ctx.error("kotlinc", ktResult.output());
+                    String kotlinVersion = CompileToolchain.kotlinVersionFor(
+                            ctx.require(LOCKFILE), ctx.require(PROJECT));
+                    KotlinWorkerSetup.Prepared kt;
+                    try {
+                        dev.jkbuild.repo.RepoGroup repos =
+                                RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
+                        kt = KotlinWorkerSetup.prepare(repos, cas, kotlinVersion);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("interrupted resolving the Kotlin compiler", e);
+                    }
+                    // Compilation classpath: project deps + the version-matched
+                    // stdlib (the in-process worker has no kotlin-home to
+                    // auto-supply it; paired with -no-stdlib).
+                    List<Path> compileCp = new ArrayList<>(classpath);
+                    compileCp.add(kt.stdlib());
+                    List<String> ktArgs = new ArrayList<>();
+                    ktArgs.add("-no-stdlib");
+                    if (mixedWithJava) {
+                        // Mixed module: Kotlin runs before javac, so it reads the
+                        // Java declarations from source (for analysis only — it
+                        // emits no Java bytecode; javac does that next).
+                        ktArgs.add("-Xjava-source-roots="
+                                + in.dir().resolve("src/main/java").toAbsolutePath());
+                    }
+                    Path workingDir = in.cache().resolve("actions").resolve("incremental-kotlin")
+                            .resolve(ActionKey.qualifiedTaskId("compile-kotlin", classes));
+                    // Kotlin compiles into its own dir, then we merge into the
+                    // shared classes dir. The incremental compiler owns its output
+                    // dir and prunes files it didn't produce — so it can't share a
+                    // dir with javac's output (it would delete the .class files).
+                    Path ktOut = classes.resolveSibling(classes.getFileName() + "-kotlin");
+                    Files.createDirectories(ktOut);
+                    KotlincRequest req = KotlincRequest.builder()
+                            .sources(ktSources).classpath(compileCp)
+                            .outputDir(ktOut)
+                            .jvmTarget(CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)))
+                            .workerClasspath(kt.workerClasspath())
+                            .javaHome(ctx.require(JAVA_HOME))
+                            .workingDir(workingDir)
+                            .snapshotDir(in.cache().resolve("kotlin-cp-snapshots"))
+                            .extraArgs(ktArgs)
+                            .build();
+                    // Tier 2: action-cache fast path (restore from CAS on an exact
+                    // input hit), else the worker compiles incrementally (tier 3).
+                    String taskId = ActionKey.qualifiedTaskId("compile-kotlin", classes);
+                    dev.jkbuild.task.KotlinCompile.Result kr = dev.jkbuild.task.KotlinCompile.run(
+                            taskId, req, dev.jkbuild.util.JkVersion.VERSION, !noCache, cas, actionCache);
+                    if (!kr.success()) {
+                        ctx.error("kotlinc", kr.output());
                         throw new RuntimeException("kotlinc reported errors");
                     }
+                    if (kr.cacheHit()) ctx.label("cache hit " + kr.actionKey().substring(0, 8));
+                    // Kotlin-only: publish straight into the classes dir. Mixed:
+                    // leave it in ktOut for `assemble-classes` to merge after javac.
+                    if (!mixedWithJava) copyResources(ktOut, classes);
+                    ctx.put(KOTLIN_OUTCOME, "compiled");
                     ctx.progress(ktSources.size());
                 })
                 .build();
@@ -470,13 +589,75 @@ public final class BuildPipeline {
                     }
                     ctx.label("write freshness stamp");
                     Path classes = ctx.require(MAIN_CLASSES);
+                    Path javaOut = mixed
+                            ? classes.resolveSibling(classes.getFileName() + "-java") : classes;
                     @SuppressWarnings("unchecked")
                     List<Path> sources = (List<Path>) ctx.require(JAVA_SOURCES);
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
+                    if (mixed) {   // match compile-java's freshness inputs
+                        classpath = new ArrayList<>(classpath);
+                        classpath.add(classes.resolveSibling(classes.getFileName() + "-kotlin"));
+                    }
                     String actionKey = ctx.get(ACTION_KEY).orElse("");
                     dev.jkbuild.task.FreshnessStamp.write(
-                            classes, "compile-main", actionKey, sources, classpath);
+                            javaOut, dev.jkbuild.task.FreshnessStamp.JAVA_STAMP,
+                            "compile-main", actionKey, sources, classpath);
+                    ctx.progress(1);
+                })
+                .build();
+
+        // ---- write-stamp-kotlin -----------------------------------------
+        // Kotlin's freshness companion (cf. write-stamp for Java). Mirrors the
+        // input set compile-kotlin checked: Kotlin sources, plus Java sources in
+        // a mixed module. No action-cache key exists yet — the direct kotlinc
+        // path leaves it empty until incremental Kotlin lands.
+        Phase writeStampKotlin = Phase.builder("write-stamp-kotlin")
+                .requires("compile-kotlin")
+                .scope(1)
+                .execute(ctx -> {
+                    String outcome = ctx.get(KOTLIN_OUTCOME).orElse("");
+                    if ("up-to-date".equals(outcome) || "no-sources".equals(outcome)) {
+                        ctx.label("stamp unchanged");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("write freshness stamp");
+                    Path classes = ctx.require(MAIN_CLASSES);
+                    @SuppressWarnings("unchecked")
+                    List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
+                    List<Path> freshInputs = new ArrayList<>(kotlinSources(ctx));
+                    if (mixedWithJava) freshInputs.addAll(javaSources(ctx));
+                    dev.jkbuild.task.FreshnessStamp.write(
+                            classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP,
+                            "compile-kotlin", "", freshInputs, classpath);
+                    ctx.progress(1);
+                })
+                .build();
+
+        // ---- assemble-classes (mixed modules only) ----------------------
+        // Merge the per-language output dirs into the shared classes dir that
+        // packaging, tests, and the run/native tails all read.
+        Phase assembleClasses = Phase.builder("assemble-classes")
+                .label("Assembling")
+                .kind(PhaseKind.CPU)
+                .requires("compile-java", "compile-kotlin")
+                .scope(1)
+                .execute(ctx -> {
+                    Path classes = ctx.require(MAIN_CLASSES);
+                    String jOutcome = ctx.get(BUILD_OUTCOME).orElse("");
+                    String kOutcome = ctx.get(KOTLIN_OUTCOME).orElse("");
+                    boolean settled = (jOutcome.equals("up-to-date") || jOutcome.equals("no-sources"))
+                            && (kOutcome.equals("up-to-date") || kOutcome.equals("no-sources"));
+                    if (settled) {   // both unchanged → classes already holds both
+                        ctx.label("up to date");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("assemble classes");
+                    Files.createDirectories(classes);
+                    copyResources(classes.resolveSibling(classes.getFileName() + "-java"), classes);
+                    copyResources(classes.resolveSibling(classes.getFileName() + "-kotlin"), classes);
                     ctx.progress(1);
                 })
                 .build();
@@ -491,6 +672,9 @@ public final class BuildPipeline {
         if (useKotlin) {
             b.addPhase(compileKotlin);
         }
+        if (mixed) {
+            b.addPhase(assembleClasses);
+        }
         b.addPhase(copyResources);
         if (!in.skipTests()) {
             b.addPhase(compileTest).addPhase(runTests);
@@ -499,6 +683,10 @@ public final class BuildPipeline {
         // write-stamp is the Java-compile freshness companion; only when Java ran.
         if (useJava) {
             b.addPhase(writeStamp);
+        }
+        // write-stamp-kotlin is the Kotlin-compile freshness companion.
+        if (useKotlin) {
+            b.addPhase(writeStampKotlin);
         }
         return b;
     }

@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.KotlinWorkerSetup;
 
 import dev.jkbuild.cli.GlobalOptions;
 
@@ -90,7 +91,9 @@ final class ScriptRunner {
     // Cross-phase keys (mode-specific, but all live in the same record).
     private static final GoalKey<ScriptHeader> HEADER = GoalKey.of("script-header", ScriptHeader.class);
     private static final GoalKey<Path> CLASSES_DIR = GoalKey.of("classes-dir", Path.class);
-    private static final GoalKey<Path> KOTLIN_HOME = GoalKey.of("kotlin-home", Path.class);
+    @SuppressWarnings("rawtypes")
+    private static final GoalKey<List> WORKER_CP = GoalKey.of("kotlin-worker-cp", List.class);
+    private static final GoalKey<Path> KT_STDLIB = GoalKey.of("kotlin-stdlib", Path.class);
     private static final GoalKey<Path> KOTLINC_BIN = GoalKey.of("kotlinc-bin", Path.class);
     private static final GoalKey<String> MAIN_CLASS = GoalKey.of("main-class", String.class);
     @SuppressWarnings("rawtypes")
@@ -279,14 +282,20 @@ final class ScriptRunner {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label(header.kotlinVersion() != null
-                            ? "provision kotlinc " + header.kotlinVersion()
-                            : "provision kotlinc");
+                            ? "resolve kotlin compiler " + header.kotlinVersion()
+                            : "resolve kotlin compiler");
+                    Cas cas = new Cas(paths.cacheDir);
+                    RepoGroup repos = buildRepos(header, new Http(), cas);
                     try {
-                        Path kotlinHome = CompileToolchain.resolveKotlinHome(
-                                paths.cacheDir, header.kotlinVersion(), ctx::output);
-                        ctx.put(KOTLIN_HOME, kotlinHome);
+                        KotlinWorkerSetup.Prepared prep =
+                                KotlinWorkerSetup.prepare(repos, cas, header.kotlinVersion());
+                        ctx.put(WORKER_CP, prep.workerClasspath());
+                        ctx.put(KT_STDLIB, prep.stdlib());
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("interrupted resolving the Kotlin compiler", e);
                     } catch (RuntimeException e) {
-                        ctx.error("kotlinc", e.getMessage());
+                        ctx.error("kotlin", e.getMessage());
                         throw e;
                     }
                     ctx.progress(1);
@@ -312,12 +321,26 @@ final class ScriptRunner {
                     List<Path> depsClasspath = (List<Path>) ctx.require(CLASSPATH);
                     int jvmTarget = header.release() != null
                             ? header.release() : Runtime.version().feature();
+                    // Compilation classpath: script deps + the version-matched
+                    // stdlib (the in-process worker has no kotlin-home to auto-add
+                    // it; paired with -no-stdlib).
+                    List<Path> compileCp = new ArrayList<>(depsClasspath);
+                    compileCp.add(ctx.require(KT_STDLIB));
+                    Path workingDir = paths.cacheDir.resolve("actions")
+                            .resolve("incremental-kotlin")
+                            .resolve(dev.jkbuild.task.ActionKey.qualifiedTaskId("script", classesDir));
+                    @SuppressWarnings("unchecked")
+                    List<Path> workerCp = (List<Path>) ctx.require(WORKER_CP);
                     KotlincRequest req = KotlincRequest.builder()
                             .sources(List.of(script.toAbsolutePath()))
-                            .classpath(depsClasspath)
+                            .classpath(compileCp)
                             .outputDir(classesDir)
                             .jvmTarget(CompileCommand.kotlinJvmTarget(jvmTarget))
-                            .kotlinHome(ctx.require(KOTLIN_HOME))
+                            .workerClasspath(workerCp)
+                            .javaHome(CompileToolchain.resolveJavaHome(
+                                    script.toAbsolutePath().getParent()))
+                            .workingDir(workingDir)
+                            .extraArgs(List.of("-no-stdlib"))
                             .build();
                     KotlincResult result = new KotlincDriver().compile(req);
                     if (!result.success()) {
@@ -340,12 +363,11 @@ final class ScriptRunner {
 
         @SuppressWarnings("unchecked")
         List<Path> depsClasspath = (List<Path>) goal.get(CLASSPATH).orElseThrow();
-        Path kotlinHome = goal.get(KOTLIN_HOME).orElseThrow();
+        Path stdlib = goal.get(KT_STDLIB).orElseThrow();
 
         // At runtime, the Kotlin stdlib must be on the classpath.
         List<Path> runtime = new ArrayList<>(depsClasspath);
-        Path stdlib = kotlinHome.resolve("lib").resolve("kotlin-stdlib.jar");
-        if (Files.exists(stdlib)) runtime.add(stdlib);
+        runtime.add(stdlib);
 
         return execJava(paths.classesDir, runtime, header.javaOptions(), mainClass, args);
     }

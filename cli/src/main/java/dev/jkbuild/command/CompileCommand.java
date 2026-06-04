@@ -2,6 +2,9 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.KotlinWorkerSetup;
+import dev.jkbuild.runtime.RepoGroupBuilder;
+import dev.jkbuild.repo.RepoGroup;
 
 import dev.jkbuild.cli.GlobalOptions;
 
@@ -130,7 +133,10 @@ public final class CompileCommand implements Callable<Integer> {
 
         Phase compileJava = Phase.builder("compile-java")
                 .kind(PhaseKind.CPU)
-                .requires("resolve-classpath")
+                // Java compiles after Kotlin (which already wrote into scratch), so
+                // Java can reference Kotlin types — javac gets scratch on its
+                // classpath below.
+                .requires("compile-kotlin")
                 .scope(1)
                 .execute(ctx -> {
                     @SuppressWarnings("unchecked")
@@ -146,12 +152,15 @@ public final class CompileCommand implements Callable<Integer> {
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
                     Path scratch = ctx.require(SCRATCH);
+                    // See Kotlin's output (compiled first into scratch).
+                    List<Path> javacCp = new ArrayList<>(classpath);
+                    javacCp.add(scratch);
                     Profile profile = resolveProfile(project.profiles(), profileName);
                     int release = project.project().javaRelease();
                     Path javaHome = CompileToolchain.resolveJavaHome(dir);
                     CompileRequest request = CompileRequest.builder()
                             .sources(javaSources)
-                            .classpath(classpath)
+                            .classpath(javacCp)
                             .outputDir(scratch)
                             .release(release)
                             .extraOptions(profile == null ? List.of() : profile.javacArgs())
@@ -171,7 +180,9 @@ public final class CompileCommand implements Callable<Integer> {
 
         Phase compileKotlin = Phase.builder("compile-kotlin")
                 .kind(PhaseKind.CPU)
-                .requires("compile-java")
+                // Kotlin compiles first (reads Java declarations from source); javac
+                // then runs against Kotlin's output.
+                .requires("resolve-classpath")
                 .scope(1)
                 .execute(ctx -> {
                     @SuppressWarnings("unchecked")
@@ -188,17 +199,39 @@ public final class CompileCommand implements Callable<Integer> {
                     Path scratch = ctx.require(SCRATCH);
                     JkBuild project = ctx.require(PROJECT);
                     int release = project.project().javaRelease();
-                    List<Path> kotlincCp = new ArrayList<>(classpath);
-                    kotlincCp.add(scratch);
-                    Path kotlinHome = CompileToolchain.resolveKotlinHome(cache,
-                            CompileToolchain.kotlinVersionFor(ctx.require(LOCK), project), ctx::output);
+                    Cas cas = new Cas(cache);
+                    KotlinWorkerSetup.Prepared kt;
+                    try {
+                        RepoGroup repos = RepoGroupBuilder.buildFor(project, null, cas);
+                        kt = KotlinWorkerSetup.prepare(repos, cas,
+                                CompileToolchain.kotlinVersionFor(ctx.require(LOCK), project));
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("interrupted resolving the Kotlin compiler", e);
+                    }
+                    // Compile classpath: deps + version-matched stdlib. Java
+                    // symbols come via -Xjava-source-roots (the shared output dir
+                    // can't serve them — the incremental compiler excludes it).
+                    List<Path> compileCp = new ArrayList<>(classpath);
+                    compileCp.add(kt.stdlib());
+                    List<String> ktArgs = new ArrayList<>();
+                    ktArgs.add("-no-stdlib");
+                    Path javaRoot = dir.resolve("src/main/java");
+                    if (java.nio.file.Files.isDirectory(javaRoot)) {
+                        ktArgs.add("-Xjava-source-roots=" + javaRoot.toAbsolutePath());
+                    }
+                    Path workingDir = cache.resolve("actions").resolve("incremental-kotlin")
+                            .resolve(dev.jkbuild.task.ActionKey.qualifiedTaskId("compile", scratch));
                     KotlincResult result = new KotlincDriver().compile(
                             KotlincRequest.builder()
                                     .sources(ktSources)
-                                    .classpath(kotlincCp)
+                                    .classpath(compileCp)
                                     .outputDir(scratch)
                                     .jvmTarget(kotlinJvmTarget(release))
-                                    .kotlinHome(kotlinHome)
+                                    .workerClasspath(kt.workerClasspath())
+                                    .javaHome(CompileToolchain.resolveJavaHome(dir))
+                                    .workingDir(workingDir)
+                                    .extraArgs(ktArgs)
                                     .build());
                     if (!result.success()) {
                         System.err.print(result.output());

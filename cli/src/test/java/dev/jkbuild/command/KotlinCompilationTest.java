@@ -63,6 +63,61 @@ class KotlinCompilationTest {
     }
 
     @Test
+    void second_build_skips_kotlin_compile_when_nothing_changed(@TempDir Path tempDir) throws IOException {
+        run("new", "--name", "widget", "--lang", "kotlin", tempDir.toString());
+        Path src = tempDir.resolve("src/main/kotlin/example/Hello.kt");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package example
+
+                fun greet(): String = "hi"
+                """);
+        Path cache = tempDir.resolve("cache");
+
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        Path ktClass = tempDir.resolve("build/classes/main/example/HelloKt.class");
+        Path stamp = tempDir.resolve("build/classes/main/.kstamp");
+        assertThat(stamp).exists();                  // freshness stamp written
+        assertThat(ktClass).exists();
+        long firstMtime = Files.getLastModifiedTime(ktClass).toMillis();
+
+        // A no-change rebuild must hit the freshness stamp and NOT re-invoke
+        // kotlinc — the output .class is left exactly as the first build wrote it.
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(Files.getLastModifiedTime(ktClass).toMillis()).isEqualTo(firstMtime);
+    }
+
+    @Test
+    void editing_a_kotlin_source_recompiles(@TempDir Path tempDir) throws IOException {
+        run("new", "--name", "widget", "--lang", "kotlin", tempDir.toString());
+        Path src = tempDir.resolve("src/main/kotlin/example/Hello.kt");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, """
+                package example
+
+                fun greet(): String = "hi"
+                """);
+        Path cache = tempDir.resolve("cache");
+
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        Path ktClass = tempDir.resolve("build/classes/main/example/HelloKt.class");
+        long firstMtime = Files.getLastModifiedTime(ktClass).toMillis();
+
+        // Edit the source forward in time so its mtime exceeds the stamp; the
+        // next build must fall through the freshness check and recompile.
+        Files.setLastModifiedTime(src, java.nio.file.attribute.FileTime.fromMillis(firstMtime + 5_000));
+        Files.writeString(src, """
+                package example
+
+                fun greet(): String = "hi, again"
+                """);
+        Files.setLastModifiedTime(src, java.nio.file.attribute.FileTime.fromMillis(firstMtime + 5_000));
+
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(Files.getLastModifiedTime(ktClass).toMillis()).isNotEqualTo(firstMtime);
+    }
+
+    @Test
     void check_fails_on_kotlin_syntax_error(@TempDir Path tempDir) throws IOException {
         run("new", "--lang", "kotlin", tempDir.toString());
         Path src = tempDir.resolve("src/main/kotlin/Broken.kt");
@@ -107,6 +162,70 @@ class KotlinCompilationTest {
             assertThat(jf.getJarEntry("example/Hub.class")).isNotNull();
             assertThat(jf.getJarEntry("example/GreeterKt.class")).isNotNull();
         }
+    }
+
+    @Test
+    void java_calls_kotlin_compiles_together(@TempDir Path tempDir) throws IOException {
+        // The reorder (Kotlin first, then javac against Kotlin's output) makes
+        // Java → Kotlin references resolve within a single module.
+        run("new", "--name", "mixed", "--lang", "kotlin", tempDir.toString());
+        Path toml = tempDir.resolve("jk.toml");
+        Files.writeString(toml, Files.readString(toml).replace("[project]\n", "[project]\njava = 25\n"));
+        Path ktSrc = tempDir.resolve("src/main/kotlin/example/Greeter.kt");
+        Files.createDirectories(ktSrc.getParent());
+        Files.writeString(ktSrc, """
+                package example
+
+                class Greeter { fun greet(): String = "hi from kotlin" }
+                """);
+        // Java type that calls the Kotlin class.
+        Path javaSrc = tempDir.resolve("src/main/java/example/App.java");
+        Files.createDirectories(javaSrc.getParent());
+        Files.writeString(javaSrc, """
+                package example;
+                public final class App {
+                    public static String run() { return new Greeter().greet(); }
+                }
+                """);
+
+        int exit = run("build",
+                "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(0);
+
+        try (JarFile jf = new JarFile(tempDir.resolve("target/mixed-0.1.0.jar").toFile())) {
+            assertThat(jf.getJarEntry("example/Greeter.class")).isNotNull();
+            assertThat(jf.getJarEntry("example/App.class")).isNotNull();
+        }
+    }
+
+    @Test
+    void check_passes_for_java_calling_kotlin(@TempDir Path tempDir) throws IOException {
+        // jk check → CompileCommand, which also compiles Kotlin-first so Java can
+        // reference Kotlin within the module.
+        run("new", "--name", "mixed", "--lang", "kotlin", tempDir.toString());
+        Path toml = tempDir.resolve("jk.toml");
+        Files.writeString(toml, Files.readString(toml).replace("[project]\n", "[project]\njava = 25\n"));
+        Path ktSrc = tempDir.resolve("src/main/kotlin/example/Greeter.kt");
+        Files.createDirectories(ktSrc.getParent());
+        Files.writeString(ktSrc, """
+                package example
+
+                class Greeter { fun greet(): String = "hi from kotlin" }
+                """);
+        Path javaSrc = tempDir.resolve("src/main/java/example/App.java");
+        Files.createDirectories(javaSrc.getParent());
+        Files.writeString(javaSrc, """
+                package example;
+                public final class App {
+                    public static String run() { return new Greeter().greet(); }
+                }
+                """);
+
+        int exit = run("check",
+                "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(0);
     }
 
     private static int run(String... args) {

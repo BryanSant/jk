@@ -103,6 +103,18 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
             }
             lines.add(quote(cp.toString()));
         }
+        if (!request.processorPath().isEmpty()) {
+            // An explicit -processorpath both runs the processors and keeps them off
+            // the compile classpath; modern javac won't auto-run classpath processors.
+            lines.add("-processorpath");
+            StringBuilder pp = new StringBuilder();
+            String sep = System.getProperty("path.separator");
+            for (int i = 0; i < request.processorPath().size(); i++) {
+                if (i > 0) pp.append(sep);
+                pp.append(request.processorPath().get(i).toAbsolutePath());
+            }
+            lines.add(quote(pp.toString()));
+        }
         for (String opt : request.extraOptions()) {
             lines.add(opt);
         }

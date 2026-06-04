@@ -6,8 +6,7 @@ import java.util.Locale;
 /**
  * External tools jk knows how to download and exec on the user's behalf:
  * Maven / Gradle for the {@code jk mvn} / {@code jk gradle} passthroughs
- * (PRD §24.1), and the Kotlin compiler distribution that
- * {@code SubprocessKotlincStrategy} drives. Each tool carries its slug
+ * (PRD §24.1). Each tool carries its slug
  * (the directory under {@code $JK_CACHE_DIR/tools/}) and the
  * POSIX/Windows binary names under {@code <home>/bin/}.
  */

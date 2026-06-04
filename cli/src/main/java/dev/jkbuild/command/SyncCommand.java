@@ -75,6 +75,8 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
             GoalKey.of("jdk-outcome", JdkEnsure.Outcome.class);
     private static final GoalKey<CacheSync.Report> CAS_REPORT =
             GoalKey.of("cas-report", CacheSync.Report.class);
+    private static final GoalKey<dev.jkbuild.runtime.JkWorkerSync.Result> WORKER_REPORT =
+            GoalKey.of("worker-report", dev.jkbuild.runtime.JkWorkerSync.Result.class);
     private static final GoalKey<Integer> WORKSPACE_MEMBERS =
             GoalKey.of("workspace-members", Integer.class);
     private static final GoalKey<Boolean> LOCKFILE_CREATED =
@@ -178,6 +180,35 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                 })
                 .build();
 
+        // jk's own worker jars (test-runner, kotlin-compiler) — pulled from the
+        // local Maven repo into the CAS so `jk test` / Kotlin builds find them by
+        // SHA. Best-effort: absent workers warn but don't fail the sync.
+        Phase syncWorkers = Phase.builder("sync-workers")
+                .kind(PhaseKind.IO)
+                .requires("parse-lock")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("sync jk workers");
+                    Cas cas = new Cas(cache);
+                    try {
+                        var report = dev.jkbuild.runtime.JkWorkerSync.ensureInCas(cas,
+                                new dev.jkbuild.runtime.JkWorkerSync.Observer() {
+                                    @Override public void fetched(String artifact) {
+                                        ctx.label("fetched " + artifact);
+                                    }
+                                    @Override public void missing(String artifact, String detail) {
+                                        ctx.warn("worker", artifact + ": " + detail);
+                                    }
+                                });
+                        ctx.put(WORKER_REPORT, report);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("interrupted syncing jk workers", e);
+                    }
+                    ctx.progress(1);
+                })
+                .build();
+
         Phase writeManifest = Phase.builder("write-sync-manifest")
                 .requires("sync-cas")
                 .scope(1)
@@ -199,6 +230,7 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                 .addPhase(parseLock)
                 .addPhase(ensureJdk)
                 .addPhase(syncCas)
+                .addPhase(syncWorkers)
                 .addPhase(writeManifest)
                 .build();
 
@@ -245,6 +277,12 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                 System.out.println(r.fetched() + " fetched, "
                         + r.upToDate() + " up-to-date, "
                         + r.skipped() + " skipped"));
+        goal.get(WORKER_REPORT).ifPresent(r -> {
+            if (r.fetched() > 0 || r.missing() > 0) {
+                System.out.println("Workers: " + r.present() + " present, "
+                        + r.fetched() + " fetched, " + r.missing() + " missing");
+            }
+        });
     }
 
     private static void printJdkSummary(JdkEnsure.Outcome outcome) {

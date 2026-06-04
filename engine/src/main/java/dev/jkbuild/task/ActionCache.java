@@ -75,10 +75,10 @@ public final class ActionCache {
             try (Stream<Path> stream = Files.walk(outputDir)) {
                 for (Path file : (Iterable<Path>) stream::iterator) {
                     if (!Files.isRegularFile(file)) continue;
-                    // FreshnessStamp's sentinel lives inside outputDir but
-                    // isn't an action output — exclude it so we don't
-                    // accidentally cache the stamp from a previous run.
-                    if (".jk-stamp".equals(file.getFileName().toString())) continue;
+                    // FreshnessStamp's sentinels (.jstamp/.kstamp) live inside
+                    // outputDir but aren't action outputs — exclude them so we
+                    // don't accidentally cache a stamp from a previous run.
+                    if (FreshnessStamp.isStampFile(file.getFileName().toString())) continue;
                     // Hash once, then hard-link the file into the CAS rather
                     // than re-reading + writing the bytes. On POSIX same-fs
                     // the output file in target/ and the CAS object share an
