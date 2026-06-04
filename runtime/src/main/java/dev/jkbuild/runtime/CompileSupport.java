@@ -76,6 +76,14 @@ public final class CompileSupport {
         return out;
     }
 
+    /** All {@code .kt} test files: under {@code src/test/kotlin} and {@code src/test/java}. */
+    public static List<Path> collectKotlinTestSources(Path projectDir) throws IOException {
+        List<Path> out = new ArrayList<>();
+        out.addAll(collectFilesWithExtension(projectDir.resolve("src/test/kotlin"), ".kt"));
+        out.addAll(collectFilesWithExtension(projectDir.resolve("src/test/java"), ".kt"));
+        return out;
+    }
+
     /**
      * The {@code -jvm-target} kotlinc should use for a given Java release.
      * Kotlin tops out at 21 today; targeting a newer JDK is fine because Java is

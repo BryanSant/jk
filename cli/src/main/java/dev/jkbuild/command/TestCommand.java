@@ -1,34 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.CompileToolchain;
-
-import dev.jkbuild.cli.Jk;
-
 import dev.jkbuild.cli.GlobalOptions;
-
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.compile.ClasspathResolver;
-import dev.jkbuild.compile.CompileRequest;
-import dev.jkbuild.compile.CompileResult;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Profile;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseContext;
-import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.task.ActionCache;
-import dev.jkbuild.task.ActionKey;
+import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;
@@ -38,8 +19,6 @@ import picocli.CommandLine.Option;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -47,25 +26,17 @@ import java.util.stream.Stream;
 /**
  * {@code jk test} — compile main + test sources and run JUnit Platform tests.
  *
- * <p>Organised as a {@link Goal} with four phases:
- * <ol>
- *   <li>{@code parse-build} (SYNC) — load jk.toml + jk.lock + classpaths.</li>
- *   <li>{@code compile-main} (CPU) — compile src/main/java with the
- *       action-cache layer.</li>
- *   <li>{@code compile-test} (CPU) — compile src/test/java; requires
- *       compile-main.</li>
- *   <li>{@code run-tests} (IO) — fork the jk-test-runner JVM(s). The
- *       NDJSON event stream from the runner bridges into the Goal:
- *       each test completion is a {@code progress(1)} event, each
- *       failure becomes a {@code ctx.error}, the discovery total
- *       grows the denominator via {@code updateScope}.</li>
- * </ol>
+ * <p>Runs the same {@linkplain BuildPipeline#coreBuilder core pipeline} as
+ * {@code jk build}, in {@code testOnly} mode: parse → sync → jdk → compile
+ * (Kotlin and/or Java, main and test) → resources → compile-test → run-tests,
+ * stopping short of packaging a jar. Sharing the pipeline means Kotlin test
+ * sources compile and run exactly as they do under {@code jk build} — no
+ * separate, Java-only test path to keep in sync.
  *
- * <p>Output renders through the shared {@link
- * dev.jkbuild.cli.run.ProgressBarListener} — same bar shape as
- * {@code jk compile} and {@code jk build}. {@link #bridgeListener}
- * translates the test-runner's NDJSON events into {@code progress},
- * {@code label}, and {@code error} calls on the {@link PhaseContext}.
+ * <p>The test-runner's NDJSON event stream bridges into the goal's progress
+ * bar (the same {@code ProgressBarListener} {@code jk compile}/{@code jk build}
+ * use): each completion ticks the numerator, each failure becomes a
+ * {@code ctx.error}, discovery grows the denominator.
  */
 @Command(name = "test", description = "Compile and run tests")
 public final class TestCommand implements Callable<Integer> {
@@ -83,27 +54,17 @@ public final class TestCommand implements Callable<Integer> {
             description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
 
+    @Option(names = "--jdks-dir", hidden = true,
+            description = "Override the JDK install root.")
+    Path jdksDir;
+
     @picocli.CommandLine.Mixin GlobalOptions global;
 
-    // Cross-phase keys.
-    private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
-    private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> COMPILE_MAIN_CP = GoalKey.of("cp-main", List.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> COMPILE_TEST_CP = GoalKey.of("cp-test", List.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> TEST_RUNTIME_CP = GoalKey.of("cp-runtime", List.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> JAVAC_ARGS = GoalKey.of("javac-args", List.class);
-    private static final GoalKey<Path> JAVA_HOME = GoalKey.of("java-home", Path.class);
-    private static final GoalKey<Integer> RELEASE = GoalKey.of("release", Integer.class);
-    private static final GoalKey<Path> MAIN_CLASSES = GoalKey.of("main-classes", Path.class);
-    private static final GoalKey<Path> TEST_CLASSES = GoalKey.of("test-classes", Path.class);
+    // Populated by the pipeline's run-tests phase; read for the summary + exit code.
+    // Value-equal to BuildPipeline.TEST_RESULT (same name + type), so it resolves
+    // the same slot in the shared goal state.
     private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
             GoalKey.of("test-result", JUnitLauncher.Result.class);
-    private static final GoalKey<Boolean> NO_TEST_SOURCES =
-            GoalKey.of("no-test-sources", Boolean.class);
 
     @Override
     public Integer call() throws IOException {
@@ -120,157 +81,19 @@ public final class TestCommand implements Callable<Integer> {
         }
 
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        Cas cas = new Cas(cache);
         int workerCount = workers != null && workers > 0 ? workers : 1;
+        // Up-front lexical estimate (Java + Kotlin test sources) so the bar's
+        // denominator is set once; the static plan gates the numerator and
+        // phase-end auto-fill closes any residual gap.
+        int estimatedTestCount = estimateTestCount(dir.resolve("src/test/java"))
+                + estimateTestCount(dir.resolve("src/test/kotlin"));
 
-        // Pre-discover an estimated test count by scanning src/test/java
-        // for @Test (and friends). The runTests phase is built with this
-        // count as its scope, so the goal's denominator is set ONCE
-        // up-front and never has to be reshaped mid-run. Bar climbs
-        // smoothly from 0 across all phases instead of flashing 100%
-        // when the early compile phases finish.
-        int estimatedTestCount = estimateTestCount(dir.resolve("src/test/java"));
-
-        Phase parseBuild = Phase.builder("parse-build")
-                .scope(1)
-                .execute(ctx -> {
-                    ctx.label("parse jk.toml / jk.lock");
-                    JkBuild project;
-                    try {
-                        project = JkBuildParser.parse(buildFile);
-                    } catch (RuntimeException e) {
-                        ctx.error("toml", e.getMessage());
-                        throw e;
-                    }
-                    ctx.put(PROJECT, project);
-                    Lockfile lock = LockfileReader.read(lockFile);
-                    ctx.put(LOCKFILE, lock);
-
-                    ClasspathResolver resolver = new ClasspathResolver(cas);
-                    ctx.put(COMPILE_MAIN_CP,
-                            resolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
-                    ctx.put(COMPILE_TEST_CP,
-                            resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
-                    ctx.put(TEST_RUNTIME_CP,
-                            resolver.classpathFor(lock, ClasspathResolver.TEST));
-
-                    Profile profile = CompileCommand.resolveProfile(project.profiles(), profileName);
-                    ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
-                    ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(dir));
-                    ctx.put(RELEASE, project.project().javaRelease());
-
-                    BuildLayout layout = BuildLayout.of(dir, project);
-                    ctx.put(MAIN_CLASSES, layout.classesDir());
-                    ctx.put(TEST_CLASSES, layout.testClassesDir());
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase compileMain = Phase.builder("compile-main")
-                .kind(PhaseKind.CPU)
-                .requires("parse-build")
-                .scope(1)
-                .execute(ctx -> {
-                    @SuppressWarnings("unchecked")
-                    List<Path> cp = (List<Path>) ctx.require(COMPILE_MAIN_CP);
-                    @SuppressWarnings("unchecked")
-                    List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
-                    boolean ok = compileWithCache(ctx, "compile-main",
-                            dir.resolve("src/main/java"),
-                            ctx.require(MAIN_CLASSES),
-                            cp, ctx.require(RELEASE), javacArgs,
-                            ctx.require(JAVA_HOME), cas, cache);
-                    if (!ok) throw new RuntimeException("main compile failed");
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase compileTest = Phase.builder("compile-test")
-                .kind(PhaseKind.CPU)
-                .requires("compile-main")
-                .scope(1)
-                .execute(ctx -> {
-                    Path srcTest = dir.resolve("src/test/java");
-                    if (CompileCommand.collectJavaSources(srcTest).isEmpty()) {
-                        ctx.label("no test sources");
-                        ctx.put(NO_TEST_SOURCES, true);
-                        ctx.progress(1);
-                        return;
-                    }
-                    @SuppressWarnings("unchecked")
-                    List<Path> compileTestCp = (List<Path>) ctx.require(COMPILE_TEST_CP);
-                    List<Path> fullCp = new ArrayList<>();
-                    fullCp.add(ctx.require(MAIN_CLASSES));
-                    fullCp.addAll(compileTestCp);
-                    @SuppressWarnings("unchecked")
-                    List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
-                    boolean ok = compileWithCache(ctx, "compile-test",
-                            srcTest, ctx.require(TEST_CLASSES), fullCp,
-                            ctx.require(RELEASE), javacArgs,
-                            ctx.require(JAVA_HOME), cas, cache);
-                    if (!ok) throw new RuntimeException("test compile failed");
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase runTests = Phase.builder("run-tests")
-                .label("Testing")
-                .kind(PhaseKind.IO)
-                .requires("compile-test")
-                // Scope is the upfront lexical estimate. We deliberately
-                // don't reshape this via updateScope at runtime — the
-                // numerator climbs through static-only test finishes and
-                // the phase-end auto-fill closes any residual gap.
-                .scope(estimatedTestCount)
-                .execute(ctx -> {
-                    if (ctx.get(NO_TEST_SOURCES).orElse(false)) {
-                        ctx.label("no tests to run");
-                        return;
-                    }
-                    @SuppressWarnings("unchecked")
-                    List<Path> testRuntimeCp = (List<Path>) ctx.require(TEST_RUNTIME_CP);
-                    List<Path> runtimeClasspath = new ArrayList<>();
-                    runtimeClasspath.add(ctx.require(MAIN_CLASSES));
-                    runtimeClasspath.addAll(testRuntimeCp);
-
-                    TestProgressListener listener =
-                            bridgeListener(ctx, workerCount, global.verbose);
-
-                    JUnitLauncher.Result result;
-                    try {
-                        result = new JUnitLauncher().run(
-                                ctx.require(JAVA_HOME),
-                                ctx.require(TEST_CLASSES),
-                                runtimeClasspath,
-                                cache, workerCount, listener);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        ctx.error("test", "interrupted");
-                        throw new RuntimeException(e);
-                    } catch (IOException e) {
-                        ctx.error("test", e.getMessage());
-                        throw e;
-                    }
-
-                    ctx.put(TEST_RESULT, result);
-                    if (!result.allPassed()) {
-                        // Throw to mark the phase FAIL so the event log
-                        // captures the verdict and ProgressBarListener
-                        // repaints the bar in the failure gradient. The
-                        // outer exit-code logic still distinguishes "test
-                        // failure" (exit 4) from "phase exception".
-                        throw new RuntimeException(result.failed() + " test failure"
-                                + (result.failed() == 1 ? "" : "s"));
-                    }
-                })
-                .build();
-
-        Goal goal = Goal.builder("test")
-                .addPhase(parseBuild)
-                .addPhase(compileMain)
-                .addPhase(compileTest)
-                .addPhase(runTests)
-                .build();
+        // testOnly → the core pipeline runs through run-tests but never packages.
+        BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
+                dir, cache, buildFile, lockFile, lockFile.getParent(),
+                workerCount, estimatedTestCount, profileName, jdksDir,
+                /* skipTests */ false, global.verbose, /* testOnly */ true);
+        Goal goal = BuildPipeline.coreBuilder(inputs).build();
 
         ConsoleSpec spec = new ConsoleSpec("Testing",
                 r -> testSummary(goal, r),
@@ -287,7 +110,7 @@ public final class TestCommand implements Callable<Integer> {
 
     /**
      * Success result line (sans the leading ✔): {@code Passed N tests in 32s},
-     * or {@code No tests in <t>} for a project with no {@code src/test/java}.
+     * or {@code No tests in <t>} for a project with no test sources.
      */
     private String testSummary(Goal goal, GoalResult result) {
         String inTime = Theme.colorize(
@@ -306,23 +129,23 @@ public final class TestCommand implements Callable<Integer> {
     }
 
     /**
-     * Up-front lexical estimate of the test count for the runTests phase's
+     * Up-front lexical estimate of the test count for the run-tests phase's
      * scope. Counts {@code @Test}, {@code @ParameterizedTest},
      * {@code @TestFactory}, {@code @TestTemplate}, and {@code @RepeatedTest}
-     * occurrences across every {@code .java} file under {@code src/test/java}.
+     * occurrences across every {@code .java}/{@code .kt} file under {@code root}.
      *
-     * <p>The estimate is intentionally generous: each parameterized /
-     * factory / template method counts as 1 regardless of the runtime
-     * invocation count, and an {@code @Test} mentioned in a Javadoc is
-     * over-counted. Both biases are safe because the numerator is gated
-     * on the static plan (see {@code wasStatic} in {@code bridgeListener}),
-     * so over-estimation just means the bar reaches ~98% and phase-end
-     * auto-fill closes the rest. Under-estimation would be worse — the
-     * regex catches every {@code @Test*}-prefixed annotation precisely
-     * to avoid it.
+     * <p>The estimate is intentionally generous (a parameterized method counts
+     * once; an annotation in a comment over-counts). Both biases are safe — the
+     * numerator is gated on the static plan, so over-estimation just means the
+     * bar reaches ~98% and phase-end auto-fill closes the rest.
      */
     private static final Pattern TEST_ANNOTATION_REGEX = Pattern.compile(
             "@(?:Test|ParameterizedTest|TestFactory|TestTemplate|RepeatedTest)\\b");
+
+    /** Bridge test-runner NDJSON events onto the goal's progress bar (delegates to TestSupport). */
+    static TestProgressListener bridgeListener(PhaseContext ctx, int workerCount, boolean verbose) {
+        return dev.jkbuild.runtime.TestSupport.bridgeListener(ctx, workerCount, verbose);
+    }
 
     static int estimateTestCount(Path testSrcDir) {
         if (!Files.isDirectory(testSrcDir)) return 0;
@@ -330,7 +153,10 @@ public final class TestCommand implements Callable<Integer> {
         try (Stream<Path> walk = Files.walk(testSrcDir)) {
             for (Path file : (Iterable<Path>) walk
                     .filter(Files::isRegularFile)
-                    .filter(p -> p.getFileName().toString().endsWith(".java"))::iterator) {
+                    .filter(p -> {
+                        String n = p.getFileName().toString();
+                        return n.endsWith(".java") || n.endsWith(".kt");
+                    })::iterator) {
                 try {
                     String content = Files.readString(file);
                     count += (int) TEST_ANNOTATION_REGEX.matcher(content).results().count();
@@ -340,56 +166,7 @@ public final class TestCommand implements Callable<Integer> {
             }
         } catch (IOException ignored) {
             // best-effort: zero estimate falls back to a flat (empty) bar
-            // through the test phase, which is honest if pessimistic.
         }
         return count;
-    }
-
-    /**
-     * Translate {@link TestProgressListener} events into Goal-framework
-     * calls so the shared {@code ProgressBarListener} renders the same
-     * bar {@code jk compile} and {@code jk build} use.
-     *
-     * <ul>
-     *   <li>{@code onDiscoveryTotal} grows the denominator via {@link
-     *       PhaseContext#updateScope}.</li>
-     *   <li>Each {@code onTestFinished} / {@code onTestSkipped} ticks
-     *       the numerator with {@code ctx.progress(1)} and sets the
-     *       bar's step-message via {@code ctx.label}.</li>
-     *   <li>Failures route through {@code ctx.error}, which the bar
-     *       listener hoists above the pinned row in the same
-     *       {@code ✗ Error [phase/code]: ...} format compile uses for
-     *       javac diagnostics.</li>
-     *   <li>Test-process stdout/stderr is muted by default and only
-     *       surfaced under {@code --verbose} — that mode swaps the bar
-     *       for {@code VerboseListener}, so direct {@code println} is
-     *       safe (no pinned row to corrupt).</li>
-     * </ul>
-     */
-    static TestProgressListener bridgeListener(
-            PhaseContext ctx,
-            int workerCount,
-            boolean verbose) {
-        return dev.jkbuild.runtime.TestSupport.bridgeListener(ctx, workerCount, verbose);
-    }
-
-    /**
-     * Compile sources with action-cache lookup. Shared by the compile-main
-     * and compile-test phases — each calls it with its own task ID, source
-     * dir, classpath, and output dir.
-     */
-    static boolean compileWithCache(
-            PhaseContext ctx,
-            String taskId,
-            Path srcDir,
-            Path outputDir,
-            List<Path> classpath,
-            int release,
-            List<String> javacArgs,
-            Path javaHome,
-            Cas cas,
-            Path cacheRoot) throws IOException {
-        return dev.jkbuild.runtime.TestSupport.compileWithCache(
-                ctx, taskId, srcDir, outputDir, classpath, release, javacArgs, javaHome, cas, cacheRoot);
     }
 }

@@ -97,7 +97,16 @@ public final class BuildPipeline {
             String profileName,
             Path jdksDir,
             boolean skipTests,
-            boolean verbose) {
+            boolean verbose,
+            boolean testOnly) {
+
+        /** Back-compat: a full build (not test-only). */
+        public Inputs(Path dir, Path cache, Path buildFile, Path lockFile, Path lockDir,
+                      int workerCount, int estimatedTestCount, String profileName, Path jdksDir,
+                      boolean skipTests, boolean verbose) {
+            this(dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount,
+                    profileName, jdksDir, skipTests, verbose, false);
+        }
     }
 
     /**
@@ -136,6 +145,7 @@ public final class BuildPipeline {
         // classes. The terminal phase downstream steps wait on is the assembler
         // when mixed, else whichever single compiler ran.
         final boolean mixed = useJava && useKotlin;
+        final boolean kotlinModule = useKotlin;   // effectively-final copy for lambdas
         String mainCompile = mixed ? "assemble-classes"
                 : (useKotlin ? "compile-kotlin" : "compile-java");
 
@@ -400,54 +410,19 @@ public final class BuildPipeline {
                         return;
                     }
                     ctx.label("compiling " + ktSources.size() + " Kotlin sources");
-                    String kotlinVersion = CompileToolchain.kotlinVersionFor(
-                            ctx.require(LOCKFILE), ctx.require(PROJECT));
-                    KotlinWorkerSetup.Prepared kt;
-                    try {
-                        dev.jkbuild.repo.RepoGroup repos =
-                                RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
-                        kt = KotlinWorkerSetup.prepare(repos, cas, kotlinVersion);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw new RuntimeException("interrupted resolving the Kotlin compiler", e);
-                    }
-                    // Compilation classpath: project deps + the version-matched
-                    // stdlib (the in-process worker has no kotlin-home to
-                    // auto-supply it; paired with -no-stdlib).
-                    List<Path> compileCp = new ArrayList<>(classpath);
-                    compileCp.add(kt.stdlib());
-                    List<String> ktArgs = new ArrayList<>();
-                    ktArgs.add("-no-stdlib");
-                    if (mixedWithJava) {
-                        // Mixed module: Kotlin runs before javac, so it reads the
-                        // Java declarations from source (for analysis only — it
-                        // emits no Java bytecode; javac does that next).
-                        ktArgs.add("-Xjava-source-roots="
-                                + in.dir().resolve("src/main/java").toAbsolutePath());
-                    }
-                    Path workingDir = in.cache().resolve("actions").resolve("incremental-kotlin")
-                            .resolve(ActionKey.qualifiedTaskId("compile-kotlin", classes));
                     // Kotlin compiles into its own dir, then we merge into the
                     // shared classes dir. The incremental compiler owns its output
                     // dir and prunes files it didn't produce — so it can't share a
                     // dir with javac's output (it would delete the .class files).
                     Path ktOut = classes.resolveSibling(classes.getFileName() + "-kotlin");
-                    Files.createDirectories(ktOut);
-                    KotlincRequest req = KotlincRequest.builder()
-                            .sources(ktSources).classpath(compileCp)
-                            .outputDir(ktOut)
-                            .jvmTarget(CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)))
-                            .workerClasspath(kt.workerClasspath())
-                            .javaHome(ctx.require(JAVA_HOME))
-                            .workingDir(workingDir)
-                            .snapshotDir(in.cache().resolve("kotlin-cp-snapshots"))
-                            .extraArgs(ktArgs)
-                            .build();
-                    // Tier 2: action-cache fast path (restore from CAS on an exact
-                    // input hit), else the worker compiles incrementally (tier 3).
                     String taskId = ActionKey.qualifiedTaskId("compile-kotlin", classes);
-                    dev.jkbuild.task.KotlinCompile.Result kr = dev.jkbuild.task.KotlinCompile.run(
-                            taskId, req, dev.jkbuild.util.JkVersion.VERSION, !noCache, cas, actionCache);
+                    Path workingDir = in.cache().resolve("actions").resolve("incremental-kotlin")
+                            .resolve(taskId);
+                    // Mixed module: Kotlin reads the Java declarations from source
+                    // (analysis only — it emits no Java bytecode; javac does next).
+                    dev.jkbuild.task.KotlinCompile.Result kr = compileKotlinSources(
+                            ctx, in, cas, actionCache, ktSources, classpath, ktOut, taskId, workingDir,
+                            mixedWithJava ? in.dir().resolve("src/main/java") : null);
                     if (!kr.success()) {
                         ctx.error("kotlinc", kr.output());
                         throw new RuntimeException("kotlinc reported errors");
@@ -484,8 +459,10 @@ public final class BuildPipeline {
                 .requires(mainCompile, "sync-deps")
                 .scope(1)
                 .execute(ctx -> {
-                    Path srcTest = in.dir().resolve("src/test/java");
-                    if (CompileSupport.collectJavaSources(srcTest).isEmpty()) {
+                    Path javaTestSrc = in.dir().resolve("src/test/java");
+                    List<Path> javaTest = CompileSupport.collectJavaSources(javaTestSrc);
+                    List<Path> ktTest = CompileSupport.collectKotlinTestSources(in.dir());
+                    if (javaTest.isEmpty() && ktTest.isEmpty()) {
                         ctx.label("no test sources");
                         ctx.put(NO_TEST_SOURCES, true);
                         ctx.progress(1);
@@ -493,17 +470,57 @@ public final class BuildPipeline {
                     }
                     @SuppressWarnings("unchecked")
                     List<Path> compileCp = (List<Path>) ctx.require(COMPILE_TEST_CP);
-                    List<Path> fullCp = new ArrayList<>();
-                    fullCp.add(ctx.require(MAIN_CLASSES));
-                    fullCp.addAll(compileCp);
-                    @SuppressWarnings("unchecked")
-                    List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
-                    boolean ok = TestSupport.compileWithCache(
-                            ctx, "compile-test", srcTest,
-                            ctx.require(TEST_CLASSES), fullCp,
-                            ctx.require(RELEASE), javacArgs,
-                            ctx.require(JAVA_HOME), cas, in.cache());
-                    if (!ok) throw new RuntimeException("test compile failed");
+                    List<Path> baseCp = new ArrayList<>();
+                    baseCp.add(ctx.require(MAIN_CLASSES));
+                    baseCp.addAll(compileCp);
+                    Path testClasses = ctx.require(TEST_CLASSES);
+                    boolean mixedTest = !javaTest.isEmpty() && !ktTest.isEmpty();
+
+                    // Kotlin test sources first, so Java tests can reference Kotlin
+                    // test types (mirrors the main mixed-module ordering). In a mixed
+                    // test module each language gets its own output dir, merged below.
+                    Path ktTestOut = mixedTest
+                            ? testClasses.resolveSibling(testClasses.getFileName() + "-kotlin")
+                            : testClasses;
+                    if (!ktTest.isEmpty()) {
+                        ctx.label("compiling " + ktTest.size() + " Kotlin test sources");
+                        String ktTaskId = ActionKey.qualifiedTaskId("compile-test-kotlin", testClasses);
+                        Path ktWorkingDir = in.cache().resolve("actions")
+                                .resolve("incremental-kotlin").resolve(ktTaskId);
+                        dev.jkbuild.task.KotlinCompile.Result kr = compileKotlinSources(
+                                ctx, in, cas, actionCache, ktTest, baseCp, ktTestOut,
+                                ktTaskId, ktWorkingDir, mixedTest ? javaTestSrc : null);
+                        if (!kr.success()) {
+                            ctx.error("kotlinc", kr.output());
+                            throw new RuntimeException("test kotlinc reported errors");
+                        }
+                    }
+
+                    // Java test sources, against the Kotlin test output in a mixed module.
+                    if (!javaTest.isEmpty()) {
+                        Path javaTestOut = mixedTest
+                                ? testClasses.resolveSibling(testClasses.getFileName() + "-java")
+                                : testClasses;
+                        List<Path> javaCp = baseCp;
+                        if (mixedTest) {
+                            javaCp = new ArrayList<>(baseCp);
+                            javaCp.add(ktTestOut);
+                        }
+                        @SuppressWarnings("unchecked")
+                        List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
+                        boolean ok = TestSupport.compileWithCache(
+                                ctx, "compile-test", javaTestSrc, javaTestOut, javaCp,
+                                ctx.require(RELEASE), javacArgs, ctx.require(JAVA_HOME), cas, in.cache());
+                        if (!ok) throw new RuntimeException("test compile failed");
+                    }
+
+                    // Merge per-language outputs into the shared test classes dir.
+                    if (mixedTest) {
+                        Files.createDirectories(testClasses);
+                        copyResources(ktTestOut, testClasses);
+                        copyResources(testClasses.resolveSibling(testClasses.getFileName() + "-java"),
+                                testClasses);
+                    }
                     ctx.progress(1);
                 })
                 .build();
@@ -524,6 +541,10 @@ public final class BuildPipeline {
                     List<Path> runtimeCp = new ArrayList<>();
                     runtimeCp.add(ctx.require(MAIN_CLASSES));
                     runtimeCp.addAll(testRtCp);
+                    // Kotlin output (main or test) needs the stdlib at runtime.
+                    if (kotlinModule || !CompileSupport.collectKotlinTestSources(in.dir()).isEmpty()) {
+                        runtimeCp.add(kotlinStdlib(ctx, cas));
+                    }
 
                     TestProgressListener listener =
                             TestSupport.bridgeListener(ctx, in.workerCount(), in.verbose());
@@ -676,10 +697,13 @@ public final class BuildPipeline {
             b.addPhase(assembleClasses);
         }
         b.addPhase(copyResources);
-        if (!in.skipTests()) {
+        if (in.testOnly() || !in.skipTests()) {
             b.addPhase(compileTest).addPhase(runTests);
         }
-        b.addPhase(packageJar);
+        // `jk test` stops at run-tests — it never packages a jar.
+        if (!in.testOnly()) {
+            b.addPhase(packageJar);
+        }
         // write-stamp is the Java-compile freshness companion; only when Java ran.
         if (useJava) {
             b.addPhase(writeStamp);
@@ -811,6 +835,75 @@ public final class BuildPipeline {
     @SuppressWarnings("unchecked")
     private static List<Path> kotlinSources(PhaseContext ctx) {
         return (List<Path>) ctx.get(KOTLIN_SOURCES).orElse(List.of());
+    }
+
+    /**
+     * Compile Kotlin {@code sources} into {@code outputDir} via the worker
+     * (action-cached: restores from the CAS on an exact-input hit without
+     * launching the worker, else compiles incrementally). Shared by the main
+     * {@code compile-kotlin} and {@code compile-test} phases. The caller owns
+     * freshness stamps, output assembly, and outcome reporting.
+     *
+     * @param javaSourceRoot when non-null, passed as {@code -Xjava-source-roots}
+     *     so a mixed module's Kotlin can read Java declarations from source
+     */
+    private static dev.jkbuild.task.KotlinCompile.Result compileKotlinSources(
+            PhaseContext ctx, Inputs in, Cas cas, ActionCache actionCache,
+            List<Path> sources, List<Path> classpath, Path outputDir,
+            String taskId, Path workingDir, Path javaSourceRoot) throws IOException {
+        String kotlinVersion = CompileToolchain.kotlinVersionFor(
+                ctx.require(LOCKFILE), ctx.require(PROJECT));
+        KotlinWorkerSetup.Prepared kt;
+        try {
+            dev.jkbuild.repo.RepoGroup repos =
+                    RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
+            kt = KotlinWorkerSetup.prepare(repos, cas, kotlinVersion);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("interrupted resolving the Kotlin compiler", e);
+        }
+        // Compilation classpath: project deps + the version-matched stdlib (the
+        // in-process worker has no kotlin-home to auto-supply it; -no-stdlib).
+        List<Path> compileCp = new ArrayList<>(classpath);
+        compileCp.add(kt.stdlib());
+        List<String> ktArgs = new ArrayList<>();
+        ktArgs.add("-no-stdlib");
+        if (javaSourceRoot != null) {
+            ktArgs.add("-Xjava-source-roots=" + javaSourceRoot.toAbsolutePath());
+        }
+        Files.createDirectories(outputDir);
+        KotlincRequest req = KotlincRequest.builder()
+                .sources(sources).classpath(compileCp)
+                .outputDir(outputDir)
+                .jvmTarget(CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)))
+                .workerClasspath(kt.workerClasspath())
+                .javaHome(ctx.require(JAVA_HOME))
+                .workingDir(workingDir)
+                .snapshotDir(in.cache().resolve("kotlin-cp-snapshots"))
+                .extraArgs(ktArgs)
+                .build();
+        boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+        return dev.jkbuild.task.KotlinCompile.run(
+                taskId, req, dev.jkbuild.util.JkVersion.VERSION, !noCache, cas, actionCache);
+    }
+
+    /**
+     * The version-matched {@code kotlin-stdlib} path (already in the CAS from the
+     * worker closure). Kotlin output needs it on the <em>runtime</em> classpath
+     * too — compilation pairs the stdlib with {@code -no-stdlib}, but the JVM
+     * still needs {@code kotlin.jvm.internal.*} etc. when the code runs.
+     */
+    private static Path kotlinStdlib(PhaseContext ctx, Cas cas) throws IOException {
+        String kotlinVersion = CompileToolchain.kotlinVersionFor(
+                ctx.require(LOCKFILE), ctx.require(PROJECT));
+        try {
+            dev.jkbuild.repo.RepoGroup repos =
+                    RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
+            return KotlinWorkerSetup.prepare(repos, cas, kotlinVersion).stdlib();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException("interrupted resolving the Kotlin stdlib", e);
+        }
     }
 
     private static void copyResources(Path resourceDir, Path classesDir) throws IOException {
