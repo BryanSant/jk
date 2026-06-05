@@ -140,7 +140,14 @@ public final class LockOrchestrator {
                 deduped.putIfAbsent(implicit.module(), implicit);
             }
         }
-        List<Dependency> declared = new ArrayList<>(deduped.values());
+        // Partition: sha256-pinned file deps are already resolved — they carry
+        // their own blob identity and never need PubGrub or a network fetch.
+        List<Dependency> fileDeps = new ArrayList<>();
+        List<Dependency> declared = new ArrayList<>();
+        for (Dependency d : deduped.values()) {
+            if (d.isFile()) fileDeps.add(d);
+            else declared.add(d);
+        }
 
         // Gather BOM constraints from `[dependencies.platform]` deps. Each
         // platform dep's effective POM contributes its managedDependencies
@@ -184,7 +191,7 @@ public final class LockOrchestrator {
                 ? resolverOverride
                 : new PubGrubResolver(repos, bomConstraints);
         Resolution resolution = resolver.resolve(declared);
-        observer.onTotal(resolution.modules().size());
+        observer.onTotal(resolution.modules().size() + fileDeps.size());
 
         // For each scope, BFS the resolution graph from that scope's roots
         // (feature deps act as additional main-scope roots).
@@ -252,6 +259,26 @@ public final class LockOrchestrator {
                     new ArrayList<>(tags),
                     mod.deps(),
                     pinnedBy));
+        }
+
+        // File deps: emit a lockfile entry directly — no solver, no network.
+        // CacheSync skips them on sync (cas.contains is true after jk install);
+        // ClasspathResolver resolves them via the checksum like any other dep.
+        for (Dependency dep : fileDeps) {
+            String version = dep.version() instanceof VersionSelector.Exact e
+                    ? e.version() : dep.version().raw();
+            observer.onPackage(dep.module(), version);
+            EnumSet<Scope> tags = EnumSet.noneOf(Scope.class);
+            for (Scope scope : SCOPES) {
+                for (Dependency d : project.dependencies().of(scope)) {
+                    if (d.isFile() && d.module().equals(dep.module())) tags.add(scope);
+                }
+            }
+            if (tags.isEmpty()) tags.add(Scope.MAIN);
+            packages.add(new Lockfile.Package(
+                    dep.module(), version, "local",
+                    "sha256:" + dep.sha256(),
+                    null, new ArrayList<>(tags), List.of(), null));
         }
 
         return new Lockfile(

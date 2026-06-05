@@ -355,15 +355,17 @@ public final class JkBuildParser {
 
         int sourceCount = (hasVersion ? 1 : 0) + (hasPath ? 1 : 0)
                 + (hasGit ? 1 : 0) + (hasWorkspace ? 1 : 0) + (hasSha256 ? 1 : 0);
-        // `version` alongside `git` is the one legal pairing: it overrides the
-        // version derived from the ref (docs/git-source-deps.md §"Discovery with
-        // override"). Every other multi-source combination is ambiguous.
+        // Two legal multi-source pairings:
+        //   git + version: version overrides the ref-derived version (git-source-deps.md).
+        //   sha256 + version: version is required alongside sha256 to record the coordinate.
+        // Every other multi-source combination is ambiguous.
         boolean gitWithVersionOverride = hasGit && hasVersion && !hasPath && !hasWorkspace && !hasSha256;
+        boolean sha256WithVersion = hasSha256 && hasVersion && !hasPath && !hasGit && !hasWorkspace;
         if (sourceCount == 0) {
             throw new JkBuildParseException(displayPath
                     + " must set exactly one of `version`, `path`, `git`, `sha256`, or `workspace = true`");
         }
-        if (sourceCount > 1 && !gitWithVersionOverride) {
+        if (sourceCount > 1 && !gitWithVersionOverride && !sha256WithVersion) {
             throw new JkBuildParseException(displayPath
                     + " sets more than one of `version` / `path` / `git` / `sha256` / `workspace`; "
                     + "pick exactly one");
