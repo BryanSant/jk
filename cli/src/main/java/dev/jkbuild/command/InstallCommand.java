@@ -22,6 +22,7 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.GitRefSpec;
+import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
@@ -91,10 +92,26 @@ import java.util.concurrent.Callable;
 public final class InstallCommand implements Callable<Integer> {
 
     @Parameters(arity = "0..1", paramLabel = "<source>",
-            description = "Maven coord (group:artifact:version) OR a git URL "
-                    + "(optionally suffixed with @<tag-or-branch> or #<tag-or-branch>). "
+            description = "Maven coord (group:artifact:version), a git URL "
+                    + "(optionally suffixed with @<tag-or-branch> or #<tag-or-branch>), "
+                    + "or a path to a local file. "
                     + "Omit to install the current jk.toml project.")
     String source;
+
+    @Option(names = "--group",
+            description = "Maven groupId for a local file install. "
+                    + "Auto-detected from JAR metadata when available.")
+    String groupFlag;
+
+    @Option(names = "--name",
+            description = "Maven artifactId for a local file install. "
+                    + "Auto-detected from JAR metadata when available.")
+    String nameFlag;
+
+    @Option(names = "--ver",
+            description = "Version for a local file install. "
+                    + "Auto-detected from JAR metadata when available.")
+    String verFlag;
 
     @Option(names = "--bin",
             description = "Launcher name under $JK_BIN_DIR. Default: the artifact id.")
@@ -149,6 +166,9 @@ public final class InstallCommand implements Callable<Integer> {
         if (looksLikeGitUrl(source)) {
             return installFromGit(source);
         }
+        if (looksLikeFilePath(source)) {
+            return installFromFile(Path.of(source).toAbsolutePath().normalize());
+        }
         return installFromMaven(source);
     }
 
@@ -164,7 +184,72 @@ public final class InstallCommand implements Callable<Integer> {
         return runProjectInstallGoal(projectDir, "install");
     }
 
-    // --- mode 2: Maven coord ---------------------------------------------
+    // --- mode 2: local file ----------------------------------------------
+
+    /**
+     * Store a local file in the CAS and record it in the Journal under its
+     * Maven coordinate (the {@code mvn install} equivalent for pre-built
+     * artifacts). The coordinate is auto-detected from
+     * {@code META-INF/maven/.../pom.properties} for {@code .jar} files;
+     * {@code --group}, {@code --name}, and {@code --ver} override or supply
+     * missing fields.
+     */
+    private int installFromFile(Path filePath) throws IOException {
+        if (!Files.exists(filePath)) {
+            System.err.println("jk install: " + filePath + ": no such file");
+            return 2;
+        }
+
+        boolean isJar = filePath.getFileName().toString().toLowerCase().endsWith(".jar");
+        java.util.Optional<Coordinate> detected = java.util.Optional.empty();
+        if (isJar) {
+            try {
+                detected = JarManifest.coordinateFrom(filePath);
+            } catch (IOException ignored) {}
+        }
+
+        String group = coalesce(groupFlag, detected.map(Coordinate::group).orElse(null));
+        String artifact = coalesce(nameFlag, detected.map(Coordinate::artifact).orElse(null));
+        String version = coalesce(verFlag, detected.map(Coordinate::version).orElse(null));
+
+        if (group == null || artifact == null || version == null) {
+            if (!isJar) {
+                System.err.println("jk install: --group, --name, and --ver are required for non-JAR files");
+            } else {
+                StringBuilder msg = new StringBuilder("jk install: could not detect");
+                if (group == null)    msg.append(" group");
+                if (artifact == null) msg.append(" name");
+                if (version == null)  msg.append(" version");
+                msg.append(" from JAR metadata");
+                if (group == null)    msg.append("; supply --group");
+                if (artifact == null) msg.append("; supply --name");
+                if (version == null)  msg.append("; supply --ver");
+                System.err.println(msg.toString());
+            }
+            return 64;
+        }
+
+        Path cache = cacheDir();
+        Files.createDirectories(cache);
+        byte[] bytes = Files.readAllBytes(filePath);
+        String sha256 = Hashing.sha256Hex(bytes);
+        new Cas(cache).putByLink(filePath, sha256);
+        Coordinate coord = Coordinate.of(group, artifact, version);
+        new Journal(cache).record(coord, "jar", sha256, bytes.length, "local", null);
+
+        if (!global.outputIsJson()) {
+            System.out.println("Installed "
+                    + dev.jkbuild.cli.theme.Coords.gav(coord)
+                    + " to the local cache");
+        }
+        return 0;
+    }
+
+    private static String coalesce(String flag, String detected) {
+        return (flag != null && !flag.isBlank()) ? flag : detected;
+    }
+
+    // --- mode 3: Maven coord ---------------------------------------------
 
     private int installFromMaven(String coord) throws IOException, InterruptedException {
         Coordinate parsed;
@@ -228,7 +313,7 @@ public final class InstallCommand implements Callable<Integer> {
         return 0;
     }
 
-    // --- mode 3: git URL -------------------------------------------------
+    // --- mode 4: git URL -------------------------------------------------
 
     private int installFromGit(String input) throws IOException, InterruptedException {
         UrlAndRef split = splitUrlRef(input);
@@ -588,6 +673,20 @@ public final class InstallCommand implements Callable<Integer> {
         System.out.println("Installed " + coord + " → " + launcher);
         System.out.println("Add to PATH if needed:");
         System.out.println("  export PATH=\"" + binDir + ":$PATH\"");
+    }
+
+    /**
+     * True when {@code source} resolves to an existing regular file on disk.
+     * Checked after git-URL detection so {@code file://...} URIs are handled
+     * by the git path. Uses filesystem existence as the discriminator: Maven
+     * coords ({@code g:a:v}) and bare names never match an actual file.
+     */
+    private static boolean looksLikeFilePath(String source) {
+        try {
+            return Files.isRegularFile(Path.of(source));
+        } catch (Exception e) {
+            return false;
+        }
     }
 
     private static boolean looksLikeGitUrl(String input) {
