@@ -82,13 +82,42 @@ val writeJavaWorkerSha by tasks.registering {
         }
     }
 }
+// Same scheme for the jk-audit-runner worker (OSV vulnerability scanning).
+val auditWorkerJar by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies {
+    auditWorkerJar(project(":audit-runner"))
+}
+val writeAuditWorkerSha by tasks.registering {
+    val inputJar = auditWorkerJar
+    inputs.files(inputJar)
+    val outFile = layout.buildDirectory.file(
+            "generated/resources/audit-worker-sha/META-INF/jk-audit-runner-sha256.txt")
+    outputs.file(outFile)
+    doLast {
+        val jarBytes = inputJar.singleFile.readBytes()
+        val digest: ByteArray = MessageDigest.getInstance("SHA-256").digest(jarBytes)
+        val sb = StringBuilder(digest.size * 2)
+        for (b in digest) {
+            sb.append(String.format("%02x", b.toInt() and 0xff))
+        }
+        outFile.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText(sb.toString())
+        }
+    }
+}
 sourceSets.named("main") {
     resources.srcDir(layout.buildDirectory.dir("generated/resources/kotlin-worker-sha"))
     resources.srcDir(layout.buildDirectory.dir("generated/resources/java-worker-sha"))
+    resources.srcDir(layout.buildDirectory.dir("generated/resources/audit-worker-sha"))
 }
 tasks.named("processResources") {
-    dependsOn(writeKotlinWorkerSha, writeJavaWorkerSha)
+    dependsOn(writeKotlinWorkerSha, writeJavaWorkerSha, writeAuditWorkerSha)
 }
 tasks.named("sourcesJar") {
-    dependsOn(writeKotlinWorkerSha, writeJavaWorkerSha)
+    dependsOn(writeKotlinWorkerSha, writeJavaWorkerSha, writeAuditWorkerSha)
 }

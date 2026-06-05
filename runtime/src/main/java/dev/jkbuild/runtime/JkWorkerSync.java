@@ -42,7 +42,8 @@ public final class JkWorkerSync {
     private static final List<Worker> WORKERS = List.of(
             new Worker("jk-test-runner", "/META-INF/jk-test-runner-sha256.txt"),
             new Worker("jk-kotlin-compiler", "/META-INF/jk-kotlin-compiler-sha256.txt"),
-            new Worker("jk-java-compiler", "/META-INF/jk-java-compiler-sha256.txt"));
+            new Worker("jk-java-compiler", "/META-INF/jk-java-compiler-sha256.txt"),
+            new Worker("jk-audit-runner", "/META-INF/jk-audit-runner-sha256.txt"));
 
     /** Per-worker progress callbacks. */
     public interface Observer {

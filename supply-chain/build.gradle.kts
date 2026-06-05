@@ -10,7 +10,6 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
     implementation(libs.bouncycastle.bcpg)
-    implementation(libs.jackson.databind)
     implementation(libs.sigstore.java)
     implementation(libs.cyclonedx.core.java)
     implementation(libs.spdx.java.library)
