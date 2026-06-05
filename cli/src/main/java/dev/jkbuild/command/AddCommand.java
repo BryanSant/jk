@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cache.Journal;
 import dev.jkbuild.cli.Ansi;
 
 import dev.jkbuild.cli.GlobalOptions;
@@ -16,6 +18,9 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.tool.JarManifest;
+import dev.jkbuild.util.Hashing;
+import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -106,11 +111,17 @@ public final class AddCommand implements Callable<Integer> {
     public Integer call() throws IOException, InterruptedException {
         Path dir = global.workingDir();
 
-        // Local workspace sibling (uv's `uv add ./lib`): a dependency edge into
-        // the current project plus registration in the workspace root's
-        // [workspace].members. Anything else — a Maven coord or a catalog
-        // library — is resolved by ParsedDep.parse below.
+        // Local path argument: either a regular file (jk add ./libs/foo.jar)
+        // or a workspace sibling directory (uv's `uv add ./lib`).
         if (isLocalPathArg(coord)) {
+            String normalized = coord.replace('\\', '/');
+            String stripped = (normalized.charAt(0) == ':') ? normalized.substring(1) : normalized;
+            Path candidate = dir.resolve(stripped).normalize();
+            if (Files.isRegularFile(candidate)) {
+                Scope scope = resolveScope();
+                if (scope == null) return 64;
+                return addFile(dir, candidate, scope);
+            }
             Scope scope = resolveScope();
             if (scope == null) return 64;
             return addMember(dir, scope);
@@ -267,6 +278,101 @@ public final class AddCommand implements Callable<Integer> {
             System.err.println("jk add: could not register workspace member: " + e.getMessage());
         }
         return 0;
+    }
+
+    /**
+     * Add an arbitrary local file as a dependency. The file is immediately
+     * stored in the CAS and its coordinate recorded in the Journal so
+     * {@code jk lock} can resolve it without re-reading the original path.
+     *
+     * <p>For {@code .jar} files, Maven coordinate metadata is auto-detected
+     * from {@code META-INF/maven/.../pom.properties}; flag overrides win.
+     * Non-JAR files, or JARs without embedded metadata, require all three of
+     * {@code --group}, {@code --name}/{@code --library}, and {@code --ver}.
+     */
+    private int addFile(Path cwd, Path filePath, Scope scope) throws IOException {
+        Path tomlFile = cwd.resolve("jk.toml");
+        if (!Files.exists(tomlFile)) {
+            System.err.println("jk add: no jk.toml in current directory");
+            return 2;
+        }
+
+        // Auto-detect coordinates from JAR metadata (best-effort).
+        Optional<Coordinate> detected = Optional.empty();
+        boolean isJar = filePath.getFileName().toString().toLowerCase().endsWith(".jar");
+        if (isJar) {
+            try {
+                detected = JarManifest.coordinateFrom(filePath);
+            } catch (IOException e) {
+                // Non-fatal: fall through to flag-based coords.
+            }
+        }
+
+        // Flags override auto-detected values.
+        String group = nonBlankOr(groupFlag,
+                detected.map(Coordinate::group).orElse(null));
+        String artifact = nonBlankOr(nameFlag,
+                detected.map(Coordinate::artifact).orElse(null));
+        String version = nonBlankOr(versionFlag,
+                detected.map(Coordinate::version).orElse(null));
+        String library = nonBlankOr(libraryFlag,
+                artifact != null ? artifact : null);
+
+        // Validate: all three coordinates are required.
+        if (group == null || artifact == null || version == null) {
+            if (!isJar) {
+                System.err.println("jk add: --group, --name, and --ver are required for non-JAR files");
+            } else {
+                StringBuilder msg = new StringBuilder("jk add: could not detect");
+                if (group == null) msg.append(" group");
+                if (artifact == null) msg.append(group == null ? "," : "").append(" name");
+                if (version == null) msg.append(" version");
+                msg.append(" from JAR metadata");
+                if (group == null) msg.append("; supply --group");
+                if (artifact == null) msg.append("; supply --name");
+                if (version == null) msg.append("; supply --ver");
+                System.err.println(msg.toString());
+            }
+            return 64;
+        }
+        if (library == null) library = artifact;
+
+        // Store in CAS and record in Journal (mirrors InstallCommand.cacheInstallArtifact).
+        Path cache = JkDirs.cache();
+        Files.createDirectories(cache);
+        byte[] bytes = Files.readAllBytes(filePath);
+        String sha256 = Hashing.sha256Hex(bytes);
+        new Cas(cache).putByLink(filePath, sha256);
+        Coordinate coord = Coordinate.of(group, artifact, version);
+        new Journal(cache).record(coord, "jar", sha256, bytes.length, "local", null);
+
+        // Edit jk.toml.
+        String original = Files.readString(tomlFile);
+        String updated;
+        try {
+            updated = JkBuildEditor.addFileDependency(
+                    original, scope, library, group, artifact, version, sha256);
+        } catch (IllegalStateException | IllegalArgumentException e) {
+            System.err.println("jk add: " + e.getMessage());
+            return 1;
+        }
+        Files.writeString(tomlFile, updated, StandardCharsets.UTF_8);
+
+        String check = Theme.colorize("✓", Theme.active().success());
+        String shortSha = sha256.substring(0, Math.min(12, sha256.length()));
+        System.out.println(check + " Added "
+                + Coords.shortName(library)
+                + " (" + Coords.gav(group, artifact, version) + ", sha256:" + shortSha + "...)"
+                + " to " + Theme.colorize("dependency", Theme.active().cyan())
+                + "." + Theme.colorize(scope.canonical(), Theme.active().cyan()));
+        System.out.println();
+        System.out.println("Run " + Theme.colorize("jk lock", Theme.active().warning())
+                + " to lock your dependencies to hard versions");
+        return 0;
+    }
+
+    private static String nonBlankOr(String first, String fallback) {
+        return (first != null && !first.isBlank()) ? first : fallback;
     }
 
     /**

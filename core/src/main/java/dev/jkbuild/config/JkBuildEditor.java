@@ -127,6 +127,65 @@ public final class JkBuildEditor {
     }
 
     /**
+     * Add a file-backed (CAS sha256) dependency entry to
+     * {@code [dependencies.<scope>]}. The rendered form is:
+     * <pre>{@code
+     *   library = { sha256 = "...", group = "...", version = "..." }
+     * }</pre>
+     * The {@code name} field is omitted when {@code artifact} equals
+     * {@code library}, following the same convention as
+     * {@link #addDependency}.
+     */
+    public static String addFileDependency(String content, Scope scope, String library,
+                                           String group, String artifact, String version,
+                                           String sha256) {
+        validateName(library);
+        if (group == null || group.isBlank()) {
+            throw new IllegalArgumentException("group must not be blank");
+        }
+        if (version == null || version.isBlank()) {
+            throw new IllegalArgumentException("version must not be blank");
+        }
+        if (sha256 == null || sha256.isBlank()) {
+            throw new IllegalArgumentException("sha256 must not be blank");
+        }
+        if (artifact == null || artifact.isBlank()) artifact = library;
+
+        List<String> lines = splitPreservingTerminator(content);
+        if (findDepKey(lines, scope, library) >= 0) {
+            throw new IllegalStateException(
+                    "dependencies." + scope.canonical() + " already contains \"" + library + "\"");
+        }
+
+        StringBuilder sb = new StringBuilder(library).append(" = { sha256 = \"")
+                .append(escape(sha256)).append("\", group = \"")
+                .append(escape(group)).append("\"");
+        if (!artifact.equals(library)) {
+            sb.append(", name = \"").append(escape(artifact)).append("\"");
+        }
+        sb.append(", version = \"").append(escape(version)).append("\" }");
+        String entryLine = sb.toString();
+
+        if (scope != Scope.MAIN) {
+            promoteFlatShorthandIfPresent(lines);
+        }
+
+        int header = findScopeHeader(lines, scope);
+        if (header < 0) {
+            ensureTrailingBlankLine(lines);
+            lines.add("[dependencies." + scope.canonical() + "]");
+            lines.add(entryLine);
+            return validated(join(lines));
+        }
+        int insertAt = endOfTable(lines, header);
+        while (insertAt > header + 1 && lines.get(insertAt - 1).isBlank()) {
+            insertAt--;
+        }
+        lines.add(insertAt, entryLine);
+        return validated(join(lines));
+    }
+
+    /**
      * Remove a dependency by short {@code name} from
      * {@code [dependencies.<scope>]}. Leaves the (possibly now-empty)
      * sub-table in place — minimal blast radius on surrounding formatting.

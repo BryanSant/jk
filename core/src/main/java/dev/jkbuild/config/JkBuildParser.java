@@ -351,20 +351,21 @@ public final class JkBuildParser {
         boolean hasVersion = entry.contains("version");
         boolean hasPath = entry.contains("path");
         boolean hasGit = entry.contains("git");
+        boolean hasSha256 = entry.contains("sha256");
 
         int sourceCount = (hasVersion ? 1 : 0) + (hasPath ? 1 : 0)
-                + (hasGit ? 1 : 0) + (hasWorkspace ? 1 : 0);
+                + (hasGit ? 1 : 0) + (hasWorkspace ? 1 : 0) + (hasSha256 ? 1 : 0);
         // `version` alongside `git` is the one legal pairing: it overrides the
         // version derived from the ref (docs/git-source-deps.md §"Discovery with
         // override"). Every other multi-source combination is ambiguous.
-        boolean gitWithVersionOverride = hasGit && hasVersion && !hasPath && !hasWorkspace;
+        boolean gitWithVersionOverride = hasGit && hasVersion && !hasPath && !hasWorkspace && !hasSha256;
         if (sourceCount == 0) {
             throw new JkBuildParseException(displayPath
-                    + " must set exactly one of `version`, `path`, `git`, or `workspace = true`");
+                    + " must set exactly one of `version`, `path`, `git`, `sha256`, or `workspace = true`");
         }
         if (sourceCount > 1 && !gitWithVersionOverride) {
             throw new JkBuildParseException(displayPath
-                    + " sets more than one of `version` / `path` / `git` / `workspace`; "
+                    + " sets more than one of `version` / `path` / `git` / `sha256` / `workspace`; "
                     + "pick exactly one");
         }
 
@@ -398,6 +399,24 @@ public final class JkBuildParser {
                 : (catalogHit != null ? catalogHit.artifact() : name);
         if (artifact != null && artifact.isBlank()) {
             throw new JkBuildParseException(displayPath + ".name must not be blank");
+        }
+
+        if (hasSha256) {
+            if (groupExplicit == null || groupExplicit.isBlank()) {
+                throw new JkBuildParseException(displayPath
+                        + " with `sha256 = ...` must set a `group` explicitly "
+                        + "(catalog shorthand applies only to version-based deps)");
+            }
+            String sha256 = entry.getString("sha256");
+            if (sha256 == null || sha256.isBlank()) {
+                throw new JkBuildParseException(displayPath + ".sha256 must not be blank");
+            }
+            String versionRaw = entry.getString("version");
+            if (versionRaw == null || versionRaw.isBlank()) {
+                throw new JkBuildParseException(displayPath
+                        + " with `sha256 = ...` must also set `version`");
+            }
+            return Dependency.file(name, group + ":" + artifact, versionRaw, sha256);
         }
 
         if (hasPath) {
@@ -475,7 +494,7 @@ public final class JkBuildParser {
         // "workspace:<name>" and a Latest selector; the resolver never
         // sees this because WorkspaceMerge rewrites it first.
         return new Dependency(name, "workspace:" + name,
-                new VersionSelector.Latest("workspace"), null, null, false);
+                new VersionSelector.Latest("workspace"), null, null, null, false);
     }
 
     private static Dependency materialize(String name, WorkspaceDependency wd) {

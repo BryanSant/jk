@@ -131,6 +131,6 @@ class WorkspaceMergeTest {
      */
     private static Dependency workspacePlaceholder(String name) {
         return new Dependency(name, "workspace:" + name,
-                new VersionSelector.Latest("workspace"), null, null, false);
+                new VersionSelector.Latest("workspace"), null, null, null, false);
     }
 }

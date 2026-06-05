@@ -101,6 +101,35 @@ public final class JarManifest {
         return out;
     }
 
+    /**
+     * Read Maven coordinates from the first complete {@code pom.properties}
+     * entry found under {@code META-INF/maven/}. Returns empty when no entry
+     * has all three of {@code groupId}, {@code artifactId}, and {@code version}.
+     */
+    public static Optional<dev.jkbuild.model.Coordinate> coordinateFrom(Path jar) throws IOException {
+        for (EmbeddedPom pom : scanEmbeddedPoms(jar)) {
+            if (pom.pomProperties() == null) continue;
+            String groupId = null, artifactId = null, version = null;
+            for (String line : pom.pomProperties().split("\n")) {
+                int eq = line.indexOf('=');
+                if (eq < 0) continue;
+                String key = line.substring(0, eq).trim();
+                String val = line.substring(eq + 1).trim();
+                switch (key) {
+                    case "groupId"    -> groupId    = val;
+                    case "artifactId" -> artifactId = val;
+                    case "version"    -> version    = val;
+                }
+            }
+            if (groupId != null && !groupId.isBlank()
+                    && artifactId != null && !artifactId.isBlank()
+                    && version != null && !version.isBlank()) {
+                return Optional.of(dev.jkbuild.model.Coordinate.of(groupId, artifactId, version));
+            }
+        }
+        return Optional.empty();
+    }
+
     /** Whether the jar contains a top-level {@code module-info.class} (a real Java module). */
     public static boolean hasModuleInfo(Path jar) throws IOException {
         try (InputStream in = Files.newInputStream(jar);
