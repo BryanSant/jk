@@ -60,19 +60,30 @@ val auditWorkerJar by configurations.creating {
 val publishWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
+val imageWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+val compatWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
 dependencies {
     kotlinWorkerJar(project(":kotlin-compiler"))
     testRunnerJar(project(":test-runner"))
     auditWorkerJar(project(":audit-runner"))
     publishWorkerJar(project(":publish-runner"))
+    imageWorkerJar(project(":image-runner"))
+    compatWorkerJar(project(":compat-runner"))
 }
 tasks.withType<Test>().configureEach {
-    dependsOn(kotlinWorkerJar, testRunnerJar, auditWorkerJar, publishWorkerJar)
+    dependsOn(kotlinWorkerJar, testRunnerJar, auditWorkerJar, publishWorkerJar,
+              imageWorkerJar, compatWorkerJar)
     doFirst {
         systemProperty("jk.kotlin.worker.jar",  kotlinWorkerJar.singleFile.absolutePath)
         systemProperty("jk.test.runner.jar",    testRunnerJar.singleFile.absolutePath)
         systemProperty("jk.audit.worker.jar",   auditWorkerJar.singleFile.absolutePath)
         systemProperty("jk.publish.worker.jar", publishWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.image.worker.jar",   imageWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.compat.worker.jar",  compatWorkerJar.singleFile.absolutePath)
     }
 }
 

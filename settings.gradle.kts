@@ -34,6 +34,8 @@ include(
     ":java-compiler",
     ":audit-runner",
     ":publish-runner",
+    ":image-runner",
+    ":compat-runner",
     ":runtime",
     ":cli",
 )

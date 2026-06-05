@@ -1,15 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.jdk.JdkResolver;
-import dev.jkbuild.compat.InstalledTool;
 import dev.jkbuild.compat.PassthroughEnv;
-import dev.jkbuild.compat.ToolDistribution;
-import dev.jkbuild.compat.ToolProvisioning;
-import dev.jkbuild.compat.ToolRegistry;
-import dev.jkbuild.gradle.GradleResolver;
-import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.InstalledJdk;
+import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -19,13 +13,13 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
  * {@code jk gradle ...} — passthrough to Gradle (PRD §24.1). Mirrors
- * {@link MvnCommand} for the Gradle wrapper.
+ * {@link MvnCommand}: provisions via {@code jk-compat-runner}, then execs
+ * {@code bin/gradle} directly.
  */
 @Command(
         name = "gradle",
@@ -33,58 +27,38 @@ import java.util.concurrent.Callable;
         mixinStandardHelpOptions = false)
 public final class GradleCommand implements Callable<Integer> {
 
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
+    @Option(names = {"-C", "--directory"})
     Path directory;
 
-    @Option(names = "--tools-dir", hidden = true,
-            description = "Override the tools install root. Default: $JK_CACHE_DIR/tools.")
+    @Option(names = "--tools-dir", hidden = true)
     Path toolsDir;
 
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
+    @Option(names = "--jdks-dir", hidden = true)
     Path jdksDir;
 
-    @Option(names = "--no-discover",
-            description = "Don't probe SDKMAN / Homebrew / etc. for an existing install; always download.")
+    @Option(names = "--no-discover")
     boolean noDiscover;
 
-    @Parameters(arity = "0..*", paramLabel = "<args>",
-            description = "Arguments forwarded to gradle.")
+    @Parameters(arity = "0..*", paramLabel = "<args>")
     List<String> args = new ArrayList<>();
 
     @Override
     public Integer call() throws IOException, InterruptedException {
-        Path projectDir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
-
+        Path projectDir = directory != null
+                ? directory.toAbsolutePath().normalize()
+                : Path.of(".").toAbsolutePath().normalize();
         Path toolsRoot = toolsDir != null ? toolsDir : JkDirs.cache().resolve("tools");
-        ToolRegistry registry = new ToolRegistry(toolsRoot);
+        Path cache = JkDirs.cache();
 
-        ToolDistribution dist = new GradleResolver().resolve(projectDir);
-        ToolProvisioning.Result result = ToolProvisioning.provision(
-                dist, registry, new Http(), noDiscover);
-        InstalledTool gradle = result.tool();
-        switch (result.source()) {
-            case LINKED -> System.err.println("Linked Gradle " + dist.version()
-                    + " from " + result.detail());
-            case DOWNLOADED -> System.err.println("Installed Gradle " + dist.version()
-                    + " from " + result.detail());
-            case CACHED -> { /* silent — common case */ }
-        }
+        Path gradleBin = MvnCommand.provision(cache, projectDir, toolsRoot, noDiscover, true);
+        if (gradleBin == null) return 1;
 
         Optional<InstalledJdk> jdk = JdkResolver.forProject(projectDir, jdksDir);
-
         List<String> command = new ArrayList<>();
-        command.add(gradle.binary().toString());
+        command.add(gradleBin.toString());
         command.addAll(args);
-
-        ProcessBuilder pb = new ProcessBuilder(command)
-                .directory(projectDir.toFile())
-                .inheritIO();
-        Map<String, String> env = pb.environment();
-        PassthroughEnv.apply(env, jdk.map(InstalledJdk::home).orElse(null));
-
-        Process process = pb.start();
-        return process.waitFor();
+        ProcessBuilder pb = new ProcessBuilder(command).directory(projectDir.toFile()).inheritIO();
+        PassthroughEnv.apply(pb.environment(), jdk.map(InstalledJdk::home).orElse(null));
+        return pb.start().waitFor();
     }
 }

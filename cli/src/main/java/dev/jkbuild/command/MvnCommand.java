@@ -1,21 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.jdk.JdkResolver;
-import dev.jkbuild.compat.InstalledTool;
+import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.PassthroughEnv;
-import dev.jkbuild.compat.ToolDistribution;
-import dev.jkbuild.compat.ToolProvisioning;
-import dev.jkbuild.compat.ToolRegistry;
-import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.InstalledJdk;
-import dev.jkbuild.mvn.MavenResolver;
+import dev.jkbuild.jdk.JdkResolver;
+import dev.jkbuild.runtime.CompatWorkerSetup;
+import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,11 +25,10 @@ import java.util.Optional;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk mvn ...} — passthrough to Maven (PRD §24.1). jk picks the Maven
- * version (wrapper if present, otherwise {@link MavenResolver#DEFAULT_VERSION}),
- * downloads/caches the distribution under {@code $JK_CACHE_DIR/tools/maven/<version>/},
- * sets {@code JAVA_HOME} from the project's pinned JDK, scrubs the
- * Maven-influencing env vars, and execs {@code bin/mvn} with the user's args.
+ * {@code jk mvn ...} — passthrough to Maven (PRD §24.1). The
+ * {@code jk-compat-runner} worker provisions the distribution if needed and
+ * returns its path; the main process then execs {@code bin/mvn} directly so
+ * Maven's stdout/stderr reach the terminal unmodified.
  */
 @Command(
         name = "mvn",
@@ -36,58 +36,102 @@ import java.util.concurrent.Callable;
         mixinStandardHelpOptions = false)
 public final class MvnCommand implements Callable<Integer> {
 
-    @Option(names = {"-C", "--directory"},
-            description = "Project directory. Default: current directory.")
+    @Option(names = {"-C", "--directory"})
     Path directory;
 
-    @Option(names = "--tools-dir", hidden = true,
-            description = "Override the tools install root. Default: $JK_CACHE_DIR/tools.")
+    @Option(names = "--tools-dir", hidden = true)
     Path toolsDir;
 
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
+    @Option(names = "--jdks-dir", hidden = true)
     Path jdksDir;
 
-    @Option(names = "--no-discover",
-            description = "Don't probe SDKMAN / Homebrew / etc. for an existing install; always download.")
+    @Option(names = "--no-discover")
     boolean noDiscover;
 
-    @Parameters(arity = "0..*", paramLabel = "<args>",
-            description = "Arguments forwarded to mvn.")
+    @Parameters(arity = "0..*", paramLabel = "<args>")
     List<String> args = new ArrayList<>();
 
     @Override
     public Integer call() throws IOException, InterruptedException {
-        Path projectDir = directory != null ? directory : Path.of(".").toAbsolutePath().normalize();
-
+        Path projectDir = directory != null
+                ? directory.toAbsolutePath().normalize()
+                : Path.of(".").toAbsolutePath().normalize();
         Path toolsRoot = toolsDir != null ? toolsDir : JkDirs.cache().resolve("tools");
-        ToolRegistry registry = new ToolRegistry(toolsRoot);
+        Path cache = JkDirs.cache();
 
-        ToolDistribution dist = new MavenResolver().resolve(projectDir);
-        ToolProvisioning.Result result = ToolProvisioning.provision(
-                dist, registry, new Http(), noDiscover);
-        InstalledTool maven = result.tool();
-        switch (result.source()) {
-            case LINKED -> System.err.println("Linked Maven " + dist.version()
-                    + " from " + result.detail());
-            case DOWNLOADED -> System.err.println("Installed Maven " + dist.version()
-                    + " from " + result.detail());
-            case CACHED -> { /* silent — common case */ }
-        }
+        // Provision Maven via the compat-runner, get back the bin path.
+        Path mvnBin = provision(cache, projectDir, toolsRoot, noDiscover, false);
+        if (mvnBin == null) return 1;
 
+        // Exec Maven directly so stdio is inherited cleanly.
         Optional<InstalledJdk> jdk = JdkResolver.forProject(projectDir, jdksDir);
-
         List<String> command = new ArrayList<>();
-        command.add(maven.binary().toString());
+        command.add(mvnBin.toString());
         command.addAll(args);
-
-        ProcessBuilder pb = new ProcessBuilder(command)
-                .directory(projectDir.toFile())
-                .inheritIO();
-        Map<String, String> env = pb.environment();
-        PassthroughEnv.apply(env, jdk.map(InstalledJdk::home).orElse(null));
-
-        Process process = pb.start();
-        return process.waitFor();
+        ProcessBuilder pb = new ProcessBuilder(command).directory(projectDir.toFile()).inheritIO();
+        PassthroughEnv.apply(pb.environment(), jdk.map(InstalledJdk::home).orElse(null));
+        return pb.start().waitFor();
     }
+
+    static Path provision(Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean isGradle)
+            throws IOException, InterruptedException {
+        Path workerJar = CompatWorkerSetup.locateWorkerJar(new Cas(cache));
+        Path spec = Files.createTempFile("jk-compat-", ".spec");
+        try {
+            Files.write(spec, List.of(
+                    "COMMAND " + (isGradle ? "provision_gradle" : "provision_mvn"),
+                    "PROJECT_DIR " + projectDir.toAbsolutePath(),
+                    "TOOLS_ROOT " + toolsRoot.toAbsolutePath(),
+                    "NO_DISCOVER " + noDiscover), StandardCharsets.UTF_8);
+
+            Path javaExe = CompileToolchain.runningJavaHome()
+                    .resolve("bin").resolve(isWindows() ? "java.exe" : "java");
+            ProcessBuilder pb = new ProcessBuilder(
+                    javaExe.toString(), "-jar", workerJar.toString(),
+                    spec.toAbsolutePath().toString()).redirectErrorStream(true);
+            Process process = pb.start();
+            String bin = null;
+            StringBuilder diag = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String ln;
+                while ((ln = reader.readLine()) != null) {
+                    if (!ln.startsWith("##JKCMP:")) { diag.append(ln).append('\n'); continue; }
+                    String json = ln.substring("##JKCMP:".length());
+                    if ("result".equals(readField(json, "t"))) {
+                        bin = readField(json, "bin");
+                        String err = readField(json, "error");
+                        if (err != null) System.err.println("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
+                        String src = readField(json, "source");
+                        String ver = readField(json, "version");
+                        if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
+                            System.err.println((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
+                        }
+                    }
+                }
+            }
+            int exit = process.waitFor();
+            if (exit != 0) {
+                if (diag.length() > 0) System.err.println(diag.toString().trim());
+                return null;
+            }
+            return bin != null ? Path.of(bin) : null;
+        } finally {
+            Files.deleteIfExists(spec);
+        }
+    }
+
+    static String readField(String json, String key) {
+        String needle = "\"" + key + "\":\"";
+        int s = json.indexOf(needle); if (s < 0) return null; s += needle.length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = s; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '\\' && i + 1 < json.length()) { char n = json.charAt(++i); if (n=='"') sb.append('"'); else { sb.append('\\'); sb.append(n); } }
+            else if (c == '"') break; else sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    private static boolean isWindows() { return System.getProperty("os.name","").toLowerCase().contains("win"); }
 }

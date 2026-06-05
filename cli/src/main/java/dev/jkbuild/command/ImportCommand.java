@@ -1,165 +1,144 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
-
-import dev.jkbuild.compat.JkBuildRenderer;
-import dev.jkbuild.compat.ImportReport;
-import dev.jkbuild.gradle.GradleImporter;
-import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.mvn.PomImporter;
+import dev.jkbuild.runtime.CompatWorkerSetup;
+import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
  * {@code jk import <file>} — convert a Maven or Gradle build to {@code jk.toml}
- * (PRD §24.2 / §24.3). Dispatches by filename:
- * {@code pom.xml} → {@link PomImporter} (with multi-module → workspace);
- * {@code build.gradle(.kts)} → {@link GradleImporter} (best-effort declarative).
- *
- * <p>Always writes a {@code jk.toml} into the project and an import report into
- * jk's scratch dir ({@code ~/.jk/tmp/}) — never the user's project tree — so the
- * full list of constructs that didn't carry over cleanly is available without
- * littering the imported repo. Override the location with {@code --report}.
+ * via the {@code jk-compat-runner} worker subprocess (PRD §24.2 / §24.3).
  */
 @Command(name = "import", description = "Convert a Maven or Gradle build to jk.toml")
 public final class ImportCommand implements Callable<Integer> {
 
-    /** Auto-detect order when {@code <file>} is omitted (most specific first). */
     private static final List<String> AUTO_DETECT_ORDER =
             List.of("build.gradle.kts", "build.gradle", "pom.xml");
 
     @picocli.CommandLine.Mixin GlobalOptions global;
 
     @Parameters(arity = "0..1", paramLabel = "file",
-            description = "The specific build file to import (optional)")
+            description = "The build file to import (auto-detected if omitted).")
     Path source;
 
-    @Option(names = "--out", description = "Path to write jk.toml. Default: <source-dir>/jk.toml.")
+    @Option(names = "--out", description = "Path to write jk.toml.")
     Path out;
 
-    @Option(names = "--report",
-            description = "Path to write the import report. "
-                    + "Default: ~/.jk/tmp/<group-artifact-version>-<n>-<source>-import.md.")
+    @Option(names = "--report", description = "Path to write the import report.")
     Path reportPath;
 
     @Option(names = "--force", description = "Overwrite existing jk.toml.")
     boolean force;
 
     @Override
-    public Integer call() throws IOException {
+    public Integer call() throws IOException, InterruptedException {
         Path baseDir = global.workingDir();
 
         if (source == null) {
             source = autoDetectSource(baseDir);
             if (source == null) {
                 System.err.println("jk import: no build file found in " + baseDir
-                        + " (looked for build.gradle.kts, build.gradle, pom.xml). "
-                        + "Pass a source file explicitly.");
-                return 66; // EX_NOINPUT
+                        + " (looked for build.gradle.kts, build.gradle, pom.xml).");
+                return 66;
             }
             System.out.println("Importing " + baseDir.relativize(source));
         } else {
             source = source.isAbsolute() ? source : baseDir.resolve(source);
             if (!Files.exists(source)) {
                 System.err.println("jk import: source not found: " + source);
-                return 66; // EX_NOINPUT
+                return 66;
             }
         }
 
         String filename = source.getFileName().toString().toLowerCase(Locale.ROOT);
+        if (!filename.endsWith("pom.xml") && !filename.equals("build.gradle")
+                && !filename.equals("build.gradle.kts")) {
+            System.err.println("jk import: expected pom.xml, build.gradle, or build.gradle.kts");
+            return 64;
+        }
+
         Path projectDir = source.toAbsolutePath().getParent();
         Path target = out != null ? out : projectDir.resolve("jk.toml");
-
         if (Files.exists(target) && !force) {
-            System.err.println("jk import: refusing to overwrite existing " + target
-                    + " (use --force to replace).");
-            return 73; // EX_CANTCREAT
+            System.err.println("jk import: refusing to overwrite " + target + " (use --force).");
+            return 73;
         }
 
-        Importable importable;
-        if (filename.endsWith("pom.xml")) {
-            PomImporter.WorkspaceImportResult result = PomImporter.importWorkspace(source);
-            Map<String, JkBuild> members = new LinkedHashMap<>(result.members());
-            importable = new Importable(result.root(), members, result.report());
-        } else if (filename.equals("build.gradle") || filename.equals("build.gradle.kts")) {
-            GradleImporter.Result result = GradleImporter.importFrom(source);
-            importable = new Importable(result.jkBuild(), Map.of(), result.report());
-        } else {
-            System.err.println("jk import: unrecognised source — expected pom.xml, build.gradle, "
-                    + "or build.gradle.kts (got " + source.getFileName() + ").");
-            return 64; // EX_USAGE
-        }
+        Path cache = JkDirs.cache();
+        List<String> lines = new ArrayList<>();
+        lines.add("COMMAND import");
+        lines.add("SOURCE "   + source.toAbsolutePath());
+        lines.add("OUT "      + target.toAbsolutePath());
+        lines.add("BASE_DIR " + projectDir.toAbsolutePath());
+        lines.add("TMP_DIR "  + JkDirs.tmp().toAbsolutePath());
+        lines.add("FORCE "    + force);
+        if (reportPath != null) lines.add("REPORT " + reportPath.toAbsolutePath());
 
-        Files.writeString(target, JkBuildRenderer.render(importable.root), StandardCharsets.UTF_8);
-        System.out.println("Wrote " + target);
-
-        for (var entry : importable.members.entrySet()) {
-            Path memberJkBuild = projectDir.resolve(entry.getKey()).resolve("jk.toml");
-            if (Files.exists(memberJkBuild) && !force) {
-                System.err.println("jk import: refusing to overwrite existing " + memberJkBuild
-                        + " (use --force to replace).");
-                return 73;
-            }
-            Files.writeString(memberJkBuild,
-                    JkBuildRenderer.render(entry.getValue()), StandardCharsets.UTF_8);
-            System.out.println("Wrote " + memberJkBuild);
-        }
-
-        // The report is a transient, regenerable artifact — keep it out of the
-        // user's project tree. Default into ~/.jk/tmp/, named by coordinate +
-        // source file, with a collision counter; --report overrides. The
-        // coordinate is hyphen-joined (not group:artifact:version) so the
-        // filename is valid on Windows.
-        var proj = importable.root.project();
-        String coord = proj.group() + "-" + proj.name() + "-" + proj.version();
-        Path reportTarget = reportPath != null
-                ? reportPath
-                : defaultReportPath(JkDirs.tmp(), coord, source.getFileName().toString());
-        Path reportDir = reportTarget.getParent();
-        if (reportDir != null) Files.createDirectories(reportDir);
-        Files.writeString(reportTarget,
-                importable.report.renderMarkdown(source.toString()),
-                StandardCharsets.UTF_8);
-        System.out.println("Wrote " + reportTarget);
-        if (!importable.report.isEmpty()) {
-            System.out.println("Import notes: " + importable.report.issues().size()
-                    + (importable.report.hasErrors() ? " (includes Tier 3 errors)" : ""));
-        }
-        return 0;
+        return runWorker(cache, lines);
     }
 
-    /**
-     * Find the first build file in {@code dir} matching {@link #AUTO_DETECT_ORDER}
-     * (build.gradle.kts → build.gradle → pom.xml), or {@code null} if none exist.
-     */
-    private static Path autoDetectSource(Path dir) {
-        for (String name : AUTO_DETECT_ORDER) {
-            Path candidate = dir.resolve(name);
-            if (Files.isRegularFile(candidate)) {
-                return candidate;
+    private int runWorker(Path cache, List<String> specLines)
+            throws IOException, InterruptedException {
+        Path workerJar = CompatWorkerSetup.locateWorkerJar(new Cas(cache));
+        Path spec = Files.createTempFile("jk-compat-", ".spec");
+        try {
+            Files.write(spec, specLines, StandardCharsets.UTF_8);
+            Path javaExe = CompileToolchain.runningJavaHome()
+                    .resolve("bin").resolve(isWindows() ? "java.exe" : "java");
+            ProcessBuilder pb = new ProcessBuilder(
+                    javaExe.toString(), "-jar", workerJar.toString(),
+                    spec.toAbsolutePath().toString()).redirectErrorStream(true);
+            Process process = pb.start();
+            int exit = 0;
+            StringBuilder diag = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String ln;
+                while ((ln = reader.readLine()) != null) {
+                    if (!ln.startsWith("##JKCMP:")) { diag.append(ln).append('\n'); continue; }
+                    String json = ln.substring("##JKCMP:".length());
+                    String t = readField(json, "t");
+                    if ("wrote".equals(t)) System.out.println("Wrote " + readField(json, "path"));
+                    else if ("note".equals(t)) System.out.println(readField(json, "msg"));
+                    else if ("result".equals(t)) {
+                        String err = readField(json, "error");
+                        if (err != null) { System.err.println("jk import: " + err); }
+                        String warnings = readNumericField(json, "warnings");
+                        if (warnings != null && !warnings.equals("0")) {
+                            System.out.println("Import notes: " + warnings + " issue(s)");
+                        }
+                    }
+                }
             }
+            exit = process.waitFor();
+            if (exit != 0 && diag.length() > 0) {
+                System.err.println("jk import: " + diag.toString().trim());
+            }
+            return exit;
+        } finally {
+            Files.deleteIfExists(spec);
         }
-        return null;
     }
 
     /**
      * Pick {@code <tmpDir>/<coord>-<n>-<sourceFile>-import.md}, incrementing
-     * {@code n} (from 1) past any existing file so repeated imports of the same
-     * coordinate don't clobber prior reports. {@code coord} is the hyphen-joined
-     * {@code group-artifact-version} (kept filename-safe on every OS).
+     * {@code n} past any existing file.
      */
     static Path defaultReportPath(Path tmpDir, String coord, String sourceFileName) {
         for (int n = 1; ; n++) {
@@ -168,5 +147,42 @@ public final class ImportCommand implements Callable<Integer> {
         }
     }
 
-    private record Importable(JkBuild root, Map<String, JkBuild> members, ImportReport report) {}
+    private static Path autoDetectSource(Path dir) {
+        for (String name : AUTO_DETECT_ORDER) {
+            Path c = dir.resolve(name);
+            if (Files.isRegularFile(c)) return c;
+        }
+        return null;
+    }
+
+    private static String readField(String json, String key) {
+        String needle = "\"" + key + "\":\"";
+        int start = json.indexOf(needle);
+        if (start < 0) return null;
+        start += needle.length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '\\' && i + 1 < json.length()) {
+                char n = json.charAt(++i);
+                if (n == '"') sb.append('"'); else { sb.append('\\'); sb.append(n); }
+            } else if (c == '"') break;
+            else sb.append(c);
+        }
+        return sb.toString();
+    }
+
+    private static String readNumericField(String json, String key) {
+        String needle = "\"" + key + "\":";
+        int s = json.indexOf(needle);
+        if (s < 0) return null;
+        s += needle.length();
+        int e = s;
+        while (e < json.length() && Character.isDigit(json.charAt(e))) e++;
+        return e > s ? json.substring(s, e) : null;
+    }
+
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
 }

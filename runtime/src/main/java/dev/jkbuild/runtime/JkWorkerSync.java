@@ -44,7 +44,9 @@ public final class JkWorkerSync {
             new Worker("jk-kotlin-compiler", "/META-INF/jk-kotlin-compiler-sha256.txt"),
             new Worker("jk-java-compiler", "/META-INF/jk-java-compiler-sha256.txt"),
             new Worker("jk-audit-runner", "/META-INF/jk-audit-runner-sha256.txt"),
-            new Worker("jk-publish-runner", "/META-INF/jk-publish-runner-sha256.txt"));
+            new Worker("jk-publish-runner", "/META-INF/jk-publish-runner-sha256.txt"),
+            new Worker("jk-image-runner",   "/META-INF/jk-image-runner-sha256.txt"),
+            new Worker("jk-compat-runner",  "/META-INF/jk-compat-runner-sha256.txt"));
 
     /** Per-worker progress callbacks. */
     public interface Observer {

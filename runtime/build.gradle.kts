@@ -82,6 +82,54 @@ val writeJavaWorkerSha by tasks.registering {
         }
     }
 }
+// Same scheme for the jk-image-runner worker (OCI image building via Jib).
+val imageWorkerJar by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies {
+    imageWorkerJar(project(":image-runner"))
+}
+val writeImageWorkerSha by tasks.registering {
+    val inputJar = imageWorkerJar
+    inputs.files(inputJar)
+    val outFile = layout.buildDirectory.file(
+            "generated/resources/image-worker-sha/META-INF/jk-image-runner-sha256.txt")
+    outputs.file(outFile)
+    doLast {
+        val jarBytes = inputJar.singleFile.readBytes()
+        val digest: ByteArray = MessageDigest.getInstance("SHA-256").digest(jarBytes)
+        val sb = StringBuilder(digest.size * 2)
+        for (b in digest) { sb.append(String.format("%02x", b.toInt() and 0xff)) }
+        outFile.get().asFile.apply { parentFile.mkdirs(); writeText(sb.toString()) }
+    }
+}
+
+// Same scheme for the jk-compat-runner worker (import/export/mvn/gradle).
+val compatWorkerJar by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+dependencies {
+    compatWorkerJar(project(":compat-runner"))
+}
+val writeCompatWorkerSha by tasks.registering {
+    val inputJar = compatWorkerJar
+    inputs.files(inputJar)
+    val outFile = layout.buildDirectory.file(
+            "generated/resources/compat-worker-sha/META-INF/jk-compat-runner-sha256.txt")
+    outputs.file(outFile)
+    doLast {
+        val jarBytes = inputJar.singleFile.readBytes()
+        val digest: ByteArray = MessageDigest.getInstance("SHA-256").digest(jarBytes)
+        val sb = StringBuilder(digest.size * 2)
+        for (b in digest) { sb.append(String.format("%02x", b.toInt() and 0xff)) }
+        outFile.get().asFile.apply { parentFile.mkdirs(); writeText(sb.toString()) }
+    }
+}
+
 // Same scheme for the jk-publish-runner worker (artifact publishing + signing).
 val publishWorkerJar by configurations.creating {
     isCanBeConsumed = false
@@ -144,10 +192,14 @@ sourceSets.named("main") {
     resources.srcDir(layout.buildDirectory.dir("generated/resources/java-worker-sha"))
     resources.srcDir(layout.buildDirectory.dir("generated/resources/audit-worker-sha"))
     resources.srcDir(layout.buildDirectory.dir("generated/resources/publish-worker-sha"))
+    resources.srcDir(layout.buildDirectory.dir("generated/resources/image-worker-sha"))
+    resources.srcDir(layout.buildDirectory.dir("generated/resources/compat-worker-sha"))
 }
 tasks.named("processResources") {
-    dependsOn(writeKotlinWorkerSha, writeJavaWorkerSha, writeAuditWorkerSha, writePublishWorkerSha)
+    dependsOn(writeKotlinWorkerSha, writeJavaWorkerSha, writeAuditWorkerSha,
+              writePublishWorkerSha, writeImageWorkerSha, writeCompatWorkerSha)
 }
 tasks.named("sourcesJar") {
-    dependsOn(writeKotlinWorkerSha, writeJavaWorkerSha, writeAuditWorkerSha, writePublishWorkerSha)
+    dependsOn(writeKotlinWorkerSha, writeJavaWorkerSha, writeAuditWorkerSha,
+              writePublishWorkerSha, writeImageWorkerSha, writeCompatWorkerSha)
 }
