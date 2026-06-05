@@ -4,15 +4,9 @@ plugins {
     id("jk.java-conventions")
 }
 
-description = "jk supply chain: audit, sbom, deny, publish"
+description = "jk supply chain: deny policy"
 
 dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
-    implementation(libs.bouncycastle.bcpg)
-    implementation(libs.sigstore.java)
-    implementation(libs.cyclonedx.core.java)
-    implementation(libs.spdx.java.library)
-
-    testImplementation(project(":supply-chain-testkit"))
 }

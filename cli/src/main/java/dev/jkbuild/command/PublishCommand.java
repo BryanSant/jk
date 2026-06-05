@@ -1,64 +1,48 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
-
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.credential.RepoCredential;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.repo.RepoCredentialResolver;
-import dev.jkbuild.publish.Checksums;
-import dev.jkbuild.publish.GpgSigner;
-import dev.jkbuild.publish.KeylessSigstoreSigner;
-import dev.jkbuild.publish.MavenPublisher;
-import dev.jkbuild.publish.PublishablePom;
-import dev.jkbuild.publish.SigningOptions;
-import dev.jkbuild.publish.SigstoreSigner;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.publish.Sbom;
-import dev.jkbuild.publish.SlsaProvenance;
-import dev.jkbuild.publish.SourcesJar;
+import dev.jkbuild.runtime.PublishWorkerSetup;
+import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.Instant;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
-import java.util.UUID;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk publish} — first cut (PRD §21). Assembles the publish bundle
- * (main jar, generated POM, sources jar + four checksum files each) and
- * uploads it to a Maven HTTP repository.
+ * {@code jk publish} — assembles, signs, and uploads Maven artifacts via the
+ * {@code jk-publish-runner} worker subprocess (PRD §21). BouncyCastle, sigstore-java,
+ * and the upload HTTP logic live in the worker, not in the main jk binary.
  *
- * <p>Goal shape: {@code parse-build} → {@code assemble-artifacts} →
- * {@code sign} (only when signing is requested) → {@code upload}
- * (skipped on {@code --dry-run}). The signing options carry the GPG
- * key and Sigstore client; we close them in a finally block so the
- * Sigstore HTTP client doesn't leak on cancellation.
- *
- * <p>SNAPSHOT versions are refused per PRD §21.4 unless
- * {@code --allow-snapshot} is set.
+ * <p>The parent process validates inputs and resolves credentials, then forks the
+ * worker which streams {@code ##JKPU:} NDJSON progress back. SNAPSHOT versions are
+ * refused unless {@code --allow-snapshot} is set (PRD §21.4).
  */
 @Command(name = "publish", description = "Publish artifacts to a package repository")
 public final class PublishCommand implements Callable<Integer> {
@@ -75,7 +59,7 @@ public final class PublishCommand implements Callable<Integer> {
     String password;
 
     @Option(names = "--region", paramLabel = "<REGION>",
-            description = "Object-store region for s3:// / gs:// targets (else the AWS env).")
+            description = "Object-store region for s3:// / gs:// targets.")
     String region;
 
     @Option(names = "--endpoint", paramLabel = "<URL>",
@@ -124,11 +108,7 @@ public final class PublishCommand implements Callable<Integer> {
 
     private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
     private static final GoalKey<Path> JAR = GoalKey.of("jar", Path.class);
-    @SuppressWarnings("rawtypes")
-    private static final GoalKey<List> ARTIFACTS = GoalKey.of("artifacts", List.class);
-    private static final GoalKey<SigningOptions> SIGNING = GoalKey.of("signing", SigningOptions.class);
-    private static final GoalKey<MavenPublisher.Result> PUB_RESULT =
-            GoalKey.of("publish-result", MavenPublisher.Result.class);
+    private static final GoalKey<String> PUB_SUMMARY = GoalKey.of("pub-summary", String.class);
 
     @Override
     public Integer call() throws IOException, InterruptedException {
@@ -137,6 +117,10 @@ public final class PublishCommand implements Callable<Integer> {
         if (!Files.exists(jkBuildPath)) {
             System.err.println("jk publish: " + jkBuildPath + " not found.");
             return 66;
+        }
+        if (sign && keyFile == null) {
+            System.err.println("jk publish: --sign requires --key-file <path>.");
+            return 64; // EX_USAGE
         }
         Path cache = JkDirs.cache();
 
@@ -164,102 +148,21 @@ public final class PublishCommand implements Callable<Integer> {
                 })
                 .build();
 
-        Phase assembleArtifacts = Phase.builder("assemble-artifacts")
+        Phase publish = Phase.builder("publish")
+                .kind(PhaseKind.IO)
                 .requires("parse-build")
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
                     Path jar = ctx.require(JAR);
-                    ctx.label("assemble publish bundle");
-                    byte[] jarBytes = Files.readAllBytes(jar);
-                    List<MavenPublisher.Artifact> artifacts = new ArrayList<>();
-                    artifacts.add(new MavenPublisher.Artifact(".jar", jarBytes));
-
-                    PublishablePom.Pom pom = PublishablePom.render(project,
-                            PublishablePom.Metadata.empty());
-                    artifacts.add(new MavenPublisher.Artifact(".pom",
-                            pom.xml().getBytes(StandardCharsets.UTF_8)));
-
-                    if (!noSources) {
-                        Path srcRoot = projectDir.resolve("src/main/java");
-                        byte[] sourcesJar = SourcesJar.build(List.of(srcRoot));
-                        artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesJar));
-                    }
-
-                    if (slsa) {
-                        artifacts.add(new MavenPublisher.Artifact(".intoto.json",
-                                buildSlsaProvenance(project.project(),
-                                        jar.getFileName().toString(), jarBytes)));
-                    }
-
-                    if (sbom) {
-                        Lockfile lock = loadLockfileIfPresent(projectDir);
-                        artifacts.add(new MavenPublisher.Artifact("-cyclonedx.json",
-                                Sbom.cyclonedx(project, lock)));
-                        artifacts.add(new MavenPublisher.Artifact("-spdx.json",
-                                Sbom.spdx(project, lock)));
-                    }
-                    ctx.put(ARTIFACTS, artifacts);
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase prepareSigning = Phase.builder("prepare-signing")
-                .kind(PhaseKind.IO)
-                .requires("assemble-artifacts")
-                .scope(1)
-                .execute(ctx -> {
-                    if (!sign && !sigstore) {
-                        ctx.label("no signing requested");
-                        ctx.put(SIGNING, new SigningOptions(null, null));
-                        ctx.progress(1);
-                        return;
-                    }
-                    ctx.label("load signing keys");
+                    ctx.label(dryRun ? "dry-run — assembling publish bundle"
+                            : "publish to " + repoUrl);
                     try {
-                        ctx.put(SIGNING, buildSigningOptions());
-                    } catch (RuntimeException | IOException e) {
-                        ctx.error("signing", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    ctx.progress(1);
-                })
-                .build();
-
-        Phase upload = Phase.builder("upload")
-                .kind(PhaseKind.IO)
-                .requires("prepare-signing")
-                .scope(1)
-                .execute(ctx -> {
-                    if (dryRun) {
-                        ctx.label("dry-run — printing upload plan");
-                        if (!global.outputIsJson()) {
-                            printDryRunPlan(ctx.require(PROJECT), ctx.require(ARTIFACTS));
-                        }
-                        ctx.progress(1);
-                        return;
-                    }
-                    JkBuild project = ctx.require(PROJECT);
-                    @SuppressWarnings("unchecked")
-                    List<MavenPublisher.Artifact> artifacts =
-                            (List<MavenPublisher.Artifact>) ctx.require(ARTIFACTS);
-                    ctx.label("upload to " + repoUrl);
-                    dev.jkbuild.model.ObjectStoreConfig objectStore =
-                            new dev.jkbuild.model.ObjectStoreConfig(
-                                    blankToNull(region), blankToNull(endpoint), null, null, null);
-                    MavenPublisher publisher = MavenPublisher.withObjectStore(
-                            repoUrl, resolvePublishCredential(project), objectStore);
-                    try {
-                        MavenPublisher.Result result = publisher.publish(
-                                project.project(), artifacts, ctx.require(SIGNING));
-                        ctx.put(PUB_RESULT, result);
-                        if (!result.allOk()) {
-                            ctx.error("upload", "publish reported partial failure");
-                            throw new RuntimeException("upload failed");
-                        }
-                    } catch (IOException | InterruptedException e) {
-                        ctx.error("upload", e.getMessage());
-                        throw new RuntimeException(e);
+                        String summary = runWorker(projectDir, jar, project, cache);
+                        ctx.put(PUB_SUMMARY, summary);
+                    } catch (RuntimeException e) {
+                        ctx.error("publish", e.getMessage());
+                        throw e;
                     }
                     ctx.progress(1);
                 })
@@ -267,18 +170,10 @@ public final class PublishCommand implements Callable<Integer> {
 
         Goal goal = Goal.builder("publish")
                 .addPhase(parseBuild)
-                .addPhase(assembleArtifacts)
-                .addPhase(prepareSigning)
-                .addPhase(upload)
+                .addPhase(publish)
                 .build();
 
-        GoalResult result;
-        try {
-            result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
-        } finally {
-            goal.get(SIGNING).ifPresent(PublishCommand::closeSigningOptions);
-        }
-
+        GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) {
             for (GoalResult.Diagnostic d : result.errors()) {
                 if ("snapshot".equals(d.code())) return 65;
@@ -287,35 +182,125 @@ public final class PublishCommand implements Callable<Integer> {
             return 1;
         }
 
-        if (dryRun) return 0;
-
-        JkBuild project = goal.get(PROJECT).orElseThrow();
-        MavenPublisher.Result pub = goal.get(PUB_RESULT).orElseThrow();
-        SigningOptions signing = goal.get(SIGNING).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println("Published " + Coords.gav(
-                    project.project().group(), project.project().name(), project.project().version())
-                    + " (" + pub.statusByPath().size() + " files"
-                    + (signing.isNoop() ? "" : ", signed") + ")");
+            JkBuild project = goal.get(PROJECT).orElseThrow();
+            String summary = goal.get(PUB_SUMMARY).orElse("");
+            System.out.println("Published "
+                    + Coords.gav(project.project().group(),
+                            project.project().name(),
+                            project.project().version())
+                    + (summary.isBlank() ? "" : " " + summary));
         }
         return 0;
     }
 
-    /**
-     * Credential for the publish upload. Explicit {@code --user}/{@code --password}
-     * (or {@code PUBLISH_USER}/{@code PUBLISH_PASSWORD}) win for back-compat;
-     * otherwise resolve through the shared chain. If {@code --repo-url} matches
-     * a repository declared in {@code jk.toml}, its name (for env/store/settings)
-     * and inline credential apply; the forge-token bridge always applies by host
-     * (so publishing to GitHub Packages reuses a `jk auth login` token).
-     */
+    private String runWorker(Path projectDir, Path jar, JkBuild project, Path cache)
+            throws IOException, InterruptedException {
+        // Resolve credential in the parent — needs env/keychain access.
+        RepoCredential cred = resolvePublishCredential(project);
+
+        Path spec = writeSpec(projectDir, jar, cred);
+        try {
+            Path workerJar = PublishWorkerSetup.locateWorkerJar(new Cas(cache));
+            Path javaExe = CompileToolchain.runningJavaHome()
+                    .resolve("bin")
+                    .resolve(isWindows() ? "java.exe" : "java");
+            List<String> cmd = new ArrayList<>();
+            cmd.add(javaExe.toString());
+            cmd.add("-jar");
+            cmd.add(workerJar.toString());
+            cmd.add(spec.toAbsolutePath().toString());
+
+            ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
+            Process process = pb.start();
+
+            int files = 0;
+            String error = null;
+            StringBuilder workerDiag = new StringBuilder();
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (!line.startsWith("##JKPU:")) {
+                        workerDiag.append(line).append('\n');
+                        continue;
+                    }
+                    String json = line.substring("##JKPU:".length());
+                    String t = readField(json, "t");
+                    if ("result".equals(t)) {
+                        String filesStr = readNumericField(json, "files");
+                        if (filesStr != null) files = Integer.parseInt(filesStr);
+                        error = readField(json, "error");
+                    }
+                }
+            }
+            int exit = process.waitFor();
+            if (exit != 0) {
+                String diag = workerDiag.length() > 0 ? workerDiag.toString().trim() : null;
+                throw new RuntimeException("publish worker failed"
+                        + (error != null ? ": " + error
+                                : diag != null ? ": " + diag
+                                : " (exit " + exit + ")"));
+            }
+            return dryRun ? "(dry-run)" : "(" + files + " files)";
+        } finally {
+            Files.deleteIfExists(spec);
+        }
+    }
+
+    private Path writeSpec(Path projectDir, Path jar, RepoCredential cred)
+            throws IOException {
+        List<String> lines = new ArrayList<>();
+        lines.add("PROJECT_DIR " + projectDir.toAbsolutePath());
+        lines.add("JAR "         + jar.toAbsolutePath());
+        lines.add("REPO_URL "    + repoUrl);
+        lines.add("DRY_RUN "     + dryRun);
+        lines.add("NO_SOURCES "  + noSources);
+        lines.add("SLSA "        + slsa);
+        lines.add("SBOM "        + sbom);
+        lines.add("SIGN_SIGSTORE " + sigstore);
+
+        // Credential (resolved in parent so the worker doesn't need keychain access).
+        if (cred instanceof RepoCredential.Basic b) {
+            lines.add("REPO_AUTH_TYPE basic");
+            lines.add("REPO_USER " + b.username());
+            lines.add("REPO_PASS " + b.password());
+        } else if (cred instanceof RepoCredential.Bearer b) {
+            lines.add("REPO_AUTH_TYPE bearer");
+            lines.add("REPO_TOKEN " + b.token());
+        } else {
+            lines.add("REPO_AUTH_TYPE anonymous");
+        }
+
+        if (sign && keyFile != null) {
+            lines.add("SIGN_GPG " + keyFile.toAbsolutePath());
+            String pass = keyPassphrase != null ? keyPassphrase
+                    : System.getenv("JK_GPG_PASSPHRASE");
+            if (pass != null) lines.add("SIGN_GPG_PASS " + pass);
+        }
+        if (region != null && !region.isBlank())   lines.add("OBJECT_STORE_REGION " + region);
+        if (endpoint != null && !endpoint.isBlank()) lines.add("OBJECT_STORE_ENDPOINT " + endpoint);
+
+        // Use a 0600 temp file so credentials aren't world-readable.
+        Path spec;
+        try {
+            spec = Files.createTempFile("jk-publish-", ".spec",
+                    PosixFilePermissions.asFileAttribute(
+                            PosixFilePermissions.fromString("rw-------")));
+        } catch (UnsupportedOperationException ignored) {
+            // Non-POSIX filesystem (Windows): fall back to default permissions.
+            spec = Files.createTempFile("jk-publish-", ".spec");
+        }
+        Files.write(spec, lines, StandardCharsets.UTF_8);
+        return spec;
+    }
+
     private RepoCredential resolvePublishCredential(JkBuild project) {
         String user = username != null ? username : System.getenv("PUBLISH_USER");
         if (user != null && !user.isBlank()) {
             String pass = password != null ? password : System.getenv("PUBLISH_PASSWORD");
             return new RepoCredential.Basic(user, pass == null ? "" : pass);
         }
-
         String matchedName = null;
         Optional<RepoCredential> inline = Optional.empty();
         String target = repoUrl.toString();
@@ -331,73 +316,42 @@ public final class PublishCommand implements Callable<Integer> {
         return new RepoCredentialResolver().resolve(matchedName, repoUrl, inline);
     }
 
-    private static String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s.strip();
-    }
-
-    private void printDryRunPlan(JkBuild project, List<MavenPublisher.Artifact> artifacts) {
-        String groupPath = project.project().group().replace('.', '/');
-        String prefix = repoUrl + (repoUrl.toString().endsWith("/") ? "" : "/")
-                + groupPath + "/" + project.project().name() + "/"
-                + project.project().version() + "/";
-        System.out.println("Would PUT to " + prefix + ":");
-        for (MavenPublisher.Artifact a : artifacts) {
-            String name = project.project().name() + "-"
-                    + project.project().version() + a.filenameSuffix();
-            System.out.println("  " + name + " (" + a.body().length + " bytes)");
-            System.out.println("  " + name + ".md5 / .sha1 / .sha256 / .sha512");
-            if (sign) System.out.println("  " + name + ".asc + four checksums");
-            if (sigstore) System.out.println("  " + name + ".sigstore + four checksums");
-            if (slsa && a.filenameSuffix().equals(".jar")) {
-                System.out.println("  " + project.project().name() + "-"
-                        + project.project().version() + ".intoto.json + four checksums");
+    private static String readField(String json, String key) {
+        String needle = "\"" + key + "\":\"";
+        int start = json.indexOf(needle);
+        if (start < 0) return null;
+        start += needle.length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = start; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '\\' && i + 1 < json.length()) {
+                char n = json.charAt(++i);
+                switch (n) {
+                    case '"' -> sb.append('"');
+                    case '\\' -> sb.append('\\');
+                    case 'n' -> sb.append('\n');
+                    default -> { sb.append('\\'); sb.append(n); }
+                }
+            } else if (c == '"') {
+                break;
+            } else {
+                sb.append(c);
             }
         }
+        return sb.toString();
     }
 
-    private SigningOptions buildSigningOptions() throws IOException {
-        GpgSigner gpg = loadGpgIfRequested();
-        SigstoreSigner sigstoreSigner = sigstore ? KeylessSigstoreSigner.sigstorePublic() : null;
-        return new SigningOptions(gpg, sigstoreSigner);
+    private static String readNumericField(String json, String key) {
+        String needle = "\"" + key + "\":";
+        int start = json.indexOf(needle);
+        if (start < 0) return null;
+        start += needle.length();
+        int end = start;
+        while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
+        return end > start ? json.substring(start, end) : null;
     }
 
-    private GpgSigner loadGpgIfRequested() throws IOException {
-        if (!sign) return null;
-        if (keyFile == null) {
-            throw new IllegalArgumentException(
-                    "jk publish --sign requires --key-file <path>.");
-        }
-        String pass = keyPassphrase != null ? keyPassphrase : System.getenv("JK_GPG_PASSPHRASE");
-        return GpgSigner.fromKeyFile(keyFile, pass == null ? new char[0] : pass.toCharArray());
-    }
-
-    private static Lockfile loadLockfileIfPresent(Path projectDir) throws IOException {
-        Path lockPath = projectDir.resolve("jk.lock");
-        return Files.exists(lockPath) ? LockfileReader.read(lockPath) : null;
-    }
-
-    private static byte[] buildSlsaProvenance(JkBuild.Project project, String jarFilename, byte[] jarBytes) {
-        Instant now = Instant.now();
-        SlsaProvenance.BuildContext ctx = new SlsaProvenance.BuildContext(
-                "https://github.com/buildjk/jk",
-                "https://buildjk.dev/jk-build/v1",
-                UUID.randomUUID().toString(),
-                now,
-                now,
-                Map.of("configRef", "jk.toml"),
-                Map.of(
-                        "group", project.group(),
-                        "artifact", project.name(),
-                        "version", project.version(),
-                        "jdk", String.valueOf(project.jdk())));
-        return SlsaProvenance.generate(
-                List.of(new SlsaProvenance.Subject(jarFilename, Checksums.sha256Hex(jarBytes))),
-                ctx);
-    }
-
-    private static void closeSigningOptions(SigningOptions signing) {
-        if (signing.sigstore() instanceof AutoCloseable c) {
-            try { c.close(); } catch (Exception ignored) { /* best effort */ }
-        }
+    private static boolean isWindows() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
     }
 }

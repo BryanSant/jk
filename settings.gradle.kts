@@ -33,6 +33,7 @@ include(
     ":kotlin-compiler",
     ":java-compiler",
     ":audit-runner",
+    ":publish-runner",
     ":runtime",
     ":cli",
 )

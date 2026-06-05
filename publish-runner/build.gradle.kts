@@ -8,28 +8,29 @@ plugins {
     `maven-publish`
 }
 
-// Published to the local Maven repo (`./gradlew publishToMavenLocal`) so `jk sync`
-// can pull the worker into the CAS. Coordinates + version must match
-// JkWorkerSync.GROUP / artifactId and dev.jkbuild.util.JkVersion.VERSION.
 group = "dev.jkbuild"
 version = "0.1.0-SNAPSHOT"
 
 publishing {
     publications {
         create<MavenPublication>("worker") {
-            artifactId = "jk-audit-runner"
+            artifactId = "jk-publish-runner"
             from(components["java"])
         }
     }
 }
 
-description = "jk-audit-runner: child-JVM worker that queries the OSV vulnerability API and " +
-        "streams NDJSON findings back to jk. Isolated from jk's own classpath so Jackson " +
-        "and the OSV HTTP client never load in the main jk process."
+description = "jk-publish-runner: child-JVM worker that assembles, signs, and publishes Maven " +
+        "artifacts. Isolates BouncyCastle, sigstore-java, and the upload HTTP logic from jk's " +
+        "own classpath. Reads a line-oriented spec, streams NDJSON progress back to jk."
 
 dependencies {
     implementation(project(":core"))
-    implementation(libs.jackson.databind)
+    implementation(project(":io"))
+    implementation(libs.bouncycastle.bcpg)
+    implementation(libs.sigstore.java)
+
+    testImplementation(project(":supply-chain-testkit"))
 }
 
 // Fat JAR: bundle all runtime deps so the worker is launchable as `java -jar`.
@@ -37,8 +38,8 @@ tasks.jar {
     dependsOn(configurations.runtimeClasspath)
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.audit.runner.AuditRunner",
-                "Implementation-Title" to "jk-audit-runner",
+                "Main-Class" to "dev.jkbuild.publish.runner.PublishRunner",
+                "Implementation-Title" to "jk-publish-runner",
                 "Implementation-Version" to project.version)
     }
     from(configurations.runtimeClasspath.get().map { if (it.isDirectory) it else zipTree(it) })
@@ -47,15 +48,8 @@ tasks.jar {
     exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "META-INF/*.EC")
 }
 
-/**
- * Side-load the freshly-built worker jar into the developer's local jk CAS at
- * {@code ~/.jk/cache/sha256/AA/BB/<rest>}, keyed by its SHA-256 — so a dev
- * {@code jk audit} finds the worker without setting {@code -Djk.audit.worker.jar}.
- * Run after any change to the worker: {@code ./gradlew :audit-runner:installLocalCas}.
- * Mirrors what {@code jk sync} will do once the worker is published to Maven Central.
- */
 tasks.register("installLocalCas") {
-    description = "Side-load the freshly-built jk-audit-runner jar into ~/.jk/cache/sha256/<hash>"
+    description = "Side-load the freshly-built jk-publish-runner jar into ~/.jk/cache/sha256/<hash>"
     group = "jk"
     dependsOn(tasks.jar)
     val jarProvider = tasks.jar.flatMap { it.archiveFile }
@@ -77,7 +71,7 @@ tasks.register("installLocalCas") {
                 .resolve(hex.substring(4))
         target.parentFile.mkdirs()
         jar.copyTo(target, overwrite = true)
-        println("Installed jk-audit-runner ${jar.length()} bytes")
+        println("Installed jk-publish-runner ${jar.length()} bytes")
         println("  sha256: $hex")
         println("  path:   $target")
     }

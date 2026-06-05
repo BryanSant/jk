@@ -45,29 +45,34 @@ tasks.withType<JavaCompile>().configureEach {
     options.compilerArgs.add("-Aproject=dev.jkbuild.cli")
 }
 
-// Tests that fork a child-JVM worker — the jk-kotlin-compiler (Kotlin compiles)
-// and jk-test-runner (`jk test`) — locate it via a system-property override
-// until it ships to Maven Central. Resolve each worker jar and hand its path to
-// the test JVM so the tests are self-contained (no `installLocalCas` needed).
+// Tests that fork child-JVM workers locate each jar via a system-property override
+// until workers ship to Maven Central. Resolve each worker jar here and pass its
+// path to the test JVM so tests are self-contained (no `installLocalCas` needed).
 val kotlinWorkerJar by configurations.creating {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-    isTransitive = false
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
 val testRunnerJar by configurations.creating {
-    isCanBeConsumed = false
-    isCanBeResolved = true
-    isTransitive = false
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+val auditWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+val publishWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
 dependencies {
     kotlinWorkerJar(project(":kotlin-compiler"))
     testRunnerJar(project(":test-runner"))
+    auditWorkerJar(project(":audit-runner"))
+    publishWorkerJar(project(":publish-runner"))
 }
 tasks.withType<Test>().configureEach {
-    dependsOn(kotlinWorkerJar, testRunnerJar)
+    dependsOn(kotlinWorkerJar, testRunnerJar, auditWorkerJar, publishWorkerJar)
     doFirst {
-        systemProperty("jk.kotlin.worker.jar", kotlinWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.test.runner.jar", testRunnerJar.singleFile.absolutePath)
+        systemProperty("jk.kotlin.worker.jar",  kotlinWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.test.runner.jar",    testRunnerJar.singleFile.absolutePath)
+        systemProperty("jk.audit.worker.jar",   auditWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.publish.worker.jar", publishWorkerJar.singleFile.absolutePath)
     }
 }
 
