@@ -8,5 +8,5 @@ description = "jk I/O: http, cache, git, repo"
 
 dependencies {
     implementation(project(":core"))
-    implementation(libs.jgit)
+    // JGit is now in :git-runner (subprocess worker); io no longer needs it.
 }

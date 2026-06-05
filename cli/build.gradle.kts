@@ -36,7 +36,8 @@ dependencies {
     testImplementation(project(":supply-chain-testkit"))
     // JdkCommandTest builds xz-compressed feed fixtures via XZCompressorOutputStream.
     // GitSourceMaterializerTest builds a local git "library" repo fixture with jgit.
-    testImplementation(libs.jgit)
+    // GitSourceMaterializerTest uses a local git fixture (built with system git or git-runner)
+    // testImplementation(libs.jgit)  -- removed, tests use system git or git-runner worker
 }
 
 tasks.withType<JavaCompile>().configureEach {
@@ -64,6 +65,9 @@ val imageWorkerJar by configurations.creating {
 val compatWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
+val gitWorkerJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
 dependencies {
     kotlinWorkerJar(project(":kotlin-compiler"))
     testRunnerJar(project(":test-runner"))
@@ -71,10 +75,11 @@ dependencies {
     publishWorkerJar(project(":publish-runner"))
     imageWorkerJar(project(":image-runner"))
     compatWorkerJar(project(":compat-runner"))
+    gitWorkerJar(project(":git-runner"))
 }
 tasks.withType<Test>().configureEach {
     dependsOn(kotlinWorkerJar, testRunnerJar, auditWorkerJar, publishWorkerJar,
-              imageWorkerJar, compatWorkerJar)
+              imageWorkerJar, compatWorkerJar, gitWorkerJar)
     doFirst {
         systemProperty("jk.kotlin.worker.jar",  kotlinWorkerJar.singleFile.absolutePath)
         systemProperty("jk.test.runner.jar",    testRunnerJar.singleFile.absolutePath)
@@ -82,6 +87,7 @@ tasks.withType<Test>().configureEach {
         systemProperty("jk.publish.worker.jar", publishWorkerJar.singleFile.absolutePath)
         systemProperty("jk.image.worker.jar",   imageWorkerJar.singleFile.absolutePath)
         systemProperty("jk.compat.worker.jar",  compatWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.git.worker.jar",     gitWorkerJar.singleFile.absolutePath)
     }
 }
 

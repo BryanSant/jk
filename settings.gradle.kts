@@ -36,6 +36,7 @@ include(
     ":publish-runner",
     ":image-runner",
     ":compat-runner",
+    ":git-runner",
     ":runtime",
     ":cli",
 )

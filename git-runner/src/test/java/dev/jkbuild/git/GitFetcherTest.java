@@ -29,7 +29,7 @@ class GitFetcherTest {
                 "file://" + upstream.workTree(),
                 new GitRefSpec.Tag("v1.0.0"));
 
-        GitFetcher.Fetched fetched = new GitFetcher(gitRoot).fetch(source);
+        GitFetcherWorker.Fetched fetched = new GitFetcherWorker(gitRoot).fetch(source);
         assertThat(fetched.sha()).isEqualTo(upstream.taggedSha());
         assertThat(fetched.checkoutPath().resolve("README.md")).exists();
         assertThat(Files.readString(fetched.checkoutPath().resolve("README.md")))
@@ -40,15 +40,15 @@ class GitFetcherTest {
     void second_fetch_uses_cache(@TempDir Path tempDir) throws Exception {
         UpstreamFixture upstream = setupUpstream(tempDir.resolve("upstream"), "v1.0.0");
         Path gitRoot = tempDir.resolve("jk-git");
-        GitFetcher fetcher = new GitFetcher(gitRoot);
+        GitFetcherWorker fetcher = new GitFetcherWorker(gitRoot);
         GitSource source = GitSource.of("file://" + upstream.workTree(),
                 "file://" + upstream.workTree(),
                 new GitRefSpec.Tag("v1.0.0"));
 
-        GitFetcher.Fetched first = fetcher.fetch(source);
+        GitFetcherWorker.Fetched first = fetcher.fetch(source);
         long firstMtime = Files.getLastModifiedTime(first.checkoutPath()).toMillis();
         Thread.sleep(20);
-        GitFetcher.Fetched second = fetcher.fetch(source);
+        GitFetcherWorker.Fetched second = fetcher.fetch(source);
         assertThat(second.checkoutPath()).isEqualTo(first.checkoutPath());
         assertThat(Files.getLastModifiedTime(second.checkoutPath()).toMillis())
                 .isEqualTo(firstMtime);
@@ -61,7 +61,7 @@ class GitFetcherTest {
                 "file://" + upstream.workTree(),
                 new GitRefSpec.Rev(upstream.taggedSha()));
 
-        GitFetcher.Fetched fetched = new GitFetcher(tempDir.resolve("jk-git")).fetch(source);
+        GitFetcherWorker.Fetched fetched = new GitFetcherWorker(tempDir.resolve("jk-git")).fetch(source);
         assertThat(fetched.sha()).isEqualTo(upstream.taggedSha());
     }
 
@@ -69,7 +69,7 @@ class GitFetcherTest {
     void verify_locked_detects_tag_rewrite(@TempDir Path tempDir) throws Exception {
         UpstreamFixture upstream = setupUpstream(tempDir.resolve("upstream"), "v1.0.0");
         Path gitRoot = tempDir.resolve("jk-git");
-        GitFetcher fetcher = new GitFetcher(gitRoot);
+        GitFetcherWorker fetcher = new GitFetcherWorker(gitRoot);
         GitSource source = GitSource.of("file://" + upstream.workTree(),
                 "file://" + upstream.workTree(),
                 new GitRefSpec.Tag("v1.0.0"));
@@ -84,7 +84,7 @@ class GitFetcherTest {
         assertThat(secondSha).isNotEqualTo(firstSha);
 
         assertThatThrownBy(() -> fetcher.verifyLocked(source, firstSha))
-                .isInstanceOf(GitFetcher.TagRewriteException.class)
+                .isInstanceOf(GitFetcherWorker.TagRewriteException.class)
                 .hasMessageContaining(firstSha)
                 .hasMessageContaining(secondSha);
     }
@@ -96,7 +96,7 @@ class GitFetcherTest {
                 "file://" + upstream.workTree(),
                 new GitRefSpec.Tag("v99.0.0"));
 
-        assertThatThrownBy(() -> new GitFetcher(tempDir.resolve("jk-git")).fetch(source))
+        assertThatThrownBy(() -> new GitFetcherWorker(tempDir.resolve("jk-git")).fetch(source))
                 .isInstanceOf(IOException.class)
                 .hasMessageContaining("v99.0.0");
     }

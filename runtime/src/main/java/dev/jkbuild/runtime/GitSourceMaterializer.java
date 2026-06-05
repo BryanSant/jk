@@ -4,7 +4,6 @@ package dev.jkbuild.runtime;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.git.ForgeGitCredentials;
-import dev.jkbuild.git.GitCredentials;
 import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.GitRefSpec;
@@ -48,7 +47,7 @@ public final class GitSourceMaterializer {
     private final RepoGroup buildRepos;
     private final Path javaHome;
     private final String jkVersion;
-    private final GitCredentials credentials;
+    private final ForgeGitCredentials credentials;
 
     /** Production wiring: caches under {@code $JK_CACHE_DIR}, forge-auth git credentials. */
     GitSourceMaterializer(Cas cas, RepoGroup buildRepos, Path javaHome, String jkVersion) {
@@ -58,7 +57,7 @@ public final class GitSourceMaterializer {
 
     /** Visible for tests — inject roots and credentials. */
     GitSourceMaterializer(Path gitRoot, Path artifactsRoot, Cas cas, RepoGroup buildRepos,
-                          Path javaHome, String jkVersion, GitCredentials credentials) {
+                          Path javaHome, String jkVersion, ForgeGitCredentials credentials) {
         this.gitRoot = gitRoot;
         this.artifactsRoot = artifactsRoot;
         this.cas = cas;

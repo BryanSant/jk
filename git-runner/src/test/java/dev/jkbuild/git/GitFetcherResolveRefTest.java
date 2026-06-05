@@ -50,9 +50,9 @@ class GitFetcherResolveRefTest {
     @Test
     void resolves_a_tag_to_its_commit_and_describes_it(@TempDir Path tmp) throws Exception {
         Repo repo = buildRepo(tmp.resolve("src"));
-        GitFetcher fetcher = new GitFetcher(tmp.resolve("gitcache"));
+        GitFetcherWorker fetcher = new GitFetcherWorker(tmp.resolve("gitcache"));
 
-        GitFetcher.RefInfo info = fetcher.resolveRef(repo.source());
+        GitFetcherWorker.RefInfo info = fetcher.resolveRef(repo.source());
         assertThat(info.sha()).isEqualTo(repo.tagSha());
         assertThat(info.commitTime()).isEqualTo(TAG_TIME);
         assertThat(info.nearestTag()).contains("v1.2.3");
@@ -61,11 +61,11 @@ class GitFetcherResolveRefTest {
     @Test
     void untagged_commit_reports_nearest_tag_and_commit_time(@TempDir Path tmp) throws Exception {
         Repo repo = buildRepo(tmp.resolve("src"));
-        GitFetcher fetcher = new GitFetcher(tmp.resolve("gitcache"));
+        GitFetcherWorker fetcher = new GitFetcherWorker(tmp.resolve("gitcache"));
 
         String url = repo.source().canonicalUrl();
         GitSource headRev = GitSource.of(url, url, new GitRefSpec.Rev(repo.headSha()));
-        GitFetcher.RefInfo info = fetcher.resolveRef(headRev);
+        GitFetcherWorker.RefInfo info = fetcher.resolveRef(headRev);
 
         assertThat(info.sha()).isEqualTo(repo.headSha());
         assertThat(info.commitTime()).isEqualTo(HEAD_TIME);
