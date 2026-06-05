@@ -2,9 +2,7 @@
 package dev.jkbuild.test;
 
 import dev.jkbuild.cache.Cas;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
+import dev.jkbuild.compile.Ndjson;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -60,8 +58,6 @@ public final class JUnitLauncher {
 
     /** Override for the jk-test-runner jar path (tests, dev). Takes precedence over the CAS lookup. */
     static final String RUNNER_JAR_PROPERTY = "jk.test.runner.jar";
-
-    private static final ObjectMapper JSON = JsonMapper.builder().build();
 
     /**
      * Run the project's tests. {@code workers} of 1 (today's default) takes
@@ -216,14 +212,7 @@ public final class JUnitLauncher {
                     continue;
                 }
                 String json = line.substring(PROTOCOL_PREFIX.length());
-                JsonNode node;
-                try {
-                    node = JSON.readTree(json);
-                } catch (RuntimeException e) {
-                    listener.onUserOutput(workerId, "malformed protocol line: " + json);
-                    continue;
-                }
-                String event = node.path("e").asString();
+                String event = Ndjson.str(json, "e");
                 if ("ready".equals(event)) {
                     String next = queue.pollFirst();
                     if (next != null) {
@@ -241,7 +230,7 @@ public final class JUnitLauncher {
                         }
                     }
                 } else {
-                    aggregator.accept(node);
+                    aggregator.accept(json);
                 }
             }
         } catch (IOException e) {
@@ -271,19 +260,14 @@ public final class JUnitLauncher {
             String line;
             while ((line = reader.readLine()) != null) {
                 if (!line.startsWith(PROTOCOL_PREFIX)) continue;
-                JsonNode node;
-                try {
-                    node = JSON.readTree(line.substring(PROTOCOL_PREFIX.length()));
-                } catch (RuntimeException ignored) {
-                    continue;
-                }
-                String event = node.path("e").asString();
+                String json = line.substring(PROTOCOL_PREFIX.length());
+                String event = Ndjson.str(json, "e");
                 if ("discovered".equals(event)) {
-                    classes.add(node.path("class").asString());
+                    classes.add(Ndjson.str(json, "class"));
                 } else if ("discovery_total".equals(event)) {
                     listener.onDiscoveryTotal(
-                            node.path("classes").asInt(0),
-                            node.path("tests").asInt(0));
+                            Ndjson.intValue(json, "classes", 0),
+                            Ndjson.intValue(json, "tests", 0));
                 }
             }
         }
@@ -405,64 +389,62 @@ public final class JUnitLauncher {
         }
 
         synchronized void accept(String json) {
-            JsonNode node;
-            try {
-                node = JSON.readTree(json);
-            } catch (RuntimeException e) {
-                // Not a protocol line — it's a raw write the child made to its
-                // own stdout. Surface it as user output (the view decides how),
-                // never straight to our streams.
+            // A non-protocol line shows up here only in tests that call accept()
+            // directly. In production the caller already stripped the prefix, so
+            // any line that doesn't look like a JSON object is user output.
+            if (json == null || !json.startsWith("{")) {
                 listener.onUserOutput(workerId, json);
                 return;
             }
-            acceptNode(node);
+            acceptJson(json);
         }
 
-        synchronized void accept(JsonNode node) {
-            acceptNode(node);
-        }
-
-        private void acceptNode(JsonNode node) {
-            switch (node.path("e").asString()) {
+        private void acceptJson(String json) {
+            String event = Ndjson.str(json, "e");
+            if (event == null) return;
+            switch (event) {
                 case "discovery_total" -> listener.onDiscoveryTotal(
-                        node.path("classes").asInt(0),
-                        node.path("tests").asInt(0));
+                        Ndjson.intValue(json, "classes", 0),
+                        Ndjson.intValue(json, "tests", 0));
                 case "dynamic_registered" -> {
-                    if ("TEST".equals(node.path("type").asString())) {
-                        dynamicIds.add(node.path("id").asString());
+                    if ("TEST".equals(Ndjson.str(json, "type"))) {
+                        dynamicIds.add(Ndjson.str(json, "id"));
                     }
                 }
-                case "started" -> onStarted(node);
-                case "finished" -> onFinished(node);
-                case "skipped" -> onSkipped(node);
+                case "started" -> onStarted(json);
+                case "finished" -> onFinished(json);
+                case "skipped" -> onSkipped(json);
                 default -> {}
             }
         }
 
-        private void onStarted(JsonNode node) {
-            boolean isTest = "TEST".equals(node.path("type").asString());
+        private void onStarted(String json) {
+            boolean isTest = "TEST".equals(Ndjson.str(json, "type"));
             listener.onTestStarted(
-                    node.path("id").asString(),
-                    node.path("display").asString(),
+                    Ndjson.str(json, "id"),
+                    Ndjson.str(json, "display"),
                     isTest,
                     workerId);
         }
 
-        private void onFinished(JsonNode node) {
-            boolean isTest = "TEST".equals(node.path("type").asString());
-            String id = node.path("id").asString();
-            String status = node.path("status").asString();
-            String display = node.path("display").asString(id);
-            long duration = node.path("duration_ms").asLong(0);
+        private void onFinished(String json) {
+            boolean isTest = "TEST".equals(Ndjson.str(json, "type"));
+            String id = Ndjson.str(json, "id");
+            String status = Ndjson.str(json, "status");
+            String display = Ndjson.str(json, "display");
+            if (display == null) display = id;
+            long duration = Ndjson.intValue(json, "duration_ms", 0);
             boolean wasStatic = isTest && !dynamicIds.contains(id);
             if (isTest) {
-                switch (status) {
+                switch (status != null ? status : "") {
                     case "SUCCESSFUL" -> succeeded++;
                     case "FAILED" -> {
                         failed++;
-                        var throwable = node.path("throwable");
-                        String exClass = throwable.path("class").asString("?");
-                        String message = throwable.path("message").asString("");
+                        String throwableJson = Ndjson.nested(json, "throwable");
+                        String exClass = throwableJson != null ? Ndjson.str(throwableJson, "class") : null;
+                        if (exClass == null) exClass = "?";
+                        String message = throwableJson != null ? Ndjson.str(throwableJson, "message") : null;
+                        if (message == null) message = "";
                         failures.add(new Failure(display, exClass + ": " + message));
                         listener.onFailure(id, display, exClass, message, workerId);
                     }
@@ -473,15 +455,16 @@ public final class JUnitLauncher {
             listener.onTestFinished(id, display, status, isTest, wasStatic, duration, workerId);
         }
 
-        private void onSkipped(JsonNode node) {
-            boolean isTest = "TEST".equals(node.path("type").asString());
-            String id = node.path("id").asString();
+        private void onSkipped(String json) {
+            boolean isTest = "TEST".equals(Ndjson.str(json, "type"));
+            String id = Ndjson.str(json, "id");
             boolean wasStatic = isTest && !dynamicIds.contains(id);
             if (isTest) skipped++;
+            String reason = Ndjson.str(json, "reason");
             listener.onTestSkipped(
                     id,
-                    node.path("display").asString(),
-                    node.path("reason").asString(""),
+                    Ndjson.str(json, "display"),
+                    reason != null ? reason : "",
                     isTest,
                     wasStatic,
                     workerId);

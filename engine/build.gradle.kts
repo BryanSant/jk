@@ -16,11 +16,8 @@ dependencies {
     // ClassRemapper drives a comprehensive type-reference traversal for the
     // incremental Java compiler's dependency extraction.
     implementation(libs.asm.commons)
-    // JUnit Platform is no longer on engine's runtime classpath — `jk test`
-    // forks a child JVM that runs jk-test-runner with the JUnit jars
-    // sourced from the user's CAS (injected via LockOrchestrator). All
-    // engine needs is jackson for parsing the runner's NDJSON event stream.
-    implementation(libs.jackson.databind)
+    // NDJSON from worker subprocesses is parsed with the hand-rolled Ndjson
+    // utility — no JSON library needed on the engine's classpath.
     // Kotlin support is now subprocess-based — SubprocessKotlincStrategy
     // execs <kotlin-home>/bin/kotlinc from a jk-installed distribution.
     // kotlin-compiler-embeddable (~50 MB) and kotlin-stdlib are no longer

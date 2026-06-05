@@ -8,5 +8,4 @@ description = "jk core foundations: util, event, model, config, lock"
 
 dependencies {
     api(libs.tomlj)
-    implementation(libs.jackson.databind)
 }

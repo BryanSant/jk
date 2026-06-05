@@ -9,5 +9,4 @@ description = "jk I/O: http, cache, git, repo"
 dependencies {
     implementation(project(":core"))
     implementation(libs.jgit)
-    implementation(libs.jackson.databind)
 }

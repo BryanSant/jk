@@ -35,8 +35,6 @@ dependencies {
 
     testImplementation(project(":supply-chain-testkit"))
     // JdkCommandTest builds xz-compressed feed fixtures via XZCompressorOutputStream.
-    testImplementation(libs.commons.compress)
-    testImplementation(libs.tukaani.xz)
     // GitSourceMaterializerTest builds a local git "library" repo fixture with jgit.
     testImplementation(libs.jgit)
 }

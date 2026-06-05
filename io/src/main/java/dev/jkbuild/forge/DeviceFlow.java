@@ -3,10 +3,8 @@ package dev.jkbuild.forge;
 
 import dev.jkbuild.http.Http;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
-
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.time.Duration;
@@ -36,7 +34,6 @@ public final class DeviceFlow {
             s -> Thread.sleep(Duration.ofSeconds(s).toMillis());
 
     private final Http http;
-    private final JsonMapper json;
     private final URI deviceCodeUri;
     private final URI tokenUri;
     private final String providerName;
@@ -53,7 +50,6 @@ public final class DeviceFlow {
     public DeviceFlow(Http http, URI deviceCodeUri, URI tokenUri, String providerName,
                       String clientId, String scope, Sleeper sleeper) {
         this.http = http;
-        this.json = JsonMapper.builder().build();
         this.deviceCodeUri = deviceCodeUri;
         this.tokenUri = tokenUri;
         this.providerName = providerName;
@@ -86,17 +82,14 @@ public final class DeviceFlow {
     }
 
     private DeviceCode requestCode() {
-        JsonNode n = readJson(post(deviceCodeUri, Map.of(
-                "client_id", clientId,
-                "scope", scope)));
+        String body = parseBody(post(deviceCodeUri, Map.of("client_id", clientId, "scope", scope)));
         return new DeviceCode(
-                n.path("device_code").asString(),
-                n.path("user_code").asString(),
-                n.path("verification_uri").asString(),
-                n.has("verification_uri_complete")
-                        ? n.path("verification_uri_complete").asString() : null,
-                n.path("interval").asInt(5),
-                n.path("expires_in").asInt(900));
+                str(body, "device_code"),
+                str(body, "user_code"),
+                str(body, "verification_uri"),
+                str(body, "verification_uri_complete"),
+                intVal(body, "interval", 5),
+                intVal(body, "expires_in", 900));
     }
 
     private String poll(DeviceCode dc) {
@@ -104,15 +97,15 @@ public final class DeviceFlow {
         int interval = Math.max(1, dc.interval());
         while (System.nanoTime() < deadline) {
             sleep(interval);
-            JsonNode n = readJson(post(tokenUri, Map.of(
+            String body = parseBody(post(tokenUri, Map.of(
                     "client_id", clientId,
                     "device_code", dc.deviceCode(),
                     "grant_type", "urn:ietf:params:oauth:grant-type:device_code")));
 
-            if (n.has("access_token")) {
-                return n.path("access_token").asString();
-            }
-            switch (n.path("error").asString("")) {
+            String token = str(body, "access_token");
+            if (token != null) return token;
+            String error = str(body, "error");
+            switch (error != null ? error : "") {
                 case "authorization_pending" -> { /* keep polling */ }
                 case "slow_down"             -> interval += 5;
                 case "expired_token"         ->
@@ -122,7 +115,7 @@ public final class DeviceFlow {
                 case ""                      ->
                         throw new AuthException("Unexpected response from " + providerName + ".");
                 default                      ->
-                        throw new AuthException("Device flow failed: " + n.path("error").asString());
+                        throw new AuthException("Device flow failed: " + error);
             }
         }
         throw new AuthException("Timed out waiting for authorization.");
@@ -140,21 +133,35 @@ public final class DeviceFlow {
         }
     }
 
-    /** Parse a JSON object body. 2xx and 4xx alike (4xx carries the poll state). */
-    private JsonNode readJson(HttpResponse<byte[]> resp) {
+    /** Return the response body as a UTF-8 string (2xx and 4xx alike). */
+    private String parseBody(HttpResponse<byte[]> resp) {
         int status = resp.statusCode();
-        // Device-flow "pending"/"slow_down" arrive as 4xx + JSON error, so
-        // we parse 2xx and 4xx alike; only 5xx (already retried by Http) is
-        // fatal here.
         if (status >= 500) {
             throw new AuthException(providerName + " returned HTTP " + status + ".");
         }
-        try {
-            return json.readTree(resp.body());
-        } catch (Exception e) {
-            throw new AuthException("Malformed response from " + providerName
-                    + " (HTTP " + status + ").", e);
+        return new String(resp.body(), StandardCharsets.UTF_8);
+    }
+
+    private static String str(String json, String key) {
+        String needle = "\"" + key + "\":\"";
+        int s = json.indexOf(needle); if (s < 0) return null; s += needle.length();
+        StringBuilder sb = new StringBuilder();
+        for (int i = s; i < json.length(); i++) {
+            char c = json.charAt(i);
+            if (c == '\\' && i + 1 < json.length()) {
+                char n = json.charAt(++i); if (n == '"') sb.append('"'); else { sb.append('\\'); sb.append(n); }
+            } else if (c == '"') break; else sb.append(c);
         }
+        return sb.toString();
+    }
+
+    private static int intVal(String json, String key, int def) {
+        String needle = "\"" + key + "\":";
+        int s = json.indexOf(needle); if (s < 0) return def; s += needle.length();
+        while (s < json.length() && json.charAt(s) == ' ') s++;
+        int e = s; while (e < json.length() && Character.isDigit(json.charAt(e))) e++;
+        try { return e > s ? Integer.parseInt(json.substring(s, e)) : def; }
+        catch (NumberFormatException x) { return def; }
     }
 
     private void sleep(int seconds) {

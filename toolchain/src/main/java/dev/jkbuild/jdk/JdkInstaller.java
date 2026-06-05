@@ -4,9 +4,6 @@ package dev.jkbuild.jdk;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkThreads;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
-
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -16,13 +13,11 @@ import java.net.URI;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermission;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.EnumSet;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -295,33 +290,26 @@ public final class JdkInstaller {
 
     private static void extractTar(Path archive, Path destDir, boolean gzipped) throws IOException {
         try (InputStream fis = new BufferedInputStream(Files.newInputStream(archive));
-             InputStream inflated = gzipped ? new GZIPInputStream(fis) : fis;
-             TarArchiveInputStream tar = new TarArchiveInputStream(inflated)) {
-            TarArchiveEntry entry;
-            while ((entry = tar.getNextEntry()) != null) {
+             InputStream inflated = gzipped ? new GZIPInputStream(fis) : fis) {
+            MinimalTar.stream(inflated, (name, linkName, mode, isDir, isLink, data, size) -> {
                 // Drop macOS AppleDouble sidecars (`._foo`) anywhere in the tree.
-                // They leak in when a tarball is built on macOS with xattrs on
-                // the source files, and a single ._<topdir> entry at the root
-                // breaks flattenedRoot()'s single-top-level detection.
-                if (isAppleDoubleSidecar(entry.getName())) continue;
-                Path out = destDir.resolve(entry.getName()).normalize();
+                if (isAppleDoubleSidecar(name)) return;
+                Path out = destDir.resolve(name).normalize();
                 if (!out.startsWith(destDir)) {
-                    throw new IOException("tar entry escapes destination: " + entry.getName());
+                    throw new IOException("tar entry escapes destination: " + name);
                 }
-                if (entry.isDirectory()) {
+                if (isDir) {
                     Files.createDirectories(out);
-                } else if (entry.isSymbolicLink()) {
+                } else if (isLink) {
                     if (out.getParent() != null) Files.createDirectories(out.getParent());
                     Files.deleteIfExists(out);
-                    Files.createSymbolicLink(out, Path.of(entry.getLinkName()));
-                } else if (entry.isFile()) {
+                    Files.createSymbolicLink(out, Path.of(linkName));
+                } else {
                     if (out.getParent() != null) Files.createDirectories(out.getParent());
-                    Files.copy(tar, out);
-                    applyMode(out, entry.getMode());
+                    Files.copy(data, out);
+                    MinimalTar.applyMode(out, mode);
                 }
-                // Hard links, device files, etc. — skip silently. JDK archives
-                // don't use them.
-            }
+            });
         }
     }
 
@@ -330,26 +318,6 @@ public final class JdkInstaller {
         int slash = entryName.lastIndexOf('/', end - 1);
         String basename = entryName.substring(slash + 1, end);
         return basename.startsWith("._");
-    }
-
-    /** Apply tar entry's POSIX mode bits where the filesystem supports it. */
-    private static void applyMode(Path file, int mode) throws IOException {
-        try {
-            Set<PosixFilePermission> perms = EnumSet.noneOf(PosixFilePermission.class);
-            if ((mode & 0400) != 0) perms.add(PosixFilePermission.OWNER_READ);
-            if ((mode & 0200) != 0) perms.add(PosixFilePermission.OWNER_WRITE);
-            if ((mode & 0100) != 0) perms.add(PosixFilePermission.OWNER_EXECUTE);
-            if ((mode & 0040) != 0) perms.add(PosixFilePermission.GROUP_READ);
-            if ((mode & 0020) != 0) perms.add(PosixFilePermission.GROUP_WRITE);
-            if ((mode & 0010) != 0) perms.add(PosixFilePermission.GROUP_EXECUTE);
-            if ((mode & 0004) != 0) perms.add(PosixFilePermission.OTHERS_READ);
-            if ((mode & 0002) != 0) perms.add(PosixFilePermission.OTHERS_WRITE);
-            if ((mode & 0001) != 0) perms.add(PosixFilePermission.OTHERS_EXECUTE);
-            if (perms.isEmpty()) return; // tar entry didn't carry a mode
-            Files.setPosixFilePermissions(file, perms);
-        } catch (UnsupportedOperationException ignored) {
-            // Windows / non-POSIX filesystem — silently skip.
-        }
     }
 
     /**

@@ -29,7 +29,6 @@ dependencies {
     implementation(project(":io"))
     implementation(project(":toolchain"))
     implementation(project(":compat"))
-    implementation(libs.commons.compress)
 }
 
 // Fat JAR: bundle all runtime deps so the worker is launchable as `java -jar`.

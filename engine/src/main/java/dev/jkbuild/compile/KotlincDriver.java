@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -31,7 +27,6 @@ public final class KotlincDriver {
     /** Mirrors the worker's {@code Ndjson.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JKKC:";
     private static final String WORKER_MAIN = "dev.jkbuild.kotlin.compiler.KotlinCompilerWorker";
-    private static final ObjectMapper JSON = JsonMapper.builder().build();
 
     public KotlincResult compile(KotlincRequest request) {
         try {
@@ -67,17 +62,12 @@ public final class KotlincDriver {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (!line.startsWith(PROTOCOL_PREFIX)) continue;   // JDK chatter etc.
-                    JsonNode node;
-                    try {
-                        node = JSON.readTree(line.substring(PROTOCOL_PREFIX.length()));
-                    } catch (RuntimeException malformed) {
-                        continue;
-                    }
-                    String t = text(node, "t");
+                    String json = line.substring(PROTOCOL_PREFIX.length());
+                    String t = Ndjson.str(json, "t");
                     if ("diag".equals(t)) {
-                        diagnostics.add(text(node, "sev") + ": " + text(node, "msg"));
+                        diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg"));
                     } else if ("result".equals(t)) {
-                        status = text(node, "status");
+                        status = Ndjson.str(json, "status");
                     }
                 }
             }
@@ -114,7 +104,4 @@ public final class KotlincDriver {
         return spec;
     }
 
-    private static String text(JsonNode node, String field) {
-        return node.path(field).asString();
-    }
 }

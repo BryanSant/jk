@@ -10,8 +10,7 @@ dependencies {
     implementation(project(":core"))
     // ToolInstaller streams over HttpClient via the :io Http wrapper.
     implementation(project(":io"))
-    // Tool discovery (find existing SDKMAN/Homebrew/asdf/... installs).
+    // Tool discovery (find existing SDKMAN/Homebrew/asdf/... installs) and
+    // MinimalTar for tar.gz extraction without an external library.
     implementation(project(":toolchain"))
-    // ToolInstaller extracts tar.gz Maven distributions.
-    implementation(libs.commons.compress)
 }

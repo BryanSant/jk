@@ -49,7 +49,7 @@ class JavaApIncrementalCompileTest {
         p.write("app/Widget.java", widget("one"));
         JavaIncrementalCompile.Result b1 = p.build();
         assertThat(b1.success()).isTrue();
-        assertThat(p.apFlags()).contains("\"sourceGenAps\":true");
+        assertThat(p.apFlags()).contains("sourceGenAps=true");
 
         // v2 — now in worker mode; no usable state yet → full compile via the worker,
         // which captures provenance, attributes WidgetGen to Widget, and classifies the
@@ -59,8 +59,8 @@ class JavaApIncrementalCompileTest {
         assertThat(b2.success()).isTrue();
         assertThat(p.classFile("app/WidgetGen.class")).isRegularFile();
         assertThat(p.classFile("app/Widget.class")).isRegularFile();
-        assertThat(Files.isRegularFile(p.stateDir.resolve("java-incremental.json"))).isTrue();
-        assertThat(p.apFlags()).contains("\"isolating\":true");
+        assertThat(Files.isRegularFile(p.stateDir.resolve("java-incremental.txt"))).isTrue();
+        assertThat(p.apFlags()).contains("isolating=true");
 
         // A non-class sentinel distinguishes the tiers: the incremental tier restores the
         // output dir (recursive wipe) before recompiling, so the sentinel vanishes; a full
@@ -97,7 +97,7 @@ class JavaApIncrementalCompileTest {
         p.write("app/Alpha.java", "package app; @reg.Reg public class Alpha { int v; }");
         p.build();                                   // build 2: worker full → arity-2 provenance
         assertThat(p.classFile("app/Registry.class")).isRegularFile();
-        assertThat(p.apFlags()).contains("\"isolating\":false");
+        assertThat(p.apFlags()).contains("isolating=false");
 
         // Stays full: a sentinel placed before an edit survives (full deletes only *.class).
         Path sentinel = p.out.resolve("FULL_SENTINEL");
@@ -156,7 +156,7 @@ class JavaApIncrementalCompileTest {
         }
 
         String apFlags() throws IOException {
-            return Files.readString(stateDir.resolve("java-ap.json"));
+            return Files.readString(stateDir.resolve("java-ap.txt"));
         }
 
         JavaIncrementalCompile.Result build() throws IOException {

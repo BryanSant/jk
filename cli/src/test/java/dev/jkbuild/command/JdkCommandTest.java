@@ -6,7 +6,6 @@ import dev.jkbuild.cli.Jk;
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.util.Hashing;
-import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -60,12 +59,12 @@ class JdkCommandTest {
                 "release", "JAVA_VERSION=21.0.5\n"));
         served.put("/archives/jdk.tar.gz", archive);
 
-        served.put("/feed/jdks.json.xz", xz(feedJson(archive.length, Hashing.sha256Hex(archive),
-                base.resolve("/archives/jdk.tar.gz").toString())));
+        served.put("/feed/jdks.json", feedJson(archive.length, Hashing.sha256Hex(archive),
+                base.resolve("/archives/jdk.tar.gz").toString()).getBytes(StandardCharsets.UTF_8));
 
         int exit = run("jdk", "install", "temurin-21",
                 "--jdks-dir", jdksDir.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json.xz").toString());
+                "--feed-url", base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
         assertThat(jdksDir.resolve("temurin-21.0.5").resolve("bin").resolve("java")).exists();
     }
@@ -93,12 +92,12 @@ class JdkCommandTest {
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
 
         byte[] dummyArchive = "stub".getBytes(StandardCharsets.UTF_8);
-        served.put("/feed/jdks.json.xz", xz(multiEntryFeedJson(dummyArchive.length,
-                Hashing.sha256Hex(dummyArchive), base.toString())));
+        served.put("/feed/jdks.json", multiEntryFeedJson(dummyArchive.length,
+                Hashing.sha256Hex(dummyArchive), base.toString()).getBytes(StandardCharsets.UTF_8));
 
         String stdout = captureStdout(() -> run("jdk", "list", "--all",
                 "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json.xz").toString()));
+                "--feed-url", base.resolve("/feed/jdks.json").toString()));
 
         // --all surfaces catalog rows alongside installed rows. Higher major
         // (catalog-only) appears first; installed row follows.
@@ -119,12 +118,12 @@ class JdkCommandTest {
         // not show available-only rows from it — the network shouldn't
         // even be hit. Serve a feed anyway to prove the command ignores it.
         byte[] dummyArchive = "stub".getBytes(StandardCharsets.UTF_8);
-        served.put("/feed/jdks.json.xz", xz(multiEntryFeedJson(dummyArchive.length,
-                Hashing.sha256Hex(dummyArchive), base.toString())));
+        served.put("/feed/jdks.json", multiEntryFeedJson(dummyArchive.length,
+                Hashing.sha256Hex(dummyArchive), base.toString()).getBytes(StandardCharsets.UTF_8));
 
         String stdout = captureStdout(() -> run("jdk", "list",
                 "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json.xz").toString()));
+                "--feed-url", base.resolve("/feed/jdks.json").toString()));
 
         assertThat(stdout).contains("temurin-21.0.5");
         assertThat(stdout).contains("installed");
@@ -376,13 +375,6 @@ class JdkCommandTest {
         return Files.readAllBytes(archivePath);
     }
 
-    private static byte[] xz(String json) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (XZCompressorOutputStream xz = new XZCompressorOutputStream(out)) {
-            xz.write(json.getBytes(StandardCharsets.UTF_8));
-        }
-        return out.toByteArray();
-    }
 
     private static void makeJdkInstall(Path home) throws IOException {
         Files.createDirectories(home.resolve("bin"));

@@ -2,9 +2,8 @@
 package dev.jkbuild.compat;
 
 import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.MinimalTar;
 import dev.jkbuild.util.Hashing;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
-import org.apache.commons.compress.archivers.tar.TarArchiveInputStream;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -118,45 +117,24 @@ public final class ToolInstaller {
 
     private static void extractTarGz(Path archive, Path destDir) throws IOException {
         try (InputStream fis = new BufferedInputStream(Files.newInputStream(archive));
-             GZIPInputStream gz = new GZIPInputStream(fis);
-             TarArchiveInputStream tar = new TarArchiveInputStream(gz)) {
-            TarArchiveEntry entry;
-            while ((entry = tar.getNextEntry()) != null) {
-                Path out = destDir.resolve(entry.getName()).normalize();
+             GZIPInputStream gz = new GZIPInputStream(fis)) {
+            MinimalTar.stream(gz, (name, linkName, mode, isDir, isLink, data, size) -> {
+                Path out = destDir.resolve(name).normalize();
                 if (!out.startsWith(destDir)) {
-                    throw new IOException("tar entry escapes destination: " + entry.getName());
+                    throw new IOException("tar entry escapes destination: " + name);
                 }
-                if (entry.isDirectory()) {
+                if (isDir) {
                     Files.createDirectories(out);
-                } else if (entry.isSymbolicLink()) {
+                } else if (isLink) {
                     if (out.getParent() != null) Files.createDirectories(out.getParent());
                     Files.deleteIfExists(out);
-                    Files.createSymbolicLink(out, Path.of(entry.getLinkName()));
-                } else if (entry.isFile()) {
+                    Files.createSymbolicLink(out, Path.of(linkName));
+                } else {
                     if (out.getParent() != null) Files.createDirectories(out.getParent());
-                    Files.copy(tar, out);
-                    applyMode(out, entry.getMode());
+                    Files.copy(data, out);
+                    MinimalTar.applyMode(out, mode);
                 }
-            }
-        }
-    }
-
-    private static void applyMode(Path file, int mode) throws IOException {
-        try {
-            Set<PosixFilePermission> perms = EnumSet.noneOf(PosixFilePermission.class);
-            if ((mode & 0400) != 0) perms.add(PosixFilePermission.OWNER_READ);
-            if ((mode & 0200) != 0) perms.add(PosixFilePermission.OWNER_WRITE);
-            if ((mode & 0100) != 0) perms.add(PosixFilePermission.OWNER_EXECUTE);
-            if ((mode & 0040) != 0) perms.add(PosixFilePermission.GROUP_READ);
-            if ((mode & 0020) != 0) perms.add(PosixFilePermission.GROUP_WRITE);
-            if ((mode & 0010) != 0) perms.add(PosixFilePermission.GROUP_EXECUTE);
-            if ((mode & 0004) != 0) perms.add(PosixFilePermission.OTHERS_READ);
-            if ((mode & 0002) != 0) perms.add(PosixFilePermission.OTHERS_WRITE);
-            if ((mode & 0001) != 0) perms.add(PosixFilePermission.OTHERS_EXECUTE);
-            if (perms.isEmpty()) return;
-            Files.setPosixFilePermissions(file, perms);
-        } catch (UnsupportedOperationException ignored) {
-            // Windows / non-POSIX filesystem.
+            });
         }
     }
 

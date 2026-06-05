@@ -14,12 +14,12 @@ import dev.jkbuild.util.Hashing;
 import org.objectweb.asm.tree.ClassNode;
 import org.objectweb.asm.ClassReader;
 
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
@@ -59,8 +59,6 @@ import java.util.stream.Stream;
  * {@link ActionCache.ActionRecord} (its {@code inputs}/{@code outputs}/{@code units}).
  */
 public final class JavaIncrementalCompile {
-
-    private static final ObjectMapper JSON = JsonMapper.builder().build();
 
     private JavaIncrementalCompile() {}
 
@@ -563,8 +561,7 @@ public final class JavaIncrementalCompile {
         Path f = unionFile(stateDir);
         if (!Files.isRegularFile(f)) return null;
         try {
-            return JSON.readValue(Files.readAllBytes(f),
-                    new TypeReference<LinkedHashMap<String, JavaClasspathAbi.DepFacts>>() {});
+            return JavaClasspathAbi.readDepFacts(Files.readAllBytes(f));
         } catch (RuntimeException corrupt) {
             return null;
         }
@@ -573,30 +570,53 @@ public final class JavaIncrementalCompile {
     private static void saveUnion(Path stateDir, Map<String, JavaClasspathAbi.DepFacts> union)
             throws IOException {
         Files.createDirectories(stateDir);
-        Files.write(unionFile(stateDir), JSON.writeValueAsBytes(new TreeMap<>(union)));
+        Files.write(unionFile(stateDir),
+                JavaClasspathAbi.writeDepFacts(new TreeMap<>(union)).getBytes(StandardCharsets.UTF_8));
     }
 
     private static Path unionFile(Path stateDir) {
-        return stateDir.resolve("java-cp-abi.json");
+        return stateDir.resolve("java-cp-abi.txt");
     }
 
     private static Path stateFile(Path stateDir) {
-        return stateDir.resolve("java-incremental.json");
+        return stateDir.resolve("java-incremental.txt");
     }
 
+    // Format: <internalName>\t<abiHex>\t<0|1>\t<dep1,dep2,...>
     private static Map<String, ClassFacts> loadState(Path stateDir) throws IOException {
         Path f = stateFile(stateDir);
         if (!Files.isRegularFile(f)) return new HashMap<>();
         try {
-            return JSON.readValue(Files.readAllBytes(f), new TypeReference<LinkedHashMap<String, ClassFacts>>() {});
+            Map<String, ClassFacts> out = new LinkedHashMap<>();
+            try (BufferedReader br = new BufferedReader(
+                    new StringReader(new String(Files.readAllBytes(f), StandardCharsets.UTF_8)))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    line = line.strip();
+                    if (line.isEmpty()) continue;
+                    String[] parts = line.split("\t", 4);
+                    if (parts.length < 3) continue;
+                    List<String> deps = (parts.length >= 4 && !parts[3].isEmpty())
+                            ? List.of(parts[3].split(",", -1)) : List.of();
+                    out.put(parts[0], new ClassFacts(parts[1], deps, "1".equals(parts[2])));
+                }
+            }
+            return out;
         } catch (RuntimeException corrupt) {
-            return new HashMap<>();   // unreadable state → treat as cold (full build)
+            return new HashMap<>();
         }
     }
 
     private static void saveState(Path stateDir, Map<String, ClassFacts> facts) throws IOException {
         Files.createDirectories(stateDir);
-        Files.write(stateFile(stateDir), JSON.writeValueAsBytes(new TreeMap<>(facts)));
+        StringBuilder sb = new StringBuilder();
+        for (Map.Entry<String, ClassFacts> e : new TreeMap<>(facts).entrySet()) {
+            ClassFacts v = e.getValue();
+            sb.append(e.getKey()).append('\t').append(v.abi()).append('\t')
+              .append(v.constants() ? '1' : '0').append('\t')
+              .append(String.join(",", v.deps())).append('\n');
+        }
+        Files.write(stateFile(stateDir), sb.toString().getBytes(StandardCharsets.UTF_8));
     }
 
     // ---- annotation-processor compiler routing ----------------------------
@@ -647,17 +667,21 @@ public final class JavaIncrementalCompile {
     }
 
     private static Path apFlagsFile(Path stateDir) {
-        return stateDir.resolve("java-ap.json");
+        return stateDir.resolve("java-ap.txt");
     }
 
+    // Format: two lines — "sourceGenAps=true" and "isolating=false"
     private static ApFlags loadApFlags(Path stateDir) throws IOException {
         Path f = apFlagsFile(stateDir);
         if (!Files.isRegularFile(f)) return ApFlags.NONE;
         try {
-            Map<String, Boolean> m = JSON.readValue(Files.readAllBytes(f),
-                    new TypeReference<LinkedHashMap<String, Boolean>>() {});
-            return new ApFlags(Boolean.TRUE.equals(m.get("sourceGenAps")),
-                    Boolean.TRUE.equals(m.get("isolating")));
+            boolean sourceGenAps = false, isolating = false;
+            for (String line : new String(Files.readAllBytes(f), StandardCharsets.UTF_8).split("\n")) {
+                line = line.strip();
+                if (line.startsWith("sourceGenAps=")) sourceGenAps = "true".equals(line.substring(13));
+                else if (line.startsWith("isolating="))   isolating   = "true".equals(line.substring(10));
+            }
+            return new ApFlags(sourceGenAps, isolating);
         } catch (RuntimeException corrupt) {
             return ApFlags.NONE;
         }
@@ -665,10 +689,8 @@ public final class JavaIncrementalCompile {
 
     private static void saveApFlags(Path stateDir, ApFlags flags) throws IOException {
         Files.createDirectories(stateDir);
-        Map<String, Boolean> m = new TreeMap<>();
-        m.put("sourceGenAps", flags.sourceGenAps());
-        m.put("isolating", flags.isolating());
-        Files.write(apFlagsFile(stateDir), JSON.writeValueAsBytes(m));
+        String content = "sourceGenAps=" + flags.sourceGenAps() + "\nisolating=" + flags.isolating() + "\n";
+        Files.write(apFlagsFile(stateDir), content.getBytes(StandardCharsets.UTF_8));
     }
 
     // ---- small helpers ----------------------------------------------------

@@ -3,15 +3,12 @@ package dev.jkbuild.jdk;
 
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.JkDirs;
-import org.apache.commons.compress.compressors.xz.XZCompressorInputStream;
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
-
-import java.io.ByteArrayInputStream;
+import java.io.BufferedReader;
+import java.io.StringReader;
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -38,7 +35,7 @@ import java.util.Objects;
 public final class JdkCatalogClient {
 
     public static final String DEFAULT_FEED_URL =
-            "https://download.jetbrains.com/jdk/feed/v1/jdks.json.xz";
+            "https://download.jetbrains.com/jdk/feed/v1/jdks.json";
 
     /** 24 h — the feed publishes new GA releases at most a few times a month. */
     public static final Duration DEFAULT_TTL = Duration.ofHours(24);
@@ -51,7 +48,6 @@ public final class JdkCatalogClient {
     private final URI feedUri;
     private final Path cacheFile;
     private final Duration ttl;
-    private final ObjectMapper json = JsonMapper.builder().build();
 
     /**
      * Where the "feed unreachable, using cached" degradation notice goes.
@@ -78,9 +74,9 @@ public final class JdkCatalogClient {
         return this;
     }
 
-    /** Default cache location: {@code $JK_CACHE_DIR/jdks.json.xz} (XDG: {@code ~/.cache/jk/jdks.json.xz}). */
+    /** Default cache location: {@code $JK_CACHE_DIR/jdks.json}. */
     public static Path defaultCachePath() {
-        return JkDirs.cache().resolve("jdks.json.xz");
+        return JkDirs.cache().resolve("jdks.json");
     }
 
     /**
@@ -150,63 +146,124 @@ public final class JdkCatalogClient {
                 StandardCopyOption.ATOMIC_MOVE);
     }
 
-    private JdkCatalog parse(byte[] xz) throws IOException {
-        byte[] inflated;
-        try (XZCompressorInputStream in =
-                     new XZCompressorInputStream(new ByteArrayInputStream(xz))) {
-            inflated = in.readAllBytes();
-        }
-        JsonNode root = json.readTree(inflated);
-        JsonNode jdks = root.path("jdks");
-        if (!jdks.isArray()) {
-            throw new IOException("JDK feed missing top-level `jdks` array");
-        }
-        List<JdkCatalog.Entry> entries = new ArrayList<>(jdks.size());
-        for (JsonNode item : jdks) {
-            String vendor = item.path("vendor").asString();
-            String product = item.path("product").asString();
-            String suggestedSdkName = item.path("suggested_sdk_name").asString();
-            int majorVersion = item.path("jdk_version_major").asInt(0);
-            String version = item.path("jdk_version").asString();
-            boolean defaultForMajor = item.path("default").asBoolean(false);
-            boolean preview = item.path("preview").asBoolean(false);
-            List<String> aliases = readStrings(item.path("shared_index_aliases"));
+    /**
+     * Parse the JDK catalog from raw (uncompressed) JSON bytes using a
+     * stateful line scanner — no JSON library required. The feed is always
+     * pretty-printed with one key/value per line, so simple line-by-line
+     * field extraction is reliable.
+     */
+    private JdkCatalog parse(byte[] json) throws IOException {
+        List<JdkCatalog.Entry> entries = new ArrayList<>(256);
 
-            JsonNode packages = item.path("packages");
-            if (!packages.isArray()) continue;
-            for (JsonNode pkg : packages) {
-                String os = pkg.path("os").asString();
-                String arch = pkg.path("arch").asString();
-                String packageType = pkg.path("package_type").asString();
-                String url = pkg.path("url").asString();
-                String sha256 = pkg.path("sha256").asString();
-                long archiveSize = pkg.path("archive_size").asLong(0);
-                String installFolderName = pkg.path("install_folder_name").asString();
-                String javaHomeSubpath = pkg.path("package_to_java_home_prefix").asString();
+        // Per-JDK fields (depth 2)
+        String vendor = null, product = null, suggestedSdkName = null, version = null;
+        int majorVersion = 0;
+        boolean defaultForMajor = false, preview = false;
+        List<String> aliases = new ArrayList<>();
+        boolean inAliases = false;
 
-                if (url == null || url.isEmpty()) continue;
-                if (installFolderName == null || installFolderName.isEmpty()) continue;
+        // Per-package fields (depth 3)
+        String os = null, arch = null, packageType = null, url = null;
+        String sha256 = null, installFolderName = null, javaHomeSubpath = null;
+        long archiveSize = 0;
 
-                entries.add(new JdkCatalog.Entry(
-                        vendor,
-                        product,
-                        suggestedSdkName,
-                        majorVersion,
-                        version,
-                        defaultForMajor,
-                        preview,
-                        aliases,
-                        os,
-                        arch,
-                        packageType,
-                        URI.create(url),
-                        sha256,
-                        archiveSize,
-                        installFolderName,
-                        javaHomeSubpath));
+        int depth = 0;
+        boolean inPackages = false;
+
+        try (BufferedReader br = new BufferedReader(
+                new StringReader(new String(json, StandardCharsets.UTF_8)))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                String t = line.strip();
+                // Depth tracking
+                for (int i = 0; i < t.length(); i++) {
+                    char c = t.charAt(i);
+                    if (c == '"') { // skip string contents
+                        i++;
+                        while (i < t.length() && t.charAt(i) != '"') {
+                            if (t.charAt(i) == '\\') i++;
+                            i++;
+                        }
+                    } else if (c == '{') depth++;
+                    else if (c == '}') {
+                        if (depth == 3 && inPackages) {
+                            // End of a package entry — emit if complete
+                            if (url != null && !url.isEmpty()
+                                    && installFolderName != null && !installFolderName.isEmpty()) {
+                                try {
+                                    entries.add(new JdkCatalog.Entry(
+                                            vendor, product, suggestedSdkName, majorVersion, version,
+                                            defaultForMajor, preview, List.copyOf(aliases),
+                                            os, arch, packageType, URI.create(url), sha256,
+                                            archiveSize, installFolderName, javaHomeSubpath));
+                                } catch (IllegalArgumentException ignored) { /* bad URL */ }
+                            }
+                            os = arch = packageType = url = sha256 = installFolderName = javaHomeSubpath = null;
+                            archiveSize = 0;
+                        } else if (depth == 2) {
+                            // End of JDK entry
+                            vendor = product = suggestedSdkName = version = null;
+                            majorVersion = 0; defaultForMajor = false; preview = false;
+                            aliases = new ArrayList<>();
+                            inPackages = false;
+                        }
+                        depth--;
+                    }
+                }
+
+                // Field extraction
+                int colon = t.indexOf(':');
+                if (colon <= 0) {
+                    // Array element (alias string)
+                    if (inAliases && t.startsWith("\"")) {
+                        String v = unquote(t.replaceAll(",$", ""));
+                        if (!v.isEmpty()) aliases.add(v);
+                    }
+                    if (t.equals("]")) inAliases = false;
+                    continue;
+                }
+                String key = unquote(t.substring(0, colon).strip());
+                String val = t.substring(colon + 1).strip().replaceAll(",$", "");
+                boolean isArray = val.startsWith("[");
+                boolean isObj   = val.startsWith("{");
+                if (!isArray && !isObj) val = unquote(val);
+
+                if (depth == 2) {
+                    switch (key) {
+                        case "vendor"              -> vendor            = val;
+                        case "product"             -> product           = val;
+                        case "suggested_sdk_name"  -> suggestedSdkName  = val;
+                        case "jdk_version_major"   -> { try { majorVersion = Integer.parseInt(val); } catch (NumberFormatException e2) { majorVersion = 0; } }
+                        case "jdk_version"         -> version           = val;
+                        case "default"             -> defaultForMajor   = "true".equals(val);
+                        case "preview"             -> preview           = "true".equals(val);
+                        case "packages"            -> inPackages        = true;
+                        case "shared_index_aliases"-> { if (isArray && !val.equals("[]")) inAliases = true; }
+                    }
+                } else if (depth == 3 && inPackages) {
+                    switch (key) {
+                        case "os"                          -> os                = val;
+                        case "arch"                        -> arch               = val;
+                        case "package_type"                -> packageType        = val;
+                        case "url"                         -> url                = val;
+                        case "sha256"                      -> sha256             = val;
+                        case "archive_size"                -> { try { archiveSize = Long.parseLong(val); } catch (NumberFormatException e2) { archiveSize = 0; } }
+                        case "install_folder_name"         -> installFolderName  = val;
+                        case "package_to_java_home_prefix" -> javaHomeSubpath    = val;
+                    }
+                }
             }
         }
         return new JdkCatalog(filterSupported(entries));
+    }
+
+    /** Strip surrounding double-quotes and unescape basic sequences. */
+    private static String unquote(String s) {
+        s = s.strip();
+        if (s.startsWith("\"") && s.endsWith("\"") && s.length() >= 2) {
+            s = s.substring(1, s.length() - 1);
+        }
+        return s.replace("\\\"", "\"").replace("\\\\", "\\").replace("\\/", "/");
     }
 
     /**
@@ -226,13 +283,4 @@ public final class JdkCatalogClient {
         return kept;
     }
 
-    private static List<String> readStrings(JsonNode node) {
-        if (!node.isArray()) return List.of();
-        List<String> out = new ArrayList<>(node.size());
-        for (JsonNode n : node) {
-            String s = n.asString();
-            if (s != null && !s.isEmpty()) out.add(s);
-        }
-        return out;
-    }
 }

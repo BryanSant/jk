@@ -4,8 +4,6 @@ package dev.jkbuild.jdk;
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.Hashing;
-import org.apache.commons.compress.archivers.tar.TarArchiveEntry;
-import org.apache.commons.compress.archivers.tar.TarArchiveOutputStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -17,6 +15,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.GZIPOutputStream;
@@ -212,27 +211,55 @@ class JdkInstallerTest {
      * Build a tar.gz with entries written verbatim — no implicit top-level
      * dir wrapping. Entry value {@code null} means a directory entry.
      */
+    /**
+     * Build a tar.gz using hand-rolled 512-byte TAR blocks — no external library.
+     * {@code null} body = directory entry.
+     */
     private static byte[] buildTarGzRaw(String[][] rawEntries) throws IOException {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        try (GZIPOutputStream gz = new GZIPOutputStream(bytes);
-             TarArchiveOutputStream tar = new TarArchiveOutputStream(gz)) {
-            tar.setLongFileMode(TarArchiveOutputStream.LONGFILE_POSIX);
-            for (String[] e : rawEntries) {
-                String name = e[0];
-                String body = e[1];
-                if (body == null) {
-                    tar.putArchiveEntry(new TarArchiveEntry(name));
-                    tar.closeArchiveEntry();
-                } else {
-                    byte[] data = body.getBytes(StandardCharsets.UTF_8);
-                    TarArchiveEntry entry = new TarArchiveEntry(name);
-                    entry.setSize(data.length);
-                    tar.putArchiveEntry(entry);
-                    tar.write(data);
-                    tar.closeArchiveEntry();
-                }
+        ByteArrayOutputStream raw = new ByteArrayOutputStream();
+        for (String[] e : rawEntries) {
+            String name = e[0];
+            byte[] data = e[1] != null ? e[1].getBytes(StandardCharsets.UTF_8) : null;
+            boolean isDir = data == null;
+            byte[] header = new byte[512];
+            // name (0-99)
+            byte[] nameBytes = name.getBytes(StandardCharsets.US_ASCII);
+            System.arraycopy(nameBytes, 0, header, 0, Math.min(nameBytes.length, 99));
+            // mode (100-107)
+            putOctal(header, 100, 8, isDir ? 0755 : 0644);
+            // uid/gid (108-115, 116-123)
+            putOctal(header, 108, 8, 0); putOctal(header, 116, 8, 0);
+            // size (124-135)
+            putOctal(header, 124, 12, data != null ? data.length : 0);
+            // mtime (136-147)
+            putOctal(header, 136, 12, 0);
+            // type (156)
+            header[156] = (byte)(isDir ? '5' : '0');
+            // ustar magic (257-262)
+            System.arraycopy("ustar ".getBytes(StandardCharsets.US_ASCII), 0, header, 257, 6);
+            header[263] = ' '; header[264] = 0;
+            // checksum (148-155): fill with spaces first, then compute
+            java.util.Arrays.fill(header, 148, 156, (byte)' ');
+            int sum = 0; for (byte b : header) sum += (b & 0xFF);
+            putOctal(header, 148, 8, sum);
+            raw.write(header);
+            if (data != null && data.length > 0) {
+                raw.write(data);
+                int pad = 512 - (data.length % 512); if (pad < 512) raw.write(new byte[pad]);
             }
         }
+        raw.write(new byte[1024]); // two zero blocks = end of archive
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (GZIPOutputStream gz = new GZIPOutputStream(bytes)) {
+            gz.write(raw.toByteArray());
+        }
         return bytes.toByteArray();
+    }
+
+    private static void putOctal(byte[] buf, int off, int len, long value) {
+        String octal = String.format("%0" + (len - 1) + "o", value);
+        byte[] oBytes = octal.getBytes(StandardCharsets.US_ASCII);
+        System.arraycopy(oBytes, 0, buf, off, Math.min(oBytes.length, len - 1));
+        buf[off + len - 1] = 0;
     }
 }

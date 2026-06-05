@@ -3,12 +3,12 @@ package dev.jkbuild.compile.incremental;
 
 import dev.jkbuild.cache.Cas;
 
-import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Enumeration;
@@ -28,8 +28,6 @@ import java.util.stream.Stream;
  * cross-language ABI changes.
  */
 public final class JavaClasspathAbi {
-
-    private static final ObjectMapper JSON = JsonMapper.builder().build();
 
     private JavaClasspathAbi() {}
 
@@ -52,16 +50,16 @@ public final class JavaClasspathAbi {
         // its snapshot is immutable and cacheable; anything else is scanned fresh.
         var cas256 = cas.hashFromPath(entry);
         if (cas256.isEmpty()) return scanJar(entry);
-        Path cacheFile = cacheDir.resolve(cas256.get() + ".json");
+        // Cache file uses .txt extension; old .json files are silently ignored (cold start).
+        Path cacheFile = cacheDir.resolve(cas256.get() + ".txt");
         if (Files.isRegularFile(cacheFile)) {
             try {
-                return JSON.readValue(Files.readAllBytes(cacheFile),
-                        new TypeReference<TreeMap<String, DepFacts>>() {});
+                return readDepFacts(Files.readAllBytes(cacheFile));
             } catch (RuntimeException ignored) { /* corrupt → recompute */ }
         }
         Map<String, DepFacts> snapshot = scanJar(entry);
         Files.createDirectories(cacheDir);
-        Files.write(cacheFile, JSON.writeValueAsBytes(snapshot));
+        Files.write(cacheFile, writeDepFacts(snapshot).getBytes(StandardCharsets.UTF_8));
         return snapshot;
     }
 
@@ -99,5 +97,34 @@ public final class JavaClasspathAbi {
 
     private static DepFacts factsOf(byte[] bytes) {
         return new DepFacts(ClassAbi.hash(bytes), ClassAbi.definesInlinableConstant(bytes));
+    }
+
+    // --- tab-delimited serialization (replaces Jackson) ---------------------
+    // Format: one entry per line — <internalName>\t<abiHex>\t<0|1>
+
+    public static String writeDepFacts(Map<String, DepFacts> map) {
+        StringBuilder sb = new StringBuilder(map.size() * 80);
+        for (Map.Entry<String, DepFacts> e : map.entrySet()) {
+            sb.append(e.getKey()).append('\t')
+              .append(e.getValue().abi()).append('\t')
+              .append(e.getValue().constants() ? '1' : '0').append('\n');
+        }
+        return sb.toString();
+    }
+
+    public static Map<String, DepFacts> readDepFacts(byte[] bytes) throws IOException {
+        Map<String, DepFacts> out = new TreeMap<>();
+        try (BufferedReader br = new BufferedReader(
+                new StringReader(new String(bytes, StandardCharsets.UTF_8)))) {
+            String line;
+            while ((line = br.readLine()) != null) {
+                line = line.strip();
+                if (line.isEmpty()) continue;
+                String[] parts = line.split("\t", 3);
+                if (parts.length < 3) continue;
+                out.put(parts[0], new DepFacts(parts[1], "1".equals(parts[2])));
+            }
+        }
+        return out;
     }
 }

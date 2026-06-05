@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.ObjectMapper;
-import tools.jackson.databind.json.JsonMapper;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -33,7 +30,6 @@ public final class WorkerJavac {
 
     private static final String PREFIX = "##JKJC:";
     private static final String WORKER_MAIN = "dev.jkbuild.java.compiler.JavaCompilerWorker";
-    private static final ObjectMapper JSON = JsonMapper.builder().build();
 
     private WorkerJavac() {}
 
@@ -86,21 +82,18 @@ public final class WorkerJavac {
                 String line;
                 while ((line = reader.readLine()) != null) {
                     if (!line.startsWith(PREFIX)) continue;
-                    JsonNode node;
-                    try {
-                        node = JSON.readTree(line.substring(PREFIX.length()));
-                    } catch (RuntimeException malformed) {
-                        continue;
-                    }
-                    switch (node.path("t").asString()) {
-                        case "diag" -> diagnostics.add(node.path("msg").asString());
+                    String json = line.substring(PREFIX.length());
+                    switch (Ndjson.str(json, "t") != null ? Ndjson.str(json, "t") : "") {
+                        case "diag" -> diagnostics.add(Ndjson.str(json, "msg"));
                         case "prov" -> {
-                            Path gen = Path.of(node.path("gen").asString());
+                            String genStr = Ndjson.str(json, "gen");
+                            if (genStr == null) break;
+                            Path gen = Path.of(genStr);
                             Set<Path> origins = new TreeSet<>();
-                            for (JsonNode s : node.path("src")) origins.add(Path.of(s.asString()));
+                            for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
                             generated.put(gen, origins);
                         }
-                        case "result" -> status = node.path("status").asString();
+                        case "result" -> status = Ndjson.str(json, "status");
                         default -> { /* ignore */ }
                     }
                 }

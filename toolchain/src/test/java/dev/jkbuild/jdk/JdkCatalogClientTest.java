@@ -3,7 +3,7 @@ package dev.jkbuild.jdk;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.http.Http;
-import org.apache.commons.compress.compressors.xz.XZCompressorOutputStream;
+
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,37 +25,37 @@ class JdkCatalogClientTest {
 
     private HttpServer server;
     private URI feed;
-    private byte[] xzBody;
+    private byte[] jsonBody;
     private AtomicInteger hits;
 
     @BeforeEach
     void start() throws IOException {
-        xzBody = xz(SAMPLE);
+        jsonBody = SAMPLE.getBytes(StandardCharsets.UTF_8);
         hits = new AtomicInteger();
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/feed/jdks.json.xz", exchange -> {
+        server.createContext("/feed/jdks.json", exchange -> {
             hits.incrementAndGet();
             String ifModSince = exchange.getRequestHeaders().getFirst("If-Modified-Since");
             if (ifModSince != null) {
                 exchange.sendResponseHeaders(304, -1);
             } else {
-                exchange.sendResponseHeaders(200, xzBody.length);
-                exchange.getResponseBody().write(xzBody);
+                exchange.sendResponseHeaders(200, jsonBody.length);
+                exchange.getResponseBody().write(jsonBody);
             }
             exchange.close();
         });
         server.start();
         feed = URI.create("http://127.0.0.1:" + server.getAddress().getPort()
-                + "/feed/jdks.json.xz");
+                + "/feed/jdks.json");
     }
 
     @AfterEach
     void stop() { server.stop(0); }
 
     @Test
-    void parses_xz_feed(@TempDir Path tempDir) throws Exception {
+    void parses_json_feed(@TempDir Path tempDir) throws Exception {
         JdkCatalogClient client = new JdkCatalogClient(
-                new Http(), feed, tempDir.resolve("jdks.json.xz"), Duration.ZERO);
+                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
         JdkCatalog catalog = client.fetch();
 
         assertThat(catalog.entries())
@@ -74,7 +74,7 @@ class JdkCatalogClientTest {
 
     @Test
     void cache_hit_within_ttl_skips_network(@TempDir Path tempDir) throws Exception {
-        Path cache = tempDir.resolve("jdks.json.xz");
+        Path cache = tempDir.resolve("jdks.json");
         JdkCatalogClient client = new JdkCatalogClient(
                 new Http(), feed, cache, Duration.ofHours(24));
         client.fetch();
@@ -85,7 +85,7 @@ class JdkCatalogClientTest {
 
     @Test
     void second_fetch_after_ttl_revalidates_with_if_modified_since(@TempDir Path tempDir) throws Exception {
-        Path cache = tempDir.resolve("jdks.json.xz");
+        Path cache = tempDir.resolve("jdks.json");
         JdkCatalogClient client = new JdkCatalogClient(
                 new Http(), feed, cache, Duration.ZERO);
         client.fetch();
@@ -98,9 +98,9 @@ class JdkCatalogClientTest {
 
     @Test
     void offline_falls_back_to_cache(@TempDir Path tempDir) throws Exception {
-        Path cache = tempDir.resolve("jdks.json.xz");
+        Path cache = tempDir.resolve("jdks.json");
         Files.createDirectories(cache.getParent());
-        Files.write(cache, xzBody);
+        Files.write(cache, jsonBody);
         // Stop the server so the next fetch fails on the wire.
         server.stop(0);
 
@@ -110,13 +110,6 @@ class JdkCatalogClientTest {
         assertThat(catalog.entries()).isNotEmpty();
     }
 
-    private static byte[] xz(String json) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try (XZCompressorOutputStream xz = new XZCompressorOutputStream(out)) {
-            xz.write(json.getBytes(StandardCharsets.UTF_8));
-        }
-        return out.toByteArray();
-    }
 
     private static final String SAMPLE = """
             {
