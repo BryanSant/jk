@@ -59,7 +59,7 @@ class SelfHostingTomlTest {
     void root_jk_toml_declares_the_workspace() throws Exception {
         JkBuild root = JkBuildParser.parse(REPO.resolve("jk.toml"));
         assertThat(root.project().group()).isEqualTo("dev.jkbuild");
-        assertThat(root.project().artifact()).isEqualTo("jk");
+        assertThat(root.project().name()).isEqualTo("jk");
         assertThat(root.isWorkspaceRoot()).isTrue();
         assertThat(root.workspace().members()).containsExactly(
                 "core", "io", "resolver", "toolchain",
@@ -75,7 +75,7 @@ class SelfHostingTomlTest {
             assertThat(memberManifest).as("missing " + memberManifest).exists();
             JkBuild parsed = JkBuildParser.parse(memberManifest);
             assertThat(parsed.project().group()).isEqualTo("dev.jkbuild");
-            assertThat(parsed.project().artifact()).startsWith("jk-");
+            assertThat(parsed.project().name()).startsWith("jk-");
             assertThat(parsed.project().jdk()).isEqualTo(25);
         }
     }

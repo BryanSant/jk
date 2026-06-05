@@ -88,7 +88,7 @@ public final class BuildLayout {
         }
         return new BuildLayout(
                 workspaceRoot, projectDir,
-                project.project().artifact(),
+                project.project().name(),
                 project.project().version());
     }
 
@@ -101,7 +101,7 @@ public final class BuildLayout {
         Objects.requireNonNull(project, "project");
         return new BuildLayout(
                 workspaceRoot, memberRoot,
-                project.project().artifact(),
+                project.project().name(),
                 project.project().version());
     }
 

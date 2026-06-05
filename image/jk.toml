@@ -1,16 +1,16 @@
 [project]
 group    = "dev.jkbuild"
-artifact = "jk-image"
+name     = "jk-image"
 version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
 [dependencies.main]
-jk-core  = { group = "dev.jkbuild",            artifact = "jk-core",  version = "0.6.0-SNAPSHOT" }
-jk-io    = { group = "dev.jkbuild",            artifact = "jk-io",    version = "0.6.0-SNAPSHOT" }
-jib-core = { group = "com.google.cloud.tools", artifact = "jib-core", version = "0.28.1" }
+jk-core  = { group = "dev.jkbuild",            name     = "jk-core",  version = "0.6.0-SNAPSHOT" }
+jk-io    = { group = "dev.jkbuild",            name     = "jk-io",    version = "0.6.0-SNAPSHOT" }
+jib-core = { group = "com.google.cloud.tools", name     = "jib-core", version = "0.28.1" }
 
 [dependencies.test]
-assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
-junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
-junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }
+assertj-core            = { group = "org.assertj",        name     = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  name     = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", name     = "junit-platform-launcher", version = "6.1.0" }

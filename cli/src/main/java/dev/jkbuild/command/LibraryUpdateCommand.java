@@ -6,7 +6,7 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.http.Http;
-import dev.jkbuild.alias.AliasCatalog;
+import dev.jkbuild.library.LibraryCatalog;
 import dev.jkbuild.util.JkDirs;
 import org.jline.utils.AttributedStyle;
 import picocli.CommandLine.Command;
@@ -28,24 +28,24 @@ import java.util.TreeSet;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk alias update} — pull the latest alias catalog from
- * {@code github.com/jkbuild/jk-alias-registry} and replace the cached copy
- * at {@code ~/.jk/aliases.global.toml}.
+ * {@code jk library update} — pull the latest library catalog from
+ * {@code github.com/jkbuild/jk-library-registry} and replace the cached copy
+ * at {@code ~/.jk/libs.global.toml}.
  *
  * <p>The upstream is unsigned for now (signing is on the roadmap). The
  * downloaded payload is validated by parsing it; a malformed response
  * leaves the previous cached copy untouched.
  *
- * <p>No version pinning. Every {@code jk alias update} pulls
+ * <p>No version pinning. Every {@code jk library update} pulls
  * {@code main} HEAD — globally consistent, per the catalog's curation
  * policy.
  */
-@Command(name = "update", description = "Fetch the latest alias catalog")
-public final class AliasUpdateCommand implements Callable<Integer> {
+@Command(name = "update", description = "Fetch the latest library catalog")
+public final class LibraryUpdateCommand implements Callable<Integer> {
 
     /** Upstream URL — the catalog's source of truth. Override via {@code --source} for tests. */
     static final URI DEFAULT_SOURCE = URI.create(
-            "https://raw.githubusercontent.com/jkbuild/jk-alias-registry/main/aliases.toml");
+            "https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml");
 
     @Option(names = "--source", hidden = true,
             description = "Override the upstream URL (used by tests; not part of the public CLI).")
@@ -61,21 +61,21 @@ public final class AliasUpdateCommand implements Callable<Integer> {
     public Integer call() throws IOException, InterruptedException {
         long startNanos = System.nanoTime();
         Path cacheFile = cacheFileOverride != null ? cacheFileOverride
-                : AliasCatalog.downloadedFile();
+                : LibraryCatalog.downloadedFile();
         Path previousBackup = cacheFile.resolveSibling(cacheFile.getFileName() + ".prev");
 
-        Map<String, AliasCatalog.Module> before = currentEntries(cacheFile);
+        Map<String, LibraryCatalog.Module> before = currentEntries(cacheFile);
 
         HttpResponse<byte[]> response;
         try {
             response = new Http().get(source);
         } catch (IOException e) {
-            System.err.println("jk alias update: failed to reach " + source);
+            System.err.println("jk library update: failed to reach " + source);
             System.err.println("  " + e.getMessage());
             return 1;
         }
         if (response.statusCode() != 200) {
-            System.err.println("jk alias update: HTTP " + response.statusCode()
+            System.err.println("jk library update: HTTP " + response.statusCode()
                     + " from " + source);
             return 1;
         }
@@ -83,11 +83,11 @@ public final class AliasUpdateCommand implements Callable<Integer> {
 
         // Parse before writing — a malformed payload should never replace
         // a good cached copy.
-        Map<String, AliasCatalog.Module> after;
+        Map<String, LibraryCatalog.Module> after;
         try {
             after = materialise(body);
         } catch (RuntimeException e) {
-            System.err.println("jk alias update: refusing to replace cache — "
+            System.err.println("jk library update: refusing to replace cache — "
                     + "upstream payload did not validate:");
             System.err.println("  " + e.getMessage());
             return 1;
@@ -104,7 +104,7 @@ public final class AliasUpdateCommand implements Callable<Integer> {
         return 0;
     }
 
-    private static Map<String, AliasCatalog.Module> currentEntries(Path cacheFile) {
+    private static Map<String, LibraryCatalog.Module> currentEntries(Path cacheFile) {
         if (!Files.isRegularFile(cacheFile)) return Map.of();
         try {
             return materialise(Files.readString(cacheFile, StandardCharsets.UTF_8));
@@ -113,10 +113,10 @@ public final class AliasUpdateCommand implements Callable<Integer> {
         }
     }
 
-    /** Parse a TOML payload's {@code [aliases]} table into a flat map. */
-    private static Map<String, AliasCatalog.Module> materialise(String body) {
-        AliasCatalog parsed = AliasCatalog.parse(body);
-        Map<String, AliasCatalog.Module> out = new java.util.LinkedHashMap<>();
+    /** Parse a TOML payload's {@code [libraries]} table into a flat map. */
+    private static Map<String, LibraryCatalog.Module> materialise(String body) {
+        LibraryCatalog parsed = LibraryCatalog.parse(body);
+        Map<String, LibraryCatalog.Module> out = new java.util.LinkedHashMap<>();
         for (String name : parsed.names()) {
             parsed.lookup(name).ifPresent(m -> out.put(name, m));
         }
@@ -127,7 +127,7 @@ public final class AliasUpdateCommand implements Callable<Integer> {
         // Header: green banner, bold count, dim elapsed — matching jk's
         // build/test result lines (see BuildCommand.fmtDuration).
         System.out.println(
-                Theme.colorize("✓ Alias catalog updated", Theme.active().completedStep())
+                Theme.colorize("✓ Library catalog updated", Theme.active().completedStep())
                         + " — " + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
                         + " entries cached "
                         + Theme.colorize("in " + BuildCommand.fmtDuration(elapsed), Theme.active().darkGray()));
@@ -157,15 +157,15 @@ public final class AliasUpdateCommand implements Callable<Integer> {
 
     private record Diff(List<String> added, List<String> removed, List<String> changed) {
         static Diff compute(
-                Map<String, AliasCatalog.Module> before,
-                Map<String, AliasCatalog.Module> after) {
+                Map<String, LibraryCatalog.Module> before,
+                Map<String, LibraryCatalog.Module> after) {
             List<String> added = new ArrayList<>();
             List<String> removed = new ArrayList<>();
             List<String> changed = new ArrayList<>();
             for (Iterator<String> it = new TreeSet<>(after.keySet()).iterator(); it.hasNext();) {
                 String name = it.next();
-                AliasCatalog.Module b = before.get(name);
-                AliasCatalog.Module a = after.get(name);
+                LibraryCatalog.Module b = before.get(name);
+                LibraryCatalog.Module a = after.get(name);
                 if (b == null) added.add(Coords.shortName(name) + " → " + Coords.module(a.moduleKey()));
                 else if (!b.equals(a)) changed.add(Coords.shortName(name) + ": "
                         + Coords.module(b.moduleKey()) + " → " + Coords.module(a.moduleKey()));

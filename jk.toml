@@ -1,6 +1,6 @@
 [project]
 group    = "dev.jkbuild"
-artifact = "jk"
+name     = "jk"
 version  = "0.6.0-SNAPSHOT"
 description = "A modern build tool for Java and Kotlin."
 jdk      = 25

@@ -294,7 +294,7 @@ public final class PublishCommand implements Callable<Integer> {
         SigningOptions signing = goal.get(SIGNING).orElseThrow();
         if (!global.outputIsJson()) {
             System.out.println("Published " + Coords.gav(
-                    project.project().group(), project.project().artifact(), project.project().version())
+                    project.project().group(), project.project().name(), project.project().version())
                     + " (" + pub.statusByPath().size() + " files"
                     + (signing.isNoop() ? "" : ", signed") + ")");
         }
@@ -338,18 +338,18 @@ public final class PublishCommand implements Callable<Integer> {
     private void printDryRunPlan(JkBuild project, List<MavenPublisher.Artifact> artifacts) {
         String groupPath = project.project().group().replace('.', '/');
         String prefix = repoUrl + (repoUrl.toString().endsWith("/") ? "" : "/")
-                + groupPath + "/" + project.project().artifact() + "/"
+                + groupPath + "/" + project.project().name() + "/"
                 + project.project().version() + "/";
         System.out.println("Would PUT to " + prefix + ":");
         for (MavenPublisher.Artifact a : artifacts) {
-            String name = project.project().artifact() + "-"
+            String name = project.project().name() + "-"
                     + project.project().version() + a.filenameSuffix();
             System.out.println("  " + name + " (" + a.body().length + " bytes)");
             System.out.println("  " + name + ".md5 / .sha1 / .sha256 / .sha512");
             if (sign) System.out.println("  " + name + ".asc + four checksums");
             if (sigstore) System.out.println("  " + name + ".sigstore + four checksums");
             if (slsa && a.filenameSuffix().equals(".jar")) {
-                System.out.println("  " + project.project().artifact() + "-"
+                System.out.println("  " + project.project().name() + "-"
                         + project.project().version() + ".intoto.json + four checksums");
             }
         }
@@ -387,7 +387,7 @@ public final class PublishCommand implements Callable<Integer> {
                 Map.of("configRef", "jk.toml"),
                 Map.of(
                         "group", project.group(),
-                        "artifact", project.artifact(),
+                        "artifact", project.name(),
                         "version", project.version(),
                         "jdk", String.valueOf(project.jdk())));
         return SlsaProvenance.generate(

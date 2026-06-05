@@ -60,7 +60,7 @@ public final class WorkspaceClasspath {
             } catch (RuntimeException ignored) {
                 continue;
             }
-            String moduleCoord = sibling.project().group() + ":" + sibling.project().artifact();
+            String moduleCoord = sibling.project().group() + ":" + sibling.project().name();
             // Until workspace-aware build wiring lands, each sibling
             // builds with workspaceRoot == memberDir — so its jar lands
             // under <siblingDir>/target/, not the shared workspace

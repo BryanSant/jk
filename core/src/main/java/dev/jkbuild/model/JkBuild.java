@@ -141,17 +141,17 @@ public record JkBuild(
         public boolean isEnabled() { return this != DISABLED; }
     }
 
-    public record Project(String group, String artifact, String version,
+    public record Project(String group, String name, String version,
                           int jdk, int java, VersionSelector kotlin,
                           String main, boolean shadow, NativeMode nativeMode,
                           String description, boolean application, boolean m2install) {
 
         public Project {
             Objects.requireNonNull(group, "group");
-            Objects.requireNonNull(artifact, "artifact");
+            Objects.requireNonNull(name, "name");
             Objects.requireNonNull(version, "version");
             if (group.isBlank()) throw new IllegalArgumentException("project.group must not be blank");
-            if (artifact.isBlank()) throw new IllegalArgumentException("project.artifact must not be blank");
+            if (name.isBlank()) throw new IllegalArgumentException("project.name must not be blank");
             if (version.isBlank()) throw new IllegalArgumentException("project.version must not be blank");
             if (java < 0 || jdk < 0) {
                 throw new IllegalArgumentException("project.jdk/java must be non-negative");
@@ -166,16 +166,16 @@ public record JkBuild(
          * the rule that a runnable project is an application unless told
          * otherwise — and {@code m2install} to false.
          */
-        public Project(String group, String artifact, String version,
+        public Project(String group, String name, String version,
                        int jdk, int java, VersionSelector kotlin,
                        String main, boolean shadow, NativeMode nativeMode, String description) {
-            this(group, artifact, version, jdk, java, kotlin, main, shadow, nativeMode,
+            this(group, name, version, jdk, java, kotlin, main, shadow, nativeMode,
                     description, main != null, false);
         }
 
         /** Library project — no main, no shadow, no native; defaults to a Java project. */
-        public Project(String group, String artifact, String version, int jdk) {
-            this(group, artifact, version, jdk, jdk, null, null, false, NativeMode.DISABLED, null);
+        public Project(String group, String name, String version, int jdk) {
+            this(group, name, version, jdk, jdk, null, null, false, NativeMode.DISABLED, null);
         }
 
         /** Backward-compat: true when native mode is not DISABLED. */

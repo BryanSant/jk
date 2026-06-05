@@ -119,7 +119,7 @@ public final class ImageCommand implements Callable<Integer> {
                     List<Path> depJars = loadDependencyJars(projectDir, cache);
                     ImageBuilder.Plan plan = new ImageBuilder.Plan(
                             config,
-                            project.project().artifact(),
+                            project.project().name(),
                             project.project().version(),
                             chosen,
                             mainJar,
@@ -182,7 +182,7 @@ public final class ImageCommand implements Callable<Integer> {
                         + " (" + plan.dependencyJars().size() + " dep layers, main jar layer)");
             } else {
                 System.out.println("Pushed " + config.targetReference(
-                        project.project().artifact(), project.project().version()));
+                        project.project().name(), project.project().version()));
             }
         }
         return 0;

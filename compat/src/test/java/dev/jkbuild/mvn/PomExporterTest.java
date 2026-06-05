@@ -186,7 +186,7 @@ class PomExporterTest {
 
         JkBuild re = reimported.jkBuild();
         assertThat(re.project().group()).isEqualTo("com.example");
-        assertThat(re.project().artifact()).isEqualTo("widget");
+        assertThat(re.project().name()).isEqualTo("widget");
         assertThat(re.project().version()).isEqualTo("1.0.0");
         assertThat(re.project().jdk()).isEqualTo(21);
         assertThat(re.dependencies().of(Scope.MAIN))

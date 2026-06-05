@@ -217,9 +217,9 @@ TOML. The single source of truth for project manifests. Reasons:
 
 Conventions:
 
-- All top-level tables are optional. A `jk.toml` with only `[project]` (`group`, `artifact`, `version`) is a valid project.
+- All top-level tables are optional. A `jk.toml` with only `[project]` (`group`, `name`, `version`) is a valid project.
 - A JSON Schema is published alongside the binary; IntelliJ/VS Code/Helix can autocomplete and validate.
-- Dependencies use **name-as-key** sub-tables per scope: `[dependencies.<scope>]` maps a short local name to an inline coord table (`{ group, artifact, version }`). The short name is the user-controlled identifier; the coordinate is a resolution detail. Source overrides (`path`, `git` + `tag`/`branch`/`rev`) are inline fields on the same table — there is **no separate `[sources]` table**. Shared external deps live in `[workspace.dependencies]`; children inherit by writing `name.workspace = true`. Workspace siblings are resolved through the same `name.workspace = true` mechanism (matched against members' `[project].artifact`). A `[dependencies]` block whose direct children are all inline dep tables is shorthand for `[dependencies.main]`. See [docs/artifact-coord-design.md](./artifact-coord-design.md) for the full grammar.
+- Dependencies use **name-as-key** sub-tables per scope: `[dependencies.<scope>]` maps a short local name to an inline coord table (`{ group, artifact, version }`). The short name is the user-controlled identifier; the coordinate is a resolution detail. Source overrides (`path`, `git` + `tag`/`branch`/`rev`) are inline fields on the same table — there is **no separate `[sources]` table**. Shared external deps live in `[workspace.dependencies]`; children inherit by writing `name.workspace = true`. Workspace siblings are resolved through the same `name.workspace = true` mechanism (matched against members' `[project].name`). A `[dependencies]` block whose direct children are all inline dep tables is shorthand for `[dependencies.main]`. See [docs/artifact-coord-design.md](./artifact-coord-design.md) for the full grammar.
 
 ### 5.2 `jk.lock`
 
@@ -351,7 +351,7 @@ By default, a coordinate is resolved by walking declared repositories in declare
 
 ```toml
 [dependencies.main]
-internal-lib = { group = "com.acme", artifact = "internal-lib", version = "1.0", from = "internal" }
+internal-lib = { group = "com.acme", name = "internal-lib", version = "1.0", from = "internal" }
 ```
 
 When pinned, jk will *refuse* to fetch the package from any other repo even at a higher version. This closes the dependency-confusion attack class.
@@ -360,7 +360,7 @@ When pinned, jk will *refuse* to fetch the package from any other repo even at a
 
 ```toml
 [dependencies.platform]
-spring-boot-dependencies = { group = "org.springframework.boot", artifact = "spring-boot-dependencies", version = "3.4.0" }
+spring-boot-dependencies = { group = "org.springframework.boot", name = "spring-boot-dependencies", version = "3.4.0" }
 ```
 
 Imported `<dependencyManagement>` constraints apply to all other scopes in the project (and, in a workspace root, to all members).
@@ -369,9 +369,9 @@ Imported `<dependencyManagement>` constraints apply to all other scopes in the p
 
 ```toml
 [dependencies.main]
-netty-epoll = { group = "io.netty", artifact = "netty-transport-native-epoll", version = "4.1.115",
+netty-epoll = { group = "io.netty", name = "netty-transport-native-epoll", version = "4.1.115",
                 classifier = "linux-x86_64", target = "os(linux)" }
-netty-kqueue = { group = "io.netty", artifact = "netty-transport-native-kqueue", version = "4.1.115",
+netty-kqueue = { group = "io.netty", name = "netty-transport-native-kqueue", version = "4.1.115",
                  classifier = "osx-aarch64", target = "os(darwin) && arch(aarch64)" }
 ```
 
@@ -385,11 +385,11 @@ Features reference **short dep names** from `[dependencies.*]`, not coord string
 
 ```toml
 [dependencies.main]
-postgres-jdbc    = { group = "org.postgresql",                artifact = "postgresql",        version = "42.7.4" }
-mysql-connector  = { group = "com.mysql",                     artifact = "mysql-connector-j", version = "9.0.0"  }
-jackson-databind = { group = "com.fasterxml.jackson.core",    artifact = "jackson-databind",  version = "2.18.2" }
-gson             = { group = "com.google.code.gson",          artifact = "gson",              version = "2.11.0" }
-micrometer-core  = { group = "io.micrometer",                 artifact = "micrometer-core",   version = "1.13.6" }
+postgres-jdbc    = { group = "org.postgresql",                name = "postgresql",        version = "42.7.4" }
+mysql-connector  = { group = "com.mysql",                     name = "mysql-connector-j", version = "9.0.0"  }
+jackson-databind = { group = "com.fasterxml.jackson.core",    name = "jackson-databind",  version = "2.18.2" }
+gson             = { group = "com.google.code.gson",          name = "gson",              version = "2.11.0" }
+micrometer-core  = { group = "io.micrometer",                 name = "micrometer-core",   version = "1.13.6" }
 
 [features]
 default = ["postgres", "jackson"]
@@ -417,7 +417,7 @@ Consumer side — request specific features from a dependency by adding fields t
 
 ```toml
 [dependencies.main]
-widget = { group = "com.example", artifact = "widget", version = "0.3.1",
+widget = { group = "com.example", name = "widget", version = "0.3.1",
            features = ["mysql", "gson"], default-features = false }
 ```
 
@@ -611,14 +611,14 @@ A git dep is a regular `[dependencies.<scope>]` entry whose source mode is `git`
 ```toml
 [dependencies.main]
 # Long form
-bar = { group = "com.foo", artifact = "bar",
+bar = { group = "com.foo", name = "bar",
         git = "https://github.com/foo/bar", tag = "v1.2.3",
         path = "modules/bar", submodules = true }
 # Host shorthands (gh, gl, bb, sr — for github, gitlab, bitbucket, sourcehut)
-baz = { group = "com.foo", artifact = "baz",
+baz = { group = "com.foo", name = "baz",
         git = "gh:foo/baz", tag = "v0.5.0" }
 # SSH form
-qux = { group = "com.foo", artifact = "qux",
+qux = { group = "com.foo", name = "qux",
         git = "git@github.com:foo/qux.git", branch = "main" }
 ```
 
@@ -759,8 +759,8 @@ kotlin = "2.1.0"
 # shared
 
 [workspace.dependencies]
-jackson-databind = { group = "com.fasterxml.jackson.core", artifact = "jackson-databind", version = "2.18.2" }
-reactor-core     = { group = "io.projectreactor",          artifact = "reactor-core",     version = "3.6.10" }
+jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind", version = "2.18.2" }
+reactor-core     = { group = "io.projectreactor",          name = "reactor-core",     version = "3.6.10" }
 ```
 
 Member `services/api/jk.toml`:
@@ -768,13 +768,13 @@ Member `services/api/jk.toml`:
 ```toml
 [project]
 group    = "com.example"
-artifact = "api"
+name     = "api"
 version  = "$workspace"
 
 [dependencies.main]
 # Shared external dep — inherited from [workspace.dependencies] above.
 jackson-databind.workspace = true
-# Workspace sibling — short name matches the sibling member's [project].artifact.
+# Workspace sibling — short name matches the sibling member's [project].name.
 # The resolver looks up siblings before [workspace.dependencies].
 widget-core.workspace = true
 ```
@@ -784,7 +784,7 @@ widget-core.workspace = true
 - **One `jk.lock` at workspace root.** Always.
 - **Shared `target/`** under workspace root. Incremental compilation reuses across members.
 - **Shared external deps** declared once in `[workspace.dependencies]`; members opt in with `name.workspace = true`.
-- **Workspace siblings** resolved through the same `name.workspace = true` mechanism — the short name is matched against the sibling's `[project].artifact`.
+- **Workspace siblings** resolved through the same `name.workspace = true` mechanism — the short name is matched against the sibling's `[project].name`.
 - **`jk -p <member> <cmd>`** scopes a command.
 - **Virtual workspaces** supported — a root `jk.toml` with `workspace { }` but no `project { }` is valid.
 - **Glob members** (`libs/*`) to avoid hand-listing.
@@ -805,7 +805,7 @@ when run inside a workspace:
   path as a member. The argument is treated as a local member when it begins
   with `:` (`:widget`, a name marker) or contains a path separator
   (`./widget`, `../widget`, `libs/widget`, `widget/`). A bare name with
-  neither (`jk add jackson`) is resolved as an alias-catalog name / Maven coord, not
+  neither (`jk add jackson`) is resolved as a library-catalog name / Maven coord, not
   a path. A path outside the workspace root adds the edge but is not
   registered as a member.
 

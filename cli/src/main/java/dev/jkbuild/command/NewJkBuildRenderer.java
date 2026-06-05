@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.alias.AliasCatalog;
+import dev.jkbuild.library.LibraryCatalog;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,7 +14,7 @@ import java.util.Map;
  * <pre>{@code
  *   [project]
  *   group    = "..."
- *   artifact = "..."
+ *   name     = "..."
  *   version  = "0.1.0"
  *   jdk      = 25
  *   java     = 25
@@ -43,8 +43,8 @@ public final class NewJkBuildRenderer {
     public static String render(NewInputs inputs) {
         var sb = new StringBuilder();
         sb.append("[project]\n");
+        sb.append("name     = \"").append(inputs.name()).append("\"\n");
         sb.append("group    = \"").append(inputs.group()).append("\"\n");
-        sb.append("artifact = \"").append(inputs.artifact()).append("\"\n");
         sb.append("version  = \"0.1.0\"\n");
         sb.append("jdk      = ").append(inputs.jdkMajor()).append('\n');
         switch (inputs.lang()) {
@@ -91,7 +91,7 @@ public final class NewJkBuildRenderer {
      * Render a single curated dep. The short name is the artifactId (the part
      * after the colon in {@code group:artifact}).
      *
-     * <p>When that short name resolves through the bundled alias catalog to
+     * <p>When that short name resolves through the bundled library catalog to
      * this exact coordinate, emit the Cargo-style one-liner
      * {@code name = "latest"} — the catalog supplies group/artifact and the
      * resolver floats to the newest release. Otherwise fall back to the
@@ -103,7 +103,7 @@ public final class NewJkBuildRenderer {
         int colon = e.coord().indexOf(':');
         String group = e.coord().substring(0, colon);
         String artifact = e.coord().substring(colon + 1);
-        var hit = AliasCatalog.bundled().lookup(artifact).orElse(null);
+        var hit = LibraryCatalog.bundled().lookup(artifact).orElse(null);
         if (hit != null && hit.group().equals(group) && hit.artifact().equals(artifact)) {
             return artifact + " = \"latest\"";
         }

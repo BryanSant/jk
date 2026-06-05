@@ -21,7 +21,7 @@ class JkBuildEditorTest {
     private static final String BASE = """
             [project]
             group    = "com.example"
-            artifact = "widget"
+            name     = "widget"
             version  = "0.1.0"
             jdk      = 21
             java     = 21
@@ -41,7 +41,7 @@ class JkBuildEditorTest {
         assertThat(parsed.dependencies().of(Scope.MAIN))
                 .singleElement()
                 .satisfies(d -> {
-                    assertThat(d.name()).isEqualTo("jackson-databind");
+                    assertThat(d.library()).isEqualTo("jackson-databind");
                     assertThat(d.module()).isEqualTo("com.fasterxml.jackson.core:jackson-databind");
                     assertThat(d.version()).isInstanceOf(VersionSelector.Exact.class);
                 });
@@ -56,7 +56,7 @@ class JkBuildEditorTest {
                 BASE, Scope.MAIN, "acme-thing", "com.acme", "acme-thing", "1.0.0");
 
         assertThat(result).contains("acme-thing = { group = \"com.acme\", version = \"1.0.0\" }");
-        assertThat(result).doesNotContain(", artifact =");
+        assertThat(result).doesNotContain(", name =");
     }
 
     @Test
@@ -71,7 +71,7 @@ class JkBuildEditorTest {
         // Round-trips through the parser to the same coord.
         JkBuild parsed = JkBuildParser.parse(result);
         Dependency d = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(d.name()).isEqualTo("picocli");
+        assertThat(d.library()).isEqualTo("picocli");
         assertThat(d.module()).isEqualTo("info.picocli:picocli");
     }
 
@@ -94,11 +94,11 @@ class JkBuildEditorTest {
 
         assertThat(result).contains(
                 "spring-web = { group = \"org.springframework.boot\", "
-                        + "artifact = \"spring-boot-starter-web\", version = \"3.4.0\" }");
+                        + "name = \"spring-boot-starter-web\", version = \"3.4.0\" }");
 
         JkBuild parsed = JkBuildParser.parse(result);
         Dependency d = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(d.name()).isEqualTo("spring-web");
+        assertThat(d.library()).isEqualTo("spring-web");
         assertThat(d.module()).isEqualTo("org.springframework.boot:spring-boot-starter-web");
     }
 
@@ -230,7 +230,7 @@ class JkBuildEditorTest {
 
         JkBuild parsed = JkBuildParser.parse(result);
         assertThat(parsed.dependencies().of(Scope.MAIN)).hasSize(1);
-        assertThat(parsed.dependencies().of(Scope.MAIN).getFirst().name()).isEqualTo("tomlj");
+        assertThat(parsed.dependencies().of(Scope.MAIN).getFirst().library()).isEqualTo("tomlj");
     }
 
     @Test
@@ -294,7 +294,7 @@ class JkBuildEditorTest {
         String start = """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "0.1.0"
                 jdk      = 21
                 java     = 21
@@ -324,7 +324,7 @@ class JkBuildEditorTest {
     private static final String WS = """
             [project]
             group    = "dev.jkbuild"
-            artifact = "jk"
+            name     = "jk"
             version  = "0.1.0"
 
             [workspace]
@@ -350,7 +350,7 @@ class JkBuildEditorTest {
         String start = """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -366,7 +366,7 @@ class JkBuildEditorTest {
         String start = """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 # the workspace
@@ -388,7 +388,7 @@ class JkBuildEditorTest {
         String start = """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -407,7 +407,7 @@ class JkBuildEditorTest {
         String start = """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -430,7 +430,7 @@ class JkBuildEditorTest {
         assertThat(result).contains("[workspace]");
         assertThat(result).contains("members = [\"core\"]");
         // The original [project] block is preserved.
-        assertThat(result).contains("artifact = \"widget\"");
+        assertThat(result).contains("name     = \"widget\"");
         JkBuild parsed = JkBuildParser.parse(result);
         assertThat(parsed.isWorkspaceRoot()).isTrue();
         assertThat(parsed.workspace().members()).containsExactly("core");

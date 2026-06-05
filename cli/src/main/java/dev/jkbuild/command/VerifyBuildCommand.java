@@ -103,7 +103,7 @@ public final class VerifyBuildCommand implements Callable<Integer> {
                     Lockfile lock = ctx.require(LOCK);
                     Path scratch = ctx.require(SCRATCH);
                     Path classesA = scratch.resolve("classes");
-                    Path jarA = scratch.resolve(project.project().artifact()
+                    Path jarA = scratch.resolve(project.project().name()
                             + "-" + project.project().version() + ".jar");
                     try {
                         buildOnce(dir, project, lock, classesA, jarA, cache);

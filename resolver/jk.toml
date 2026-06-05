@@ -1,18 +1,18 @@
 [project]
 group    = "dev.jkbuild"
-artifact = "jk-resolver"
+name     = "jk-resolver"
 version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
 [dependencies.main]
-jk-core        = { group = "dev.jkbuild",       artifact = "jk-core",        version = "0.6.0-SNAPSHOT" }
-jk-io          = { group = "dev.jkbuild",       artifact = "jk-io",          version = "0.6.0-SNAPSHOT" }
+jk-core        = { group = "dev.jkbuild",       name     = "jk-core",        version = "0.6.0-SNAPSHOT" }
+jk-io          = { group = "dev.jkbuild",       name     = "jk-io",          version = "0.6.0-SNAPSHOT" }
 # ComparableVersion is the Maven-canonical version comparator (e.g.
 # `1.0-alpha < 1.0-rc < 1.0 < 1.0-sp1`). Used by Versions.compare.
-maven-artifact = { group = "org.apache.maven",  artifact = "maven-artifact", version = "3.9.16" }
+maven-artifact = { group = "org.apache.maven",  name     = "maven-artifact", version = "3.9.16" }
 
 [dependencies.test]
-assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
-junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
-junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }
+assertj-core            = { group = "org.assertj",        name     = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  name     = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", name     = "junit-platform-launcher", version = "6.1.0" }

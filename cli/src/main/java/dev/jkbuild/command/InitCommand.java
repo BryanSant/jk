@@ -33,11 +33,8 @@ import java.util.concurrent.Callable;
         description = "Initialize the current directory into a project (or member)")
 public final class InitCommand implements Callable<Integer> {
 
-    @Option(names = "--name", description = "Project name (artifact). Defaults to the current directory name.")
+    @Option(names = "--name", description = "Project name. Defaults to the current directory name.")
     String name;
-
-    @Option(names = "--artifact", description = "Maven artifactId. Defaults to --name.")
-    String artifact;
 
     @Option(names = "--group", description = "Maven groupId. Default: inferred from ~/.gitconfig, else 'com.example'.")
     String group;
@@ -88,7 +85,6 @@ public final class InitCommand implements Callable<Integer> {
         NewCommand delegate = new NewCommand();
         delegate.directory    = Path.of(".");
         delegate.name         = this.name;
-        delegate.artifact     = this.artifact;
         delegate.group        = this.group;
         delegate.jdk          = this.jdk;
         delegate.lang         = this.lang;
@@ -107,7 +103,7 @@ public final class InitCommand implements Callable<Integer> {
         try {
             JkBuild project = JkBuildParser.parse(buildFile);
             String g = project.project().group();
-            String a = project.project().artifact();
+            String a = project.project().name();
             return Theme.colorize(g, Theme.active().activeStep())
                     + ":" + Theme.colorize(a, Theme.active().activeStep().bold());
         } catch (Exception ignored) {

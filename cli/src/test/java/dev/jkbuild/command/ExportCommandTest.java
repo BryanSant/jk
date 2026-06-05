@@ -20,7 +20,7 @@ class ExportCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0"
                 jdk      = 21
 
@@ -42,7 +42,7 @@ class ExportCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0"
                 jdk      = 21
                 """, StandardCharsets.UTF_8);
@@ -58,7 +58,7 @@ class ExportCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget-parent"
+                name     = "widget-parent"
                 version  = "1.0.0"
                 jdk      = 21
 
@@ -69,7 +69,7 @@ class ExportCommandTest {
         Files.writeString(tempDir.resolve("core/jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget-core"
+                name     = "widget-core"
                 version  = "1.0.0"
                 jdk      = 21
                 """, StandardCharsets.UTF_8);
@@ -77,7 +77,7 @@ class ExportCommandTest {
         Files.writeString(tempDir.resolve("app/jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget-app"
+                name     = "widget-app"
                 version  = "1.0.0"
                 jdk      = 21
                 """, StandardCharsets.UTF_8);
@@ -108,7 +108,7 @@ class ExportCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0"
                 jdk      = 21
                 """, StandardCharsets.UTF_8);

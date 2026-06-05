@@ -55,7 +55,7 @@ public final class Sbom {
         sb.append("]}");
         comma(sb);
         sb.append("\"component\":");
-        appendCdxComponent(sb, project.project().group(), project.project().artifact(),
+        appendCdxComponent(sb, project.project().group(), project.project().name(),
                 project.project().version(), null);
         sb.append('}');
         comma(sb);
@@ -80,7 +80,7 @@ public final class Sbom {
     /** Render an SPDX 2.3 JSON SBOM. */
     public static byte[] spdx(JkBuild project, Lockfile lock) {
         String docNamespace = "https://buildjk.dev/sbom/" + project.project().group() + "/"
-                + project.project().artifact() + "/" + project.project().version()
+                + project.project().name() + "/" + project.project().version()
                 + "/" + UUID.randomUUID();
         StringBuilder sb = new StringBuilder(512);
         sb.append('{');
@@ -90,7 +90,7 @@ public final class Sbom {
         comma(sb);
         kv(sb, "SPDXID", "SPDXRef-DOCUMENT");
         comma(sb);
-        kv(sb, "name", project.project().artifact() + "-" + project.project().version());
+        kv(sb, "name", project.project().name() + "-" + project.project().version());
         comma(sb);
         kv(sb, "documentNamespace", docNamespace);
         comma(sb);
@@ -107,7 +107,7 @@ public final class Sbom {
 
         sb.append("\"packages\":[");
         appendSpdxPackage(sb, "SPDXRef-Package-Root",
-                project.project().group(), project.project().artifact(),
+                project.project().group(), project.project().name(),
                 project.project().version(), null);
         if (lock != null) {
             int i = 0;

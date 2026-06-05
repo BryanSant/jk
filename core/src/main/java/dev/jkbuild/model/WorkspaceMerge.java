@@ -56,8 +56,8 @@ public final class WorkspaceMerge {
         Map<String, JkBuild.Project> siblingByArtifact = new LinkedHashMap<>();
         Set<String> internal = new HashSet<>();
         for (JkBuild m : allMembers) {
-            siblingByArtifact.put(m.project().artifact(), m.project());
-            internal.add(m.project().group() + ":" + m.project().artifact());
+            siblingByArtifact.put(m.project().name(), m.project());
+            internal.add(m.project().group() + ":" + m.project().name());
         }
         Map<String, Workspace.WorkspaceDependency> wsDeps = root.workspace() != null
                 ? root.workspace().dependencies() : Map.of();
@@ -88,8 +88,8 @@ public final class WorkspaceMerge {
         Map<String, JkBuild.Project> siblingByArtifact = new LinkedHashMap<>();
         Set<String> internal = new HashSet<>();
         for (JkBuild member : members) {
-            String coord = member.project().group() + ":" + member.project().artifact();
-            siblingByArtifact.put(member.project().artifact(), member.project());
+            String coord = member.project().group() + ":" + member.project().name();
+            siblingByArtifact.put(member.project().name(), member.project());
             internal.add(coord);
         }
 
@@ -135,13 +135,13 @@ public final class WorkspaceMerge {
             Map<String, JkBuild.Project> siblingByArtifact,
             Map<String, Workspace.WorkspaceDependency> wsDeps) {
         if (!d.module().startsWith(UNRESOLVED_PREFIX)) return d;
-        String name = d.name();
+        String name = d.library();
         // Sibling lookup first. Members typically name siblings as
-        // jk-core, jk-cli, etc. — the dep name is expected to match the
-        // sibling's artifact directly.
+        // jk-core, jk-cli, etc. — the dep handle is expected to match the
+        // sibling's name directly.
         JkBuild.Project sibling = siblingByArtifact.get(name);
         if (sibling != null) {
-            String module = sibling.group() + ":" + sibling.artifact();
+            String module = sibling.group() + ":" + sibling.name();
             return Dependency.of(name, module, VersionSelector.parse("=" + sibling.version()));
         }
         Workspace.WorkspaceDependency ws = wsDeps.get(name);

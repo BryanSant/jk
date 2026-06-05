@@ -30,7 +30,7 @@ class AddRemoveCommandTest {
         assertThat(parsed.dependencies().of(Scope.MAIN))
                 .singleElement()
                 .satisfies(d -> {
-                    assertThat(d.name()).isEqualTo("jackson-databind");
+                    assertThat(d.library()).isEqualTo("jackson-databind");
                     assertThat(d.module())
                             .isEqualTo("com.fasterxml.jackson.core:jackson-databind");
                 });
@@ -53,7 +53,7 @@ class AddRemoveCommandTest {
         run("new", tempDir.toString());
         int exit = run("add", "spring-web",
                 "--group", "org.springframework.boot",
-                "--artifact", "spring-boot-starter-web",
+                "--name", "spring-boot-starter-web",
                 "--ver", "3.4.0",
                 "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
@@ -61,13 +61,13 @@ class AddRemoveCommandTest {
         String toml = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(toml).contains(
                 "spring-web = { group = \"org.springframework.boot\", "
-                        + "artifact = \"spring-boot-starter-web\", version = \"3.4.0\" }");
+                        + "name = \"spring-boot-starter-web\", version = \"3.4.0\" }");
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
         assertThat(parsed.dependencies().of(Scope.MAIN))
                 .singleElement()
                 .satisfies(d -> {
-                    assertThat(d.name()).isEqualTo("spring-web");
+                    assertThat(d.library()).isEqualTo("spring-web");
                     assertThat(d.module())
                             .isEqualTo("org.springframework.boot:spring-boot-starter-web");
                 });
@@ -98,7 +98,7 @@ class AddRemoveCommandTest {
     @Test
     void add_rejects_unparseable_coord(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        // A bare name that is not in the alias catalog and has no --group
+        // A bare name that is not in the library catalog and has no --group
         // is a usage error.
         int exit = run("add", "not-a-coord", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(64);
@@ -114,7 +114,7 @@ class AddRemoveCommandTest {
     void add_unknown_bare_name_suggests_close_catalog_matches(@TempDir Path tempDir) throws Exception {
         // `picocl` is a typo for `picocli`, which IS in the bundled
         // catalog. The "not in catalog" error should surface the
-        // suggestion via AliasCatalog.suggestionsFor — matching the
+        // suggestion via LibraryCatalog.suggestionsFor — matching the
         // did-you-mean behavior of the parser.
         run("new", tempDir.toString());
 
@@ -129,7 +129,7 @@ class AddRemoveCommandTest {
         }
         assertThat(exit).isEqualTo(64);
         String msg = stderr.toString(StandardCharsets.UTF_8);
-        assertThat(msg).contains("not in the alias catalog");
+        assertThat(msg).contains("not in the library catalog");
         assertThat(msg).contains("Did you mean:");
         assertThat(msg).contains("picocli");
     }

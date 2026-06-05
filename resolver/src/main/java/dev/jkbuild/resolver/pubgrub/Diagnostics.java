@@ -105,13 +105,13 @@ public final class Diagnostics {
         out.append('\n');
         out.append("Hint: the dep `").append(name)
                 .append("` resolves to `").append(pkg).append("`, which Maven Central does not\n");
-        out.append("recognize. If the artifact is published under a different name, set\n");
-        out.append("`artifact` explicitly:\n\n");
+        out.append("recognize. If it is published under a different name, set\n");
+        out.append("`name` explicitly:\n\n");
         out.append("  ").append(name).append(" = { group = \"").append(group)
-                .append("\", artifact = \"<correct-artifact>\", version = \"...\" }\n");
+                .append("\", name = \"<correct-name>\", version = \"...\" }\n");
         out.append("\n");
-        out.append("(jk defaults `artifact` to the table key when omitted — see\n");
-        out.append("docs/artifact-coord-design.md §\"Footgun: artifact defaulting\".)\n");
+        out.append("(jk defaults `name` to the table key when omitted — see\n");
+        out.append("docs/artifact-coord-design.md §\"Footgun: name defaulting\".)\n");
     }
 
     private static void countIncomingEdges(

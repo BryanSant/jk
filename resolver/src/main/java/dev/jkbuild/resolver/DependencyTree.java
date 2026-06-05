@@ -85,7 +85,7 @@ public final class DependencyTree {
         // Root project: group:artifact:version, styled like every other line.
         out.append(formatCoord(
                 project.project().group(),
-                project.project().artifact(),
+                project.project().name(),
                 project.project().version(),
                 styling)).append('\n');
 

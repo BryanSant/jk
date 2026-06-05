@@ -62,11 +62,8 @@ import java.util.concurrent.Callable;
         description = "Create a new jk project (or workspace member)")
 public final class NewCommand implements Callable<Integer> {
 
-    @Option(names = "--name", description = "Project name (target directory).")
+    @Option(names = "--name", description = "Project name — the target directory leaf and [project].name.")
     String name;
-
-    @Option(names = "--artifact", description = "Maven artifactId. Defaults to --name.")
-    String artifact;
 
     @Option(names = "--group", description = "Maven groupId. Default: inferred from ~/.gitconfig, else 'com.example'.")
     String group;
@@ -124,7 +121,7 @@ public final class NewCommand implements Callable<Integer> {
 
     /** Inherited context from the parent project's {@code [project]} block. */
     private record ParentInfo(Path root, dev.jkbuild.model.JkBuild.Project project) {
-        String displayName() { return project.artifact(); }
+        String displayName() { return project.name(); }
         String group() { return project.group(); }
         boolean kotlin() { return project.isKotlin(); }
         /** The JDK toolchain version (which JDK runs the build). */
@@ -188,7 +185,7 @@ public final class NewCommand implements Callable<Integer> {
                 && Files.exists(cwd.resolve("jk.toml"))) {
             String existing = wizardPresetName(directory, cwd).orElseGet(
                     () -> cwd.getFileName() != null ? cwd.getFileName().toString() : "this directory");
-            emitProjectExistsError(existing);
+            emitProjectExistsError(existing, parent != null, true, null);
             return 2; // EX_CONFIG
         }
 
@@ -324,6 +321,7 @@ public final class NewCommand implements Callable<Integer> {
                     // for fromAnswers.
                     var pickedOpt = ((NewJdkCandidate.Installed) resolved).option();
                     var inputs = fromAnswers(ctx.require(ANSWERS), cwd, pickedOpt);
+                    ctx.put(INPUTS, inputs);
                     if (Files.exists(inputs.directory().resolve("jk.toml"))) {
                         ctx.error("exists", "project " + inputs.name()
                                 + " already exists at " + inputs.directory());
@@ -362,7 +360,9 @@ public final class NewCommand implements Callable<Integer> {
                     if ("exists".equals(d.code())) {
                         NewInputs partial = goal.get(INPUTS).orElse(null);
                         String name = partial != null ? partial.name() : "project";
-                        emitProjectExistsError(name);
+                        boolean isInit = directory != null && isCurrentDirArg(directory);
+                        Terminal term = goal.get(TERMINAL).orElse(null);
+                        emitProjectExistsError(name, parent != null, isInit, term);
                         return 2;
                     }
                 }
@@ -370,9 +370,10 @@ public final class NewCommand implements Callable<Integer> {
             }
 
             NewInputs inputs = goal.get(INPUTS).orElseThrow();
+            boolean isInit = directory != null && isCurrentDirArg(directory);
             goal.get(TERMINAL).ifPresentOrElse(
-                    t -> emitSuccessOnTerminal(inputs, t, registered),
-                    () -> emitSuccessPlain(inputs, registered));
+                    t -> emitSuccessOnTerminal(inputs, t, registered, isInit),
+                    () -> emitSuccessPlain(inputs, registered, isInit));
             return 0;
         } finally {
             goal.get(TERMINAL).ifPresent(t -> {
@@ -393,7 +394,7 @@ public final class NewCommand implements Callable<Integer> {
             return 64;
         }
         if (Files.exists(inputs.directory().resolve("jk.toml"))) {
-            emitProjectExistsError(inputs.name());
+            emitProjectExistsError(inputs.name(), parent != null, directory != null && isCurrentDirArg(directory), null);
             return 2;
         }
         Path cache = JkDirs.cache();
@@ -414,7 +415,7 @@ public final class NewCommand implements Callable<Integer> {
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) return 1;
-        if (!global.outputIsJson()) emitSuccessPlain(inputs, registered);
+        if (!global.outputIsJson()) emitSuccessPlain(inputs, registered, directory != null && isCurrentDirArg(directory));
         return 0;
     }
 
@@ -438,7 +439,6 @@ public final class NewCommand implements Callable<Integer> {
 
     private boolean anyFlagSupplied() {
         return name != null
-                || artifact != null
                 || group != null
                 || jdk != null
                 || lang != null
@@ -476,7 +476,6 @@ public final class NewCommand implements Callable<Integer> {
         var resolvedName = (name != null && !name.isBlank())
                 ? name
                 : presetName.orElse("untitled");
-        var resolvedArtifact = (artifact != null && !artifact.isBlank()) ? artifact : resolvedName;
         Path target = resolveTarget(directory, cwd, resolvedName);
         var resolvedGroup = (group != null && !group.isBlank())
                 ? group
@@ -502,7 +501,7 @@ public final class NewCommand implements Callable<Integer> {
                 ? Optional.of(kotlinModule)
                 : Optional.<String>empty();
         return new NewInputs(
-                resolvedGroup, resolvedName, resolvedArtifact,
+                resolvedGroup, resolvedName,
                 resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
                 Optional.<String>empty(), // flag path doesn't resolve to a specific install
                 resolvedMain, shadow, nativeImage,
@@ -555,27 +554,30 @@ public final class NewCommand implements Callable<Integer> {
         return raw.equals(".") || raw.equals("./") || raw.equals(".\\");
     }
 
-    /**
-     * Styled "project already exists" error.
-     * <pre>
-     *   ⚠ Jk: Failed to initialize a new project. Project &lt;name&gt; already exists.
-     * </pre>
-     * Yellow for {@code ⚠} and the project name, hot pink for "Jk", soft
-     * gray for the rest.
-     */
-    private static void emitProjectExistsError(String projectName) {
-        // Colors come from the active theme: warning (yellow) for the ⚠ glyph and
-        // the project name, the active-step accent for the "Jk" label, and the
-        // normal-gray body for the explanatory text.
-        var warn = Theme.active().warning();
-        var label = Theme.active().activeStep();
+    private static void emitProjectExistsError(
+            String name, boolean isMember, boolean isInit, Terminal terminal) {
+        var verb = isInit ? "initialize" : "create";
+        var noun = isMember ? "member" : "project";
         var body = Theme.active().normalGray();
-        System.err.println(
-                Theme.colorize("⚠", warn)
-                        + " " + Theme.colorize("Jk", label)
-                        + Theme.colorize(": Failed to initialize a new project. Project ", body)
-                        + Theme.colorize(projectName, warn)
-                        + Theme.colorize(" already exists.", body));
+        if (terminal != null) {
+            var writer = terminal.writer();
+            writer.println();
+            writer.println(new AttributedStringBuilder()
+                    .append(dev.jkbuild.cli.tui.Glyphs.CROSS, Theme.active().error())
+                    .append(" Failed to " + verb + " " + noun + " ", body)
+                    .append(name, Theme.active().cyan())
+                    .append(". Project already exists.", body)
+                    .toAttributedString()
+                    .toAnsi(terminal));
+            writer.flush();
+        } else {
+            System.err.println();
+            System.err.println(
+                    Theme.colorize(dev.jkbuild.cli.tui.Glyphs.CROSS, Theme.active().error())
+                            + Theme.colorize(" Failed to " + verb + " " + noun + " ", body)
+                            + Theme.colorize(name, Theme.active().cyan())
+                            + Theme.colorize(". Project already exists.", body));
+        }
     }
 
     /** Same styling as {@link #emitProjectExistsError} for the no-JDK case. */
@@ -804,12 +806,6 @@ public final class NewCommand implements Callable<Integer> {
                         .placeholder(effectiveGroup)
                         .defaultValue(effectiveGroup)
                         .build())
-                .step(WizardStep.InputStep.of("artifact", "Maven artifactId:")
-                        // Pre-fill the buffer with whatever the user just
-                        // entered for the project name — the common case is
-                        // "they're the same", and the user can edit.
-                        .initialValueFn(a -> a.get("name"))
-                        .build())
                 .step(WizardStep.RadioStep.horizontal("kind", "Project type:")
                         .choice("executable", "Executable")
                         .choice("library", "Library")
@@ -850,9 +846,6 @@ public final class NewCommand implements Callable<Integer> {
         var resolvedName = answers.has("name") && !answers.get("name").isBlank()
                 ? answers.get("name")
                 : wizardPresetName(directory, cwd).orElse("untitled");
-        var resolvedArtifact = answers.has("artifact") && !answers.get("artifact").isBlank()
-                ? answers.get("artifact")
-                : resolvedName;
         Path target = resolveTarget(directory, cwd, resolvedName);
         var resolvedGroup = answers.has("group") && !answers.get("group").isBlank()
                 ? answers.get("group")
@@ -893,7 +886,7 @@ public final class NewCommand implements Callable<Integer> {
             var kotlinOpts = answers.getList("kotlinOptions");
             resolvedKotlinCompact = kotlinOpts.contains("compact");
             if (kotlinOpts.contains("module")) {
-                resolvedKotlinModule = Optional.of(resolvedArtifact);
+                resolvedKotlinModule = Optional.of(resolvedName);
             }
             if (kotlinOpts.contains("kotest")) deps.add("kotest");
         }
@@ -903,7 +896,7 @@ public final class NewCommand implements Callable<Integer> {
                 : Optional.<String>empty();
 
         return new NewInputs(
-                resolvedGroup, resolvedName, resolvedArtifact,
+                resolvedGroup, resolvedName,
                 resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
                 Optional.of(pickedOpt.id()),
                 resolvedMain, resolvedShadow, resolvedNative,
@@ -911,7 +904,7 @@ public final class NewCommand implements Callable<Integer> {
                 deps, true, target);
     }
 
-    private static void emitSuccessOnTerminal(NewInputs inputs, Terminal terminal, Member member) {
+    private static void emitSuccessOnTerminal(NewInputs inputs, Terminal terminal, Member member, boolean isInit) {
         var writer = terminal.writer();
         if (member != null) {
             writer.println(new AttributedStringBuilder()
@@ -921,44 +914,49 @@ public final class NewCommand implements Callable<Integer> {
                     .toAttributedString()
                     .toAnsi(terminal));
         }
-        writer.println(headline("Done. Next:").toAnsi(terminal));
+        var verb = isInit ? "Initialized" : "Created";
+        var noun = member != null ? "member" : "project";
+        writer.println();
+        writer.println(new AttributedStringBuilder()
+                .append(dev.jkbuild.cli.tui.Glyphs.CHECK + " " + verb + " new " + noun + " ", Theme.active().success())
+                .append(inputs.name(), Theme.active().cyan())
+                .append(".", Theme.active().success())
+                .toAttributedString()
+                .toAnsi(terminal));
+        writer.println();
+        writer.println(new AttributedStringBuilder()
+                .append("Next:", Theme.active().focused())
+                .toAttributedString()
+                .toAnsi(terminal));
         for (var line : nextSteps(inputs)) {
             writer.println(new AttributedStringBuilder()
-                    .append("  ")
-                    .append(line, Theme.active().dim())
+                    .append(line, Theme.active().warning())
                     .toAttributedString()
                     .toAnsi(terminal));
         }
         writer.flush();
     }
 
-    private static void emitSuccessPlain(NewInputs inputs, Member member) {
-        System.out.println("Created " + inputs.directory().resolve("jk.toml"));
-        if (member == null) {
-            System.out.println("Created " + inputs.directory().resolve("jk.lock"));
-        } else {
+    private static void emitSuccessPlain(NewInputs inputs, Member member, boolean isInit) {
+        if (member != null) {
             System.out.println("Registered member '" + member.rel()
                     + "' in workspace " + member.root());
         }
+        var verb = isInit ? "Initialized" : "Created";
+        var noun = member != null ? "member" : "project";
         System.out.println();
-        System.out.println("Done. Next:");
+        System.out.println(dev.jkbuild.cli.tui.Glyphs.CHECK + " " + verb + " new " + noun + " " + inputs.name() + ".");
+        System.out.println();
+        System.out.println("Next:");
         for (var line : nextSteps(inputs)) {
-            System.out.println("  " + line);
+            System.out.println(line);
         }
     }
 
-    private static AttributedString headline(String text) {
-        return new AttributedStringBuilder()
-                .append(text, Theme.active().success())
-                .toAttributedString();
-    }
-
     private static List<String> nextSteps(NewInputs inputs) {
-        var dirArg = inputs.directory().toString();
         return List.of(
-                "cd " + dirArg,
-                inputs.isRunnable() ? "jk run" : "jk compile",
-                "jk test");
+                "cd " + inputs.directory().toAbsolutePath(),
+                inputs.isRunnable() ? "jk run" : "jk build");
     }
 
     // Suppress unused warning for the import we keep for clarity.

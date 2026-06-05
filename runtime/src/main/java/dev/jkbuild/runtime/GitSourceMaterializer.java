@@ -104,7 +104,7 @@ public final class GitSourceMaterializer {
         String group = source.overrideGroup() != null
                 ? source.overrideGroup() : project.project().group();
         String artifact = source.overrideArtifact() != null
-                ? source.overrideArtifact() : project.project().artifact();
+                ? source.overrideArtifact() : project.project().name();
 
         // Per-commit local Maven repo; reused on a cache hit (immutable tag/rev).
         Path repo = artifactsRoot.resolve(GitUrl.canonicalHash(source.canonicalUrl()))

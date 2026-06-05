@@ -36,11 +36,12 @@ import java.util.concurrent.Callable;
  * <p>The argument may be:
  * <ul>
  *   <li>A Maven-coord shorthand: {@code group:artifact:version} (pinned) or
- *       {@code group:artifact@version} (floating caret). The short {@code name}
- *       defaults to the artifactId; override with {@code --name}.</li>
+ *       {@code group:artifact@version} (floating caret). The short {@code library}
+ *       handle defaults to the artifactId; override with {@code --library}. The
+ *       artifactId itself can be overridden with {@code --name}.</li>
  *   <li>A bare short name (e.g. {@code spring-web}), optionally with an
  *       {@code @version} suffix ({@code spring-web@3.4.0}), resolved against the
- *       alias catalog. The version defaults to {@code latest} when omitted.
+ *       library catalog. The version defaults to {@code latest} when omitted.
  *       Combine with {@code --group}/{@code --ver} for names not in the catalog.</li>
  *   <li>A local workspace member, when the argument begins with {@code :}
  *       ({@code :widget}) or contains a path separator ({@code ./widget},
@@ -62,17 +63,17 @@ public final class AddCommand implements Callable<Integer> {
             })
     String coord;
 
-    @Option(names = "--name",
-            description = "Short name used as the manifest key. Defaults to the artifactId.")
-    String nameFlag;
+    @Option(names = "--library",
+            description = "Library handle used as the manifest key. Defaults to the name.")
+    String libraryFlag;
 
     @Option(names = "--group",
             description = "Maven groupId. Required when the positional argument is a bare short name.")
     String groupFlag;
 
-    @Option(names = "--artifact",
-            description = "Maven artifactId. Defaults to the short name.")
-    String artifactFlag;
+    @Option(names = "--name",
+            description = "Dependency name (Maven artifactId). Defaults to the library handle.")
+    String nameFlag;
 
     // We can't use `--version` here: it collides with the global `--version`
     // flag on the parent command. Picocli rejects duplicate option names even
@@ -108,7 +109,7 @@ public final class AddCommand implements Callable<Integer> {
         // Local workspace sibling (uv's `uv add ./lib`): a dependency edge into
         // the current project plus registration in the workspace root's
         // [workspace].members. Anything else — a Maven coord or a catalog
-        // alias — is resolved by ParsedDep.parse below.
+        // library — is resolved by ParsedDep.parse below.
         if (isLocalPathArg(coord)) {
             Scope scope = resolveScope();
             if (scope == null) return 64;
@@ -117,7 +118,7 @@ public final class AddCommand implements Callable<Integer> {
 
         ParsedDep parsed;
         try {
-            parsed = ParsedDep.parse(coord, nameFlag, groupFlag, artifactFlag, versionFlag);
+            parsed = ParsedDep.parse(coord, libraryFlag, groupFlag, nameFlag, versionFlag);
         } catch (IllegalArgumentException e) {
             System.err.println("jk add: " + e.getMessage());
             return 64; // EX_USAGE
@@ -138,7 +139,7 @@ public final class AddCommand implements Callable<Integer> {
         String updated;
         try {
             updated = JkBuildEditor.addDependency(original, scope,
-                    parsed.name(), parsed.group(), parsed.artifact(), parsed.versionLiteral());
+                    parsed.library(), parsed.group(), parsed.name(), parsed.versionLiteral());
         } catch (IllegalStateException | IllegalArgumentException e) {
             System.err.println("jk add: " + e.getMessage());
             return 1;
@@ -146,8 +147,8 @@ public final class AddCommand implements Callable<Integer> {
         Files.writeString(file, updated, StandardCharsets.UTF_8);
         String check = Theme.colorize("✓", Theme.active().success());
         System.out.println(check + " Added "
-                + Coords.shortName(parsed.name())
-                + " (" + Coords.gav(parsed.group(), parsed.artifact(), parsed.versionLiteral())
+                + Coords.shortName(parsed.library())
+                + " (" + Coords.gav(parsed.group(), parsed.name(), parsed.versionLiteral())
                 + ") to " + Theme.colorize("dependency", Theme.active().cyan())
                 + "." + Theme.colorize(scope.canonical(), Theme.active().cyan()));
         System.out.println();
@@ -174,14 +175,14 @@ public final class AddCommand implements Callable<Integer> {
 
     /**
      * Whether the positional argument denotes a local workspace member rather
-     * than a Maven coord or catalog alias. True when it begins with
+     * than a Maven coord or catalog library. True when it begins with
      * {@code :} (an explicit local marker, e.g. {@code :jackson}) or looks
      * like a filesystem path — i.e. contains a {@code /} or {@code \}
      * separator ({@code ./m}, {@code ../m}, {@code backend/m}, {@code m/},
      * {@code ..\..\m}).
      *
      * <p>A bare name with none of these (e.g. {@code jackson}) is a catalog
-     * alias and is resolved as a coord — never treated as a path, even if a
+     * library and is resolved as a coord — never treated as a path, even if a
      * directory by that name happens to exist. A Maven coord
      * ({@code group:artifact:version}) has its {@code :} after the group, not
      * at the start, so it is not mistaken for a local marker.
@@ -224,9 +225,9 @@ public final class AddCommand implements Callable<Integer> {
             return 1;
         }
         String group = member.project().group();
-        String artifact = member.project().artifact();
+        String artifact = member.project().name();
         String version = member.project().version();
-        String name = (nameFlag != null && !nameFlag.isBlank()) ? nameFlag : artifact;
+        String name = (libraryFlag != null && !libraryFlag.isBlank()) ? libraryFlag : artifact;
 
         // 1. Dependency edge into the current project, pinned to the member's
         //    version — matching how this repo's own members reference siblings.
@@ -274,11 +275,11 @@ public final class AddCommand implements Callable<Integer> {
      * {@code versionLiteral}) and the floating/pinned distinction for
      * round-trip display.
      */
-    record ParsedDep(String name, String group, String artifact,
+    record ParsedDep(String library, String group, String name,
                      String versionLiteral, boolean floating) {
 
-        static ParsedDep parse(String coord, String nameFlag, String groupFlag,
-                               String artifactFlag, String versionFlag) {
+        static ParsedDep parse(String coord, String libraryFlag, String groupFlag,
+                               String nameFlag, String versionFlag) {
             if (coord == null || coord.isBlank()) {
                 throw new IllegalArgumentException("dependency argument must not be blank");
             }
@@ -288,42 +289,42 @@ public final class AddCommand implements Callable<Integer> {
             if (firstColon < 0) {
                 // Bare short name, optionally with an `@version` suffix
                 // (e.g. `jackson3-core` or `jackson3-core@3.1.0`). The layered
-                // alias catalog (project + user + downloaded + bundled) supplies
+                // library catalog (project + user + downloaded + bundled) supplies
                 // group + artifact for curated names. The version comes from
                 // --ver, else the `@version` suffix (caret-floating, like the
                 // group:artifact@version coord form), else defaults to floating
                 // "latest". All are resolved at `jk lock`. Flags override the catalog.
-                String aliasKey = atSign >= 0 ? coord.substring(0, atSign) : coord;
+                String libraryKey = atSign >= 0 ? coord.substring(0, atSign) : coord;
                 String atVersion = atSign >= 0 ? coord.substring(atSign + 1) : null;
-                if (aliasKey.isBlank()) {
+                if (libraryKey.isBlank()) {
                     throw new IllegalArgumentException("empty name before '@' in: " + coord);
                 }
                 if (atVersion != null && atVersion.isBlank()) {
                     throw new IllegalArgumentException("empty version after '@' in: " + coord);
                 }
-                String name = nonBlank(nameFlag, aliasKey);
-                var catalog = dev.jkbuild.alias.AliasCatalog.layered(System.err::println);
-                var catalogHit = catalog.lookup(aliasKey);
+                String library = nonBlank(libraryFlag, libraryKey);
+                var catalog = dev.jkbuild.library.LibraryCatalog.layered(System.err::println);
+                var catalogHit = catalog.lookup(libraryKey);
                 String group = nonBlank(groupFlag,
-                        catalogHit.map(dev.jkbuild.alias.AliasCatalog.Module::group).orElse(null));
-                String artifact = nonBlank(artifactFlag,
-                        catalogHit.map(dev.jkbuild.alias.AliasCatalog.Module::artifact).orElse(name));
+                        catalogHit.map(dev.jkbuild.library.LibraryCatalog.Module::group).orElse(null));
+                String name = nonBlank(nameFlag,
+                        catalogHit.map(dev.jkbuild.library.LibraryCatalog.Module::artifact).orElse(library));
                 if (group == null || group.isBlank()) {
                     StringBuilder msg = new StringBuilder("bare name `")
-                            .append(aliasKey).append("` is not in the alias catalog. ");
-                    List<String> suggestions = catalog.suggestionsFor(aliasKey, 5);
+                            .append(libraryKey).append("` is not in the library catalog. ");
+                    List<String> suggestions = catalog.suggestionsFor(libraryKey, 5);
                     if (!suggestions.isEmpty()) {
                         msg.append("Did you mean: ")
                                 .append(String.join(", ", suggestions)).append("? ");
                     }
-                    msg.append("Either pick an alias name or supply --group ")
-                            .append("(and optionally --artifact) explicitly.");
+                    msg.append("Either pick an library name or supply --group ")
+                            .append("(and optionally --name) explicitly.");
                     throw new IllegalArgumentException(msg.toString());
                 }
                 boolean hasFlagVersion = versionFlag != null && !versionFlag.isBlank();
                 String versionLiteral = hasFlagVersion ? versionFlag
                         : atVersion != null ? atVersion : "latest";
-                return new ParsedDep(name, group, artifact, versionLiteral, !hasFlagVersion);
+                return new ParsedDep(library, group, name, versionLiteral, !hasFlagVersion);
             }
 
             // Maven-coord shorthand (has a colon). Three forms:
@@ -363,17 +364,17 @@ public final class AddCommand implements Callable<Integer> {
             String groupFromCoord = moduleStr.substring(0, sep);
             String artifactFromCoord = moduleStr.substring(sep + 1);
 
-            // Flags override the parsed coord. Defaults: name → artifact,
-            // artifact → name (if --name was set), group → groupFromCoord.
-            String name = nonBlank(nameFlag, artifactFromCoord);
+            // Flags override the parsed coord. Defaults: library → artifactId,
+            // name → artifactId (override with --name), group → groupFromCoord.
+            String library = nonBlank(libraryFlag, artifactFromCoord);
             String group = nonBlank(groupFlag, groupFromCoord);
-            String artifact = nonBlank(artifactFlag, artifactFromCoord);
+            String name = nonBlank(nameFlag, artifactFromCoord);
             String versionLiteral = versionFlag != null && !versionFlag.isBlank()
                     ? versionFlag
                     // Pinned colon-form gets an explicit `=` prefix so the parser
                     // reads it as Exact (caret-default in `parseFloating`).
                     : floating ? rawVersion : "=" + rawVersion;
-            return new ParsedDep(name, group, artifact, versionLiteral, floating);
+            return new ParsedDep(library, group, name, versionLiteral, floating);
         }
 
         private static String nonBlank(String flagValue, String fallback) {
@@ -386,7 +387,7 @@ public final class AddCommand implements Callable<Integer> {
                     || versionLiteral.startsWith("~")
                     ? versionLiteral.substring(1)
                     : versionLiteral;
-            return Coordinate.of(group, artifact, v);
+            return Coordinate.of(group, name, v);
         }
     }
 

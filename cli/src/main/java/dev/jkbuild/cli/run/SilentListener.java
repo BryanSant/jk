@@ -16,14 +16,21 @@ public final class SilentListener implements GoalListener {
 
     private final PrintStream out;
     private final PrintStream err;
+    private final boolean suppressDiagnostics;
 
     public SilentListener(PrintStream out, PrintStream err) {
+        this(out, err, false);
+    }
+
+    public SilentListener(PrintStream out, PrintStream err, boolean suppressDiagnostics) {
         this.out = out;
         this.err = err;
+        this.suppressDiagnostics = suppressDiagnostics;
     }
 
     @Override
     public void goalFinish(GoalResult result) {
+        if (suppressDiagnostics) return;
         for (GoalResult.Diagnostic d : result.errors()) {
             err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
         }

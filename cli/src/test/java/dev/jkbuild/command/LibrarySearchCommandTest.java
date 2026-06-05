@@ -18,7 +18,7 @@ import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class AliasSearchCommandTest {
+class LibrarySearchCommandTest {
 
     private ByteArrayOutputStream out;
     private PrintStream originalOut;
@@ -35,7 +35,7 @@ class AliasSearchCommandTest {
 
     @Test
     void search_matches_substring_of_name_in_bundled_catalog() {
-        int exit = new CommandLine(new Jk()).execute("alias", "search", "junit", "--show-layer");
+        int exit = new CommandLine(new Jk()).execute("library", "search", "junit", "--show-layer");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("junit-jupiter");
@@ -48,7 +48,7 @@ class AliasSearchCommandTest {
     void search_matches_substring_of_group() {
         // "springframework" appears in groups (org.springframework.boot) but
         // not in names — exercises the group-field branch of the matcher.
-        int exit = new CommandLine(new Jk()).execute("alias", "search", "springframework");
+        int exit = new CommandLine(new Jk()).execute("library", "search", "springframework");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("spring-boot-starter");
@@ -59,7 +59,7 @@ class AliasSearchCommandTest {
     void search_AND_semantics_with_multiple_terms() {
         // Both "spring" and "starter" must appear somewhere.
         int exit = new CommandLine(new Jk()).execute(
-                "alias", "search", "spring", "starter");
+                "library", "search", "spring", "starter");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("spring-boot-starter");
@@ -69,7 +69,7 @@ class AliasSearchCommandTest {
 
     @Test
     void search_is_case_insensitive() {
-        int exit = new CommandLine(new Jk()).execute("alias", "search", "PICOCLI");
+        int exit = new CommandLine(new Jk()).execute("library", "search", "PICOCLI");
         assertThat(exit).isZero();
         assertThat(out.toString(StandardCharsets.UTF_8)).contains("picocli");
     }
@@ -77,7 +77,7 @@ class AliasSearchCommandTest {
     @Test
     void search_with_no_matches_returns_nonzero_and_clear_message() {
         int exit = new CommandLine(new Jk()).execute(
-                "alias", "search", "definitely-not-in-registry-xyz");
+                "library", "search", "definitely-not-in-registry-xyz");
         assertThat(exit).isOne();
         assertThat(out.toString(StandardCharsets.UTF_8)).contains("No matches");
     }
@@ -91,7 +91,7 @@ class AliasSearchCommandTest {
                 "pom", "a", 1, "central", "u");
 
         int exit = new CommandLine(new Jk()).execute(
-                "alias", "search", "junit", "--offline", "--cache-dir", cache.toString());
+                "library", "search", "junit", "--offline", "--cache-dir", cache.toString());
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         // The cached coord is shown, annotated with its local version...
@@ -104,7 +104,7 @@ class AliasSearchCommandTest {
     void offline_with_nothing_cached_reports_no_local_matches(@TempDir Path tempDir) {
         Path cache = tempDir.resolve("cache");
         int exit = new CommandLine(new Jk()).execute(
-                "alias", "search", "junit", "--offline", "--cache-dir", cache.toString());
+                "library", "search", "junit", "--offline", "--cache-dir", cache.toString());
         assertThat(exit).isOne();
         assertThat(out.toString(StandardCharsets.UTF_8)).contains("No matches (cached locally)");
     }
@@ -112,7 +112,7 @@ class AliasSearchCommandTest {
     @Test
     void search_limit_truncates_with_explanatory_footer() {
         int exit = new CommandLine(new Jk()).execute(
-                "alias", "search", "kotlin", "--limit", "1");
+                "library", "search", "kotlin", "--limit", "1");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("more");

@@ -3,7 +3,7 @@ package dev.jkbuild.config;
 
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
-import dev.jkbuild.alias.AliasCatalog;
+import dev.jkbuild.library.LibraryCatalog;
 import dev.jkbuild.model.Feature;
 import dev.jkbuild.model.Features;
 import dev.jkbuild.model.GitRefSpec;
@@ -40,11 +40,11 @@ import java.util.Objects;
  *
  * <p>v0.7 schema (see {@code docs/artifact-coord-design.md}):
  * <ul>
- *   <li>{@code [project]} — required; {@code group}, {@code artifact}, {@code version} required;
+ *   <li>{@code [project]} — required; {@code group}, {@code name}, {@code version} required;
  *       optional {@code jdk}, {@code main}, {@code java}/{@code kotlin}, {@code shadow},
  *       {@code native}, {@code description}.</li>
- *   <li>{@code [dependencies.<scope>]} — name-as-key sub-tables; each entry is
- *       {@code name = { group, artifact?, version | path | git | workspace }}.
+ *   <li>{@code [dependencies.<scope>]} — library-as-key sub-tables; each entry is
+ *       {@code <lib> = { group, name?, version | path | git | workspace }}.
  *       {@code [dependencies]} with only inline-table children is shorthand for
  *       {@code [dependencies.main]}; mixing flat and sub-scope is a parse error.</li>
  *   <li>{@code [workspace]} — optional; {@code members = [...]} plus an optional
@@ -71,15 +71,15 @@ public final class JkBuildParser {
     }
 
     public static JkBuild parse(String toml) {
-        return parse(toml, AliasCatalog.layered());
+        return parse(toml, LibraryCatalog.layered());
     }
 
     /**
-     * Test seam: parse against a synthetic alias catalog instead of the
-     * default layered one. The manifest's own {@code [aliases]} table is
-     * still layered on top via {@link AliasCatalog#withProjectOverrides}.
+     * Test seam: parse against a synthetic library catalog instead of the
+     * default layered one. The manifest's own {@code [libraries]} table is
+     * still layered on top via {@link LibraryCatalog#withProjectOverrides}.
      */
-    public static JkBuild parse(String toml, AliasCatalog catalog) {
+    public static JkBuild parse(String toml, LibraryCatalog catalog) {
         Objects.requireNonNull(toml, "toml");
         Objects.requireNonNull(catalog, "catalog");
         TomlParseResult result = Toml.parse(toml);
@@ -89,7 +89,7 @@ public final class JkBuildParser {
         }
         JkBuild.Project project = parseProject(result);
         Workspace workspace = parseWorkspace(result);
-        AliasCatalog effective = catalog.withProjectOverrides(parseProjectAliases(result));
+        LibraryCatalog effective = catalog.withProjectOverrides(parseProjectLibraries(result));
         JkBuild.Dependencies deps = parseDependencies(result, workspace, effective);
         List<RepositorySpec> repos = parseRepositories(result);
         Profiles profiles = parseProfiles(result);
@@ -123,15 +123,15 @@ public final class JkBuildParser {
     }
 
     /**
-     * Parse the optional top-level {@code [aliases]} table. Empty map when
-     * absent. Validated through {@link AliasCatalog#parseAliasesTable} so
+     * Parse the optional top-level {@code [libraries]} table. Empty map when
+     * absent. Validated through {@link LibraryCatalog#parseLibrariesTable} so
      * the schema matches the bundled and user files.
      */
-    private static java.util.Map<String, AliasCatalog.Module> parseProjectAliases(TomlTable root) {
-        TomlTable aliases = root.getTable("aliases");
-        if (aliases == null) return java.util.Map.of();
+    private static java.util.Map<String, LibraryCatalog.Module> parseProjectLibraries(TomlTable root) {
+        TomlTable libraries = root.getTable("libraries");
+        if (libraries == null) return java.util.Map.of();
         try {
-            return AliasCatalog.parseAliasesTable(aliases, "jk.toml");
+            return LibraryCatalog.parseLibrariesTable(libraries, "jk.toml");
         } catch (IllegalStateException e) {
             throw new JkBuildParseException(e.getMessage(), e);
         }
@@ -143,7 +143,7 @@ public final class JkBuildParser {
             throw new JkBuildParseException("jk.toml must declare a top-level `[project]` table");
         }
         String group = requireString(project, "group", "project.group");
-        String artifact = requireString(project, "artifact", "project.artifact");
+        String name = requireString(project, "name", "project.name");
         String version = requireString(project, "version", "project.version");
         int jdk = intOrZero(project, "jdk", "project.jdk");
         int java = intOrZero(project, "java", "project.java");
@@ -171,7 +171,7 @@ public final class JkBuildParser {
                 ? Boolean.TRUE.equals(project.getBoolean("application"))
                 : main != null;
         boolean m2install = Boolean.TRUE.equals(project.getBoolean("m2install"));
-        return new JkBuild.Project(group, artifact, version, jdk, java, kotlin,
+        return new JkBuild.Project(group, name, version, jdk, java, kotlin,
                 main, shadow, nativeMode, description, application, m2install);
     }
 
@@ -222,7 +222,7 @@ public final class JkBuildParser {
     // ---------------------------------------------------------------------
 
     private static JkBuild.Dependencies parseDependencies(
-            TomlTable root, Workspace workspace, AliasCatalog catalog) {
+            TomlTable root, Workspace workspace, LibraryCatalog catalog) {
         TomlTable deps = root.getTable("dependencies");
         if (deps == null) return JkBuild.Dependencies.empty();
         EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
@@ -286,7 +286,7 @@ public final class JkBuildParser {
 
     private static List<Dependency> parseScopeTable(
             TomlTable scopeTable, List<String> keys, Scope scope,
-            Workspace workspace, AliasCatalog catalog) {
+            Workspace workspace, LibraryCatalog catalog) {
         List<Dependency> result = new ArrayList<>(keys.size());
         for (String name : keys) {
             Object value = scopeTable.get(List.of(name));
@@ -310,16 +310,16 @@ public final class JkBuildParser {
 
     /**
      * Resolve a {@code name = "version-spec"} shorthand by looking the
-     * short name up in the bundled alias catalog.
+     * short name up in the bundled library catalog.
      */
     private static Dependency parseShorthandEntry(
-            String name, String versionRaw, Scope scope, AliasCatalog catalog) {
+            String name, String versionRaw, Scope scope, LibraryCatalog catalog) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
         if (versionRaw.isBlank()) {
             throw new JkBuildParseException(displayPath + " has an empty version string");
         }
-        AliasCatalog.Module mod = catalog.lookup(name).orElseThrow(() ->
-                new JkBuildParseException(unknownAliasMessage(displayPath, name, catalog)));
+        LibraryCatalog.Module mod = catalog.lookup(name).orElseThrow(() ->
+                new JkBuildParseException(unknownLibraryMessage(displayPath, name, catalog)));
         VersionSelector selector = VersionSelector.parseFloating(versionRaw);
         return Dependency.of(name, mod.moduleKey(), selector);
     }
@@ -330,7 +330,7 @@ public final class JkBuildParser {
      * particularly useful for major-version-split families like Jackson 2
      * vs 3, where typing the unprefixed name silently fails by design.
      */
-    private static String unknownAliasMessage(String displayPath, String name, AliasCatalog catalog) {
+    private static String unknownLibraryMessage(String displayPath, String name, LibraryCatalog catalog) {
         StringBuilder msg = new StringBuilder(displayPath)
                 .append(" — unknown short name `").append(name).append("`. ");
         List<String> suggestions = catalog.suggestionsFor(name, 5);
@@ -345,7 +345,7 @@ public final class JkBuildParser {
 
     private static Dependency parseDepEntry(
             String name, TomlTable entry, Scope scope,
-            Workspace workspace, AliasCatalog catalog) {
+            Workspace workspace, LibraryCatalog catalog) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
@@ -374,22 +374,22 @@ public final class JkBuildParser {
                 throw new JkBuildParseException(displayPath
                         + ".workspace must be `true` (the only legal value)");
             }
-            // workspace = true is mutually exclusive with group/artifact too.
-            if (entry.contains("group") || entry.contains("artifact")) {
+            // workspace = true is mutually exclusive with group/name too.
+            if (entry.contains("group") || entry.contains("name")) {
                 throw new JkBuildParseException(displayPath
-                        + " with `workspace = true` must not set `group` or `artifact`");
+                        + " with `workspace = true` must not set `group` or `name`");
             }
             return resolveWorkspaceDep(name, displayPath, workspace);
         }
 
-        // For non-workspace deps, group/artifact may come from the table or
+        // For non-workspace deps, group/name may come from the table or
         // fall back to the bundled catalog (which keys off the short name).
         // path/git sources still REQUIRE explicit `group` — they're inherently
         // user-controlled overrides where defaulting silently would be
         // surprising.
         String groupExplicit = entry.getString("group");
-        String artifactExplicit = entry.getString("artifact");
-        AliasCatalog.Module catalogHit = (groupExplicit == null)
+        String artifactExplicit = entry.getString("name");
+        LibraryCatalog.Module catalogHit = (groupExplicit == null)
                 ? catalog.lookup(name).orElse(null) : null;
 
         String group = groupExplicit != null ? groupExplicit
@@ -397,7 +397,7 @@ public final class JkBuildParser {
         String artifact = artifactExplicit != null ? artifactExplicit
                 : (catalogHit != null ? catalogHit.artifact() : name);
         if (artifact != null && artifact.isBlank()) {
-            throw new JkBuildParseException(displayPath + ".artifact must not be blank");
+            throw new JkBuildParseException(displayPath + ".name must not be blank");
         }
 
         if (hasPath) {
@@ -431,7 +431,7 @@ public final class JkBuildParser {
             }
             if (artifactExplicit != null) {
                 throw new JkBuildParseException(displayPath
-                        + " sets `artifact` without `group`; set `group` too to override the "
+                        + " sets `name` without `group`; set `group` too to override the "
                         + "discovered coordinate, or omit both to discover it from the repo");
             }
             // Pure discovery (modulo an optional version override): a synthetic
@@ -686,10 +686,10 @@ public final class JkBuildParser {
         if (group == null || group.isBlank()) {
             throw new JkBuildParseException(displayPath + " must set a `group`");
         }
-        String artifact = entry.getString("artifact");
+        String artifact = entry.getString("name");
         if (artifact == null) artifact = name;
         if (artifact.isBlank()) {
-            throw new JkBuildParseException(displayPath + ".artifact must not be blank");
+            throw new JkBuildParseException(displayPath + ".name must not be blank");
         }
         boolean hasVersion = entry.contains("version");
         boolean hasPath = entry.contains("path");

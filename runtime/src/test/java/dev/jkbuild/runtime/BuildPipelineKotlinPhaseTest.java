@@ -22,19 +22,19 @@ class BuildPipelineKotlinPhaseTest {
 
     @Test
     void jdk_alone_is_a_java_project(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"j\"\nversion=\"0.1.0\"\njdk=25\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"j\"\nversion=\"0.1.0\"\njdk=25\n");
         assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
     }
 
     @Test
     void explicit_java_only(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"j\"\nversion=\"0.1.0\"\njava=21\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"j\"\nversion=\"0.1.0\"\njava=21\n");
         assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
     }
 
     @Test
     void jdk_plus_kotlin_is_kotlin_only(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"k\"\nversion=\"0.1.0\"\njdk=25\nkotlin=\"2.3.21\"\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"k\"\nversion=\"0.1.0\"\njdk=25\nkotlin=\"2.3.21\"\n");
         assertThat(phaseNames(dir))
                 .contains("compile-kotlin", "write-stamp-kotlin")
                 // no Java ⇒ no javac phase and no assembler (Kotlin publishes directly)
@@ -43,7 +43,7 @@ class BuildPipelineKotlinPhaseTest {
 
     @Test
     void jdk_plus_java_plus_kotlin_enables_both(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"b\"\nversion=\"0.1.0\"\njdk=25\njava=25\nkotlin=\"2.3.21\"\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"b\"\nversion=\"0.1.0\"\njdk=25\njava=25\nkotlin=\"2.3.21\"\n");
         assertThat(phaseNames(dir))
                 .contains("compile-java", "compile-kotlin", "write-stamp", "write-stamp-kotlin",
                         // mixed modules add the assembler that merges both outputs
@@ -54,21 +54,21 @@ class BuildPipelineKotlinPhaseTest {
 
     @Test
     void detects_kotlin_from_src_main_kotlin(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"k\"\nversion=\"0.1.0\"\njdk=25\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"k\"\nversion=\"0.1.0\"\njdk=25\n");
         Files.createDirectories(dir.resolve("src/main/kotlin"));
         assertThat(phaseNames(dir)).contains("compile-kotlin").doesNotContain("compile-java");
     }
 
     @Test
     void detects_java_from_src_main_java(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"j\"\nversion=\"0.1.0\"\njdk=25\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"j\"\nversion=\"0.1.0\"\njdk=25\n");
         Files.createDirectories(dir.resolve("src/main/java"));
         assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
     }
 
     @Test
     void detects_both_from_a_stray_kt_and_java_file(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"b\"\nversion=\"0.1.0\"\njdk=25\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"b\"\nversion=\"0.1.0\"\njdk=25\n");
         Path kt = dir.resolve("src/app/Foo.kt");
         Files.createDirectories(kt.getParent());
         Files.writeString(kt, "class Foo");
@@ -79,14 +79,14 @@ class BuildPipelineKotlinPhaseTest {
     @Test
     void explicit_java_ignores_kotlin_sources(@TempDir Path dir) throws Exception {
         // Explicit opt-in wins — stray .kt is not auto-detected when java is declared.
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"j\"\nversion=\"0.1.0\"\njava=21\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"j\"\nversion=\"0.1.0\"\njava=21\n");
         Files.createDirectories(dir.resolve("src/main/kotlin"));
         assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
     }
 
     @Test
     void empty_project_defaults_to_java(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nartifact=\"e\"\nversion=\"0.1.0\"\njdk=25\n");
+        writeManifest(dir, "group=\"com.example\"\nname=\"e\"\nversion=\"0.1.0\"\njdk=25\n");
         assertThat(phaseNames(dir)).contains("compile-java").doesNotContain("compile-kotlin");
     }
 

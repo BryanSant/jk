@@ -39,7 +39,7 @@ class ImportCommandTest {
         assertThat(exit).isEqualTo(0);
 
         String jkBuild = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(jkBuild).contains("artifact = \"widget\"");
+        assertThat(jkBuild).contains("name     = \"widget\"");
         assertThat(jkBuild).contains("[dependencies.main]");
         assertThat(jkBuild).contains(
                 "jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
@@ -86,7 +86,7 @@ class ImportCommandTest {
                 tempDir.resolve("report.md").toString(), pom.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(Files.readString(tempDir.resolve("jk.toml")))
-                .contains("artifact = \"widget\"")
+                .contains("name     = \"widget\"")
                 .doesNotContain("\"prior\"");
     }
 
@@ -180,14 +180,14 @@ class ImportCommandTest {
         assertThat(exit).isEqualTo(0);
 
         String root = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(root).contains("artifact = \"widget-parent\"");
+        assertThat(root).contains("name     = \"widget-parent\"");
         assertThat(root).contains("[workspace]");
         assertThat(root).contains("members = [\"core\", \"app\"]");
 
         assertThat(Files.readString(tempDir.resolve("core/jk.toml")))
-                .contains("artifact = \"widget-core\"");
+                .contains("name     = \"widget-core\"");
         assertThat(Files.readString(tempDir.resolve("app/jk.toml")))
-                .contains("artifact = \"widget-app\"");
+                .contains("name     = \"widget-app\"");
     }
 
     @Test

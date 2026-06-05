@@ -109,8 +109,8 @@ public final class MavenPublisher {
         if (signing == null) signing = SigningOptions.none();
         Map<String, Integer> results = new LinkedHashMap<>();
         String groupPath = project.group().replace('.', '/');
-        String prefix = groupPath + "/" + project.artifact() + "/" + project.version() + "/";
-        String stem = project.artifact() + "-" + project.version();
+        String prefix = groupPath + "/" + project.name() + "/" + project.version() + "/";
+        String stem = project.name() + "-" + project.version();
 
         for (Artifact a : artifacts) {
             String relPath = prefix + stem + a.filenameSuffix();

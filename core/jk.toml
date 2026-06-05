@@ -1,6 +1,6 @@
 [project]
 group    = "dev.jkbuild"
-artifact = "jk-core"
+name     = "jk-core"
 version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
@@ -11,11 +11,11 @@ java     = 25
 # from inside a single-member build.
 
 [dependencies.main]
-typesafe-config  = { group = "com.typesafe",       artifact = "config",           version = "1.4.8" }
-tomlj            = { group = "org.tomlj",          artifact = "tomlj",            version = "1.1.1" }
-jackson-databind = { group = "tools.jackson.core", artifact = "jackson-databind", version = "3.1.3" }
+typesafe-config  = { group = "com.typesafe",       name     = "config",           version = "1.4.8" }
+tomlj            = { group = "org.tomlj",          name     = "tomlj",            version = "1.1.1" }
+jackson-databind = { group = "tools.jackson.core", name     = "jackson-databind", version = "3.1.3" }
 
 [dependencies.test]
-assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
-junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
-junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }
+assertj-core            = { group = "org.assertj",        name     = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  name     = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", name     = "junit-platform-launcher", version = "6.1.0" }

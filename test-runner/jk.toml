@@ -1,6 +1,6 @@
 [project]
 group    = "jk"
-artifact = "test-runner"
+name     = "test-runner"
 version  = "0.1.0"
 description = "jk-test-runner: child-JVM entry point that drives JUnit Platform and "
 jdk      = 25

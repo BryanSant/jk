@@ -25,15 +25,15 @@ import java.util.TreeMap;
  *   <li>{@code [workspace]} block when this is a workspace root.</li>
  *   <li>{@code [repositories]} block with per-name URL strings.</li>
  *   <li>{@code [dependencies.<scope>]} sub-tables; each entry is
- *       {@code name = { group = "...", artifact = "...", version = "..." }}.
- *       The {@code artifact} field is omitted when it equals the key. Workspace
+ *       {@code <lib> = { group = "...", name = "...", version = "..." }}.
+ *       The {@code name} field is omitted when it equals the {@code <lib>} key. Workspace
  *       placeholders ({@code module} starts with {@code workspace:}) collapse
- *       to {@code name.workspace = true}. Git sources emit the inline-table
+ *       to {@code <lib>.workspace = true}. Git sources emit the inline-table
  *       form with {@code git}/{@code tag|branch|rev} fields. Path sources emit
  *       {@code path = "..."}.</li>
  * </ul>
  *
- * <p>Within a scope, deps are alphabetised by short {@code name} for
+ * <p>Within a scope, deps are alphabetised by the short library key for
  * determinism; declared order is not preserved.
  */
 public final class JkBuildRenderer {
@@ -65,7 +65,7 @@ public final class JkBuildRenderer {
     private static void renderProject(StringBuilder sb, JkBuild.Project p) {
         sb.append("[project]\n");
         sb.append("group    = ").append(quote(p.group())).append('\n');
-        sb.append("artifact = ").append(quote(p.artifact())).append('\n');
+        sb.append("name     = ").append(quote(p.name())).append('\n');
         sb.append("version  = ").append(quote(p.version())).append('\n');
         if (p.description() != null) {
             // Longer key than the rest of the block; emit unpadded.
@@ -126,7 +126,7 @@ public final class JkBuildRenderer {
             // user-facing manifest key; module ordering is no longer the
             // identifier.
             Map<String, Dependency> sorted = new TreeMap<>();
-            for (Dependency d : deps) sorted.put(d.name(), d);
+            for (Dependency d : deps) sorted.put(d.library(), d);
 
             sb.append('\n');
             sb.append("[dependencies.").append(scope.canonical()).append("]\n");
@@ -140,20 +140,20 @@ public final class JkBuildRenderer {
      * Render a single dep entry line. Three forms:
      * <ul>
      *   <li>Workspace placeholder (module starts with {@code workspace:}):
-     *       {@code name.workspace = true}</li>
-     *   <li>Git-sourced: {@code name = { group = "...", artifact?, git = "...", tag|branch|rev = "..." }}</li>
-     *   <li>Path-sourced: {@code name = { group = "...", artifact?, path = "..." }}</li>
-     *   <li>Versioned: {@code name = { group = "...", artifact?, version = "..." }}</li>
+     *       {@code <lib>.workspace = true}</li>
+     *   <li>Git-sourced: {@code <lib> = { group = "...", name?, git = "...", tag|branch|rev = "..." }}</li>
+     *   <li>Path-sourced: {@code <lib> = { group = "...", name?, path = "..." }}</li>
+     *   <li>Versioned: {@code <lib> = { group = "...", name?, version = "..." }}</li>
      * </ul>
      */
     private static String renderEntry(Dependency d) {
         if (d.module().startsWith(WORKSPACE_PLACEHOLDER_PREFIX)) {
-            return safeKey(d.name()) + ".workspace = true";
+            return safeKey(d.library()) + ".workspace = true";
         }
         StringBuilder sb = new StringBuilder();
-        sb.append(safeKey(d.name())).append(" = { group = ").append(quote(d.group()));
-        if (!d.artifact().equals(d.name())) {
-            sb.append(", artifact = ").append(quote(d.artifact()));
+        sb.append(safeKey(d.library())).append(" = { group = ").append(quote(d.group()));
+        if (!d.name().equals(d.library())) {
+            sb.append(", name = ").append(quote(d.name()));
         }
         if (d.isGit()) {
             GitSource s = d.gitSource();

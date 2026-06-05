@@ -5,9 +5,13 @@ import java.util.Objects;
 
 /**
  * A declared dependency in {@code jk.toml} (or a {@code //jk dep} script
- * directive). Carries the user-chosen short {@code name} (the manifest
- * key), the resolved {@code module} (group:artifact), a version selector,
- * and an optional source override (git or local path).
+ * directive). Carries the user-chosen short {@code library} handle (the
+ * manifest key), the resolved {@code module} (group:artifact), a version
+ * selector, and an optional source override (git or local path).
+ *
+ * <p>Terminology: {@code library} is the short local handle the user types; the
+ * Maven artifactId segment of {@code module} is exposed as {@link #name()}
+ * (Gradle's "name" for that coordinate segment).
  *
  * <p>For git deps the version field carries the synthetic marker
  * {@code "git"} so the record's non-null invariant holds; consumers
@@ -24,7 +28,7 @@ import java.util.Objects;
  * </ul>
  */
 public record Dependency(
-        String name,
+        String library,
         String module,
         VersionSelector version,
         GitSource gitSource,
@@ -32,7 +36,7 @@ public record Dependency(
         boolean pinned) {
 
     public Dependency {
-        Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(library, "library");
         Objects.requireNonNull(module, "module");
         Objects.requireNonNull(version, "version");
         if (!module.contains(":") || module.indexOf(':') != module.lastIndexOf(':')) {
@@ -49,7 +53,7 @@ public record Dependency(
         pinned = derivePinned(version, gitSource, pathSource);
     }
 
-    /** Maven-coord constructor (no source override). Name defaults to artifactId. */
+    /** Maven-coord constructor (no source override). Library defaults to artifactId. */
     public Dependency(String module, VersionSelector version) {
         this(artifactOf(module), module, version, null, null, false);
     }
@@ -63,9 +67,9 @@ public record Dependency(
         this(artifactOf(module), module, version, null, null, false);
     }
 
-    /** Maven-coord with an explicit short name. */
-    public static Dependency of(String name, String module, VersionSelector version) {
-        return new Dependency(name, module, version, null, null, false);
+    /** Maven-coord with an explicit library handle. */
+    public static Dependency of(String library, String module, VersionSelector version) {
+        return new Dependency(library, module, version, null, null, false);
     }
 
     /** Git-sourced constructor; version is a synthetic marker. */
@@ -74,16 +78,16 @@ public record Dependency(
                 VersionSelector.parse("=git"), source, null, false);
     }
 
-    /** Git-sourced with explicit short name. */
-    public static Dependency git(String name, String module, GitSource source) {
-        return new Dependency(name, module, VersionSelector.parse("=git"),
+    /** Git-sourced with explicit library handle. */
+    public static Dependency git(String library, String module, GitSource source) {
+        return new Dependency(library, module, VersionSelector.parse("=git"),
                 source, null, false);
     }
 
     /** Local-path sourced; version is a synthetic marker. */
-    public static Dependency path(String name, String module, String path) {
+    public static Dependency path(String library, String module, String path) {
         Objects.requireNonNull(path, "path");
-        return new Dependency(name, module, VersionSelector.parse("=path"),
+        return new Dependency(library, module, VersionSelector.parse("=path"),
                 null, path, false);
     }
 
@@ -99,7 +103,8 @@ public record Dependency(
         return module.substring(0, module.indexOf(':'));
     }
 
-    public String artifact() {
+    /** The Maven artifactId segment of {@code module} (Gradle's "name"). */
+    public String name() {
         return module.substring(module.indexOf(':') + 1);
     }
 

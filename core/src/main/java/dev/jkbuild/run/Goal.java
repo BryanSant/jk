@@ -18,7 +18,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
@@ -110,7 +109,7 @@ public final class Goal {
     /**
      * Run the goal. Blocks until every phase reaches a terminal state.
      * Throws no checked exceptions — phase failures are folded into
-     * {@link GoalResult#success}.
+     * {@link GoalResult#success()}.
      */
     public GoalResult run() {
         Instant goalStart = Instant.now();

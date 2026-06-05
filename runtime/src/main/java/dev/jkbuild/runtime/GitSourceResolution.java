@@ -122,7 +122,7 @@ public final class GitSourceResolution {
                     continue;
                 }
                 GitSourceMaterializer.Materialized m = bySource.get(sourceKey(d.gitSource()));
-                out.add(Dependency.of(d.name(), m.coordinate(),
+                out.add(Dependency.of(d.library(), m.coordinate(),
                         VersionSelector.parse("=" + m.version())));
             }
             rewritten.put(scope, out);

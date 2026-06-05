@@ -117,7 +117,7 @@ class ReadSideIntegrationTest {
     void tree_without_lockfile_errors(@TempDir Path tempDir) throws IOException {
         // Write a jk.toml by hand so no jk.lock is created.
         Files.writeString(tempDir.resolve("jk.toml"),
-                "[project]\ngroup = \"com.example\"\nartifact = \"a\"\nversion = \"0.1.0\"\n");
+                "[project]\ngroup = \"com.example\"\nname = \"a\"\nversion = \"0.1.0\"\n");
         int exit = run("tree", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(2);
     }

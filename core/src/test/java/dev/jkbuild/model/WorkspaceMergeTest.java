@@ -86,7 +86,7 @@ class WorkspaceMergeTest {
 
         var testDeps = merged.dependencies().of(Scope.TEST);
         assertThat(testDeps).hasSize(1);
-        assertThat(testDeps.getFirst().name()).isEqualTo("junit-jupiter");
+        assertThat(testDeps.getFirst().library()).isEqualTo("junit-jupiter");
         assertThat(testDeps.getFirst().module()).isEqualTo("org.junit.jupiter:junit-jupiter");
     }
 

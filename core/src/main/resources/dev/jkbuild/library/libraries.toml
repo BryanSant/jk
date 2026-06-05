@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 #
-# jk bundled short-name alias catalog.
+# jk bundled short-name library catalog.
 #
 # Maps a curated short identifier to a Maven `group:artifact` pair. When a
 # project's jk.toml references a known short name, jk fills in the
@@ -10,7 +10,7 @@
 #     jackson-databind = "2.18.2"           # parser resolves via this table
 #
 # Unknown short names fall back to the structured form
-# `{ group = "...", version = "..." }`. Workspace-defined aliases in
+# `{ group = "...", version = "..." }`. Workspace-defined libraries in
 # `[workspace.dependencies]` take precedence over the bundled list.
 #
 # Versions are deliberately NOT pinned here — that's the user's call per
@@ -20,22 +20,22 @@
 #   - Java/Kotlin ecosystem only (matches jk's v1 scope).
 #   - One canonical short name per artifact. If a project already uses a
 #     different short name idiomatically, set it explicitly via
-#     `artifact = "..."` in the dep table.
+#     `name = "..."` in the dep table.
 #   - When the artifactId is already short and unambiguous (e.g. `picocli`,
 #     `guava`), prefer that as the short name.
 #   - Spring Boot starter prefix retained (`spring-boot-starter-*`) — it's
 #     load-bearing for grep / muscle-memory; no abbreviation.
-#   - Split aliases by major version when the Maven *coordinate* changes
+#   - Split libraries by major version when the Maven *coordinate* changes
 #     (e.g. Jackson 2 → 3 moved from com.fasterxml.jackson.* to
 #     tools.jackson.*). The bundled set deliberately does NOT pick a
 #     default — both `jackson2-databind` and `jackson3-databind` are
 #     curated; the unprefixed `jackson-databind` is intentionally absent
-#     so an alias-catalog adopter never gets a silent major-version bump.
+#     so a library-catalog adopter never gets a silent major-version bump.
 #     Within-coord major bumps (Spring Boot 2 vs 3 — same GAV, different
-#     version selector) keep one alias; the user's version field does the
+#     version selector) keep one library; the user's version field does the
 #     work.
 
-[aliases]
+[libraries]
 
 # Jackson 2 (com.fasterxml.jackson.*) — the version still dominant in production.
 jackson2-databind             = "com.fasterxml.jackson.core:jackson-databind"

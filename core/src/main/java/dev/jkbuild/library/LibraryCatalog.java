@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.alias;
+package dev.jkbuild.library;
 
 import dev.jkbuild.util.JkDirs;
 import org.tomlj.Toml;
@@ -29,15 +29,15 @@ import java.util.TreeSet;
  * losing the rest of the curated set. Highest precedence first:
  *
  * <ol>
- *   <li><b>Project</b> — the {@code [aliases]} table in the project's
+ *   <li><b>Project</b> — the {@code [libraries]} table in the project's
  *       {@code jk.toml}. Passed in by the parser.</li>
- *   <li><b>Local</b> — {@code ~/.jk/aliases.local.toml} (per-user overrides,
+ *   <li><b>Local</b> — {@code ~/.jk/libs.local.toml} (per-user overrides,
  *       hand-edited).</li>
- *   <li><b>Global</b> — {@code ~/.jk/aliases.global.toml}, refreshed
- *       by {@code jk alias update} from
- *       {@code github.com/jkbuild/jk-alias-registry}.</li>
+ *   <li><b>Global</b> — {@code ~/.jk/libs.global.toml}, refreshed
+ *       by {@code jk library update} from
+ *       {@code github.com/jkbuild/jk-library-registry}.</li>
  *   <li><b>Bundled</b> — classpath resource shipped with the jk binary
- *       ({@code dev/jkbuild/alias/aliases.toml}). Acts as the floor so
+ *       ({@code dev/jkbuild/library/libraries.toml}). Acts as the floor so
  *       lookups still work offline before any update has run.</li>
  * </ol>
  *
@@ -45,29 +45,29 @@ import java.util.TreeSet;
  * bundled layer is the only one guaranteed to exist; the others light up
  * when their files appear on disk.
  */
-public final class AliasCatalog {
+public final class LibraryCatalog {
 
-    private static final String BUNDLED_RESOURCE = "/dev/jkbuild/alias/aliases.toml";
+    private static final String BUNDLED_RESOURCE = "/dev/jkbuild/library/libraries.toml";
 
-    private static volatile AliasCatalog bundled;
+    private static volatile LibraryCatalog bundled;
 
     private final List<Layer> layers;
 
-    private AliasCatalog(List<Layer> layers) {
+    private LibraryCatalog(List<Layer> layers) {
         this.layers = List.copyOf(Objects.requireNonNull(layers, "layers"));
     }
 
-    /** Per-user manual override layer: {@code ~/.jk/aliases.local.toml}. */
+    /** Per-user manual override layer: {@code ~/.jk/libs.local.toml}. */
     public static Path userFile() {
-        return JkDirs.home().resolve("aliases.local.toml");
+        return JkDirs.home().resolve("libs.local.toml");
     }
 
     /**
-     * The downloaded layer, refreshed by {@code jk alias update}:
-     * {@code ~/.jk/aliases.global.toml}.
+     * The downloaded layer, refreshed by {@code jk library update}:
+     * {@code ~/.jk/libs.global.toml}.
      */
     public static Path downloadedFile() {
-        return JkDirs.home().resolve("aliases.global.toml");
+        return JkDirs.home().resolve("libs.global.toml");
     }
 
     /**
@@ -76,12 +76,12 @@ public final class AliasCatalog {
      * (renderer-side defaulting, where local overrides would create
      * file-vs-tool consistency surprises).
      */
-    public static AliasCatalog bundled() {
-        AliasCatalog local = bundled;
+    public static LibraryCatalog bundled() {
+        LibraryCatalog local = bundled;
         if (local != null) return local;
-        synchronized (AliasCatalog.class) {
+        synchronized (LibraryCatalog.class) {
             if (bundled != null) return bundled;
-            bundled = new AliasCatalog(List.of(loadBundledLayer()));
+            bundled = new LibraryCatalog(List.of(loadBundledLayer()));
             return bundled;
         }
     }
@@ -91,7 +91,7 @@ public final class AliasCatalog {
      * Project overrides aren't applied here — the parser layers them on
      * top via {@link #withProjectOverrides}.
      */
-    public static AliasCatalog layered() {
+    public static LibraryCatalog layered() {
         return layered(w -> {});
     }
 
@@ -100,36 +100,36 @@ public final class AliasCatalog {
      * to {@code warn} instead of a stream — only the CLI view layer owns
      * {@code System.err}, so callers there pass {@code System.err::println}.
      */
-    public static AliasCatalog layered(java.util.function.Consumer<String> warn) {
+    public static LibraryCatalog layered(java.util.function.Consumer<String> warn) {
         List<Layer> chain = new ArrayList<>();
         loadFileLayer(userFile(), "local", warn).ifPresent(chain::add);
         loadFileLayer(downloadedFile(), "global", warn).ifPresent(chain::add);
         chain.add(loadBundledLayer());
-        return new AliasCatalog(chain);
+        return new LibraryCatalog(chain);
     }
 
     /** Test seam: build a catalog from a single in-memory map. */
-    public static AliasCatalog of(Map<String, Module> aliases) {
-        return new AliasCatalog(List.of(new Layer("test", Map.copyOf(aliases))));
+    public static LibraryCatalog of(Map<String, Module> libraries) {
+        return new LibraryCatalog(List.of(new Layer("test", Map.copyOf(libraries))));
     }
 
     /** Test seam: parse a single layer from a TOML string. */
-    public static AliasCatalog parse(String toml) {
-        return new AliasCatalog(List.of(new Layer("inline", parseTable(toml, "inline"))));
+    public static LibraryCatalog parse(String toml) {
+        return new LibraryCatalog(List.of(new Layer("inline", parseTable(toml, "inline"))));
     }
 
     /**
-     * Returns a new view with {@code projectAliases} as the top-priority
+     * Returns a new view with {@code projectLibraries} as the top-priority
      * layer. The original catalog is unchanged. Used by the parser to
-     * make {@code [aliases]} from the current {@code jk.toml} the
+     * make {@code [libraries]} from the current {@code jk.toml} the
      * authoritative source for that file.
      */
-    public AliasCatalog withProjectOverrides(Map<String, Module> projectAliases) {
-        if (projectAliases == null || projectAliases.isEmpty()) return this;
+    public LibraryCatalog withProjectOverrides(Map<String, Module> projectLibraries) {
+        if (projectLibraries == null || projectLibraries.isEmpty()) return this;
         List<Layer> chain = new ArrayList<>(layers.size() + 1);
-        chain.add(new Layer("project", Map.copyOf(projectAliases)));
+        chain.add(new Layer("project", Map.copyOf(projectLibraries)));
         chain.addAll(layers);
-        return new AliasCatalog(chain);
+        return new LibraryCatalog(chain);
     }
 
     /**
@@ -139,7 +139,7 @@ public final class AliasCatalog {
     public Optional<Module> lookup(String name) {
         if (name == null) return Optional.empty();
         for (Layer layer : layers) {
-            Module hit = layer.aliases.get(name);
+            Module hit = layer.libraries.get(name);
             if (hit != null) return Optional.of(hit);
         }
         return Optional.empty();
@@ -148,7 +148,7 @@ public final class AliasCatalog {
     /** All names across every layer, sorted lexicographically. */
     public Set<String> names() {
         Set<String> all = new TreeSet<>();
-        for (Layer layer : layers) all.addAll(layer.aliases.keySet());
+        for (Layer layer : layers) all.addAll(layer.libraries.keySet());
         return all;
     }
 
@@ -159,7 +159,7 @@ public final class AliasCatalog {
     public Optional<Source> source(String name) {
         if (name == null) return Optional.empty();
         for (Layer layer : layers) {
-            Module hit = layer.aliases.get(name);
+            Module hit = layer.libraries.get(name);
             if (hit != null) return Optional.of(new Source(layer.name, hit));
         }
         return Optional.empty();
@@ -177,7 +177,7 @@ public final class AliasCatalog {
     }
 
     /**
-     * Best-effort name suggestions for an unknown alias. Splits the
+     * Best-effort name suggestions for an unknown library. Splits the
      * candidate on {@code -} and returns up to {@code maxResults}
      * catalog names that contain every non-empty part as a substring
      * (case-insensitive). Useful for "did you mean" diagnostics — typing
@@ -229,13 +229,13 @@ public final class AliasCatalog {
         }
     }
 
-    /** Where a lookup resolved — used by {@code jk alias list}. */
+    /** Where a lookup resolved — used by {@code jk library list}. */
     public record Source(String layer, Module module) {}
 
-    private record Layer(String name, Map<String, Module> aliases) {}
+    private record Layer(String name, Map<String, Module> libraries) {}
 
     private static Layer loadBundledLayer() {
-        try (InputStream in = AliasCatalog.class.getResourceAsStream(BUNDLED_RESOURCE)) {
+        try (InputStream in = LibraryCatalog.class.getResourceAsStream(BUNDLED_RESOURCE)) {
             if (in == null) {
                 throw new IOException("missing classpath resource: " + BUNDLED_RESOURCE);
             }
@@ -243,7 +243,7 @@ public final class AliasCatalog {
             return new Layer("bundled", parseTable(text, BUNDLED_RESOURCE));
         } catch (IOException e) {
             throw new UncheckedIOException(
-                    "failed to load bundled alias catalog from " + BUNDLED_RESOURCE, e);
+                    "failed to load bundled library catalog from " + BUNDLED_RESOURCE, e);
         }
     }
 
@@ -257,46 +257,46 @@ public final class AliasCatalog {
             // Fail soft: a malformed user/downloaded layer should warn, not
             // break every jk invocation. Hand the message to the caller's sink
             // (the CLI routes it to stderr) and skip the layer.
-            warn.accept("warning: ignoring alias catalog layer at "
+            warn.accept("warning: ignoring library catalog layer at "
                     + file + " — " + e.getMessage());
             return Optional.empty();
         }
     }
 
-    /** Parse an [aliases] table from TOML source. */
+    /** Parse an [libraries] table from TOML source. */
     static Map<String, Module> parseTable(String toml, String displayPath) {
         TomlParseResult result = Toml.parse(toml);
         if (result.hasErrors()) {
             throw new IllegalStateException(displayPath
                     + " has invalid TOML: " + result.errors().getFirst().getMessage());
         }
-        TomlTable table = result.getTable("aliases");
+        TomlTable table = result.getTable("libraries");
         if (table == null) {
             throw new IllegalStateException(displayPath
-                    + " is missing the required [aliases] table");
+                    + " is missing the required [libraries] table");
         }
-        return parseAliasesTable(table, displayPath);
+        return parseLibrariesTable(table, displayPath);
     }
 
     /**
-     * Parse an already-located {@code [aliases]} sub-table. Used by the
+     * Parse an already-located {@code [libraries]} sub-table. Used by the
      * jk.toml parser, which has already navigated to the table.
      */
-    public static Map<String, Module> parseAliasesTable(TomlTable table, String displayPath) {
+    public static Map<String, Module> parseLibrariesTable(TomlTable table, String displayPath) {
         Map<String, Module> out = new LinkedHashMap<>();
         for (String name : table.keySet()) {
             Object raw = table.get(name);
             if (!(raw instanceof String coord)) {
-                throw new IllegalStateException(displayPath + ".aliases." + name
+                throw new IllegalStateException(displayPath + ".libraries." + name
                         + " must be a string of the form \"group:artifact\"");
             }
             int sep = coord.indexOf(':');
             if (sep <= 0 || sep == coord.length() - 1) {
-                throw new IllegalStateException(displayPath + ".aliases." + name
+                throw new IllegalStateException(displayPath + ".libraries." + name
                         + " must be \"group:artifact\" — got: " + coord);
             }
             if (coord.indexOf(':', sep + 1) >= 0) {
-                throw new IllegalStateException(displayPath + ".aliases." + name
+                throw new IllegalStateException(displayPath + ".libraries." + name
                         + " carries a version — strip it; the catalog is name→coord only: "
                         + coord);
             }

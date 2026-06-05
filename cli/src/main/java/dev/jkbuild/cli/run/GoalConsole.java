@@ -135,7 +135,7 @@ public final class GoalConsole {
         // Interactive goals (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events
         // already go to stdout via NdjsonListener) and explicit quiet.
-        if (goal.interactive()) return new SilentListener(System.out, System.err);
+        if (goal.interactive()) return new SilentListener(System.out, System.err, true);
         return switch (mode) {
             case QUIET -> new SilentListener(System.out, System.err);
             case JSON -> new NdjsonListener(System.out);

@@ -13,7 +13,7 @@ import org.jline.utils.AttributedStyle;
  *   [blue]group[/]:[cyan]artifact[/]:[bright-blue]version[/]
  * </pre>
  *
- * and artifact short-names (dependency aliases) render as {@code [bright-cyan]}.
+ * and artifact short-names (dependency libraries) render as {@code [bright-cyan]}.
  *
  * <p>The four roles map onto the active {@link Theme} palette:
  * <ul>
@@ -46,7 +46,7 @@ public final class Coords {
         return Theme.active().blue();
     }
 
-    /** artifact short-name (dependency alias) — bright-cyan. */
+    /** artifact short-name (dependency library) — bright-cyan. */
     public static AttributedStyle shortNameStyle() {
         return Theme.active().brightCyan();
     }
@@ -73,7 +73,7 @@ public final class Coords {
         return Theme.colorize(version, versionStyle());
     }
 
-    /** An artifact short-name / alias on its own — bright-cyan. */
+    /** An artifact short-name / library on its own — bright-cyan. */
     public static String shortName(String name) {
         return Theme.colorize(name, shortNameStyle());
     }

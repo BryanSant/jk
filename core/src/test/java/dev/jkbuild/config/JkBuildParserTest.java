@@ -6,7 +6,7 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
-import dev.jkbuild.alias.AliasCatalog;
+import dev.jkbuild.library.LibraryCatalog;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -19,7 +19,7 @@ class JkBuildParserTest {
     private static final String PROJECT = """
             [project]
             group    = "com.example"
-            artifact = "widget"
+            name     = "widget"
             version  = "1.0.0"
             jdk      = 21
             java     = 21
@@ -29,7 +29,7 @@ class JkBuildParserTest {
     void parses_minimal_project_block() {
         JkBuild parsed = JkBuildParser.parse(PROJECT);
         assertThat(parsed.project().group()).isEqualTo("com.example");
-        assertThat(parsed.project().artifact()).isEqualTo("widget");
+        assertThat(parsed.project().name()).isEqualTo("widget");
         assertThat(parsed.project().version()).isEqualTo("1.0.0");
         assertThat(parsed.project().jdk()).isEqualTo(21);
         assertThat(parsed.project().java()).isEqualTo(21);
@@ -68,7 +68,7 @@ class JkBuildParserTest {
         assertThatThrownBy(() -> JkBuildParser.parse("""
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0"
                 java     = 11
                 """))
@@ -82,7 +82,7 @@ class JkBuildParserTest {
         assertThatThrownBy(() -> JkBuildParser.parse("""
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0"
                 jdk      = 8
                 java     = 17
@@ -96,7 +96,7 @@ class JkBuildParserTest {
         assertThatThrownBy(() -> JkBuildParser.parse("""
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 """))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("project.version");
@@ -106,11 +106,11 @@ class JkBuildParserTest {
     void parses_name_as_key_dep_with_full_table() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
-                slf4j-api = { group = "org.slf4j", artifact = "slf4j-api", version = "2.0.16" }
-                picocli   = { group = "info.picocli", artifact = "picocli", version = "^4.7.7" }
+                slf4j-api = { group = "org.slf4j", name = "slf4j-api", version = "2.0.16" }
+                picocli   = { group = "info.picocli", name = "picocli", version = "^4.7.7" }
 
                 [dependencies.test]
-                junit-jupiter = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = ">=5.10, <6" }
+                junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version = ">=5.10, <6" }
                 """);
 
         var mainDeps = parsed.dependencies().of(Scope.MAIN);
@@ -118,13 +118,13 @@ class JkBuildParserTest {
 
         // Bare version on the new format → Caret (Cargo-style default).
         var slf4j = mainDeps.get(0);
-        assertThat(slf4j.name()).isEqualTo("slf4j-api");
+        assertThat(slf4j.library()).isEqualTo("slf4j-api");
         assertThat(slf4j.module()).isEqualTo("org.slf4j:slf4j-api");
         assertThat(slf4j.version()).isInstanceOf(VersionSelector.Caret.class);
         assertThat(slf4j.pinned()).isFalse();
 
         var picocli = mainDeps.get(1);
-        assertThat(picocli.name()).isEqualTo("picocli");
+        assertThat(picocli.library()).isEqualTo("picocli");
         assertThat(picocli.module()).isEqualTo("info.picocli:picocli");
         assertThat(picocli.version()).isInstanceOf(VersionSelector.Caret.class);
         assertThat(picocli.pinned()).isFalse();
@@ -142,7 +142,7 @@ class JkBuildParserTest {
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.name()).isEqualTo("picocli");
+        assertThat(dep.library()).isEqualTo("picocli");
         assertThat(dep.module()).isEqualTo("info.picocli:picocli");
     }
 
@@ -203,7 +203,7 @@ class JkBuildParserTest {
                 stray = { group = "com.example", version = "1.0" }
 
                 [dependencies.test]
-                junit = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = "5.10.0" }
+                junit = { group = "org.junit.jupiter", name = "junit-jupiter", version = "5.10.0" }
                 """))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("mixed flat and sub-scope");
@@ -213,7 +213,7 @@ class JkBuildParserTest {
     void path_source_is_pinned() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
-                shared-utils = { group = "com.acme", artifact = "shared-utils", path = "../shared-utils" }
+                shared-utils = { group = "com.acme", name = "shared-utils", path = "../shared-utils" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.isPath()).isTrue();
@@ -266,7 +266,7 @@ class JkBuildParserTest {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
                 fork = { git = "https://github.com/me/widgets-fork", branch = "main", \
-                         group = "com.acme", artifact = "widgets", version = "1.4.0-acme" }
+                         group = "com.acme", name = "widgets", version = "1.4.0-acme" }
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
         assertThat(dep.isGit()).isTrue();
@@ -293,10 +293,10 @@ class JkBuildParserTest {
     void git_source_artifact_without_group_is_rejected() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
-                bad = { git = "https://github.com/acme/widgets", tag = "v1", artifact = "widgets" }
+                bad = { git = "https://github.com/acme/widgets", tag = "v1", name = "widgets" }
                 """))
                 .isInstanceOf(JkBuildParseException.class)
-                .hasMessageContaining("`artifact` without `group`");
+                .hasMessageContaining("`name` without `group`");
     }
 
     @Test
@@ -349,8 +349,8 @@ class JkBuildParserTest {
                 members = ["a", "b"]
 
                 [workspace.dependencies]
-                junit-jupiter = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = "6.1.0" }
-                assertj-core  = { group = "org.assertj",       artifact = "assertj-core",  version = "3.27.7" }
+                junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version = "6.1.0" }
+                assertj-core  = { group = "org.assertj",       name = "assertj-core",  version = "3.27.7" }
                 """);
         assertThat(parsed.workspace().dependencies()).hasSize(2);
         var jj = parsed.workspace().dependencies().get("junit-jupiter");
@@ -382,13 +382,13 @@ class JkBuildParserTest {
                 members = []
 
                 [workspace.dependencies]
-                junit-jupiter = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = "6.1.0" }
+                junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version = "6.1.0" }
 
                 [dependencies.test]
                 junit-jupiter.workspace = true
                 """);
         var dep = parsed.dependencies().of(Scope.TEST).getFirst();
-        assertThat(dep.name()).isEqualTo("junit-jupiter");
+        assertThat(dep.library()).isEqualTo("junit-jupiter");
         assertThat(dep.module()).isEqualTo("org.junit.jupiter:junit-jupiter");
         assertThat(dep.version()).isInstanceOf(VersionSelector.Caret.class);
     }
@@ -404,7 +404,7 @@ class JkBuildParserTest {
                 jk-core.workspace = true
                 """);
         var dep = parsed.dependencies().of(Scope.MAIN).getFirst();
-        assertThat(dep.name()).isEqualTo("jk-core");
+        assertThat(dep.library()).isEqualTo("jk-core");
         assertThat(dep.module()).startsWith("workspace:");
     }
 
@@ -567,13 +567,13 @@ class JkBuildParserTest {
     }
 
     // ───────────────────────────────────────────────────────────────
-    //  Alias-catalog shorthand
+    //  Library-catalog shorthand
     // ───────────────────────────────────────────────────────────────
 
     /** Synthetic catalog used so the tests don't drift with the bundled set. */
-    private static final AliasCatalog TEST_CATALOG = AliasCatalog.of(Map.of(
-            "jackson-databind", new AliasCatalog.Module("tools.jackson.core", "jackson-databind"),
-            "picocli", new AliasCatalog.Module("info.picocli", "picocli")));
+    private static final LibraryCatalog TEST_CATALOG = LibraryCatalog.of(Map.of(
+            "jackson-databind", new LibraryCatalog.Module("tools.jackson.core", "jackson-databind"),
+            "picocli", new LibraryCatalog.Module("info.picocli", "picocli")));
 
     @Test
     void shorthand_string_value_resolves_through_catalog() {
@@ -585,7 +585,7 @@ class JkBuildParserTest {
                 """, TEST_CATALOG);
         var deps = parsed.dependencies().of(Scope.MAIN);
         assertThat(deps).hasSize(1);
-        assertThat(deps.getFirst().name()).isEqualTo("jackson-databind");
+        assertThat(deps.getFirst().library()).isEqualTo("jackson-databind");
         assertThat(deps.getFirst().module())
                 .isEqualTo("tools.jackson.core:jackson-databind");
         assertThat(deps.getFirst().version())
@@ -626,12 +626,12 @@ class JkBuildParserTest {
 
     @Test
     void unknown_shorthand_surfaces_did_you_mean_for_split_families() {
-        // The parser's unknown-alias message includes suggestions drawn
+        // The parser's unknown-library message includes suggestions drawn
         // from the catalog. For the Jackson family this means typing the
         // unprefixed name surfaces both major-version flavors.
-        AliasCatalog splitFamily = AliasCatalog.of(Map.of(
-                "jackson2-databind", new AliasCatalog.Module("com.fasterxml.jackson.core", "jackson-databind"),
-                "jackson3-databind", new AliasCatalog.Module("tools.jackson.core", "jackson-databind")));
+        LibraryCatalog splitFamily = LibraryCatalog.of(Map.of(
+                "jackson2-databind", new LibraryCatalog.Module("com.fasterxml.jackson.core", "jackson-databind"),
+                "jackson3-databind", new LibraryCatalog.Module("tools.jackson.core", "jackson-databind")));
 
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
                 [dependencies.main]
@@ -667,12 +667,12 @@ class JkBuildParserTest {
     }
 
     @Test
-    void project_aliases_table_overrides_passed_in_catalog() {
-        // The project-local [aliases] table is the top of the lookup chain;
+    void project_libraries_table_overrides_passed_in_catalog() {
+        // The project-local [libraries] table is the top of the lookup chain;
         // it shadows the catalog passed by callers (including the bundled
         // one in production).
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [aliases]
+                [libraries]
                 picocli = "io.fork:picocli"
 
                 [dependencies.main]
@@ -683,9 +683,9 @@ class JkBuildParserTest {
     }
 
     @Test
-    void project_aliases_can_introduce_a_brand_new_short_name() {
+    void project_libraries_can_introduce_a_brand_new_short_name() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
-                [aliases]
+                [libraries]
                 internal-widget = "com.acme:internal-widget"
 
                 [dependencies.main]
@@ -696,9 +696,9 @@ class JkBuildParserTest {
     }
 
     @Test
-    void project_aliases_with_versioned_coord_is_rejected() {
+    void project_libraries_with_versioned_coord_is_rejected() {
         assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
-                [aliases]
+                [libraries]
                 bad = "com.acme:bad:1.0.0"
                 """, TEST_CATALOG))
                 .isInstanceOf(JkBuildParseException.class)

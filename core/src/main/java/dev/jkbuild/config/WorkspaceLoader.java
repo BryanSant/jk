@@ -78,14 +78,14 @@ public final class WorkspaceLoader {
         // Only include the root if it could plausibly produce its own jar
         // (i.e., it declares a non-blank artifact). Many workspace roots
         // are pure coordinators with no own artifact; skip those.
-        if (!root.project().artifact().isBlank()) {
+        if (!root.project().name().isBlank()) {
             all.add(new Entry(null, root));
         }
         for (Map.Entry<Path, JkBuild> e : members.entrySet()) {
             all.add(new Entry(e.getKey(), e.getValue()));
         }
         for (Entry e : all) {
-            String key = e.build.project().artifact() + "-" + e.build.project().version();
+            String key = e.build.project().name() + "-" + e.build.project().version();
             // containsKey, not the put return value: the workspace root
             // stores `null` as its dir, and Map.put can't distinguish a
             // returned null between "no prior entry" and "prior entry's

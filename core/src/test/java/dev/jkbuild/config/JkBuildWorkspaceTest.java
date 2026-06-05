@@ -18,7 +18,7 @@ class JkBuildWorkspaceTest {
     private static final String LEAF_PROJECT = """
             [project]
             group    = "com.example"
-            artifact = "leaf"
+            name     = "leaf"
             version  = "0.1.0"
             """;
 
@@ -27,7 +27,7 @@ class JkBuildWorkspaceTest {
         JkBuild parsed = JkBuildParser.parse("""
                 [project]
                 group    = "com.example"
-                artifact = "root"
+                name     = "root"
                 version  = "0.1.0"
 
                 [workspace]
@@ -70,7 +70,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "root"
+                name     = "root"
                 version  = "0.1.0"
 
                 [workspace]
@@ -82,7 +82,7 @@ class JkBuildWorkspaceTest {
             Files.writeString(memberDir.resolve("jk.toml"), """
                     [project]
                     group    = "com.example"
-                    artifact = "%s"
+                    name     = "%s"
                     version  = "0.1.0"
                     """.formatted(name.replace('/', '-')));
         }
@@ -98,7 +98,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "root"
+                name     = "root"
                 version  = "0.1.0"
 
                 [workspace]
@@ -115,7 +115,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "root"
+                name     = "root"
                 version  = "0.1.0"
 
                 [workspace]
@@ -129,7 +129,7 @@ class JkBuildWorkspaceTest {
             Files.writeString(memberDir.resolve("jk.toml"), """
                     [project]
                     group    = "com.example"
-                    artifact = "widget"
+                    name     = "widget"
                     version  = "0.1.0"
                     """);
         }
@@ -147,7 +147,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "0.1.0"
 
                 [workspace]
@@ -158,7 +158,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(memberA.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "0.1.0"
                 """);
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
@@ -174,7 +174,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "root"
+                name     = "root"
                 version  = "0.1.0"
 
                 [workspace]
@@ -186,7 +186,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(memberA.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "a"
+                name     = "a"
                 version  = "0.1.0"
 
                 [workspace]
@@ -204,7 +204,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "root"
+                name     = "root"
                 version  = "0.1.0"
 
                 [workspace]
@@ -216,7 +216,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(a.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "0.1.0"
                 """);
         Path b = tempDir.resolve("libs/b");
@@ -224,7 +224,7 @@ class JkBuildWorkspaceTest {
         Files.writeString(b.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "0.2.0"
                 """);
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));

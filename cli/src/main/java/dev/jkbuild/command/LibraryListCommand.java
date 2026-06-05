@@ -5,7 +5,7 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 
-import dev.jkbuild.alias.AliasCatalog;
+import dev.jkbuild.library.LibraryCatalog;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Mixin;
 import picocli.CommandLine.Option;
@@ -16,16 +16,16 @@ import java.util.Set;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk alias list} — print every alias known to the layered catalog as
- * {@code name....group:artifact}, the dotted leader tracking each alias across
- * to its coordinate. The source layer each alias resolves through is hidden by
+ * {@code jk library list} — print every library known to the layered catalog as
+ * {@code name....group:artifact}, the dotted leader tracking each library across
+ * to its coordinate. The source layer each library resolves through is hidden by
  * default; surface it inline with {@code --show-layer} or as section headings
  * with {@code --group-by-layer} when a project-local override or downloaded
  * entry is shadowing an unexpected coordinate.
  */
 @Command(name = "list", aliases = {"ls"},
-        description = "List every alias the layered catalog resolves")
-public final class AliasListCommand implements Callable<Integer> {
+        description = "List every library the layered catalog resolves")
+public final class LibraryListCommand implements Callable<Integer> {
 
     @Option(names = "--layer",
             description = "Filter to a single source layer (project, local, global, bundled).")
@@ -36,22 +36,22 @@ public final class AliasListCommand implements Callable<Integer> {
     boolean showLayer;
 
     @Option(names = "--group-by-layer",
-            description = "Group aliases under a heading per source layer, highest precedence first.")
+            description = "Group libraries under a heading per source layer, highest precedence first.")
     boolean groupByLayer;
 
     @Mixin GlobalOptions global;
 
     @Override
     public Integer call() {
-        AliasCatalog catalog = AliasCatalog.layered(System.err::println);
+        LibraryCatalog catalog = LibraryCatalog.layered(System.err::println);
         var names = catalog.names();
         if (names.isEmpty()) {
-            System.out.println("(no aliases registered)");
+            System.out.println("(no libraries registered)");
             return 0;
         }
         int nameWidth = names.stream().mapToInt(String::length).max().orElse(0);
         // Coordinates align at a fixed column; the gap is filled with a dotted
-        // leader so the eye can track each alias across to its coordinate. The
+        // leader so the eye can track each library across to its coordinate. The
         // longest name still gets a two-dot minimum. The column is computed over
         // every name so coordinates line up across layer groups too.
         int leaderColumn = nameWidth + 2;
@@ -60,7 +60,7 @@ public final class AliasListCommand implements Callable<Integer> {
                 : listFlat(catalog, names, leaderColumn);
     }
 
-    private Integer listFlat(AliasCatalog catalog, Set<String> names, int leaderColumn) {
+    private Integer listFlat(LibraryCatalog catalog, Set<String> names, int leaderColumn) {
         int shown = 0;
         for (String name : names) {
             var src = catalog.source(name).orElseThrow();
@@ -69,12 +69,12 @@ public final class AliasListCommand implements Callable<Integer> {
             System.out.println(row(name, src, leaderColumn));
         }
         if (shown == 0 && layerFilter != null) {
-            System.out.println("(no aliases in layer `" + layerFilter + "`)");
+            System.out.println("(no libraries in layer `" + layerFilter + "`)");
         }
         return 0;
     }
 
-    private Integer listGrouped(AliasCatalog catalog, Set<String> names, int leaderColumn) {
+    private Integer listGrouped(LibraryCatalog catalog, Set<String> names, int leaderColumn) {
         boolean firstGroup = true;
         int shown = 0;
         for (String layer : catalog.layerNames()) {
@@ -94,13 +94,13 @@ public final class AliasListCommand implements Callable<Integer> {
             }
         }
         if (shown == 0 && layerFilter != null) {
-            System.out.println("(no aliases in layer `" + layerFilter + "`)");
+            System.out.println("(no libraries in layer `" + layerFilter + "`)");
         }
         return 0;
     }
 
-    /** A single alias row: name, dotted leader, coordinate, and (with {@code --show-layer}) the layer tag. */
-    private String row(String name, AliasCatalog.Source src, int leaderColumn) {
+    /** A single library row: name, dotted leader, coordinate, and (with {@code --show-layer}) the layer tag. */
+    private String row(String name, LibraryCatalog.Source src, int leaderColumn) {
         // Pad against the plain name width (color escapes have zero width).
         String leader = ".".repeat(Math.max(2, leaderColumn - name.length()));
         String line = Coords.shortName(name)

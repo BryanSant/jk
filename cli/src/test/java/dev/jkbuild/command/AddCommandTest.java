@@ -26,7 +26,7 @@ class AddCommandTest {
         return """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "%s"
+                name     = "%s"
                 version  = "%s"
                 """.formatted(artifact, version);
     }
@@ -36,7 +36,7 @@ class AddCommandTest {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -65,7 +65,7 @@ class AddCommandTest {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -86,7 +86,7 @@ class AddCommandTest {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -105,7 +105,7 @@ class AddCommandTest {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -124,14 +124,14 @@ class AddCommandTest {
     }
 
     @Test
-    void add_bare_name_is_resolved_as_alias_not_path(@TempDir Path tmp) throws IOException {
-        // A bare name with no separators and no leading ':' is an alias, even
-        // when a directory by that name exists. Unknown alias + no --group →
+    void add_bare_name_is_resolved_as_library_not_path(@TempDir Path tmp) throws IOException {
+        // A bare name with no separators and no leading ':' is a library, even
+        // when a directory by that name exists. Unknown library + no --group →
         // usage error, and the workspace is left untouched.
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -140,19 +140,19 @@ class AddCommandTest {
         write(tmp.resolve("jackson/jk.toml"), member("jackson", "1.0.0"));
 
         int exit = Jk.execute("add", "jackson", "-C", tmp.toString());
-        assertThat(exit).isEqualTo(64); // EX_USAGE — alias resolution, not a path
+        assertThat(exit).isEqualTo(64); // EX_USAGE — library resolution, not a path
         assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().members()).isEmpty();
     }
 
     @Test
     void add_bare_catalog_name_without_ver_defaults_to_latest(@TempDir Path tmp) throws IOException {
-        // A bare name that IS in the alias catalog resolves group + artifact
+        // A bare name that IS in the library catalog resolves group + artifact
         // and defaults to floating "latest" when --ver is omitted, matching the
         // group:artifact coord form. Resolution happens later at `jk lock`.
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -162,20 +162,20 @@ class AddCommandTest {
         int exit = Jk.execute("add", "jackson3-core", "-C", tmp.toString());
         assertThat(exit).isEqualTo(0);
 
-        // Because jackson3-core is a known catalog alias, the editor renders
-        // the short form (alias name = version) rather than the expanded coord.
+        // Because jackson3-core is a known catalog library, the editor renders
+        // the short form (library name = version) rather than the expanded coord.
         String toml = Files.readString(tmp.resolve("jk.toml"));
         assertThat(toml).contains("jackson3-core = \"latest\"");
     }
 
     @Test
     void add_bare_catalog_name_with_at_version_pins_floating(@TempDir Path tmp) throws IOException {
-        // `alias@version` resolves the alias and uses the @version as a
+        // `library@version` resolves the library and uses the @version as a
         // caret-floating selector, matching group:artifact@version.
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -190,11 +190,11 @@ class AddCommandTest {
 
     @Test
     void add_bare_catalog_name_with_at_latest_is_latest(@TempDir Path tmp) throws IOException {
-        // `alias@latest` is equivalent to omitting the version.
+        // `library@latest` is equivalent to omitting the version.
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -212,7 +212,7 @@ class AddCommandTest {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]

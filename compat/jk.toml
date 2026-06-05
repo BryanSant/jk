@@ -1,17 +1,17 @@
 [project]
 group    = "dev.jkbuild"
-artifact = "jk-compat"
+name     = "jk-compat"
 version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
 [dependencies.main]
-jk-core          = { group = "dev.jkbuild",        artifact = "jk-core",          version = "0.6.0-SNAPSHOT" }
-jk-io            = { group = "dev.jkbuild",        artifact = "jk-io",            version = "0.6.0-SNAPSHOT" }
-jk-toolchain     = { group = "dev.jkbuild",        artifact = "jk-toolchain",     version = "0.6.0-SNAPSHOT" }
-commons-compress = { group = "org.apache.commons", artifact = "commons-compress", version = "1.28.0" }
+jk-core          = { group = "dev.jkbuild",        name     = "jk-core",          version = "0.6.0-SNAPSHOT" }
+jk-io            = { group = "dev.jkbuild",        name     = "jk-io",            version = "0.6.0-SNAPSHOT" }
+jk-toolchain     = { group = "dev.jkbuild",        name     = "jk-toolchain",     version = "0.6.0-SNAPSHOT" }
+commons-compress = { group = "org.apache.commons", name     = "commons-compress", version = "1.28.0" }
 
 [dependencies.test]
-assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
-junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
-junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }
+assertj-core            = { group = "org.assertj",        name     = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  name     = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", name     = "junit-platform-launcher", version = "6.1.0" }

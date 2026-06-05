@@ -57,7 +57,7 @@ class RunCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "lib-only"
+                name     = "lib-only"
                 version  = "0.1.0"
                 """);
         int exit = run("run", "-C", tempDir.toString());

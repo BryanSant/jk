@@ -8,25 +8,25 @@ import picocli.CommandLine.Spec;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk alias} parent verb. The short-name alias catalog is a
+ * {@code jk library} parent verb. The short-name library catalog is a
  * layered name → {@code group:artifact} index used to resolve manifest
  * shorthands like {@code picocli = "4.7.7"}. Subcommands here manage the
  * downloaded layer and surface lookups.
  *
  * <p>Layered lookup order (highest → lowest): the current project's
- * {@code [aliases]} table, the user's {@code ~/.jk/aliases.local.toml}, the
- * downloaded {@code ~/.jk/aliases.global.toml} (refreshed by
- * {@link AliasUpdateCommand}), then the bundled floor that ships with
+ * {@code [libraries]} table, the user's {@code ~/.jk/libs.local.toml}, the
+ * downloaded {@code ~/.jk/libs.global.toml} (refreshed by
+ * {@link LibraryUpdateCommand}), then the bundled floor that ships with
  * the binary.
  */
-@Command(name = "alias",
-        description = "Manage the short-name-to-coordinate alias catalog",
+@Command(name = "library", aliases = {"lib"},
+        description = "Manage the short-name-to-coordinate library catalog",
         subcommands = {
-                AliasUpdateCommand.class,
-                AliasListCommand.class,
-                AliasSearchCommand.class,
+                LibraryUpdateCommand.class,
+                LibraryListCommand.class,
+                LibrarySearchCommand.class,
         })
-public final class AliasCommand implements Callable<Integer> {
+public final class LibraryCommand implements Callable<Integer> {
 
     @Spec CommandSpec spec;
 

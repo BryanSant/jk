@@ -66,7 +66,7 @@ class InstallCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "lib-only"
+                name     = "lib-only"
                 version  = "0.1.0"
                 jdk      = 25
                 java     = 25
@@ -130,7 +130,7 @@ class InstallCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group     = "com.example"
-                artifact  = "lib-only"
+                name      = "lib-only"
                 version   = "0.1.0"
                 jdk       = 25
                 java      = 25

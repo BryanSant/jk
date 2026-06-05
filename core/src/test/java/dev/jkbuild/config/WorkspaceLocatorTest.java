@@ -16,7 +16,7 @@ class WorkspaceLocatorTest {
     private static final String ROOT = """
             [project]
             group    = "dev.jkbuild"
-            artifact = "jk"
+            name     = "jk"
             version  = "0.1.0"
 
             [workspace]
@@ -59,7 +59,7 @@ class WorkspaceLocatorTest {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "0.1.0"
                 """);
         Path sub = Files.createDirectories(tmp.resolve("sub"));

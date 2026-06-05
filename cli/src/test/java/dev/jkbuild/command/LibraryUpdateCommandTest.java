@@ -21,7 +21,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class AliasUpdateCommandTest {
+class LibraryUpdateCommandTest {
 
     private HttpServer server;
     private URI base;
@@ -31,7 +31,7 @@ class AliasUpdateCommandTest {
     @BeforeEach
     void start() throws IOException {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/aliases.toml", exchange -> {
+        server.createContext("/libraries.toml", exchange -> {
             int code = status.get();
             byte[] payload = body.get() == null
                     ? new byte[0]
@@ -45,7 +45,7 @@ class AliasUpdateCommandTest {
             exchange.close();
         });
         server.start();
-        base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/aliases.toml");
+        base = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/libraries.toml");
     }
 
     @AfterEach
@@ -54,12 +54,12 @@ class AliasUpdateCommandTest {
     @Test
     void update_writes_payload_to_cache(@TempDir Path tempDir) throws Exception {
         body.set("""
-                [aliases]
+                [libraries]
                 foo = "com.acme:foo"
                 bar = "org.example:bar"
                 """);
 
-        Path cache = tempDir.resolve("aliases.toml");
+        Path cache = tempDir.resolve("libraries.toml");
         int exit = run(cache);
 
         assertThat(exit).isZero();
@@ -68,27 +68,27 @@ class AliasUpdateCommandTest {
 
     @Test
     void update_backs_up_previous_cache_before_overwriting(@TempDir Path tempDir) throws Exception {
-        Path cache = tempDir.resolve("aliases.toml");
-        Files.writeString(cache, "[aliases]\nold = \"com.old:thing\"\n");
+        Path cache = tempDir.resolve("libraries.toml");
+        Files.writeString(cache, "[libraries]\nold = \"com.old:thing\"\n");
 
-        body.set("[aliases]\nnew = \"com.new:thing\"\n");
+        body.set("[libraries]\nnew = \"com.new:thing\"\n");
 
         int exit = run(cache);
 
         assertThat(exit).isZero();
         assertThat(Files.readString(cache)).contains("new = \"com.new:thing\"");
-        assertThat(cache.resolveSibling("aliases.toml.prev")).exists();
-        assertThat(Files.readString(cache.resolveSibling("aliases.toml.prev")))
+        assertThat(cache.resolveSibling("libraries.toml.prev")).exists();
+        assertThat(Files.readString(cache.resolveSibling("libraries.toml.prev")))
                 .contains("old = \"com.old:thing\"");
     }
 
     @Test
     void update_rejects_malformed_payload(@TempDir Path tempDir) throws Exception {
-        Path cache = tempDir.resolve("aliases.toml");
-        Files.writeString(cache, "[aliases]\nkeep = \"com.acme:keep\"\n");
+        Path cache = tempDir.resolve("libraries.toml");
+        Files.writeString(cache, "[libraries]\nkeep = \"com.acme:keep\"\n");
 
-        // No [aliases] table → parse rejects.
-        body.set("# garbage with no aliases table\n");
+        // No [libraries] table → parse rejects.
+        body.set("# garbage with no libraries table\n");
 
         int exit = run(cache);
 
@@ -99,9 +99,9 @@ class AliasUpdateCommandTest {
 
     @Test
     void update_rejects_payload_with_versioned_coords(@TempDir Path tempDir) throws Exception {
-        Path cache = tempDir.resolve("aliases.toml");
+        Path cache = tempDir.resolve("libraries.toml");
         body.set("""
-                [aliases]
+                [libraries]
                 bad = "com.acme:bad:1.0.0"
                 """);
 
@@ -114,8 +114,8 @@ class AliasUpdateCommandTest {
 
     @Test
     void update_reports_http_failure_without_touching_cache(@TempDir Path tempDir) throws Exception {
-        Path cache = tempDir.resolve("aliases.toml");
-        Files.writeString(cache, "[aliases]\nkeep = \"com.acme:keep\"\n");
+        Path cache = tempDir.resolve("libraries.toml");
+        Files.writeString(cache, "[libraries]\nkeep = \"com.acme:keep\"\n");
 
         status.set(503);
 
@@ -127,7 +127,7 @@ class AliasUpdateCommandTest {
 
     private int run(Path cacheFile) {
         return new CommandLine(new Jk()).execute(
-                "alias", "update",
+                "library", "update",
                 "--source", base.toString(),
                 "--cache-file", cacheFile.toString());
     }

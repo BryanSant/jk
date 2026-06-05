@@ -22,7 +22,7 @@ class NativeCommandTest {
     @Test
     void builds_from_source_then_fails_native_without_main(@TempDir Path tempDir) throws Exception {
         Files.writeString(tempDir.resolve("jk.toml"),
-                "[project]\ngroup = \"com.example\"\nartifact = \"widget\"\nversion = \"0.1.0\"\njava = 21\n");
+                "[project]\ngroup = \"com.example\"\nname = \"widget\"\nversion = \"0.1.0\"\njava = 21\n");
         Path src = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "package example;\npublic class Hello {}\n");

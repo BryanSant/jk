@@ -71,7 +71,7 @@ public final class PublishablePom {
 
         JkBuild.Project p = jkBuild.project();
         sb.append("  <groupId>").append(escape(p.group())).append("</groupId>\n");
-        sb.append("  <artifactId>").append(escape(p.artifact())).append("</artifactId>\n");
+        sb.append("  <artifactId>").append(escape(p.name())).append("</artifactId>\n");
         sb.append("  <version>").append(escape(p.version())).append("</version>\n");
         sb.append("  <packaging>jar</packaging>\n");
 
@@ -147,7 +147,7 @@ public final class PublishablePom {
         for (Dependency d : platforms) {
             sb.append("      <dependency>\n");
             sb.append("        <groupId>").append(escape(d.group())).append("</groupId>\n");
-            sb.append("        <artifactId>").append(escape(d.artifact())).append("</artifactId>\n");
+            sb.append("        <artifactId>").append(escape(d.name())).append("</artifactId>\n");
             sb.append("        <version>").append(escape(versionOf(d.version()))).append("</version>\n");
             sb.append("        <type>pom</type>\n");
             sb.append("        <scope>import</scope>\n");
@@ -170,7 +170,7 @@ public final class PublishablePom {
             for (Dependency d : jkBuild.dependencies().of(s)) {
                 sb.append("    <dependency>\n");
                 sb.append("      <groupId>").append(escape(d.group())).append("</groupId>\n");
-                sb.append("      <artifactId>").append(escape(d.artifact())).append("</artifactId>\n");
+                sb.append("      <artifactId>").append(escape(d.name())).append("</artifactId>\n");
                 sb.append("      <version>").append(escape(versionOf(d.version()))).append("</version>\n");
                 if (mavenScope != null) {
                     sb.append("      <scope>").append(mavenScope).append("</scope>\n");

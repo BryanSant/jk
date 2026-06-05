@@ -29,7 +29,7 @@ class GitProjectBuilderTest {
         Files.writeString(dir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widgets"
+                name     = "widgets"
                 version  = "0.1.0"
                 jdk      = 25
                 java     = 25

@@ -59,7 +59,7 @@ public final class ExplainCommand implements Callable<Integer> {    @Option(name
         List<Path> lockClasspath = new ClasspathResolver(cas).classpathFor(lock);
         int release = project.project().javaRelease();
 
-        System.out.println("build plan for " + project.project().artifact()
+        System.out.println("build plan for " + project.project().name()
                 + " v" + project.project().version() + ":");
 
         BuildLayout layout = BuildLayout.of(dir, project);

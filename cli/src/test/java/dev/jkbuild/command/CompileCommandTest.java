@@ -70,7 +70,7 @@ class CompileCommandTest {
     @Test
     void check_without_lockfile_errors(@TempDir Path tempDir) throws Exception {
         Files.writeString(tempDir.resolve("jk.toml"),
-                "[project]\ngroup = \"com.example\"\nartifact = \"x\"\nversion = \"0.1\"\n");
+                "[project]\ngroup = \"com.example\"\nname = \"x\"\nversion = \"0.1\"\n");
         // No jk.lock.
         int exit = run("check", "-C", tempDir.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());

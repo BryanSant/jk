@@ -30,7 +30,7 @@ class JkBuildRendererTest {
         assertThat(out).isEqualTo("""
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0"
                 jdk      = 21
                 java     = 21
@@ -226,7 +226,7 @@ class JkBuildRendererTest {
 
         JkBuild reparsed = JkBuildParser.parse(out);
         assertThat(reparsed.project().group()).isEqualTo("com.example");
-        assertThat(reparsed.project().artifact()).isEqualTo("widget");
+        assertThat(reparsed.project().name()).isEqualTo("widget");
         assertThat(reparsed.project().version()).isEqualTo("1.0.0");
         assertThat(reparsed.dependencies().of(Scope.MAIN))
                 .extracting(Dependency::module)

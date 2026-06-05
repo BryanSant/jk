@@ -18,7 +18,7 @@ import java.util.regex.Pattern;
  * <p>Works against the v0.7 name-as-key sub-table format:
  * <pre>{@code
  *   [dependencies.main]
- *   spring-web = { group = "org.springframework.boot", artifact = "spring-boot-starter-web", version = "3.4.0" }
+ *   spring-web = { group = "org.springframework.boot", name = "spring-boot-starter-web", version = "3.4.0" }
  *
  *   [dependencies.test]
  *   junit-jupiter.workspace = true
@@ -388,7 +388,7 @@ public final class JkBuildEditor {
         // catalog entry — `picocli = "4.7.7"` reads better in big manifests
         // than the full structured form. Falls back to the structured form
         // otherwise.
-        var hit = dev.jkbuild.alias.AliasCatalog.bundled().lookup(name);
+        var hit = dev.jkbuild.library.LibraryCatalog.bundled().lookup(name);
         if (hit.isPresent()
                 && hit.get().group().equals(group)
                 && hit.get().artifact().equals(artifact)) {
@@ -397,7 +397,7 @@ public final class JkBuildEditor {
         StringBuilder sb = new StringBuilder(name).append(" = { group = \"")
                 .append(escape(group)).append("\"");
         if (!artifact.equals(name)) {
-            sb.append(", artifact = \"").append(escape(artifact)).append("\"");
+            sb.append(", name = \"").append(escape(artifact)).append("\"");
         }
         sb.append(", version = \"").append(escape(versionLiteral)).append("\" }");
         return sb.toString();

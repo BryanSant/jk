@@ -160,7 +160,7 @@ public final class LockOrchestrator {
                 continue;
             }
             Coordinate bomCoord = Coordinate.of(
-                    platformDep.group(), platformDep.artifact(), bomVersion);
+                    platformDep.group(), platformDep.name(), bomVersion);
             EffectivePom bomPom = pomBuilder.build(bomCoord);
             String bomLabel = bomCoord.toGav();
             for (Pom.Dep m : bomPom.managedDependencies()) {

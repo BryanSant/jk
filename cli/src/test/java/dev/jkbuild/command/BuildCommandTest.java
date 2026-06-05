@@ -101,7 +101,7 @@ class BuildCommandTest {
     void build_without_lockfile_auto_locks(@TempDir Path tempDir) throws Exception {
         // jk build auto-resolves the lockfile when jk.lock is absent.
         Files.writeString(tempDir.resolve("jk.toml"),
-                "[project]\ngroup = \"com.example\"\nartifact = \"x\"\nversion = \"0.1\"\n");
+                "[project]\ngroup = \"com.example\"\nname = \"x\"\nversion = \"0.1\"\n");
         int exit = run("build", "-C", tempDir.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         // No sources → still succeeds and jk.lock was created.

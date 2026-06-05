@@ -98,7 +98,7 @@ jk add :widget            # ':' marks a local member by name
 ```
 
 A bare name with no `:` and no path separator (e.g. `jk add jackson`) is
-treated as an alias-catalog name / Maven coordinate, not a local path.
+treated as a library-catalog name / Maven coordinate, not a local path.
 
 ## Git-source dependencies
 
@@ -120,7 +120,7 @@ submod = { git = "https://github.com/acme/monorepo", tag = "v2.0.0", path = "lib
 
 # Override the discovered coordinate / derived version (handy for forks):
 fork   = { git = "https://github.com/me/widgets-fork", branch = "main",
-           group = "com.acme", artifact = "widgets", version = "1.4.0-acme" }
+           group = "com.acme", name = "widgets", version = "1.4.0-acme" }
 ```
 
 The resolved commit SHA is pinned in `jk.lock`, so a locked build is

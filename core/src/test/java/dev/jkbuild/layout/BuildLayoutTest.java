@@ -74,7 +74,7 @@ class BuildLayoutTest {
         java.nio.file.Files.writeString(workspace.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "ws-root"
+                name     = "ws-root"
                 version  = "1.0.0"
 
                 [workspace]
@@ -85,7 +85,7 @@ class BuildLayoutTest {
         java.nio.file.Files.writeString(member.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "core"
+                name     = "core"
                 version  = "1.0.0"
                 """);
 
@@ -115,7 +115,7 @@ class BuildLayoutTest {
         return dev.jkbuild.config.JkBuildParser.parse("""
                 [project]
                 group    = "com.example"
-                artifact = "%s"
+                name     = "%s"
                 version  = "%s"
 
                 [workspace]

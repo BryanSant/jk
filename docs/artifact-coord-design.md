@@ -52,7 +52,7 @@ main = ["org.springframework.boot:spring-boot-starter-web:3.4.0"]
 
 # After — name-as-key, scope is a sub-table mapping name → dep
 [dependencies.main]
-spring-web = { group = "org.springframework.boot", artifact = "spring-boot-starter-web", version = "3.4.0" }
+spring-web = { group = "org.springframework.boot", name = "spring-boot-starter-web", version = "3.4.0" }
 ```
 
 The **key** (`spring-web`) is the local identifier the user controls.
@@ -66,7 +66,7 @@ optional metadata.
 ```toml
 [project]
 group       = "dev.jkbuild"      # required
-artifact    = "jk"               # required
+name        = "jk"               # required
 version     = "0.7.0-SNAPSHOT"   # required
 description = "..."              # optional
 jdk         = 25                 # optional, ≥17
@@ -88,21 +88,21 @@ members = ["core", "io", "cli"]
 # Optional: shared external deps that multiple children use.
 # Children inherit by writing `name.workspace = true`.
 [workspace.dependencies]
-junit-jupiter           = { group = "org.junit.jupiter", artifact = "junit-jupiter", version = "6.1.0" }
-junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }
-assertj-core            = { group = "org.assertj", artifact = "assertj-core", version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter", name = "junit-jupiter", version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }
+assertj-core            = { group = "org.assertj", name = "assertj-core", version = "3.27.7" }
 ```
 
 **Workspace member resolution.** When a child writes
 `jk-core.workspace = true`, jk looks up the name in this order:
 
-1. **Workspace member** with matching `artifact` field (after the
+1. **Workspace member** with matching `name` field (after the
    conventional `jk-` prefix is stripped — see "Implicit naming" below).
 2. **`[workspace.dependencies]`** entry with that key.
 3. Error: "no workspace dependency or sibling named `jk-core`".
 
 For workspace siblings, the resolved coord uses the sibling's
-`[project].group`, `[project].artifact`, and `[project].version`.
+`[project].group`, `[project].name`, and `[project].version`.
 
 **Registering members.** The `members` array is not hand-edited. Run inside
 a workspace, `jk new <path>` and `jk init` scaffold a member and append its
@@ -111,7 +111,7 @@ no per-member `jk.lock`). `jk add <path>` — where the argument starts with
 `:` or contains a path separator (`:widget`, `./widget`, `libs/widget`,
 `widget/`) — registers a local sibling **and** adds the dependency edge,
 pinned to the sibling's `[project].version`. A bare name (`jk add jackson`)
-is a catalog alias / Maven coord, never a path. All edits preserve the
+is a catalog library / Maven coord, never a path. All edits preserve the
 array's formatting and comments.
 
 ### `[dependencies.<scope>]` — name-as-key sub-tables
@@ -122,7 +122,7 @@ Six scopes, identical to v0.6: `main`, `provided`, `runtime`, `test`,
 ```toml
 [dependencies.main]
 # Fully structured
-picocli = { group = "info.picocli", artifact = "picocli", version = "4.7.7" }
+picocli = { group = "info.picocli", name = "picocli", version = "4.7.7" }
 
 # Workspace sibling (auto-resolves group, artifact, version from the member)
 jk-core.workspace = true
@@ -131,10 +131,10 @@ jk-core.workspace = true
 jackson-databind.workspace = true
 
 # Path source override (replaces v0.6 [sources] table)
-shared-utils = { group = "com.acme", artifact = "shared-utils", path = "../shared-utils" }
+shared-utils = { group = "com.acme", name = "shared-utils", path = "../shared-utils" }
 
 # Git source override (replaces v0.6 [sources] table)
-codec = { group = "com.acme", artifact = "codec", git = "https://github.com/acme/codec", tag = "v0.9.1" }
+codec = { group = "com.acme", name = "codec", git = "https://github.com/acme/codec", tag = "v0.9.1" }
 ```
 
 #### Field reference for a dep table
@@ -142,7 +142,7 @@ codec = { group = "com.acme", artifact = "codec", git = "https://github.com/acme
 | Field        | Required when                     | Notes |
 |--------------|-----------------------------------|-------|
 | `group`      | not a workspace-resolved dep      | Maven groupId. |
-| `artifact`   | name doesn't match artifactId     | Defaults to the key (`spring-web` → `spring-web`). |
+| `name`       | library handle differs from it    | Defaults to the key (`spring-web` → `spring-web`). |
 | `version`    | no `path`, `git`, or `workspace`  | Version selector. See grammar below. |
 | `path`       | local-path source                 | Mutually exclusive with `version` and `git`. |
 | `git`        | git source                        | Mutually exclusive with `version` and `path`. |
@@ -175,14 +175,14 @@ When all deps fall in `main`, the scope sub-table is optional:
 ```toml
 # Equivalent to [dependencies.main]
 [dependencies]
-spring-web = { group = "...", artifact = "...", version = "3.4.0" }
+spring-web = { group = "...", name = "...", version = "3.4.0" }
 ```
 
 When mixed scopes appear, prefer the explicit sub-table form:
 
 ```toml
 [dependencies.main]
-spring-web = { group = "...", artifact = "...", version = "3.4.0" }
+spring-web = { group = "...", name = "...", version = "3.4.0" }
 
 [dependencies.test]
 junit-jupiter.workspace = true
@@ -256,9 +256,9 @@ members = ["core", "io", "resolver", "toolchain", "engine",
            "supply-chain", "image", "compat", "cli"]
 
 [workspace.dependencies]
-junit-jupiter           = { group = "org.junit.jupiter",        artifact = "junit-jupiter",           version = "6.1.0" }
-junit-platform-launcher = { group = "org.junit.platform",       artifact = "junit-platform-launcher", version = "6.1.0" }
-assertj-core            = { group = "org.assertj",              artifact = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",        name = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform",       name = "junit-platform-launcher", version = "6.1.0" }
+assertj-core            = { group = "org.assertj",              name = "assertj-core",            version = "3.27.7" }
 ```
 
 ### Library child (`core/jk.toml`)
@@ -266,15 +266,15 @@ assertj-core            = { group = "org.assertj",              artifact = "asse
 ```toml
 [project]
 group    = "dev.jkbuild"
-artifact = "jk-core"
+name = "jk-core"
 version  = "0.7.0-SNAPSHOT"
 jdk      = 25
 java     = 25
 
 [dependencies.main]
-typesafe-config  = { group = "com.typesafe",        artifact = "config",           version = "1.4.8" }
-tomlj            = { group = "org.tomlj",           artifact = "tomlj",            version = "1.1.1" }
-jackson-databind = { group = "tools.jackson.core",  artifact = "jackson-databind", version = "3.1.3" }
+typesafe-config  = { group = "com.typesafe",        name = "config",           version = "1.4.8" }
+tomlj            = { group = "org.tomlj",           name = "tomlj",            version = "1.1.1" }
+jackson-databind = { group = "tools.jackson.core",  name = "jackson-databind", version = "3.1.3" }
 
 [dependencies.test]
 junit-jupiter.workspace           = true
@@ -287,7 +287,7 @@ assertj-core.workspace            = true
 ```toml
 [project]
 group    = "dev.jkbuild"
-artifact = "jk-cli"
+name = "jk-cli"
 version  = "0.7.0-SNAPSHOT"
 jdk      = 25
 java     = 25
@@ -304,7 +304,7 @@ jk-resolver.workspace     = true
 jk-supply-chain.workspace = true
 jk-toolchain.workspace    = true
 # External
-picocli = { group = "info.picocli", artifact = "picocli", version = "4.7.7" }
+picocli = { group = "info.picocli", name = "picocli", version = "4.7.7" }
 
 [dependencies.test]
 assertj-core.workspace            = true
@@ -366,18 +366,18 @@ Files touched (TOML):
 - Root `jk.toml` + 9 child `jk.toml` files.
 
 Files touched (docs):
-- `docs/requirements.md`, `docs/aliases.md`, `docs/comparison.md`,
+- `docs/requirements.md`, `docs/libraries.md`, `docs/comparison.md`,
   `docs/implementation-plan.md`, `README.md`, `CONTRIBUTING.md`.
 
-## Footgun: artifact defaulting
+## Footgun: name defaulting
 
-The `artifact = "..."` field defaults to the table key when omitted. This
+The `name = "..."` field defaults to the table key when omitted. This
 matches Cargo's `serde = "1.0"` ergonomics and covers ~88% of real-world
 deps cleanly (the artifactId and the natural short name agree). But it
 creates one specific failure mode worth knowing about.
 
 If the user picks a short name that **differs** from the Maven artifactId
-and forgets to set `artifact = ...`, the parser builds a coordinate that
+and forgets to set `name = ...`, the parser builds a coordinate that
 doesn't exist on the catalog:
 
 ```toml
@@ -393,10 +393,10 @@ this case and surfaces a hint:
 - no versions of org.postgresql:postgres match =42.7.4
 
 Hint: the dep `postgres` resolves to `org.postgresql:postgres`, which Maven Central does not
-recognize. If the artifact is published under a different name, set
-`artifact` explicitly:
+recognize. If it is published under a different name, set
+`name` explicitly:
 
-  postgres = { group = "org.postgresql", artifact = "<correct-artifact>", version = "..." }
+  postgres = { group = "org.postgresql", name = "<correct-name>", version = "..." }
 ```
 
 The hint fires only when:
@@ -408,23 +408,23 @@ The hint fires only when:
   from POMs we trust as authoritative, so the hint would be misleading.
 
 **Rule of thumb:** if the key you want to use in `jk.toml` differs from
-the published artifactId, write `artifact = "..."` explicitly. Otherwise
+the published artifactId, write `name = "..."` explicitly. Otherwise
 let the default carry it.
 
 ```toml
 # Right — short name matches artifactId; default carries it
 jackson-databind = { group = "com.fasterxml.jackson.core", version = "2.18.2" }
 
-# Right — short name deliberately differs from artifactId; set artifact
-postgres-jdbc = { group = "org.postgresql", artifact = "postgresql", version = "42.7.4" }
+# Right — short name deliberately differs from artifactId; set name
+postgres-jdbc = { group = "org.postgresql", name = "postgresql", version = "42.7.4" }
 ```
 
-`jk add`, `jk init`, and `jk import pom.xml` always write `artifact = ...`
+`jk add`, `jk init`, and `jk import pom.xml` always write `name = ...`
 when the user-supplied key (or the artifactId-derived default) differs
 from the artifactId, so this footgun only fires on hand-edited
 manifests.
 
-## Short-name alias catalog
+## Short-name library catalog
 
 jk ships a curated `name → group:artifact` index and resolves manifest
 shorthand against it. The catalog is layered — the same name can be
@@ -434,14 +434,14 @@ defined in multiple places, and the topmost layer wins.
 
 | Layer | Source | Updated by |
 |--|--|--|
-| **project** | `[aliases]` table in the project's `jk.toml` | Hand-edited |
-| **local** | `~/.jk/aliases.local.toml` | Hand-edited |
-| **global** | `~/.jk/aliases.global.toml` | `jk alias update` |
-| **bundled** | classpath resource at `dev/jkbuild/alias/aliases.toml` | Shipped with the binary |
+| **project** | `[libraries]` table in the project's `jk.toml` | Hand-edited |
+| **local** | `~/.jk/libs.local.toml` | Hand-edited |
+| **global** | `~/.jk/libs.global.toml` | `jk library update` |
+| **bundled** | classpath resource at `dev/jkbuild/library/libraries.toml` | Shipped with the binary |
 
 Only the bundled layer is guaranteed to exist. The local file lights up
 when present; the global file lights up after the first
-`jk alias update`. Project-level overrides apply only to the
+`jk library update`. Project-level overrides apply only to the
 manifest they're declared in.
 
 ### Shorthand forms it enables
@@ -469,18 +469,18 @@ The bundled index is intentionally version-free — it's a name-to-coord index, 
 
 `jk add <name>` consults the catalog too: with a known short name the user only supplies `--ver` (no `--group` needed). Unknown names still require explicit `--group`.
 
-### `jk alias` subcommands
+### `jk library` subcommands
 
-- **`jk alias update`** pulls `https://raw.githubusercontent.com/jkbuild/jk-alias-registry/main/aliases.toml` and replaces `~/.jk/aliases.global.toml`. The previous file is preserved at `aliases.global.toml.prev`. A malformed or HTTP-failed response never replaces a good cache.
-- **`jk alias list`** prints every alias with its source layer. `--layer <name>` filters (e.g. `--layer project`).
-- **`jk alias search <term>...`** substring-matches against name, group, and artifact across every layer. Multiple terms are AND-ed (each must appear in at least one of the three fields). Case-insensitive. `--limit N` caps the result count for noisy queries.
+- **`jk library update`** pulls `https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml` and replaces `~/.jk/libs.global.toml`. The previous file is preserved at `libs.global.toml.prev`. A malformed or HTTP-failed response never replaces a good cache.
+- **`jk library list`** prints every library with its source layer. `--layer <name>` filters (e.g. `--layer project`).
+- **`jk library search <term>...`** substring-matches against name, group, and artifact across every layer. Multiple terms are AND-ed (each must appear in at least one of the three fields). Case-insensitive. `--limit N` caps the result count for noisy queries.
 
-### Curation policy (`jkbuild/jk-alias-registry`)
+### Curation policy (`jkbuild/jk-library-registry`)
 
-- The repo's `main` branch is the source of truth — `jk alias update` always pulls HEAD; there's no client-side pinning. Every team is on the same revision globally.
+- The repo's `main` branch is the source of truth — `jk library update` always pulls HEAD; there's no client-side pinning. Every team is on the same revision globally.
 - Only BryanSant can commit for now. Future maintainers join via CODEOWNERS once the curation surface justifies it.
-- First-PR-wins for short-name conflicts. If `foo` is the natural short name for two different artifacts, whichever PR lands first claims it; the other artifact must use an explicit `group =` in `jk.toml` or a project-level `[aliases]` override.
-- The bundled `aliases.toml` shipped with each jk release seeds the floor. Once downloaded layers exist they take precedence — but the binary is never useless on a fresh machine.
+- First-PR-wins for short-name conflicts. If `foo` is the natural short name for two different artifacts, whichever PR lands first claims it; the other artifact must use an explicit `group =` in `jk.toml` or a project-level `[libraries]` override.
+- The bundled `libraries.toml` shipped with each jk release seeds the floor. Once downloaded layers exist they take precedence — but the binary is never useless on a fresh machine.
 
 ### Local overrides
 
@@ -488,7 +488,7 @@ Projects can shadow catalog entries — useful for forks of upstream
 libraries or internal artifacts that aren't in the curated set:
 
 ```toml
-[aliases]
+[libraries]
 picocli = "io.fork:picocli"        # local fork wins over bundled
 internal-widget = "com.acme:internal-widget"
 
@@ -497,7 +497,7 @@ picocli = "4.7.7"
 internal-widget = "0.1.0"
 ```
 
-User-global overrides live in `~/.jk/aliases.toml` (same schema). The
+User-global overrides live in `~/.jk/libraries.toml` (same schema). The
 file is read at parser invocation time; no daemon caching.
 
 ## Out of scope for v0.7
@@ -505,7 +505,7 @@ file is read at parser invocation time; no daemon caching.
 These are intentionally deferred — the format leaves room for them but
 the parser does not enforce or honor them yet.
 
-- **Sigstore verification of `jk alias update`.** Wire the same verifier `jk audit` uses; pinned identity is `*.jkbuild.dev` via GitHub OIDC.
+- **Sigstore verification of `jk library update`.** Wire the same verifier `jk audit` uses; pinned identity is `*.jkbuild.dev` via GitHub OIDC.
 - **PEP 621-style `[project]`** with `authors`, `license`, `urls`,
   `readme`, `keywords`. Adds option value but no immediate feature
   unlock.
@@ -528,10 +528,10 @@ the parser does not enforce or honor them yet.
    shape? Recommendation: **reject** — the structured form is the only
    form, paste-friction is small, and the catalog will eventually
    eliminate the paste case.
-2. **`artifact` defaulting to key.** Trivial collision: a user names a
+2. **`name` defaulting to key.** Trivial collision: a user names a
    dep `spring-web` but the artifact is `spring-boot-starter-web`. The
-   key/artifact independence is the whole point — we just require
-   `artifact = "..."` when they differ. Documented above.
+   key/name independence is the whole point — we just require
+   `name = "..."` when they differ. Documented above.
 3. **Caret meaning for `0.x.y` versions.** Cargo treats `^0.2.0` as
    `>=0.2.0, <0.3.0` (compatible within minor). Maven semantics are
    different. We adopt Cargo's interpretation per the v1 locked

@@ -124,7 +124,7 @@ public final class ImportCommand implements Callable<Integer> {
         // coordinate is hyphen-joined (not group:artifact:version) so the
         // filename is valid on Windows.
         var proj = importable.root.project();
-        String coord = proj.group() + "-" + proj.artifact() + "-" + proj.version();
+        String coord = proj.group() + "-" + proj.name() + "-" + proj.version();
         Path reportTarget = reportPath != null
                 ? reportPath
                 : defaultReportPath(JkDirs.tmp(), coord, source.getFileName().toString());

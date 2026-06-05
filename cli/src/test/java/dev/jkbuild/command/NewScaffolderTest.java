@@ -88,7 +88,7 @@ class NewScaffolderTest {
 
     @Test
     void deps_render_in_name_as_key_subtables(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget", "widget",
+        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget",
                 Optional.empty(), false, false,
                 List.of("commons-io", "guava"), 25, false, Optional.empty());
         NewScaffolder.write(inputs);
@@ -104,7 +104,7 @@ class NewScaffolderTest {
 
     @Test
     void lombok_adds_processor_and_provided_blocks(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget", "widget",
+        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget",
                 Optional.empty(), false, false,
                 List.of("lombok"), 25, false, Optional.empty());
         NewScaffolder.write(inputs);
@@ -118,7 +118,7 @@ class NewScaffolderTest {
 
     @Test
     void jspecify_renders_into_main_scope(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget", "widget",
+        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget",
                 Optional.empty(), false, false,
                 List.of("jspecify"), 25, false, Optional.empty());
         NewScaffolder.write(inputs);
@@ -130,7 +130,7 @@ class NewScaffolderTest {
 
     @Test
     void kotest_renders_into_test_scope(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.KOTLIN, "widget", "widget",
+        var inputs = inputs(tempDir, NewInputs.Language.KOTLIN, "widget",
                 Optional.empty(), false, false,
                 List.of("kotest"), 25, false, Optional.empty());
         NewScaffolder.write(inputs);
@@ -140,21 +140,9 @@ class NewScaffolderTest {
         assertThat(build).contains("kotest-runner-junit6 = \"latest\"");
     }
 
-    @Test
-    void artifact_differs_from_name(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "my-project", "my-core",
-                Optional.empty(), false, false,
-                List.of(), 25, false, Optional.empty());
-        NewScaffolder.write(inputs);
-
-        var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).contains("artifact = \"my-core\"");
-        assertThat(build).doesNotContain("artifact = \"my-project\"");
-    }
-
-    @Test
+        @Test
     void kotlin_compact_and_module_emit_project_fields(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.KOTLIN, "widget", "widget-core",
+        var inputs = inputs(tempDir, NewInputs.Language.KOTLIN, "widget",
                 Optional.of("MainKt"), false, false,
                 List.of(), 25, true, Optional.of("widget-core"));
         NewScaffolder.write(inputs);
@@ -166,14 +154,14 @@ class NewScaffolderTest {
 
     @Test
     void shadow_only_set_when_true(@TempDir Path tempDir) throws IOException {
-        var off = inputs(tempDir, NewInputs.Language.JAVA, "widget", "widget",
+        var off = inputs(tempDir, NewInputs.Language.JAVA, "widget",
                 Optional.of("com.example.Main"), false, false,
                 List.of(), 25, false, Optional.empty());
         NewScaffolder.write(off);
         assertThat(Files.readString(tempDir.resolve("jk.toml"))).doesNotContain("shadow");
 
         var sub = Files.createDirectories(tempDir.resolve("on"));
-        var on = inputs(sub, NewInputs.Language.JAVA, "widget", "widget",
+        var on = inputs(sub, NewInputs.Language.JAVA, "widget",
                 Optional.of("com.example.Main"), true, false,
                 List.of(), 25, false, Optional.empty());
         NewScaffolder.write(on);
@@ -182,14 +170,14 @@ class NewScaffolderTest {
 
     @Test
     void native_only_set_when_true(@TempDir Path tempDir) throws IOException {
-        var off = inputs(tempDir, NewInputs.Language.JAVA, "widget", "widget",
+        var off = inputs(tempDir, NewInputs.Language.JAVA, "widget",
                 Optional.empty(), false, false,
                 List.of(), 25, false, Optional.empty());
         NewScaffolder.write(off);
         assertThat(Files.readString(tempDir.resolve("jk.toml"))).doesNotContain("native");
 
         var sub = Files.createDirectories(tempDir.resolve("on"));
-        var on = inputs(sub, NewInputs.Language.JAVA, "widget", "widget",
+        var on = inputs(sub, NewInputs.Language.JAVA, "widget",
                 Optional.empty(), false, true,
                 List.of(), 25, false, Optional.empty());
         NewScaffolder.write(on);
@@ -208,7 +196,7 @@ class NewScaffolderTest {
     @Test
     void resolved_jdk_identifier_is_stamped_into_lockfile(@TempDir Path tempDir) throws IOException {
         var inputs = new NewInputs(
-                "com.example", "widget", "widget", "25", 25,
+                "com.example", "widget", "25", 25,
                 Optional.of("temurin-25.0.3"),
                 Optional.of("com.example.Main"), false, false,
                 NewInputs.Language.JAVA, false, Optional.empty(),
@@ -247,7 +235,7 @@ class NewScaffolderTest {
     @Test
     void absent_jdk_identifier_leaves_no_jdk_line(@TempDir Path tempDir) throws IOException {
         var inputs = new NewInputs(
-                "com.example", "widget", "widget", "25", 25,
+                "com.example", "widget", "25", 25,
                 Optional.empty(),
                 Optional.empty(), false, false,
                 NewInputs.Language.JAVA, false, Optional.empty(),
@@ -260,7 +248,7 @@ class NewScaffolderTest {
 
     private static NewInputs library(Path dir, NewInputs.Language lang, boolean sample, int major) {
         return new NewInputs(
-                "com.example", "widget", "widget", String.valueOf(major), major,
+                "com.example", "widget", String.valueOf(major), major,
                 Optional.empty(),
                 Optional.empty(), false, false,
                 lang, false, Optional.empty(),
@@ -269,7 +257,7 @@ class NewScaffolderTest {
 
     private static NewInputs runnable(Path dir, NewInputs.Language lang, String main, int major, boolean kotlinCompact) {
         return new NewInputs(
-                "com.example", "widget", "widget", String.valueOf(major), major,
+                "com.example", "widget", String.valueOf(major), major,
                 Optional.empty(),
                 Optional.of(main), false, false,
                 lang, kotlinCompact, Optional.empty(),
@@ -280,7 +268,6 @@ class NewScaffolderTest {
             Path dir,
             NewInputs.Language lang,
             String name,
-            String artifact,
             Optional<String> main,
             boolean shadow,
             boolean nativeImage,
@@ -289,7 +276,7 @@ class NewScaffolderTest {
             boolean kotlinCompact,
             Optional<String> kotlinModule) {
         return new NewInputs(
-                "com.example", name, artifact, String.valueOf(major), major,
+                "com.example", name, String.valueOf(major), major,
                 Optional.empty(),
                 main, shadow, nativeImage,
                 lang, kotlinCompact, kotlinModule,

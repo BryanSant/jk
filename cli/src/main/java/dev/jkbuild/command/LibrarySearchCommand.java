@@ -6,7 +6,7 @@ import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 
 import dev.jkbuild.cache.Journal;
-import dev.jkbuild.alias.AliasCatalog;
+import dev.jkbuild.library.LibraryCatalog;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
@@ -21,20 +21,20 @@ import java.util.Locale;
 import java.util.concurrent.Callable;
 
 /**
- * {@code jk alias search <term>...} — substring match against name,
- * group, and artifact across every layer of the alias catalog. Multiple
+ * {@code jk library search <term>...} — substring match against name,
+ * group, and artifact across every layer of the library catalog. Multiple
  * terms are ANDed (each must appear somewhere in name/group/artifact).
  * Matches are case-insensitive.
  *
- * <p>Output shape mirrors {@code jk alias list}: {@code name....group:artifact},
- * the dotted leader tracking each alias across to its coordinate. The source
+ * <p>Output shape mirrors {@code jk library list}: {@code name....group:artifact},
+ * the dotted leader tracking each library across to its coordinate. The source
  * layer is hidden by default; surface it inline with {@code --show-layer} or as
  * section headings with {@code --group-by-layer} to see when a project- or
  * user-level override is shadowing the bundled coord.
  */
 @Command(name = "search",
-        description = "Find alias entries by substring of name, group, or artifact")
-public final class AliasSearchCommand implements Callable<Integer> {
+        description = "Find library entries by substring of name, group, or artifact")
+public final class LibrarySearchCommand implements Callable<Integer> {
 
     @Parameters(arity = "1..*", paramLabel = "<term>",
             description = "One or more substrings. All must match (in name, group, or artifact).")
@@ -60,7 +60,7 @@ public final class AliasSearchCommand implements Callable<Integer> {
 
     @Override
     public Integer call() {
-        AliasCatalog catalog = AliasCatalog.layered(System.err::println);
+        LibraryCatalog catalog = LibraryCatalog.layered(System.err::println);
         Journal journal = new Journal(cacheDir != null ? cacheDir : JkDirs.cache());
         List<String> lowerTerms = new ArrayList<>(terms.size());
         for (String t : terms) lowerTerms.add(t.toLowerCase(Locale.ROOT));
@@ -91,7 +91,7 @@ public final class AliasSearchCommand implements Callable<Integer> {
         int shown = limit != null && limit > 0 && total > limit ? limit : total;
         List<Hit> visible = hits.subList(0, shown);
         // Coordinates align at a fixed column filled with a dotted leader (see
-        // jk alias list); the column is computed over every visible hit so it
+        // jk library list); the column is computed over every visible hit so it
         // lines up across layer groups too. The longest name keeps a two-dot minimum.
         int nameWidth = visible.stream().mapToInt(h -> h.name.length()).max().orElse(0);
         int leaderColumn = nameWidth + 2;
@@ -109,7 +109,7 @@ public final class AliasSearchCommand implements Callable<Integer> {
         return 0;
     }
 
-    private void renderGrouped(AliasCatalog catalog, List<Hit> visible, int leaderColumn) {
+    private void renderGrouped(LibraryCatalog catalog, List<Hit> visible, int leaderColumn) {
         boolean firstGroup = true;
         for (String layer : catalog.layerNames()) {
             List<Hit> inLayer = new ArrayList<>();
@@ -153,5 +153,5 @@ public final class AliasSearchCommand implements Callable<Integer> {
         return true;
     }
 
-    private record Hit(String name, AliasCatalog.Source src, List<String> cached) {}
+    private record Hit(String name, LibraryCatalog.Source src, List<String> cached) {}
 }

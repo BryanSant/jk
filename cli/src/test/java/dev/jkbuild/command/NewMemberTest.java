@@ -25,7 +25,7 @@ class NewMemberTest {
     private static final String PLAIN_PROJECT = """
             [project]
             group    = "com.acme"
-            artifact = "root"
+            name     = "root"
             version  = "0.1.0"
             jdk      = 17
             java     = 17
@@ -46,7 +46,7 @@ class NewMemberTest {
         // Group + JDK/java release inherited from the parent.
         JkBuild m = JkBuildParser.parse(member.resolve("jk.toml"));
         assertThat(m.project().group()).isEqualTo("com.acme");
-        assertThat(m.project().artifact()).isEqualTo("widget");
+        assertThat(m.project().name()).isEqualTo("widget");
         assertThat(m.project().javaRelease()).isEqualTo(17);
 
         // The plain parent was promoted to a workspace root with the member.
@@ -62,7 +62,7 @@ class NewMemberTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.acme"
-                artifact = "root"
+                name     = "root"
                 version  = "0.1.0"
                 jdk      = 25
                 java     = 17
@@ -82,7 +82,7 @@ class NewMemberTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.acme"
-                artifact = "root"
+                name     = "root"
                 version  = "0.1.0"
                 jdk      = 25
                 kotlin   = "2.3.21"

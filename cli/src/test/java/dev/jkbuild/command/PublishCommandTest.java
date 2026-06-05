@@ -79,7 +79,7 @@ class PublishCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0-SNAPSHOT"
                 jdk      = 21
                 """);
@@ -97,7 +97,7 @@ class PublishCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0-SNAPSHOT"
                 jdk      = 21
                 """);
@@ -251,7 +251,7 @@ class PublishCommandTest {
         Files.writeString(projectDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
-                artifact = "widget"
+                name     = "widget"
                 version  = "1.0.0"
                 jdk      = 21
                 """);

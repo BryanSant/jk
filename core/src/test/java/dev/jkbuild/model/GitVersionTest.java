@@ -23,6 +23,8 @@ class GitVersionTest {
         assertThat(GitVersion.fromTag("1.2.3-rc1")).isEqualTo("1.2.3-rc1");
         assertThat(GitVersion.fromTag("v1.2.3+build.5")).isEqualTo("1.2.3+build.5");
         assertThat(GitVersion.fromTag("v01.02.03")).isEqualTo("1.2.3");   // leading zeros normalized
+        assertThat(GitVersion.fromTag("r6.1.0")).isEqualTo("6.1.0");
+        assertThat(GitVersion.fromTag("r6.1.11")).isEqualTo("6.1.11");
     }
 
     @Test

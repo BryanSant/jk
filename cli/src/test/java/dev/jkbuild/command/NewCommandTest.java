@@ -34,7 +34,7 @@ class NewCommandTest {
 
         JkBuild parsed = JkBuildParser.parse(buildFile);
         assertThat(parsed.project().group()).isEqualTo("com.example");
-        assertThat(parsed.project().artifact()).isEqualTo("widget");
+        assertThat(parsed.project().name()).isEqualTo("widget");
         assertThat(parsed.project().version()).isEqualTo("0.1.0");
         assertThat(parsed.project().jdk()).isEqualTo(25);
         assertThat(parsed.project().java()).isEqualTo(25);
@@ -188,14 +188,14 @@ class NewCommandTest {
     }
 
     @Test
-    void named_positional_uses_arg_as_artifact_name(@TempDir Path tempDir) throws IOException {
-        // `jk init <abs-path>/my-project` → artifact = "my-project" (the leaf).
+    void named_positional_uses_arg_as_project_name(@TempDir Path tempDir) throws IOException {
+        // `jk init <abs-path>/my-project` → name = "my-project" (the leaf).
         Path target = tempDir.resolve("my-project");
         int exit = Jk.execute("new", "--group", "com.example", target.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(target.resolve("jk.toml"));
-        assertThat(parsed.project().artifact()).isEqualTo("my-project");
+        assertThat(parsed.project().name()).isEqualTo("my-project");
     }
 
     @Test
@@ -203,7 +203,7 @@ class NewCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
-                artifact = "jk"
+                name     = "jk"
                 version  = "0.1.0"
 
                 [workspace]
@@ -221,7 +221,7 @@ class NewCommandTest {
         // Group inherited from the workspace root.
         JkBuild member = JkBuildParser.parse(app.resolve("jk.toml"));
         assertThat(member.project().group()).isEqualTo("dev.jkbuild");
-        assertThat(member.project().artifact()).isEqualTo("app");
+        assertThat(member.project().name()).isEqualTo("app");
 
         // Registered in the root [workspace].members.
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));

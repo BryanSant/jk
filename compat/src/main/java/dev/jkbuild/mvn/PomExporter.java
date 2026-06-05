@@ -62,7 +62,7 @@ public final class PomExporter {
 
     private static void appendCoords(StringBuilder sb, JkBuild.Project p, boolean workspaceRoot) {
         sb.append("  <groupId>").append(escape(p.group())).append("</groupId>\n");
-        sb.append("  <artifactId>").append(escape(p.artifact())).append("</artifactId>\n");
+        sb.append("  <artifactId>").append(escape(p.name())).append("</artifactId>\n");
         sb.append("  <version>").append(escape(p.version())).append("</version>\n");
         sb.append("  <packaging>").append(workspaceRoot ? "pom" : "jar").append("</packaging>\n");
         if (p.description() != null) {
@@ -111,7 +111,7 @@ public final class PomExporter {
         for (Dependency d : platforms) {
             sb.append("      <dependency>\n");
             sb.append("        <groupId>").append(escape(d.group())).append("</groupId>\n");
-            sb.append("        <artifactId>").append(escape(d.artifact())).append("</artifactId>\n");
+            sb.append("        <artifactId>").append(escape(d.name())).append("</artifactId>\n");
             sb.append("        <version>").append(escape(extractVersion(d.version(), d.module(), report)))
                     .append("</version>\n");
             sb.append("        <type>pom</type>\n");
@@ -147,7 +147,7 @@ public final class PomExporter {
                                          ImportReport.Builder report) {
         sb.append("    <dependency>\n");
         sb.append("      <groupId>").append(escape(d.group())).append("</groupId>\n");
-        sb.append("      <artifactId>").append(escape(d.artifact())).append("</artifactId>\n");
+        sb.append("      <artifactId>").append(escape(d.name())).append("</artifactId>\n");
         sb.append("      <version>").append(escape(extractVersion(d.version(), d.module(), report)))
                 .append("</version>\n");
         if (mavenScope != null) {
@@ -171,7 +171,7 @@ public final class PomExporter {
         for (Dependency d : processors) {
             sb.append("            <path>\n");
             sb.append("              <groupId>").append(escape(d.group())).append("</groupId>\n");
-            sb.append("              <artifactId>").append(escape(d.artifact())).append("</artifactId>\n");
+            sb.append("              <artifactId>").append(escape(d.name())).append("</artifactId>\n");
             sb.append("              <version>")
                     .append(escape(extractVersion(d.version(), d.module(), report)))
                     .append("</version>\n");

@@ -212,7 +212,7 @@ public final class BuildCommand implements Callable<Integer> {
         Map<String, Path> dirByCoord = new HashMap<>();
         for (var e : membersByDir.entrySet()) {
             String coord = e.getValue().project().group()
-                    + ":" + e.getValue().project().artifact();
+                    + ":" + e.getValue().project().name();
             dirByCoord.put(coord, e.getKey());
         }
         Map<Path, Set<Path>> requires = new LinkedHashMap<>();
@@ -335,7 +335,7 @@ public final class BuildCommand implements Callable<Integer> {
     static String buildTarget(Path buildFile, Path dir) {
         try {
             var p = JkBuildParser.parse(buildFile).project();
-            return p.group() + ":" + p.artifact();
+            return p.group() + ":" + p.name();
         } catch (Exception e) {
             return dir.getFileName() == null ? "" : dir.getFileName().toString();
         }

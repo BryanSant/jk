@@ -1,6 +1,6 @@
 [project]
 group    = "dev.jkbuild"
-artifact = "jk-supply-chain-testkit"
+name     = "jk-supply-chain-testkit"
 version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
@@ -12,4 +12,4 @@ java     = 25
 # testFixtures plumbing.
 
 [dependencies.main]
-bcpg-jdk18on = { group = "org.bouncycastle", artifact = "bcpg-jdk18on", version = "1.84" }
+bcpg-jdk18on = { group = "org.bouncycastle", name     = "bcpg-jdk18on", version = "1.84" }

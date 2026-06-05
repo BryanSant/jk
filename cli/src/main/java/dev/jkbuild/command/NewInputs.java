@@ -13,9 +13,8 @@ import java.util.Optional;
  *
  * <p>Field reminder:
  * <ul>
- *   <li>{@code name} — project name; doubles as the target directory's leaf.</li>
- *   <li>{@code artifact} — Maven artifactId. Often equal to {@code name} but
- *       can diverge (e.g., name = {@code my-app}, artifact = {@code my-app-core}).</li>
+ *   <li>{@code name} — project name; the target directory's leaf and the
+ *       value written as {@code [project].name} in {@code jk.toml}.</li>
  *   <li>{@code jdkMajor} — the JDK toolchain feature-release (which JDK runs
  *       the build). Defaults to the parent's for a member; user-pickable.</li>
  *   <li>{@code javaRelease} — the {@code java = N} compile target. Usually
@@ -31,7 +30,6 @@ import java.util.Optional;
 public record NewInputs(
         String group,
         String name,
-        String artifact,
         String jdk,
         int jdkMajor,
         int javaRelease,
@@ -49,7 +47,6 @@ public record NewInputs(
     public NewInputs {
         Objects.requireNonNull(group, "group");
         Objects.requireNonNull(name, "name");
-        Objects.requireNonNull(artifact, "artifact");
         Objects.requireNonNull(jdk, "jdk");
         Objects.requireNonNull(jdkIdentifier, "jdkIdentifier");
         Objects.requireNonNull(main, "main");
@@ -65,11 +62,11 @@ public record NewInputs(
      * that inherit a divergent member release use the canonical constructor.
      */
     public NewInputs(
-            String group, String name, String artifact, String jdk, int jdkMajor,
+            String group, String name, String jdk, int jdkMajor,
             Optional<String> jdkIdentifier, Optional<String> main, boolean shadow,
             boolean nativeImage, Language lang, boolean kotlinCompact,
             Optional<String> kotlinModuleName, List<String> deps, boolean sample, Path directory) {
-        this(group, name, artifact, jdk, jdkMajor, jdkMajor, jdkIdentifier, main, shadow,
+        this(group, name, jdk, jdkMajor, jdkMajor, jdkIdentifier, main, shadow,
                 nativeImage, lang, kotlinCompact, kotlinModuleName, deps, sample, directory);
     }
 

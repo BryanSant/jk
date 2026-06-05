@@ -138,7 +138,7 @@ class UpdateCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "ws"
+                name     = "ws"
                 version = "0.1.0"
 
                 [workspace]
@@ -148,18 +148,18 @@ class UpdateCommandTest {
         Files.writeString(app.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "app"
+                name     = "app"
                 version = "0.1.0"
 
                 [dependencies.main]
-                libb = { group = "com.acme", artifact = "libb", version = "0.1.0" }
-                leaf = { group = "com.foo",  artifact = "leaf", version = "1.0" }
+                libb = { group = "com.acme", name = "libb", version = "0.1.0" }
+                leaf = { group = "com.foo",  name = "leaf", version = "1.0" }
                 """);
         Path libb = Files.createDirectories(tempDir.resolve("libb"));
         Files.writeString(libb.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "libb"
+                name     = "libb"
                 version = "0.1.0"
                 """);
 

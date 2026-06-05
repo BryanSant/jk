@@ -1,6 +1,6 @@
 [project]
 group    = "dev.jkbuild"
-artifact = "jk-engine"
+name     = "jk-engine"
 version  = "0.6.0-SNAPSHOT"
 jdk      = 25
 java     = 25
@@ -19,16 +19,16 @@ java     = 25
 # `com.fasterxml.jackson.core:jackson-annotations` to 2.21, which is
 # wire-compatible with Jackson 3.x and ships the JsonSerialize classes
 # Jackson 3.1.3 actually needs (the standalone 3.0-rc5 jar is missing).
-jackson-bom      = { group = "tools.jackson",               artifact = "jackson-bom",         version = "3.1.3" }
+jackson-bom      = { group = "tools.jackson",               name     = "jackson-bom",         version = "3.1.3" }
 
 [dependencies.main]
-jk-core          = { group = "dev.jkbuild",                 artifact = "jk-core",             version = "0.6.0-SNAPSHOT" }
-jk-io            = { group = "dev.jkbuild",                 artifact = "jk-io",               version = "0.6.0-SNAPSHOT" }
-jackson-databind = { group = "tools.jackson.core",          artifact = "jackson-databind",    version = "3.1.3" }
-asm              = { group = "org.ow2.asm",                 artifact = "asm",                 version = "9.10" }
-asm-tree         = { group = "org.ow2.asm",                 artifact = "asm-tree",            version = "9.10" }
+jk-core          = { group = "dev.jkbuild",                 name     = "jk-core",             version = "0.6.0-SNAPSHOT" }
+jk-io            = { group = "dev.jkbuild",                 name     = "jk-io",               version = "0.6.0-SNAPSHOT" }
+jackson-databind = { group = "tools.jackson.core",          name     = "jackson-databind",    version = "3.1.3" }
+asm              = { group = "org.ow2.asm",                 name     = "asm",                 version = "9.10" }
+asm-tree         = { group = "org.ow2.asm",                 name     = "asm-tree",            version = "9.10" }
 
 [dependencies.test]
-assertj-core            = { group = "org.assertj",        artifact = "assertj-core",            version = "3.27.7" }
-junit-jupiter           = { group = "org.junit.jupiter",  artifact = "junit-jupiter",           version = "6.1.0" }
-junit-platform-launcher = { group = "org.junit.platform", artifact = "junit-platform-launcher", version = "6.1.0" }
+assertj-core            = { group = "org.assertj",        name     = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  name     = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", name     = "junit-platform-launcher", version = "6.1.0" }

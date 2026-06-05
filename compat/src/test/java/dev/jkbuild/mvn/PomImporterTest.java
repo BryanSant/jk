@@ -28,7 +28,7 @@ class PomImporterTest {
 
         var p = result.jkBuild().project();
         assertThat(p.group()).isEqualTo("com.example");
-        assertThat(p.artifact()).isEqualTo("widget");
+        assertThat(p.name()).isEqualTo("widget");
         assertThat(p.version()).isEqualTo("1.2.3");
         assertThat(p.jdk()).isEqualTo(25); // no compiler config → default
         assertThat(result.report().issues()).isEmpty();
@@ -416,7 +416,7 @@ class PomImporterTest {
         // Root carries the workspace block.
         assertThat(result.root().isWorkspaceRoot()).isTrue();
         assertThat(result.root().workspace().members()).containsExactly("core", "app");
-        assertThat(result.root().project().artifact()).isEqualTo("widget-parent");
+        assertThat(result.root().project().name()).isEqualTo("widget-parent");
 
         // Each member is present with its own coords inherited from the parent.
         assertThat(result.members()).containsKeys("core", "app");

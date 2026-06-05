@@ -113,16 +113,16 @@ table **override** it (and are validated against the build, where feasible):
 
 ```toml
 fork = { git = "gh:me/widgets-fork", branch = "main",
-         group = "com.acme", artifact = "widgets",   # override discovered coordinate
+         group = "com.acme", name = "widgets",   # override discovered coordinate
          version = "1.4.0-acme" }                     # override derived version
 ```
 
-- **`group` / `artifact`** override the coordinate discovered from `[project]`.
+- **`group` / `name`** override the coordinate discovered from `[project]`.
 - **`version` is honored** as an explicit override of the *derived* version.
   The ref (`tag`/`branch`/`rev`) still selects **which commit to build**;
   `version` only relabels the published/resolved artifact — handy for forks, or
   when a tag won't coerce to a clean version. **Precedence:** explicit
-  `version` field → derived-from-ref. Likewise explicit `group`/`artifact` →
+  `version` field → derived-from-ref. Likewise explicit `group`/`name` →
   discovered coordinate.
 
 This requires populating `Dependency`'s `module`/version from these keys for
@@ -215,7 +215,7 @@ build at resolve time.
   (the earlier Go-style `1.2.4-0.<ts>` guess sorted wrong under Maven's
   comparator).
 - **Coordinate / version:** discover from `[project]` by default; `group` /
-  `artifact` / `version` keys on the git table override (the ref still selects
+  `name` / `version` keys on the git table override (the ref still selects
   the commit; `version` only relabels).
 - **Build sandboxing:** deferred for v1 — rely on SHA-pinning + `verify-signed`;
   document that a git dep runs that repo's build at resolve time.

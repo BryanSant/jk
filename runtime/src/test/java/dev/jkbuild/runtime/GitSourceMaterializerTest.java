@@ -30,7 +30,7 @@ class GitSourceMaterializerTest {
         Files.writeString(repoDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.acme"
-                artifact = "widgets"
+                name     = "widgets"
                 version  = "0.1.0"
                 jdk      = 25
                 java     = 25

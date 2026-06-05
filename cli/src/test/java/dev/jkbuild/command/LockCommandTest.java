@@ -147,7 +147,7 @@ class LockCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "ws"
+                name     = "ws"
                 version = "0.1.0"
 
                 [workspace]
@@ -157,18 +157,18 @@ class LockCommandTest {
         Files.writeString(app.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "app"
+                name     = "app"
                 version = "0.1.0"
 
                 [dependencies.main]
-                libb = { group = "com.acme", artifact = "libb", version = "0.1.0" }
-                root = { group = "com.foo",  artifact = "root", version = "1.0" }
+                libb = { group = "com.acme", name = "libb", version = "0.1.0" }
+                root = { group = "com.foo",  name = "root", version = "1.0" }
                 """);
         Path libb = Files.createDirectories(tempDir.resolve("libb"));
         Files.writeString(libb.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "libb"
+                name     = "libb"
                 version = "0.1.0"
                 """);
 
@@ -277,7 +277,7 @@ class LockCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "app"
+                name     = "app"
                 version = "0.1.0"
                 kotlin = "^2.3.0"
                 """);
@@ -300,7 +300,7 @@ class LockCommandTest {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "app"
+                name     = "app"
                 version = "0.1.0"
                 kotlin = "=2.1.0"
                 """);
@@ -351,11 +351,11 @@ class LockCommandTest {
         Files.writeString(dir.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
-                artifact = "app"
+                name     = "app"
                 version = "0.1.0"
 
                 [dependencies.main]
-                root = { group = "com.foo", artifact = "root", version = "1.0" }
+                root = { group = "com.foo", name = "root", version = "1.0" }
                 """);
     }
 

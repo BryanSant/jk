@@ -137,10 +137,10 @@ class DiagnosticsTest {
     @Test
     void artifact_defaulting_hint_fires_when_unknown_package_matches_root_name() {
         // User wrote: postgres = { group = "org.postgresql", version = "42.7.4" }
-        // The parser defaults artifact = "postgres", producing the module
+        // The parser defaults name = "postgres", producing the module
         // "org.postgresql:postgres" — which doesn't exist on Maven Central.
         // The diagnostic should explain the defaulting and suggest setting
-        // `artifact = "..."` explicitly.
+        // `name = "..."` explicitly.
         PackageSource src = InMemoryPackageSource.builder().build();   // no packages exist
 
         try {
@@ -152,8 +152,8 @@ class DiagnosticsTest {
                     e.rootCause(),
                     Map.of("org.postgresql:postgres", "postgres"));
             assertThat(rendered).contains("Hint: the dep `postgres` resolves to `org.postgresql:postgres`");
-            assertThat(rendered).contains("set\n`artifact` explicitly");
-            assertThat(rendered).contains("postgres = { group = \"org.postgresql\", artifact = \"<correct-artifact>\"");
+            assertThat(rendered).contains("set\n`name` explicitly");
+            assertThat(rendered).contains("postgres = { group = \"org.postgresql\", name = \"<correct-name>\"");
             assertThat(rendered).contains("docs/artifact-coord-design.md");
         } catch (Exception e) {
             fail("expected UnsatisfiableException, got: " + e);
@@ -162,7 +162,7 @@ class DiagnosticsTest {
 
     @Test
     void artifact_defaulting_hint_skipped_when_artifact_was_explicit() {
-        // User wrote: postgres-jdbc = { group = "org.postgresql", artifact = "postgresql", ... }
+        // User wrote: postgres-jdbc = { group = "org.postgresql", name = "postgresql", ... }
         // The artifact ("postgresql") doesn't match the name ("postgres-jdbc"),
         // so the hint is irrelevant — the user clearly typed the artifact on
         // purpose. We should NOT pester them with the defaulting note.

@@ -70,7 +70,7 @@ public final class PubGrubResolver implements Resolver {
             // Skip workspace placeholders — they never hit the network so
             // the artifact-defaulting hint would be misleading there.
             if (!dep.module().startsWith("workspace:")) {
-                rootDepNames.put(dep.module(), dep.name());
+                rootDepNames.put(dep.module(), dep.library());
             }
         }
 

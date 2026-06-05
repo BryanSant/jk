@@ -293,7 +293,7 @@ public final class Wizard {
         // `\r\n` to land the shell prompt on a fresh line, so a println here
         // would leave a blank gap between the wizard and whatever the caller
         // emits next (e.g. a progress bar).
-        writer.print(Rail.closer("", Theme.active().dim()).toAnsi(terminal));
+        writer.print(Rail.closer(Glyphs.CHECK + " Done", Theme.active().success()).toAnsi(terminal));
         writer.flush();
         return Answers.of(Map.copyOf(answers));
     }

@@ -358,7 +358,7 @@ public final class InstallCommand implements Callable<Integer> {
                     JkBuild project = ctx.require(PROJECT);
                     BuildLayout layout = ctx.require(LAYOUT);
                     var p = project.project();
-                    Coordinate coord = Coordinate.of(p.group(), p.artifact(), p.version());
+                    Coordinate coord = Coordinate.of(p.group(), p.name(), p.version());
                     ctx.label("install " + Coords.gav(coord) + " to cache");
                     try {
                         cacheInstallArtifact(project, layout, cacheDir);
@@ -422,7 +422,7 @@ public final class InstallCommand implements Callable<Integer> {
     private void cacheInstallArtifact(JkBuild project, BuildLayout layout, Path cacheDir)
             throws IOException {
         var p = project.project();
-        Coordinate coord = Coordinate.of(p.group(), p.artifact(), p.version());
+        Coordinate coord = Coordinate.of(p.group(), p.name(), p.version());
         Cas cas = new Cas(cacheDir);
         Journal journal = new Journal(cacheDir);
 
@@ -440,9 +440,9 @@ public final class InstallCommand implements Callable<Integer> {
         if (p.m2install()) {
             Path dir = m2Dir().resolve("repository");
             for (String seg : p.group().split("\\.")) dir = dir.resolve(seg);
-            dir = dir.resolve(p.artifact()).resolve(p.version());
+            dir = dir.resolve(p.name()).resolve(p.version());
             Files.createDirectories(dir);
-            String base = p.artifact() + "-" + p.version();
+            String base = p.name() + "-" + p.version();
             Linking.linkOrCopy(jar, dir.resolve(base + ".jar"));
             Files.writeString(dir.resolve(base + ".pom"), pomXml, StandardCharsets.UTF_8);
         }
@@ -459,7 +459,7 @@ public final class InstallCommand implements Callable<Integer> {
     private Path makeInstallApp(Path projectDir, JkBuild project, BuildLayout layout,
                                 Path cacheDir, Path binDir, Path libexecDir) throws IOException {
         var p = project.project();
-        String bin = binName != null && !binName.isBlank() ? binName : p.artifact();
+        String bin = binName != null && !binName.isBlank() ? binName : p.name();
         String mainCls = mainClass != null && !mainClass.isBlank() ? mainClass : p.main();
         Path javaHome = CompileToolchain.runningJavaHome();
 

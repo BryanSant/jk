@@ -53,7 +53,7 @@ class PolicyCheckerTest {
         DenyPolicy policy = DenyPolicyParser.parse("""
                 [project]
                 group    = "g"
-                artifact = "a"
+                name     = "a"
                 version  = "1"
                 jdk      = 21
 
@@ -78,7 +78,7 @@ class PolicyCheckerTest {
         DenyPolicy policy = DenyPolicyParser.parse("""
                 [project]
                 group    = "g"
-                artifact = "a"
+                name     = "a"
                 version  = "1"
                 jdk      = 21
                 """);

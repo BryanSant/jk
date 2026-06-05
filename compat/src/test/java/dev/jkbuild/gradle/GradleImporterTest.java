@@ -34,7 +34,7 @@ class GradleImporterTest {
 
         var p = result.jkBuild().project();
         assertThat(p.group()).isEqualTo("com.example");
-        assertThat(p.artifact()).isEqualTo("widget");
+        assertThat(p.name()).isEqualTo("widget");
         assertThat(p.version()).isEqualTo("1.2.3");
         assertThat(p.jdk()).isEqualTo(21);
 
