@@ -61,11 +61,8 @@ public final class WorkspaceClasspath {
                 continue;
             }
             String moduleCoord = sibling.project().group() + ":" + sibling.project().name();
-            // Until workspace-aware build wiring lands, each sibling
-            // builds with workspaceRoot == memberDir — so its jar lands
-            // under <siblingDir>/target/, not the shared workspace
-            // target/. Match that here.
-            Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
+            // Sibling jars land at <workspaceRoot>/target/ per the BuildLayout contract.
+            Path jar = BuildLayout.of(root, siblingDir, sibling).mainJar();
             siblingJarByModule.put(moduleCoord, jar);
         }
 

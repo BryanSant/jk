@@ -13,14 +13,12 @@ import java.util.Optional;
  * given module. Used by verbs that operate on a single member but need
  * the workspace's shared {@code jk.lock} (PRD §13).
  *
- * <p>Search policy: starting from {@code memberDir}, walk up the
- * parent chain (capped at a reasonable depth) looking for a
- * {@code jk.toml} whose {@code workspace.members} contains the relative
- * path from that parent down to {@code memberDir}.
+ * <p>Search policy: starting from {@code memberDir}, walk all the way up
+ * to the filesystem root ({@code /} on Linux/macOS, {@code <drive>:\} on
+ * Windows) looking for a {@code jk.toml} whose {@code workspace.members}
+ * contains the relative path from that ancestor down to {@code memberDir}.
  */
 public final class WorkspaceLocator {
-
-    private static final int MAX_DEPTH = 8;
 
     private WorkspaceLocator() {}
 
@@ -38,9 +36,9 @@ public final class WorkspaceLocator {
     public static Optional<Path> findEnclosingWorkspace(Path dir) throws IOException {
         Path normalized = dir.toAbsolutePath().normalize();
         Path candidate = normalized;
-        for (int depth = 0; depth < MAX_DEPTH; depth++) {
+        while (true) {
             Path parent = candidate.getParent();
-            if (parent == null) break;
+            if (parent == null) break;   // reached filesystem root
             Path rootJkToml = parent.resolve("jk.toml");
             if (Files.exists(rootJkToml)) {
                 try {
@@ -63,9 +61,9 @@ public final class WorkspaceLocator {
     public static Optional<Path> findRoot(Path memberDir) throws IOException {
         Path normalized = memberDir.toAbsolutePath().normalize();
         Path candidate = normalized;
-        for (int depth = 0; depth < MAX_DEPTH; depth++) {
+        while (true) {
             Path parent = candidate.getParent();
-            if (parent == null) break;
+            if (parent == null) break;   // reached filesystem root
             Path rootJkToml = parent.resolve("jk.toml");
             if (Files.exists(rootJkToml)) {
                 JkBuild root;

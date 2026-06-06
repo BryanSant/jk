@@ -11,6 +11,7 @@ import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.config.WorkspaceRedirect;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
@@ -84,7 +85,13 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
 
     @Override
     public Integer call() throws Exception {
-        Path dir = global.workingDir();
+        Path invokedDir = global.workingDir();
+        Path dir = WorkspaceRedirect.effectiveDir(invokedDir);
+        if (!dir.equals(invokedDir) && !global.outputIsJson()) {
+            System.err.println("jk sync: syncing workspace root "
+                    + dir.getFileName() + " (from member "
+                    + invokedDir.getFileName() + ")");
+        }
         Path lockFile = dir.resolve("jk.lock");
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);

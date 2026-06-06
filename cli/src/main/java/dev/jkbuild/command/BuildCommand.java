@@ -105,8 +105,9 @@ public final class BuildCommand implements Callable<Integer> {
             return 2;
         }
         // Peek at the manifest before committing to a per-dir build. A
-        // workspace root dispatches to runWorkspaceBuild, which iterates
-        // members in topological order and calls runForDir per member.
+        // workspace root dispatches to runWorkspaceBuild. A workspace member
+        // also redirects — jk build from any member builds the whole workspace
+        // in topological order, same as running from the root.
         JkBuild peek;
         try {
             peek = JkBuildParser.parse(buildFile);
@@ -116,6 +117,21 @@ public final class BuildCommand implements Callable<Integer> {
         }
         if (peek.isWorkspaceRoot()) {
             return runWorkspaceBuild(startDir, peek);
+        }
+        // Member redirect: discover the enclosing workspace and build from there.
+        try {
+            var rootOpt = WorkspaceLocator.findRoot(startDir);
+            if (rootOpt.isPresent()) {
+                Path root = rootOpt.get();
+                if (!global.outputIsJson()) {
+                    System.err.println("jk build: building workspace from "
+                            + root.getFileName()
+                            + " (member: " + startDir.getFileName() + ")");
+                }
+                return runWorkspaceBuild(root, JkBuildParser.parse(root.resolve("jk.toml")));
+            }
+        } catch (java.io.IOException e) {
+            // Workspace discovery failed — fall through to single-project build.
         }
         return runForDir(startDir);
     }
