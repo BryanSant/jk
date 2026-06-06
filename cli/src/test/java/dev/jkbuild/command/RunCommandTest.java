@@ -27,6 +27,7 @@ class RunCommandTest {
                 "--group", "com.example",
                 "--name", "widget",
                 "--executable",
+                "--layout", "traditional",
                 tempDir.toString());
         Path src = tempDir.resolve("src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());

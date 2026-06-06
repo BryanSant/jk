@@ -21,7 +21,8 @@ class CleanExplainWhyRebuiltTest {
 
     @Test
     void clean_removes_target_and_build_and_generated(@TempDir Path tempDir) throws Exception {
-        run("new", tempDir.toString());
+        run("new", "--layout", "traditional",
+                tempDir.toString());
         // Intermediates live under build/ in the v1 two-tier layout.
         Files.createDirectories(tempDir.resolve("target/build/classes/main/example"));
         Files.writeString(tempDir.resolve("target/build/classes/main/example/Hello.class"), "fake");
@@ -40,7 +41,8 @@ class CleanExplainWhyRebuiltTest {
 
     @Test
     void clean_keep_artifacts_preserves_target(@TempDir Path tempDir) throws Exception {
-        run("new", tempDir.toString());
+        run("new", "--layout", "traditional",
+                tempDir.toString());
         Files.createDirectories(tempDir.resolve("target/build/classes/main"));
         Files.writeString(tempDir.resolve("target/build/classes/main/Hello.class"), "fake");
         Files.createDirectories(tempDir.resolve("target"));
@@ -54,7 +56,8 @@ class CleanExplainWhyRebuiltTest {
 
     @Test
     void clean_idempotent_on_empty_project(@TempDir Path tempDir) {
-        run("new", tempDir.toString());
+        run("new", "--layout", "traditional",
+                tempDir.toString());
         int exit = run("clean", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
     }
@@ -63,7 +66,8 @@ class CleanExplainWhyRebuiltTest {
 
     @Test
     void explain_lists_compile_tasks_with_cache_status(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional",
+                tempDir.toString());
         Path src = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "package example; public class Hello {}");
@@ -78,7 +82,8 @@ class CleanExplainWhyRebuiltTest {
 
     @Test
     void explain_reports_hit_after_build(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional",
+                tempDir.toString());
         Path src = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "package example; public class Hello {}");

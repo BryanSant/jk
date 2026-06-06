@@ -131,7 +131,7 @@ public final class BuildPipeline {
             CompileSupport.Languages langs = CompileSupport.resolveLanguages(project, in.dir());
             useJava = langs.java();
             useKotlin = langs.kotlin();
-            compactLayout = CompileSupport.isCompact(project, in.dir());
+            compactLayout = CompileSupport.isSimpleLayout(project, in.dir());
         } catch (Exception ignored) {
             // Unparseable/missing jk.toml — parse-build will surface the real error.
         }

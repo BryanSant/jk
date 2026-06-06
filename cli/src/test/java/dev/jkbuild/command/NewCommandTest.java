@@ -81,6 +81,7 @@ class NewCommandTest {
                 "--group", "com.example",
                 "--name", "widget",
                 "--shadow",
+                "--layout", "traditional",
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
@@ -96,6 +97,7 @@ class NewCommandTest {
                 "--group", "com.example",
                 "--name", "widget",
                 "--executable",
+                "--layout", "traditional",
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
@@ -129,7 +131,8 @@ class NewCommandTest {
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
-        Path app = tempDir.resolve("src/main/kotlin/com/example/Main.kt");
+        // Default layout is simple: Main.kt lands at ./src/Main.kt with no package.
+        Path app = tempDir.resolve("src/Main.kt");
         assertThat(app).exists();
         assertThat(Files.readString(app)).contains("fun main()");
     }

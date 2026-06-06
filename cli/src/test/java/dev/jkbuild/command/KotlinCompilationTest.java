@@ -132,7 +132,7 @@ class KotlinCompilationTest {
 
     @Test
     void mixed_java_and_kotlin_compile_together(@TempDir Path tempDir) throws IOException {
-        run("new", "--name", "mixed", "--lang", "kotlin", tempDir.toString());
+        run("new", "--name", "mixed", "--lang", "kotlin", "--layout", "traditional", tempDir.toString());
         // Opt into Java too — a mixed project declares both java and kotlin.
         Path toml = tempDir.resolve("jk.toml");
         Files.writeString(toml, Files.readString(toml).replace("[project]\n", "[project]\njava = 25\n"));
@@ -168,7 +168,7 @@ class KotlinCompilationTest {
     void java_calls_kotlin_compiles_together(@TempDir Path tempDir) throws IOException {
         // The reorder (Kotlin first, then javac against Kotlin's output) makes
         // Java → Kotlin references resolve within a single module.
-        run("new", "--name", "mixed", "--lang", "kotlin", tempDir.toString());
+        run("new", "--name", "mixed", "--lang", "kotlin", "--layout", "traditional", tempDir.toString());
         Path toml = tempDir.resolve("jk.toml");
         Files.writeString(toml, Files.readString(toml).replace("[project]\n", "[project]\njava = 25\n"));
         Path ktSrc = tempDir.resolve("src/main/kotlin/example/Greeter.kt");
@@ -203,7 +203,7 @@ class KotlinCompilationTest {
     void check_passes_for_java_calling_kotlin(@TempDir Path tempDir) throws IOException {
         // jk check → CompileCommand, which also compiles Kotlin-first so Java can
         // reference Kotlin within the module.
-        run("new", "--name", "mixed", "--lang", "kotlin", tempDir.toString());
+        run("new", "--name", "mixed", "--lang", "kotlin", "--layout", "traditional", tempDir.toString());
         Path toml = tempDir.resolve("jk.toml");
         Files.writeString(toml, Files.readString(toml).replace("[project]\n", "[project]\njava = 25\n"));
         Path ktSrc = tempDir.resolve("src/main/kotlin/example/Greeter.kt");

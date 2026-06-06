@@ -171,9 +171,23 @@ public final class JkBuildParser {
                 ? Boolean.TRUE.equals(project.getBoolean("application"))
                 : main != null;
         boolean m2install = Boolean.TRUE.equals(project.getBoolean("m2install"));
-        boolean compact  = Boolean.TRUE.equals(project.getBoolean("compact"));
+        // project.layout = "simple"|"traditional"|"auto" (preferred).
+        // Legacy: compact = true → "simple", compact = false → keep auto-detect.
+        JkBuild.Layout layout;
+        if (project.contains("layout")) {
+            String layoutRaw = project.getString("layout");
+            try {
+                layout = JkBuild.Layout.parse(layoutRaw);
+            } catch (IllegalArgumentException e) {
+                throw new JkBuildParseException(e.getMessage());
+            }
+        } else if (Boolean.TRUE.equals(project.getBoolean("compact"))) {
+            layout = JkBuild.Layout.SIMPLE;   // legacy compact = true
+        } else {
+            layout = JkBuild.Layout.AUTO;
+        }
         return new JkBuild.Project(group, name, version, jdk, java, kotlin,
-                main, shadow, nativeMode, description, application, m2install, compact);
+                main, shadow, nativeMode, description, application, m2install, layout);
     }
 
     private static int intOrZero(TomlTable table, String key, String path) {

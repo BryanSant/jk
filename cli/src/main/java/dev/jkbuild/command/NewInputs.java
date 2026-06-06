@@ -21,10 +21,8 @@ import java.util.Optional;
  *       equal to {@code jdkMajor}, but a workspace member inherits the parent's
  *       release even when it diverges (e.g. {@code jdk = 25}, {@code java = 17}).
  *       Drives the instance-{@code main} syntax decision.</li>
- *   <li>{@code compact} — when {@code true}, source files live directly in
- *       {@code ./src} (main) and {@code ./test} (test) with no subdirectory
- *       nesting and no package declaration. Applies to both Java and Kotlin.
- *       Emitted as {@code compact = true} in {@code jk.toml}.</li>
+ *   <li>{@code layout} — "simple" for flat ./src + ./test layout, "traditional" for Maven layout,
+ *       or null/"auto" for auto-detection. Emitted as project.layout in jk.toml.</li>
  *   <li>{@code kotlinModuleName} — when present, written as
  *       {@code module = "..."} under {@code [project]}.</li>
  * </ul>
@@ -40,7 +38,7 @@ public record NewInputs(
         boolean shadow,
         boolean nativeImage,
         Language lang,
-        boolean compact,
+        String layout,
         Optional<String> kotlinModuleName,
         List<String> deps,
         boolean sample,
@@ -64,10 +62,10 @@ public record NewInputs(
     public NewInputs(
             String group, String name, String jdk, int jdkMajor,
             Optional<String> jdkIdentifier, Optional<String> main, boolean shadow,
-            boolean nativeImage, Language lang, boolean compact,
+            boolean nativeImage, Language lang, String layout,
             Optional<String> kotlinModuleName, List<String> deps, boolean sample, Path directory) {
         this(group, name, jdk, jdkMajor, jdkMajor, jdkIdentifier, main, shadow,
-                nativeImage, lang, compact, kotlinModuleName, deps, sample, directory);
+                nativeImage, lang, layout, kotlinModuleName, deps, sample, directory);
     }
 
     public enum Language {
@@ -86,6 +84,11 @@ public record NewInputs(
                 case KOTLIN -> "kotlin";
             };
         }
+    }
+
+    /** True when the chosen layout is "simple" (flat ./src + ./test). */
+    public boolean isSimpleLayout() {
+        return "simple".equalsIgnoreCase(layout);
     }
 
     public boolean isRunnable() {

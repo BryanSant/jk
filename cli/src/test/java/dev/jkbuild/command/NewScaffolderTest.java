@@ -148,7 +148,7 @@ class NewScaffolderTest {
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(build).contains("compact  = true");
+        assertThat(build).contains("layout   = \"simple\"");
         assertThat(build).contains("module   = \"widget-core\"");
     }
 
@@ -199,7 +199,7 @@ class NewScaffolderTest {
                 "com.example", "widget", "25", 25,
                 Optional.of("temurin-25.0.3"),
                 Optional.of("com.example.Main"), false, false,
-                NewInputs.Language.JAVA, false, Optional.empty(),
+                NewInputs.Language.JAVA, null, Optional.empty(),
                 List.of(), true, tempDir);
         NewScaffolder.write(inputs);
 
@@ -238,7 +238,7 @@ class NewScaffolderTest {
                 "com.example", "widget", "25", 25,
                 Optional.empty(),
                 Optional.empty(), false, false,
-                NewInputs.Language.JAVA, false, Optional.empty(),
+                NewInputs.Language.JAVA, null, Optional.empty(),
                 List.of(), false, tempDir);
         NewScaffolder.write(inputs);
 
@@ -251,16 +251,16 @@ class NewScaffolderTest {
                 "com.example", "widget", String.valueOf(major), major,
                 Optional.empty(),
                 Optional.empty(), false, false,
-                lang, false, Optional.empty(),
+                lang, null, Optional.empty(),
                 List.of(), sample, dir);
     }
 
-    private static NewInputs runnable(Path dir, NewInputs.Language lang, String main, int major, boolean kotlinCompact) {
+    private static NewInputs runnable(Path dir, NewInputs.Language lang, String main, int major, boolean simple) {
         return new NewInputs(
                 "com.example", "widget", String.valueOf(major), major,
                 Optional.empty(),
                 Optional.of(main), false, false,
-                lang, kotlinCompact, Optional.empty(),
+                lang, simple ? "simple" : null, Optional.empty(),
                 List.of(), true, dir);
     }
 
@@ -273,13 +273,13 @@ class NewScaffolderTest {
             boolean nativeImage,
             List<String> deps,
             int major,
-            boolean kotlinCompact,
+            boolean simple,
             Optional<String> kotlinModule) {
         return new NewInputs(
                 "com.example", name, String.valueOf(major), major,
                 Optional.empty(),
                 main, shadow, nativeImage,
-                lang, kotlinCompact, kotlinModule,
+                lang, simple ? "simple" : null, kotlinModule,
                 deps, false, dir);
     }
 }

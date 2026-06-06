@@ -105,7 +105,7 @@ public final class CompileCommand implements Callable<Integer> {
                     }
                     ctx.put(PROJECT, project);
                     ctx.put(LOCK, LockfileReader.read(lockFile));
-                    boolean compact = dev.jkbuild.runtime.CompileSupport.isCompact(project.project(), dir);
+                    boolean compact = dev.jkbuild.runtime.CompileSupport.isSimpleLayout(project.project(), dir);
                     List<Path> javaSources = collectJavaSources(compact ? dir.resolve("src") : dir.resolve("src/main/java"));
                     List<Path> ktSources = collectKotlinSources(dir, compact);
                     ctx.put(JAVA_SOURCES, javaSources);

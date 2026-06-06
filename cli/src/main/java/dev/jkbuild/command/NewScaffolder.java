@@ -126,7 +126,7 @@ public final class NewScaffolder {
         var pkg = inputs.group();
         switch (inputs.lang()) {
             case JAVA -> {
-                if (inputs.compact()) {
+                if (inputs.isSimpleLayout()) {
                     // Compact layout: no package, file lives at ./src/Main.java.
                     var dir = inputs.directory().resolve("src");
                     Files.createDirectories(dir);
@@ -145,7 +145,7 @@ public final class NewScaffolder {
             case KOTLIN -> {
                 Path file;
                 String body;
-                if (inputs.compact()) {
+                if (inputs.isSimpleLayout()) {
                     // Compact layout: no package, file lives at ./src/Main.kt.
                     var dir = inputs.directory().resolve("src");
                     Files.createDirectories(dir);
@@ -164,7 +164,7 @@ public final class NewScaffolder {
 
     private static void writePackageMarker(NewInputs inputs) throws IOException {
         var pkg = inputs.group();
-        if (inputs.compact()) {
+        if (inputs.isSimpleLayout()) {
             // Compact layout: place a single source file at ./src/ with no nesting.
             var dir = inputs.directory().resolve("src");
             Files.createDirectories(dir);

@@ -130,6 +130,43 @@ public record JkBuild(
      */
 
     /** Controls how native-image compilation participates in the build. */
+    /**
+     * Source layout strategy for a project.
+     *
+     * <ul>
+     *   <li>{@code simple} — sources in {@code ./src}, tests in {@code ./test},
+     *       no package declaration. Written as {@code project.layout = "simple"}.</li>
+     *   <li>{@code traditional} — Maven layout: {@code src/main/java},
+     *       {@code src/test/java}. Written as {@code project.layout = "traditional"}.</li>
+     *   <li>{@code auto} — inferred from the directory tree. Default when
+     *       {@code project.layout} is absent from {@code jk.toml}.</li>
+     * </ul>
+     */
+    public enum Layout {
+        SIMPLE, TRADITIONAL, AUTO;
+
+        /** Parse from a jk.toml string value; null or blank → AUTO. */
+        public static Layout parse(String raw) {
+            if (raw == null || raw.isBlank()) return AUTO;
+            return switch (raw.trim().toLowerCase()) {
+                case "simple"      -> SIMPLE;
+                case "traditional" -> TRADITIONAL;
+                case "auto"        -> AUTO;
+                default -> throw new IllegalArgumentException(
+                        "project.layout must be \"simple\", \"traditional\", or \"auto\" (got: " + raw + ")");
+            };
+        }
+
+        /** The string written to jk.toml, or null for AUTO (omitted). */
+        public String tomlValue() {
+            return switch (this) {
+                case SIMPLE      -> "simple";
+                case TRADITIONAL -> "traditional";
+                case AUTO        -> null;
+            };
+        }
+    }
+
     public enum NativeMode {
         /** {@code native = false} or absent — no native support. */
         DISABLED,
@@ -145,7 +182,7 @@ public record JkBuild(
                           int jdk, int java, VersionSelector kotlin,
                           String main, boolean shadow, NativeMode nativeMode,
                           String description, boolean application, boolean m2install,
-                          boolean compact) {
+                          Layout layout) {
 
         public Project {
             Objects.requireNonNull(group, "group");
@@ -158,33 +195,31 @@ public record JkBuild(
                 throw new IllegalArgumentException("project.jdk/java must be non-negative");
             }
             if (nativeMode == null) nativeMode = NativeMode.DISABLED;
+            if (layout == null) layout = Layout.AUTO;
             if (description != null && description.isBlank()) description = null;
         }
 
-        /**
-         * Back-compat constructor (pre-{@code compact}).
-         */
+        /** Back-compat constructor (pre-{@code layout}). */
         public Project(String group, String name, String version,
                        int jdk, int java, VersionSelector kotlin,
                        String main, boolean shadow, NativeMode nativeMode,
                        String description, boolean application, boolean m2install) {
             this(group, name, version, jdk, java, kotlin, main, shadow, nativeMode,
-                    description, application, m2install, false);
+                    description, application, m2install, Layout.AUTO);
         }
 
-        /**
-         * Back-compat constructor (pre-{@code application}/{@code m2install}).
-         */
+        /** Back-compat constructor (pre-{@code application}/{@code m2install}). */
         public Project(String group, String name, String version,
                        int jdk, int java, VersionSelector kotlin,
                        String main, boolean shadow, NativeMode nativeMode, String description) {
             this(group, name, version, jdk, java, kotlin, main, shadow, nativeMode,
-                    description, main != null, false, false);
+                    description, main != null, false, Layout.AUTO);
         }
 
         /** Library project — no main, no shadow, no native; defaults to a Java project. */
         public Project(String group, String name, String version, int jdk) {
-            this(group, name, version, jdk, jdk, null, null, false, NativeMode.DISABLED, null, false, false, false);
+            this(group, name, version, jdk, jdk, null, null, false, NativeMode.DISABLED,
+                    null, false, false, Layout.AUTO);
         }
 
         /** Backward-compat: true when native mode is not DISABLED. */

@@ -19,7 +19,8 @@ class BuildCommandTest {
 
     @Test
     void builds_jar_from_main_sources(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional",
+                tempDir.toString());
 
         Path src = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(src.getParent());
@@ -44,7 +45,8 @@ class BuildCommandTest {
 
     @Test
     void skip_tests_leaves_the_test_phases_out_of_the_build(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional",
+                tempDir.toString());
         Path main = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(main.getParent());
         Files.writeString(main, "package example;\npublic class Hello {}\n");
@@ -67,7 +69,8 @@ class BuildCommandTest {
 
     @Test
     void copies_resources_into_jar(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional",
+                tempDir.toString());
         Path res = tempDir.resolve("src/main/resources/application.properties");
         Files.createDirectories(res.getParent());
         Files.writeString(res, "name=widget\n");
@@ -87,7 +90,8 @@ class BuildCommandTest {
 
     @Test
     void build_fails_on_syntax_error(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional",
+                tempDir.toString());
         Path src = tempDir.resolve("src/main/java/Bad.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "public class Bad { void f(   // missing\n");
@@ -111,7 +115,8 @@ class BuildCommandTest {
 
     @Test
     void build_with_no_sources_still_produces_jar(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "empty", tempDir.toString());
+        run("new", "--name", "empty", "--layout", "traditional",
+                tempDir.toString());
         int exit = run("build", "-C", tempDir.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);

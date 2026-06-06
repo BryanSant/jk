@@ -60,24 +60,37 @@ public final class CompileSupport {
     }
 
     /**
-     * Whether this project uses the compact/flat source layout.
+     * Whether this project uses the simple (flat) source layout.
      *
-     * <p>Compact is <em>explicit</em> when {@code compact = true} in {@code jk.toml},
-     * or <em>implicit</em> when both {@code src/main/kotlin} and {@code src/main/java}
-     * are absent or contain no source files — i.e. the project was scaffolded with
-     * {@code jk new --compact} and sources live directly in {@code src/}.
+     * <p>Determined by {@code project.layout} in {@code jk.toml}:
+     * <ul>
+     *   <li>{@code "simple"} — always use simple layout.</li>
+     *   <li>{@code "traditional"} — always use Maven layout.</li>
+     *   <li>{@code "auto"} or absent — infer from the directory tree: simple
+     *       when both {@code src/main/kotlin} and {@code src/main/java} are
+     *       absent or empty, traditional otherwise.</li>
+     * </ul>
      *
-     * <p>Compact layout source roots:
+     * <p>Simple layout source roots:
      * <ul>
      *   <li>Main: {@code ./src}  (all {@code .kt} and {@code .java} files)</li>
      *   <li>Test: {@code ./test} (all {@code .kt} and {@code .java} files)</li>
      * </ul>
      */
+    public static boolean isSimpleLayout(JkBuild.Project project, Path projectDir) {
+        return switch (project.layout()) {
+            case SIMPLE      -> true;
+            case TRADITIONAL -> false;
+            case AUTO        ->
+                !anySourceUnder(projectDir.resolve("src/main/kotlin"), ".kt", ".java")
+             && !anySourceUnder(projectDir.resolve("src/main/java"),   ".kt", ".java");
+        };
+    }
+
+    /** @deprecated Use {@link #isSimpleLayout(JkBuild.Project, Path)} instead. */
+    @Deprecated
     public static boolean isCompact(JkBuild.Project project, Path projectDir) {
-        if (project.compact()) return true;
-        // Implicit: both standard main-source dirs absent or completely empty.
-        return !anySourceUnder(projectDir.resolve("src/main/kotlin"), ".kt", ".java")
-            && !anySourceUnder(projectDir.resolve("src/main/java"),   ".kt", ".java");
+        return isSimpleLayout(project, projectDir);
     }
 
     private static boolean anySourceUnder(Path root, String... extensions) {
