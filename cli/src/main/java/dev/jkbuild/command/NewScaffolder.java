@@ -62,10 +62,10 @@ public final class NewScaffolder {
     }
 
     /**
-     * Scaffold the project tree. When {@code writeLock} is false the
-     * per-project {@code jk.lock} is skipped — used when the project is a
-     * workspace member, since the single workspace-root {@code jk.lock}
-     * owns resolution (Cargo/uv: members never carry their own lock).
+     * Scaffold the project tree. When {@code writeLock} is false the project
+     * is a workspace member: the per-member {@code jk.lock} and the
+     * {@code .gitignore} are both skipped, since the workspace root owns
+     * both (Cargo/uv: members never carry their own lock or gitignore).
      */
     public static void write(NewInputs inputs, boolean writeLock) throws IOException {
         var dir = inputs.directory();
@@ -86,7 +86,9 @@ public final class NewScaffolder {
             LockfileWriter.write(lock, lockFile);
         }
 
-        writeGitignore(dir);
+        if (writeLock) {
+            writeGitignore(dir);   // members inherit the workspace root's .gitignore
+        }
 
         if (inputs.sample()) {
             writeSample(inputs);
