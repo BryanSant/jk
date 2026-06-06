@@ -125,16 +125,19 @@ public final class BuildPipeline {
         // the source tree (see CompileSupport.resolveLanguages).
         boolean useKotlin = false;
         boolean useJava = true;
+        boolean compactLayout = false;
         try {
             var project = JkBuildParser.parse(in.buildFile()).project();
             CompileSupport.Languages langs = CompileSupport.resolveLanguages(project, in.dir());
             useJava = langs.java();
             useKotlin = langs.kotlin();
+            compactLayout = CompileSupport.isCompact(project, in.dir());
         } catch (Exception ignored) {
             // Unparseable/missing jk.toml — parse-build will surface the real error.
         }
-        // Effectively-final copies for the phase lambdas (useJava is reassigned above).
+        // Effectively-final copies for the phase lambdas.
         final boolean mixedWithJava = useJava;
+        final boolean compact = compactLayout;
         // Mixed module: Kotlin compiles first (it reads Java *declarations* from
         // source; the Kotlin compiler never emits Java bytecode), then javac
         // against the Kotlin output, then `assemble-classes` merges both into the
@@ -220,8 +223,9 @@ public final class BuildPipeline {
                     testRuntimeCp.addAll(testSiblings.jars());
                     ctx.put(COMPILE_TEST_CP, compileTestCp);
                     ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
-                    ctx.put(JAVA_SOURCES, CompileSupport.collectJavaSources(in.dir().resolve("src/main/java")));
-                    ctx.put(KOTLIN_SOURCES, CompileSupport.collectKotlinSources(in.dir()));
+                    Path javaMainSrc = compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java");
+                    ctx.put(JAVA_SOURCES, CompileSupport.collectJavaSources(javaMainSrc));
+                    ctx.put(KOTLIN_SOURCES, CompileSupport.collectKotlinSources(in.dir(), compact));
                     ctx.put(RELEASE, project.project().javaRelease());
                     ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(in.dir()));
                     ctx.put(MAIN_CLASSES, layout.classesDir());
@@ -422,7 +426,7 @@ public final class BuildPipeline {
                     // (analysis only — it emits no Java bytecode; javac does next).
                     dev.jkbuild.task.KotlinCompile.Result kr = compileKotlinSources(
                             ctx, in, cas, actionCache, ktSources, classpath, ktOut, taskId, workingDir,
-                            mixedWithJava ? in.dir().resolve("src/main/java") : null);
+                            mixedWithJava ? (compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java")) : null);
                     if (!kr.success()) {
                         ctx.error("kotlinc", kr.output());
                         throw new RuntimeException("kotlinc reported errors");
@@ -459,9 +463,9 @@ public final class BuildPipeline {
                 .requires(mainCompile, "sync-deps")
                 .scope(1)
                 .execute(ctx -> {
-                    Path javaTestSrc = in.dir().resolve("src/test/java");
+                    Path javaTestSrc = compact ? in.dir().resolve("test") : in.dir().resolve("src/test/java");
                     List<Path> javaTest = CompileSupport.collectJavaSources(javaTestSrc);
-                    List<Path> ktTest = CompileSupport.collectKotlinTestSources(in.dir());
+                    List<Path> ktTest = CompileSupport.collectKotlinTestSources(in.dir(), compact);
                     if (javaTest.isEmpty() && ktTest.isEmpty()) {
                         ctx.label("no test sources");
                         ctx.put(NO_TEST_SOURCES, true);
@@ -542,7 +546,7 @@ public final class BuildPipeline {
                     runtimeCp.add(ctx.require(MAIN_CLASSES));
                     runtimeCp.addAll(testRtCp);
                     // Kotlin output (main or test) needs the stdlib at runtime.
-                    if (kotlinModule || !CompileSupport.collectKotlinTestSources(in.dir()).isEmpty()) {
+                    if (kotlinModule || !CompileSupport.collectKotlinTestSources(in.dir(), compact).isEmpty()) {
                         runtimeCp.add(kotlinStdlib(ctx, cas));
                     }
 

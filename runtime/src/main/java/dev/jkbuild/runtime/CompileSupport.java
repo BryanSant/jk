@@ -59,43 +59,76 @@ public final class CompileSupport {
         }
     }
 
+    /**
+     * Whether this project uses the compact/flat source layout.
+     *
+     * <p>Compact is <em>explicit</em> when {@code compact = true} in {@code jk.toml},
+     * or <em>implicit</em> when both {@code src/main/kotlin} and {@code src/main/java}
+     * are absent or contain no source files — i.e. the project was scaffolded with
+     * {@code jk new --compact} and sources live directly in {@code src/}.
+     *
+     * <p>Compact layout source roots:
+     * <ul>
+     *   <li>Main: {@code ./src}  (all {@code .kt} and {@code .java} files)</li>
+     *   <li>Test: {@code ./test} (all {@code .kt} and {@code .java} files)</li>
+     * </ul>
+     */
+    public static boolean isCompact(JkBuild.Project project, Path projectDir) {
+        if (project.compact()) return true;
+        // Implicit: both standard main-source dirs absent or completely empty.
+        return !anySourceUnder(projectDir.resolve("src/main/kotlin"), ".kt", ".java")
+            && !anySourceUnder(projectDir.resolve("src/main/java"),   ".kt", ".java");
+    }
+
+    private static boolean anySourceUnder(Path root, String... extensions) {
+        if (!Files.isDirectory(root)) return false;
+        try (Stream<Path> stream = Files.walk(root)) {
+            return stream.anyMatch(p -> {
+                if (!Files.isRegularFile(p)) return false;
+                String name = p.getFileName().toString();
+                for (String ext : extensions) if (name.endsWith(ext)) return true;
+                return false;
+            });
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
     /** All {@code .java} files under {@code root} (empty if it doesn't exist). */
     public static List<Path> collectJavaSources(Path root) throws IOException {
         return collectFilesWithExtension(root, ".java");
     }
 
     /**
-     * All {@code .kt} files for a project. Searches in order:
-     * <ol>
-     *   <li>{@code src/main/kotlin} — standard Maven/Gradle layout</li>
-     *   <li>{@code src/main/java} — mixed layout (Maven users sometimes place .kt here)</li>
-     *   <li>{@code src/} directly, excluding {@code src/test/} — compact/flat layout
-     *       ({@code jk new --compact}) where {@code src/Main.kt} lives at the root of
-     *       {@code src/} with no subdirectory nesting.</li>
-     * </ol>
+     * All main {@code .kt} files for a project.
+     * <ul>
+     *   <li>Standard layout: {@code src/main/kotlin/} and {@code src/main/java/}</li>
+     *   <li>Compact layout:  {@code src/}  (all {@code .kt} files)</li>
+     * </ul>
      */
-    public static List<Path> collectKotlinSources(Path projectDir) throws IOException {
+    public static List<Path> collectKotlinSources(Path projectDir, boolean compact)
+            throws IOException {
+        if (compact) {
+            return collectFilesWithExtension(projectDir.resolve("src"), ".kt");
+        }
         List<Path> out = new ArrayList<>();
         out.addAll(collectFilesWithExtension(projectDir.resolve("src/main/kotlin"), ".kt"));
         out.addAll(collectFilesWithExtension(projectDir.resolve("src/main/java"), ".kt"));
-        if (out.isEmpty()) {
-            // Compact/flat layout: src/Main.kt alongside (but not under) src/test/.
-            Path src = projectDir.resolve("src");
-            Path srcTest = src.resolve("test");
-            if (Files.isDirectory(src)) {
-                try (Stream<Path> stream = Files.walk(src)) {
-                    stream.filter(Files::isRegularFile)
-                          .filter(p -> p.getFileName().toString().endsWith(".kt"))
-                          .filter(p -> !p.startsWith(srcTest))
-                          .forEach(out::add);
-                }
-            }
-        }
         return out;
     }
 
-    /** All {@code .kt} test files: under {@code src/test/kotlin} and {@code src/test/java}. */
-    public static List<Path> collectKotlinTestSources(Path projectDir) throws IOException {
+    /**
+     * All test {@code .kt} files for a project.
+     * <ul>
+     *   <li>Standard layout: {@code src/test/kotlin/} and {@code src/test/java/}</li>
+     *   <li>Compact layout:  {@code test/} (all {@code .kt} files)</li>
+     * </ul>
+     */
+    public static List<Path> collectKotlinTestSources(Path projectDir, boolean compact)
+            throws IOException {
+        if (compact) {
+            return collectFilesWithExtension(projectDir.resolve("test"), ".kt");
+        }
         List<Path> out = new ArrayList<>();
         out.addAll(collectFilesWithExtension(projectDir.resolve("src/test/kotlin"), ".kt"));
         out.addAll(collectFilesWithExtension(projectDir.resolve("src/test/java"), ".kt"));

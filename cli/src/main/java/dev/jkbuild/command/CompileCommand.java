@@ -105,8 +105,9 @@ public final class CompileCommand implements Callable<Integer> {
                     }
                     ctx.put(PROJECT, project);
                     ctx.put(LOCK, LockfileReader.read(lockFile));
-                    List<Path> javaSources = collectJavaSources(dir.resolve("src/main/java"));
-                    List<Path> ktSources = collectKotlinSources(dir);
+                    boolean compact = dev.jkbuild.runtime.CompileSupport.isCompact(project.project(), dir);
+                    List<Path> javaSources = collectJavaSources(compact ? dir.resolve("src") : dir.resolve("src/main/java"));
+                    List<Path> ktSources = collectKotlinSources(dir, compact);
                     ctx.put(JAVA_SOURCES, javaSources);
                     ctx.put(KT_SOURCES, ktSources);
                     if (javaSources.isEmpty() && ktSources.isEmpty()) {
@@ -276,8 +277,8 @@ public final class CompileCommand implements Callable<Integer> {
         return dev.jkbuild.runtime.CompileSupport.kotlinJvmTarget(release);
     }
 
-    static List<Path> collectKotlinSources(Path projectDir) throws IOException {
-        return dev.jkbuild.runtime.CompileSupport.collectKotlinSources(projectDir);
+    static List<Path> collectKotlinSources(Path projectDir, boolean compact) throws IOException {
+        return dev.jkbuild.runtime.CompileSupport.collectKotlinSources(projectDir, compact);
     }
 
     private static void deleteRecursively(Path target) {

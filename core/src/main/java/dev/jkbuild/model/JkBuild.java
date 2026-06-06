@@ -144,7 +144,8 @@ public record JkBuild(
     public record Project(String group, String name, String version,
                           int jdk, int java, VersionSelector kotlin,
                           String main, boolean shadow, NativeMode nativeMode,
-                          String description, boolean application, boolean m2install) {
+                          String description, boolean application, boolean m2install,
+                          boolean compact) {
 
         public Project {
             Objects.requireNonNull(group, "group");
@@ -161,21 +162,29 @@ public record JkBuild(
         }
 
         /**
+         * Back-compat constructor (pre-{@code compact}).
+         */
+        public Project(String group, String name, String version,
+                       int jdk, int java, VersionSelector kotlin,
+                       String main, boolean shadow, NativeMode nativeMode,
+                       String description, boolean application, boolean m2install) {
+            this(group, name, version, jdk, java, kotlin, main, shadow, nativeMode,
+                    description, application, m2install, false);
+        }
+
+        /**
          * Back-compat constructor (pre-{@code application}/{@code m2install}).
-         * Defaults {@code application} to "is there a main class?" — matching
-         * the rule that a runnable project is an application unless told
-         * otherwise — and {@code m2install} to false.
          */
         public Project(String group, String name, String version,
                        int jdk, int java, VersionSelector kotlin,
                        String main, boolean shadow, NativeMode nativeMode, String description) {
             this(group, name, version, jdk, java, kotlin, main, shadow, nativeMode,
-                    description, main != null, false);
+                    description, main != null, false, false);
         }
 
         /** Library project — no main, no shadow, no native; defaults to a Java project. */
         public Project(String group, String name, String version, int jdk) {
-            this(group, name, version, jdk, jdk, null, null, false, NativeMode.DISABLED, null);
+            this(group, name, version, jdk, jdk, null, null, false, NativeMode.DISABLED, null, false, false, false);
         }
 
         /** Backward-compat: true when native mode is not DISABLED. */

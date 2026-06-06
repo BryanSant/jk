@@ -171,8 +171,9 @@ public final class JkBuildParser {
                 ? Boolean.TRUE.equals(project.getBoolean("application"))
                 : main != null;
         boolean m2install = Boolean.TRUE.equals(project.getBoolean("m2install"));
+        boolean compact  = Boolean.TRUE.equals(project.getBoolean("compact"));
         return new JkBuild.Project(group, name, version, jdk, java, kotlin,
-                main, shadow, nativeMode, description, application, m2install);
+                main, shadow, nativeMode, description, application, m2install, compact);
     }
 
     private static int intOrZero(TomlTable table, String key, String path) {
