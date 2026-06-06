@@ -30,9 +30,9 @@ class BuildLayoutTest {
         BuildLayout layout = BuildLayout.of(dir, project("widget", "0.1.0"));
 
         assertThat(layout.classesDir())
-                .isEqualTo(dir.resolve("target/build/java/main"));
+                .isEqualTo(dir.resolve("target/build/classes/main"));
         assertThat(layout.testClassesDir())
-                .isEqualTo(dir.resolve("target/build/java/test"));
+                .isEqualTo(dir.resolve("target/build/classes/test"));
         assertThat(layout.kotlinClassesDir())
                 .isEqualTo(dir.resolve("target/build/kotlin/main"));
         assertThat(layout.kotlinTestClassesDir())
@@ -74,7 +74,7 @@ class BuildLayoutTest {
 
         // Intermediates stay with the member (under member/target/build/).
         assertThat(layout.classesDir())
-                .isEqualTo(member.resolve("target/build/java/main"));
+                .isEqualTo(member.resolve("target/build/classes/main"));
         // Final artifacts land at the workspace root.
         assertThat(layout.mainJar()).isEqualTo(workspace.resolve("target/jk-core-0.7.0.jar"));
         assertThat(layout.nativeBinary()).isEqualTo(workspace.resolve("target/jk-core"));
@@ -110,7 +110,7 @@ class BuildLayoutTest {
                 .isEqualTo(workspace.toAbsolutePath().normalize().resolve("target/core-1.0.0.jar"));
         // But intermediates stay member-local (member/target/build/).
         assertThat(layout.classesDir())
-                .isEqualTo(member.resolve("target/build/java/main"));
+                .isEqualTo(member.resolve("target/build/classes/main"));
     }
 
     @Test

@@ -26,7 +26,7 @@ import java.util.Objects;
  * compiler from pruning Java-compiled classes (it owns and prunes its directory):
  * <ul>
  *   <li>{@code target/build/kotlin/main} — kotlinc incremental workspace</li>
- *   <li>{@code target/build/java/main} — javac output <em>and</em> the final
+ *   <li>{@code target/build/classes/main} — javac output <em>and</em> the final
  *       assembled classes (kotlinc output is merged here after compilation)</li>
  * </ul>
  *
@@ -87,7 +87,7 @@ public final class BuildLayout {
     }
 
     /**
-     * {@code target/build/java/main/} — final assembled main classes.
+     * {@code target/build/classes/main/} — final assembled main classes.
      *
      * <p>Both javac output and (after assembly) kotlinc output land here.
      * This is the directory the JAR packager reads from, so it contains
@@ -96,12 +96,12 @@ public final class BuildLayout {
      * first, then jk merges the result here.
      */
     public Path classesDir() {
-        return buildDir().resolve("java").resolve("main");
+        return buildDir().resolve("classes").resolve("main");
     }
 
-    /** {@code target/build/java/test/} — final assembled test classes. */
+    /** {@code target/build/classes/test/} — final assembled test classes. */
     public Path testClassesDir() {
-        return buildDir().resolve("java").resolve("test");
+        return buildDir().resolve("classes").resolve("test");
     }
 
     /**

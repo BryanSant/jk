@@ -23,8 +23,8 @@ class CleanExplainWhyRebuiltTest {
     void clean_removes_target_and_build_and_generated(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
         // Intermediates live under build/ in the v1 two-tier layout.
-        Files.createDirectories(tempDir.resolve("target/build/java/main/example"));
-        Files.writeString(tempDir.resolve("target/build/java/main/example/Hello.class"), "fake");
+        Files.createDirectories(tempDir.resolve("target/build/classes/main/example"));
+        Files.writeString(tempDir.resolve("target/build/classes/main/example/Hello.class"), "fake");
         // Final artifacts live under target/.
         Files.createDirectories(tempDir.resolve("target"));
         Files.writeString(tempDir.resolve("target/widget-0.1.0.jar"), "fake");
@@ -41,8 +41,8 @@ class CleanExplainWhyRebuiltTest {
     @Test
     void clean_keep_artifacts_preserves_target(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        Files.createDirectories(tempDir.resolve("target/build/java/main"));
-        Files.writeString(tempDir.resolve("target/build/java/main/Hello.class"), "fake");
+        Files.createDirectories(tempDir.resolve("target/build/classes/main"));
+        Files.writeString(tempDir.resolve("target/build/classes/main/Hello.class"), "fake");
         Files.createDirectories(tempDir.resolve("target"));
         Files.writeString(tempDir.resolve("target/widget-0.1.0.jar"), "fake-jar");
 
