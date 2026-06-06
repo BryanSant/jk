@@ -21,21 +21,32 @@ class BuildLayoutTest {
 
         assertThat(layout.workspaceRoot()).isEqualTo(dir);
         assertThat(layout.memberRoot()).isEqualTo(dir);
-        assertThat(layout.buildDir()).isEqualTo(dir.resolve("build"));
+        assertThat(layout.buildDir()).isEqualTo(dir.resolve("target/build"));
         assertThat(layout.targetDir()).isEqualTo(dir.resolve("target"));
     }
 
     @Test
-    void intermediates_live_under_build(@TempDir Path dir) {
+    void intermediates_live_under_target_build(@TempDir Path dir) {
         BuildLayout layout = BuildLayout.of(dir, project("widget", "0.1.0"));
 
-        assertThat(layout.classesDir()).isEqualTo(dir.resolve("build/classes/main"));
-        assertThat(layout.testClassesDir()).isEqualTo(dir.resolve("build/classes/test"));
-        assertThat(layout.resourcesDir()).isEqualTo(dir.resolve("build/resources/main"));
-        assertThat(layout.testResourcesDir()).isEqualTo(dir.resolve("build/resources/test"));
-        assertThat(layout.tmpDir()).isEqualTo(dir.resolve("build/tmp"));
+        assertThat(layout.classesDir())
+                .isEqualTo(dir.resolve("target/build/java/main"));
+        assertThat(layout.testClassesDir())
+                .isEqualTo(dir.resolve("target/build/java/test"));
+        assertThat(layout.kotlinClassesDir())
+                .isEqualTo(dir.resolve("target/build/kotlin/main"));
+        assertThat(layout.kotlinTestClassesDir())
+                .isEqualTo(dir.resolve("target/build/kotlin/test"));
+        assertThat(layout.resourcesDir())
+                .isEqualTo(dir.resolve("target/build/resources/main"));
+        assertThat(layout.testResourcesDir())
+                .isEqualTo(dir.resolve("target/build/resources/test"));
+        assertThat(layout.tmpDir())
+                .isEqualTo(dir.resolve("target/build/tmp"));
         assertThat(layout.generatedSourcesDir("immutables"))
-                .isEqualTo(dir.resolve("build/generated/sources/immutables/main"));
+                .isEqualTo(dir.resolve("target/build/generated/sources/immutables/main"));
+        assertThat(layout.testResultsDir())
+                .isEqualTo(dir.resolve("target/build/test-results"));
     }
 
     @Test
@@ -47,9 +58,12 @@ class BuildLayoutTest {
         assertThat(layout.javadocJar()).isEqualTo(dir.resolve("target/widget-1.2.3-javadoc.jar"));
         assertThat(layout.nativeBinary()).isEqualTo(dir.resolve("target/widget"));
         assertThat(layout.ociImageTar()).isEqualTo(dir.resolve("target/widget.oci.tar"));
-        assertThat(layout.testReportsDir("core")).isEqualTo(dir.resolve("target/reports/core"));
-        assertThat(layout.sbomDir()).isEqualTo(dir.resolve("target/sbom"));
-        assertThat(layout.provenanceDir()).isEqualTo(dir.resolve("target/provenance"));
+        assertThat(layout.testReportsDir("core"))
+                .isEqualTo(dir.resolve("target/build/reports/core"));
+        assertThat(layout.sbomDir())
+                .isEqualTo(dir.resolve("target/widget-1.2.3-sbom"));
+        assertThat(layout.provenanceDir())
+                .isEqualTo(dir.resolve("target/widget-1.2.3-provenance"));
     }
 
     @Test
@@ -58,8 +72,9 @@ class BuildLayoutTest {
         JkBuild proj = project("jk-core", "0.7.0");
         BuildLayout layout = BuildLayout.of(workspace, member, proj);
 
-        // Intermediates stay with the member.
-        assertThat(layout.classesDir()).isEqualTo(member.resolve("build/classes/main"));
+        // Intermediates stay with the member (under member/target/build/).
+        assertThat(layout.classesDir())
+                .isEqualTo(member.resolve("target/build/java/main"));
         // Final artifacts land at the workspace root.
         assertThat(layout.mainJar()).isEqualTo(workspace.resolve("target/jk-core-0.7.0.jar"));
         assertThat(layout.nativeBinary()).isEqualTo(workspace.resolve("target/jk-core"));
@@ -67,10 +82,6 @@ class BuildLayoutTest {
 
     @Test
     void of_auto_discovers_enclosing_workspace_root(@TempDir Path workspace) throws java.io.IOException {
-        // Two-on-disk-files scenario: a workspace root that lists `core/`
-        // as a member, plus a member manifest under `core/`. Calling
-        // BuildLayout.of(member, memberProject) should yield a layout
-        // whose target/ lives at the *workspace* root, not the member.
         java.nio.file.Files.writeString(workspace.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
@@ -97,13 +108,13 @@ class BuildLayoutTest {
         // The jar belongs at the workspace root, NOT the member.
         assertThat(layout.mainJar())
                 .isEqualTo(workspace.toAbsolutePath().normalize().resolve("target/core-1.0.0.jar"));
-        // But intermediates stay member-local.
-        assertThat(layout.classesDir()).isEqualTo(member.resolve("build/classes/main"));
+        // But intermediates stay member-local (member/target/build/).
+        assertThat(layout.classesDir())
+                .isEqualTo(member.resolve("target/build/java/main"));
     }
 
     @Test
     void of_workspace_root_itself_keeps_target_at_root(@TempDir Path workspace) {
-        // The workspace root *is* the project; both layers collapse to it.
         BuildLayout layout = BuildLayout.of(workspace,
                 workspaceRootProject("ws-root", "1.0.0"));
         assertThat(layout.workspaceRoot()).isEqualTo(workspace);

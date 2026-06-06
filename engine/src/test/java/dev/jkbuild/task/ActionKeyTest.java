@@ -80,8 +80,8 @@ class ActionKeyTest {
 
     @Test
     void qualified_task_id_differs_per_module_and_is_stable() {
-        Path a = Path.of("/work/projA/build/classes/main");
-        Path b = Path.of("/work/projB/build/classes/main");
+        Path a = Path.of("/work/projA/target/build/java/main");
+        Path b = Path.of("/work/projB/target/build/java/main");
         String qa = ActionKey.qualifiedTaskId("compile-main", a);
         String qb = ActionKey.qualifiedTaskId("compile-main", b);
 

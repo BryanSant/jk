@@ -50,12 +50,16 @@ public final class CleanCommand implements Callable<Integer> {
         long[] stats = {0L, 0L}; // [fileCount, totalBytes]
 
         try (Spinner spinner = Spinner.show(System.out, "Cleaning...")) {
-            // Member intermediates — always removed.
-            deleteRecursively(dir.resolve("build"), stats);
-            // Workspace artifacts — kept only when --keep-artifacts is set.
+            // Member intermediates live under target/build/; workspace final
+            // artifacts sit directly under target/. Clean all or just intermediates.
             if (!keepArtifacts) {
                 deleteRecursively(workspaceRoot.resolve("target"), stats);
+            } else {
+                // Keep jars/native/OCI but remove build intermediates.
+                deleteRecursively(dir.resolve("target").resolve("build"), stats);
             }
+            // Legacy build/ dir from pre-layout projects, best-effort.
+            deleteRecursively(dir.resolve("build"), stats);
             // Pre-layout generated-sources dir, best-effort.
             deleteRecursively(dir.resolve(".jk").resolve("generated"), stats);
         }

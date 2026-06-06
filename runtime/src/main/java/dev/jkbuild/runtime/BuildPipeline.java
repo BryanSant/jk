@@ -297,11 +297,10 @@ public final class BuildPipeline {
                 .scope(0)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
-                    // In a mixed module javac writes to a private dir (the
-                    // assembler merges it into classes); its action cache snapshots
-                    // this dir, so it must never hold Kotlin's output.
-                    Path javaOut = mixed
-                            ? classes.resolveSibling(classes.getFileName() + "-java") : classes;
+                    // javac always writes to the canonical classes dir (java/main/).
+                    // The Kotlin incremental compiler gets its own dir (kotlin/main/)
+                    // so it cannot prune Java's output; the assembler merges both.
+                    Path javaOut = classes;
                     List<Path> sources = javaSources(ctx);
                     if (sources.isEmpty()) {
                         ctx.label("no Java sources");
@@ -315,7 +314,7 @@ public final class BuildPipeline {
                     if (mixed) {
                         // See Kotlin's output so Java can reference Kotlin types.
                         classpath = new ArrayList<>(classpath);
-                        classpath.add(classes.resolveSibling(classes.getFileName() + "-kotlin"));
+                        classpath.add(ctx.require(LAYOUT).kotlinClassesDir());
                     }
                     @SuppressWarnings("unchecked")
                     List<Path> processorCp = (List<Path>) ctx.require(PROCESSOR_CP);
@@ -418,7 +417,7 @@ public final class BuildPipeline {
                     // shared classes dir. The incremental compiler owns its output
                     // dir and prunes files it didn't produce — so it can't share a
                     // dir with javac's output (it would delete the .class files).
-                    Path ktOut = classes.resolveSibling(classes.getFileName() + "-kotlin");
+                    Path ktOut = ctx.require(LAYOUT).kotlinClassesDir();
                     String taskId = ActionKey.qualifiedTaskId("compile-kotlin", classes);
                     Path workingDir = in.cache().resolve("actions").resolve("incremental-kotlin")
                             .resolve(taskId);
@@ -484,7 +483,7 @@ public final class BuildPipeline {
                     // test types (mirrors the main mixed-module ordering). In a mixed
                     // test module each language gets its own output dir, merged below.
                     Path ktTestOut = mixedTest
-                            ? testClasses.resolveSibling(testClasses.getFileName() + "-kotlin")
+                            ? ctx.require(LAYOUT).kotlinTestClassesDir()
                             : testClasses;
                     if (!ktTest.isEmpty()) {
                         ctx.label("compiling " + ktTest.size() + " Kotlin test sources");
@@ -502,9 +501,7 @@ public final class BuildPipeline {
 
                     // Java test sources, against the Kotlin test output in a mixed module.
                     if (!javaTest.isEmpty()) {
-                        Path javaTestOut = mixedTest
-                                ? testClasses.resolveSibling(testClasses.getFileName() + "-java")
-                                : testClasses;
+                        Path javaTestOut = testClasses;  // javac always writes to java/test/
                         List<Path> javaCp = baseCp;
                         if (mixedTest) {
                             javaCp = new ArrayList<>(baseCp);
@@ -518,12 +515,11 @@ public final class BuildPipeline {
                         if (!ok) throw new RuntimeException("test compile failed");
                     }
 
-                    // Merge per-language outputs into the shared test classes dir.
-                    if (mixedTest) {
+                    // In mixed test mode, kotlin output needs to be merged into testClasses
+                    // (java/test/). Java test output already went there directly.
+                    if (mixedTest && !ktTest.isEmpty()) {
                         Files.createDirectories(testClasses);
                         copyResources(ktTestOut, testClasses);
-                        copyResources(testClasses.resolveSibling(testClasses.getFileName() + "-java"),
-                                testClasses);
                     }
                     ctx.progress(1);
                 })
@@ -614,15 +610,14 @@ public final class BuildPipeline {
                     }
                     ctx.label("write freshness stamp");
                     Path classes = ctx.require(MAIN_CLASSES);
-                    Path javaOut = mixed
-                            ? classes.resolveSibling(classes.getFileName() + "-java") : classes;
+                    Path javaOut = classes;  // javac always writes to java/main/
                     @SuppressWarnings("unchecked")
                     List<Path> sources = (List<Path>) ctx.require(JAVA_SOURCES);
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
                     if (mixed) {   // match compile-java's freshness inputs
                         classpath = new ArrayList<>(classpath);
-                        classpath.add(classes.resolveSibling(classes.getFileName() + "-kotlin"));
+                        classpath.add(ctx.require(LAYOUT).kotlinClassesDir());
                     }
                     String actionKey = ctx.get(ACTION_KEY).orElse("");
                     dev.jkbuild.task.FreshnessStamp.write(
@@ -681,8 +676,8 @@ public final class BuildPipeline {
                     }
                     ctx.label("assemble classes");
                     Files.createDirectories(classes);
-                    copyResources(classes.resolveSibling(classes.getFileName() + "-java"), classes);
-                    copyResources(classes.resolveSibling(classes.getFileName() + "-kotlin"), classes);
+                    // Java output already lives in classes (java/main/); merge kotlin.
+                    copyResources(ctx.require(LAYOUT).kotlinClassesDir(), classes);
                     ctx.progress(1);
                 })
                 .build();
