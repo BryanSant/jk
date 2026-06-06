@@ -216,7 +216,7 @@ class NewScaffolderTest {
         assertThat(gitignore).exists();
         String body = Files.readString(gitignore);
         assertThat(body).contains("target/");
-        assertThat(body).contains("**/build/");
+        
         assertThat(body).contains(".jk/");
     }
 

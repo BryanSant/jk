@@ -104,7 +104,6 @@ public final class NewScaffolder {
         Files.writeString(gitignore, """
                 # jk build outputs
                 target/
-                **/build/
                 .jk/
                 """, StandardCharsets.UTF_8);
     }
@@ -127,19 +126,26 @@ public final class NewScaffolder {
         var pkg = inputs.group();
         switch (inputs.lang()) {
             case JAVA -> {
-                var dir = inputs.directory().resolve("src/main/java/" + pkg.replace('.', '/'));
-                Files.createDirectories(dir);
-                // Gate on the compile target, not the toolchain — a member that
-                // inherits java = 17 must use the traditional main even on JDK 25.
-                var body = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN
-                        ? renderJavaInstanceMain(pkg)
-                        : renderJavaTraditionalMain(pkg);
-                Files.writeString(dir.resolve(MAIN_CLASS + ".java"), body, StandardCharsets.UTF_8);
+                if (inputs.compact()) {
+                    // Compact layout: no package, file lives at ./src/Main.java.
+                    var dir = inputs.directory().resolve("src");
+                    Files.createDirectories(dir);
+                    // Gate on the compile target, not the toolchain.
+                    var body = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN
+                            ? renderJavaInstanceMain("") : renderJavaTraditionalMain("");
+                    Files.writeString(dir.resolve(MAIN_CLASS + ".java"), body, StandardCharsets.UTF_8);
+                } else {
+                    var dir = inputs.directory().resolve("src/main/java/" + pkg.replace('.', '/'));
+                    Files.createDirectories(dir);
+                    var body = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN
+                            ? renderJavaInstanceMain(pkg) : renderJavaTraditionalMain(pkg);
+                    Files.writeString(dir.resolve(MAIN_CLASS + ".java"), body, StandardCharsets.UTF_8);
+                }
             }
             case KOTLIN -> {
                 Path file;
                 String body;
-                if (inputs.kotlinCompact()) {
+                if (inputs.compact()) {
                     // Compact layout: no package, file lives at ./src/Main.kt.
                     var dir = inputs.directory().resolve("src");
                     Files.createDirectories(dir);
@@ -158,18 +164,30 @@ public final class NewScaffolder {
 
     private static void writePackageMarker(NewInputs inputs) throws IOException {
         var pkg = inputs.group();
-        var langDir = inputs.lang().sourceDir();
-        var pkgDir = inputs.directory().resolve("src/main/" + langDir + "/" + pkg.replace('.', '/'));
-        Files.createDirectories(pkgDir);
-        switch (inputs.lang()) {
-            case JAVA -> Files.writeString(
-                    pkgDir.resolve("package-info.java"),
-                    renderJavaPackageInfo(pkg),
-                    StandardCharsets.UTF_8);
-            case KOTLIN -> Files.writeString(
-                    pkgDir.resolve("PackageInfo.kt"),
-                    renderKotlinPackageMarker(pkg),
-                    StandardCharsets.UTF_8);
+        if (inputs.compact()) {
+            // Compact layout: place a single source file at ./src/ with no nesting.
+            var dir = inputs.directory().resolve("src");
+            Files.createDirectories(dir);
+            switch (inputs.lang()) {
+                case JAVA -> Files.writeString(
+                        dir.resolve("package-info.java"),
+                        renderJavaPackageInfo(pkg), StandardCharsets.UTF_8);
+                case KOTLIN -> Files.writeString(
+                        dir.resolve("PackageInfo.kt"),
+                        renderKotlinPackageMarker(pkg), StandardCharsets.UTF_8);
+            }
+        } else {
+            var langDir = inputs.lang().sourceDir();
+            var pkgDir = inputs.directory().resolve("src/main/" + langDir + "/" + pkg.replace('.', '/'));
+            Files.createDirectories(pkgDir);
+            switch (inputs.lang()) {
+                case JAVA -> Files.writeString(
+                        pkgDir.resolve("package-info.java"),
+                        renderJavaPackageInfo(pkg), StandardCharsets.UTF_8);
+                case KOTLIN -> Files.writeString(
+                        pkgDir.resolve("PackageInfo.kt"),
+                        renderKotlinPackageMarker(pkg), StandardCharsets.UTF_8);
+            }
         }
     }
 

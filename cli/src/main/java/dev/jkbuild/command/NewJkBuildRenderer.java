@@ -60,7 +60,7 @@ public final class NewJkBuildRenderer {
         if (inputs.nativeImage()) {
             sb.append("native   = true\n");
         }
-        if (inputs.kotlinCompact()) {
+        if (inputs.compact()) {
             sb.append("compact  = true\n");
         }
         inputs.kotlinModuleName().ifPresent(m ->

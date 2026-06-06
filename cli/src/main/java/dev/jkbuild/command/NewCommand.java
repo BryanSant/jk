@@ -86,8 +86,8 @@ public final class NewCommand implements Callable<Integer> {
     @Option(names = "--deps", description = "Comma-separated curated deps: lombok, jspecify, kotest, commons-lang, commons-io, guava.")
     String depsCsv;
 
-    @Option(names = "--kotlin-compact", description = "Use Kotlin compact project structure (Main.kt at ./src/Main.kt).")
-    boolean kotlinCompact;
+    @Option(names = "--compact", description = "Use compact project structure: sources in ./src, tests in ./test.")
+    boolean compact;
 
     @Option(names = "--kotlin-module", description = "Kotlin module name; emitted as project.module in jk.toml.")
     String kotlinModule;
@@ -446,7 +446,7 @@ public final class NewCommand implements Callable<Integer> {
                 || shadow
                 || nativeImage
                 || depsCsv != null
-                || kotlinCompact
+                || compact
                 || kotlinModule != null;
     }
 
@@ -494,7 +494,7 @@ public final class NewCommand implements Callable<Integer> {
                 : NewInputs.Language.JAVA;
         var isExecutable = Boolean.TRUE.equals(executable) || shadow || nativeImage;
         var resolvedMain = isExecutable
-                ? Optional.of(deriveMainFqcn(resolvedGroup, resolvedLang, kotlinCompact))
+                ? Optional.of(deriveMainFqcn(resolvedGroup, resolvedLang, compact))
                 : Optional.<String>empty();
         var resolvedDeps = parseDeps(depsCsv);
         var resolvedKotlinModule = (kotlinModule != null && !kotlinModule.isBlank())
@@ -505,7 +505,7 @@ public final class NewCommand implements Callable<Integer> {
                 resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
                 Optional.<String>empty(), // flag path doesn't resolve to a specific install
                 resolvedMain, shadow, nativeImage,
-                resolvedLang, kotlinCompact, resolvedKotlinModule,
+                resolvedLang, compact, resolvedKotlinModule,
                 resolvedDeps, true, target);
     }
 
@@ -699,16 +699,17 @@ public final class NewCommand implements Callable<Integer> {
     /**
      * Fully-qualified main class name for an executable project.
      * <ul>
-     *   <li>Java → {@code <group>.Main}.</li>
-     *   <li>Kotlin (non-compact) → {@code <group>.MainKt} (Kotlin emits a
+     *   <li>Java compact → {@code Main} (no package).</li>
+     *   <li>Java standard → {@code <group>.Main}.</li>
+     *   <li>Kotlin compact → {@code MainKt} (no package; Kotlin emits a
      *       {@code FilenameKt} synthetic class for top-level {@code fun main}).</li>
-     *   <li>Kotlin compact → {@code MainKt} (no package).</li>
+     *   <li>Kotlin standard → {@code <group>.MainKt}.</li>
      * </ul>
      */
-    private static String deriveMainFqcn(String group, NewInputs.Language lang, boolean kotlinCompact) {
+    private static String deriveMainFqcn(String group, NewInputs.Language lang, boolean compact) {
         return switch (lang) {
-            case JAVA -> group + ".Main";
-            case KOTLIN -> kotlinCompact ? "MainKt" : group + ".MainKt";
+            case JAVA   -> compact ? "Main"   : group + ".Main";
+            case KOTLIN -> compact ? "MainKt" : group + ".MainKt";
         };
     }
 
@@ -737,9 +738,10 @@ public final class NewCommand implements Callable<Integer> {
         }
 
         var javaOptions = WizardStep.MultiSelectStep.vertical("javaOptions", "Additional project options:")
+                .choice("compact", "Use compact project structure (sources in ./src, tests in ./test)")
                 .choice("lombok", "Use Lombok")
                 .choice("jspecify", "Use JSpecify (null-safety)")
-                .defaults(java.util.Set.of("lombok", "jspecify"))
+                .defaults(java.util.Set.of("compact", "lombok", "jspecify"))
                 .when(a -> "java".equals(a.get("lang")))
                 .build();
 
@@ -875,16 +877,17 @@ public final class NewCommand implements Callable<Integer> {
         boolean resolvedShadow = isExecutable && targets.contains("shadow");
         boolean resolvedNative = isExecutable && targets.contains("native");
 
-        boolean resolvedKotlinCompact = false;
+        boolean resolvedCompact = false;
         Optional<String> resolvedKotlinModule = Optional.empty();
         var deps = new ArrayList<String>();
         if (resolvedLang == NewInputs.Language.JAVA) {
             var javaOpts = answers.getList("javaOptions");
+            resolvedCompact = javaOpts.contains("compact");
             if (javaOpts.contains("lombok")) deps.add("lombok");
             if (javaOpts.contains("jspecify")) deps.add("jspecify");
         } else {
             var kotlinOpts = answers.getList("kotlinOptions");
-            resolvedKotlinCompact = kotlinOpts.contains("compact");
+            resolvedCompact = kotlinOpts.contains("compact");
             if (kotlinOpts.contains("module")) {
                 resolvedKotlinModule = Optional.of(resolvedName);
             }
@@ -892,7 +895,7 @@ public final class NewCommand implements Callable<Integer> {
         }
 
         var resolvedMain = isExecutable
-                ? Optional.of(deriveMainFqcn(resolvedGroup, resolvedLang, resolvedKotlinCompact))
+                ? Optional.of(deriveMainFqcn(resolvedGroup, resolvedLang, resolvedCompact))
                 : Optional.<String>empty();
 
         return new NewInputs(
@@ -900,7 +903,7 @@ public final class NewCommand implements Callable<Integer> {
                 resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
                 Optional.of(pickedOpt.id()),
                 resolvedMain, resolvedShadow, resolvedNative,
-                resolvedLang, resolvedKotlinCompact, resolvedKotlinModule,
+                resolvedLang, resolvedCompact, resolvedKotlinModule,
                 deps, true, target);
     }
 

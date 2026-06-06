@@ -57,8 +57,8 @@ public final class InitCommand implements Callable<Integer> {
     @Option(names = "--deps", description = "Comma-separated curated deps: lombok, jspecify, kotest, commons-lang, commons-io, guava.")
     String depsCsv;
 
-    @Option(names = "--kotlin-compact", description = "Use Kotlin compact project structure (Main.kt at ./src/Main.kt).")
-    boolean kotlinCompact;
+    @Option(names = "--compact", description = "Use compact project structure: sources in ./src, tests in ./test.")
+    boolean compact;
 
     @Option(names = "--kotlin-module", description = "Kotlin module name; emitted as project.module in jk.toml.")
     String kotlinModule;
@@ -92,7 +92,7 @@ public final class InitCommand implements Callable<Integer> {
         delegate.shadow       = this.shadow;
         delegate.nativeImage  = this.nativeImage;
         delegate.depsCsv      = this.depsCsv;
-        delegate.kotlinCompact = this.kotlinCompact;
+        delegate.compact = this.compact;
         delegate.kotlinModule = this.kotlinModule;
         delegate.noMember     = this.noMember;
         delegate.global       = this.global;

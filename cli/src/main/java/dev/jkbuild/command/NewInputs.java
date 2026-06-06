@@ -21,8 +21,10 @@ import java.util.Optional;
  *       equal to {@code jdkMajor}, but a workspace member inherits the parent's
  *       release even when it diverges (e.g. {@code jdk = 25}, {@code java = 17}).
  *       Drives the instance-{@code main} syntax decision.</li>
- *   <li>{@code kotlinCompact} — when {@code true} (Kotlin only), {@code Main.kt}
- *       lands at {@code ./src/Main.kt} with no package declaration.</li>
+ *   <li>{@code compact} — when {@code true}, source files live directly in
+ *       {@code ./src} (main) and {@code ./test} (test) with no subdirectory
+ *       nesting and no package declaration. Applies to both Java and Kotlin.
+ *       Emitted as {@code compact = true} in {@code jk.toml}.</li>
  *   <li>{@code kotlinModuleName} — when present, written as
  *       {@code module = "..."} under {@code [project]}.</li>
  * </ul>
@@ -38,7 +40,7 @@ public record NewInputs(
         boolean shadow,
         boolean nativeImage,
         Language lang,
-        boolean kotlinCompact,
+        boolean compact,
         Optional<String> kotlinModuleName,
         List<String> deps,
         boolean sample,
@@ -57,17 +59,15 @@ public record NewInputs(
     }
 
     /**
-     * Back-compat constructor: {@code javaRelease} defaults to {@code jdkMajor}
-     * (the common case where the compile target equals the toolchain). Callers
-     * that inherit a divergent member release use the canonical constructor.
+     * Back-compat constructor: {@code javaRelease} defaults to {@code jdkMajor}.
      */
     public NewInputs(
             String group, String name, String jdk, int jdkMajor,
             Optional<String> jdkIdentifier, Optional<String> main, boolean shadow,
-            boolean nativeImage, Language lang, boolean kotlinCompact,
+            boolean nativeImage, Language lang, boolean compact,
             Optional<String> kotlinModuleName, List<String> deps, boolean sample, Path directory) {
         this(group, name, jdk, jdkMajor, jdkMajor, jdkIdentifier, main, shadow,
-                nativeImage, lang, kotlinCompact, kotlinModuleName, deps, sample, directory);
+                nativeImage, lang, compact, kotlinModuleName, deps, sample, directory);
     }
 
     public enum Language {
