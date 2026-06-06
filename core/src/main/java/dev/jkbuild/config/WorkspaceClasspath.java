@@ -37,9 +37,17 @@ public final class WorkspaceClasspath {
      * @param scopes the scopes whose deps should contribute (typically
      *     {@code MAIN} for compile, {@code MAIN}+{@code TEST} for tests)
      */
-    public static Result resolve(Path memberDir, JkBuild member, Set<Scope> scopes)
+    public static Result resolve(Path projectDir, JkBuild project, Set<Scope> scopes)
             throws IOException {
-        var rootOpt = WorkspaceLocator.findRoot(memberDir);
+        // Case 1: project IS the workspace root — add all member jars implicitly.
+        // Members' compiled outputs are always applicable to the root's classpath;
+        // no explicit dependency declaration is needed.
+        if (project.isWorkspaceRoot()) {
+            return resolveForRoot(projectDir, project);
+        }
+
+        // Case 2: project is a workspace member — add declared sibling deps.
+        var rootOpt = WorkspaceLocator.findRoot(projectDir);
         if (rootOpt.isEmpty()) {
             return new Result(List.of(), List.of());
         }
@@ -69,7 +77,7 @@ public final class WorkspaceClasspath {
         List<Path> jars = new ArrayList<>();
         List<String> missing = new ArrayList<>();
         for (Scope scope : scopes) {
-            for (Dependency dep : member.dependencies().of(scope)) {
+            for (Dependency dep : project.dependencies().of(scope)) {
                 Path siblingJar = siblingJarByModule.get(dep.module());
                 if (siblingJar == null) continue;
                 if (Files.exists(siblingJar)) {
@@ -77,6 +85,37 @@ public final class WorkspaceClasspath {
                 } else {
                     missing.add(dep.module() + " (expected at " + siblingJar + ")");
                 }
+            }
+        }
+        return new Result(jars, missing);
+    }
+
+    /**
+     * When the workspace root itself has source code, all member jars are
+     * automatically on its classpath — no explicit dep declaration needed.
+     * Members missing their jars are reported as errors so the root build
+     * fails clearly instead of compiling against stale or absent types.
+     */
+    private static Result resolveForRoot(Path root, JkBuild rootManifest)
+            throws IOException {
+        List<Path> jars = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        for (String memberName : rootManifest.workspace().members()) {
+            Path siblingDir = root.resolve(memberName);
+            Path siblingManifest = siblingDir.resolve("jk.toml");
+            if (!Files.exists(siblingManifest)) continue;
+            JkBuild sibling;
+            try {
+                sibling = JkBuildParser.parse(siblingManifest);
+            } catch (RuntimeException ignored) {
+                continue;
+            }
+            Path jar = BuildLayout.of(root, siblingDir, sibling).mainJar();
+            if (Files.exists(jar)) {
+                jars.add(jar);
+            } else {
+                missing.add(sibling.project().group() + ":" + sibling.project().name()
+                        + " (expected at " + jar + ")");
             }
         }
         return new Result(jars, missing);
