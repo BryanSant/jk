@@ -65,14 +65,32 @@ public final class CompileSupport {
     }
 
     /**
-     * All {@code .kt} files for a project: under {@code src/main/kotlin} and also
-     * under {@code src/main/java} (a common shortcut Maven users take — kotlinc
-     * handles both layouts).
+     * All {@code .kt} files for a project. Searches in order:
+     * <ol>
+     *   <li>{@code src/main/kotlin} — standard Maven/Gradle layout</li>
+     *   <li>{@code src/main/java} — mixed layout (Maven users sometimes place .kt here)</li>
+     *   <li>{@code src/} directly, excluding {@code src/test/} — compact/flat layout
+     *       ({@code jk new --compact}) where {@code src/Main.kt} lives at the root of
+     *       {@code src/} with no subdirectory nesting.</li>
+     * </ol>
      */
     public static List<Path> collectKotlinSources(Path projectDir) throws IOException {
         List<Path> out = new ArrayList<>();
         out.addAll(collectFilesWithExtension(projectDir.resolve("src/main/kotlin"), ".kt"));
         out.addAll(collectFilesWithExtension(projectDir.resolve("src/main/java"), ".kt"));
+        if (out.isEmpty()) {
+            // Compact/flat layout: src/Main.kt alongside (but not under) src/test/.
+            Path src = projectDir.resolve("src");
+            Path srcTest = src.resolve("test");
+            if (Files.isDirectory(src)) {
+                try (Stream<Path> stream = Files.walk(src)) {
+                    stream.filter(Files::isRegularFile)
+                          .filter(p -> p.getFileName().toString().endsWith(".kt"))
+                          .filter(p -> !p.startsWith(srcTest))
+                          .forEach(out::add);
+                }
+            }
+        }
         return out;
     }
 
