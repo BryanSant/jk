@@ -738,19 +738,31 @@ public final class NewCommand implements Callable<Integer> {
                     .orElse(defaultJdkId);
         }
 
-        var javaOptions = WizardStep.MultiSelectStep.vertical("javaOptions", "Additional project options:")
-                .choice("simple", "Use a simplified project structure (sources in ./src, tests in ./test)")
-                .choice("lombok", "Use Lombok")
-                .choice("jspecify", "Use JSpecify (null-safety)")
-                .defaults(java.util.Set.of("simple", "lombok", "jspecify"))
+        var javaLayoutStep = WizardStep.RadioStep.vertical("layout", "Project layout:")
+                .choice("simple",      "Simple (sources in ./src, tests in ./test)")
+                .choice("traditional", "Traditional (sources in ./src/main/java, tests in ./src/test/java)")
+                .defaultChoice("simple")
                 .when(a -> "java".equals(a.get("lang")))
                 .build();
 
-        var kotlinOptions = WizardStep.MultiSelectStep.vertical("kotlinOptions", "Additional project options:")
-                .choice("simple", "Use a simplified project structure")
+        var kotlinLayoutStep = WizardStep.RadioStep.vertical("layout", "Project layout:")
+                .choice("simple",      "Simple (sources in ./src, tests in ./test)")
+                .choice("traditional", "Traditional (sources in ./src/main/kotlin, tests in ./src/test/kotlin)")
+                .defaultChoice("simple")
+                .when(a -> "kotlin".equals(a.get("lang")))
+                .build();
+
+        var javaOptions = WizardStep.MultiSelectStep.vertical("javaOptions", "Include common libraries:")
+                .choice("lombok",   "Lombok (boilerplate reduction)")
+                .choice("jspecify", "JSpecify (null-safety)")
+                .defaults(java.util.Set.of("lombok", "jspecify"))
+                .when(a -> "java".equals(a.get("lang")))
+                .build();
+
+        var kotlinOptions = WizardStep.MultiSelectStep.vertical("kotlinOptions", "Include common libraries:")
                 .choice("module", "Set module name")
-                .choice("kotest", "Use Kotest for unit testing")
-                .defaults(java.util.Set.of("simple", "module", "kotest"))
+                .choice("kotest", "Kotest (unit testing)")
+                .defaults(java.util.Set.of("module", "kotest"))
                 .when(a -> "kotlin".equals(a.get("lang")))
                 .build();
 
@@ -805,7 +817,7 @@ public final class NewCommand implements Callable<Integer> {
                         .placeholder("untitled")
                         .defaultValue("untitled")
                         .build())
-                .step(WizardStep.InputStep.of("group", "Maven groupId:")
+                .step(WizardStep.InputStep.of("group", member ? "Member group:" : "Project group:")
                         .placeholder(effectiveGroup)
                         .defaultValue(effectiveGroup)
                         .build())
@@ -824,6 +836,8 @@ public final class NewCommand implements Callable<Integer> {
                         .build())
                 .step(javaVersion)
                 .step(jdkStep.build())
+                .step(javaLayoutStep)
+                .step(kotlinLayoutStep)
                 .step(javaOptions)
                 .step(kotlinOptions)
                 .build();
@@ -878,17 +892,17 @@ public final class NewCommand implements Callable<Integer> {
         boolean resolvedShadow = isExecutable && targets.contains("shadow");
         boolean resolvedNative = isExecutable && targets.contains("native");
 
-        String resolvedLayout = null;
+        // Layout comes from its own dedicated step; default to "simple" if not answered.
+        String resolvedLayout = answers.has("layout") && !answers.get("layout").isBlank()
+                ? answers.get("layout") : "simple";
         Optional<String> resolvedKotlinModule = Optional.empty();
         var deps = new ArrayList<String>();
         if (resolvedLang == NewInputs.Language.JAVA) {
             var javaOpts = answers.getList("javaOptions");
-            resolvedLayout = javaOpts.contains("simple") ? "simple" : "traditional";
             if (javaOpts.contains("lombok")) deps.add("lombok");
             if (javaOpts.contains("jspecify")) deps.add("jspecify");
         } else {
             var kotlinOpts = answers.getList("kotlinOptions");
-            resolvedLayout = kotlinOpts.contains("simple") ? "simple" : "traditional";
             if (kotlinOpts.contains("module")) {
                 resolvedKotlinModule = Optional.of(resolvedName);
             }
