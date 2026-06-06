@@ -20,6 +20,9 @@ import java.util.Optional;
  */
 public final class WorkspaceLocator {
 
+    /** Guard against symlink cycles or other pathological filesystems. */
+    private static final int MAX_DEPTH = 8192;
+
     private WorkspaceLocator() {}
 
     /**
@@ -36,7 +39,7 @@ public final class WorkspaceLocator {
     public static Optional<Path> findEnclosingWorkspace(Path dir) throws IOException {
         Path normalized = dir.toAbsolutePath().normalize();
         Path candidate = normalized;
-        while (true) {
+        for (int depth = 0; depth < MAX_DEPTH; depth++) {
             Path parent = candidate.getParent();
             if (parent == null) break;   // reached filesystem root
             Path rootJkToml = parent.resolve("jk.toml");
@@ -61,7 +64,7 @@ public final class WorkspaceLocator {
     public static Optional<Path> findRoot(Path memberDir) throws IOException {
         Path normalized = memberDir.toAbsolutePath().normalize();
         Path candidate = normalized;
-        while (true) {
+        for (int depth = 0; depth < MAX_DEPTH; depth++) {
             Path parent = candidate.getParent();
             if (parent == null) break;   // reached filesystem root
             Path rootJkToml = parent.resolve("jk.toml");
