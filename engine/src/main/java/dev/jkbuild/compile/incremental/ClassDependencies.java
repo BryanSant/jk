@@ -2,6 +2,7 @@
 package dev.jkbuild.compile.incremental;
 
 import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.Remapper;
 import org.objectweb.asm.tree.ClassNode;
@@ -33,7 +34,7 @@ public final class ClassDependencies {
     public static Set<String> referencedTypes(byte[] classBytes) {
         ClassReader reader = new ClassReader(classBytes);
         Set<String> names = new TreeSet<>();
-        Remapper recorder = new Remapper() {
+        Remapper recorder = new Remapper(Opcodes.ASM9) {
             @Override
             public String map(String internalName) {
                 if (internalName != null) names.add(internalName);

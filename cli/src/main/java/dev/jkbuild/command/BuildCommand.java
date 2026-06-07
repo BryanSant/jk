@@ -211,9 +211,36 @@ public final class BuildCommand implements Callable<Integer> {
                 built++;
             }
         }
-        view.finishSuccess("Built " + built + " member" + (built == 1 ? "" : "s")
+        view.finishSuccess(workspaceSummary(root, workspaceRoot, sorted)
                 + " " + elapsedSince(buildStart));
         return 0;
+    }
+
+    /**
+     * "Built jktest and its :cli member"
+     * "Built jktest and its :cli, :core members"
+     * "Built jktest and its :cli, :runtime and 1 other member"
+     * "Built jktest and its :cli, :runtime and 4 other members"
+     */
+    private static String workspaceSummary(JkBuild root, Path workspaceRoot, List<Path> members) {
+        String rootName = root.project().name();
+        if (rootName.isBlank()) rootName = workspaceRoot.getFileName().toString();
+        String cyanRoot = Theme.colorize(rootName, Theme.active().cyan());
+
+        int n = members.size();
+        if (n == 0) return "Built " + cyanRoot;
+
+        String m0 = Theme.colorize(":" + workspaceRoot.relativize(members.get(0)),
+                Theme.active().cyan());
+        if (n == 1) return "Built " + cyanRoot + " and its " + m0 + " member";
+
+        String m1 = Theme.colorize(":" + workspaceRoot.relativize(members.get(1)),
+                Theme.active().cyan());
+        if (n == 2) return "Built " + cyanRoot + " and its " + m0 + ", " + m1 + " members";
+
+        int others = n - 2;
+        return "Built " + cyanRoot + " and its " + m0 + ", " + m1
+                + " and " + others + " other " + (others == 1 ? "member" : "members");
     }
 
     /**
