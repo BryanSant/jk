@@ -5,6 +5,7 @@ import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -156,47 +157,54 @@ public final class RunCommand implements Callable<Integer> {
      * Prints the "→ Executing ..." line (to stderr, above the program's output)
      * followed by a blank line, so the program's stdout starts on a clean line.
      *
-     * <p>Native:  {@code → Executing [yellow]target/myapp[/]}
-     * <p>JVM jar: {@code → Executing [yellow italic]{jdk}[/][yellow]/java -jar app.jar[/]}
-     * <p>JVM cp:  {@code → Executing [yellow italic]{jdk}[/][yellow]/java -cp app.jar[/]}
+     * <p>Native:  {@code → Executing native binary: [yellow]target/myapp[/]}
+     * <p>Shadow:  {@code → Executing [dim italic]{jdk}[/]:[yellow]java -jar target/app-all.jar[/]}
+     * <p>Plain:   {@code → Executing [dim italic]{jdk}[/]:[yellow]java -cp … target/app.jar[/]}
      */
     private static void printExecBanner(Path projectDir, List<String> command) {
-        dev.jkbuild.cli.theme.Theme t = dev.jkbuild.cli.theme.Theme.active();
+        Theme t = Theme.active();
         String exec;
         if (command.size() == 1) {
-            // Native binary — show path relative to the project dir.
+            // Native binary — "native binary: target/myapp"
             Path bin = Path.of(command.get(0));
-            String rel;
-            try {
-                rel = projectDir.relativize(bin).toString();
-            } catch (IllegalArgumentException ignored) {
-                rel = bin.getFileName() != null ? bin.getFileName().toString() : bin.toString();
-            }
-            exec = dev.jkbuild.cli.theme.Theme.colorize(rel, t.warning());
+            exec = "native binary: "
+                    + Theme.colorize(relativeTo(projectDir, bin), t.warning());
         } else {
-            // JVM — derive jdk leaf from the java executable path.
-            // Resolve symlinks so "current" etc. show the real JDK name.
+            // JVM — derive jdk leaf, resolving symlinks so "current" shows the real spec.
             Path javaExe = Path.of(command.get(0));
-            try { javaExe = javaExe.toRealPath(); } catch (java.io.IOException ignored) {}
-            Path binDir = javaExe.getParent();
-            Path jdkHome = binDir != null ? binDir.getParent() : null;
+            try { javaExe = javaExe.toRealPath(); } catch (IOException ignored) {}
+            Path jdkHome = javaExe.getParent() != null ? javaExe.getParent().getParent() : null;
             String jdkLeaf = jdkHome != null && jdkHome.getFileName() != null
                     ? jdkHome.getFileName().toString() : "java";
 
-            // Jar/classpath label: the jar filename (first entry for multi-jar cp).
-            String flag = command.get(1);                    // "-jar" or "-cp"
-            String cpArg = command.size() >= 3 ? command.get(2) : "";
-            String pathSep = System.getProperty("path.separator");
-            String firstEntry = cpArg.contains(pathSep)
-                    ? cpArg.substring(0, cpArg.indexOf(pathSep)) : cpArg;
-            String jarName = Path.of(firstEntry).getFileName() != null
-                    ? Path.of(firstEntry).getFileName().toString() : firstEntry;
-
-            exec = dev.jkbuild.cli.theme.Theme.colorize(jdkLeaf, t.warning().italic())
-                    + dev.jkbuild.cli.theme.Theme.colorize(":java " + flag + " " + jarName, t.warning());
+            String flag = command.get(1);   // "-jar" or "-cp"
+            String javaCmd;
+            if ("-jar".equals(flag)) {
+                // Shadow jar — full relative path, no classpath noise.
+                Path jar = Path.of(command.get(2));
+                javaCmd = "java -jar " + relativeTo(projectDir, jar);
+            } else {
+                // Plain jar + classpath — elide the full cp, show project jar.
+                String cpArg = command.size() >= 3 ? command.get(2) : "";
+                String pathSep = System.getProperty("path.separator");
+                String first = cpArg.contains(pathSep)
+                        ? cpArg.substring(0, cpArg.indexOf(pathSep)) : cpArg;
+                javaCmd = "java -cp … " + relativeTo(projectDir, Path.of(first));
+            }
+            exec = Theme.colorize(jdkLeaf, t.darkGray().italic())
+                    + ":"
+                    + Theme.colorize(javaCmd, t.warning());
         }
         System.err.println("→ Executing " + exec);
         System.err.println();
+    }
+
+    private static String relativeTo(Path base, Path target) {
+        try {
+            return base.relativize(target.toAbsolutePath()).toString();
+        } catch (IllegalArgumentException ignored) {
+            return target.getFileName() != null ? target.getFileName().toString() : target.toString();
+        }
     }
 
     private List<Path> assembleRuntimeClasspath(Path projectDir, JkBuild project, Path projectJar)
