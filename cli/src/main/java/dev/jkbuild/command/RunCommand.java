@@ -193,7 +193,7 @@ public final class RunCommand implements Callable<Integer> {
                     ? Path.of(firstEntry).getFileName().toString() : firstEntry;
 
             exec = dev.jkbuild.cli.theme.Theme.colorize(jdkLeaf, t.warning().italic())
-                    + dev.jkbuild.cli.theme.Theme.colorize("/java " + flag + " " + jarName, t.warning());
+                    + dev.jkbuild.cli.theme.Theme.colorize(":java " + flag + " " + jarName, t.warning());
         }
         System.err.println("→ Executing " + exec);
         System.err.println();
