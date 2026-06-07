@@ -11,6 +11,7 @@ import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.WorkspaceRedirect;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
@@ -204,7 +205,9 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
                                         ctx.label("fetched " + artifact);
                                     }
                                     @Override public void missing(String artifact, String detail) {
-                                        ctx.warn("worker", artifact + ": " + detail);
+                                        System.err.println(
+                                            Theme.colorize("⚠", Theme.active().warning())
+                                            + " Warning: " + artifact + " " + detail + ".");
                                     }
                                 });
                         ctx.put(WORKER_REPORT, report);

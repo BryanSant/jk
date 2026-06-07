@@ -84,8 +84,7 @@ public final class JkWorkerSync {
                 var hit = mavenLocal.tryFetchArtifact(coord);
                 if (hit.isEmpty()) {
                     missing++;
-                    obs.missing(w.artifactId(), "not found in " + m2
-                            + " — run `./gradlew publishToMavenLocal` in jk's tree");
+                    obs.missing(w.artifactId(), "not found in cache");
                     continue;
                 }
                 got = hit.get().fetched().sha256();
@@ -98,9 +97,7 @@ public final class JkWorkerSync {
                 // The published jar is a different build than this jk — it landed
                 // at the wrong CAS key, so the expected one still isn't satisfied.
                 missing++;
-                obs.missing(w.artifactId(), "published sha " + shortSha(got)
-                        + " != expected " + shortSha(expectedSha)
-                        + " — rebuild jk and re-run publishToMavenLocal");
+                obs.missing(w.artifactId(), "not found in cache");
                 continue;
             }
             fetched++;
