@@ -211,8 +211,10 @@ public final class BuildCommand implements Callable<Integer> {
                 built++;
             }
         }
-        view.finishSuccess(workspaceSummary(root, workspaceRoot, sorted)
-                + " " + elapsedSince(buildStart));
+        String duration = " " + elapsedSince(buildStart);
+        // "✔ Build Successful: " prefix costs ~20 visible columns.
+        String msg = workspaceSummary(root, workspaceRoot, sorted, view.width() - 20, duration);
+        view.finishSuccess(msg + duration);
         return 0;
     }
 
@@ -221,8 +223,12 @@ public final class BuildCommand implements Callable<Integer> {
      * "Built jktest and its :cli, :core members"
      * "Built jktest and its :cli, :runtime and 1 other member"
      * "Built jktest and its :cli, :runtime and 4 other members"
+     *
+     * Falls back to "Built jktest and its N members" when {@code maxCols} is too
+     * small to fit the named form (including the {@code durationSuffix}).
      */
-    private static String workspaceSummary(JkBuild root, Path workspaceRoot, List<Path> members) {
+    private static String workspaceSummary(JkBuild root, Path workspaceRoot,
+                                           List<Path> members, int maxCols, String durationSuffix) {
         String rootName = root.project().name();
         if (rootName.isBlank()) rootName = workspaceRoot.getFileName().toString();
         String cyanRoot = Theme.colorize(rootName, Theme.active().cyan());
@@ -232,15 +238,41 @@ public final class BuildCommand implements Callable<Integer> {
 
         String m0 = Theme.colorize(":" + workspaceRoot.relativize(members.get(0)),
                 Theme.active().cyan());
-        if (n == 1) return "Built " + cyanRoot + " and its " + m0 + " member";
+        String candidate;
+        if (n == 1) {
+            candidate = "Built " + cyanRoot + " and its " + m0 + " member";
+        } else {
+            String m1 = Theme.colorize(":" + workspaceRoot.relativize(members.get(1)),
+                    Theme.active().cyan());
+            if (n == 2) {
+                candidate = "Built " + cyanRoot + " and its " + m0 + ", " + m1 + " members";
+            } else {
+                int others = n - 2;
+                candidate = "Built " + cyanRoot + " and its " + m0 + ", " + m1
+                        + " and " + others + " other " + (others == 1 ? "member" : "members");
+            }
+        }
+        if (visibleLength(candidate + durationSuffix) <= maxCols) return candidate;
 
-        String m1 = Theme.colorize(":" + workspaceRoot.relativize(members.get(1)),
-                Theme.active().cyan());
-        if (n == 2) return "Built " + cyanRoot + " and its " + m0 + ", " + m1 + " members";
+        // Terminal too narrow: compact form with just the count.
+        return "Built " + cyanRoot + " and its " + n + " " + (n == 1 ? "member" : "members");
+    }
 
-        int others = n - 2;
-        return "Built " + cyanRoot + " and its " + m0 + ", " + m1
-                + " and " + others + " other " + (others == 1 ? "member" : "members");
+    /** Count visible (non-ANSI-escape) characters in {@code s}. */
+    private static int visibleLength(String s) {
+        int count = 0;
+        for (int i = 0; i < s.length(); ) {
+            char c = s.charAt(i);
+            if (c == '\033' && i + 1 < s.length() && s.charAt(i + 1) == '[') {
+                i += 2;
+                while (i < s.length() && !Character.isLetter(s.charAt(i))) i++;
+                if (i < s.length()) i++; // consume the final letter
+            } else {
+                count++;
+                i++;
+            }
+        }
+        return count;
     }
 
     /**

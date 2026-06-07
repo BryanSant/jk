@@ -150,6 +150,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         return cm;
     }
 
+    /** Terminal width detected at construction (columns). */
+    public int width() { return width; }
+
     /** Header member, e.g. {@code "acme:api"}. */
     public void target(String member) {
         synchronized (lock) {
