@@ -9,7 +9,6 @@ import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.PhaseContext;
-import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
@@ -71,15 +70,13 @@ public final class TestCommand implements Callable<Integer> {
     public Integer call() throws IOException {
         Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
-        // jk.lock lives at the workspace root when inside a workspace member.
-        Path lockFile = resolveLockFile(dir);
+        Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
             System.err.println("jk test: no jk.toml in " + dir);
             return 2;
         }
         if (!Files.exists(lockFile)) {
-            System.err.println("jk test: no jk.lock in " + lockFile.getParent()
-                    + " (run `jk lock` first)");
+            System.err.println("jk test: no jk.lock in " + dir + " (run `jk lock` first)");
             return 2;
         }
 
@@ -123,17 +120,6 @@ public final class TestCommand implements Callable<Integer> {
         long total = testResult.total();
         String passed = Theme.colorize("Passed", Theme.active().focused());
         return passed + " " + total + " test" + (total == 1 ? "" : "s") + " " + inTime;
-    }
-
-    /** Resolve jk.lock: at the workspace root when in a member, else in projectDir. */
-    private static Path resolveLockFile(Path projectDir) {
-        try {
-            return WorkspaceLocator.findRoot(projectDir)
-                    .map(r -> r.resolve("jk.lock"))
-                    .orElse(projectDir.resolve("jk.lock"));
-        } catch (java.io.IOException ignored) {
-            return projectDir.resolve("jk.lock");
-        }
     }
 
     private static String testFailureMessage(Goal goal, GoalResult result) {

@@ -161,9 +161,16 @@ public final class BuildLayout {
 
     // ---- Shared workspace artifacts (under workspaceRoot/target/) -----------
 
-    /** {@code <workspaceRoot>/target/} — root of all final artifacts. */
+    /**
+     * {@code <memberRoot>/target/} — this member's final artifacts.
+     *
+     * <p>Each project owns its own {@code target/} directory. The workspace root
+     * only gets a {@code target/} if it has its own source code to build.
+     * This mirrors Gradle multi-project builds where every subproject has its
+     * own build directory.
+     */
     public Path targetDir() {
-        return workspaceRoot.resolve("target");
+        return memberRoot.resolve("target");
     }
 
     /** {@code target/<artifact>-<version>.jar} — the main jar. */

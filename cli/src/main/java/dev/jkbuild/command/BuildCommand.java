@@ -297,23 +297,11 @@ public final class BuildCommand implements Callable<Integer> {
             return 2;
         }
 
-        // Workspace members share the root's jk.lock — there's exactly one
-        // lock per workspace (PRD §13.2). A member-local jk.lock would be
-        // resolved against a partial view of the dep graph and would race
-        // with the root's. Detect the member case here and target the
-        // root's lockfile for both reads and the first-run write.
-        final Path lockFile = resolveLockFileForDir(dir, buildFile);
-        if (lockFile == null) {
-            // resolveLockFileForDir handles the error message internally.
-            return 2;
-        }
-        // The directory where LockFlow.run should write a missing lock —
-        // always the workspace root when we're a member, so the member
-        // doesn't shadow the root with its own.
-        final Path lockDir = lockFile.getParent();
+        // Each project owns its own jk.lock alongside its jk.toml.
+        final Path lockFile = dir.resolve("jk.lock");
 
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                dir, cache, buildFile, lockFile, lockDir,
+                dir, cache, buildFile, lockFile, dir,
                 workerCount, estimatedTestCount, profileName, jdksDir, buildOpts.skipTests, global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
@@ -403,31 +391,4 @@ public final class BuildCommand implements Callable<Integer> {
         return hours + "h " + minutes + "m " + seconds + "s";
     }
 
-    // ---- helpers -------------------------------------------------------
-
-    /**
-     * Resolve which {@code jk.lock} a member project should use. For a
-     * workspace member, the workspace root's {@code jk.lock} is shared —
-     * we never write a per-member lockfile. For a standalone project (or
-     * the workspace root itself), the project's own directory.
-     *
-     * @return the lockfile path, or {@code null} if the parse failed
-     *         (an error message was already printed to stderr).
-     */
-    private static Path resolveLockFileForDir(Path dir, Path buildFile) throws IOException {
-        JkBuild peek;
-        try {
-            peek = JkBuildParser.parse(buildFile);
-        } catch (RuntimeException e) {
-            System.err.println("jk build: " + e.getMessage());
-            return null;
-        }
-        if (!peek.isWorkspaceRoot()) {
-            var workspaceRoot = WorkspaceLocator.findRoot(dir);
-            if (workspaceRoot.isPresent()) {
-                return workspaceRoot.get().resolve("jk.lock");
-            }
-        }
-        return dir.resolve("jk.lock");
-    }
 }

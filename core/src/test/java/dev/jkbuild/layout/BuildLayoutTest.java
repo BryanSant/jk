@@ -75,9 +75,9 @@ class BuildLayoutTest {
         // Intermediates stay with the member (under member/target/build/).
         assertThat(layout.classesDir())
                 .isEqualTo(member.resolve("target/build/classes/main"));
-        // Final artifacts land at the workspace root.
-        assertThat(layout.mainJar()).isEqualTo(workspace.resolve("target/jk-core-0.7.0.jar"));
-        assertThat(layout.nativeBinary()).isEqualTo(workspace.resolve("target/jk-core"));
+        // Final artifacts also land under the member's own target/.
+        assertThat(layout.mainJar()).isEqualTo(member.resolve("target/jk-core-0.7.0.jar"));
+        assertThat(layout.nativeBinary()).isEqualTo(member.resolve("target/jk-core"));
     }
 
     @Test
@@ -105,9 +105,9 @@ class BuildLayoutTest {
 
         assertThat(layout.workspaceRoot()).isEqualTo(workspace.toAbsolutePath().normalize());
         assertThat(layout.memberRoot()).isEqualTo(member);
-        // The jar belongs at the workspace root, NOT the member.
+        // Each member owns its own target/ — the jar lives with the member.
         assertThat(layout.mainJar())
-                .isEqualTo(workspace.toAbsolutePath().normalize().resolve("target/core-1.0.0.jar"));
+                .isEqualTo(member.resolve("target/core-1.0.0.jar"));
         // But intermediates stay member-local (member/target/build/).
         assertThat(layout.classesDir())
                 .isEqualTo(member.resolve("target/build/classes/main"));

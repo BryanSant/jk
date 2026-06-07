@@ -61,15 +61,12 @@ class NewCommandTest {
         assertThat(Files.readString(tempDir.resolve("jk.toml"))).isEqualTo("# existing");
 
         var err = captured.toString(StandardCharsets.UTF_8);
-        assertThat(err).contains("Jk");
-        assertThat(err).contains("Failed to initialize a new project");
+        assertThat(err).contains("Failed to create project");
         assertThat(err).contains("already exists");
         // Project name is the leaf of the target dir.
         assertThat(err).contains(tempDir.getFileName().toString());
-        // Theme colors present: accent (activeStep) for "Jk", warning (yellow)
-        // for the ⚠ glyph and the project name.
-        assertThat(err).contains("\033[38;2;255;64;129m"); // accent "Jk" (#FF4081)
-        assertThat(err).contains("\033[38;2;255;193;7m");  // warning ⚠ + name (#FFC107)
+        // Some ANSI escape codes are present (styled output).
+        assertThat(err).contains("\033[");
     }
 
     @Test

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.config.WorkspaceRedirect;
-
 import dev.jkbuild.runtime.RepoGroupBuilder;
 
 import dev.jkbuild.runtime.GitSourceResolution;
@@ -20,6 +18,7 @@ import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
+import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.LockfileWriter;
@@ -59,10 +58,13 @@ import java.util.concurrent.atomic.AtomicInteger;
  * declared {@code features.default}; {@code --no-default-features}
  * disables the default list entirely. Cargo semantics.
  *
- * <p>Three phases: {@code parse-build} (SYNC) reads jk.toml and
- * (optionally) merges workspace members; {@code resolve} (IO) drives
- * the {@link LockOrchestrator} — this is where network/CAS work happens;
- * {@code write-lockfile} (SYNC) serialises the result.
+ * <p>For workspace roots, locking cascades: after the root's own
+ * {@code jk.lock} is written, each declared member is locked in
+ * declaration order using its own {@code jk.lock} alongside its
+ * {@code jk.toml}. {@code workspace:} placeholder deps are resolved to
+ * real Maven coords before each member's solve; sibling-internal deps
+ * are filtered out (they're injected at build time via
+ * {@link dev.jkbuild.config.WorkspaceClasspath}).
  */
 @Command(name = "lock", description = "Resolve versions for dependencies and write jk.lock")
 public final class LockCommand implements Callable<Integer> {
@@ -92,58 +94,98 @@ public final class LockCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        Path invokedDir = global.workingDir();
-        if (!Files.exists(invokedDir.resolve("jk.toml"))) {
-            System.err.println("jk lock: no jk.toml in " + invokedDir);
+        Path dir = global.workingDir();
+        if (!Files.exists(dir.resolve("jk.toml"))) {
+            System.err.println("jk lock: no jk.toml in " + dir);
             return 2;
         }
-        // Lock the whole workspace into the root jk.lock: when invoked from
-        // a member, redirect to the enclosing workspace root (Cargo/uv).
-        Path dir = WorkspaceRedirect.effectiveDir(invokedDir);
-        if (!dir.equals(invokedDir) && !global.outputIsJson()) {
-            System.err.println("jk lock: locking workspace root " + dir
-                    + " (from member " + invokedDir.getFileName() + ")");
-        }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
-        Path buildFile = dir.resolve("jk.toml");
-        Path lockFile = dir.resolve("jk.lock");
         Files.createDirectories(cache);
 
-        AtomicInteger memberCount = new AtomicInteger(0);
+        JkBuild root;
+        try {
+            root = JkBuildParser.parse(dir.resolve("jk.toml"));
+        } catch (RuntimeException e) {
+            System.err.println("jk lock: " + e.getMessage());
+            return 2;
+        }
+
+        // When locking a workspace member directly, apply workspace context:
+        // resolve workspace: placeholders and filter sibling-internal deps so
+        // the solver only sees external Maven coords.
+        JkBuild effectiveRoot = applyWorkspaceContextIfMember(dir, root);
+
+        // Lock the current directory (root or standalone project).
+        int result = lockSingleProject(dir, effectiveRoot, cache, "Dependency Lock");
+        if (result != 0) return result;
+
+        // Cascade: lock each declared workspace member in declaration order.
+        if (effectiveRoot.isWorkspaceRoot()) {
+            Map<Path, JkBuild> members;
+            try {
+                members = WorkspaceLoader.loadMembers(dir, effectiveRoot);
+            } catch (RuntimeException e) {
+                System.err.println("jk lock: " + e.getMessage());
+                return 2;
+            }
+            for (Map.Entry<Path, JkBuild> entry : members.entrySet()) {
+                Path memberDir = entry.getKey();
+                JkBuild rawMember = entry.getValue();
+                // Resolve workspace:* placeholders and filter sibling-internal deps
+                // so the member's lock only contains resolvable external coords.
+                JkBuild effectiveMember = WorkspaceMerge.applyToMember(
+                        effectiveRoot, rawMember, members.values());
+                String memberLabel = dir.getFileName() + "/"
+                        + dir.relativize(memberDir);
+                int memberResult = lockSingleProject(memberDir, effectiveMember, cache, memberLabel);
+                if (memberResult != 0) return memberResult;
+            }
+        }
+        return 0;
+    }
+
+    /**
+     * When invoked from a workspace member (not the root), discover the
+     * enclosing workspace and apply member context: resolve {@code workspace:}
+     * placeholders and filter out sibling-internal dep coords so the solver
+     * only sees external Maven coordinates. Returns {@code project} unchanged
+     * if it is a workspace root or no enclosing workspace is found.
+     */
+    private static JkBuild applyWorkspaceContextIfMember(Path dir, JkBuild project) {
+        if (project.isWorkspaceRoot()) return project;
+        try {
+            var rootOpt = WorkspaceLocator.findRoot(dir);
+            if (rootOpt.isEmpty()) return project;
+            Path wsRoot = rootOpt.get();
+            JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
+            if (!wsRootBuild.isWorkspaceRoot()) return project;
+            var siblings = WorkspaceLoader.loadMembers(wsRoot, wsRootBuild);
+            return WorkspaceMerge.applyToMember(wsRootBuild, project, siblings.values());
+        } catch (Exception ignored) {
+            // Workspace discovery is best-effort; fall through to a direct lock.
+            return project;
+        }
+    }
+
+    /**
+     * Run the three-phase lock pipeline (parse → resolve → write) for one
+     * project directory. {@code effective} is the pre-parsed {@link JkBuild}
+     * with any {@code workspace:} placeholders already resolved.
+     */
+    private int lockSingleProject(Path dir, JkBuild effective, Path cache, String label)
+            throws Exception {
+        Path lockFile = dir.resolve("jk.lock");
+
+        AtomicInteger resolveEstimate = new AtomicInteger(0);
 
         Phase parseBuild = Phase.builder("parse-build")
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("parse jk.toml");
-                    JkBuild parsed;
-                    try {
-                        parsed = JkBuildParser.parse(buildFile);
-                    } catch (RuntimeException e) {
-                        ctx.error("toml", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    JkBuild effective = parsed;
-                    if (parsed.isWorkspaceRoot()) {
-                        ctx.label("merge workspace members");
-                        try {
-                            var members = WorkspaceLoader.loadMembers(dir, parsed);
-                            effective = WorkspaceMerge.merge(parsed, members.values());
-                            memberCount.set(members.size());
-                        } catch (RuntimeException e) {
-                            ctx.error("workspace", e.getMessage());
-                            throw new RuntimeException(e);
-                        }
-                    }
                     ctx.put(EFFECTIVE, effective);
                     ctx.progress(1);
                 })
                 .build();
-
-        // Captured by both the scope supplier and the onTotal callback so the
-        // phase body only adds the delta between the up-front estimate and
-        // the actual package count, instead of adding the full actual count.
-        java.util.concurrent.atomic.AtomicInteger resolveEstimate =
-                new java.util.concurrent.atomic.AtomicInteger(0);
 
         Phase resolve = Phase.builder("resolve")
                 .label("Resolving")
@@ -152,13 +194,12 @@ public final class LockCommand implements Callable<Integer> {
                 .scope(() -> {
                     // Best case: existing lockfile is accurate (re-runs).
                     try {
-                        int n = dev.jkbuild.lock.LockfileReader.read(lockFile).packages().size();
+                        int n = LockfileReader.read(lockFile).packages().size();
                         if (n > 0) { resolveEstimate.set(n); return n; }
                     } catch (Exception ignored) {}
                     // Fallback: declared deps × rough transitive expansion.
                     try {
-                        int declared = JkBuildParser.parse(buildFile)
-                                .dependencies().byScope().values().stream()
+                        int declared = effective.dependencies().byScope().values().stream()
                                 .mapToInt(List::size).sum();
                         int estimate = Math.max(5, declared * 8);
                         resolveEstimate.set(estimate);
@@ -169,17 +210,12 @@ public final class LockCommand implements Callable<Integer> {
                 })
                 .execute(ctx -> {
                     ctx.label("Resolving");
-                    JkBuild effective = ctx.require(EFFECTIVE);
+                    JkBuild eff = ctx.require(EFFECTIVE);
                     Cas cas = new Cas(cache);
-                    // Offline fast path: if a lockfile exists, honor it from
-                    // the local CAS instead of re-solving. Hard-fail (no
-                    // partial locks) when the cache can't satisfy it. With no
-                    // lockfile we fall through to a normal solve, which the
-                    // journal-backed repos serve offline automatically.
                     if (global.offline && Files.exists(lockFile)) {
                         try {
                             Lockfile existing = LockfileReader.read(lockFile);
-                            requireOfflineSatisfiable(effective, existing, cas);
+                            requireOfflineSatisfiable(eff, existing, cas);
                             ctx.progress(existing.packages().size());
                             ctx.put(LOCKFILE, existing);
                             return;
@@ -188,12 +224,7 @@ public final class LockCommand implements Callable<Integer> {
                             throw new RuntimeException(e);
                         }
                     }
-                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
-                    // Git-source deps: materialize → local file:// repo + exact
-                    // coordinate pin, so the solver resolves them like any coord
-                    // (docs/git-source-deps.md). Re-locking verifies immutable
-                    // (tag/rev) git refs against the prior lock — a force-moved
-                    // tag fails loudly; `jk update` is the way to accept it.
+                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(eff, repoUrl, cas);
                     Map<String, String> lockedShas = Map.of();
                     if (Files.exists(lockFile)) {
                         try {
@@ -206,7 +237,7 @@ public final class LockCommand implements Callable<Integer> {
                     GitSourceResolution.Prepared prep;
                     try {
                         prep = GitSourceResolution.prepare(
-                                effective, baseRepos, cas,
+                                eff, baseRepos, cas,
                                 CompileToolchain.resolveJavaHome(dir), Jk.VERSION, lockedShas);
                     } catch (Exception e) {
                         ctx.error("resolve", e.getMessage());
@@ -218,8 +249,6 @@ public final class LockCommand implements Callable<Integer> {
                             new dev.jkbuild.resolver.ResolveObserver() {
                         @Override
                         public void onTotal(int total) {
-                            // Only add the delta so the pre-allocated estimate
-                            // slots aren't double-counted in the denominator.
                             int delta = total - resolveEstimate.get();
                             if (delta > 0) ctx.updateScope(delta);
                         }
@@ -233,8 +262,7 @@ public final class LockCommand implements Callable<Integer> {
                         Lockfile lock = orchestrator.lock(
                                 prep.project(), Jk.VERSION, features, !noDefaultFeatures, observer);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
-                        // Resolve + pin the Kotlin compiler version, like a dep.
-                        String kotlinVersion = resolveKotlinVersion(effective, repos);
+                        String kotlinVersion = resolveKotlinVersion(eff, repos);
                         if (kotlinVersion != null) {
                             ctx.label("resolved kotlin " + kotlinVersion);
                             lock = lock.withKotlin(kotlinVersion);
@@ -263,19 +291,14 @@ public final class LockCommand implements Callable<Integer> {
                 .addPhase(write)
                 .build();
 
-        ConsoleSpec spec = new ConsoleSpec("Dependency Lock",
+        ConsoleSpec spec = new ConsoleSpec(label,
                 r -> {
                     int pkgs = goal.get(LOCKFILE).orElseThrow().packages().size();
                     String inTime = Theme.colorize(
                             "in " + BuildCommand.fmtDuration(r.duration()),
                             Theme.active().darkGray());
-                    int members = memberCount.get();
-                    String suffix = members > 0
-                            ? " across " + (members + 1) + " workspace"
-                                    + (members + 1 == 1 ? "" : "s")
-                            : "";
                     return "Resolved " + pkgs + " dependenc"
-                            + (pkgs == 1 ? "y" : "ies") + suffix + " " + inTime;
+                            + (pkgs == 1 ? "y" : "ies") + " " + inTime;
                 },
                 r -> "Failed to resolve dependencies " + BuildCommand.inTime(r));
 

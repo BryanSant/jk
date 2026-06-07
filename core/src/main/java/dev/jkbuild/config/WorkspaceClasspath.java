@@ -69,8 +69,8 @@ public final class WorkspaceClasspath {
                 continue;
             }
             String moduleCoord = sibling.project().group() + ":" + sibling.project().name();
-            // Sibling jars land at <workspaceRoot>/target/ per the BuildLayout contract.
-            Path jar = BuildLayout.of(root, siblingDir, sibling).mainJar();
+            // Each member owns its own target/ — sibling jars are at <siblingDir>/target/.
+            Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
             siblingJarByModule.put(moduleCoord, jar);
         }
 
@@ -110,7 +110,7 @@ public final class WorkspaceClasspath {
             } catch (RuntimeException ignored) {
                 continue;
             }
-            Path jar = BuildLayout.of(root, siblingDir, sibling).mainJar();
+            Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
             if (Files.exists(jar)) {
                 jars.add(jar);
             } else {

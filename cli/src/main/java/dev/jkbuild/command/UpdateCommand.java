@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.config.WorkspaceRedirect;
-
 import dev.jkbuild.runtime.RepoGroupBuilder;
 
 import dev.jkbuild.runtime.GitSourceResolution;
@@ -17,6 +15,7 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
+import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
@@ -37,6 +36,7 @@ import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
@@ -44,6 +44,10 @@ import java.util.concurrent.Callable;
  * {@code jk.lock}. Same pipeline as {@code jk lock}; the difference is
  * intent: {@code lock} is "make sure a lock exists", {@code update} is
  * "throw away whatever I have and resolve fresh."
+ *
+ * <p>For workspace roots, updating cascades to each declared member in
+ * declaration order, writing a fresh {@code jk.lock} alongside each
+ * member's {@code jk.toml}.
  *
  * <p>{@code --precise &lt;coord&gt;@&lt;ver&gt;} per PRD §6 is accepted
  * but a no-op until selective resolution lands.
@@ -80,20 +84,11 @@ public final class UpdateCommand implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        Path invokedDir = global.workingDir();
-        if (!Files.exists(invokedDir.resolve("jk.toml"))) {
-            System.err.println("jk update: no jk.toml in " + invokedDir);
+        Path dir = global.workingDir();
+        if (!Files.exists(dir.resolve("jk.toml"))) {
+            System.err.println("jk update: no jk.toml in " + dir);
             return 2;
         }
-        // Re-resolve the whole workspace into the root jk.lock: when invoked
-        // from a member, redirect to the enclosing workspace root (Cargo/uv).
-        Path dir = WorkspaceRedirect.effectiveDir(invokedDir);
-        if (!dir.equals(invokedDir) && !global.outputIsJson()) {
-            System.err.println("jk update: updating workspace root " + dir
-                    + " (from member " + invokedDir.getFileName() + ")");
-        }
-        Path buildFile = dir.resolve("jk.toml");
-        Path lockFile = dir.resolve("jk.lock");
         if (precise != null && !precise.isBlank()) {
             System.err.println("jk update: --precise is recognized but not yet implemented; "
                     + "performing a full re-resolve instead.");
@@ -102,28 +97,64 @@ public final class UpdateCommand implements Callable<Integer> {
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
 
+        JkBuild root;
+        try {
+            root = JkBuildParser.parse(dir.resolve("jk.toml"));
+        } catch (RuntimeException e) {
+            System.err.println("jk update: " + e.getMessage());
+            return 2;
+        }
+
+        // When updating a workspace member directly, filter sibling-internal deps.
+        JkBuild effectiveRoot = applyWorkspaceContextIfMember(dir, root);
+
+        // Re-resolve the current directory (root or standalone project).
+        int result = updateSingleProject(dir, effectiveRoot, cache);
+        if (result != 0) return result;
+
+        // Cascade: re-resolve each declared workspace member in declaration order.
+        if (effectiveRoot.isWorkspaceRoot()) {
+            Map<Path, JkBuild> members;
+            try {
+                members = WorkspaceLoader.loadMembers(dir, effectiveRoot);
+            } catch (RuntimeException e) {
+                System.err.println("jk update: " + e.getMessage());
+                return 2;
+            }
+            for (Map.Entry<Path, JkBuild> entry : members.entrySet()) {
+                Path memberDir = entry.getKey();
+                JkBuild rawMember = entry.getValue();
+                JkBuild effectiveMember = WorkspaceMerge.applyToMember(
+                        effectiveRoot, rawMember, members.values());
+                int memberResult = updateSingleProject(memberDir, effectiveMember, cache);
+                if (memberResult != 0) return memberResult;
+            }
+        }
+        return 0;
+    }
+
+    private static JkBuild applyWorkspaceContextIfMember(Path dir, JkBuild project) {
+        if (project.isWorkspaceRoot()) return project;
+        try {
+            var rootOpt = WorkspaceLocator.findRoot(dir);
+            if (rootOpt.isEmpty()) return project;
+            Path wsRoot = rootOpt.get();
+            JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
+            if (!wsRootBuild.isWorkspaceRoot()) return project;
+            var siblings = WorkspaceLoader.loadMembers(wsRoot, wsRootBuild);
+            return WorkspaceMerge.applyToMember(wsRootBuild, project, siblings.values());
+        } catch (Exception ignored) {
+            return project;
+        }
+    }
+
+    private int updateSingleProject(Path dir, JkBuild effective, Path cache) throws Exception {
+        Path lockFile = dir.resolve("jk.lock");
+
         Phase parseBuild = Phase.builder("parse-build")
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("parse jk.toml");
-                    JkBuild parsed;
-                    try {
-                        parsed = JkBuildParser.parse(buildFile);
-                    } catch (RuntimeException e) {
-                        ctx.error("toml", e.getMessage());
-                        throw new RuntimeException(e);
-                    }
-                    JkBuild effective = parsed;
-                    if (parsed.isWorkspaceRoot()) {
-                        ctx.label("merge workspace members");
-                        try {
-                            var members = WorkspaceLoader.loadMembers(dir, parsed);
-                            effective = WorkspaceMerge.merge(parsed, members.values());
-                        } catch (RuntimeException e) {
-                            ctx.error("workspace", e.getMessage());
-                            throw new RuntimeException(e);
-                        }
-                    }
                     ctx.put(EFFECTIVE, effective);
                     ctx.progress(1);
                 })
@@ -135,16 +166,16 @@ public final class UpdateCommand implements Callable<Integer> {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("re-resolve dependencies");
-                    JkBuild effective = ctx.require(EFFECTIVE);
+                    JkBuild eff = ctx.require(EFFECTIVE);
                     Cas cas = new Cas(cache);
-                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+                    RepoGroup baseRepos = RepoGroupBuilder.buildFor(eff, repoUrl, cas);
                     try {
                         // Git-source deps: re-materialize against the current ref
                         // tip and accept any movement (update is the "accept the
                         // new commit" path — no tag-rewrite check; see
                         // docs/git-source-deps.md).
                         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                                effective, baseRepos, cas,
+                                eff, baseRepos, cas,
                                 CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
                         Lockfile lock = new LockOrchestrator(prep.repos()).lock(
                                 prep.project(), Jk.VERSION, features, !noDefaultFeatures);

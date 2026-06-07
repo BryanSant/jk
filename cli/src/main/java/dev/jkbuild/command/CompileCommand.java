@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.runtime.KotlinWorkerSetup;
 import dev.jkbuild.runtime.RepoGroupBuilder;
@@ -82,15 +81,13 @@ public final class CompileCommand implements Callable<Integer> {
     public Integer call() throws IOException {
         Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
-        // jk.lock lives at the workspace root when inside a workspace member.
-        Path lockFile = resolveLockFile(dir);
+        Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
             System.err.println("jk compile: no jk.toml in " + dir);
             return 2;
         }
         if (!Files.exists(lockFile)) {
-            System.err.println("jk compile: no jk.lock in " + lockFile.getParent()
-                    + " (run `jk lock` first)");
+            System.err.println("jk compile: no jk.lock in " + dir + " (run `jk lock` first)");
             return 2;
         }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
@@ -278,17 +275,6 @@ public final class CompileCommand implements Callable<Integer> {
 
     static int kotlinJvmTarget(int release) {
         return dev.jkbuild.runtime.CompileSupport.kotlinJvmTarget(release);
-    }
-
-    /** Resolve jk.lock: at the workspace root when in a member, else in projectDir. */
-    private static Path resolveLockFile(Path projectDir) {
-        try {
-            return WorkspaceLocator.findRoot(projectDir)
-                    .map(r -> r.resolve("jk.lock"))
-                    .orElse(projectDir.resolve("jk.lock"));
-        } catch (java.io.IOException ignored) {
-            return projectDir.resolve("jk.lock");
-        }
     }
 
     static List<Path> collectKotlinSources(Path projectDir, boolean compact) throws IOException {

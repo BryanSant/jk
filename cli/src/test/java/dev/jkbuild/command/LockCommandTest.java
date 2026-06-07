@@ -127,7 +127,7 @@ class LockCommandTest {
     }
 
     @Test
-    void lock_from_member_dir_locks_workspace_root(@TempDir Path tempDir) throws Exception {
+    void lock_from_member_dir_locks_member_only(@TempDir Path tempDir) throws Exception {
         // External graph served by the test repo: root -> leaf.
         registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
@@ -172,22 +172,88 @@ class LockCommandTest {
                 version = "0.1.0"
                 """);
 
-        // Invoke from INSIDE the member directory.
+        // Invoke from INSIDE the member directory — locks only that member.
         int exit = run("lock",
                 "-C", app.toString(),
                 "--repo-url", base.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
-        // The single lockfile lives at the workspace root — never the member.
-        assertThat(Files.exists(app.resolve("jk.lock"))).isFalse();
-        Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
+        // Each member has its own lock file alongside its jk.toml.
+        Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
 
         // External coords are resolved; the workspace sibling is not locked.
         assertThat(lock.packages()).extracting(Lockfile.Package::name)
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
         assertThat(lock.packages()).extracting(Lockfile.Package::name)
                 .doesNotContain("com.acme:libb");
+
+        // Workspace root's own jk.lock was NOT created by this invocation.
+        assertThat(Files.exists(tempDir.resolve("jk.lock"))).isFalse();
+    }
+
+    @Test
+    void lock_from_workspace_root_cascades_to_members(@TempDir Path tempDir) throws Exception {
+        registerMetadata("com.foo", "leaf", "1.0");
+        registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
+        registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
+        registerMetadata("com.foo", "root", "1.0");
+        registerPom("com.foo", "root", "1.0", pom("com.foo", "root", "1.0", """
+                <dependency>
+                  <groupId>com.foo</groupId>
+                  <artifactId>leaf</artifactId>
+                  <version>1.0</version>
+                </dependency>
+                """));
+        registerJar("com.foo", "root", "1.0", "root".getBytes(StandardCharsets.UTF_8));
+
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                name     = "ws"
+                version = "0.1.0"
+
+                [workspace]
+                members = ["app", "libb"]
+                """);
+        Path app = Files.createDirectories(tempDir.resolve("app"));
+        Files.writeString(app.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                name     = "app"
+                version = "0.1.0"
+
+                [dependencies.main]
+                libb = { group = "com.acme", name = "libb", version = "0.1.0" }
+                root = { group = "com.foo",  name = "root", version = "1.0" }
+                """);
+        Path libb = Files.createDirectories(tempDir.resolve("libb"));
+        Files.writeString(libb.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                name     = "libb"
+                version = "0.1.0"
+                """);
+
+        // Invoke from the workspace root — cascades to all members.
+        int exit = run("lock",
+                "-C", tempDir.toString(),
+                "--repo-url", base.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(0);
+
+        // Root gets its own lock (empty — no deps declared at root).
+        assertThat(Files.exists(tempDir.resolve("jk.lock"))).isTrue();
+
+        // app gets its own lock with external deps; sibling not included.
+        Lockfile appLock = LockfileReader.read(app.resolve("jk.lock"));
+        assertThat(appLock.packages()).extracting(Lockfile.Package::name)
+                .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
+        assertThat(appLock.packages()).extracting(Lockfile.Package::name)
+                .doesNotContain("com.acme:libb");
+
+        // libb gets its own lock (empty — no deps declared).
+        assertThat(Files.exists(libb.resolve("jk.lock"))).isTrue();
     }
 
     @Test

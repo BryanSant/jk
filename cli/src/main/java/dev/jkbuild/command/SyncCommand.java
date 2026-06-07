@@ -11,7 +11,7 @@ import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.config.WorkspaceRedirect;
+import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
@@ -31,6 +31,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 /**
@@ -85,13 +86,7 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
 
     @Override
     public Integer call() throws Exception {
-        Path invokedDir = global.workingDir();
-        Path dir = WorkspaceRedirect.effectiveDir(invokedDir);
-        if (!dir.equals(invokedDir) && !global.outputIsJson()) {
-            System.err.println("jk sync: syncing workspace root "
-                    + dir.getFileName() + " (from member "
-                    + invokedDir.getFileName() + ")");
-        }
+        Path dir = global.workingDir();
         Path lockFile = dir.resolve("jk.lock");
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Files.createDirectories(cache);
@@ -256,11 +251,67 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
             } catch (IOException ignored) {
                 // Cache hygiene is never load-bearing.
             }
+            // Cascade: sync each member's lock file for workspace roots.
+            cascadeSyncMembers(dir, cache);
             return 0;
         }
         // The progress-bar listener (or SilentListener on a pipe) has
         // already surfaced the failure — no command-side summary.
         return 1;
+    }
+
+    /**
+     * For workspace roots: download any artifacts locked by each member's
+     * own {@code jk.lock} that aren't already in the CAS. Skips members
+     * whose lock file hasn't been created yet (run {@code jk lock} first).
+     */
+    private void cascadeSyncMembers(Path dir, Path cache) {
+        JkBuild root;
+        try {
+            root = JkBuildParser.parse(dir.resolve("jk.toml"));
+        } catch (Exception ignored) {
+            return;
+        }
+        if (!root.isWorkspaceRoot()) return;
+
+        Map<Path, JkBuild> members;
+        try {
+            members = WorkspaceLoader.loadMembers(dir, root);
+        } catch (Exception e) {
+            if (!global.outputIsJson()) {
+                System.err.println("jk sync: skipping member sync — " + e.getMessage());
+            }
+            return;
+        }
+
+        Cas cas = new Cas(cache);
+        Http http = new Http();
+        boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+        for (Map.Entry<Path, JkBuild> entry : members.entrySet()) {
+            Path memberDir = entry.getKey();
+            Path memberLock = memberDir.resolve("jk.lock");
+            if (!Files.exists(memberLock)) {
+                if (!global.outputIsJson()) {
+                    System.err.println("jk sync: " + dir.relativize(memberDir)
+                            + "/jk.lock not found — run `jk lock` first");
+                }
+                continue;
+            }
+            try {
+                Lockfile lock = LockfileReader.read(memberLock);
+                var report = new dev.jkbuild.resolver.CacheSync(cas, http)
+                        .sync(lock, dev.jkbuild.resolver.CacheSync.ProgressObserver.NOOP, noCache);
+                if (!global.outputIsJson() && (report.fetched() > 0 || report.upToDate() > 0)) {
+                    System.out.println(dir.relativize(memberDir) + ": "
+                            + report.fetched() + " fetched, "
+                            + report.upToDate() + " up-to-date, "
+                            + report.skipped() + " skipped");
+                }
+            } catch (Exception e) {
+                System.err.println("jk sync: " + dir.relativize(memberDir)
+                        + ": sync failed — " + e.getMessage());
+            }
+        }
     }
 
     /**

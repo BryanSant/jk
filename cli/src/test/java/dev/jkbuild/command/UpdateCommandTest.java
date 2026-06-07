@@ -130,7 +130,7 @@ class UpdateCommandTest {
     }
 
     @Test
-    void update_from_member_dir_rewrites_workspace_root_lock(@TempDir Path tempDir) throws Exception {
+    void update_from_member_dir_locks_member_only(@TempDir Path tempDir) throws Exception {
         registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
@@ -163,16 +163,20 @@ class UpdateCommandTest {
                 version = "0.1.0"
                 """);
 
+        // Invoke from member — updates only that member's lock.
         int exit = run("update",
                 "-C", app.toString(),
                 "--repo-url", base.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
-        assertThat(Files.exists(app.resolve("jk.lock"))).isFalse();
-        Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
+        // Member owns its own lock; sibling dep filtered out.
+        Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
         assertThat(lock.packages()).extracting(Lockfile.Package::name)
                 .containsExactly("com.foo:leaf");
+
+        // Workspace root lock NOT created by this invocation.
+        assertThat(Files.exists(tempDir.resolve("jk.lock"))).isFalse();
     }
 
     // --- helpers -----------------------------------------------------------
