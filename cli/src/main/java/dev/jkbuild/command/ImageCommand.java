@@ -146,8 +146,8 @@ public final class ImageCommand implements Callable<Integer> {
         Goal goal = builder.build();
 
         ConsoleSpec spec = new ConsoleSpec("Image Build",
-                r -> "Built image " + BuildCommand.inTime(r),
-                r -> "Image build failed " + BuildCommand.inTime(r));
+                r -> "Built image",
+                r -> "Image build failed");
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
                 BuildCommand.buildTarget(jkBuildPath, projectDir));
 

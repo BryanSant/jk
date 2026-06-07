@@ -90,8 +90,8 @@ public final class NativeCommand implements Callable<Integer> {
         ConsoleSpec spec = new ConsoleSpec("Native Build",
                 r -> goal.get(BuildPipeline.LAYOUT)
                         .map(l -> "Built native binary " + l.nativeBinary().getFileName())
-                        .orElse("Built native binary") + " " + BuildCommand.inTime(r),
-                r -> "Native build failed " + BuildCommand.inTime(r));
+                        .orElse("Built native binary"),
+                r -> "Native build failed");
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
                 BuildCommand.buildTarget(buildFile, projectDir));
 

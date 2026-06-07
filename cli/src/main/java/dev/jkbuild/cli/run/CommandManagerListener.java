@@ -94,10 +94,11 @@ public final class CommandManagerListener implements GoalListener {
         // diagnostics aren't themselves routed back above the (closing) region.
         if (capture != null) capture.close();
         if (cm == null) cm = CommandManager.goal(out, spec.verb(), animate);
+        String suffix = " " + ConsoleSpec.inTime(result.duration());
         if (result.success()) {
-            cm.finishSuccess(spec.onSuccess().apply(result));
+            cm.finishSuccess(spec.onSuccess().apply(result) + suffix);
         } else {
-            cm.finishFailure(spec.onFailure().apply(result));
+            cm.finishFailure(spec.onFailure().apply(result) + suffix);
         }
         for (GoalResult.Diagnostic d : result.errors()) {
             err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());

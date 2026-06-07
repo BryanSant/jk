@@ -107,8 +107,8 @@ public final class RunCommand implements Callable<Integer> {
         Goal goal = builder.build();
 
         ConsoleSpec spec = new ConsoleSpec("Build",
-                r -> "Built " + BuildCommand.inTime(r),
-                r -> "Build failed " + BuildCommand.inTime(r));
+                r -> "Built",
+                r -> "Build failed");
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
                 BuildCommand.buildTarget(projectDir.resolve("jk.toml"), projectDir));
         if (!result.success()) {

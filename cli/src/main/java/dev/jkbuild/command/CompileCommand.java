@@ -255,10 +255,9 @@ public final class CompileCommand implements Callable<Integer> {
                     int total = sourceCount(goal, JAVA_SOURCES) + sourceCount(goal, KT_SOURCES);
                     if (total == 0) return "No sources found";
                     String compiled = Theme.colorize("Compiled", Theme.active().focused());
-                    return compiled + " " + total + " source file" + (total == 1 ? "" : "s")
-                            + " " + BuildCommand.inTime(r);
+                    return compiled + " " + total + " source file" + (total == 1 ? "" : "s");
                 },
-                r -> "Compilation failed " + BuildCommand.inTime(r));
+                r -> "Compilation failed");
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
                 BuildCommand.buildTarget(buildFile, dir));
 

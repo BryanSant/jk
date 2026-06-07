@@ -15,7 +15,6 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
-import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
@@ -294,13 +293,10 @@ public final class LockCommand implements Callable<Integer> {
         ConsoleSpec spec = new ConsoleSpec(label,
                 r -> {
                     int pkgs = goal.get(LOCKFILE).orElseThrow().packages().size();
-                    String inTime = Theme.colorize(
-                            "in " + BuildCommand.fmtDuration(r.duration()),
-                            Theme.active().darkGray());
                     return "Resolved " + pkgs + " dependenc"
-                            + (pkgs == 1 ? "y" : "ies") + " " + inTime;
+                            + (pkgs == 1 ? "y" : "ies");
                 },
-                r -> "Failed to resolve dependencies " + BuildCommand.inTime(r));
+                r -> "Failed to resolve dependencies");
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache, spec);
         if (!result.success()) {

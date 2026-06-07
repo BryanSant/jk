@@ -189,6 +189,7 @@ public final class BuildCommand implements Callable<Integer> {
         CommandManager view = CommandManager.goal(System.out, "Build", animate);
         AggregateContext agg = new AggregateContext(view);
         int built = 0;
+        long buildStart = System.nanoTime();
         // Route every member's phase/process output above the one shared region.
         try (var cap = view.captureOutput()) {
             for (Path memberDir : sorted) {
@@ -197,18 +198,21 @@ public final class BuildCommand implements Callable<Integer> {
                 try {
                     exit = runForDir(memberDir, agg);
                 } catch (Exception e) {
-                    view.finishFailure("Build failed in " + member);
+                    view.finishFailure("Build failed in " + member
+                            + " " + elapsedSince(buildStart));
                     throw e;
                 }
                 if (exit != 0) {
-                    view.finishFailure("Build failed in " + member);
+                    view.finishFailure("Build failed in " + member
+                            + " " + elapsedSince(buildStart));
                     System.err.println("jk build: " + member + " failed (exit " + exit + ")");
                     return exit;
                 }
                 built++;
             }
         }
-        view.finishSuccess("Built " + built + " member" + (built == 1 ? "" : "s"));
+        view.finishSuccess("Built " + built + " member" + (built == 1 ? "" : "s")
+                + " " + elapsedSince(buildStart));
         return 0;
     }
 
@@ -345,50 +349,37 @@ public final class BuildCommand implements Callable<Integer> {
         }
     }
 
-    /** Dim {@code "in <duration>"} suffix shared by success and failure lines. */
-    static String inTime(GoalResult result) {
-        return Theme.colorize("in " + fmtDuration(result.duration()), Theme.active().darkGray());
-    }
-
-    /** Success result line (sans the leading ✔), e.g. "Built jktest-0.1.0.jar in 717ms". */
+    /** Success result line (sans the leading ✔ and trailing duration). */
     private static String successMessage(Goal goal, GoalResult result) {
-        String inTime = inTime(result);
         String outcome = goal.get(BUILD_OUTCOME).orElse("");
         if ("up-to-date".equals(outcome)) {
-            return "Up to date " + inTime;
+            return "Up to date";
         }
         String built = Theme.colorize("Built", Theme.active().focused());
         if (outcome.startsWith("cache-hit:")) {
             String jarLabel = goal.get(JAR_PATH)
                     .map(p -> p.getFileName().toString()).orElse("");
-            return built + (jarLabel.isEmpty() ? "" : " " + jarLabel) + " " + inTime;
+            return built + (jarLabel.isEmpty() ? "" : " " + jarLabel);
         }
         return goal.get(JAR_PATH)
-                .map(jar -> built + " " + jar.getFileName() + " " + inTime)
-                .orElse(built + " " + inTime);
+                .map(jar -> built + " " + jar.getFileName())
+                .orElse(built);
     }
 
-    /** Failure result line (sans the leading ✗): "Build failed in 387ms" (test failures tailored). */
+    /** Failure result line (sans the leading ✗ and trailing duration). */
     private static String failureMessage(Goal goal, GoalResult result) {
         var testResult = goal.get(TEST_RESULT).orElse(null);
         if (testResult != null && !testResult.allPassed()) {
             String jar = goal.get(JAR_PATH).map(p -> p.getFileName().toString()).orElse("");
-            String base = jar.isEmpty() ? "Tests failed" : "Tests failed while building " + jar;
-            return base + " " + inTime(result);
+            return jar.isEmpty() ? "Tests failed" : "Tests failed while building " + jar;
         }
-        return "Build failed " + inTime(result);
+        return "Build failed";
     }
 
-    static String fmtDuration(java.time.Duration d) {
-        long ms = d.toMillis();
-        if (ms < 1000) return ms + "ms";
-        long totalSec = d.toSeconds();
-        if (totalSec < 60) return String.format("%.1fs", ms / 1000.0);
-        long hours   = totalSec / 3600;
-        long minutes = (totalSec % 3600) / 60;
-        long seconds = totalSec % 60;
-        if (hours == 0) return minutes + "m " + seconds + "s";
-        return hours + "h " + minutes + "m " + seconds + "s";
+    /** Dim {@code "in Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */
+    private static String elapsedSince(long startNanos) {
+        long ms = (System.nanoTime() - startNanos) / 1_000_000;
+        return dev.jkbuild.cli.run.ConsoleSpec.inTime(java.time.Duration.ofMillis(ms));
     }
 
 }

@@ -113,19 +113,16 @@ public final class TestCommand implements Callable<Integer> {
      * or {@code No tests in <t>} for a project with no test sources.
      */
     private String testSummary(Goal goal, GoalResult result) {
-        String inTime = Theme.colorize(
-                "in " + BuildCommand.fmtDuration(result.duration()), Theme.active().darkGray());
         var testResult = goal.get(TEST_RESULT).orElse(null);
-        if (testResult == null || testResult.total() == 0) return "No tests " + inTime;
+        if (testResult == null || testResult.total() == 0) return "No tests";
         long total = testResult.total();
         String passed = Theme.colorize("Passed", Theme.active().focused());
-        return passed + " " + total + " test" + (total == 1 ? "" : "s") + " " + inTime;
+        return passed + " " + total + " test" + (total == 1 ? "" : "s");
     }
 
     private static String testFailureMessage(Goal goal, GoalResult result) {
         var tr = goal.get(TEST_RESULT).orElse(null);
-        String base = (tr != null && !tr.allPassed()) ? "Tests failed" : "Build failed";
-        return base + " " + BuildCommand.inTime(result);
+        return (tr != null && !tr.allPassed()) ? "Tests failed" : "Build failed";
     }
 
     /**

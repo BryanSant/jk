@@ -50,10 +50,11 @@ public final class SimpleTaskListener implements GoalListener {
     @Override
     public void goalFinish(GoalResult result) {
         if (cm == null) cm = CommandManager.simple(out, spec.verb(), animate);
+        String suffix = " " + ConsoleSpec.inTime(result.duration());
         if (result.success()) {
-            cm.finishSuccess(spec.onSuccess().apply(result));
+            cm.finishSuccess(spec.onSuccess().apply(result) + suffix);
         } else {
-            cm.finishFailure(spec.onFailure().apply(result));
+            cm.finishFailure(spec.onFailure().apply(result) + suffix);
         }
         // Diagnostics below the result line; the spinner is already stopped.
         for (GoalResult.Diagnostic d : result.errors()) {

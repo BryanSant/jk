@@ -125,12 +125,13 @@ public final class LibraryUpdateCommand implements Callable<Integer> {
 
     private void printSummary(int total, Diff diff, Duration elapsed) {
         // Header: green banner, bold count, dim elapsed — matching jk's
-        // build/test result lines (see BuildCommand.fmtDuration).
+        // build/test result lines.
         System.out.println(
                 Theme.colorize("✓ Library catalog updated", Theme.active().completedStep())
                         + " — " + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
                         + " entries cached "
-                        + Theme.colorize("in " + BuildCommand.fmtDuration(elapsed), Theme.active().darkGray()));
+                        + Theme.colorize("in " + dev.jkbuild.cli.run.ConsoleSpec.fmtDuration(elapsed),
+                                Theme.active().darkGray()));
         if (diff.isEmpty()) {
             System.out.println();
             System.out.println("  (no changes from previous version)");
