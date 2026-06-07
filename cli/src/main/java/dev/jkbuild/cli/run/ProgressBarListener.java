@@ -374,10 +374,21 @@ public final class ProgressBarListener implements GoalListener {
             detail  = capitalize(summary.substring(sep + 3));
             summary = summary.substring(0, sep);
         }
-        summary = capitalize(summary);
+        // Only capitalize when the summary looks like a sentence start (first char
+        // is a plain letter not followed by a hyphen — artifact names like
+        // "jk-audit-runner" should stay lowercase).
+        if (!summary.isEmpty() && Character.isLowerCase(summary.charAt(0))
+                && (summary.length() < 2 || summary.charAt(1) != '-')) {
+            summary = capitalize(summary);
+        }
         var sb = new org.jline.utils.AttributedStringBuilder();
         sb.append(prefix, prefixStyle);
-        sb.append(" [").append(phase).append("/").append(code).append("]: ");
+        // Omit [phase/code] when code is absent — keeps simple informational
+        // warnings (e.g. missing worker jars) uncluttered.
+        if (code != null && !code.isBlank()) {
+            sb.append(" [").append(phase).append("/").append(code).append("]");
+        }
+        sb.append(": ");
         sb.append(summary, Theme.active().focused());
         if (detail != null) sb.append(" — ").append(detail, Theme.active().activeStep());
         return sb.toAnsi();

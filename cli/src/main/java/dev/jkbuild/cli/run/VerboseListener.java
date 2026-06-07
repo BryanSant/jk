@@ -66,8 +66,9 @@ public final class VerboseListener implements GoalListener {
 
     @Override
     public void warn(String phase, String code, String message) {
+        String location = (code != null && !code.isBlank()) ? " " + phase + "/" + code : "";
         err.println("    " + Theme.colorize("⚠", Theme.active().warning())
-                + " " + phase + "/" + code + ": " + message);
+                + location + ": " + message);
     }
 
     @Override
