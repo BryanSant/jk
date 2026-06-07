@@ -175,7 +175,9 @@ public final class RunCommand implements Callable<Integer> {
             exec = dev.jkbuild.cli.theme.Theme.colorize(rel, t.warning());
         } else {
             // JVM — derive jdk leaf from the java executable path.
+            // Resolve symlinks so "current" etc. show the real JDK name.
             Path javaExe = Path.of(command.get(0));
+            try { javaExe = javaExe.toRealPath(); } catch (java.io.IOException ignored) {}
             Path binDir = javaExe.getParent();
             Path jdkHome = binDir != null ? binDir.getParent() : null;
             String jdkLeaf = jdkHome != null && jdkHome.getFileName() != null
