@@ -53,9 +53,7 @@ public final class AuditWorkerSetup {
                 "jk-audit-runner.jar is not in the CAS.\n"
                 + "  expected sha256: " + expectedHash + "\n"
                 + "  expected path:   " + target + "\n"
-                + "  Until jk-audit-runner is published to Maven Central, side-load it:\n"
-                + "    ./gradlew :audit-runner:installLocalCas   (in jk's own tree)\n"
-                + "  or set -D" + WORKER_JAR_PROPERTY + "=<path to the worker jar>.");
+                + "  Until jk-audit-runner is published to a primary repo, side-load it.");
     }
 
     private static String readExpectedHash() {

@@ -76,6 +76,9 @@ public final class AggregateMemberListener implements GoalListener {
 
     @Override
     public void goalFinish(GoalResult result) {
+        if (!result.success()) {
+            agg.notifyErrors(result.errors());
+        }
         agg.completeMember(lastDenominator);
     }
 

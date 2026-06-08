@@ -314,9 +314,7 @@ public final class JUnitLauncher {
                 "jk test: jk-test-runner.jar is not in the CAS.\n"
                 + "  expected sha256: " + expectedHash + "\n"
                 + "  expected path:   " + target + "\n"
-                + "  Until jk-test-runner is published to Maven Central, side-load it:\n"
-                + "    ./gradlew :test-runner:installLocalCas   (in jk's own tree)\n"
-                + "  or copy a known-good test-runner.jar to the expected path manually.");
+                + "  Until jk-test-runner is published to a primary repo, side-load it.");
     }
 
     private static String readExpectedHash() throws IOException {

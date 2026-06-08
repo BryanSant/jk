@@ -205,7 +205,9 @@ public final class BuildCommand implements Callable<Integer> {
                 if (exit != 0) {
                     view.finishFailure("Build failed in " + member
                             + " " + elapsedSince(buildStart));
-                    System.err.println("jk build: " + member + " failed (exit " + exit + ")");
+                    for (GoalResult.Diagnostic d : agg.lastErrors()) {
+                        System.err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
+                    }
                     return exit;
                 }
                 built++;

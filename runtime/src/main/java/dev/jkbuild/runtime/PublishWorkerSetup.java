@@ -39,9 +39,7 @@ public final class PublishWorkerSetup {
                 "jk-publish-runner.jar is not in the CAS.\n"
                 + "  expected sha256: " + expectedHash + "\n"
                 + "  expected path:   " + target + "\n"
-                + "  Until jk-publish-runner is published to Maven Central, side-load it:\n"
-                + "    ./gradlew :publish-runner:installLocalCas   (in jk's own tree)\n"
-                + "  or set -D" + WORKER_JAR_PROPERTY + "=<path to the worker jar>.");
+                + "  Until jk-publish-runner is published to a primary repo, side-load it.");
     }
 
     private static String readExpectedHash() {

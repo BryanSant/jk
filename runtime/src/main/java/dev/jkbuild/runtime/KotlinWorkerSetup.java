@@ -84,9 +84,7 @@ public final class KotlinWorkerSetup {
                 "jk-kotlin-compiler.jar is not in the CAS.\n"
                 + "  expected sha256: " + expectedHash + "\n"
                 + "  expected path:   " + target + "\n"
-                + "  Until jk-kotlin-compiler is published to Maven Central, side-load it:\n"
-                + "    ./gradlew :kotlin-compiler:installLocalCas   (in jk's own tree)\n"
-                + "  or set -D" + WORKER_JAR_PROPERTY + "=<path to the worker jar>.");
+                + "  Until jk-kotlin-compiler is published to a primary repo, side-load it.");
     }
 
     private static String readExpectedHash() {

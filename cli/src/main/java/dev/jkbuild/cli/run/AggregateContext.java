@@ -2,6 +2,9 @@
 package dev.jkbuild.cli.run;
 
 import dev.jkbuild.cli.tui.CommandManager;
+import dev.jkbuild.run.GoalResult;
+
+import java.util.List;
 
 /**
  * Shared sink for a workspace build: one {@link CommandManager} (goal mode) that
@@ -20,6 +23,7 @@ public final class AggregateContext {
 
     private final CommandManager cm;
     private long completedBase;
+    private volatile List<GoalResult.Diagnostic> lastErrors = List.of();
 
     public AggregateContext(CommandManager cm) {
         this.cm = cm;
@@ -38,4 +42,9 @@ public final class AggregateContext {
     public synchronized void completeMember(long memberDenominator) {
         completedBase += memberDenominator;
     }
+
+    /** Errors from the most recently failed member goal. */
+    public List<GoalResult.Diagnostic> lastErrors() { return lastErrors; }
+
+    public void notifyErrors(List<GoalResult.Diagnostic> errors) { this.lastErrors = errors; }
 }
