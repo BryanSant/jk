@@ -191,9 +191,7 @@ public final class RunCommand implements Callable<Integer> {
                         ? cpArg.substring(0, cpArg.indexOf(pathSep)) : cpArg;
                 javaCmd = "java -cp … " + relativeTo(projectDir, Path.of(first));
             }
-            exec = Theme.colorize(jdkLeaf, t.darkGray().italic())
-                    + ":"
-                    + Theme.colorize(javaCmd, t.warning());
+            exec = "(" + jdkLeaf + "): " + Theme.colorize(javaCmd, t.warning());
         }
         System.err.println("→ Executing " + exec);
         System.err.println();
