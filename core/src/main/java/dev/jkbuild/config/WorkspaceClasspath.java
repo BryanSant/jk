@@ -58,6 +58,7 @@ public final class WorkspaceClasspath {
         }
 
         Map<String, Path> siblingJarByModule = new HashMap<>();
+        Map<String, Path> siblingJarByName   = new HashMap<>();
         for (String memberName : rootManifest.workspace().members()) {
             Path siblingDir = root.resolve(memberName);
             Path siblingManifest = siblingDir.resolve("jk.toml");
@@ -72,18 +73,27 @@ public final class WorkspaceClasspath {
             // Each member owns its own target/ — sibling jars are at <siblingDir>/target/.
             Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
             siblingJarByModule.put(moduleCoord, jar);
+            // Also index by bare name so workspace: placeholders resolve correctly.
+            // jk-core.workspace = true produces module "workspace:jk-core" in the
+            // raw parsed manifest (before WorkspaceMerge rewrites it), so we need
+            // a name-keyed lookup for that case.
+            siblingJarByName.put(sibling.project().name(), jar);
         }
 
         List<Path> jars = new ArrayList<>();
         List<String> missing = new ArrayList<>();
         for (Scope scope : scopes) {
             for (Dependency dep : project.dependencies().of(scope)) {
-                Path siblingJar = siblingJarByModule.get(dep.module());
+                String module = dep.module();
+                Path siblingJar = siblingJarByModule.get(module);
+                if (siblingJar == null && module.startsWith("workspace:")) {
+                    siblingJar = siblingJarByName.get(module.substring("workspace:".length()));
+                }
                 if (siblingJar == null) continue;
                 if (Files.exists(siblingJar)) {
                     if (!jars.contains(siblingJar)) jars.add(siblingJar);
                 } else {
-                    missing.add(dep.module() + " (expected at " + siblingJar + ")");
+                    missing.add(module + " (expected at " + siblingJar + ")");
                 }
             }
         }
