@@ -50,6 +50,7 @@ public final class JarPackager {
             for (Path file : files) {
                 String name = normalize(request.inputDir(), file);
                 if (name.equals("META-INF/MANIFEST.MF")) continue; // already written
+                if (name.endsWith(".jstamp")) continue;             // build-host artefact, not jar content
                 JarEntry entry = new JarEntry(name);
                 entry.setTimeLocal(LocalDateTime.ofEpochSecond(
                         request.timestampEpochSeconds(), 0,
