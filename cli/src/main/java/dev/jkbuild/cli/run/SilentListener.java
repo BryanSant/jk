@@ -32,7 +32,11 @@ public final class SilentListener implements GoalListener {
     public void goalFinish(GoalResult result) {
         if (suppressDiagnostics) return;
         for (GoalResult.Diagnostic d : result.errors()) {
-            err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
+            if ("verbatim".equals(d.code())) {
+                err.println(d.message());
+            } else {
+                err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
+            }
         }
         for (GoalResult.Diagnostic d : result.warnings()) {
             err.println("warn[" + d.phase() + "/" + d.code() + "]: " + d.message());

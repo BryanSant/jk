@@ -78,8 +78,11 @@ public final class PubGrubResolver implements Resolver {
         try {
             decisions = new PubGrubSolver(source).solve(ROOT_PKG, ROOT_VERSION, rootTerms);
         } catch (UnsatisfiableException e) {
+            boolean ansi = System.console() != null
+                    && !"dumb".equals(System.getenv("TERM"))
+                    && System.getenv("CI") == null;
             throw new UnsatisfiableException(
-                    Diagnostics.render(e.rootCause(), rootDepNames), e.rootCause());
+                    Diagnostics.render(e.rootCause(), rootDepNames, ansi), e.rootCause());
         }
 
         // Drop the synthetic root from the result and build the per-module dep lists.

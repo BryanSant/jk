@@ -156,8 +156,12 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void error(String phase, String code, String message) {
-        writeAboveInternal(renderDiagnostic("✗ Error", Theme.active().error().bold(),
-                phase, code, message));
+        if ("verbatim".equals(code)) {
+            writeAboveInternal(message);
+        } else {
+            writeAboveInternal(renderDiagnostic("✗ Error", Theme.active().error().bold(),
+                    phase, code, message));
+        }
     }
 
     private void writeAboveInternal(String line) {

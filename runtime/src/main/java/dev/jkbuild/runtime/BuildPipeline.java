@@ -20,6 +20,7 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.resolver.CacheSync;
+import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.Phase;
@@ -177,8 +178,13 @@ public final class BuildPipeline {
 
                     if (!Files.exists(in.lockFile())) {
                         ctx.label("resolve deps (first run)");
-                        var result = LockFlow.run(
-                                in.lockDir(), in.cache(), List.of(), true, null);
+                        LockFlow.Result result;
+                        try {
+                            result = LockFlow.run(in.lockDir(), in.cache(), List.of(), true, null);
+                        } catch (UnsatisfiableException e) {
+                            ctx.error("verbatim", e.getMessage());
+                            throw new RuntimeException("dependency resolution failed");
+                        }
                         if (result.status() != 0) {
                             ctx.error("lock", result.error() != null
                                     ? result.error() : "dependency resolution failed");

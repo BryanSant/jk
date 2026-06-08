@@ -37,6 +37,7 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -267,6 +268,9 @@ public final class LockCommand implements Callable<Integer> {
                             lock = lock.withKotlin(kotlinVersion);
                         }
                         ctx.put(LOCKFILE, lock);
+                    } catch (UnsatisfiableException e) {
+                        ctx.error("verbatim", e.getMessage());
+                        throw new RuntimeException(e);
                     } catch (Exception e) {
                         ctx.error("resolve", e.getMessage());
                         throw new RuntimeException(e);

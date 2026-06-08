@@ -73,8 +73,12 @@ public final class VerboseListener implements GoalListener {
 
     @Override
     public void error(String phase, String code, String message) {
-        err.println("    " + Theme.colorize("✗", Theme.active().error())
-                + " " + phase + "/" + code + ": " + message);
+        if ("verbatim".equals(code)) {
+            err.println(message);
+        } else {
+            err.println("    " + Theme.colorize("✗", Theme.active().error())
+                    + " " + phase + "/" + code + ": " + message);
+        }
     }
 
     @Override
