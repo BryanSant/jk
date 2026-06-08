@@ -6,6 +6,7 @@ package dev.jkbuild.model;
  * {@code system} is intentionally absent — rejected on import.
  */
 public enum Scope {
+    EXPORT,
     MAIN,
     PROVIDED,
     RUNTIME,

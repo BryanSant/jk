@@ -183,7 +183,7 @@ public final class PublishablePom {
 
     private static String mavenScope(Scope s) {
         return switch (s) {
-            case MAIN -> null;
+            case EXPORT, MAIN -> null;  // compile scope (Maven default — transitive to consumers)
             case RUNTIME -> "runtime";
             case PROVIDED -> "provided";
             case TEST -> "test";

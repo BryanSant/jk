@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -53,25 +54,48 @@ public final class WorkspaceMerge {
             JkBuild root, JkBuild member, Collection<JkBuild> allMembers) {
         if (allMembers.isEmpty()) return member;
 
-        Map<String, JkBuild.Project> siblingByArtifact = new LinkedHashMap<>();
+        Map<String, JkBuild> siblingByArtifact = new LinkedHashMap<>();
         Set<String> internal = new HashSet<>();
         for (JkBuild m : allMembers) {
-            siblingByArtifact.put(m.project().name(), m.project());
+            siblingByArtifact.put(m.project().name(), m);
             internal.add(m.project().group() + ":" + m.project().name());
         }
         Map<String, Workspace.WorkspaceDependency> wsDeps = root.workspace() != null
                 ? root.workspace().dependencies() : Map.of();
 
+        // First pass: resolve this member's own deps, strip sibling refs, and
+        // track which siblings are direct dependencies (for export propagation).
+        Set<String> dependedSiblingNames = new LinkedHashSet<>();
         Map<Scope, List<Dependency>> resolvedByScope = new EnumMap<>(Scope.class);
         for (Scope scope : Scope.values()) {
             List<Dependency> resolved = new ArrayList<>();
             for (Dependency d : member.dependencies().of(scope)) {
                 Dependency r = resolve(d, siblingByArtifact, wsDeps);
-                if (internal.contains(r.module())) continue;
+                if (internal.contains(r.module())) {
+                    dependedSiblingNames.add(r.name());
+                    continue;
+                }
                 resolved.add(r);
             }
             if (!resolved.isEmpty()) resolvedByScope.put(scope, resolved);
         }
+
+        // Second pass: pull each direct sibling's export deps into this member's
+        // main scope so they land in this member's lockfile and compile classpath.
+        for (String siblingName : dependedSiblingNames) {
+            JkBuild sibling = siblingByArtifact.get(siblingName);
+            if (sibling == null) continue;
+            for (Dependency d : sibling.dependencies().of(Scope.EXPORT)) {
+                Dependency r = resolve(d, siblingByArtifact, wsDeps);
+                if (internal.contains(r.module())) continue;
+                List<Dependency> mainList =
+                        resolvedByScope.computeIfAbsent(Scope.MAIN, k -> new ArrayList<>());
+                if (mainList.stream().noneMatch(e -> e.module().equals(r.module()))) {
+                    mainList.add(r);
+                }
+            }
+        }
+
         return new JkBuild(
                 member.project(),
                 new JkBuild.Dependencies(resolvedByScope),
@@ -84,12 +108,12 @@ public final class WorkspaceMerge {
     public static JkBuild merge(JkBuild root, Collection<JkBuild> members) {
         if (members.isEmpty()) return root;
 
-        // Build the sibling lookup: artifact → (group:artifact, version).
-        Map<String, JkBuild.Project> siblingByArtifact = new LinkedHashMap<>();
+        // Build the sibling lookup: artifact → JkBuild (full manifest).
+        Map<String, JkBuild> siblingByArtifact = new LinkedHashMap<>();
         Set<String> internal = new HashSet<>();
         for (JkBuild member : members) {
             String coord = member.project().group() + ":" + member.project().name();
-            siblingByArtifact.put(member.project().name(), member.project());
+            siblingByArtifact.put(member.project().name(), member);
             internal.add(coord);
         }
 
@@ -132,17 +156,18 @@ public final class WorkspaceMerge {
      */
     private static Dependency resolve(
             Dependency d,
-            Map<String, JkBuild.Project> siblingByArtifact,
+            Map<String, JkBuild> siblingByArtifact,
             Map<String, Workspace.WorkspaceDependency> wsDeps) {
         if (!d.module().startsWith(UNRESOLVED_PREFIX)) return d;
         String name = d.library();
         // Sibling lookup first. Members typically name siblings as
         // jk-core, jk-cli, etc. — the dep handle is expected to match the
         // sibling's name directly.
-        JkBuild.Project sibling = siblingByArtifact.get(name);
+        JkBuild sibling = siblingByArtifact.get(name);
         if (sibling != null) {
-            String module = sibling.group() + ":" + sibling.name();
-            return Dependency.of(name, module, VersionSelector.parse("=" + sibling.version()));
+            JkBuild.Project p = sibling.project();
+            String module = p.group() + ":" + p.name();
+            return Dependency.of(name, module, VersionSelector.parse("=" + p.version()));
         }
         Workspace.WorkspaceDependency ws = wsDeps.get(name);
         if (ws != null) {

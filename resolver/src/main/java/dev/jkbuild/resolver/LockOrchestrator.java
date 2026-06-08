@@ -42,7 +42,7 @@ import java.util.Set;
 public final class LockOrchestrator {
 
     private static final List<Scope> SCOPES =
-            List.of(Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR);
+            List.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR);
 
     /**
      * Synthetic deps every project's TEST scope inherits. The user never

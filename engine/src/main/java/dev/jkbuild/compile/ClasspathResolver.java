@@ -24,17 +24,17 @@ import java.util.Set;
 public final class ClasspathResolver {
 
     /** Scopes used to build the runtime / test runtime classpath. */
-    public static final Set<Scope> TEST = EnumSet.of(Scope.MAIN, Scope.RUNTIME, Scope.TEST);
+    public static final Set<Scope> TEST = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.TEST);
 
     /** Scopes bundled into a runnable app (shadow jar / installed libexec). */
-    public static final Set<Scope> RUNTIME = EnumSet.of(Scope.MAIN, Scope.RUNTIME);
+    public static final Set<Scope> RUNTIME = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME);
 
     /** Scopes visible while compiling main sources. */
-    public static final Set<Scope> COMPILE_MAIN = EnumSet.of(Scope.MAIN, Scope.PROVIDED);
+    public static final Set<Scope> COMPILE_MAIN = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED);
 
     /** Scopes visible while compiling test sources. */
     public static final Set<Scope> COMPILE_TEST =
-            EnumSet.of(Scope.MAIN, Scope.PROVIDED, Scope.TEST);
+            EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED, Scope.TEST);
 
     private final Cas cas;
 
