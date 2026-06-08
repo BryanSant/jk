@@ -5,7 +5,9 @@ import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.model.JkBuild;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
@@ -13,30 +15,32 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
 /**
- * {@code jk clean} — delete generated build outputs under the two-tier
- * layout.
+ * {@code jk clean} — delete generated build outputs for the workspace root
+ * and every declared member.
  *
- * <p>By default removes the workspace's shared {@code target/} tree
- * (final artifacts) AND the current member's {@code build/} tree
- * (intermediates). With {@code --keep-artifacts}, only the member's
- * {@code build/} is removed — handy when you want a fresh compile but
- * still need the existing jar around for downstream consumers.
+ * <p>Each member owns its own {@code target/} directory (final artifacts +
+ * build intermediates). By default {@code jk clean} removes the full
+ * {@code target/} tree for every project directory. With
+ * {@code --keep-artifacts}, only {@code target/build/} (compiler outputs,
+ * test reports, etc.) is removed — handy when you want a fresh compile but
+ * still need the existing jars around for downstream consumers.
  *
  * <p>The shared cache at {@code $JK_CACHE_DIR} is left alone — that's
- * per-machine state, not per-project. {@code .jk/generated/} (a
- * pre-layout artefact path) is also wiped on best-effort basis.
+ * per-machine state, not per-project.
  */
 @Command(name = "clean", description = "Delete generated build outputs")
 public final class CleanCommand implements Callable<Integer> {
 
     @Option(names = "--keep-artifacts",
-            description = "Only delete the member's build/ intermediates; keep the workspace's target/.")
+            description = "Only delete build/ intermediates; keep target/ artifacts.")
     boolean keepArtifacts;
 
     @picocli.CommandLine.Mixin GlobalOptions global;
@@ -45,23 +49,22 @@ public final class CleanCommand implements Callable<Integer> {
     public Integer call() throws IOException {
         Path dir = global.workingDir();
         Path workspaceRoot = resolveWorkspaceRoot(dir);
+        List<Path> projectDirs = collectProjectDirs(workspaceRoot);
 
         long startMs = System.currentTimeMillis();
         long[] stats = {0L, 0L}; // [fileCount, totalBytes]
 
         try (Spinner spinner = Spinner.show(System.out, "Cleaning...")) {
-            // Member intermediates live under target/build/; workspace final
-            // artifacts sit directly under target/. Clean all or just intermediates.
-            if (!keepArtifacts) {
-                deleteRecursively(workspaceRoot.resolve("target"), stats);
-            } else {
-                // Keep jars/native/OCI but remove build intermediates.
-                deleteRecursively(dir.resolve("target").resolve("build"), stats);
+            for (Path projectDir : projectDirs) {
+                if (!keepArtifacts) {
+                    deleteRecursively(projectDir.resolve("target"), stats);
+                } else {
+                    deleteRecursively(projectDir.resolve("target").resolve("build"), stats);
+                }
+                // Legacy pre-layout directories, best-effort.
+                deleteRecursively(projectDir.resolve("build"), stats);
+                deleteRecursively(projectDir.resolve(".jk").resolve("generated"), stats);
             }
-            // Legacy build/ dir from pre-layout projects, best-effort.
-            deleteRecursively(dir.resolve("build"), stats);
-            // Pre-layout generated-sources dir, best-effort.
-            deleteRecursively(dir.resolve(".jk").resolve("generated"), stats);
         }
 
         long elapsedMs = System.currentTimeMillis() - startMs;
@@ -82,18 +85,27 @@ public final class CleanCommand implements Callable<Integer> {
     }
 
     /**
-     * Resolve the workspace root for the current directory. Falls back
-     * to the directory itself when no enclosing workspace is found.
-     *
-     * <p>The two paths are:
-     * <ul>
-     *   <li>{@code dir} is a workspace member ({@code jk.toml} sits
-     *       inside a parent that has {@code [workspace]}) — return the
-     *       parent.</li>
-     *   <li>{@code dir} is either a single project, or the workspace
-     *       root itself — return {@code dir}.</li>
-     * </ul>
+     * Returns the workspace root plus every declared member directory.
+     * Falls back to just {@code [workspaceRoot]} when parsing fails or
+     * there are no members (single-project).
      */
+    private static List<Path> collectProjectDirs(Path workspaceRoot) {
+        List<Path> dirs = new ArrayList<>();
+        dirs.add(workspaceRoot);
+        Path rootToml = workspaceRoot.resolve("jk.toml");
+        if (!Files.exists(rootToml)) return dirs;
+        try {
+            JkBuild root = JkBuildParser.parse(rootToml);
+            if (root.isWorkspaceRoot()) {
+                for (String member : root.workspace().members()) {
+                    Path memberDir = workspaceRoot.resolve(member);
+                    if (Files.isDirectory(memberDir)) dirs.add(memberDir);
+                }
+            }
+        } catch (IOException | RuntimeException ignored) {}
+        return dirs;
+    }
+
     private static Path resolveWorkspaceRoot(Path dir) {
         try {
             Optional<Path> root = WorkspaceLocator.findRoot(dir);

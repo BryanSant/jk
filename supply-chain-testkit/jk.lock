@@ -1,0 +1,31 @@
+version = 1
+generated-by = "jk 0.1.0-SNAPSHOT"
+resolution-algorithm = "pubgrub-v1"
+
+[[package]]
+name     = "org.bouncycastle:bcpg-jdk18on"
+version  = "1.84"
+source   = "central+https://repo.maven.apache.org/maven2/"
+checksum = "sha256:c0e6303a0d7589040f400950ecee87a14b81312e84ed15e5390ebb0c4566ddab"
+scopes   = ["main"]
+deps = [
+  "org.bouncycastle:bcprov-jdk18on@1.84",
+  "org.bouncycastle:bcutil-jdk18on@1.84",
+]
+
+[[package]]
+name     = "org.bouncycastle:bcprov-jdk18on"
+version  = "1.84"
+source   = "central+https://repo.maven.apache.org/maven2/"
+checksum = "sha256:64d6c5a6121fcd927152dd182cbed39afe0fda641a970d9bcc0c9cb1858b2731"
+scopes   = ["main"]
+
+[[package]]
+name     = "org.bouncycastle:bcutil-jdk18on"
+version  = "1.84"
+source   = "central+https://repo.maven.apache.org/maven2/"
+checksum = "sha256:b374e16963421fb9cfb01cc20d7ad8fd2f8b8188e3eef0ec0a8965e245f7619a"
+scopes   = ["main"]
+deps = [
+  "org.bouncycastle:bcprov-jdk18on@1.84",
+]
