@@ -27,8 +27,13 @@ public final class ProtocolWriter {
         return prefix;
     }
 
-    /** Emit one already-encoded JSON object as a prefixed protocol line. */
-    public void emit(String json) {
+    /**
+     * Emit one already-encoded JSON object as a prefixed protocol line.
+     * Synchronised so plugins that emit from multiple threads (e.g. a test
+     * runner firing listener events from parallel test threads) can't interleave
+     * a half-written line.
+     */
+    public synchronized void emit(String json) {
         out.println(prefix + json);
         out.flush();
     }

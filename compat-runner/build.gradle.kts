@@ -37,7 +37,7 @@ tasks.jar {
     dependsOn(configurations.runtimeClasspath)
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.compat.runner.CompatRunner",
+                "Main-Class" to "dev.jkbuild.plugin.host.PluginHostMain",
                 "Implementation-Title" to "jk-compat-runner",
                 "Implementation-Version" to project.version)
     }

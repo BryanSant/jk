@@ -84,7 +84,8 @@ class JavaCompilerWorkerTest {
                 "PROCESSORPATH " + procDir) + "\n");
 
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        int code = JavaCompilerWorker.run(spec, new PrintStream(buf, true, StandardCharsets.UTF_8));
+        int code = JavaCompilerWorker.compileSpec(spec, new dev.jkbuild.plugin.protocol.ProtocolWriter(
+                new PrintStream(buf, true, StandardCharsets.UTF_8), "##JKJC:"));
         String out = buf.toString(StandardCharsets.UTF_8);
 
         assertThat(code).isZero();

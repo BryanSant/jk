@@ -14,7 +14,10 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.mvn.MavenResolver;
 import dev.jkbuild.mvn.PomExporter;
 import dev.jkbuild.mvn.PomImporter;
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -22,6 +25,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
@@ -43,24 +47,22 @@ import java.util.Map;
  *
  * <p>Exit 0 on success, 1 on operation error, 2 on bad arguments.
  */
-public final class CompatRunner {
+public final class CompatRunner implements Plugin {
 
-    static final String PREFIX = "##JKCMP:";
-
-    private CompatRunner() {}
-
-    public static void main(String[] args) {
-        System.exit(run(args, System.out, System.err));
+    @Override
+    public PluginManifest manifest() {
+        return new PluginManifest("jk-compat-runner", "##JKCMP:");
     }
 
-    static int run(String[] args, PrintStream out, PrintStream err) {
-        if (args.length < 1) {
-            err.println("jk-compat-runner: expected spec file path");
+    @Override
+    public int run(List<String> args, ProtocolWriter out) {
+        if (args.isEmpty()) {
+            System.err.println("jk-compat-runner: expected spec file path");
             return 2;
         }
-        Path specFile = Path.of(args[0]);
+        Path specFile = Path.of(args.get(0));
         if (!Files.isRegularFile(specFile)) {
-            err.println("jk-compat-runner: spec file not found: " + specFile);
+            System.err.println("jk-compat-runner: spec file not found: " + specFile);
             return 2;
         }
 
@@ -93,29 +95,29 @@ public final class CompatRunner {
                 }
             }
         } catch (IOException e) {
-            err.println("jk-compat-runner: could not read spec: " + e.getMessage());
+            System.err.println("jk-compat-runner: could not read spec: " + e.getMessage());
             return 2;
         }
 
         if (command == null) {
-            err.println("jk-compat-runner: spec missing COMMAND");
+            System.err.println("jk-compat-runner: spec missing COMMAND");
             return 2;
         }
 
         return switch (command) {
-            case "import"          -> runImport(out, err, source, out_, report, tmpDir, baseDir, force);
-            case "export"          -> runExport(out, err, projectDir, target, force);
-            case "provision_mvn"   -> runProvision(out, err, projectDir, toolsRoot, noDiscover, false);
-            case "provision_gradle"-> runProvision(out, err, projectDir, toolsRoot, noDiscover, true);
-            default -> { err.println("jk-compat-runner: unknown command: " + command); yield 2; }
+            case "import"          -> runImport(out, source, out_, report, tmpDir, baseDir, force);
+            case "export"          -> runExport(out, projectDir, target, force);
+            case "provision_mvn"   -> runProvision(out, projectDir, toolsRoot, noDiscover, false);
+            case "provision_gradle"-> runProvision(out, projectDir, toolsRoot, noDiscover, true);
+            default -> { System.err.println("jk-compat-runner: unknown command: " + command); yield 2; }
         };
     }
 
-    private static int runImport(PrintStream out, PrintStream err,
+    private static int runImport(ProtocolWriter out,
                                   Path source, Path outPath, Path report,
                                   Path tmpDir, Path baseDir, boolean force) {
         if (source == null || outPath == null) {
-            err.println("jk-compat-runner: import requires SOURCE and OUT");
+            System.err.println("jk-compat-runner: import requires SOURCE and OUT");
             return 2;
         }
         try {
@@ -134,24 +136,24 @@ public final class CompatRunner {
                 root = result.jkBuild();
                 importReport = result.report();
             } else {
-                err.println("jk-compat-runner: unrecognised source: " + source.getFileName());
+                System.err.println("jk-compat-runner: unrecognised source: " + source.getFileName());
                 return 64;
             }
 
             Files.writeString(outPath, JkBuildRenderer.render(root), StandardCharsets.UTF_8);
-            emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(outPath.toString()) + "}");
+            out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(outPath.toString()) + "}");
 
             Path effectiveBaseDir = baseDir != null ? baseDir : source.getParent();
             for (Map.Entry<String, JkBuild> e : members.entrySet()) {
                 Path memberJkBuild = effectiveBaseDir.resolve(e.getKey()).resolve("jk.toml");
                 if (Files.exists(memberJkBuild) && !force) {
-                    emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
+                    out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
                             + memberJkBuild + " — pass --force\"}");
                     return 73;
                 }
                 Files.writeString(memberJkBuild, JkBuildRenderer.render(e.getValue()),
                         StandardCharsets.UTF_8);
-                emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(memberJkBuild.toString()) + "}");
+                out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(memberJkBuild.toString()) + "}");
             }
 
             // Write import report.
@@ -170,24 +172,24 @@ public final class CompatRunner {
                 if (rDir != null) Files.createDirectories(rDir);
                 Files.writeString(reportTarget,
                         importReport.renderMarkdown(source.toString()), StandardCharsets.UTF_8);
-                emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(reportTarget.toString()) + "}");
+                out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(reportTarget.toString()) + "}");
             }
 
             int warnings = importReport.issues().size();
             boolean hasErrors = importReport.hasErrors();
-            emit(out, "{\"t\":\"result\",\"ok\":true,\"warnings\":" + warnings
+            out.emit("{\"t\":\"result\",\"ok\":true,\"warnings\":" + warnings
                     + ",\"errors\":" + hasErrors + "}");
             return 0;
         } catch (IOException e) {
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         }
     }
 
-    private static int runExport(PrintStream out, PrintStream err,
+    private static int runExport(ProtocolWriter out,
                                   Path projectDir, Path target, boolean force) {
         if (projectDir == null || target == null) {
-            err.println("jk-compat-runner: export requires PROJECT_DIR and TARGET");
+            System.err.println("jk-compat-runner: export requires PROJECT_DIR and TARGET");
             return 2;
         }
         try {
@@ -195,7 +197,7 @@ public final class CompatRunner {
             JkBuild root = dev.jkbuild.config.JkBuildParser.parse(projectDir.resolve("jk.toml"));
             PomExporter.Result rootResult = PomExporter.export(root);
             Files.writeString(target, rootResult.xml(), StandardCharsets.UTF_8);
-            emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(target.toString()) + "}");
+            out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(target.toString()) + "}");
 
             int totalWarnings = rootResult.report().issues().size();
             if (root.isWorkspaceRoot()) {
@@ -204,29 +206,29 @@ public final class CompatRunner {
                 for (Map.Entry<Path, JkBuild> e : members.entrySet()) {
                     Path memberPom = e.getKey().resolve("pom.xml");
                     if (Files.exists(memberPom) && !force) {
-                        emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
+                        out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
                                 + memberPom + " — pass --force\"}");
                         return 73;
                     }
                     PomExporter.Result memberResult = PomExporter.export(e.getValue());
                     Files.writeString(memberPom, memberResult.xml(), StandardCharsets.UTF_8);
-                    emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(memberPom.toString()) + "}");
+                    out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(memberPom.toString()) + "}");
                     totalWarnings += memberResult.report().issues().size();
                 }
             }
-            emit(out, "{\"t\":\"result\",\"ok\":true,\"warnings\":" + totalWarnings + "}");
+            out.emit("{\"t\":\"result\",\"ok\":true,\"warnings\":" + totalWarnings + "}");
             return 0;
         } catch (IOException e) {
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         }
     }
 
-    private static int runProvision(PrintStream out, PrintStream err,
+    private static int runProvision(ProtocolWriter out,
                                      Path projectDir, Path toolsRoot,
                                      boolean noDiscover, boolean isGradle) {
         if (projectDir == null || toolsRoot == null) {
-            err.println("jk-compat-runner: provision requires PROJECT_DIR and TOOLS_ROOT");
+            System.err.println("jk-compat-runner: provision requires PROJECT_DIR and TOOLS_ROOT");
             return 2;
         }
         try {
@@ -237,7 +239,7 @@ public final class CompatRunner {
             ToolProvisioning.Result result =
                     ToolProvisioning.provision(dist, registry, new Http(), noDiscover);
             InstalledTool tool = result.tool();
-            emit(out, "{\"t\":\"result\",\"ok\":true"
+            out.emit("{\"t\":\"result\",\"ok\":true"
                     + ",\"bin\":" + Ndjson.quote(tool.binary().toString())
                     + ",\"home\":" + Ndjson.quote(tool.home().toString())
                     + ",\"version\":" + Ndjson.quote(dist.version())
@@ -246,13 +248,9 @@ public final class CompatRunner {
             return 0;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         }
     }
 
-    private static void emit(PrintStream out, String json) {
-        out.println(PREFIX + json);
-        out.flush();
-    }
 }

@@ -7,7 +7,10 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.ObjectStoreConfig;
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
 import dev.jkbuild.publish.Checksums;
 import dev.jkbuild.publish.GpgSigner;
 import dev.jkbuild.publish.KeylessSigstoreSigner;
@@ -65,24 +68,22 @@ import java.util.UUID;
  *
  * <p>Exit codes: 0 success, 1 publish error, 2 bad arguments.
  */
-public final class PublishRunner {
+public final class PublishRunner implements Plugin {
 
-    static final String PREFIX = "##JKPU:";
-
-    private PublishRunner() {}
-
-    public static void main(String[] args) {
-        System.exit(run(args, System.out, System.err));
+    @Override
+    public PluginManifest manifest() {
+        return new PluginManifest("jk-publish-runner", "##JKPU:");
     }
 
-    static int run(String[] args, PrintStream out, PrintStream err) {
-        if (args.length < 1) {
-            err.println("jk-publish-runner: expected spec file path as first argument");
+    @Override
+    public int run(List<String> args, ProtocolWriter out) {
+        if (args.isEmpty()) {
+            System.err.println("jk-publish-runner: expected spec file path as first argument");
             return 2;
         }
-        Path specFile = Path.of(args[0]);
+        Path specFile = Path.of(args.get(0));
         if (!Files.isRegularFile(specFile)) {
-            err.println("jk-publish-runner: spec file not found: " + specFile);
+            System.err.println("jk-publish-runner: spec file not found: " + specFile);
             return 2;
         }
 
@@ -124,11 +125,11 @@ public final class PublishRunner {
                 }
             }
         } catch (IOException e) {
-            err.println("jk-publish-runner: could not read spec: " + e.getMessage());
+            System.err.println("jk-publish-runner: could not read spec: " + e.getMessage());
             return 2;
         }
         if (projectDir == null || jar == null || repoUrl == null) {
-            err.println("jk-publish-runner: spec missing PROJECT_DIR, JAR, or REPO_URL");
+            System.err.println("jk-publish-runner: spec missing PROJECT_DIR, JAR, or REPO_URL");
             return 2;
         }
 
@@ -137,7 +138,7 @@ public final class PublishRunner {
         try {
             project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         } catch (IOException e) {
-            err.println("jk-publish-runner: could not read jk.toml: " + e.getMessage());
+            System.err.println("jk-publish-runner: could not read jk.toml: " + e.getMessage());
             return 1;
         }
 
@@ -146,13 +147,13 @@ public final class PublishRunner {
         try {
             byte[] jarBytes = Files.readAllBytes(jar);
             artifacts.add(new MavenPublisher.Artifact(".jar", jarBytes));
-            emit(out, "{\"t\":\"artifact\",\"name\":" + Ndjson.quote(jar.getFileName().toString())
+            out.emit("{\"t\":\"artifact\",\"name\":" + Ndjson.quote(jar.getFileName().toString())
                     + ",\"size\":" + jarBytes.length + "}");
 
             PublishablePom.Pom pom = PublishablePom.render(project, PublishablePom.Metadata.empty());
             byte[] pomBytes = pom.xml().getBytes(StandardCharsets.UTF_8);
             artifacts.add(new MavenPublisher.Artifact(".pom", pomBytes));
-            emit(out, "{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
+            out.emit("{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
                     + "-" + project.project().version() + ".pom")
                     + ",\"size\":" + pomBytes.length + "}");
 
@@ -160,7 +161,7 @@ public final class PublishRunner {
                 Path srcRoot = projectDir.resolve("src/main/java");
                 byte[] sourcesJar = SourcesJar.build(List.of(srcRoot));
                 artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesJar));
-                emit(out, "{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
+                out.emit("{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
                         + "-" + project.project().version() + "-sources.jar")
                         + ",\"size\":" + sourcesJar.length + "}");
             }
@@ -180,7 +181,7 @@ public final class PublishRunner {
                 byte[] provenance = SlsaProvenance.generate(
                         List.of(new SlsaProvenance.Subject(jarFilename, Checksums.sha256Hex(jarBytes))), ctx);
                 artifacts.add(new MavenPublisher.Artifact(".intoto.json", provenance));
-                emit(out, "{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
+                out.emit("{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
                         + "-" + project.project().version() + ".intoto.json")
                         + ",\"size\":" + provenance.length + "}");
             }
@@ -192,16 +193,16 @@ public final class PublishRunner {
                 byte[] spdxBytes = Sbom.spdx(project, lock);
                 artifacts.add(new MavenPublisher.Artifact("-cyclonedx.json", cdx));
                 artifacts.add(new MavenPublisher.Artifact("-spdx.json", spdxBytes));
-                emit(out, "{\"t\":\"artifact\",\"name\":\"cyclonedx+spdx\",\"size\":"
+                out.emit("{\"t\":\"artifact\",\"name\":\"cyclonedx+spdx\",\"size\":"
                         + (cdx.length + spdxBytes.length) + "}");
             }
         } catch (IOException e) {
-            err.println("jk-publish-runner: artifact assembly failed: " + e.getMessage());
+            System.err.println("jk-publish-runner: artifact assembly failed: " + e.getMessage());
             return 1;
         }
 
         if (dryRun) {
-            emit(out, "{\"t\":\"result\",\"ok\":true,\"dry_run\":true,\"files\":"
+            out.emit("{\"t\":\"result\",\"ok\":true,\"dry_run\":true,\"files\":"
                     + artifacts.size() + "}");
             return 0;
         }
@@ -218,7 +219,7 @@ public final class PublishRunner {
                     : null;
             signing = new SigningOptions(gpg, sigstoreSigner);
         } catch (IOException e) {
-            err.println("jk-publish-runner: signing setup failed: " + e.getMessage());
+            System.err.println("jk-publish-runner: signing setup failed: " + e.getMessage());
             return 1;
         }
 
@@ -236,31 +237,26 @@ public final class PublishRunner {
 
             MavenPublisher.Result result = publisher.publish(project.project(), artifacts, signing);
             for (Map.Entry<String, Integer> e : result.statusByPath().entrySet()) {
-                emit(out, "{\"t\":\"upload\",\"name\":" + Ndjson.quote(e.getKey())
+                out.emit("{\"t\":\"upload\",\"name\":" + Ndjson.quote(e.getKey())
                         + ",\"status\":" + e.getValue() + "}");
             }
 
             if (!result.allOk()) {
-                emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":\"partial upload failure\"}");
+                out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"partial upload failure\"}");
                 return 1;
             }
-            emit(out, "{\"t\":\"result\",\"ok\":true,\"files\":"
+            out.emit("{\"t\":\"result\",\"ok\":true,\"files\":"
                     + result.statusByPath().size() + "}");
             return 0;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         } finally {
             if (signing != null && signing.sigstore() instanceof AutoCloseable c) {
                 try { c.close(); } catch (Exception ignored) {}
             }
         }
-    }
-
-    private static void emit(PrintStream out, String json) {
-        out.println(PREFIX + json);
-        out.flush();
     }
 
     private static String blankToNull(String s) {

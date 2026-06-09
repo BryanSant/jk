@@ -48,7 +48,7 @@ dependencies {
 tasks.jar {
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.test.runner.JkRunner",
+                "Main-Class" to "dev.jkbuild.plugin.host.PluginHostMain",
                 "Implementation-Title" to "jk-test-runner",
                 "Implementation-Version" to project.version)
     }

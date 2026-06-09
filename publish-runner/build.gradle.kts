@@ -39,7 +39,7 @@ tasks.jar {
     dependsOn(configurations.runtimeClasspath)
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.publish.runner.PublishRunner",
+                "Main-Class" to "dev.jkbuild.plugin.host.PluginHostMain",
                 "Implementation-Title" to "jk-publish-runner",
                 "Implementation-Version" to project.version)
     }

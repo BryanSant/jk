@@ -10,10 +10,11 @@ import org.jetbrains.kotlin.buildtools.api.jvm.JvmSnapshotBasedIncrementalCompil
 import org.jetbrains.kotlin.buildtools.api.jvm.JvmSnapshotBasedIncrementalCompilationConfiguration.Builder;
 import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperation;
 
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
+
 import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileOutputStream;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,27 +38,28 @@ import java.util.stream.Collectors;
  * compiler arrive on the classpath at runtime, version-matched by jk, so the
  * worker never leaks compiler deps into jk.
  */
-public final class KotlinCompilerWorker {
+public final class KotlinCompilerWorker implements Plugin {
 
-    private KotlinCompilerWorker() {}
+    @Override
+    public PluginManifest manifest() {
+        return new PluginManifest("jk-kotlin-compiler", "##JKKC:");
+    }
 
-    public static void main(String[] argv) {
-        PrintStream out = new PrintStream(
-                new FileOutputStream(FileDescriptor.out), /* autoFlush */ true, StandardCharsets.UTF_8);
+    @Override
+    public int run(List<String> args, ProtocolWriter out) {
         KcProtocol proto = new KcProtocol(out);
         try {
-            if (argv.length != 1) {
-                System.err.println("usage: KotlinCompilerWorker <spec-file>|@<spec-file>");
-                System.exit(2);
-                return;
+            if (args.size() != 1) {
+                System.err.println("usage: jk-kotlin-compiler <spec-file>|@<spec-file>");
+                return 2;
             }
-            String specArg = argv[0].startsWith("@") ? argv[0].substring(1) : argv[0];
+            String specArg = args.get(0).startsWith("@") ? args.get(0).substring(1) : args.get(0);
             CompileSpec spec = CompileSpec.parse(Path.of(specArg));
-            System.exit(compile(spec, proto));
+            return compile(spec, proto);
         } catch (Throwable t) {
             System.err.println("jk-kotlin-compiler: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace(System.err);
-            System.exit(2);
+            return 2;
         }
     }
 

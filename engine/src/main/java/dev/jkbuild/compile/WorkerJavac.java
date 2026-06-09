@@ -30,7 +30,7 @@ import java.util.TreeSet;
 public final class WorkerJavac {
 
     private static final String PREFIX = "##JKJC:";
-    private static final String WORKER_MAIN = "dev.jkbuild.java.compiler.JavaCompilerWorker";
+    private static final String WORKER_MAIN = "dev.jkbuild.plugin.host.PluginHostMain";
 
     private WorkerJavac() {}
 
