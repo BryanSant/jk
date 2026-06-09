@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Spec;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
 
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
  * {@code jk repo} parent verb — manage artifact-repository credentials (the
@@ -15,19 +14,26 @@ import java.util.concurrent.Callable;
  * WebDAV, and other authenticated Maven repositories. See
  * docs/artifact-repos.md.
  */
-@Command(name = "repo",
-        description = "Manage artifact repository credentials",
-        subcommands = {
-                RepoLoginCommand.class,
-                RepoLogoutCommand.class,
-        })
-public final class RepoCommand implements Callable<Integer> {
-
-    @Spec CommandSpec spec;
+public final class RepoCommand implements CliCommand {
 
     @Override
-    public Integer call() {
-        spec.commandLine().usage(System.out);
+    public String name() {
+        return "repo";
+    }
+
+    @Override
+    public String description() {
+        return "Manage artifact repository credentials";
+    }
+
+    @Override
+    public List<CliCommand> subcommands() {
+        return List.of(new RepoLoginCommand(), new RepoLogoutCommand());
+    }
+
+    /** Unreachable: the dispatcher prints the command list for a bare parent. */
+    @Override
+    public int run(Invocation in) {
         return 64;
     }
 }

@@ -54,7 +54,6 @@ import java.util.Set;
                 ToolCommand.class,
                 LibraryCommand.class,
                 AuthCommand.class,
-                RepoCommand.class,
                 DoctorCommand.class,
                 CacheCommand.class,
         })

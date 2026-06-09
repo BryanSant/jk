@@ -9,6 +9,7 @@ import dev.jkbuild.command.DeactivateCommand;
 import dev.jkbuild.command.ExplainCommand;
 import dev.jkbuild.command.HookEnvCommand;
 import dev.jkbuild.command.LockCommand;
+import dev.jkbuild.command.RepoCommand;
 import dev.jkbuild.command.ShellCommand;
 import dev.jkbuild.command.SyncCommand;
 import dev.jkbuild.command.TreeCommand;
@@ -22,9 +23,11 @@ import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Routes verbs that have been ported off picocli through jk's own
@@ -32,6 +35,11 @@ import java.util.Map;
  * picocli. This is the coexistence seam for Phase 3 (docs/plugin-refactor.md §5):
  * commands move into the registry below one tranche at a time, and picocli is
  * deleted once it's empty on the other side.
+ *
+ * <p>Handles both leaf verbs and parent groups (a {@link CliCommand} with
+ * subcommands) — {@code jk jdk install …} descends into the parent, finds the
+ * sub-verb, and dispatches it; {@code jk jdk}/{@code jk jdk --help} prints the
+ * parent's command list.
  */
 public final class CommandDispatch {
 
@@ -47,7 +55,8 @@ public final class CommandDispatch {
             new ShellCommand(),
             new HookEnvCommand(),
             new LockCommand(),
-            new SyncCommand());
+            new SyncCommand(),
+            new RepoCommand());
 
     private static final Map<String, CliCommand> BY_NAME = index();
 
@@ -66,33 +75,50 @@ public final class CommandDispatch {
     }
 
     /**
-     * If {@code args[0]} names a ported command, parse and run it, returning the
-     * exit code; otherwise return {@code null} so the caller falls back to
-     * picocli. Global flags ({@code -q}, {@code -C}, …) are accepted (their
-     * effect was already folded into {@link ActiveConfig} before dispatch);
-     * {@code --help} / {@code --version} are handled here.
+     * If the verb names a ported command, parse and run it (descending through
+     * subcommands as needed), returning the exit code; otherwise return
+     * {@code null} so the caller falls back to picocli.
      */
     public static Integer tryDispatch(String[] args) {
-        int verbAt = verbIndex(args);
+        List<String> all = List.of(args);
+        int verbAt = verbIndex(all);
         if (verbAt < 0) return null;
-        CliCommand cmd = BY_NAME.get(args[verbAt]);
+        CliCommand cmd = BY_NAME.get(all.get(verbAt));
         if (cmd == null) return null;
+        return dispatch(cmd, "jk " + all.get(verbAt), all.subList(verbAt + 1, all.size()), ansiEnabled());
+    }
 
-        boolean ansi = ansiEnabled();
-        // Args after the verb. Global options before the verb were already folded
-        // into ActiveConfig by Jk.applyCliOverrides, so dropping them here is safe.
-        List<String> rest = List.of(args).subList(verbAt + 1, args.length);
+    /** Dispatch {@code cmd} against {@code rest} (its arguments), descending into subcommands. */
+    private static int dispatch(CliCommand cmd, String qualified, List<String> rest, boolean ansi) {
+        if (!cmd.subcommands().isEmpty()) {
+            int subAt = verbIndex(rest);
+            if (subAt < 0) {
+                // No subcommand: print the group's command list. `--help` is a
+                // request (exit 0); bare `jk <group>` is a usage error (64).
+                System.out.print(renderHelp(cmd, qualified, ansi));
+                return helpRequested(rest) ? 0 : 64;
+            }
+            String subName = rest.get(subAt);
+            CliCommand sub = findSub(cmd, subName);
+            if (sub == null) {
+                printUnknownSubcommand(cmd, qualified, subName, ansi);
+                return 2;
+            }
+            return dispatch(sub, qualified + " " + subName, rest.subList(subAt + 1, rest.size()), ansi);
+        }
 
+        // --help wins over parse validation (e.g. a missing required argument),
+        // matching picocli — so `jk <cmd> --help` always shows help.
+        if (helpRequested(rest)) {
+            System.out.print(renderHelp(cmd, qualified, ansi));
+            return 0;
+        }
         Invocation in;
         try {
             in = ArgParser.parse(withGlobals(cmd), rest);
         } catch (ParseException e) {
-            printError(cmd, e, ansi);
+            printError(qualified, cmd, e, ansi);
             return 2;
-        }
-        if (in.isSet("help")) {
-            System.out.print(renderHelp(cmd, ansi));
-            return 0;
         }
         if (in.isSet("version")) {
             System.out.println("jk " + Jk.VERSION);
@@ -107,6 +133,13 @@ public final class CommandDispatch {
         }
     }
 
+    private static CliCommand findSub(CliCommand parent, String name) {
+        for (CliCommand sub : parent.subcommands()) {
+            if (sub.name().equals(name) || sub.aliases().contains(name)) return sub;
+        }
+        return null;
+    }
+
     /** A parse model = the command's own options plus the shared global options. */
     private static Command withGlobals(CliCommand cmd) {
         List<Opt> opts = new ArrayList<>(cmd.options());
@@ -119,14 +152,14 @@ public final class CommandDispatch {
         };
     }
 
-    private static String renderHelp(CliCommand cmd, boolean ansi) {
+    private static String renderHelp(CliCommand cmd, String qualified, boolean ansi) {
         List<OptionModel> globals = GlobalOptions.globalOpts().stream()
                 .filter(o -> !o.hidden()).map(CommandModels::option).toList();
-        CommandModel model = CommandModels.from(cmd, "jk " + cmd.name(), globals);
+        CommandModel model = CommandModels.from(cmd, qualified, globals);
         return HelpRenderer.renderHelp(model, ansi);
     }
 
-    private static void printError(CliCommand cmd, ParseException e, boolean ansi) {
+    private static void printError(String qualified, CliCommand cmd, ParseException e, boolean ansi) {
         String label = HelpRenderer.paint("error:", Theme.active().errorLabel(), ansi);
         String message = switch (e.kind()) {
             case UNKNOWN_OPTION -> "unrecognized option '"
@@ -137,14 +170,22 @@ public final class CommandDispatch {
         };
         System.err.println(label + " " + message);
         System.err.println();
-        System.err.println(usageLine(cmd, ansi));
+        System.err.println(usageLine(cmd, qualified, ansi));
         System.err.println();
-        System.err.println(ansi
-                ? "For more information, try '" + Ansi.sgr(Theme.active().helpHint()) + "--help" + Ansi.RESET + "'"
-                : "For more information, try '--help'");
+        System.err.println(helpHint(ansi));
     }
 
-    private static String usageLine(CliCommand cmd, boolean ansi) {
+    private static void printUnknownSubcommand(CliCommand parent, String qualified, String sub, boolean ansi) {
+        System.err.println(HelpRenderer.paint("error:", Theme.active().errorLabel(), ansi)
+                + " unrecognized subcommand '"
+                + HelpRenderer.paint(sub, Theme.active().highlight(), ansi) + "'");
+        System.err.println();
+        System.err.println(usageLine(parent, qualified, ansi));
+        System.err.println();
+        System.err.println(helpHint(ansi));
+    }
+
+    private static String usageLine(CliCommand cmd, String qualified, boolean ansi) {
         StringBuilder suffix = new StringBuilder();
         if (cmd.isLeaf()) {
             for (Param p : cmd.parameters()) {
@@ -155,35 +196,43 @@ public final class CommandDispatch {
             suffix.append(" <COMMAND>");
         }
         suffix.append(" [OPTIONS]");
-        String name = "jk " + cmd.name();
         if (ansi) {
             return HelpRenderer.paint("Usage:", Theme.active().sectionHeading(), true) + " "
-                    + HelpRenderer.paint(name, Theme.active().commandName(), true)
+                    + HelpRenderer.paint(qualified, Theme.active().commandName(), true)
                     + HelpRenderer.paint(suffix.toString(), Theme.active().paramLabel(), true);
         }
-        return "Usage: " + name + suffix;
+        return "Usage: " + qualified + suffix;
+    }
+
+    private static String helpHint(boolean ansi) {
+        return ansi
+                ? "For more information, try '" + Ansi.sgr(Theme.active().helpHint()) + "--help" + Ansi.RESET + "'"
+                : "For more information, try '--help'";
     }
 
     /**
      * Index of the verb — the first non-option token, skipping any leading
      * global options (and the value of a value-taking one, e.g. {@code -C dir}).
-     * Returns -1 when there's no verb (bare {@code jk}, or {@code jk --help}).
+     * Returns -1 when there's none (bare {@code jk}, or {@code jk --help}).
      */
-    static int verbIndex(String[] args) {
-        java.util.Set<String> valueGlobals = new java.util.HashSet<>();
+    static int verbIndex(List<String> args) {
+        Set<String> valueGlobals = new LinkedHashSet<>();
         for (Opt o : GlobalOptions.globalOpts()) {
             if (o.takesValue()) valueGlobals.addAll(o.names());
         }
         int i = 0;
-        while (i < args.length) {
-            String a = args[i];
-            if (a.equals("--")) return i + 1 < args.length ? i + 1 : -1;
+        while (i < args.size()) {
+            String a = args.get(i);
+            if (a.equals("--")) return i + 1 < args.size() ? i + 1 : -1;
             if (!a.startsWith("-") || a.equals("-")) return i;   // first positional = verb
             String name = a.contains("=") ? a.substring(0, a.indexOf('=')) : a;
-            // A value-taking global in `--name value` form consumes the next token too.
             i += (valueGlobals.contains(name) && !a.contains("=")) ? 2 : 1;
         }
         return -1;
+    }
+
+    private static boolean helpRequested(List<String> args) {
+        return args.contains("-h") || args.contains("--help");
     }
 
     static boolean ansiEnabled() {

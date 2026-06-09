@@ -2,35 +2,51 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 import dev.jkbuild.repo.RepoCredentialStore;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Mixin;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
 
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
  * {@code jk repo logout <id>} — forget stored credentials for an artifact
  * repository. Leaves env vars and {@code ~/.m2/settings.xml} untouched.
  */
-@Command(name = "logout", description = "Remove stored credentials for an artifact repository")
-public final class RepoLogoutCommand implements Callable<Integer> {
-
-    @Parameters(arity = "1", paramLabel = "<id>",
-            description = "Repository id (matches [repositories.<id>] in jk.toml).")
-    String id;
-
-    @Option(names = "--credentials-dir", hidden = true,
-            description = "Override the credentials directory. Default: ~/.jk/repo-credentials.")
-    Path credentialsDir;
-
-    @Mixin GlobalOptions global;
+public final class RepoLogoutCommand implements CliCommand {
 
     @Override
-    public Integer call() {
+    public String name() {
+        return "logout";
+    }
+
+    @Override
+    public String description() {
+        return "Remove stored credentials for an artifact repository";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(Opt.value("<dir>",
+                "Override the credentials directory. Default: ~/.jk/repo-credentials.",
+                "--credentials-dir").hide());
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of("id", Arity.ONE,
+                "Repository id (matches [repositories.<id>] in jk.toml)."));
+    }
+
+    @Override
+    public int run(Invocation in) {
+        String id = in.positionals().get(0);
+        Path credentialsDir = in.value("credentials-dir").map(Path::of).orElse(null);
+        GlobalOptions global = GlobalOptions.from(in);
+
         RepoCredentialStore store = credentialsDir != null
                 ? new RepoCredentialStore(credentialsDir)
                 : new RepoCredentialStore();
