@@ -5,16 +5,16 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.PassthroughEnv;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkResolver;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -86,51 +86,30 @@ public final class MvnCommand implements Callable<Integer> {
 
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin").resolve(isWindows() ? "java.exe" : "java");
-            ProcessBuilder pb = new ProcessBuilder(
-                    javaExe.toString(), "-jar", workerJar.toString(),
-                    spec.toAbsolutePath().toString()).redirectErrorStream(true);
-            Process process = pb.start();
-            String bin = null;
+            List<String> cmd = List.of(javaExe.toString(), "-jar",
+                    workerJar.toString(), spec.toAbsolutePath().toString());
+            String[] bin = {null};
             StringBuilder diag = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String ln;
-                while ((ln = reader.readLine()) != null) {
-                    if (!ln.startsWith("##JKCMP:")) { diag.append(ln).append('\n'); continue; }
-                    String json = ln.substring("##JKCMP:".length());
-                    if ("result".equals(readField(json, "t"))) {
-                        bin = readField(json, "bin");
-                        String err = readField(json, "error");
-                        if (err != null) System.err.println("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
-                        String src = readField(json, "source");
-                        String ver = readField(json, "version");
-                        if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
-                            System.err.println((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
-                        }
+            int exit = WorkerProcess.run(cmd, "##JKCMP:", json -> {
+                if ("result".equals(Ndjson.str(json, "t"))) {
+                    bin[0] = Ndjson.str(json, "bin");
+                    String err = Ndjson.str(json, "error");
+                    if (err != null) System.err.println("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
+                    String src = Ndjson.str(json, "source");
+                    String ver = Ndjson.str(json, "version");
+                    if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
+                        System.err.println((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
                     }
                 }
-            }
-            int exit = process.waitFor();
+            }, ln -> diag.append(ln).append('\n'));
             if (exit != 0) {
                 if (diag.length() > 0) System.err.println(diag.toString().trim());
                 return null;
             }
-            return bin != null ? Path.of(bin) : null;
+            return bin[0] != null ? Path.of(bin[0]) : null;
         } finally {
             Files.deleteIfExists(spec);
         }
-    }
-
-    static String readField(String json, String key) {
-        String needle = "\"" + key + "\":\"";
-        int s = json.indexOf(needle); if (s < 0) return null; s += needle.length();
-        StringBuilder sb = new StringBuilder();
-        for (int i = s; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '\\' && i + 1 < json.length()) { char n = json.charAt(++i); if (n=='"') sb.append('"'); else { sb.append('\\'); sb.append(n); } }
-            else if (c == '"') break; else sb.append(c);
-        }
-        return sb.toString();
     }
 
     private static boolean isWindows() { return System.getProperty("os.name","").toLowerCase().contains("win"); }

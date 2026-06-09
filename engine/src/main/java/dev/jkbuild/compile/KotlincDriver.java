@@ -2,10 +2,9 @@
 package dev.jkbuild.compile;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.worker.WorkerProcess;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -44,37 +43,26 @@ public final class KotlincDriver {
     private KotlincResult run(KotlincRequest request) throws IOException, InterruptedException {
         Path spec = writeSpec(request);
         try {
-            List<String> cmd = new ArrayList<>();
-            cmd.add(request.javaHome().resolve("bin").resolve("java").toString());
-            // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
-            cmd.add("--enable-native-access=ALL-UNNAMED");
-            cmd.add("-cp");
-            cmd.add(request.workerClasspath().stream()
-                    .map(Path::toString).collect(Collectors.joining(java.io.File.pathSeparator)));
-            cmd.add(WORKER_MAIN);
-            cmd.add("@" + spec.toAbsolutePath());
-
-            ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
-            Process process = pb.start();
+            List<String> cmd = List.of(
+                    request.javaHome().resolve("bin").resolve("java").toString(),
+                    // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
+                    "--enable-native-access=ALL-UNNAMED",
+                    "-cp", request.workerClasspath().stream()
+                            .map(Path::toString).collect(Collectors.joining(java.io.File.pathSeparator)),
+                    WORKER_MAIN, "@" + spec.toAbsolutePath());
 
             List<String> diagnostics = new ArrayList<>();
-            String status = null;
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.startsWith(PROTOCOL_PREFIX)) continue;   // JDK chatter etc.
-                    String json = line.substring(PROTOCOL_PREFIX.length());
-                    String t = Ndjson.str(json, "t");
-                    if ("diag".equals(t)) {
-                        diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg"));
-                    } else if ("result".equals(t)) {
-                        status = Ndjson.str(json, "status");
-                    }
+            String[] status = {null};
+            // Non-protocol lines (JDK/compiler chatter) are dropped, as before.
+            int exit = WorkerProcess.run(cmd, PROTOCOL_PREFIX, json -> {
+                String t = Ndjson.str(json, "t");
+                if ("diag".equals(t)) {
+                    diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg"));
+                } else if ("result".equals(t)) {
+                    status[0] = Ndjson.str(json, "status");
                 }
-            }
-            int exit = process.waitFor();
-            boolean success = exit == 0 && "COMPILATION_SUCCESS".equals(status);
+            }, null);
+            boolean success = exit == 0 && "COMPILATION_SUCCESS".equals(status[0]);
             return new KotlincResult(success, String.join("\n", diagnostics));
         } finally {
             Files.deleteIfExists(spec);

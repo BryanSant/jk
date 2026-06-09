@@ -19,14 +19,14 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -205,32 +205,23 @@ public final class ImageCommand implements Callable<Integer> {
                     .resolve(isWindows() ? "java.exe" : "java");
             List<String> cmd = List.of(javaExe.toString(), "-jar",
                     workerJar.toString(), spec.toAbsolutePath().toString());
-            ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
-            Process process = pb.start();
-
-            String ref = null;
+            String[] ref = {null};
+            String[] workerError = {null};
             StringBuilder diag = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String ln;
-                while ((ln = reader.readLine()) != null) {
-                    if (!ln.startsWith("##JKIM:")) { diag.append(ln).append('\n'); continue; }
-                    String json = ln.substring("##JKIM:".length());
-                    String t = readField(json, "t");
-                    if ("result".equals(t)) {
-                        ref = readField(json, "ref");
-                        String err = readField(json, "error");
-                        if (err != null) throw new RuntimeException("image worker: " + err);
-                    }
+            int exit = WorkerProcess.run(cmd, "##JKIM:", json -> {
+                if ("result".equals(Ndjson.str(json, "t"))) {
+                    ref[0] = Ndjson.str(json, "ref");
+                    String err = Ndjson.str(json, "error");
+                    if (err != null) workerError[0] = err;
                 }
-            }
-            int exit = process.waitFor();
+            }, ln -> diag.append(ln).append('\n'));
+            if (workerError[0] != null) throw new RuntimeException("image worker: " + workerError[0]);
             if (exit != 0) {
                 String d = diag.length() > 0 ? diag.toString().trim() : null;
                 throw new RuntimeException("image worker failed"
                         + (d != null ? ": " + d : " (exit " + exit + ")"));
             }
-            return ref != null ? ref : "";
+            return ref[0] != null ? ref[0] : "";
         } finally {
             Files.deleteIfExists(spec);
         }
@@ -266,23 +257,6 @@ public final class ImageCommand implements Callable<Integer> {
             if (Files.exists(candidate)) result.add(candidate);
         }
         return result;
-    }
-
-    private static String readField(String json, String key) {
-        String needle = "\"" + key + "\":\"";
-        int start = json.indexOf(needle);
-        if (start < 0) return null;
-        start += needle.length();
-        StringBuilder sb = new StringBuilder();
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '\\' && i + 1 < json.length()) {
-                char n = json.charAt(++i);
-                if (n == '"') sb.append('"'); else { sb.append('\\'); sb.append(n); }
-            } else if (c == '"') break;
-            else sb.append(c);
-        }
-        return sb.toString();
     }
 
     private static boolean isWindows() {

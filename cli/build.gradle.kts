@@ -12,6 +12,8 @@ dependencies {
     implementation(project(":runtime"))
     implementation(project(":core"))
     implementation(project(":io"))
+    // Shared NDJSON reader + WorkerProcess launch helper for worker-driving commands.
+    implementation(project(":plugin-api"))
     implementation(project(":resolver"))
     implementation(project(":toolchain"))
     implementation(project(":engine"))

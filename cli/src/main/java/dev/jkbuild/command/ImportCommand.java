@@ -3,16 +3,16 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -101,32 +101,22 @@ public final class ImportCommand implements Callable<Integer> {
             Files.write(spec, specLines, StandardCharsets.UTF_8);
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin").resolve(isWindows() ? "java.exe" : "java");
-            ProcessBuilder pb = new ProcessBuilder(
-                    javaExe.toString(), "-jar", workerJar.toString(),
-                    spec.toAbsolutePath().toString()).redirectErrorStream(true);
-            Process process = pb.start();
-            int exit = 0;
+            List<String> cmd = List.of(javaExe.toString(), "-jar",
+                    workerJar.toString(), spec.toAbsolutePath().toString());
             StringBuilder diag = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String ln;
-                while ((ln = reader.readLine()) != null) {
-                    if (!ln.startsWith("##JKCMP:")) { diag.append(ln).append('\n'); continue; }
-                    String json = ln.substring("##JKCMP:".length());
-                    String t = readField(json, "t");
-                    if ("wrote".equals(t)) System.out.println("Wrote " + readField(json, "path"));
-                    else if ("note".equals(t)) System.out.println(readField(json, "msg"));
-                    else if ("result".equals(t)) {
-                        String err = readField(json, "error");
-                        if (err != null) { System.err.println("jk import: " + err); }
-                        String warnings = readNumericField(json, "warnings");
-                        if (warnings != null && !warnings.equals("0")) {
-                            System.out.println("Import notes: " + warnings + " issue(s)");
-                        }
+            int exit = WorkerProcess.run(cmd, "##JKCMP:", json -> {
+                String t = Ndjson.str(json, "t");
+                if ("wrote".equals(t)) System.out.println("Wrote " + Ndjson.str(json, "path"));
+                else if ("note".equals(t)) System.out.println(Ndjson.str(json, "msg"));
+                else if ("result".equals(t)) {
+                    String err = Ndjson.str(json, "error");
+                    if (err != null) System.err.println("jk import: " + err);
+                    int warnings = Ndjson.intValue(json, "warnings", 0);
+                    if (warnings != 0) {
+                        System.out.println("Import notes: " + warnings + " issue(s)");
                     }
                 }
-            }
-            exit = process.waitFor();
+            }, ln -> diag.append(ln).append('\n'));
             if (exit != 0 && diag.length() > 0) {
                 System.err.println("jk import: " + diag.toString().trim());
             }
@@ -155,32 +145,6 @@ public final class ImportCommand implements Callable<Integer> {
         return null;
     }
 
-    private static String readField(String json, String key) {
-        String needle = "\"" + key + "\":\"";
-        int start = json.indexOf(needle);
-        if (start < 0) return null;
-        start += needle.length();
-        StringBuilder sb = new StringBuilder();
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '\\' && i + 1 < json.length()) {
-                char n = json.charAt(++i);
-                if (n == '"') sb.append('"'); else { sb.append('\\'); sb.append(n); }
-            } else if (c == '"') break;
-            else sb.append(c);
-        }
-        return sb.toString();
-    }
-
-    private static String readNumericField(String json, String key) {
-        String needle = "\"" + key + "\":";
-        int s = json.indexOf(needle);
-        if (s < 0) return null;
-        s += needle.length();
-        int e = s;
-        while (e < json.length() && Character.isDigit(json.charAt(e))) e++;
-        return e > s ? json.substring(s, e) : null;
-    }
 
     private static boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase().contains("win");
