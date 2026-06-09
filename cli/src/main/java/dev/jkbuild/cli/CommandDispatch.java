@@ -7,6 +7,10 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.command.CleanCommand;
 import dev.jkbuild.command.DeactivateCommand;
 import dev.jkbuild.command.ExplainCommand;
+import dev.jkbuild.command.HookEnvCommand;
+import dev.jkbuild.command.LockCommand;
+import dev.jkbuild.command.ShellCommand;
+import dev.jkbuild.command.SyncCommand;
 import dev.jkbuild.command.TreeCommand;
 import dev.jkbuild.command.WhyCommand;
 import dev.jkbuild.config.ActiveConfig;
@@ -39,7 +43,11 @@ public final class CommandDispatch {
             new TreeCommand(),
             new WhyCommand(),
             new ExplainCommand(),
-            new DeactivateCommand());
+            new DeactivateCommand(),
+            new ShellCommand(),
+            new HookEnvCommand(),
+            new LockCommand(),
+            new SyncCommand());
 
     private static final Map<String, CliCommand> BY_NAME = index();
 

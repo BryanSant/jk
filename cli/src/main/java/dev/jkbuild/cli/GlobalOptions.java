@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import picocli.CommandLine.Option;
 
@@ -101,6 +102,28 @@ public final class GlobalOptions {
     @Option(names = {"-V", "--version"}, versionHelp = true,
             description = "Print version information and exit")
     public boolean version;
+
+    /**
+     * Populate a {@code GlobalOptions} from a parsed {@link Invocation} — the
+     * picocli-free counterpart to the {@code @Mixin}. A ported command's
+     * {@code run(Invocation)} replaces its {@code @Mixin GlobalOptions global}
+     * field with {@code GlobalOptions.from(in)}; the rest of the body
+     * ({@code global.workingDir()}, {@code global.offline}, …) is unchanged.
+     */
+    public static GlobalOptions from(Invocation in) {
+        GlobalOptions g = new GlobalOptions();
+        g.quiet = in.isSet("quiet");
+        g.verbose = in.isSet("verbose");
+        g.color = in.value("color").orElse(null);
+        g.offline = in.isSet("offline");
+        g.noCache = in.isSet("no-cache");
+        g.noProgress = in.isSet("no-progress");
+        g.output = in.value("output").orElse(null);
+        g.configFile = in.value("config-file").map(Path::of).orElse(null);
+        g.noConfig = in.isSet("no-config");
+        g.directory = in.value("directory").map(Path::of).orElse(null);
+        return g;
+    }
 
     /**
      * The same options as data, for commands parsed by jk's own

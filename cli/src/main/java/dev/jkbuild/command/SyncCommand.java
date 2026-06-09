@@ -23,9 +23,10 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -51,24 +52,35 @@ import java.util.concurrent.Callable;
  *       {@code actions/synced/<projectFingerprint>}.</li>
  * </ol>
  */
-@Command(name = "sync", description = "Ensure our local cache has all project dependencies")
-public final class SyncCommand implements Callable<Integer> {    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
-    Path cacheDir;
+public final class SyncCommand implements CliCommand {
 
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
-    Path jdksDir;
+    private Path cacheDir;
+    private Path jdksDir;
+    private java.net.URI repoUrl;
+    private boolean offlinePrepare;
+    private GlobalOptions global;
 
-    @Option(names = "--repo-url", hidden = true,
-            description = "Override declared repos with a single URL (for tests).")
-    java.net.URI repoUrl;
+    @Override
+    public String name() {
+        return "sync";
+    }
 
-    @Option(names = "--offline-prepare",
-            description = "Prepare for an offline build.")
-    boolean offlinePrepare;
+    @Override
+    public String description() {
+        return "Ensure our local cache has all project dependencies";
+    }
 
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                        "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.",
+                        "--jdks-dir").hide(),
+                Opt.value("<url>", "Override declared repos with a single URL (for tests).",
+                        "--repo-url").hide(),
+                Opt.flag("Prepare for an offline build.", "--offline-prepare"));
+    }
 
     /** Cross-phase keys. Lifted out so each phase reads/writes through the same handle. */
     private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
@@ -85,7 +97,13 @@ public final class SyncCommand implements Callable<Integer> {    @Option(names =
             GoalKey.of("lockfile-created", Boolean.class);
 
     @Override
-    public Integer call() throws Exception {
+    public int run(Invocation in) throws Exception {
+        this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.repoUrl = in.value("repo-url").map(java.net.URI::create).orElse(null);
+        this.offlinePrepare = in.isSet("offline-prepare");
+        this.global = GlobalOptions.from(in);
+
         Path dir = global.workingDir();
         Path lockFile = dir.resolve("jk.lock");
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();

@@ -30,19 +30,15 @@ import java.util.Set;
                 InitCommand.class,
                 AddCommand.class,
                 RemoveCommand.class,
-                LockCommand.class,
                 UpdateCommand.class,
-                SyncCommand.class,
                 CompileCommand.class,
                 BuildCommand.class,
                 TestCommand.class,
                 // Ported to jk's own CliCommand model (run via CommandDispatch,
                 // listed in `jk --help` by newCommandLine()): clean, tree, why,
-                // explain, deactivate.
+                // explain, deactivate, shell, hook-env, lock, sync.
                 JdkCommand.class,
                 ActivateCommand.class,
-                HookEnvCommand.class,
-                ShellCommand.class,
                 MvnCommand.class,
                 GradleCommand.class,
                 ImportCommand.class,
@@ -244,7 +240,7 @@ public final class Jk implements Runnable {
         // they still appear in `jk --help`. Metadata-only specs — picocli never
         // executes them (the dispatcher intercepts those verbs first).
         for (dev.jkbuild.model.command.CliCommand c : CommandDispatch.commands()) {
-            if (cmd.getSubcommands().containsKey(c.name())) continue;
+            if (c.hidden() || cmd.getSubcommands().containsKey(c.name())) continue;
             CommandSpec sub = CommandSpec.create().name(c.name());
             sub.usageMessage().description(c.description());
             cmd.getCommandSpec().addSubcommand(c.name(), new CommandLine(sub));

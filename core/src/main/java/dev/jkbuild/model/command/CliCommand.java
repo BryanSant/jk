@@ -27,6 +27,11 @@ public interface CliCommand extends Command {
         return subcommands().isEmpty();
     }
 
+    /** True to omit this command from the top-level help listing (still dispatchable). */
+    default boolean hidden() {
+        return false;
+    }
+
     /**
      * Execute with the parsed arguments; return the process exit code
      * (0 = success). Parent commands typically print help and return a usage
