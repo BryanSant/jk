@@ -70,13 +70,17 @@ public final class BuildCommand implements CliCommand {
                 Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"),
+                // Phase 4 coexistence: fork the Workspace Host JVM instead of running in-process.
+                // Hidden until the Host path is stable enough to be the default.
+                Opt.flag("Run via the Workspace Host JVM (Phase 4 preview).", "--use-host").hide());
     }
 
     String profileName;
     Integer workers;
     Path cacheDir;
     Path jdksDir;
+    boolean useHost;
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
 
@@ -99,6 +103,7 @@ public final class BuildCommand implements CliCommand {
         this.workers = in.value("workers").map(Integer::parseInt).orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.useHost = in.isSet("use-host");
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
@@ -369,6 +374,15 @@ public final class BuildCommand implements CliCommand {
         // Each project owns its own jk.lock alongside its jk.toml.
         final Path lockFile = dir.resolve("jk.lock");
 
+        // Phase 4 coexistence: when --use-host is set, fork the Workspace Host
+        // JVM instead of running the pipeline in-process. The host streams
+        // HostEvents; HostLauncher bridges them back to the GoalConsole listeners.
+        if (useHost) {
+            int hostResult = buildViaHost(dir, cache, lockFile, workerCount, agg);
+            if (hostResult >= 0) return hostResult;
+            // -1 = fallback to in-process (e.g. workspace case not yet supported)
+        }
+
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 dir, cache, buildFile, lockFile, dir,
                 workerCount, estimatedTestCount, profileName, jdksDir, buildOpts.skipTests, global.verbose);
@@ -400,6 +414,41 @@ public final class BuildCommand implements CliCommand {
         var testResult = goal.get(TEST_RESULT).orElse(null);
         if (testResult != null && !testResult.allPassed()) return 4;
         return 1;
+    }
+
+    // ---- Workspace Host dispatch (Phase 4 coexistence) ----------------------
+
+    /**
+     * Fork the Workspace Host JVM, stream its events back through the CLI's
+     * existing GoalConsole listeners, and return the exit code.
+     * Used when {@code --use-host} is set (hidden flag, Phase 4 preview).
+     */
+    private int buildViaHost(Path dir, Path cache, Path lockFile, int workerCount,
+                              dev.jkbuild.cli.run.AggregateContext agg)
+            throws Exception {
+        // Workspace aggregation via host is a follow-up; single-project only for now.
+        if (agg != null) {
+            System.err.println("jk build: --use-host is not yet supported in workspace mode; "
+                    + "falling back to in-process build.");
+            return -1; // signal caller to fall through to the in-process path
+        }
+        dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
+                "build", dir, cache, lockFile, jdksDir, profileName, workerCount,
+                buildOpts.skipTests, global.verbose, global.outputIsJson());
+        Path specFile = dev.jkbuild.host.HostInvocation.write(inv);
+        try {
+            dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(cache);
+            // Listeners that don't need a live Goal object can be attached here.
+            // Full TUI wiring (progress bar) is a follow-up once GoalConsole has
+            // a Goal-free listener factory. For now: event-log records the run.
+            var listeners = new java.util.ArrayList<dev.jkbuild.run.GoalListener>();
+            try {
+                listeners.add(dev.jkbuild.cli.run.EventLogListener.open(cache, "build"));
+            } catch (Exception ignored) {}
+            return dev.jkbuild.cli.run.HostLauncher.run(specFile, cas, listeners);
+        } finally {
+            Files.deleteIfExists(specFile);
+        }
     }
 
     // ---- success summary -----------------------------------------------

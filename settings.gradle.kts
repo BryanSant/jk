@@ -39,5 +39,6 @@ include(
     ":compat-runner",
     ":git-runner",
     ":runtime",
+    ":host",
     ":cli",
 )
