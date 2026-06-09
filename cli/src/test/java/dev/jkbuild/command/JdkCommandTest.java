@@ -209,6 +209,17 @@ class JdkCommandTest {
     }
 
     @Test
+    void uninstall_refuses_intellij_source(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        // `intellij` = a JDK an IDE registered in jdk.table.xml; removal must go
+        // through the IDE, not jk. Refused before any registry lookup.
+        int exit = run("jdk", "uninstall", "intellij/graalvm-ce-24.0.2", "--yes",
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
     void pin_unknown_jdk_errors(@TempDir Path tempDir) {
         int exit = run("jdk", "pin", "nothing-installed",
                 "-C", tempDir.toString(),

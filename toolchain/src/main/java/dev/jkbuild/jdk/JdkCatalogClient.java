@@ -288,11 +288,20 @@ public final class JdkCatalogClient {
      * the feed — the JetBrains feed publishes 8 / 11 / 17 / 21 / 23 / 24 / 25 /
      * 26 / …, so that pass keeps {17, 21, 25, latestMajor}. With it cleared,
      * every major at or above the floor is kept (for {@code jk jdk list --all}).
+     *
+     * <p>"Latest" is the newest <em>GA</em> major: preview/EA builds are
+     * excluded from the computation. Otherwise an early-access next release
+     * (e.g. a {@code 27-ea} when 26 is the newest GA) would claim the single
+     * latest-major slot, and since the wizard and lists hide preview entries,
+     * the real latest (26) would silently vanish from both.
      */
     private static List<JdkCatalog.Entry> filterSupported(
             List<JdkCatalog.Entry> all, boolean firstClassOnly) {
         if (all.isEmpty()) return all;
-        int latest = all.stream().mapToInt(JdkCatalog.Entry::majorVersion).max().orElse(0);
+        int latest = all.stream()
+                .filter(e -> !e.preview())
+                .mapToInt(JdkCatalog.Entry::majorVersion)
+                .max().orElse(0);
         List<JdkCatalog.Entry> kept = new ArrayList<>(all.size());
         for (JdkCatalog.Entry e : all) {
             boolean keep = firstClassOnly
