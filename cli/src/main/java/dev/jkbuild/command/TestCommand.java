@@ -48,7 +48,8 @@ public final class TestCommand implements CliCommand {
                 Opt.value("<name>", "Build profile to apply.", "--profile"),
                 Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.flag("Run the test build in-process instead of via the Workspace Host JVM.", "--no-host").hide());
     }
 
     String profileName;
@@ -64,12 +65,13 @@ public final class TestCommand implements CliCommand {
             GoalKey.of("test-result", JUnitLauncher.Result.class);
 
     @Override
-    public int run(Invocation in) throws IOException {
+    public int run(Invocation in) throws IOException, InterruptedException {
         this.profileName = in.value("profile").orElse(null);
         this.workers = in.value("workers").map(Integer::parseInt).orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.global = GlobalOptions.from(in);
+        boolean useHost = !in.isSet("no-host");
         Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
@@ -89,6 +91,17 @@ public final class TestCommand implements CliCommand {
         // phase-end auto-fill closes any residual gap.
         int estimatedTestCount = estimateTestCount(dir.resolve("src/test/java"))
                 + estimateTestCount(dir.resolve("src/test/kotlin"));
+
+        // Phase 4: fork the Workspace Host by default; --no-host runs in-process.
+        if (useHost) {
+            dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
+                    "test", dir, cache, lockFile, jdksDir, profileName, workerCount,
+                    false, global.verbose, global.outputIsJson());
+            var consoleSpec = new ConsoleSpec("Testing", r -> "Tests passed", r -> "Tests failed");
+            int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
+                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
+            if (code >= 0) return code;
+        }
 
         // testOnly → the core pipeline runs through run-tests but never packages.
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(

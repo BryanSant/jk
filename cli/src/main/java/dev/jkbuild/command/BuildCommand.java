@@ -71,9 +71,9 @@ public final class BuildCommand implements CliCommand {
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"),
-                // Phase 4 coexistence: fork the Workspace Host JVM instead of running in-process.
-                // Hidden until the Host path is stable enough to be the default.
-                Opt.flag("Run via the Workspace Host JVM (Phase 4 preview).", "--use-host").hide());
+                // Phase 4: the Workspace Host is now the default execution path.
+                // --no-host forces in-process execution (for debugging/fallback only).
+                Opt.flag("Run the build in-process instead of via the Workspace Host JVM.", "--no-host").hide());
     }
 
     String profileName;
@@ -103,7 +103,8 @@ public final class BuildCommand implements CliCommand {
         this.workers = in.value("workers").map(Integer::parseInt).orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
-        this.useHost = in.isSet("use-host");
+        // Default: use the Host; --no-host forces in-process (debug/fallback).
+        this.useHost = !in.isSet("no-host");
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
@@ -380,7 +381,7 @@ public final class BuildCommand implements CliCommand {
         if (useHost) {
             int hostResult = buildViaHost(dir, cache, lockFile, workerCount, agg);
             if (hostResult >= 0) return hostResult;
-            // -1 = fallback to in-process (e.g. workspace case not yet supported)
+            // -1 = fallback to in-process (host jar missing, workspace, or other)
         }
 
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
@@ -435,20 +436,10 @@ public final class BuildCommand implements CliCommand {
         dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
                 "build", dir, cache, lockFile, jdksDir, profileName, workerCount,
                 buildOpts.skipTests, global.verbose, global.outputIsJson());
-        Path specFile = dev.jkbuild.host.HostInvocation.write(inv);
-        try {
-            dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(cache);
-            // Listeners that don't need a live Goal object can be attached here.
-            // Full TUI wiring (progress bar) is a follow-up once GoalConsole has
-            // a Goal-free listener factory. For now: event-log records the run.
-            var listeners = new java.util.ArrayList<dev.jkbuild.run.GoalListener>();
-            try {
-                listeners.add(dev.jkbuild.cli.run.EventLogListener.open(cache, "build"));
-            } catch (Exception ignored) {}
-            return dev.jkbuild.cli.run.HostLauncher.run(specFile, cas, listeners);
-        } finally {
-            Files.deleteIfExists(specFile);
-        }
+        var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec("Build",
+                r -> "Build successful", r -> "Build failed");
+        return dev.jkbuild.cli.run.HostLauncher.tryRun(
+                inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
     }
 
     // ---- success summary -----------------------------------------------

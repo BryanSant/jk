@@ -53,7 +53,8 @@ public final class ImageCommand implements CliCommand {
                 Opt.value("<path>", "Write an OCI tarball instead of pushing. Optional path.", "--tarball").withFallback(""),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"),
+                Opt.flag("Run the build in-process instead of via the Workspace Host JVM.", "--no-host").hide());
     }
 
     String mainClass;
@@ -82,6 +83,7 @@ public final class ImageCommand implements CliCommand {
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
+        boolean useHost = !in.isSet("no-host");
         Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
@@ -90,8 +92,19 @@ public final class ImageCommand implements CliCommand {
         }
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
         Path lockFile = projectDir.resolve("jk.lock");
-        int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
 
+        if (useHost) {
+            dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
+                    "image", projectDir, cache, lockFile, jdksDir, null, 1,
+                    buildOpts.skipTests, global.verbose, global.outputIsJson());
+            var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec("Image Build",
+                    r -> "Built image", r -> "Image build failed");
+            int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
+                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
+            if (code >= 0) return code;
+        }
+
+        int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 projectDir, cache, jkBuildPath, lockFile, projectDir,
                 1, estimatedTestCount, null, jdksDir, buildOpts.skipTests, global.verbose);

@@ -79,6 +79,44 @@ public final class HostLauncher {
         return run(specFile, javaExe, hostJar, listeners);
     }
 
+    /**
+     * High-level entry point for build-family commands (build/test/native/image/…):
+     * tries to fork the Host JVM and returns the exit code. Returns {@code -1}
+     * when the host jar is not yet in the CAS (so the caller can fall back to
+     * in-process execution without producing a user-visible error).
+     *
+     * <p>Attaches a {@link SimpleTaskListener} for spinner+result-line TUI and
+     * the {@link EventLogListener} for the run log.
+     *
+     * @param inv    the build invocation (caller constructs; caller writes spec)
+     * @param mode   rendering mode
+     * @param spec   result-line spec (success/failure message)
+     * @param verbose when true, logs the in-process fallback reason to stderr
+     */
+    public static int tryRun(dev.jkbuild.host.HostInvocation inv,
+                              GoalConsole.Mode mode, ConsoleSpec spec,
+                              boolean verbose)
+            throws IOException, InterruptedException {
+        dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(inv.cache());
+        try {
+            WorkerJar.HOST.locate(cas);
+        } catch (IllegalStateException e) {
+            if (verbose) System.err.println("jk: host jar not in CAS, running in-process");
+            return -1;
+        }
+        java.nio.file.Path specFile = dev.jkbuild.host.HostInvocation.write(inv);
+        try {
+            var listeners = new java.util.ArrayList<GoalListener>();
+            var console = GoalConsole.makeListenerWithoutGoal(mode, spec);
+            if (console != null) listeners.add(console);
+            try { listeners.add(EventLogListener.open(inv.cache(), inv.verb())); }
+            catch (Exception ignored) {}
+            return run(specFile, cas, listeners);
+        } finally {
+            java.nio.file.Files.deleteIfExists(specFile);
+        }
+    }
+
     private static Path runningJavaExe() {
         String home = System.getProperty("java.home");
         boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
