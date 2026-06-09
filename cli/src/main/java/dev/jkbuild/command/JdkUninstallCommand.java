@@ -64,11 +64,29 @@ public final class JdkUninstallCommand implements Callable<Integer> {
      * by the OS package manager and jk can't safely remove them.
      */
     private static final Set<String> KNOWN_SOURCES = Set.of(
-            "jk", "intellij", "sdkman", "jbang", "mise", "asdf", "jenv",
+            "jk", "intellij", "jdks", "sdkman", "jbang", "mise", "asdf", "jenv",
             "homebrew", "path");
 
-    /** Probe names jk refuses to uninstall from. Listed for a friendlier error. */
-    private static final Set<String> UNINSTALL_FORBIDDEN_SOURCES = Set.of("system");
+    /**
+     * Sources jk refuses to uninstall from — the install's lifecycle belongs to
+     * another owner. {@code system} is the OS package manager; {@code intellij}
+     * is a JDK an IDE has registered in its {@code jdk.table.xml} (an unmanaged
+     * JDK merely sitting in {@code ~/.jdks} is labelled {@code jdks} and stays
+     * removable). See {@link #forbiddenSourceMessage}.
+     */
+    private static final Set<String> UNINSTALL_FORBIDDEN_SOURCES = Set.of("system", "intellij");
+
+    /** Explain why a forbidden {@code source} can't be removed by jk. */
+    private static String forbiddenSourceMessage(String source) {
+        return switch (source) {
+            case "intellij" -> "jk jdk uninstall: `" + source + "` JDKs are managed by your IDE — "
+                    + "remove this one through IntelliJ (Project Structure ▸ SDKs, or the "
+                    + "Download JDK list), not jk.";
+            default -> "jk jdk uninstall: refusing to remove `" + source
+                    + "` installs — they're managed by the OS package manager "
+                    + "(use your distro's tooling, e.g. apt/dnf/brew, to remove them).";
+        };
+    }
 
     @Parameters(arity = "0..1", paramLabel = "[<source>/]<spec>",
             description = "Install to remove (e.g. temurin-26.0.1). Optionally "
@@ -124,9 +142,7 @@ public final class JdkUninstallCommand implements Callable<Integer> {
         // Validate an explicitly-supplied source up front.
         if (source != null) {
             if (UNINSTALL_FORBIDDEN_SOURCES.contains(source)) {
-                System.err.println("jk jdk uninstall: refusing to remove `" + source
-                        + "` installs — they're managed by the OS package manager "
-                        + "(use your distro's tooling, e.g. apt/dnf/brew, to remove them).");
+                System.err.println(forbiddenSourceMessage(source));
                 return 64;
             }
             if (!KNOWN_SOURCES.contains(source)) {
@@ -157,12 +173,11 @@ public final class JdkUninstallCommand implements Callable<Integer> {
         }
 
         JdkHit hit = match.get();
-        // A bare spec sorts `system` installs last in the chain, so we only land
-        // on one when no removable source has the spec — refuse it the same way
-        // an explicit `system/...` is refused.
+        // A bare spec can resolve to a protected install (an OS `system` JDK, or
+        // an IDE-registered `intellij` one). Refuse it the same way an explicit
+        // `<source>/...` would be — naming the source so the reason is clear.
         if (UNINSTALL_FORBIDDEN_SOURCES.contains(hit.source())) {
-            System.err.println("jk jdk uninstall: `" + spec + "` resolves to a `" + hit.source()
-                    + "` install, which jk can't remove — it's managed by the OS package manager.");
+            System.err.println(forbiddenSourceMessage(hit.source()));
             return 64;
         }
 
@@ -178,14 +193,14 @@ public final class JdkUninstallCommand implements Callable<Integer> {
     // --- wizard path --------------------------------------------------------
 
     private Integer runWizard(JdkRegistry registry, GlobalDefaultJdk defaults) throws IOException {
-        // OS-package-manager-managed installs (probe source = "system") can't
-        // be removed by jk, so they don't belong in the checklist at all.
+        // Installs jk can't remove — OS-package-manager (`system`) and
+        // IDE-registered (`intellij`) JDKs — don't belong in the checklist.
         List<JdkHit> installed = registry.listHits().stream()
                 .filter(h -> !UNINSTALL_FORBIDDEN_SOURCES.contains(h.source()))
                 .toList();
         if (installed.isEmpty()) {
             System.err.println("jk jdk uninstall: no removable JDKs installed "
-                    + "(system-managed installs aren't supported here).");
+                    + "(system- and IDE-managed installs aren't removable here).");
             return 0;
         }
         Optional<String> currentDefault = defaults.currentIdentifier();

@@ -13,6 +13,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -153,6 +154,26 @@ class JdkRegistryTest {
                 .singleElement()
                 .extracting(JdkHit::source)
                 .isEqualTo("path");
+    }
+
+    @Test
+    void list_hits_keeps_intellij_only_for_ide_registered_installs(@TempDir Path tempDir) {
+        // Both live in IntelliJ's dir (source "intellij"); only `managed` is in a
+        // jdk.table.xml. The other must drop to the removable "jdks" label.
+        Path managed = tempDir.resolve("graalvm-ce-24.0.2");
+        Path unmanaged = tempDir.resolve("temurin-21.0.5");
+        JdkRegistry registry = new JdkRegistry(
+                tempDir,
+                List.of(
+                        fakeProbe("intellij", new JdkHit(managed, "24.0.2", JdkVendor.UNKNOWN, "intellij")),
+                        fakeProbe("intellij", new JdkHit(unmanaged, "21.0.5", JdkVendor.UNKNOWN, "intellij"))),
+                IntellijJdkTable.ofManaged(Set.of(managed)));
+
+        assertThat(registry.listHits())
+                .extracting(JdkHit::home, JdkHit::source)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.api.Assertions.tuple(managed, "intellij"),
+                        org.assertj.core.api.Assertions.tuple(unmanaged, "jdks"));
     }
 
     /** A {@link JdkRegistry} backed by a single {@link JkProbe} rooted at {@code root} — isolates the test from any JDKs actually installed on the host. */

@@ -41,6 +41,7 @@ public final class JdkRegistry {
 
     private final Path jdksRoot;
     private final List<LocalToolProbe> probes;
+    private final IntellijJdkTable intellij;
 
     /** Production: jk's own JDK dir as the write target + the default probe chain. */
     public JdkRegistry() {
@@ -57,10 +58,16 @@ public final class JdkRegistry {
         this(jdksRoot, List.of(new JkProbe(jdksRoot)));
     }
 
-    /** Full control — both the write target and the probe chain. */
+    /** Full control — write target + probe chain; real IDE registration view. */
     public JdkRegistry(Path jdksRoot, List<LocalToolProbe> probes) {
+        this(jdksRoot, probes, IntellijJdkTable.shared());
+    }
+
+    /** Full control including a stubbed {@link IntellijJdkTable} (tests). */
+    JdkRegistry(Path jdksRoot, List<LocalToolProbe> probes, IntellijJdkTable intellij) {
         this.jdksRoot = Objects.requireNonNull(jdksRoot, "jdksRoot");
         this.probes = List.copyOf(Objects.requireNonNull(probes, "probes"));
+        this.intellij = Objects.requireNonNull(intellij, "intellij");
     }
 
     /** The directory {@code jk jdk install} writes new downloads into. */
@@ -128,9 +135,7 @@ public final class JdkRegistry {
         }
         List<JdkHit> result = new ArrayList<>(hits.size());
         for (JdkHit hit : hits.values()) {
-            result.add(isEnvSource(hit.source())
-                    ? new JdkHit(hit.home(), hit.version(), hit.vendor(), SOURCE_PATH)
-                    : hit);
+            result.add(relabel(hit));
         }
         return result;
     }
@@ -140,6 +145,36 @@ public final class JdkRegistry {
 
     /** Replacement label for a JDK reachable only via {@code $JAVA_HOME}. */
     private static final String SOURCE_PATH = "path";
+
+    /** {@link dev.jkbuild.discovery.IntellijProbe}'s label — a JDK in IntelliJ's dir. */
+    private static final String SOURCE_INTELLIJ = "intellij";
+
+    /** A JDK in IntelliJ's dir that no IDE has actually registered. */
+    private static final String SOURCE_JDKS = "jdks";
+
+    /**
+     * Finalise a hit's source label:
+     * <ul>
+     *   <li>{@code java-home} → {@code path} (the manager that owns it, if any,
+     *       has already won the dedup above; what's left is an unmanaged
+     *       {@code $JAVA_HOME} pointer).</li>
+     *   <li>{@code intellij} → {@code jdks} unless the install is actually
+     *       registered in some IDE's {@code jdk.table.xml}. Only IDE-registered
+     *       JDKs keep the {@code intellij} label (and the uninstall protection
+     *       that comes with it).</li>
+     * </ul>
+     * The {@code jdk.table.xml} scan is consulted lazily — only when an
+     * {@code intellij}-sourced hit is present — so the common case pays nothing.
+     */
+    private JdkHit relabel(JdkHit hit) {
+        if (isEnvSource(hit.source())) {
+            return new JdkHit(hit.home(), hit.version(), hit.vendor(), SOURCE_PATH);
+        }
+        if (SOURCE_INTELLIJ.equals(hit.source()) && !intellij.isManaged(hit.home())) {
+            return new JdkHit(hit.home(), hit.version(), hit.vendor(), SOURCE_JDKS);
+        }
+        return hit;
+    }
 
     private static boolean isEnvSource(String source) {
         return SOURCE_JAVA_HOME.equals(source);
