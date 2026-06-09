@@ -15,7 +15,8 @@ dependencies {
     implementation(libs.bouncycastle.bcpg)
     implementation(libs.sigstore.java)
 
-    testImplementation(project(":supply-chain-testkit"))
+    // GpgTestFixture moved here from supply-chain-testkit (which is deleted)
+    testImplementation(libs.bouncycastle.bcpg)
 }
 
 // Fat JAR: bundle the full runtime closure so the worker runs as `java -jar`.

@@ -18,7 +18,7 @@ dependencies {
     implementation(project(":engine"))
     implementation(project(":toolchain"))
     implementation(project(":compat"))
-    implementation(project(":supply-chain"))
+    // supply-chain deleted: PolicyChecker moved to :core
     testImplementation(libs.jgit)   // test fixtures only; not in production binary
 }
 

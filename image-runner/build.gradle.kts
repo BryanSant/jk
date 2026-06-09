@@ -10,7 +10,7 @@ description = "jk-image-runner: child-JVM worker that builds and pushes OCI imag
 dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
-    implementation(project(":image"))  // for ImageConfig record
+    // image module deleted; ImageConfig moved to :core
     implementation(project(":plugin-api"))  // shared NDJSON codec (bundled into the fat jar)
     implementation(libs.jib.core)
 }

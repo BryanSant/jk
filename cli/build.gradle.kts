@@ -20,8 +20,8 @@ dependencies {
     implementation(project(":resolver"))
     implementation(project(":toolchain"))
     implementation(project(":engine"))
-    implementation(project(":supply-chain"))
-    implementation(project(":image"))
+    // supply-chain deleted: PolicyChecker moved to :core
+    // image deleted: ImageConfig moved to :core
     implementation(project(":compat"))
 
     // JLine 4 FFM terminal provider for raw-mode TUI (jk init wizard).
@@ -30,7 +30,8 @@ dependencies {
     // src/main/resources/META-INF/native-image/org.jline/jline-terminal-ffm/.
     implementation(libs.jline.terminal.ffm)
 
-    testImplementation(project(":supply-chain-testkit"))
+    // supply-chain-testkit deleted: GpgTestFixture copied to cli/src/test and publish-runner/src/test
+    testImplementation(libs.bouncycastle.bcpg)
     // JdkCommandTest builds xz-compressed feed fixtures via XZCompressorOutputStream.
     // GitSourceMaterializerTest builds a local git "library" repo fixture with jgit.
     // GitSourceMaterializerTest uses a local git fixture (built with system git or git-runner)

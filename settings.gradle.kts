@@ -26,9 +26,9 @@ include(
     ":resolver",
     ":toolchain",
     ":engine",
-    ":supply-chain",
-    ":supply-chain-testkit",
-    ":image",
+    // :supply-chain deleted — PolicyChecker merged into :core
+    // :supply-chain-testkit deleted — GpgTestFixture merged into :publish-runner/src/test
+    // :image deleted — ImageConfig merged into :core
     ":compat",
     ":test-runner",
     ":kotlin-compiler",

@@ -30,8 +30,7 @@ dependencies {
     implementation(project(":resolver"))
     implementation(project(":toolchain"))
     implementation(project(":engine"))
-    implementation(project(":supply-chain"))
-    implementation(project(":image"))
+    // supply-chain/image deleted: moved to :core
     implementation(project(":compat"))
     implementation(project(":runtime"))
 
