@@ -41,6 +41,7 @@ public final class JdkRegistry {
 
     private final Path jdksRoot;
     private final List<LocalToolProbe> probes;
+    private final IntellijJdkTable intellij;
 
     /** Production: jk's own JDK dir as the write target + the default probe chain. */
     public JdkRegistry() {
@@ -57,10 +58,16 @@ public final class JdkRegistry {
         this(jdksRoot, List.of(new JkProbe(jdksRoot)));
     }
 
-    /** Full control — both the write target and the probe chain. */
+    /** Full control — write target + probe chain; real IDE registration view. */
     public JdkRegistry(Path jdksRoot, List<LocalToolProbe> probes) {
+        this(jdksRoot, probes, IntellijJdkTable.shared());
+    }
+
+    /** Full control including a stubbed {@link IntellijJdkTable} (tests). */
+    JdkRegistry(Path jdksRoot, List<LocalToolProbe> probes, IntellijJdkTable intellij) {
         this.jdksRoot = Objects.requireNonNull(jdksRoot, "jdksRoot");
         this.probes = List.copyOf(Objects.requireNonNull(probes, "probes"));
+        this.intellij = Objects.requireNonNull(intellij, "intellij");
     }
 
     /** The directory {@code jk jdk install} writes new downloads into. */
@@ -104,14 +111,73 @@ public final class JdkRegistry {
         }
         // Walk the futures in probe-chain order so dedup picks the same
         // "winner" every run regardless of which future finished first.
+        //
+        // Attribution rule: $JAVA_HOME is an ephemeral pointer, so we never
+        // surface "java-home" as a source. When some manager probe (SDKMAN,
+        // IntelliJ, jk, …) also reports the same install, its attribution wins
+        // even though EnvVarProbe sits first in the chain — that's the tool
+        // that actually owns the directory. A home that ONLY $JAVA_HOME knows
+        // about (a hand-placed JDK no manager scans) is relabelled SOURCE_PATH
+        // below so it still shows up, just without the misleading label.
         Map<Path, JdkHit> hits = new LinkedHashMap<>();
         for (CompletableFuture<List<JdkHit>> f : futures) {
             for (JdkHit hit : f.join()) {
                 if (!isSupportedHit(hit)) continue;
-                hits.putIfAbsent(hit.home(), hit);
+                JdkHit existing = hits.get(hit.home());
+                if (existing == null) {
+                    hits.put(hit.home(), hit);
+                } else if (isEnvSource(existing.source()) && !isEnvSource(hit.source())) {
+                    // Replace the $JAVA_HOME attribution with the owning manager's
+                    // (home/version/vendor are identical — same release file).
+                    hits.put(hit.home(), hit);
+                }
             }
         }
-        return new ArrayList<>(hits.values());
+        List<JdkHit> result = new ArrayList<>(hits.size());
+        for (JdkHit hit : hits.values()) {
+            result.add(relabel(hit));
+        }
+        return result;
+    }
+
+    /** Source label produced by {@link dev.jkbuild.discovery.EnvVarProbe}. */
+    private static final String SOURCE_JAVA_HOME = "java-home";
+
+    /** Replacement label for a JDK reachable only via {@code $JAVA_HOME}. */
+    private static final String SOURCE_PATH = "path";
+
+    /** {@link dev.jkbuild.discovery.IntellijProbe}'s label — a JDK in IntelliJ's dir. */
+    private static final String SOURCE_INTELLIJ = "intellij";
+
+    /** A JDK in IntelliJ's dir that no IDE has actually registered. */
+    private static final String SOURCE_JDKS = "jdks";
+
+    /**
+     * Finalise a hit's source label:
+     * <ul>
+     *   <li>{@code java-home} → {@code path} (the manager that owns it, if any,
+     *       has already won the dedup above; what's left is an unmanaged
+     *       {@code $JAVA_HOME} pointer).</li>
+     *   <li>{@code intellij} → {@code jdks} unless the install is actually
+     *       registered in some IDE's {@code jdk.table.xml}. Only IDE-registered
+     *       JDKs keep the {@code intellij} label (and the uninstall protection
+     *       that comes with it).</li>
+     * </ul>
+     * The {@code jdk.table.xml} scan is consulted lazily — only when an
+     * {@code intellij}-sourced hit is present — so the common case pays nothing.
+     */
+    private JdkHit relabel(JdkHit hit) {
+        if (isEnvSource(hit.source())) {
+            return new JdkHit(hit.home(), hit.version(), hit.vendor(), SOURCE_PATH);
+        }
+        if (SOURCE_INTELLIJ.equals(hit.source()) && !intellij.isManaged(hit.home())) {
+            return new JdkHit(hit.home(), hit.version(), hit.vendor(), SOURCE_JDKS);
+        }
+        return hit;
+    }
+
+    private static boolean isEnvSource(String source) {
+        return SOURCE_JAVA_HOME.equals(source);
     }
 
     /**

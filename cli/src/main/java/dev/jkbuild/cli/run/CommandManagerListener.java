@@ -16,7 +16,7 @@ import java.util.List;
  * Console listener for goal-oriented commands ({@code jk build} and friends):
  * drives a {@link CommandManager} in goal mode — a spinner header, an aggregate
  * progress bar, and a dynamic phase list. On completion the live region is
- * replaced by a {@code ✔}/{@code ✗} result line built from the
+ * replaced by a {@code ✓}/{@code ✗} result line built from the
  * {@link ConsoleSpec} mappers.
  *
  * <p>All phases of this goal are attributed to a single {@code member} (the

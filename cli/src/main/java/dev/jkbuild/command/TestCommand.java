@@ -111,7 +111,7 @@ public final class TestCommand implements CliCommand {
     }
 
     /**
-     * Success result line (sans the leading ✔): {@code Passed N tests in 32s},
+     * Success result line (sans the leading ✓): {@code Passed N tests in 32s},
      * or {@code No tests in <t>} for a project with no test sources.
      */
     private String testSummary(Goal goal, GoalResult result) {

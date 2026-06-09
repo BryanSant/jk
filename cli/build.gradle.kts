@@ -114,22 +114,13 @@ graalvmNative {
         // Silence the FFM "restricted method" runtime warning. Without this,
         // every wizard invocation prints a 4-line WARNING block before the UI.
         buildArgs.add("--enable-native-access=ALL-UNNAMED")
-        // Push every heavy dep to lazy init. Build-time <clinit> is faster
-        // at runtime but blows up .svm_heap with cached objects we may never
-        // touch. Each package below is a known large contributor.
-        buildArgs.add("--initialize-at-run-time=" + listOf(
-            "org.bouncycastle",            // crypto (GPG signing)
-            "dev.sigstore",                // sigstore-java + transitives
-            "com.google",                  // Jib-core + Guava + Protobuf
-            "org.cyclonedx",               // CycloneDX SBOM
-            "org.spdx",                    // SPDX SBOM
-            "org.eclipse.jgit",            // git client
-            // gRPC client (sigstore-java). Pulls in netty via grpc-netty-shaded,
-            // whose classes live under io.grpc.netty.shaded.io.netty.* — so the
-            // `io.grpc` prefix here also covers the bundled netty.
-            "io.grpc",
-            "org.jline"                    // FFM Linker/Arena lookups must run at image-runtime
-        ).joinToString(","))
+        // Push heavy deps to lazy init. Build-time <clinit> is faster at
+        // runtime but blows up .svm_heap with cached objects we may never
+        // touch. The crypto/SBOM/git/Jib closures (bouncycastle, sigstore,
+        // grpc, cyclonedx, spdx, jgit, com.google) live in forked workers, not
+        // on the binary's classpath, so jline is the only contributor left:
+        // its FFM Linker/Arena lookups must run at image-runtime regardless.
+        buildArgs.add("--initialize-at-run-time=org.jline")
     }
 }
 

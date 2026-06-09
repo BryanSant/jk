@@ -158,12 +158,25 @@ class JdkCommandTest {
     }
 
     @Test
-    void uninstall_rejects_bare_spec_with_no_source(@TempDir Path tempDir) throws Exception {
+    void uninstall_matches_bare_spec_across_sources(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
-        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        Path victim = jdks.resolve("temurin-21.0.5");
+        makeJdkInstall(victim);
+        // No <source> prefix: jk resolves the spec across every source. The
+        // confirmation prompt (skipped here via --yes) names the resolved source.
         int exit = run("jdk", "uninstall", "temurin-21.0.5", "--yes",
                 "--jdks-dir", jdks.toString());
-        assertThat(exit).isEqualTo(64); // EX_USAGE
+        assertThat(exit).isEqualTo(0);
+        assertThat(victim).doesNotExist();
+    }
+
+    @Test
+    void uninstall_reports_no_match_for_unknown_bare_spec(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        int exit = run("jdk", "uninstall", "corretto-25.0.3", "--yes",
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(1); // matched nothing
     }
 
     @Test
@@ -191,6 +204,17 @@ class JdkCommandTest {
         // `system` would route to a JDK owned by the OS package manager;
         // jk can't safely remove those.
         int exit = run("jdk", "uninstall", "system/openjdk-21", "--yes",
+                "--jdks-dir", jdks.toString());
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
+    void uninstall_refuses_intellij_source(@TempDir Path tempDir) throws Exception {
+        Path jdks = tempDir.resolve("jdks");
+        makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        // `intellij` = a JDK an IDE registered in jdk.table.xml; removal must go
+        // through the IDE, not jk. Refused before any registry lookup.
+        int exit = run("jdk", "uninstall", "intellij/graalvm-ce-24.0.2", "--yes",
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(64);
     }

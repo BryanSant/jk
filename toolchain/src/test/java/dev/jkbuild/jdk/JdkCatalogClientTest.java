@@ -97,6 +97,50 @@ class JdkCatalogClientTest {
     }
 
     @Test
+    void first_class_fetch_keeps_only_lts_and_latest_majors(@TempDir Path tempDir) throws Exception {
+        // Feed spans below-floor (11), interim non-LTS (19), LTS (21), latest (26).
+        jsonBody = multiMajorFeed().getBytes(StandardCharsets.UTF_8);
+        JdkCatalogClient client = new JdkCatalogClient(
+                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
+
+        assertThat(client.fetch().entries())
+                .extracting(JdkCatalog.Entry::majorVersion)
+                .containsExactlyInAnyOrder(21, 26);   // 11 below floor, 19 not LTS/latest
+    }
+
+    @Test
+    void all_supported_fetch_keeps_every_major_at_or_above_the_floor(@TempDir Path tempDir) throws Exception {
+        jsonBody = multiMajorFeed().getBytes(StandardCharsets.UTF_8);
+        JdkCatalogClient client = new JdkCatalogClient(
+                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
+
+        assertThat(client.fetch(false, /* firstClassOnly = */ false).entries())
+                .extracting(JdkCatalog.Entry::majorVersion)
+                .containsExactlyInAnyOrder(19, 21, 26)  // 11 still dropped (below 17)
+                .doesNotContain(11);
+    }
+
+    @Test
+    void first_class_latest_ignores_preview_only_majors(@TempDir Path tempDir) throws Exception {
+        // 26 is the newest GA; 27 exists only as an early-access build. The
+        // latest-major slot must go to 26 (and 27 must be dropped), not the
+        // other way around.
+        jsonBody = ("{\n  \"jdks\": [\n"
+                + String.join(",\n",
+                        jdkBlock(21, "21.0.5"),         // LTS
+                        jdkBlock(26, "26.0.1"),         // newest GA
+                        previewBlock(27, "27-ea+22"))   // early access only
+                + "\n  ]\n}\n").getBytes(StandardCharsets.UTF_8);
+        JdkCatalogClient client = new JdkCatalogClient(
+                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
+
+        assertThat(client.fetch().entries())
+                .extracting(JdkCatalog.Entry::majorVersion)
+                .containsExactlyInAnyOrder(21, 26)   // 26 kept as latest GA; 27 EA dropped
+                .doesNotContain(27);
+    }
+
+    @Test
     void offline_falls_back_to_cache(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("jdks.json");
         Files.createDirectories(cache.getParent());
@@ -110,6 +154,48 @@ class JdkCatalogClientTest {
         assertThat(catalog.entries()).isNotEmpty();
     }
 
+
+    /** A feed with one Temurin entry per major in {11, 19, 21, 26}. */
+    private static String multiMajorFeed() {
+        return "{\n  \"jdks\": [\n"
+                + String.join(",\n",
+                        jdkBlock(11, "11.0.25"),
+                        jdkBlock(19, "19.0.2"),
+                        jdkBlock(21, "21.0.5"),
+                        jdkBlock(26, "26.0.1"))
+                + "\n  ]\n}\n";
+    }
+
+    /** A preview/early-access JDK block (carries {@code "preview": true}). */
+    private static String previewBlock(int major, String version) {
+        return jdkBlock(major, version).replaceFirst(
+                "\"jdk_version_major\": " + major + ",",
+                "\"jdk_version_major\": " + major + ",\n      \"preview\": true,");
+    }
+
+    private static String jdkBlock(int major, String version) {
+        return """
+                    {
+                      "vendor": "Eclipse",
+                      "product": "Temurin",
+                      "jdk_version_major": %d,
+                      "jdk_version": "%s",
+                      "suggested_sdk_name": "temurin-%d",
+                      "packages": [
+                        {
+                          "os": "linux",
+                          "arch": "x86_64",
+                          "version": "%s",
+                          "url": "https://example.invalid/temurin-%s-linux-x64.tar.gz",
+                          "package_type": "targz",
+                          "package_to_java_home_prefix": "",
+                          "install_folder_name": "temurin-%s",
+                          "archive_size": 2048,
+                          "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+                        }
+                      ]
+                    }""".formatted(major, version, major, version, version, version);
+    }
 
     private static final String SAMPLE = """
             {

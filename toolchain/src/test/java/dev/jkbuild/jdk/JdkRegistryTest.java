@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
+import dev.jkbuild.discovery.DiscoveredTool;
 import dev.jkbuild.discovery.JkProbe;
+import dev.jkbuild.discovery.LocalToolProbe;
+import dev.jkbuild.discovery.ToolSpec;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -9,6 +12,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -122,9 +127,67 @@ class JdkRegistryTest {
         assertThat(isolatedRegistry(tempDir).findBySpec("corretto-25")).isEmpty();
     }
 
+    @Test
+    void list_hits_prefers_manager_source_over_java_home(@TempDir Path tempDir) {
+        // EnvVarProbe ($JAVA_HOME → "java-home") sits first in the chain, but a
+        // manager probe that reports the same home must win the attribution.
+        Path home = tempDir.resolve("25.0.3-tem");
+        JdkRegistry registry = new JdkRegistry(tempDir, List.of(
+                fakeProbe("java-home", new JdkHit(home, "25.0.3", JdkVendor.UNKNOWN, "java-home")),
+                fakeProbe("sdkman", new JdkHit(home, "25.0.3", JdkVendor.UNKNOWN, "sdkman"))));
+
+        assertThat(registry.listHits())
+                .singleElement()
+                .extracting(JdkHit::source)
+                .isEqualTo("sdkman");
+    }
+
+    @Test
+    void list_hits_relabels_java_home_only_install_as_path(@TempDir Path tempDir) {
+        // A JDK reachable only via $JAVA_HOME (no manager owns it) is kept, but
+        // the ephemeral "java-home" label is replaced with "path".
+        Path home = tempDir.resolve("opt-jdk-25");
+        JdkRegistry registry = new JdkRegistry(tempDir, List.of(
+                fakeProbe("java-home", new JdkHit(home, "25", JdkVendor.UNKNOWN, "java-home"))));
+
+        assertThat(registry.listHits())
+                .singleElement()
+                .extracting(JdkHit::source)
+                .isEqualTo("path");
+    }
+
+    @Test
+    void list_hits_keeps_intellij_only_for_ide_registered_installs(@TempDir Path tempDir) {
+        // Both live in IntelliJ's dir (source "intellij"); only `managed` is in a
+        // jdk.table.xml. The other must drop to the removable "jdks" label.
+        Path managed = tempDir.resolve("graalvm-ce-24.0.2");
+        Path unmanaged = tempDir.resolve("temurin-21.0.5");
+        JdkRegistry registry = new JdkRegistry(
+                tempDir,
+                List.of(
+                        fakeProbe("intellij", new JdkHit(managed, "24.0.2", JdkVendor.UNKNOWN, "intellij")),
+                        fakeProbe("intellij", new JdkHit(unmanaged, "21.0.5", JdkVendor.UNKNOWN, "intellij"))),
+                IntellijJdkTable.ofManaged(Set.of(managed)));
+
+        assertThat(registry.listHits())
+                .extracting(JdkHit::home, JdkHit::source)
+                .containsExactlyInAnyOrder(
+                        org.assertj.core.api.Assertions.tuple(managed, "intellij"),
+                        org.assertj.core.api.Assertions.tuple(unmanaged, "jdks"));
+    }
+
     /** A {@link JdkRegistry} backed by a single {@link JkProbe} rooted at {@code root} — isolates the test from any JDKs actually installed on the host. */
     private static JdkRegistry isolatedRegistry(Path root) {
         return new JdkRegistry(root, List.of(new JkProbe(root)));
+    }
+
+    /** A {@link LocalToolProbe} that enumerates exactly the given hits. */
+    private static LocalToolProbe fakeProbe(String name, JdkHit... hits) {
+        return new LocalToolProbe() {
+            @Override public String name() { return name; }
+            @Override public Optional<DiscoveredTool> find(ToolSpec spec) { return Optional.empty(); }
+            @Override public List<JdkHit> discoverAllJdks() { return List.of(hits); }
+        };
     }
 
     private static void makeJdkInstall(Path home, String version) throws IOException {

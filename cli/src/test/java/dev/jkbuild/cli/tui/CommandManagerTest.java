@@ -33,9 +33,9 @@ class CommandManagerTest {
         String visible = stripAnsi(raw);
         // Frozen spinner (first glyph) + verb on its own line, result line below.
         assertThat(visible).contains("· Syncing…");
-        // "✔ <goal> Successful: <message>", head in green.
-        assertThat(visible).contains("✔ Syncing Successful: Finished syncing 13 artifacts");
-        assertThat(raw).contains(Theme.colorize("✔ Syncing Successful", Theme.active().success()));
+        // "✓ <goal> Successful: <message>", head in green.
+        assertThat(visible).contains("✓ Syncing Successful: Finished syncing 13 artifacts");
+        assertThat(raw).contains(Theme.colorize("✓ Syncing Successful", Theme.active().success()));
         assertThat(raw).contains("\033[?25h"); // cursor restored
     }
 
@@ -76,7 +76,7 @@ class CommandManagerTest {
         cm.finishSuccess("done");
 
         String raw = buf.toString(StandardCharsets.UTF_8);
-        assertThat(stripAnsi(raw)).contains("✔ Locking Successful: done");
+        assertThat(stripAnsi(raw)).contains("✓ Locking Successful: done");
         assertThat(stripAnsi(raw)).doesNotContain("Locking…"); // no spinner line
         assertThat(raw).doesNotContain("\033[?25h");           // never hid the cursor
     }
@@ -109,9 +109,9 @@ class CommandManagerTest {
         assertThat(all).contains("Building").contains("acme:api").contains("(1m 52s)");
         // Bar with percent + count.
         assertThat(all).contains("45%").contains("[45 of 100]");
-        // Active row (◻) on top with its message; completed row (✔) below.
+        // Active row (◻) on top with its message; completed row (✓) below.
         assertThat(all).contains("◻ acme:api › Compile java › javac 12 sources");
-        assertThat(all).contains("✔ acme:api › Parse build");
+        assertThat(all).contains("✓ acme:api › Parse build");
         int active = all.indexOf("Compile java");
         int doneRow = all.indexOf("Parse build");
         assertThat(active).isLessThan(doneRow); // outstanding floats above completed

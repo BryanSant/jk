@@ -5,6 +5,7 @@ import dev.jkbuild.cli.Ansi;
 
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.ActiveJavac;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.IntellijJdkDir;
@@ -35,9 +36,15 @@ import java.util.regex.Pattern;
 
 /**
  * {@code jk jdk list} — every JDK the probe chain finds on this machine
- * (jk's managed dir, {@code $JAVA_HOME}, SDKMAN, JBang, mise, asdf, jenv,
- * Homebrew, system paths). With {@code --all}, also lists JDKs available
- * for download from the JetBrains feed for the current OS / arch.
+ * (jk's managed dir, SDKMAN, JBang, mise, asdf, jenv, Homebrew, system
+ * paths). With {@code --all}, also lists JDKs available for download from
+ * the JetBrains feed for the current OS / arch.
+ *
+ * <p>The JDK {@code javac} on {@code PATH} resolves to is highlighted as
+ * {@code current}; jk's global default is shown as {@code default} only when
+ * it differs from the current one. Each row's source column names the tool
+ * that owns the install ({@code sdkman}, {@code intellij}, …) rather than the
+ * ephemeral {@code $JAVA_HOME} pointer.
  *
  * <p>Renders a box-drawn table grouped by major version. Without
  * {@code --all} the command is purely offline; with {@code --all},
@@ -61,6 +68,9 @@ public final class JdkListCommand implements CliCommand {
     Path cacheFile;
 
     enum Status {
+        // CURRENT first so it sorts to the top of its version group and wins
+        // the status-priority tie-break in buildRows().
+        CURRENT("current"),
         DEFAULT("default"),
         INSTALLED("installed"),
         AVAILABLE("available");
@@ -91,7 +101,11 @@ public final class JdkListCommand implements CliCommand {
         String os = HostPlatform.currentOs();
         String arch = HostPlatform.currentArch();
 
-        List<Row> rows = buildRows(installed, defaultId.orElse(null), catalog, os, arch);
+        // The "current" JDK is whatever `javac` on PATH resolves to — what this
+        // shell actually compiles with, independent of jk's default pointer.
+        Path currentHome = ActiveJavac.home().orElse(null);
+
+        List<Row> rows = buildRows(installed, defaultId.orElse(null), catalog, os, arch, currentHome);
         if (!all) {
             rows = rows.stream()
                     .filter(r -> r.status() != Status.AVAILABLE)
@@ -116,7 +130,8 @@ public final class JdkListCommand implements CliCommand {
             String defaultId,
             JdkCatalog catalog,
             String os,
-            String arch) {
+            String arch,
+            Path currentHome) {
         // Index catalog entries by installFolderName, restricted to current host.
         Map<String, JdkCatalog.Entry> byInstall = new HashMap<>();
         if (catalog != null) {
@@ -126,7 +141,10 @@ public final class JdkListCommand implements CliCommand {
             }
         }
 
-        // Installed → Row. Mark default first, then installed.
+        // Installed → Row. Status precedence: CURRENT (what `javac` on PATH
+        // resolves to) wins over DEFAULT (jk's global default) — so the green
+        // "default" row only appears when the default JDK isn't the one on PATH.
+        boolean currentShown = false;
         List<Row> rows = new ArrayList<>();
         for (JdkHit j : installed) {
             String id = IntellijJdkDir.installDirOf(j.home()).getFileName().toString();
@@ -138,8 +156,23 @@ public final class JdkListCommand implements CliCommand {
                     ? e.vendor() + " " + e.product()
                     : (j.vendor() != JdkVendor.UNKNOWN ? j.vendor().displayName() : "");
             int major = e != null ? e.majorVersion() : parseMajor(id);
-            Status status = id.equals(defaultId) ? Status.DEFAULT : Status.INSTALLED;
+            boolean isCurrent = sameHome(currentHome, j.home());
+            Status status = isCurrent ? Status.CURRENT
+                    : id.equals(defaultId) ? Status.DEFAULT
+                    : Status.INSTALLED;
+            if (isCurrent) currentShown = true;
             rows.add(new Row(major, vendor, id, status, j.source()));
+        }
+
+        // The active javac may resolve to a JDK no probe surfaced (e.g. on PATH
+        // but outside every manager's root). Synthesize a CURRENT row so the
+        // JDK this shell actually uses is never absent from the list.
+        if (currentHome != null && !currentShown) {
+            dev.jkbuild.discovery.ProbeSupport.discoverJdk(currentHome, "path").ifPresent(hit -> {
+                String id = IntellijJdkDir.installDirOf(hit.home()).getFileName().toString();
+                String vendor = hit.vendor() != JdkVendor.UNKNOWN ? hit.vendor().displayName() : "";
+                rows.add(new Row(parseMajor(id), vendor, id, Status.CURRENT, hit.source()));
+            });
         }
 
         // Catalog → Row for each (vendor, product, major) not already installed.
@@ -171,13 +204,31 @@ public final class JdkListCommand implements CliCommand {
             }
         }
 
-        // Sort: major desc, then status priority (default > installed > available),
-        // then vendor alphabetical.
+        // Sort: major desc, then status priority (current > default > installed
+        // > available, via enum ordinal), then vendor alphabetical.
         rows.sort(Comparator
                 .comparingInt(Row::major).reversed()
                 .thenComparingInt((Row r) -> r.status().ordinal())
                 .thenComparing(Row::vendor, Comparator.nullsLast(String::compareTo)));
         return rows;
+    }
+
+    /**
+     * True when {@code currentHome} and a probe-discovered {@code hitHome}
+     * point at the same JDK. Both are normally already canonical, but we
+     * canonicalise defensively (each may be a symlink path) before comparing.
+     */
+    private static boolean sameHome(Path currentHome, Path hitHome) {
+        if (currentHome == null || hitHome == null) return false;
+        return canonical(currentHome).equals(canonical(hitHome));
+    }
+
+    private static Path canonical(Path p) {
+        try {
+            return p.toRealPath();
+        } catch (IOException e) {
+            return p.toAbsolutePath().normalize();
+        }
     }
 
     /**
@@ -342,8 +393,11 @@ public final class JdkListCommand implements CliCommand {
 
     private static AttributedStyle statusStyle(Status status) {
         return switch (status) {
-            // Bold + bright-green draws the eye to the system-default JDK row
-            // — it's the one a fresh shell will pick up via $JAVA_HOME.
+            // Bold + cyan marks the JDK `javac` on PATH actually resolves to —
+            // the compiler this shell runs right now.
+            case CURRENT -> Theme.active().cyan().bold();
+            // Bold + bright-green marks jk's global default; shown only when it
+            // differs from the current (PATH) JDK.
             case DEFAULT -> Theme.active().brightGreen().bold();
             case INSTALLED -> Theme.active().completedStep();
             case AVAILABLE -> Theme.active().darkGray();
@@ -389,7 +443,9 @@ public final class JdkListCommand implements CliCommand {
                             java.time.Duration.ZERO)
                     : new JdkCatalogClient())
                     .onWarning(System.err::println);
-            return client.fetch(noCache);
+            // --all is the "show me everything" view: every vendor/product at
+            // every major >= 17, not just jk's curated LTS-or-latest set.
+            return client.fetch(noCache, /* firstClassOnly = */ false);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             System.err.println("jk jdk list: JetBrains feed unreachable ("
