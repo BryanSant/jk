@@ -83,6 +83,26 @@ public final class Ndjson {
         }
     }
 
+    /** Extract a JSON long field, returning {@code defaultVal} when absent or non-numeric. */
+    public static long longValue(String json, String key, long defaultVal) {
+        if (json == null) return defaultVal;
+        String needle = "\"" + key + "\":";
+        int start = json.indexOf(needle);
+        if (start < 0) return defaultVal;
+        start += needle.length();
+        while (start < json.length() && json.charAt(start) == ' ') start++;
+        int end = start;
+        boolean neg = end < json.length() && json.charAt(end) == '-';
+        if (neg) end++;
+        while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
+        if (end == start || (neg && end == start + 1)) return defaultVal;
+        try {
+            return Long.parseLong(json.substring(start, end));
+        } catch (NumberFormatException ignored) {
+            return defaultVal;
+        }
+    }
+
     /** Extract a JSON boolean field, returning {@code defaultVal} when absent. */
     public static boolean bool(String json, String key, boolean defaultVal) {
         if (json == null) return defaultVal;

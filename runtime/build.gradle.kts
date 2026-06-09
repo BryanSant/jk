@@ -11,6 +11,9 @@ description = "jk runtime: the build pipeline + command logic, embeddable withou
 dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
+    // The shared NDJSON codec (GitFetcher reads worker output with it). engine's
+    // dependency on plugin-api is `implementation`, so it isn't exposed here.
+    implementation(project(":plugin-api"))
     implementation(project(":resolver"))
     implementation(project(":engine"))
     implementation(project(":toolchain"))

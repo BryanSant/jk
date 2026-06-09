@@ -4,11 +4,11 @@ package dev.jkbuild.git;
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -126,45 +126,37 @@ public final class GitFetcher {
             Files.write(spec, lines, StandardCharsets.UTF_8);
 
             Path workerJar = WorkerJar.GIT_RUNNER.locate();
-            Path javaExe = javaExe();
-            Process process = new ProcessBuilder(
-                    javaExe.toString(), "-jar",
-                    workerJar.toString(), spec.toAbsolutePath().toString())
-                    .redirectErrorStream(true)
-                    .start();
+            List<String> cmd = List.of(
+                    javaExe().toString(), "-jar",
+                    workerJar.toString(), spec.toAbsolutePath().toString());
 
             Result result = new Result();
             StringBuilder diag = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String ln;
-                while ((ln = reader.readLine()) != null) {
-                    if (!ln.startsWith("##JKGIT:")) { diag.append(ln).append('\n'); continue; }
-                    String json = ln.substring("##JKGIT:".length());
-                    String t = readField(json, "t");
-                    if ("result".equals(t)) {
-                        result.ok = !"false".equals(readBoolField(json, "ok"));
-                        result.sha         = readField(json, "sha");
-                        result.checkout    = readField(json, "checkout");
-                        result.error       = readField(json, "error");
-                        result.tagRewrite  = "true".equals(readBoolField(json, "tag_rewrite"));
-                        result.actual      = readField(json, "actual");
-                        String ct = readNumericField(json, "commit_time");
-                        if (ct != null) result.commitTime = Long.parseLong(ct);
-                        result.nearestTag  = readField(json, "nearest_tag");
-                    }
-                }
+            int exit;
+            try {
+                exit = WorkerProcess.run(cmd, "##JKGIT:",
+                        json -> {
+                            if (!"result".equals(Ndjson.str(json, "t"))) return;
+                            result.ok         = Ndjson.bool(json, "ok", true);
+                            result.sha        = Ndjson.str(json, "sha");
+                            result.checkout   = Ndjson.str(json, "checkout");
+                            result.error      = Ndjson.str(json, "error");
+                            result.tagRewrite = Ndjson.bool(json, "tag_rewrite", false);
+                            result.actual     = Ndjson.str(json, "actual");
+                            result.commitTime = Ndjson.longValue(json, "commit_time", 0);
+                            result.nearestTag = Ndjson.str(json, "nearest_tag");
+                        },
+                        line -> diag.append(line).append('\n'));
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw new IOException("git operation interrupted", e);
             }
-            int exit = process.waitFor();
             if (exit != 0 && result.error == null) {
                 result.ok = false;
                 result.error = "git-runner exited " + exit
                         + (diag.length() > 0 ? ": " + diag.toString().trim() : "");
             }
             return result;
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("git operation interrupted", e);
         } finally {
             Files.deleteIfExists(spec);
         }
@@ -193,36 +185,6 @@ public final class GitFetcher {
         Path java = Path.of(home, "bin",
                 System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
         return java;
-    }
-
-    private static String readField(String json, String key) {
-        String needle = "\"" + key + "\":\"";
-        int s = json.indexOf(needle); if (s < 0) return null; s += needle.length();
-        StringBuilder sb = new StringBuilder();
-        for (int i = s; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '\\' && i + 1 < json.length()) {
-                char n = json.charAt(++i);
-                if (n == '"') sb.append('"'); else if (n == '\\') sb.append('\\');
-                else { sb.append('\\'); sb.append(n); }
-            } else if (c == '"') break; else sb.append(c);
-        }
-        return sb.toString();
-    }
-
-    private static String readBoolField(String json, String key) {
-        String needle = "\"" + key + "\":";
-        int s = json.indexOf(needle); if (s < 0) return null; s += needle.length();
-        if (json.startsWith("true", s)) return "true";
-        if (json.startsWith("false", s)) return "false";
-        return null;
-    }
-
-    private static String readNumericField(String json, String key) {
-        String needle = "\"" + key + "\":";
-        int s = json.indexOf(needle); if (s < 0) return null; s += needle.length();
-        int e = s; while (e < json.length() && (Character.isDigit(json.charAt(e)) || json.charAt(e) == '-')) e++;
-        return e > s ? json.substring(s, e) : null;
     }
 
     private static class Result {
