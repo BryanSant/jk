@@ -29,6 +29,7 @@ dependencies {
     implementation(project(":io"))
     implementation(project(":toolchain"))
     implementation(project(":compat"))
+    implementation(project(":plugin-api"))  // shared NDJSON codec (bundled into fat jar)
 }
 
 // Fat JAR: bundle all runtime deps so the worker is launchable as `java -jar`.
