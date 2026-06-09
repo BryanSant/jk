@@ -214,7 +214,7 @@ public final class BuildCommand implements Callable<Integer> {
             }
         }
         String duration = " " + elapsedSince(buildStart);
-        // "✔ Build Successful: " prefix costs ~20 visible columns.
+        // "✓ Build Successful: " prefix costs ~20 visible columns.
         String msg = workspaceSummary(root, workspaceRoot, sorted, view.width() - 20, duration);
         view.finishSuccess(msg + duration);
         return 0;
@@ -410,7 +410,7 @@ public final class BuildCommand implements Callable<Integer> {
         }
     }
 
-    /** Success result line (sans the leading ✔ and trailing duration). */
+    /** Success result line (sans the leading ✓ and trailing duration). */
     private static String successMessage(Goal goal, GoalResult result) {
         String outcome = goal.get(BUILD_OUTCOME).orElse("");
         if ("up-to-date".equals(outcome)) {
