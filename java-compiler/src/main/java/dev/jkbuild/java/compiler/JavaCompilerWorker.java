@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.java.compiler;
 
+import dev.jkbuild.plugin.protocol.Ndjson;
+
 import javax.annotation.processing.Processor;
 
 import java.io.File;
@@ -72,18 +74,18 @@ public final class JavaCompilerWorker {
                 spec.release, spec.args, processors);
 
         for (String d : r.diagnostics()) {
-            out.println(PREFIX + "{\"t\":\"diag\",\"msg\":" + quote(d) + "}");
+            out.println(PREFIX + "{\"t\":\"diag\",\"msg\":" + Ndjson.quote(d) + "}");
         }
         for (Map.Entry<Path, Set<Path>> e : r.generated().entrySet()) {
             StringBuilder src = new StringBuilder("[");
             boolean first = true;
             for (Path s : e.getValue()) {
                 if (!first) src.append(',');
-                src.append(quote(s.toString()));
+                src.append(Ndjson.quote(s.toString()));
                 first = false;
             }
             src.append(']');
-            out.println(PREFIX + "{\"t\":\"prov\",\"gen\":" + quote(e.getKey().toString())
+            out.println(PREFIX + "{\"t\":\"prov\",\"gen\":" + Ndjson.quote(e.getKey().toString())
                     + ",\"src\":" + src + "}");
         }
         out.println(PREFIX + "{\"t\":\"result\",\"status\":\"" + (r.success() ? "OK" : "ERROR") + "\"}");
@@ -143,22 +145,4 @@ public final class JavaCompilerWorker {
         }
     }
 
-    private static String quote(String s) {
-        StringBuilder b = new StringBuilder(s.length() + 2).append('"');
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"' -> b.append("\\\"");
-                case '\\' -> b.append("\\\\");
-                case '\n' -> b.append("\\n");
-                case '\r' -> b.append("\\r");
-                case '\t' -> b.append("\\t");
-                default -> {
-                    if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
-                    else b.append(c);
-                }
-            }
-        }
-        return b.append('"').toString();
-    }
 }

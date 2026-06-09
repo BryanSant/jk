@@ -2,7 +2,8 @@
 package dev.jkbuild.test;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.compile.Ndjson;
+import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.worker.WorkerJar;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -48,16 +49,6 @@ public final class JUnitLauncher {
     /** Marker prefix every protocol line carries. Must match {@code JsonEventWriter.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JK:";
 
-    /**
-     * Build-time-generated resource carrying the SHA-256 of the
-     * jk-test-runner jar this build of engine pairs with. Engine reads
-     * the hash, then looks the jar up in the CAS at that key. See
-     * {@code engine/build.gradle.kts:writeRunnerSha}.
-     */
-    private static final String RUNNER_SHA_RESOURCE = "/META-INF/jk-test-runner-sha256.txt";
-
-    /** Override for the jk-test-runner jar path (tests, dev). Takes precedence over the CAS lookup. */
-    static final String RUNNER_JAR_PROPERTY = "jk.test.runner.jar";
 
     /**
      * Run the project's tests. {@code workers} of 1 (today's default) takes
@@ -294,37 +285,12 @@ public final class JUnitLauncher {
      * spells out the exact destination path the user needs to populate.
      */
     private static Path locateRunner(Path cacheRoot) throws IOException {
-        // Override (tests / dev) wins over the CAS lookup, mirroring the Kotlin
-        // worker's jk.kotlin.worker.jar — lets a test JVM point at a freshly-built
-        // runner without side-loading it into an ephemeral cache.
-        String override = System.getProperty(RUNNER_JAR_PROPERTY);
-        if (override != null && !override.isBlank()) {
-            Path jar = Path.of(override);
-            if (Files.isRegularFile(jar)) return jar;
-            throw new IOException(RUNNER_JAR_PROPERTY + " is set to '" + override
-                    + "' but no file exists there.");
-        }
-        String expectedHash = readExpectedHash();
-        Cas cas = new Cas(cacheRoot);
-        Path target = cas.pathFor(expectedHash);
-        if (Files.isRegularFile(target)) {
-            return target;
-        }
-        throw new IOException(
-                "jk test: jk-test-runner.jar is not in the CAS.\n"
-                + "  expected sha256: " + expectedHash + "\n"
-                + "  expected path:   " + target + "\n"
-                + "  Until jk-test-runner is published to a primary repo, side-load it.");
-    }
-
-    private static String readExpectedHash() throws IOException {
-        try (InputStream in = JUnitLauncher.class.getResourceAsStream(RUNNER_SHA_RESOURCE)) {
-            if (in == null) {
-                throw new IOException(
-                        "jk test: " + RUNNER_SHA_RESOURCE + " missing from this engine build "
-                        + "(writeRunnerSha didn't run)");
-            }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
+        // Location (override → CAS-by-SHA) is shared with every other worker via
+        // WorkerJar; adapt its IllegalStateException to this method's IOException.
+        try {
+            return WorkerJar.TEST_RUNNER.locate(new Cas(cacheRoot));
+        } catch (IllegalStateException e) {
+            throw new IOException("jk test: " + e.getMessage(), e);
         }
     }
 

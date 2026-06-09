@@ -19,7 +19,7 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.runtime.ImageWorkerSetup;
+import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -180,7 +180,7 @@ public final class ImageCommand implements Callable<Integer> {
                                    ImageConfig config, String chosen,
                                    List<Path> depJars, Path tarballPath)
             throws IOException, InterruptedException {
-        Path workerJar = ImageWorkerSetup.locateWorkerJar(new Cas(cache));
+        Path workerJar = WorkerJar.IMAGE_RUNNER.locate(new Cas(cache));
         List<String> lines = new ArrayList<>();
         lines.add("MAIN_JAR " + layout.mainJar().toAbsolutePath());
         lines.add("ARTIFACT " + project.project().name());

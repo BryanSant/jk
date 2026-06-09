@@ -16,7 +16,7 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.runtime.PublishWorkerSetup;
+import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
@@ -201,7 +201,7 @@ public final class PublishCommand implements Callable<Integer> {
 
         Path spec = writeSpec(projectDir, jar, cred);
         try {
-            Path workerJar = PublishWorkerSetup.locateWorkerJar(new Cas(cache));
+            Path workerJar = WorkerJar.PUBLISH_RUNNER.locate(new Cas(cache));
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
                     .resolve(isWindows() ? "java.exe" : "java");

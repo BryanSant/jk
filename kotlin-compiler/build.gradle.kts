@@ -27,6 +27,14 @@ description = "jk-kotlin-compiler: child-JVM worker that drives the Kotlin Build
         "(CompilationService) for full and incremental JVM compilation, isolated from jk's " +
         "own classpath. Reads a line-oriented spec, streams NDJSON diagnostics back to jk."
 
+// plugin-api is tiny and dependency-free; vendor just its classes into the thin
+// worker jar (not the whole runtime closure — the BTA impl stays external).
+val bundledCodec by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
 dependencies {
     // Compile against the stable Build Tools API only. The implementation
     // (kotlin-build-tools-impl + the Kotlin compiler closure) is resolved at
@@ -37,6 +45,12 @@ dependencies {
     compileOnly(libs.kotlin.build.tools.api)
     // Tests drive the worker against the API directly.
     testImplementation(libs.kotlin.build.tools.api)
+    // The shared NDJSON protocol codec. compileOnly so it doesn't drag onto the
+    // worker's resolved runtime closure; its classes are vendored into the jar
+    // via `bundledCodec` below so the codec is present in the worker JVM.
+    compileOnly(project(":plugin-api"))
+    bundledCodec(project(":plugin-api"))
+    testImplementation(project(":plugin-api"))
 }
 
 tasks.jar {
@@ -46,6 +60,10 @@ tasks.jar {
                 "Implementation-Title" to "jk-kotlin-compiler",
                 "Implementation-Version" to project.version)
     }
+    dependsOn(bundledCodec)
+    from(bundledCodec.map { zipTree(it) })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "META-INF/*.EC")
 }
 
 /**

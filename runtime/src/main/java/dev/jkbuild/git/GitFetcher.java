@@ -4,7 +4,7 @@ package dev.jkbuild.git;
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
-import dev.jkbuild.runtime.GitWorkerSetup;
+import dev.jkbuild.worker.WorkerJar;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -125,7 +125,7 @@ public final class GitFetcher {
             } catch (UnsupportedOperationException ignored) {}
             Files.write(spec, lines, StandardCharsets.UTF_8);
 
-            Path workerJar = GitWorkerSetup.locateWorkerJar();
+            Path workerJar = WorkerJar.GIT_RUNNER.locate();
             Path javaExe = javaExe();
             Process process = new ProcessBuilder(
                     javaExe.toString(), "-jar",

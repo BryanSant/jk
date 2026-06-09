@@ -3,7 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.runtime.CompatWorkerSetup;
+import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
@@ -61,7 +61,7 @@ public final class ExportCommand implements Callable<Integer> {
         }
 
         Path cache = JkDirs.cache();
-        Path workerJar = CompatWorkerSetup.locateWorkerJar(new Cas(cache));
+        Path workerJar = WorkerJar.COMPAT_RUNNER.locate(new Cas(cache));
         Path spec = Files.createTempFile("jk-compat-", ".spec");
         try {
             Files.write(spec, List.of(
