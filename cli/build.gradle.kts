@@ -22,7 +22,7 @@ dependencies {
     implementation(project(":engine"))
     // supply-chain deleted: PolicyChecker moved to :core
     // image deleted: ImageConfig moved to :core
-    implementation(project(":compat"))
+    // compat deleted: tool classes moved to :toolchain, bridge classes moved to :compat-runner
 
     // JLine 4 FFM terminal provider for raw-mode TUI (jk init wizard).
     // FFM backend requires JDK 22+; the GraalVM-compiled binary embeds the

@@ -31,7 +31,7 @@ dependencies {
     implementation(project(":toolchain"))
     implementation(project(":engine"))
     // supply-chain/image deleted: moved to :core
-    implementation(project(":compat"))
+    // compat deleted: tool classes moved to :toolchain, bridge classes moved to :compat-runner
     implementation(project(":runtime"))
 
     testImplementation(libs.jgit)   // test fixtures only

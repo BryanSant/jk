@@ -29,7 +29,7 @@ include(
     // :supply-chain deleted — PolicyChecker merged into :core
     // :supply-chain-testkit deleted — GpgTestFixture merged into :publish-runner/src/test
     // :image deleted — ImageConfig merged into :core
-    ":compat",
+    // :compat deleted — tool classes → :toolchain; bridge classes → :compat-runner
     ":test-runner",
     ":kotlin-compiler",
     ":java-compiler",

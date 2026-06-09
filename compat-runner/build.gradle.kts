@@ -12,7 +12,7 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
     implementation(project(":toolchain"))
-    implementation(project(":compat"))
+    // compat deleted: mvn/gradle/kotlin bridge + JkBuildRenderer moved into this module
     implementation(project(":plugin-api"))  // shared NDJSON codec (bundled into the fat jar)
 }
 

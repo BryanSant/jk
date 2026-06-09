@@ -17,7 +17,7 @@ dependencies {
     implementation(project(":resolver"))
     implementation(project(":engine"))
     implementation(project(":toolchain"))
-    implementation(project(":compat"))
+    // compat deleted: tool classes moved to :toolchain, bridge classes moved to :compat-runner
     // supply-chain deleted: PolicyChecker moved to :core
     testImplementation(libs.jgit)   // test fixtures only; not in production binary
 }
