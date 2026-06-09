@@ -121,6 +121,26 @@ class JdkCatalogClientTest {
     }
 
     @Test
+    void first_class_latest_ignores_preview_only_majors(@TempDir Path tempDir) throws Exception {
+        // 26 is the newest GA; 27 exists only as an early-access build. The
+        // latest-major slot must go to 26 (and 27 must be dropped), not the
+        // other way around.
+        jsonBody = ("{\n  \"jdks\": [\n"
+                + String.join(",\n",
+                        jdkBlock(21, "21.0.5"),         // LTS
+                        jdkBlock(26, "26.0.1"),         // newest GA
+                        previewBlock(27, "27-ea+22"))   // early access only
+                + "\n  ]\n}\n").getBytes(StandardCharsets.UTF_8);
+        JdkCatalogClient client = new JdkCatalogClient(
+                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
+
+        assertThat(client.fetch().entries())
+                .extracting(JdkCatalog.Entry::majorVersion)
+                .containsExactlyInAnyOrder(21, 26)   // 26 kept as latest GA; 27 EA dropped
+                .doesNotContain(27);
+    }
+
+    @Test
     void offline_falls_back_to_cache(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("jdks.json");
         Files.createDirectories(cache.getParent());
@@ -144,6 +164,13 @@ class JdkCatalogClientTest {
                         jdkBlock(21, "21.0.5"),
                         jdkBlock(26, "26.0.1"))
                 + "\n  ]\n}\n";
+    }
+
+    /** A preview/early-access JDK block (carries {@code "preview": true}). */
+    private static String previewBlock(int major, String version) {
+        return jdkBlock(major, version).replaceFirst(
+                "\"jdk_version_major\": " + major + ",",
+                "\"jdk_version_major\": " + major + ",\n      \"preview\": true,");
     }
 
     private static String jdkBlock(int major, String version) {
