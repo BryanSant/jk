@@ -70,13 +70,17 @@ public final class BuildCommand implements CliCommand {
                 Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"),
+                // Phase 4: the Workspace Host is now the default execution path.
+                // --no-host forces in-process execution (for debugging/fallback only).
+                Opt.flag("Run the build in-process instead of via the Workspace Host JVM.", "--no-host").hide());
     }
 
     String profileName;
     Integer workers;
     Path cacheDir;
     Path jdksDir;
+    boolean useHost;
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
 
@@ -99,6 +103,8 @@ public final class BuildCommand implements CliCommand {
         this.workers = in.value("workers").map(Integer::parseInt).orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        // Default: use the Host; --no-host forces in-process (debug/fallback).
+        this.useHost = !in.isSet("no-host");
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
@@ -369,6 +375,15 @@ public final class BuildCommand implements CliCommand {
         // Each project owns its own jk.lock alongside its jk.toml.
         final Path lockFile = dir.resolve("jk.lock");
 
+        // Phase 4 coexistence: when --use-host is set, fork the Workspace Host
+        // JVM instead of running the pipeline in-process. The host streams
+        // HostEvents; HostLauncher bridges them back to the GoalConsole listeners.
+        if (useHost) {
+            int hostResult = buildViaHost(dir, cache, lockFile, workerCount, agg);
+            if (hostResult >= 0) return hostResult;
+            // -1 = fallback to in-process (host jar missing, workspace, or other)
+        }
+
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 dir, cache, buildFile, lockFile, dir,
                 workerCount, estimatedTestCount, profileName, jdksDir, buildOpts.skipTests, global.verbose);
@@ -400,6 +415,31 @@ public final class BuildCommand implements CliCommand {
         var testResult = goal.get(TEST_RESULT).orElse(null);
         if (testResult != null && !testResult.allPassed()) return 4;
         return 1;
+    }
+
+    // ---- Workspace Host dispatch (Phase 4 coexistence) ----------------------
+
+    /**
+     * Fork the Workspace Host JVM, stream its events back through the CLI's
+     * existing GoalConsole listeners, and return the exit code.
+     * Used when {@code --use-host} is set (hidden flag, Phase 4 preview).
+     */
+    private int buildViaHost(Path dir, Path cache, Path lockFile, int workerCount,
+                              dev.jkbuild.cli.run.AggregateContext agg)
+            throws Exception {
+        // Workspace aggregation via host is a follow-up; single-project only for now.
+        if (agg != null) {
+            System.err.println("jk build: --use-host is not yet supported in workspace mode; "
+                    + "falling back to in-process build.");
+            return -1; // signal caller to fall through to the in-process path
+        }
+        dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
+                "build", dir, cache, lockFile, jdksDir, profileName, workerCount,
+                buildOpts.skipTests, global.verbose, global.outputIsJson());
+        var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec("Build",
+                r -> "Build successful", r -> "Build failed");
+        return dev.jkbuild.cli.run.HostLauncher.tryRun(
+                inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
     }
 
     // ---- success summary -----------------------------------------------

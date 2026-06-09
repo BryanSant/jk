@@ -131,6 +131,28 @@ public final class GoalConsole {
         return goal.run();
     }
 
+    /**
+     * Build a {@link GoalListener} for use when there is no pre-built
+     * {@link Goal} object — specifically for the Host path where the Goal runs
+     * inside the forked JVM. Uses {@link SimpleTaskListener} (spinner + result
+     * line) instead of the full progress bar, since the phase list isn't known
+     * ahead of time. The full progress bar is a follow-up once streaming phase
+     * discovery is plumbed through the Host protocol.
+     *
+     * @param mode   rendering mode (from {@link #modeFor(dev.jkbuild.cli.GlobalOptions)})
+     * @param spec   result-line spec ({@code ✓ Built …} / {@code ✗ Build failed})
+     * @return a ready-to-use {@link GoalListener}, or {@code null} when the mode
+     *         would produce no output (e.g. {@code QUIET} without a TTY)
+     */
+    public static GoalListener makeListenerWithoutGoal(Mode mode, ConsoleSpec spec) {
+        return switch (mode) {
+            case JSON    -> new NdjsonListener(System.out);
+            case VERBOSE -> new VerboseListener(System.out, System.err);
+            case AUTO    -> new SimpleTaskListener(System.out, System.err, spec, isInteractiveTerminal());
+            case QUIET   -> new SimpleTaskListener(System.out, System.err, spec, false);
+        };
+    }
+
     private static GoalListener chooseConsoleListener(Goal goal, Mode mode) {
         // Interactive goals (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events

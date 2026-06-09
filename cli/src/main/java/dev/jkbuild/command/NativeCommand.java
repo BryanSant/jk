@@ -39,7 +39,8 @@ public final class NativeCommand implements CliCommand {
                 Opt.value("<class>", "Main class to compile. Default: read from jk.toml's image.main-class.", "--main"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"),
+                Opt.flag("Run the build in-process instead of via the Workspace Host JVM.", "--no-host").hide());
     }
     @Override public List<dev.jkbuild.model.command.Param> parameters() {
         return List.of(dev.jkbuild.model.command.Param.of("native-image-args", dev.jkbuild.model.command.Arity.ZERO_OR_MORE, "Extra arguments forwarded to native-image (after --)"));
@@ -61,6 +62,7 @@ public final class NativeCommand implements CliCommand {
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
+        boolean useHost = !in.isSet("no-host");
         Path projectDir = global.workingDir();
         Path buildFile = projectDir.resolve("jk.toml");
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
@@ -80,6 +82,18 @@ public final class NativeCommand implements CliCommand {
         }
 
         Path lockFile = projectDir.resolve("jk.lock");
+
+        if (useHost) {
+            dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
+                    "native", projectDir, cache, lockFile, jdksDir, null, 1,
+                    buildOpts.skipTests, global.verbose, global.outputIsJson());
+            var consoleSpec = new ConsoleSpec("Native Build",
+                    r -> "Built native binary", r -> "Native build failed");
+            int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
+                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
+            if (code >= 0) return code;
+        }
+
         int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 projectDir, cache, buildFile, lockFile, projectDir,

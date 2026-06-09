@@ -1,5 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
+import java.security.MessageDigest
+
 plugins {
     id("jk.java-conventions")
     application
@@ -10,6 +12,7 @@ description = "jk command-line entrypoint"
 
 dependencies {
     implementation(project(":runtime"))
+    implementation(project(":host"))
     implementation(project(":core"))
     implementation(project(":io"))
     // Shared NDJSON reader + WorkerProcess launch helper for worker-driving commands.
@@ -33,6 +36,30 @@ dependencies {
     // GitSourceMaterializerTest uses a local git fixture (built with system git or git-runner)
     // testImplementation(libs.jgit)  -- removed, tests use system git or git-runner worker
 }
+
+// jk-host SHA resource: :host depends on :runtime so can't be hashed there.
+// The CLI is the right place — it's what locates the host jar at runtime.
+val hostJar by configurations.creating {
+    isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
+}
+dependencies { hostJar(project(":host")) }
+val artifact = "jk-host"
+val hostShaOutDir = "generated/resources/host-sha/$artifact"
+val hostShaOutFile = layout.buildDirectory.file("$hostShaOutDir/META-INF/$artifact-sha256.txt")
+val writeHostSha by tasks.registering {
+    inputs.files(hostJar)
+    outputs.file(hostShaOutFile)
+    doLast {
+        val digest = MessageDigest.getInstance("SHA-256").digest(hostJar.singleFile.readBytes())
+        hostShaOutFile.get().asFile.apply {
+            parentFile.mkdirs()
+            writeText(digest.joinToString("") { "%02x".format(it.toInt() and 0xff) })
+        }
+    }
+}
+sourceSets.named("main") { resources.srcDir(layout.buildDirectory.dir(hostShaOutDir)) }
+tasks.named("processResources") { dependsOn(writeHostSha) }
+tasks.named("sourcesJar") { dependsOn(writeHostSha) }
 
 // Tests that fork child-JVM workers locate each jar via a system-property override
 // until workers ship to Maven Central. Resolve each worker jar here and pass its

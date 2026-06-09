@@ -38,7 +38,8 @@ public enum WorkerJar {
     PUBLISH_RUNNER("jk-publish-runner", "jk.publish.worker.jar", ":publish-runner:installLocalCas"),
     IMAGE_RUNNER("jk-image-runner", "jk.image.worker.jar", ":image-runner:installLocalCas"),
     COMPAT_RUNNER("jk-compat-runner", "jk.compat.worker.jar", ":compat-runner:installLocalCas"),
-    GIT_RUNNER("jk-git-runner", "jk.git.worker.jar", ":git-runner:installLocalCas");
+    GIT_RUNNER("jk-git-runner", "jk.git.worker.jar", ":git-runner:installLocalCas"),
+    HOST("jk-host", "jk.host.jar", ":host:installLocalCas");
 
     private final String artifactId;
     private final String jarProperty;
