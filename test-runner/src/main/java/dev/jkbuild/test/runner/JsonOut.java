@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.test.runner;
 
+import dev.jkbuild.plugin.protocol.Ndjson;
+
 import java.util.List;
 import java.util.Map;
 
@@ -62,27 +64,9 @@ final class JsonOut {
     }
 
     private static void writeString(StringBuilder out, CharSequence cs) {
-        out.append('"');
-        for (int i = 0; i < cs.length(); i++) {
-            char c = cs.charAt(i);
-            switch (c) {
-                case '"' -> out.append("\\\"");
-                case '\\' -> out.append("\\\\");
-                case '\n' -> out.append("\\n");
-                case '\r' -> out.append("\\r");
-                case '\t' -> out.append("\\t");
-                case '\b' -> out.append("\\b");
-                case '\f' -> out.append("\\f");
-                default -> {
-                    if (c < 0x20) {
-                        out.append(String.format("\\u%04x", (int) c));
-                    } else {
-                        out.append(c);
-                    }
-                }
-            }
-        }
-        out.append('"');
+        // Shared codec: surrounding quotes + escaping (backspace/form-feed
+        // normalise to unicode escapes rather than their own short forms).
+        out.append(Ndjson.quote(cs.toString()));
     }
 
     /** Convenience for callers that want a finished String for a small object. */
