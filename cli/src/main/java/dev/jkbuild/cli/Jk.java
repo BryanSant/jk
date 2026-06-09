@@ -38,7 +38,8 @@ import java.util.Set;
                 CompileCommand.class,
                 BuildCommand.class,
                 TestCommand.class,
-                CleanCommand.class,
+                // CleanCommand ported to jk's own CliCommand model (run via
+                // CommandDispatch); listed in `jk --help` by newCommandLine().
                 ExplainCommand.class,
                 JdkCommand.class,
                 ActivateCommand.class,
@@ -111,9 +112,15 @@ public final class Jk implements Runnable {
         // -q/--quiet must take effect before any println happens. Apply it now
         // based on the resolved config (which already knows about env/file/CLI layers).
         dev.jkbuild.config.Quietable.applyIfQuiet(ActiveConfig.get());
+        String[] rewritten = rewriteAlias(args);
+        // Coexistence (Phase 3): verbs ported off picocli to jk's own Command
+        // model are parsed + run by CommandDispatch; everything else still
+        // flows through picocli. Returns null when the verb isn't ported.
+        Integer ported = CommandDispatch.tryDispatch(rewritten);
+        if (ported != null) return ported;
         CommandLine cmd = newCommandLine();
         HelpLayout.applyColorScheme(cmd);
-        return cmd.execute(rewriteAlias(args));
+        return cmd.execute(rewritten);
     }
 
     /**
@@ -236,6 +243,15 @@ public final class Jk implements Runnable {
         // Install jk's help system: the GlobalOptions mixin on every command, the
         // styled parent/leaf section layouts, and the cargo-style error renderers.
         HelpLayout.install(cmd);
+        // List commands already ported off picocli (run via CommandDispatch) so
+        // they still appear in `jk --help`. Metadata-only specs — picocli never
+        // executes them (the dispatcher intercepts those verbs first).
+        for (dev.jkbuild.model.command.CliCommand c : CommandDispatch.commands()) {
+            if (cmd.getSubcommands().containsKey(c.name())) continue;
+            CommandSpec sub = CommandSpec.create().name(c.name());
+            sub.usageMessage().description(c.description());
+            cmd.getCommandSpec().addSubcommand(c.name(), new CommandLine(sub));
+        }
         return cmd;
     }
 
