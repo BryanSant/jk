@@ -54,7 +54,7 @@ import java.util.concurrent.Callable;
  * we get a run-log entry per uninstall. Marked interactive so the
  * progress widget stays out of the way of the spinner + wizard UI.
  */
-@Command(name = "uninstall", aliases = {"remove"},
+@Command(name = "uninstall", aliases = {"remove", "rm", "del"},
         description = "Uninstall JDK versions")
 public final class JdkUninstallCommand implements Callable<Integer> {
 
@@ -65,14 +65,16 @@ public final class JdkUninstallCommand implements Callable<Integer> {
      */
     private static final Set<String> KNOWN_SOURCES = Set.of(
             "jk", "intellij", "sdkman", "jbang", "mise", "asdf", "jenv",
-            "homebrew", "java-home");
+            "homebrew", "path");
 
     /** Probe names jk refuses to uninstall from. Listed for a friendlier error. */
     private static final Set<String> UNINSTALL_FORBIDDEN_SOURCES = Set.of("system");
 
-    @Parameters(arity = "0..1", paramLabel = "<source>/<spec>",
-            description = "Source-qualified install (e.g. intellij/temurin-26.0.1). "
-                    + "Omit to launch the interactive wizard.")
+    @Parameters(arity = "0..1", paramLabel = "[<source>/]<spec>",
+            description = "Install to remove (e.g. temurin-26.0.1). Optionally "
+                    + "source-qualify it (e.g. intellij/temurin-26.0.1) to disambiguate "
+                    + "when the same spec exists in several places. Omit to launch the "
+                    + "interactive wizard.")
     String argument;
 
     @Option(names = {"-y", "--yes"},
@@ -97,8 +99,8 @@ public final class JdkUninstallCommand implements Callable<Integer> {
             return runSingle(registry, defaults);
         }
         if (!isInteractiveTerminal()) {
-            System.err.println("jk jdk uninstall: stdin is not a TTY — pass <source>/<spec> "
-                    + "(e.g. `jk jdk uninstall intellij/temurin-21.0.5`) or run interactively.");
+            System.err.println("jk jdk uninstall: stdin is not a TTY — pass a spec "
+                    + "(e.g. `jk jdk uninstall temurin-21.0.5`) or run interactively.");
             return 64; // EX_USAGE
         }
         return runWizard(registry, defaults);
@@ -107,42 +109,65 @@ public final class JdkUninstallCommand implements Callable<Integer> {
     // --- single-target path -------------------------------------------------
 
     private Integer runSingle(JdkRegistry registry, GlobalDefaultJdk defaults) throws IOException {
+        // `<source>/<spec>` is optional: a slash qualifies which probe's copy to
+        // remove, but a bare `<spec>` matches across every source. Specs never
+        // contain a slash, so its presence unambiguously marks a source prefix.
         int slash = argument.indexOf('/');
-        if (slash <= 0 || slash == argument.length() - 1) {
-            System.err.println("jk jdk uninstall: argument must be `<source>/<spec>` "
-                    + "(got `" + argument + "`). Examples: intellij/temurin-26.0.1, "
-                    + "jbang/temurin-17.0.19.");
+        String source = slash < 0 ? null : argument.substring(0, slash);
+        String spec = slash < 0 ? argument : argument.substring(slash + 1);
+        if (slash == 0 || slash == argument.length() - 1) {
+            System.err.println("jk jdk uninstall: argument must be `<spec>` or `<source>/<spec>` "
+                    + "(got `" + argument + "`). Examples: temurin-26.0.1, intellij/temurin-26.0.1.");
             return 64;
         }
-        String source = argument.substring(0, slash);
-        String spec = argument.substring(slash + 1);
 
-        if (UNINSTALL_FORBIDDEN_SOURCES.contains(source)) {
-            System.err.println("jk jdk uninstall: refusing to remove `" + source
-                    + "` installs — they're managed by the OS package manager "
-                    + "(use your distro's tooling, e.g. apt/dnf/brew, to remove them).");
-            return 64;
-        }
-        if (!KNOWN_SOURCES.contains(source)) {
-            System.err.println("jk jdk uninstall: unknown source `" + source + "` "
-                    + "(supported: " + String.join(", ", KNOWN_SOURCES.stream().sorted().toList()) + ")");
-            return 64;
+        // Validate an explicitly-supplied source up front.
+        if (source != null) {
+            if (UNINSTALL_FORBIDDEN_SOURCES.contains(source)) {
+                System.err.println("jk jdk uninstall: refusing to remove `" + source
+                        + "` installs — they're managed by the OS package manager "
+                        + "(use your distro's tooling, e.g. apt/dnf/brew, to remove them).");
+                return 64;
+            }
+            if (!KNOWN_SOURCES.contains(source)) {
+                System.err.println("jk jdk uninstall: unknown source `" + source + "` "
+                        + "(supported: " + String.join(", ", KNOWN_SOURCES.stream().sorted().toList()) + ")");
+                return 64;
+            }
         }
         if (spec.matches("\\d+")) {
-            System.err.println("jk jdk uninstall: `" + source + "/" + spec
-                    + "` — full spec required (e.g. `" + source + "/temurin-" + spec
+            String prefix = source != null ? source + "/" : "";
+            System.err.println("jk jdk uninstall: `" + prefix + spec
+                    + "` — full spec required (e.g. `" + prefix + "temurin-" + spec
                     + ".0.1`), not a bare major.");
             return 64;
         }
 
-        Optional<JdkHit> match = registry.findHitBySpec(spec, source);
+        // Source-qualified → that probe only; bare spec → first match in
+        // probe-chain order across every source.
+        Optional<JdkHit> match = source != null
+                ? registry.findHitBySpec(spec, source)
+                : registry.findHitBySpec(spec);
         if (match.isEmpty()) {
-            System.err.println("jk jdk uninstall: no `" + source + "` install matches `"
-                    + spec + "` (try `jk jdk list`).");
+            String where = source != null
+                    ? "no `" + source + "` install matches `" + spec + "`"
+                    : "no install matches `" + spec + "`";
+            System.err.println("jk jdk uninstall: " + where + " (try `jk jdk list`).");
             return 1;
         }
 
         JdkHit hit = match.get();
+        // A bare spec sorts `system` installs last in the chain, so we only land
+        // on one when no removable source has the spec — refuse it the same way
+        // an explicit `system/...` is refused.
+        if (UNINSTALL_FORBIDDEN_SOURCES.contains(hit.source())) {
+            System.err.println("jk jdk uninstall: `" + spec + "` resolves to a `" + hit.source()
+                    + "` install, which jk can't remove — it's managed by the OS package manager.");
+            return 64;
+        }
+
+        // The confirmation prompt names the resolved <source>/<spec>, so a bare
+        // spec that matched somewhere unexpected can still be cancelled here.
         if (!confirmDeletion(List.of(hit))) {
             System.out.println("Aborted.");
             return 0;
@@ -180,7 +205,14 @@ public final class JdkUninstallCommand implements Callable<Integer> {
             Optional<List<JdkHit>> outcome =
                     JdkUninstallWizard.run(installed, currentDefault, terminal);
             if (outcome.isEmpty()) {
-                return 130; // wizard cancelled
+                // Ctrl-C cancellation. Render the red closer on the active rail,
+                // identical to `jk jdk install`. Runtime.halt() (not close())
+                // skips shutdown hooks — JLine's cleanup hook blocks on its
+                // stdin reader thread that macOS won't let us interrupt; the
+                // wizard's finally already restored terminal attributes.
+                Wizard.printCancellation(terminal, "𝘅 JDK uninstall canceled");
+                Runtime.getRuntime().halt(130); // 128 + SIGINT
+                throw new AssertionError("unreachable");
             }
             List<JdkHit> victims = outcome.get();
             if (victims.isEmpty()) {
@@ -290,18 +322,18 @@ public final class JdkUninstallCommand implements Callable<Integer> {
      */
     private boolean confirmDeletion(List<JdkHit> victims) throws IOException {
         if (assumeYes) return true;
-        String warn = Theme.colorize("⚠", Theme.active().warning().bold());
+        String warn = Theme.colorize("‼", Theme.active().warning());
         if (victims.size() == 1) {
             JdkHit h = victims.getFirst();
-            System.out.print(warn + " Are you sure you want to delete "
-                    + h.source() + "/" + JdkRegistry.identifierFor(h.home()) + "? [Y/n] ");
+            System.out.print("\n" + warn + " Are you sure you want to delete "
+                    + target(h) + "? " + yesNo() + " ");
         } else {
-            System.out.println(warn + " Are you sure you want to delete the following "
+            System.out.println("\n" + warn + " Are you sure you want to delete the following "
                     + victims.size() + " JDKs?");
             for (JdkHit h : victims) {
-                System.out.println("   " + h.source() + "/" + JdkRegistry.identifierFor(h.home()));
+                System.out.println("   " + target(h));
             }
-            System.out.print("[Y/n] ");
+            System.out.print(yesNo() + " ");
         }
         System.out.flush();
         var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
@@ -310,6 +342,19 @@ public final class JdkUninstallCommand implements Callable<Integer> {
         String trimmed = line.trim();
         if (trimmed.isEmpty()) return true;
         return trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
+    }
+
+    /** The {@code source/identifier} a deletion targets, in cyan. */
+    private static String target(JdkHit h) {
+        return Theme.colorize(h.source() + "/" + JdkRegistry.identifierFor(h.home()),
+                Theme.active().cyan());
+    }
+
+    /** {@code [Y/n]} with the brackets and slash dimmed, the keys left plain. */
+    private static String yesNo() {
+        var dim = Theme.active().black();
+        return Theme.colorize("[", dim) + "Y" + Theme.colorize("/", dim)
+                + "n" + Theme.colorize("]", dim);
     }
 
     /**
