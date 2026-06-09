@@ -60,7 +60,7 @@ class GitSourceMaterializerTest {
         var materializer = new GitSourceMaterializer(
                 tmp.resolve("git"), tmp.resolve("git-artifacts"),
                 cas, buildRepos, Path.of(System.getProperty("java.home")), "test",
-                new dev.jkbuild.git.ForgeGitCredentials());
+                new dev.jkbuild.forge.ForgeGitCredentials());
 
         GitSourceMaterializer.Materialized m = materializer.materialize(source);
 
@@ -92,7 +92,7 @@ class GitSourceMaterializerTest {
                 "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
         var materializer = new GitSourceMaterializer(
                 tmp.resolve("git"), tmp.resolve("git-artifacts"),
-                cas, buildRepos, Path.of(System.getProperty("java.home")), "test", new dev.jkbuild.git.ForgeGitCredentials());
+                cas, buildRepos, Path.of(System.getProperty("java.home")), "test", new dev.jkbuild.forge.ForgeGitCredentials());
 
         GitSourceMaterializer.Materialized m = materializer.materialize(overridden);
 
@@ -115,7 +115,7 @@ class GitSourceMaterializerTest {
                 "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
         var materializer = new GitSourceMaterializer(
                 tmp.resolve("git"), tmp.resolve("git-artifacts"),
-                cas, buildRepos, Path.of(System.getProperty("java.home")), "test", new dev.jkbuild.git.ForgeGitCredentials());
+                cas, buildRepos, Path.of(System.getProperty("java.home")), "test", new dev.jkbuild.forge.ForgeGitCredentials());
 
         var first = materializer.materialize(source);
         var second = materializer.materialize(source);   // cache hit — same sha/version/repo

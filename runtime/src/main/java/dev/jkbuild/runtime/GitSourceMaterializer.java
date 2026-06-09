@@ -3,7 +3,7 @@ package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.git.ForgeGitCredentials;
+import dev.jkbuild.forge.ForgeGitCredentials;
 import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.GitRefSpec;

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.git;
+package dev.jkbuild.forge;
 
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ForgeKind;

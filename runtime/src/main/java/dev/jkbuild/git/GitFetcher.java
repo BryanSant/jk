@@ -2,6 +2,7 @@
 package dev.jkbuild.git;
 
 import dev.jkbuild.forge.ForgeAuth;
+import dev.jkbuild.forge.ForgeGitCredentials;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.plugin.protocol.Ndjson;
