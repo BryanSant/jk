@@ -6,6 +6,7 @@ import dev.jkbuild.audit.Auditor;
 import dev.jkbuild.audit.OsvClient;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
+import dev.jkbuild.plugin.protocol.Ndjson;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -108,11 +109,11 @@ public final class AuditRunner {
         for (AuditReport.Finding f : findings) {
             out.println(PREFIX + "{"
                     + "\"t\":\"finding\","
-                    + "\"module\":" + quote(f.module()) + ","
-                    + "\"version\":" + quote(f.version()) + ","
-                    + "\"vuln_id\":" + quote(f.vulnId()) + ","
-                    + "\"severity\":" + quote(f.severity().name()) + ","
-                    + "\"summary\":" + quote(f.summary())
+                    + "\"module\":" + Ndjson.quote(f.module()) + ","
+                    + "\"version\":" + Ndjson.quote(f.version()) + ","
+                    + "\"vuln_id\":" + Ndjson.quote(f.vulnId()) + ","
+                    + "\"severity\":" + Ndjson.quote(f.severity().name()) + ","
+                    + "\"summary\":" + Ndjson.quote(f.summary())
                     + "}");
         }
         out.println(PREFIX + "{\"t\":\"result\",\"total\":" + findings.size() + "}");
@@ -120,23 +121,4 @@ public final class AuditRunner {
         return 0;
     }
 
-    static String quote(String s) {
-        if (s == null) return "\"\"";
-        StringBuilder sb = new StringBuilder(s.length() + 2).append('"');
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"'  -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default   -> {
-                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
-                    else sb.append(c);
-                }
-            }
-        }
-        return sb.append('"').toString();
-    }
 }

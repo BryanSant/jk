@@ -11,9 +11,9 @@ import org.jetbrains.kotlin.buildtools.api.KotlinLogger;
  */
 final class WorkerLogger implements KotlinLogger {
 
-    private final Ndjson proto;
+    private final KcProtocol proto;
 
-    WorkerLogger(Ndjson proto) {
+    WorkerLogger(KcProtocol proto) {
         this.proto = proto;
     }
 

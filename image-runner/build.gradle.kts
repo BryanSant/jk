@@ -27,6 +27,7 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
     implementation(project(":image"))  // for ImageConfig record
+    implementation(project(":plugin-api"))  // shared NDJSON codec (bundled into fat jar)
     implementation(libs.jib.core)
 }
 

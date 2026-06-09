@@ -11,13 +11,16 @@ description = "jk build engine: action graph, compile, test"
 dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
+    // The host<->worker NDJSON protocol codec (Ndjson) lives in plugin-api now,
+    // shared with the workers themselves rather than copy-pasted per side.
+    implementation(project(":plugin-api"))
     implementation(libs.asm)
     implementation(libs.asm.tree)
     // ClassRemapper drives a comprehensive type-reference traversal for the
     // incremental Java compiler's dependency extraction.
     implementation(libs.asm.commons)
-    // NDJSON from worker subprocesses is parsed with the hand-rolled Ndjson
-    // utility — no JSON library needed on the engine's classpath.
+    // NDJSON from worker subprocesses is parsed with the shared plugin-api codec
+    // — no JSON library needed on the engine's classpath.
     // Kotlin support is now subprocess-based — SubprocessKotlincStrategy
     // execs <kotlin-home>/bin/kotlinc from a jk-installed distribution.
     // kotlin-compiler-embeddable (~50 MB) and kotlin-stdlib are no longer

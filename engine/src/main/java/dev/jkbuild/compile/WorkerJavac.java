@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
+import dev.jkbuild.plugin.protocol.Ndjson;
 
 import java.io.BufferedReader;
 import java.io.IOException;

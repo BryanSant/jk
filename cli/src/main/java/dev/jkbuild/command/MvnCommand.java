@@ -5,7 +5,7 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.PassthroughEnv;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkResolver;
-import dev.jkbuild.runtime.CompatWorkerSetup;
+import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
@@ -75,7 +75,7 @@ public final class MvnCommand implements Callable<Integer> {
 
     static Path provision(Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean isGradle)
             throws IOException, InterruptedException {
-        Path workerJar = CompatWorkerSetup.locateWorkerJar(new Cas(cache));
+        Path workerJar = WorkerJar.COMPAT_RUNNER.locate(new Cas(cache));
         Path spec = Files.createTempFile("jk-compat-", ".spec");
         try {
             Files.write(spec, List.of(

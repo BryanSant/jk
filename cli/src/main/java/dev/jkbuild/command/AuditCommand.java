@@ -11,7 +11,7 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.runtime.AuditWorkerSetup;
+import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
@@ -147,7 +147,7 @@ public final class AuditCommand implements Callable<Integer> {
      */
     private List<AuditReport.Finding> runWorker(Path lockPath, Path cache)
             throws IOException, InterruptedException {
-        Path workerJar = AuditWorkerSetup.locateWorkerJar(new Cas(cache));
+        Path workerJar = WorkerJar.AUDIT_RUNNER.locate(new Cas(cache));
         Path spec = writeSpec(lockPath);
         try {
             Path javaExe = CompileToolchain.runningJavaHome()

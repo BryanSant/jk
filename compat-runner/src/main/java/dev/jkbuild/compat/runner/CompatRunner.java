@@ -14,6 +14,7 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.mvn.MavenResolver;
 import dev.jkbuild.mvn.PomExporter;
 import dev.jkbuild.mvn.PomImporter;
+import dev.jkbuild.plugin.protocol.Ndjson;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -138,7 +139,7 @@ public final class CompatRunner {
             }
 
             Files.writeString(outPath, JkBuildRenderer.render(root), StandardCharsets.UTF_8);
-            emit(out, "{\"t\":\"wrote\",\"path\":" + quote(outPath.toString()) + "}");
+            emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(outPath.toString()) + "}");
 
             Path effectiveBaseDir = baseDir != null ? baseDir : source.getParent();
             for (Map.Entry<String, JkBuild> e : members.entrySet()) {
@@ -150,7 +151,7 @@ public final class CompatRunner {
                 }
                 Files.writeString(memberJkBuild, JkBuildRenderer.render(e.getValue()),
                         StandardCharsets.UTF_8);
-                emit(out, "{\"t\":\"wrote\",\"path\":" + quote(memberJkBuild.toString()) + "}");
+                emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(memberJkBuild.toString()) + "}");
             }
 
             // Write import report.
@@ -169,7 +170,7 @@ public final class CompatRunner {
                 if (rDir != null) Files.createDirectories(rDir);
                 Files.writeString(reportTarget,
                         importReport.renderMarkdown(source.toString()), StandardCharsets.UTF_8);
-                emit(out, "{\"t\":\"wrote\",\"path\":" + quote(reportTarget.toString()) + "}");
+                emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(reportTarget.toString()) + "}");
             }
 
             int warnings = importReport.issues().size();
@@ -178,7 +179,7 @@ public final class CompatRunner {
                     + ",\"errors\":" + hasErrors + "}");
             return 0;
         } catch (IOException e) {
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + quote(e.getMessage()) + "}");
+            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         }
     }
@@ -194,7 +195,7 @@ public final class CompatRunner {
             JkBuild root = dev.jkbuild.config.JkBuildParser.parse(projectDir.resolve("jk.toml"));
             PomExporter.Result rootResult = PomExporter.export(root);
             Files.writeString(target, rootResult.xml(), StandardCharsets.UTF_8);
-            emit(out, "{\"t\":\"wrote\",\"path\":" + quote(target.toString()) + "}");
+            emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(target.toString()) + "}");
 
             int totalWarnings = rootResult.report().issues().size();
             if (root.isWorkspaceRoot()) {
@@ -209,14 +210,14 @@ public final class CompatRunner {
                     }
                     PomExporter.Result memberResult = PomExporter.export(e.getValue());
                     Files.writeString(memberPom, memberResult.xml(), StandardCharsets.UTF_8);
-                    emit(out, "{\"t\":\"wrote\",\"path\":" + quote(memberPom.toString()) + "}");
+                    emit(out, "{\"t\":\"wrote\",\"path\":" + Ndjson.quote(memberPom.toString()) + "}");
                     totalWarnings += memberResult.report().issues().size();
                 }
             }
             emit(out, "{\"t\":\"result\",\"ok\":true,\"warnings\":" + totalWarnings + "}");
             return 0;
         } catch (IOException e) {
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + quote(e.getMessage()) + "}");
+            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         }
     }
@@ -237,15 +238,15 @@ public final class CompatRunner {
                     ToolProvisioning.provision(dist, registry, new Http(), noDiscover);
             InstalledTool tool = result.tool();
             emit(out, "{\"t\":\"result\",\"ok\":true"
-                    + ",\"bin\":" + quote(tool.binary().toString())
-                    + ",\"home\":" + quote(tool.home().toString())
-                    + ",\"version\":" + quote(dist.version())
-                    + ",\"source\":" + quote(result.source().name())
+                    + ",\"bin\":" + Ndjson.quote(tool.binary().toString())
+                    + ",\"home\":" + Ndjson.quote(tool.home().toString())
+                    + ",\"version\":" + Ndjson.quote(dist.version())
+                    + ",\"source\":" + Ndjson.quote(result.source().name())
                     + "}");
             return 0;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + quote(e.getMessage()) + "}");
+            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         }
     }
@@ -253,18 +254,5 @@ public final class CompatRunner {
     private static void emit(PrintStream out, String json) {
         out.println(PREFIX + json);
         out.flush();
-    }
-
-    static String quote(String s) {
-        if (s == null) return "null";
-        StringBuilder sb = new StringBuilder(s.length() + 2).append('"');
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '"') sb.append("\\\"");
-            else if (c == '\\') sb.append("\\\\");
-            else if (c == '\n') sb.append("\\n");
-            else sb.append(c);
-        }
-        return sb.append('"').toString();
     }
 }

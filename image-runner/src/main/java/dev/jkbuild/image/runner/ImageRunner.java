@@ -3,6 +3,7 @@ package dev.jkbuild.image.runner;
 
 import dev.jkbuild.image.ImageBuilder;
 import dev.jkbuild.image.ImageConfig;
+import dev.jkbuild.plugin.protocol.Ndjson;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -121,16 +122,16 @@ public final class ImageRunner {
                 emit(out, "{\"t\":\"progress\",\"msg\":\"building OCI tarball\"}");
                 Files.createDirectories(tarball.getParent());
                 ImageBuilder.writeToTarball(plan, tarball);
-                emit(out, "{\"t\":\"result\",\"ok\":true,\"tarball\":" + quote(tarball.toString()) + "}");
+                emit(out, "{\"t\":\"result\",\"ok\":true,\"tarball\":" + Ndjson.quote(tarball.toString()) + "}");
             } else {
                 String ref = config.targetReference(artifact, version);
                 emit(out, "{\"t\":\"progress\",\"msg\":\"pushing " + ref + "\"}");
                 ImageBuilder.pushToRegistry(plan);
-                emit(out, "{\"t\":\"result\",\"ok\":true,\"ref\":" + quote(ref) + "}");
+                emit(out, "{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(ref) + "}");
             }
             return 0;
         } catch (Exception e) {
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + quote(e.getMessage()) + "}");
+            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         }
     }
@@ -138,18 +139,5 @@ public final class ImageRunner {
     private static void emit(PrintStream out, String json) {
         out.println(PREFIX + json);
         out.flush();
-    }
-
-    static String quote(String s) {
-        if (s == null) return "null";
-        StringBuilder sb = new StringBuilder(s.length() + 2).append('"');
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            if (c == '"') sb.append("\\\"");
-            else if (c == '\\') sb.append("\\\\");
-            else if (c == '\n') sb.append("\\n");
-            else sb.append(c);
-        }
-        return sb.append('"').toString();
     }
 }

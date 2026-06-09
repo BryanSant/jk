@@ -4,12 +4,9 @@ package dev.jkbuild.runtime;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.repo.RepoGroup;
+import dev.jkbuild.worker.WorkerJar;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -22,15 +19,14 @@ import java.util.List;
  *
  * <p>Shared by every Kotlin compile entry point ({@code jk build}'s
  * {@code compile-kotlin}, {@code jk compile}, {@code jk run} scripts) so they
- * resolve and locate consistently.
+ * resolve and locate consistently. Jar location itself is delegated to the
+ * shared {@link WorkerJar} registry; this class adds only the Kotlin-specific
+ * closure/stdlib resolution on top.
  */
 public final class KotlinWorkerSetup {
 
     /** Override for the {@code jk-kotlin-compiler} jar path (tests, dev). Takes precedence over the CAS lookup. */
-    public static final String WORKER_JAR_PROPERTY = "jk.kotlin.worker.jar";
-
-    /** Expected worker-jar SHA-256, emitted into runtime's resources at build time. */
-    private static final String WORKER_SHA_RESOURCE = "/META-INF/jk-kotlin-compiler-sha256.txt";
+    public static final String WORKER_JAR_PROPERTY = WorkerJar.KOTLIN_COMPILER.jarProperty();
 
     private KotlinWorkerSetup() {}
 
@@ -58,44 +54,10 @@ public final class KotlinWorkerSetup {
     }
 
     /**
-     * Locate the {@code jk-kotlin-compiler} worker jar, in order:
-     * <ol>
-     *   <li>the {@value #WORKER_JAR_PROPERTY} system property (tests / dev override);</li>
-     *   <li>the local CAS, keyed by the SHA-256 this build of jk was paired with
-     *       (populated by {@code jk sync} once the worker is published, or by
-     *       {@code ./gradlew :kotlin-compiler:installLocalCas} in jk's own tree).</li>
-     * </ol>
-     * Throws with side-load instructions if neither is available.
+     * Locate the {@code jk-kotlin-compiler} worker jar via the shared registry:
+     * the {@value #WORKER_JAR_PROPERTY} override, then the CAS by expected SHA.
      */
     public static Path locateWorkerJar(Cas cas) {
-        String prop = System.getProperty(WORKER_JAR_PROPERTY);
-        if (prop != null && !prop.isBlank()) {
-            Path jar = Path.of(prop);
-            if (Files.isRegularFile(jar)) return jar;
-            throw new IllegalStateException(WORKER_JAR_PROPERTY + " is set to '" + prop
-                    + "' but no file exists there.");
-        }
-        String expectedHash = readExpectedHash();
-        Path target = cas.pathFor(expectedHash);
-        if (Files.isRegularFile(target)) {
-            return target;
-        }
-        throw new IllegalStateException(
-                "jk-kotlin-compiler.jar is not in the CAS.\n"
-                + "  expected sha256: " + expectedHash + "\n"
-                + "  expected path:   " + target + "\n"
-                + "  Until jk-kotlin-compiler is published to a primary repo, side-load it.");
-    }
-
-    private static String readExpectedHash() {
-        try (InputStream in = KotlinWorkerSetup.class.getResourceAsStream(WORKER_SHA_RESOURCE)) {
-            if (in == null) {
-                throw new IllegalStateException(WORKER_SHA_RESOURCE
-                        + " missing from this jk build (writeKotlinWorkerSha didn't run)");
-            }
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
+        return WorkerJar.KOTLIN_COMPILER.locate(cas);
     }
 }

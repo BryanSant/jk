@@ -21,6 +21,7 @@ rootProject.name = "jk"
 
 include(
     ":core",
+    ":plugin-api",
     ":io",
     ":resolver",
     ":toolchain",

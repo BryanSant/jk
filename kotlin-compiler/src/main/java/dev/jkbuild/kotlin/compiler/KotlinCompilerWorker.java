@@ -44,7 +44,7 @@ public final class KotlinCompilerWorker {
     public static void main(String[] argv) {
         PrintStream out = new PrintStream(
                 new FileOutputStream(FileDescriptor.out), /* autoFlush */ true, StandardCharsets.UTF_8);
-        Ndjson proto = new Ndjson(out);
+        KcProtocol proto = new KcProtocol(out);
         try {
             if (argv.length != 1) {
                 System.err.println("usage: KotlinCompilerWorker <spec-file>|@<spec-file>");
@@ -61,7 +61,7 @@ public final class KotlinCompilerWorker {
         }
     }
 
-    static int compile(CompileSpec spec, Ndjson proto) throws Exception {
+    static int compile(CompileSpec spec, KcProtocol proto) throws Exception {
         spec.outputDir.mkdirs();
 
         KotlinToolchains toolchains =

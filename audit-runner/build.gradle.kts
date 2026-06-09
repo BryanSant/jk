@@ -29,6 +29,7 @@ description = "jk-audit-runner: child-JVM worker that queries the OSV vulnerabil
 
 dependencies {
     implementation(project(":core"))
+    implementation(project(":plugin-api"))  // shared NDJSON codec (bundled into fat jar)
     implementation(libs.jackson.databind)
 }
 

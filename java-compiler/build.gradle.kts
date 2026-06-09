@@ -27,6 +27,21 @@ publishing {
     }
 }
 
+// plugin-api is tiny and dependency-free; compile against it and vendor just its
+// classes (the shared NDJSON codec) into the thin worker jar so the worker JVM
+// has the codec without an external classpath entry.
+val bundledCodec by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
+dependencies {
+    compileOnly(project(":plugin-api"))
+    bundledCodec(project(":plugin-api"))
+    testImplementation(project(":plugin-api"))
+}
+
 tasks.jar {
     manifest {
         attributes(
@@ -34,6 +49,10 @@ tasks.jar {
                 "Implementation-Title" to "jk-java-compiler",
                 "Implementation-Version" to project.version)
     }
+    dependsOn(bundledCodec)
+    from(bundledCodec.map { zipTree(it) })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "META-INF/*.EC")
 }
 
 /**

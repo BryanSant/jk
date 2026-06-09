@@ -30,6 +30,7 @@ import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
+import dev.jkbuild.worker.WorkerJar;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -360,7 +361,7 @@ public final class BuildPipeline {
                         Path genDir = ctx.require(LAYOUT).generatedSourcesDir("annotations");
                         Files.createDirectories(genDir);
                         ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(
-                                JavaWorkerSetup.locateWorkerJar(cas), genDir);
+                                WorkerJar.JAVA_COMPILER.locate(cas), genDir);
                     }
                     ctx.label("compiling " + sources.size() + " sources");
                     dev.jkbuild.task.JavaIncrementalCompile.Result r =

@@ -1,19 +1,30 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.compile;
+package dev.jkbuild.plugin.protocol;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Minimal hand-rolled reader for the simple flat JSON objects jk's worker
- * subprocesses emit as NDJSON ({@code ##PREFIX:{...}}). Handles string,
- * integer, boolean, string-array, and nested-object fields. No external
- * dependencies — this is what keeps Jackson off the main binary's classpath.
+ * The canonical codec for jk's host&lt;-&gt;plugin wire protocol: the simple
+ * flat JSON objects plugins (today's "runner" workers) emit as NDJSON
+ * ({@code ##PREFIX:{...}}).
  *
- * <p>All methods treat a missing or malformed field as the supplied default
- * (or {@code null}) rather than throwing, matching the contract callers
- * already relied on from Jackson's {@code node.path("x").asString()}.
+ * <p>Two halves, both dependency-free so the codec can be bundled into a tiny
+ * plugin jar without dragging in Jackson or any jk internals:
+ * <ul>
+ *   <li><b>Reader</b> — {@link #str}, {@link #intValue}, {@link #bool},
+ *       {@link #has}, {@link #strArray}, {@link #nested}: pull fields out of a
+ *       single JSON object line (the parent side, after the prefix is stripped).
+ *   <li><b>Writer</b> — {@link #quote}: escape a string into a JSON string
+ *       literal (the plugin side, building a line to emit).
+ * </ul>
+ *
+ * <p>The reader treats a missing or malformed field as the supplied default
+ * (or {@code null}) rather than throwing, matching the contract callers already
+ * relied on from Jackson's {@code node.path("x").asString()}. It handles string,
+ * integer, boolean, string-array, and nested-object fields; it does not parse
+ * nested arrays or non-string array elements.
  */
 public final class Ndjson {
 
@@ -67,6 +78,26 @@ public final class Ndjson {
         if (end == start || (neg && end == start + 1)) return defaultVal;
         try {
             return Integer.parseInt(json.substring(start, end));
+        } catch (NumberFormatException ignored) {
+            return defaultVal;
+        }
+    }
+
+    /** Extract a JSON long field, returning {@code defaultVal} when absent or non-numeric. */
+    public static long longValue(String json, String key, long defaultVal) {
+        if (json == null) return defaultVal;
+        String needle = "\"" + key + "\":";
+        int start = json.indexOf(needle);
+        if (start < 0) return defaultVal;
+        start += needle.length();
+        while (start < json.length() && json.charAt(start) == ' ') start++;
+        int end = start;
+        boolean neg = end < json.length() && json.charAt(end) == '-';
+        if (neg) end++;
+        while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
+        if (end == start || (neg && end == start + 1)) return defaultVal;
+        try {
+            return Long.parseLong(json.substring(start, end));
         } catch (NumberFormatException ignored) {
             return defaultVal;
         }
@@ -173,5 +204,38 @@ public final class Ndjson {
             i++;
         }
         return json.substring(braceStart, i);
+    }
+
+    /**
+     * Escape a string into a JSON string literal, surrounding quotes included
+     * ({@code foo"bar} → {@code "foo\"bar"}). Control characters below 0x20 are
+     * emitted as {@code \\uXXXX}. The inverse of {@link #str} for the escape
+     * sequences both sides handle.
+     *
+     * <p>This is the writer half: a plugin building a protocol line uses it to
+     * encode arbitrary string values (diagnostics, paths, messages). A
+     * {@code null} value encodes as the bare JSON literal {@code null} (not a
+     * quoted string), so {@code "msg":} + {@code quote(maybeNull)} is always
+     * valid JSON.
+     */
+    public static String quote(String s) {
+        if (s == null) return "null";
+        StringBuilder b = new StringBuilder(s.length() + 2);
+        b.append('"');
+        for (int i = 0; i < s.length(); i++) {
+            char c = s.charAt(i);
+            switch (c) {
+                case '"'  -> b.append("\\\"");
+                case '\\' -> b.append("\\\\");
+                case '\n' -> b.append("\\n");
+                case '\r' -> b.append("\\r");
+                case '\t' -> b.append("\\t");
+                default -> {
+                    if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
+                    else b.append(c);
+                }
+            }
+        }
+        return b.append('"').toString();
     }
 }

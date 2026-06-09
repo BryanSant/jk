@@ -7,6 +7,7 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.ObjectStoreConfig;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.publish.Checksums;
 import dev.jkbuild.publish.GpgSigner;
 import dev.jkbuild.publish.KeylessSigstoreSigner;
@@ -145,13 +146,13 @@ public final class PublishRunner {
         try {
             byte[] jarBytes = Files.readAllBytes(jar);
             artifacts.add(new MavenPublisher.Artifact(".jar", jarBytes));
-            emit(out, "{\"t\":\"artifact\",\"name\":" + quote(jar.getFileName().toString())
+            emit(out, "{\"t\":\"artifact\",\"name\":" + Ndjson.quote(jar.getFileName().toString())
                     + ",\"size\":" + jarBytes.length + "}");
 
             PublishablePom.Pom pom = PublishablePom.render(project, PublishablePom.Metadata.empty());
             byte[] pomBytes = pom.xml().getBytes(StandardCharsets.UTF_8);
             artifacts.add(new MavenPublisher.Artifact(".pom", pomBytes));
-            emit(out, "{\"t\":\"artifact\",\"name\":" + quote(project.project().name()
+            emit(out, "{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
                     + "-" + project.project().version() + ".pom")
                     + ",\"size\":" + pomBytes.length + "}");
 
@@ -159,7 +160,7 @@ public final class PublishRunner {
                 Path srcRoot = projectDir.resolve("src/main/java");
                 byte[] sourcesJar = SourcesJar.build(List.of(srcRoot));
                 artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesJar));
-                emit(out, "{\"t\":\"artifact\",\"name\":" + quote(project.project().name()
+                emit(out, "{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
                         + "-" + project.project().version() + "-sources.jar")
                         + ",\"size\":" + sourcesJar.length + "}");
             }
@@ -179,7 +180,7 @@ public final class PublishRunner {
                 byte[] provenance = SlsaProvenance.generate(
                         List.of(new SlsaProvenance.Subject(jarFilename, Checksums.sha256Hex(jarBytes))), ctx);
                 artifacts.add(new MavenPublisher.Artifact(".intoto.json", provenance));
-                emit(out, "{\"t\":\"artifact\",\"name\":" + quote(project.project().name()
+                emit(out, "{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
                         + "-" + project.project().version() + ".intoto.json")
                         + ",\"size\":" + provenance.length + "}");
             }
@@ -235,7 +236,7 @@ public final class PublishRunner {
 
             MavenPublisher.Result result = publisher.publish(project.project(), artifacts, signing);
             for (Map.Entry<String, Integer> e : result.statusByPath().entrySet()) {
-                emit(out, "{\"t\":\"upload\",\"name\":" + quote(e.getKey())
+                emit(out, "{\"t\":\"upload\",\"name\":" + Ndjson.quote(e.getKey())
                         + ",\"status\":" + e.getValue() + "}");
             }
 
@@ -248,7 +249,7 @@ public final class PublishRunner {
             return 0;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + quote(e.getMessage()) + "}");
+            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         } finally {
             if (signing != null && signing.sigstore() instanceof AutoCloseable c) {
@@ -266,23 +267,4 @@ public final class PublishRunner {
         return (s == null || s.isBlank()) ? null : s;
     }
 
-    static String quote(String s) {
-        if (s == null) return "\"\"";
-        StringBuilder sb = new StringBuilder(s.length() + 2).append('"');
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"'  -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default   -> {
-                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
-                    else sb.append(c);
-                }
-            }
-        }
-        return sb.append('"').toString();
-    }
 }

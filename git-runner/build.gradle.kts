@@ -27,6 +27,10 @@ description = "jk-git-runner: child-JVM worker that performs JGit operations " +
 dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
+    // The plugin SPI + shared host main + NDJSON codec. Bundled into the fat
+    // worker jar; the jar's Main-Class is plugin-api's PluginHostMain, which
+    // ServiceLoader-loads GitPlugin.
+    implementation(project(":plugin-api"))
     implementation(libs.jgit)
     testImplementation(libs.jgit)
 }
@@ -36,7 +40,7 @@ tasks.jar {
     dependsOn(configurations.runtimeClasspath)
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.git.runner.GitRunner",
+                "Main-Class" to "dev.jkbuild.plugin.host.PluginHostMain",
                 "Implementation-Title" to "jk-git-runner",
                 "Implementation-Version" to project.version)
     }

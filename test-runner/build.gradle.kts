@@ -26,11 +26,23 @@ publishing {
 description = "jk-test-runner: child-JVM entry point that drives JUnit Platform and " +
         "streams events back to the parent jk process as NDJSON on stdout."
 
+// plugin-api is tiny and dependency-free; vendor just its classes (the shared
+// NDJSON codec) into the thin runner jar so the worker JVM has the codec without
+// an external classpath entry.
+val bundledCodec by configurations.creating {
+    isCanBeConsumed = false
+    isCanBeResolved = true
+    isTransitive = false
+}
+
 dependencies {
     // The runner only needs the Launcher API at compile time. Engines and the
     // user's test classes are added to the child classpath at fork time by
     // jk's TestCommand — they don't belong here.
     implementation(libs.junit.platform.launcher)
+    compileOnly(project(":plugin-api"))
+    bundledCodec(project(":plugin-api"))
+    testImplementation(project(":plugin-api"))
 }
 
 tasks.jar {
@@ -40,6 +52,10 @@ tasks.jar {
                 "Implementation-Title" to "jk-test-runner",
                 "Implementation-Version" to project.version)
     }
+    dependsOn(bundledCodec)
+    from(bundledCodec.map { zipTree(it) })
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    exclude("META-INF/*.SF", "META-INF/*.RSA", "META-INF/*.DSA", "META-INF/*.EC")
 }
 
 /**

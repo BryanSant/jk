@@ -8,13 +8,11 @@ import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.util.JkVersion;
+import dev.jkbuild.worker.WorkerJar;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.List;
 
 /**
  * Pulls jk's own child-JVM worker jars ({@code jk-test-runner},
@@ -37,18 +35,6 @@ public final class JkWorkerSync {
     /** Group the worker artifacts publish under (see the worker modules' build.gradle.kts). */
     static final String GROUP = "dev.jkbuild";
 
-    private record Worker(String artifactId, String shaResource) {}
-
-    private static final List<Worker> WORKERS = List.of(
-            new Worker("jk-test-runner", "/META-INF/jk-test-runner-sha256.txt"),
-            new Worker("jk-kotlin-compiler", "/META-INF/jk-kotlin-compiler-sha256.txt"),
-            new Worker("jk-java-compiler", "/META-INF/jk-java-compiler-sha256.txt"),
-            new Worker("jk-audit-runner", "/META-INF/jk-audit-runner-sha256.txt"),
-            new Worker("jk-publish-runner", "/META-INF/jk-publish-runner-sha256.txt"),
-            new Worker("jk-image-runner",   "/META-INF/jk-image-runner-sha256.txt"),
-            new Worker("jk-compat-runner",  "/META-INF/jk-compat-runner-sha256.txt"),
-            new Worker("jk-git-runner",     "/META-INF/jk-git-runner-sha256.txt"));
-
     /** Per-worker progress callbacks. */
     public interface Observer {
         default void present(String artifact) {}
@@ -67,8 +53,8 @@ public final class JkWorkerSync {
         int fetched = 0;
         int missing = 0;
 
-        for (Worker w : WORKERS) {
-            String expectedSha = readSha(w.shaResource());
+        for (WorkerJar w : WorkerJar.values()) {
+            String expectedSha = w.expectedShaOrNull();
             if (expectedSha == null || expectedSha.isBlank()) {
                 continue;   // this jk build didn't bundle the resource — nothing to pin to
             }
@@ -110,13 +96,6 @@ public final class JkWorkerSync {
         URI base = m2.toUri();   // file:///<home>/.m2/repository/
         Journal journal = new Journal(cas.root());
         return RepoGroup.of(new MavenRepo("mavenLocal", base, new Http(), cas, journal));
-    }
-
-    private static String readSha(String resource) throws IOException {
-        try (InputStream in = JkWorkerSync.class.getResourceAsStream(resource)) {
-            if (in == null) return null;
-            return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
-        }
     }
 
     private static String shortSha(String sha) {
