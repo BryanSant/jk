@@ -2,18 +2,18 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.credential.RepoCredential;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 import dev.jkbuild.repo.RepoCredentialStore;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Mixin;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
  * {@code jk repo login <id>} — store credentials for an artifact repository,
@@ -23,26 +23,42 @@ import java.util.concurrent.Callable;
  * shell history and process listings). With {@code --username} the secret is
  * treated as a password (HTTP Basic); otherwise it's a bearer token.
  */
-@Command(name = "login", description = "Store credentials for an artifact repository")
-public final class RepoLoginCommand implements Callable<Integer> {
-
-    @Parameters(arity = "1", paramLabel = "<id>",
-            description = "Repository id (matches [repositories.<id>] in jk.toml).")
-    String id;
-
-    @Option(names = "--username", paramLabel = "<USER>",
-            description = "Use HTTP Basic auth with this username; read the password from stdin. "
-                    + "Without it, the stdin value is stored as a bearer token.")
-    String username;
-
-    @Option(names = "--credentials-dir", hidden = true,
-            description = "Override the credentials directory. Default: ~/.jk/repo-credentials.")
-    Path credentialsDir;
-
-    @Mixin GlobalOptions global;
+public final class RepoLoginCommand implements CliCommand {
 
     @Override
-    public Integer call() {
+    public String name() {
+        return "login";
+    }
+
+    @Override
+    public String description() {
+        return "Store credentials for an artifact repository";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<USER>",
+                        "Use HTTP Basic auth with this username; read the password from stdin. "
+                                + "Without it, the stdin value is stored as a bearer token.",
+                        "--username"),
+                Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/repo-credentials.",
+                        "--credentials-dir").hide());
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of("id", Arity.ONE,
+                "Repository id (matches [repositories.<id>] in jk.toml)."));
+    }
+
+    @Override
+    public int run(Invocation in) {
+        String id = in.positionals().get(0);
+        String username = in.value("username").orElse(null);
+        Path credentialsDir = in.value("credentials-dir").map(Path::of).orElse(null);
+        GlobalOptions global = GlobalOptions.from(in);
+
         String secret;
         try {
             secret = new String(System.in.readAllBytes(), StandardCharsets.UTF_8).strip();
@@ -59,7 +75,7 @@ public final class RepoLoginCommand implements Callable<Integer> {
         RepoCredential cred = (username != null && !username.isBlank())
                 ? new RepoCredential.Basic(username.strip(), secret)
                 : new RepoCredential.Bearer(secret);
-        store().write(id, cred);
+        store(credentialsDir).write(id, cred);
 
         if (!global.quiet) {
             System.out.println("Stored " + (username != null ? "basic" : "token")
@@ -68,7 +84,7 @@ public final class RepoLoginCommand implements Callable<Integer> {
         return 0;
     }
 
-    private RepoCredentialStore store() {
+    private static RepoCredentialStore store(Path credentialsDir) {
         return credentialsDir != null
                 ? new RepoCredentialStore(credentialsDir)
                 : new RepoCredentialStore();

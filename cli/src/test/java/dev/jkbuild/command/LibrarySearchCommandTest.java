@@ -9,7 +9,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
@@ -35,7 +34,7 @@ class LibrarySearchCommandTest {
 
     @Test
     void search_matches_substring_of_name_in_bundled_catalog() {
-        int exit = new CommandLine(new Jk()).execute("library", "search", "junit", "--show-layer");
+        int exit = Jk.execute("library", "search", "junit", "--show-layer");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("junit-jupiter");
@@ -48,7 +47,7 @@ class LibrarySearchCommandTest {
     void search_matches_substring_of_group() {
         // "springframework" appears in groups (org.springframework.boot) but
         // not in names — exercises the group-field branch of the matcher.
-        int exit = new CommandLine(new Jk()).execute("library", "search", "springframework");
+        int exit = Jk.execute("library", "search", "springframework");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("spring-boot-starter");
@@ -58,7 +57,7 @@ class LibrarySearchCommandTest {
     @Test
     void search_AND_semantics_with_multiple_terms() {
         // Both "spring" and "starter" must appear somewhere.
-        int exit = new CommandLine(new Jk()).execute(
+        int exit = Jk.execute(
                 "library", "search", "spring", "starter");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
@@ -69,14 +68,14 @@ class LibrarySearchCommandTest {
 
     @Test
     void search_is_case_insensitive() {
-        int exit = new CommandLine(new Jk()).execute("library", "search", "PICOCLI");
+        int exit = Jk.execute("library", "search", "PICOCLI");
         assertThat(exit).isZero();
         assertThat(out.toString(StandardCharsets.UTF_8)).contains("picocli");
     }
 
     @Test
     void search_with_no_matches_returns_nonzero_and_clear_message() {
-        int exit = new CommandLine(new Jk()).execute(
+        int exit = Jk.execute(
                 "library", "search", "definitely-not-in-registry-xyz");
         assertThat(exit).isOne();
         assertThat(out.toString(StandardCharsets.UTF_8)).contains("No matches");
@@ -90,7 +89,7 @@ class LibrarySearchCommandTest {
                 Coordinate.of("org.junit.jupiter", "junit-jupiter", "6.1.0"),
                 "pom", "a", 1, "central", "u");
 
-        int exit = new CommandLine(new Jk()).execute(
+        int exit = Jk.execute(
                 "library", "search", "junit", "--offline", "--cache-dir", cache.toString());
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
@@ -103,7 +102,7 @@ class LibrarySearchCommandTest {
     @Test
     void offline_with_nothing_cached_reports_no_local_matches(@TempDir Path tempDir) {
         Path cache = tempDir.resolve("cache");
-        int exit = new CommandLine(new Jk()).execute(
+        int exit = Jk.execute(
                 "library", "search", "junit", "--offline", "--cache-dir", cache.toString());
         assertThat(exit).isOne();
         assertThat(out.toString(StandardCharsets.UTF_8)).contains("No matches (cached locally)");
@@ -111,7 +110,7 @@ class LibrarySearchCommandTest {
 
     @Test
     void search_limit_truncates_with_explanatory_footer() {
-        int exit = new CommandLine(new Jk()).execute(
+        int exit = Jk.execute(
                 "library", "search", "kotlin", "--limit", "1");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);

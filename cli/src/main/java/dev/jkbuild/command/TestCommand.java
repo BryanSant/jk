@@ -13,13 +13,14 @@ import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -38,27 +39,23 @@ import java.util.stream.Stream;
  * use): each completion ticks the numerator, each failure becomes a
  * {@code ctx.error}, discovery grows the denominator.
  */
-@Command(name = "test", description = "Compile and run tests")
-public final class TestCommand implements Callable<Integer> {
+public final class TestCommand implements CliCommand {
 
-    @Option(names = "--profile", paramLabel = "<name>",
-            description = "Build profile to apply.")
+    @Override public String name() { return "test"; }
+    @Override public String description() { return "Compile and run tests"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<name>", "Build profile to apply.", "--profile"),
+                Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
+    }
+
     String profileName;
-
-    @Option(names = {"-w", "--workers"}, paramLabel = "<N>",
-            description = "Number of test-runner JVMs to fork in parallel. Each fork is fully "
-                    + "process-isolated and pulls test classes from a shared queue. Default 1.")
     Integer workers;
-
-    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
-
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root.")
     Path jdksDir;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    GlobalOptions global;
 
     // Populated by the pipeline's run-tests phase; read for the summary + exit code.
     // Value-equal to BuildPipeline.TEST_RESULT (same name + type), so it resolves
@@ -67,7 +64,12 @@ public final class TestCommand implements Callable<Integer> {
             GoalKey.of("test-result", JUnitLauncher.Result.class);
 
     @Override
-    public Integer call() throws IOException {
+    public int run(Invocation in) throws IOException {
+        this.profileName = in.value("profile").orElse(null);
+        this.workers = in.value("workers").map(Integer::parseInt).orElse(null);
+        this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.global = GlobalOptions.from(in);
         Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");

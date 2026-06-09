@@ -21,9 +21,11 @@ import dev.jkbuild.model.Scope;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -32,7 +34,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk run [-- <args>...]} — build the current project through the shared
@@ -52,28 +53,35 @@ import java.util.concurrent.Callable;
  * {@code .jar} argument is forwarded to the program, not executed. Use
  * {@code jk tool run} for a loose file or a published tool.
  */
-@Command(name = "run",
-        description = "Run the current project's designated target")
-public final class RunCommand implements Callable<Integer> {
+public final class RunCommand implements CliCommand {
 
-    @Parameters(arity = "0..*", paramLabel = "<args>",
-            description = "Arguments forwarded to the project's main method.")
+    @Override public String name() { return "run"; }
+    @Override public String description() { return "Run the current project's designated target"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+    }
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to the project's main method."));
+    }
+
     List<String> positional = new ArrayList<>();
-
-    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
-
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root.")
     Path jdksDir;
-
-    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    dev.jkbuild.cli.BuildOptions buildOpts;
+    GlobalOptions global;
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        this.positional = in.positionals();
+        this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.buildOpts = new dev.jkbuild.cli.BuildOptions();
+        this.buildOpts.skipTests = in.isSet("skip-tests");
+        this.global = GlobalOptions.from(in);
+
         Path projectDir = global.workingDir();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {

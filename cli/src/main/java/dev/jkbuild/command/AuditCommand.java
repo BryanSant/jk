@@ -13,11 +13,12 @@ import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.io.IOException;
 import java.net.URI;
@@ -26,7 +27,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk audit} — scan the lockfile against OSV (PRD §23.5). Exits
@@ -40,29 +40,28 @@ import java.util.concurrent.Callable;
  * {@code query-osv} (IO) forks the worker and streams NDJSON findings back;
  * {@code evaluate} (SYNC) applies the severity threshold.
  */
-@Command(name = "audit", description = "Check the locked dependencies for known vulnerabilities")
-public final class AuditCommand implements Callable<Integer> {
+public final class AuditCommand implements CliCommand {
 
-    @Option(names = "--severity",
-            description = "Fail when any finding is at least this severe. "
-                    + "One of CRITICAL, HIGH, MEDIUM, LOW. Default: LOW.")
-    String severity = "LOW";
-
-    @Option(names = "--osv-batch-url", hidden = true,
-            description = "Override the OSV batch query URL (for tests).")
+    @Override public String name() { return "audit"; }
+    @Override public String description() { return "Check the locked dependencies for known vulnerabilities"; }
+    @Override public java.util.List<Opt> options() {
+        return java.util.List.of(
+                Opt.value("<level>", "Fail when any finding is at least this severe. One of CRITICAL, HIGH, MEDIUM, LOW. Default: LOW.", "--severity"),
+                Opt.value("<url>", "Override the OSV batch query URL (for tests).", "--osv-batch-url").hide(),
+                Opt.value("<url>", "Override the OSV vulnerability lookup URL (for tests).", "--osv-vulns-url").hide());
+    }
     URI osvBatchUrl;
-
-    @Option(names = "--osv-vulns-url", hidden = true,
-            description = "Override the OSV vulnerability lookup URL (for tests).")
     URI osvVulnsUrl;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
 
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> FINDINGS = GoalKey.of("findings", List.class);
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        GlobalOptions global = GlobalOptions.from(in);
+        this.osvBatchUrl = in.value("osv-batch-url").map(java.net.URI::create).orElse(null);
+        this.osvVulnsUrl = in.value("osv-vulns-url").map(java.net.URI::create).orElse(null);
+        String severity = in.value("severity").orElse("LOW");
         Path projectDir = global.workingDir();
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(lockPath)) {

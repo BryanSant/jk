@@ -15,9 +15,11 @@ import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
 import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.net.URI;
@@ -25,7 +27,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk tool run <coord|file> -- <args>} — ephemerally run a tool or a
@@ -43,43 +44,45 @@ import java.util.concurrent.Callable;
  * <p>{@code jk activate} scripts also expose this on the path as a
  * {@code jkx} alias for uvx-style muscle memory.
  */
-@Command(name = "run",
-        description = "Ephemerally run a tool from a Maven coord, or a .java/.kt/.kts/.jar file")
-public final class ToolRunCommand implements Callable<Integer> {
+public final class ToolRunCommand implements CliCommand {
 
-    @Parameters(index = "0", arity = "1", paramLabel = "<coord|file>",
-            description = "Maven coordinate (group:artifact:version), or a "
-                    + ".java/.kt/.kts/.jar file to execute.")
+    @Override public String name() { return "run"; }
+    @Override public String description() { return "Ephemerally run a tool from a Maven coord, or a .java/.kt/.kts/.jar file"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<class>", "Override the Main-Class to exec (coordinate targets only).", "--main"),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the jk state directory.", "--state-dir").hide(),
+                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url").hide(),
+                Opt.flag("Ignore cached classes and recompile (file targets only).", "--force-recompile"));
+    }
+    @Override public List<Param> parameters() {
+        // The tool args after the target are captured as trailing positionals via ZERO_OR_MORE
+        return List.of(
+                Param.of("coord|file", Arity.ONE, "Maven coordinate or .java/.kt/.kts/.jar file."),
+                Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to the program."));
+    }
+
     String target;
-
-    @Option(names = "--main",
-            description = "Override the Main-Class to exec (coordinate targets only).")
     String mainClass;
-
-    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
-
-    @Option(names = "--state-dir", hidden = true,
-            description = "Override the jk state directory. Default: $JK_STATE_DIR.")
     Path stateDirOverride;
-
-    @Option(names = "--repo-url", hidden = true,
-            description = "Override the Maven repository URL (for tests).")
     URI repoUrl;
-
-    @Option(names = "--force-recompile",
-            description = "Ignore cached classes and recompile (file targets only).")
     boolean forceRecompile;
-
-    @Parameters(index = "1..*", arity = "0..*", paramLabel = "<args>",
-            description = "Arguments forwarded to the program (separate from jk's own flags with `--`).")
     List<String> toolArgs = new ArrayList<>();
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    GlobalOptions global;
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        List<String> positionals = in.positionals();
+        this.target = positionals.isEmpty() ? "" : positionals.get(0);
+        this.toolArgs = positionals.size() > 1 ? positionals.subList(1, positionals.size()) : List.of();
+        this.mainClass = in.value("main").orElse(null);
+        this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
+        this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
+        this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
+        this.forceRecompile = in.isSet("force-recompile");
+        this.global = GlobalOptions.from(in);
         // A file target (by extension) is compiled/run by ScriptRunner; the
         // extension is the signal even when the file is missing, so the user
         // gets a proper "not found" error from the matching mode handler.

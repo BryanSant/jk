@@ -38,9 +38,10 @@ import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.net.URI;
 import java.nio.file.Files;
@@ -66,34 +67,46 @@ import java.util.concurrent.atomic.AtomicInteger;
  * are filtered out (they're injected at build time via
  * {@link dev.jkbuild.config.WorkspaceClasspath}).
  */
-@Command(name = "lock", description = "Resolve versions for dependencies and write jk.lock")
-public final class LockCommand implements Callable<Integer> {
+public final class LockCommand implements CliCommand {
 
-    @Option(names = "--features", paramLabel = "<a,b,...>", split = ",",
-            description = "Activate the listed features in addition to defaults.")
-    List<String> features = List.of();
+    private List<String> features = List.of();
+    private boolean noDefaultFeatures;
+    private URI repoUrl;
+    private Path cacheDir;
+    private GlobalOptions global;
 
-    @Option(names = "--no-default-features",
-            description = "Don't activate the project's default features.")
-    boolean noDefaultFeatures;
+    @Override
+    public String name() {
+        return "lock";
+    }
 
-    @Option(names = "--repo-url",
-            description = "Override declared repos with a single URL.",
-            hidden = true)
-    URI repoUrl;
+    @Override
+    public String description() {
+        return "Resolve versions for dependencies and write jk.lock";
+    }
 
-    @Option(names = "--cache-dir",
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
-            hidden = true)
-    Path cacheDir;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<a,b,...>", "Activate the listed features in addition to defaults.", "--features")
+                        .splitOn(","),
+                Opt.flag("Don't activate the project's default features.", "--no-default-features"),
+                Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
+                Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                        "--cache-dir").hide());
+    }
 
     private static final GoalKey<JkBuild> EFFECTIVE = GoalKey.of("effective-build", JkBuild.class);
     private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
 
     @Override
-    public Integer call() throws Exception {
+    public int run(Invocation in) throws Exception {
+        this.features = in.values("features");
+        this.noDefaultFeatures = in.isSet("no-default-features");
+        this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
+        this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+        this.global = GlobalOptions.from(in);
+
         Path dir = global.workingDir();
         if (!Files.exists(dir.resolve("jk.toml"))) {
             System.err.println("jk lock: no jk.toml in " + dir);

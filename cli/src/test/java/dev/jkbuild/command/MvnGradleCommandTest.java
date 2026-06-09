@@ -10,7 +10,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -144,8 +143,7 @@ class MvnGradleCommandTest {
     }
 
     private static int run(String... args) {
-        CommandLine cmd = Jk.newCommandLine();
-        return cmd.execute(args);
+        return Jk.execute(args);
     }
 
     /**

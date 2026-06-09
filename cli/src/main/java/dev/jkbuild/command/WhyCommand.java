@@ -2,39 +2,47 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Param;
 import dev.jkbuild.resolver.Provenance;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.stream.Collectors;
 
 /**
  * {@code jk why &lt;module&gt;} — explain why a module is in the dependency graph.
  */
-@Command(name = "why", description = "Explain why a module is in the dependency graph")
-public final class WhyCommand implements Callable<Integer> {
-
-    @Parameters(arity = "1", paramLabel = "<dependency>",
-            description = "group or artifact or substring")
-    String moduleArg;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+public final class WhyCommand implements CliCommand {
 
     @Override
-    public Integer call() throws IOException {
-        Path dir = global.workingDir();
+    public String name() {
+        return "why";
+    }
+
+    @Override
+    public String description() {
+        return "Explain why a module is in the dependency graph";
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of("dependency", Arity.ONE, "group or artifact or substring"));
+    }
+
+    @Override
+    public int run(Invocation in) throws IOException {
+        Path dir = new GlobalOptions().workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
@@ -42,7 +50,7 @@ public final class WhyCommand implements Callable<Integer> {
             return 2;
         }
 
-        String query = moduleOnly(moduleArg);
+        String query = moduleOnly(in.positionals().get(0));
         JkBuild project = JkBuildParser.parse(buildFile);
         Lockfile lock = LockfileReader.read(lockFile);
 

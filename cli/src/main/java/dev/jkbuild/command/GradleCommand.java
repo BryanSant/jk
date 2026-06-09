@@ -4,46 +4,48 @@ package dev.jkbuild.command;
 import dev.jkbuild.compat.PassthroughEnv;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkResolver;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk gradle ...} — passthrough to Gradle (PRD §24.1). Mirrors
  * {@link MvnCommand}: provisions via {@code jk-compat-runner}, then execs
  * {@code bin/gradle} directly.
  */
-@Command(
-        name = "gradle",
-        description = "Passthrough to Gradle (jk manages the install)",
-        mixinStandardHelpOptions = false)
-public final class GradleCommand implements Callable<Integer> {
+public final class GradleCommand implements CliCommand {
 
-    @Option(names = {"-C", "--directory"})
-    Path directory;
-
-    @Option(names = "--tools-dir", hidden = true)
-    Path toolsDir;
-
-    @Option(names = "--jdks-dir", hidden = true)
-    Path jdksDir;
-
-    @Option(names = "--no-discover")
-    boolean noDiscover;
-
-    @Parameters(arity = "0..*", paramLabel = "<args>")
-    List<String> args = new ArrayList<>();
+    @Override public String name() { return "gradle"; }
+    @Override public String description() { return "Passthrough to Gradle (jk manages the install)"; }
+    @Override public boolean passthrough() { return true; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<dir>", "Project directory.", "-C", "--directory"),
+                Opt.value("<dir>", "Override the tools install root.", "--tools-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.flag("Skip tool discovery.", "--no-discover"));
+    }
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to Gradle."));
+    }
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        Path directory = in.value("directory").map(Path::of).orElse(null);
+        Path toolsDir = in.value("tools-dir").map(Path::of).orElse(null);
+        Path jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        boolean noDiscover = in.isSet("no-discover");
+        List<String> args = in.positionals();
+
         Path projectDir = directory != null
                 ? directory.toAbsolutePath().normalize()
                 : Path.of(".").toAbsolutePath().normalize();

@@ -5,7 +5,6 @@ import dev.jkbuild.cli.Jk;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -118,7 +117,6 @@ class ExportCommandTest {
     }
 
     private static int run(String... args) {
-        CommandLine cmd = Jk.newCommandLine();
-        return cmd.execute(args);
+        return Jk.execute(args);
     }
 }

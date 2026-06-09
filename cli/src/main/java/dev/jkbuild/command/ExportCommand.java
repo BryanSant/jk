@@ -8,9 +8,11 @@ import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -18,26 +20,27 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk export <file>} — emit a Maven-Central-grade {@code pom.xml} from
  * {@code jk.toml} via the {@code jk-compat-runner} worker (PRD §24.4).
  */
-@Command(name = "export", description = "Emit a Maven pom.xml from jk.toml")
-public final class ExportCommand implements Callable<Integer> {
+public final class ExportCommand implements CliCommand {
 
-    @Parameters(arity = "1", paramLabel = "<file>",
-            description = "Target file: pom.xml (Gradle export is v1.1+).")
-    Path target;
-
-    @Option(names = "--force", description = "Overwrite an existing pom.xml.")
-    boolean force;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    @Override public String name() { return "export"; }
+    @Override public String description() { return "Emit a Maven pom.xml from jk.toml"; }
+    @Override public List<Opt> options() {
+        return List.of(Opt.flag("Overwrite an existing pom.xml.", "--force"));
+    }
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("file", Arity.ONE, "Target file: pom.xml (Gradle export is v1.1+)."));
+    }
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        Path target = Path.of(in.positionals().get(0));
+        boolean force = in.isSet("force");
+        GlobalOptions global = GlobalOptions.from(in);
         String filename = target.getFileName().toString().toLowerCase(Locale.ROOT);
         if (!filename.equals("pom.xml")) {
             if (filename.startsWith("build.gradle")) {

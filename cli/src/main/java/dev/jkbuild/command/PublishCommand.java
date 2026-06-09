@@ -16,13 +16,14 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.io.IOException;
 import java.net.URI;
@@ -33,7 +34,6 @@ import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk publish} — assembles, signs, and uploads Maven artifacts via the
@@ -44,74 +44,69 @@ import java.util.concurrent.Callable;
  * worker which streams {@code ##JKPU:} NDJSON progress back. SNAPSHOT versions are
  * refused unless {@code --allow-snapshot} is set (PRD §21.4).
  */
-@Command(name = "publish", description = "Publish artifacts to a package repository")
-public final class PublishCommand implements Callable<Integer> {
+public final class PublishCommand implements CliCommand {
 
-    @Option(names = "--repo-url", required = true,
-            description = "Target Maven repository base URL.")
+    @Override public String name() { return "publish"; }
+    @Override public String description() { return "Publish artifacts to a package repository"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<url>", "Target Maven repository base URL.", "--repo-url").require(),
+                Opt.value("<user>", "HTTP Basic auth username (or via PUBLISH_USER env).", "--user"),
+                Opt.value("<pass>", "HTTP Basic auth password (or via PUBLISH_PASSWORD env).", "--password"),
+                Opt.value("<REGION>", "Object-store region for s3:// / gs:// targets.", "--region"),
+                Opt.value("<URL>", "Object-store endpoint override for s3:// (MinIO/S3-compatible).", "--endpoint"),
+                Opt.value("<file>", "Override the main jar path. Default: target/<artifact>-<version>.jar.", "--jar"),
+                Opt.flag("Skip the sources jar.", "--no-sources"),
+                Opt.flag("Permit publishing -SNAPSHOT versions (refused by default per PRD §21.4).", "--allow-snapshot"),
+                Opt.flag("Assemble and print the upload plan without making HTTP requests.", "--dry-run"),
+                Opt.flag("Emit a detached .asc GPG signature for every artifact.", "--sign"),
+                Opt.value("<file>", "Path to the GPG secret key (armored or binary). Required with --sign.", "--key-file"),
+                Opt.value("<pass>", "Passphrase for the secret key, or via JK_GPG_PASSPHRASE env.", "--key-passphrase"),
+                Opt.flag("Sign each artifact with Sigstore keyless OIDC (.sigstore file).", "--sigstore"),
+                Opt.flag("Emit a SLSA v1 in-toto provenance statement (.intoto.json) for the main jar.", "--slsa"),
+                Opt.flag("Emit CycloneDX 1.6 (-cyclonedx.json) and SPDX 2.3 (-spdx.json) SBOMs.", "--sbom"));
+    }
+
     URI repoUrl;
-
-    @Option(names = "--user", description = "HTTP Basic auth username (or via PUBLISH_USER env).")
     String username;
-
-    @Option(names = "--password", description = "HTTP Basic auth password (or via PUBLISH_PASSWORD env).",
-            interactive = false, arity = "0..1")
     String password;
-
-    @Option(names = "--region", paramLabel = "<REGION>",
-            description = "Object-store region for s3:// / gs:// targets.")
     String region;
-
-    @Option(names = "--endpoint", paramLabel = "<URL>",
-            description = "Object-store endpoint override for s3:// (MinIO/S3-compatible).")
     String endpoint;
-
-    @Option(names = "--jar",
-            description = "Override the main jar path. Default: target/<artifact>-<version>.jar.")
     Path jarPath;
-
-    @Option(names = "--no-sources", description = "Skip the sources jar.")
     boolean noSources;
-
-    @Option(names = "--allow-snapshot",
-            description = "Permit publishing -SNAPSHOT versions (refused by default per PRD §21.4).")
     boolean allowSnapshot;
-
-    @Option(names = "--dry-run",
-            description = "Assemble and print the upload plan without making HTTP requests.")
     boolean dryRun;
-
-    @Option(names = "--sign", description = "Emit a detached .asc GPG signature for every artifact.")
     boolean sign;
-
-    @Option(names = "--key-file",
-            description = "Path to the GPG secret key (armored or binary). Required with --sign.")
     Path keyFile;
-
-    @Option(names = "--key-passphrase",
-            description = "Passphrase for the secret key, or via JK_GPG_PASSPHRASE env.")
     String keyPassphrase;
-
-    @Option(names = "--sigstore",
-            description = "Sign each artifact with Sigstore keyless OIDC (.sigstore file).")
     boolean sigstore;
-
-    @Option(names = "--slsa",
-            description = "Emit a SLSA v1 in-toto provenance statement (.intoto.json) for the main jar.")
     boolean slsa;
-
-    @Option(names = "--sbom",
-            description = "Emit CycloneDX 1.6 (-cyclonedx.json) and SPDX 2.3 (-spdx.json) SBOMs.")
     boolean sbom;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    GlobalOptions global;
 
     private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
     private static final GoalKey<Path> JAR = GoalKey.of("jar", Path.class);
     private static final GoalKey<String> PUB_SUMMARY = GoalKey.of("pub-summary", String.class);
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
+        this.username = in.value("user").orElse(null);
+        this.password = in.value("password").orElse(null);
+        this.region = in.value("region").orElse(null);
+        this.endpoint = in.value("endpoint").orElse(null);
+        this.jarPath = in.value("jar").map(Path::of).orElse(null);
+        this.noSources = in.isSet("no-sources");
+        this.allowSnapshot = in.isSet("allow-snapshot");
+        this.dryRun = in.isSet("dry-run");
+        this.sign = in.isSet("sign");
+        this.keyFile = in.value("key-file").map(Path::of).orElse(null);
+        this.keyPassphrase = in.value("key-passphrase").orElse(null);
+        this.sigstore = in.isSet("sigstore");
+        this.slsa = in.isSet("slsa");
+        this.sbom = in.isSet("sbom");
+        this.global = GlobalOptions.from(in);
+
         Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {

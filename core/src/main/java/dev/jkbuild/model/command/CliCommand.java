@@ -27,6 +27,20 @@ public interface CliCommand extends Command {
         return subcommands().isEmpty();
     }
 
+    /** True to omit this command from the top-level help listing (still dispatchable). */
+    default boolean hidden() {
+        return false;
+    }
+
+    /**
+     * True when unrecognized options should be forwarded as positional arguments
+     * rather than treated as errors — needed for passthrough commands like
+     * {@code jk mvn} / {@code jk gradle} that relay unknown flags to a child process.
+     */
+    default boolean passthrough() {
+        return false;
+    }
+
     /**
      * Execute with the parsed arguments; return the process exit code
      * (0 = success). Parent commands typically print help and return a usage

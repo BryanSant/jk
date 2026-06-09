@@ -2,33 +2,44 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.resolver.DependencyTree;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /** {@code jk tree} — print the resolved dependency tree. */
-@Command(name = "tree", description = "Print the resolved dependency tree")
-public final class TreeCommand implements Callable<Integer> {    @Option(names = "--depth",
-            description = "Maximum tree depth. Default: unlimited.")
-    Integer depth;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+public final class TreeCommand implements CliCommand {
 
     @Override
-    public Integer call() throws IOException {
-        Path dir = global.workingDir();
+    public String name() {
+        return "tree";
+    }
+
+    @Override
+    public String description() {
+        return "Print the resolved dependency tree";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(Opt.value("<depth>", "Maximum tree depth. Default: unlimited.", "--depth"));
+    }
+
+    @Override
+    public int run(Invocation in) throws IOException {
+        Integer depth = in.value("depth").map(Integer::parseInt).orElse(null);
+        Path dir = new GlobalOptions().workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {

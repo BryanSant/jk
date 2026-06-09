@@ -17,8 +17,9 @@ import dev.jkbuild.jdk.JdkVendor;
 import dev.jkbuild.resolver.Versions;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.net.URI;
@@ -31,7 +32,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
-import java.util.concurrent.Callable;
 import java.util.regex.Pattern;
 
 /**
@@ -50,23 +50,21 @@ import java.util.regex.Pattern;
  * {@code --all} the command is purely offline; with {@code --all},
  * network failure degrades to installed-only rows with a stderr warning.
  */
-@Command(name = "list", description = "List installed JDKs (use --all to also show available ones)")
-public final class JdkListCommand implements Callable<Integer> {
+public final class JdkListCommand implements CliCommand {
 
-    @Option(names = "--all",
-            description = "Also list JDKs available for download from the JetBrains feed.")
+    @Override public String name() { return "list"; }
+    @Override public String description() { return "List installed JDKs (use --all to also show available ones)"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.flag("Also list JDKs available for download from the JetBrains feed.", "--all"),
+                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide(),
+                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url").hide(),
+                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file").hide());
+    }
+
     boolean all;
-
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
-
-    @Option(names = "--feed-url", hidden = true,
-            description = "Override the JetBrains JDK feed URL (for tests).")
     URI feedUrl;
-
-    @Option(names = "--cache-file", hidden = true,
-            description = "Override the catalog cache path (for tests).")
     Path cacheFile;
 
     enum Status {
@@ -86,7 +84,11 @@ public final class JdkListCommand implements Callable<Integer> {
     record Row(int major, String vendor, String spec, Status status, String location) {}
 
     @Override
-    public Integer call() throws Exception {
+    public int run(Invocation in) throws Exception {
+        this.all = in.isSet("all");
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.feedUrl = in.value("feed-url").map(URI::create).orElse(null);
+        this.cacheFile = in.value("cache-file").map(Path::of).orElse(null);
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         Path jdksRoot = registry.jdksRoot();
         List<JdkHit> installed = registry.listHits();
@@ -120,6 +122,8 @@ public final class JdkListCommand implements Callable<Integer> {
         }
         return 0;
     }
+
+    @Override public String toString() { return "jdk list"; }
 
     static List<Row> buildRows(
             List<JdkHit> installed,

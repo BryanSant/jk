@@ -2,14 +2,14 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.jdk.JdkRegistry;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
  * {@code jk shell} — spawn a subshell with the env the project would have
@@ -21,16 +21,29 @@ import java.util.concurrent.Callable;
  * {@code /bin/sh}) and inherits stdio. Native cmd / PowerShell wiring lands
  * in a follow-up.
  */
-@Command(name = "shell", description = "Spawn a subshell with the project's pinned JDK on PATH")
-public final class ShellCommand implements Callable<Integer> {    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
-    Path jdksDir;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+public final class ShellCommand implements CliCommand {
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
-        Path dir = global.workingDir();
+    public String name() {
+        return "shell";
+    }
+
+    @Override
+    public String description() {
+        return "Spawn a subshell with the project's pinned JDK on PATH";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(Opt.value("<dir>",
+                "Override the JDK install root. Default: the IntelliJ JDK directory.",
+                "--jdks-dir").hide());
+    }
+
+    @Override
+    public int run(Invocation in) throws IOException, InterruptedException {
+        Path jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        Path dir = new GlobalOptions().workingDir();
         var origPath = System.getenv().getOrDefault("PATH", "");
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         var target = new JkEnv(registry, origPath).resolve(dir);

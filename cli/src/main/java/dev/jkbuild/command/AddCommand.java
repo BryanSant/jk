@@ -21,9 +21,11 @@ import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.net.URI;
@@ -32,7 +34,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk add &lt;coord|path&gt;} — add a dependency (or a local workspace
@@ -58,57 +59,74 @@ import java.util.concurrent.Callable;
  *
  * <p>Pass {@code --ping} to check availability without modifying anything.
  */
-@Command(name = "add", description = "Add a dependency, or workspace member, to jk.toml")
-public final class AddCommand implements Callable<Integer> {
+public final class AddCommand implements CliCommand {
 
-    @Parameters(arity = "1", paramLabel = "[dep|path]",
-            description = {
-                    "A dependency by its short-name, group:artifact@version, or group:artifact:version",
-                    "...or a local workspace member (:name or a relative path like ./foo/bar)."
-            })
-    String coord;
-
-    @Option(names = "--library",
-            description = "Library handle used as the manifest key. Defaults to the name.")
-    String libraryFlag;
-
-    @Option(names = "--group",
-            description = "Maven groupId. Required when the positional argument is a bare short name.")
-    String groupFlag;
-
-    @Option(names = "--name",
-            description = "Dependency name (Maven artifactId). Defaults to the library handle.")
-    String nameFlag;
-
-    // We can't use `--version` here: it collides with the global `--version`
-    // flag on the parent command. Picocli rejects duplicate option names even
-    // when the global lives on a Mixin. `--ver` is the next-best abbreviation.
-    @Option(names = "--ver",
-            description = "Version selector (e.g. \"3.4.0\", \"=3.4.0\", \"~3.4\"). "
-                    + "Required when the positional argument is a bare short name.")
-    String versionFlag;
-
-    // Mutually-exclusive scope flags. Default (no flag) = main.
-    // Inlined rather than wrapped in @ArgGroup because picocli-codegen 4.7.7
-    // can't generate native-image reflection config for that pattern; we
-    // enforce exclusivity by hand below.
-    @Option(names = "--test",      description = "Test scope")
-    boolean test;
-    @Option(names = "--runtime",   description = "Runtime scope")
-    boolean runtime;
-    @Option(names = "--provided",  description = "Provided scope")
-    boolean provided;
-    @Option(names = "--processor", description = "Annotation processor scope")
-    boolean processor;
-
-    @Option(names = "--ping",
-            description = "Check whether the dependency is reachable in configured repos without adding it.")
-    boolean ping;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    private String coord;
+    private String libraryFlag;
+    private String groupFlag;
+    private String nameFlag;
+    private String versionFlag;
+    private boolean test;
+    private boolean runtime;
+    private boolean provided;
+    private boolean processor;
+    private boolean ping;
+    private GlobalOptions global;
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public String name() {
+        return "add";
+    }
+
+    @Override
+    public String description() {
+        return "Add a dependency, or workspace member, to jk.toml";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<handle>", "Library handle used as the manifest key. Defaults to the name.",
+                        "--library"),
+                Opt.value("<group>",
+                        "Maven groupId. Required when the positional argument is a bare short name.",
+                        "--group"),
+                Opt.value("<name>", "Dependency name (Maven artifactId). Defaults to the library handle.",
+                        "--name"),
+                // --version collides with the global --version, so jk uses --ver.
+                Opt.value("<ver>",
+                        "Version selector (e.g. \"3.4.0\", \"=3.4.0\", \"~3.4\"). "
+                                + "Required when the positional argument is a bare short name.",
+                        "--ver"),
+                Opt.flag("Test scope", "--test"),
+                Opt.flag("Runtime scope", "--runtime"),
+                Opt.flag("Provided scope", "--provided"),
+                Opt.flag("Annotation processor scope", "--processor"),
+                Opt.flag("Check whether the dependency is reachable in configured repos without adding it.",
+                        "--ping"));
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of("dep|path", Arity.ONE,
+                "A dependency by its short-name, group:artifact@version, or group:artifact:version\n"
+                        + "...or a local workspace member (:name or a relative path like ./foo/bar)."));
+    }
+
+    @Override
+    public int run(Invocation in) throws IOException, InterruptedException {
+        this.coord = in.positionals().get(0);
+        this.libraryFlag = in.value("library").orElse(null);
+        this.groupFlag = in.value("group").orElse(null);
+        this.nameFlag = in.value("name").orElse(null);
+        this.versionFlag = in.value("ver").orElse(null);
+        this.test = in.isSet("test");
+        this.runtime = in.isSet("runtime");
+        this.provided = in.isSet("provided");
+        this.processor = in.isSet("processor");
+        this.ping = in.isSet("ping");
+        this.global = GlobalOptions.from(in);
+
         Path dir = global.workingDir();
 
         // Local path argument: either a regular file (jk add ./libs/foo.jar)

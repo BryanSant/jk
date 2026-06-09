@@ -10,16 +10,15 @@ import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk native} — build a GraalVM-compiled native binary for the project,
@@ -31,32 +30,37 @@ import java.util.concurrent.Callable;
  * <p>The GraalVM JDK is the project's pinned JDK (else the running JVM);
  * classpath is the freshly-built main jar plus {@code jk.lock}'s runtime deps.
  */
-@Command(name = "native",
-        description = "Build a native binary with GraalVM")
-public final class NativeCommand implements Callable<Integer> {
+public final class NativeCommand implements CliCommand {
 
-    @Option(names = "--main",
-            description = "Main class to compile. Default: read from jk.toml's image.main-class.")
+    @Override public String name() { return "native"; }
+    @Override public String description() { return "Build a native binary with GraalVM"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<class>", "Main class to compile. Default: read from jk.toml's image.main-class.", "--main"),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+    }
+    @Override public List<dev.jkbuild.model.command.Param> parameters() {
+        return List.of(dev.jkbuild.model.command.Param.of("native-image-args", dev.jkbuild.model.command.Arity.ZERO_OR_MORE, "Extra arguments forwarded to native-image (after --)"));
+    }
+
     String mainClass;
-
-    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
-
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
-
-    @Parameters(arity = "0..*", paramLabel = "<native-image-args>",
-            description = "Extra arguments forwarded to native-image (after --).")
     List<String> extra = new ArrayList<>();
-
-    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    dev.jkbuild.cli.BuildOptions buildOpts;
+    GlobalOptions global;
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        this.mainClass = in.value("main").orElse(null);
+        this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.extra = in.positionals();
+        this.buildOpts = new dev.jkbuild.cli.BuildOptions();
+        this.buildOpts.skipTests = in.isSet("skip-tests");
+        this.global = GlobalOptions.from(in);
         Path projectDir = global.workingDir();
         Path buildFile = projectDir.resolve("jk.toml");
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();

@@ -1,37 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Spec;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
 
-import java.util.concurrent.Callable;
+import java.util.List;
 
-/**
- * {@code jk tool} parent verb. Subcommands form the install / list /
- * uninstall / run / dir skeleton shared with {@code jk jdk}; they manage
- * CLI tools the user installs from Maven coordinates.
- *
- * <p>Build tools jk drives implicitly (mvn, gradle, kotlin) are
- * <i>not</i> managed here — those land via {@code jk mvn} / {@code jk
- * gradle} passthrough and are repaired via {@code jk doctor}.
- */
-@Command(name = "tool",
-        description = "Manage tools, scripts, and commands",
-        subcommands = {
-                ToolInstallCommand.class,
-                ToolListCommand.class,
-                ToolUninstallCommand.class,
-                ToolRunCommand.class,
-                ToolDirCommand.class,
-        })
-public final class ToolCommand implements Callable<Integer> {
+/** {@code jk tool} parent verb — manage tools, scripts, and commands. */
+public final class ToolCommand implements CliCommand {
 
-    @Spec CommandSpec spec;
+    @Override public String name() { return "tool"; }
+    @Override public String description() { return "Manage tools, scripts, and commands"; }
 
     @Override
-    public Integer call() {
-        spec.commandLine().usage(System.out);
-        return 64;
+    public List<CliCommand> subcommands() {
+        return List.of(new ToolInstallCommand(), new ToolListCommand(), new ToolUninstallCommand(), new ToolRunCommand(), new ToolDirCommand());
     }
+
+    @Override
+    public int run(Invocation in) { return 64; }
 }

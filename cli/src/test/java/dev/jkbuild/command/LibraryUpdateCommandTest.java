@@ -8,7 +8,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -126,7 +125,7 @@ class LibraryUpdateCommandTest {
     }
 
     private int run(Path cacheFile) {
-        return new CommandLine(new Jk()).execute(
+        return Jk.execute(
                 "library", "update",
                 "--source", base.toString(),
                 "--cache-file", cacheFile.toString());

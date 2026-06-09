@@ -23,8 +23,9 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -36,7 +37,6 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk build} — smart meta-goal that orchestrates the full pipeline:
@@ -60,28 +60,25 @@ import java.util.concurrent.Callable;
  *   <li>{@code write-stamp} (SYNC) — refresh the freshness stamp.</li>
  * </ol>
  */
-@Command(name = "build", description = "Compile, test, and package the project")
-public final class BuildCommand implements Callable<Integer> {
+public final class BuildCommand implements CliCommand {
 
-    @Option(names = "--profile", paramLabel = "<name>",
-            description = "Build profile to apply. Default: auto (ci if CI=true, else none).")
+    @Override public String name() { return "build"; }
+    @Override public String description() { return "Compile, test, and package the project"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<name>", "Build profile to apply. Default: auto (ci if CI=true, else none).", "--profile"),
+                Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+    }
+
     String profileName;
-
-    @Option(names = {"-w", "--workers"}, paramLabel = "<N>",
-            description = "Number of test-runner JVMs to fork in parallel. Default 1.")
     Integer workers;
-
-    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory.")
     Path cacheDir;
-
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root.")
     Path jdksDir;
-
-    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    dev.jkbuild.cli.BuildOptions buildOpts;
+    GlobalOptions global;
 
     // ---- GoalKeys -------------------------------------------------------
     //
@@ -97,7 +94,14 @@ public final class BuildCommand implements Callable<Integer> {
     // ---- Entry point ----------------------------------------------------
 
     @Override
-    public Integer call() throws Exception {
+    public int run(Invocation in) throws Exception {
+        this.profileName = in.value("profile").orElse(null);
+        this.workers = in.value("workers").map(Integer::parseInt).orElse(null);
+        this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.buildOpts = new dev.jkbuild.cli.BuildOptions();
+        this.buildOpts.skipTests = in.isSet("skip-tests");
+        this.global = GlobalOptions.from(in);
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {

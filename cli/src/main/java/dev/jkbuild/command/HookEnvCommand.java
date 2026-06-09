@@ -2,13 +2,13 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
-import java.nio.file.Path;
 import java.util.LinkedHashSet;
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
  * {@code jk hook-env -s <shell>} (hidden) — emitted by the activation script
@@ -20,24 +20,37 @@ import java.util.concurrent.Callable;
  * {@code __JK_DIFF} so leaving a project (or switching projects) can restore
  * the original values rather than appending forever.
  */
-@Command(name = "hook-env", hidden = true,
-        description = "Internal: emit env-sync commands for the current directory")
-public final class HookEnvCommand implements Callable<Integer> {
-
-    @Option(names = {"-s", "--shell"}, required = true,
-            description = "Shell: bash | zsh | fish | pwsh.")
-    String shellName;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+public final class HookEnvCommand implements CliCommand {
 
     @Override
-    public Integer call() throws IOException {
+    public String name() {
+        return "hook-env";
+    }
+
+    @Override
+    public String description() {
+        return "Internal: emit env-sync commands for the current directory";
+    }
+
+    @Override
+    public boolean hidden() {
+        return true;
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(Opt.value("<shell>", "Shell: bash | zsh | fish | pwsh.", "-s", "--shell").require());
+    }
+
+    @Override
+    public int run(Invocation in) throws IOException {
+        String shellName = in.value("shell").orElseThrow();
         var shell = Shell.byName(shellName);
         if (shell.isEmpty()) {
             System.err.println("jk hook-env: unsupported shell `" + shellName + "`");
             return 64;
         }
-        var cwd = global.workingDir();
+        var cwd = new GlobalOptions().workingDir();
         var env = JkEnv.defaults();
         var prevDiff = JkDiff.parse(System.getenv("__JK_DIFF"));
         var target = env.resolve(cwd);

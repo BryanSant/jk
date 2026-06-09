@@ -9,7 +9,6 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -269,7 +268,6 @@ class PublishCommandTest {
     }
 
     private static int run(String... args) {
-        CommandLine cmd = Jk.newCommandLine();
-        return cmd.execute(args);
+        return Jk.execute(args);
     }
 }

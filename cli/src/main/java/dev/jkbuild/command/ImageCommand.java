@@ -23,8 +23,9 @@ import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -33,7 +34,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk image} — build an OCI image for the project (PRD §22). Runs the
@@ -41,33 +41,29 @@ import java.util.concurrent.Callable;
  * {@code jk-image-runner} worker for the Jib-backed image step so Jib, Guava,
  * and the Google HTTP stack never load in the main jk process.
  */
-@Command(name = "image", description = "Bundle this project into an OCI image")
-public final class ImageCommand implements Callable<Integer> {
+public final class ImageCommand implements CliCommand {
 
-    @Option(names = "--main",
-            description = "Main class to set as the image entrypoint.")
+    @Override public String name() { return "image"; }
+    @Override public String description() { return "Bundle this project into an OCI image"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<class>", "Main class to set as the image entrypoint.", "--main"),
+                Opt.value("<registry>", "Override image.registry from jk.toml.", "--registry"),
+                Opt.value("<tag>", "Override image.tag from jk.toml.", "--tag"),
+                Opt.value("<path>", "Write an OCI tarball instead of pushing. Optional path.", "--tarball").withFallback(""),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+    }
+
     String mainClass;
-
-    @Option(names = "--registry",
-            description = "Override image.registry from jk.toml.")
     String registry;
-
-    @Option(names = "--tag",
-            description = "Override image.tag from jk.toml.")
     String tag;
-
-    @Option(names = "--tarball", arity = "0..1", fallbackValue = "",
-            description = "Write an OCI tarball instead of pushing. Optional path.")
     String tarballArg;
-
-    @Option(names = "--cache-dir", hidden = true)
     Path cacheDirOverride;
-
-    @Option(names = "--jdks-dir", hidden = true)
     Path jdksDir;
-
-    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    dev.jkbuild.cli.BuildOptions buildOpts;
+    GlobalOptions global;
 
     private static final GoalKey<ImageConfig>   CONFIG       = GoalKey.of("image-config", ImageConfig.class);
     private static final GoalKey<Path>          TARBALL_PATH = GoalKey.of("tarball-path", Path.class);
@@ -76,7 +72,16 @@ public final class ImageCommand implements Callable<Integer> {
     private static final GoalKey<String>        IMAGE_REF    = GoalKey.of("image-ref", String.class);
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        this.mainClass = in.value("main").orElse(null);
+        this.registry = in.value("registry").orElse(null);
+        this.tag = in.value("tag").orElse(null);
+        this.tarballArg = in.value("tarball").orElse(null);
+        this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.buildOpts = new dev.jkbuild.cli.BuildOptions();
+        this.buildOpts.skipTests = in.isSet("skip-tests");
+        this.global = GlobalOptions.from(in);
         Path projectDir = global.workingDir();
         Path jkBuildPath = projectDir.resolve("jk.toml");
         if (!Files.exists(jkBuildPath)) {
