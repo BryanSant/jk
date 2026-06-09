@@ -16,15 +16,15 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -205,44 +205,26 @@ public final class PublishCommand implements Callable<Integer> {
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
                     .resolve(isWindows() ? "java.exe" : "java");
-            List<String> cmd = new ArrayList<>();
-            cmd.add(javaExe.toString());
-            cmd.add("-jar");
-            cmd.add(workerJar.toString());
-            cmd.add(spec.toAbsolutePath().toString());
+            List<String> cmd = List.of(javaExe.toString(), "-jar",
+                    workerJar.toString(), spec.toAbsolutePath().toString());
 
-            ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
-            Process process = pb.start();
-
-            int files = 0;
-            String error = null;
+            int[] files = {0};
+            String[] error = {null};
             StringBuilder workerDiag = new StringBuilder();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.startsWith("##JKPU:")) {
-                        workerDiag.append(line).append('\n');
-                        continue;
-                    }
-                    String json = line.substring("##JKPU:".length());
-                    String t = readField(json, "t");
-                    if ("result".equals(t)) {
-                        String filesStr = readNumericField(json, "files");
-                        if (filesStr != null) files = Integer.parseInt(filesStr);
-                        error = readField(json, "error");
-                    }
+            int exit = WorkerProcess.run(cmd, "##JKPU:", json -> {
+                if ("result".equals(Ndjson.str(json, "t"))) {
+                    files[0] = Ndjson.intValue(json, "files", 0);
+                    error[0] = Ndjson.str(json, "error");
                 }
-            }
-            int exit = process.waitFor();
+            }, line -> workerDiag.append(line).append('\n'));
             if (exit != 0) {
                 String diag = workerDiag.length() > 0 ? workerDiag.toString().trim() : null;
                 throw new RuntimeException("publish worker failed"
-                        + (error != null ? ": " + error
+                        + (error[0] != null ? ": " + error[0]
                                 : diag != null ? ": " + diag
                                 : " (exit " + exit + ")"));
             }
-            return dryRun ? "(dry-run)" : "(" + files + " files)";
+            return dryRun ? "(dry-run)" : "(" + files[0] + " files)";
         } finally {
             Files.deleteIfExists(spec);
         }
@@ -314,41 +296,6 @@ public final class PublishCommand implements Callable<Integer> {
             }
         }
         return new RepoCredentialResolver().resolve(matchedName, repoUrl, inline);
-    }
-
-    private static String readField(String json, String key) {
-        String needle = "\"" + key + "\":\"";
-        int start = json.indexOf(needle);
-        if (start < 0) return null;
-        start += needle.length();
-        StringBuilder sb = new StringBuilder();
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '\\' && i + 1 < json.length()) {
-                char n = json.charAt(++i);
-                switch (n) {
-                    case '"' -> sb.append('"');
-                    case '\\' -> sb.append('\\');
-                    case 'n' -> sb.append('\n');
-                    default -> { sb.append('\\'); sb.append(n); }
-                }
-            } else if (c == '"') {
-                break;
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
-
-    private static String readNumericField(String json, String key) {
-        String needle = "\"" + key + "\":";
-        int start = json.indexOf(needle);
-        if (start < 0) return null;
-        start += needle.length();
-        int end = start;
-        while (end < json.length() && Character.isDigit(json.charAt(end))) end++;
-        return end > start ? json.substring(start, end) : null;
     }
 
     private static boolean isWindows() {

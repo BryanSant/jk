@@ -11,15 +11,15 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -153,39 +153,24 @@ public final class AuditCommand implements Callable<Integer> {
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
                     .resolve(isWindows() ? "java.exe" : "java");
-            List<String> cmd = new ArrayList<>();
-            cmd.add(javaExe.toString());
-            cmd.add("-jar");
-            cmd.add(workerJar.toString());
-            cmd.add(spec.toAbsolutePath().toString());
-
-            ProcessBuilder pb = new ProcessBuilder(cmd).redirectErrorStream(true);
-            Process process = pb.start();
+            List<String> cmd = List.of(javaExe.toString(), "-jar",
+                    workerJar.toString(), spec.toAbsolutePath().toString());
 
             List<AuditReport.Finding> findings = new ArrayList<>();
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.startsWith("##JKAU:")) continue;
-                    String json = line.substring("##JKAU:".length());
-                    String t = readField(json, "t");
-                    if ("finding".equals(t)) {
-                        String module   = readField(json, "module");
-                        String version  = readField(json, "version");
-                        String vulnId   = readField(json, "vuln_id");
-                        String severity = readField(json, "severity");
-                        String summary  = readField(json, "summary");
-                        if (module != null && version != null && vulnId != null) {
-                            findings.add(new AuditReport.Finding(
-                                    module, version, vulnId,
-                                    summary != null ? summary : "",
-                                    AuditReport.Severity.parse(severity)));
-                        }
-                    }
+            int exit = WorkerProcess.run(cmd, "##JKAU:", json -> {
+                if (!"finding".equals(Ndjson.str(json, "t"))) return;
+                String module   = Ndjson.str(json, "module");
+                String version  = Ndjson.str(json, "version");
+                String vulnId   = Ndjson.str(json, "vuln_id");
+                String severity = Ndjson.str(json, "severity");
+                String summary  = Ndjson.str(json, "summary");
+                if (module != null && version != null && vulnId != null) {
+                    findings.add(new AuditReport.Finding(
+                            module, version, vulnId,
+                            summary != null ? summary : "",
+                            AuditReport.Severity.parse(severity)));
                 }
-            }
-            int exit = process.waitFor();
+            }, null);
             if (exit != 0) {
                 throw new RuntimeException("audit worker exited with code " + exit);
             }
@@ -209,32 +194,6 @@ public final class AuditCommand implements Callable<Integer> {
      * Extract a JSON string field value from a simple NDJSON object without a
      * full parser. Handles basic backslash escapes but not surrogate pairs.
      */
-    private static String readField(String json, String key) {
-        String needle = "\"" + key + "\":\"";
-        int start = json.indexOf(needle);
-        if (start < 0) return null;
-        start += needle.length();
-        StringBuilder sb = new StringBuilder();
-        for (int i = start; i < json.length(); i++) {
-            char c = json.charAt(i);
-            if (c == '\\' && i + 1 < json.length()) {
-                char next = json.charAt(++i);
-                switch (next) {
-                    case '"' -> sb.append('"');
-                    case '\\' -> sb.append('\\');
-                    case 'n' -> sb.append('\n');
-                    case 'r' -> sb.append('\r');
-                    case 't' -> sb.append('\t');
-                    default  -> { sb.append('\\'); sb.append(next); }
-                }
-            } else if (c == '"') {
-                break;
-            } else {
-                sb.append(c);
-            }
-        }
-        return sb.toString();
-    }
 
     private static boolean isWindows() {
         return System.getProperty("os.name", "").toLowerCase().contains("win");

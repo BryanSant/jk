@@ -2,10 +2,9 @@
 package dev.jkbuild.compile;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.worker.WorkerProcess;
 
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -66,41 +65,33 @@ public final class WorkerJavac {
     private static Result run(Request req) throws IOException, InterruptedException {
         Path spec = writeSpec(req);
         try {
-            List<String> cmd = new ArrayList<>();
-            cmd.add(req.javaHome().resolve("bin").resolve("java").toString());
-            cmd.add("-cp");
-            cmd.add(req.workerJar().toString());
-            cmd.add(WORKER_MAIN);
-            cmd.add("@" + spec.toAbsolutePath());
-
-            Process process = new ProcessBuilder(cmd).redirectErrorStream(true).start();
+            List<String> cmd = List.of(
+                    req.javaHome().resolve("bin").resolve("java").toString(),
+                    "-cp", req.workerJar().toString(),
+                    WORKER_MAIN, "@" + spec.toAbsolutePath());
 
             List<String> diagnostics = new ArrayList<>();
             Map<Path, Set<Path>> generated = new TreeMap<>();
-            String status = null;
-            try (BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    if (!line.startsWith(PREFIX)) continue;
-                    String json = line.substring(PREFIX.length());
-                    switch (Ndjson.str(json, "t") != null ? Ndjson.str(json, "t") : "") {
-                        case "diag" -> diagnostics.add(Ndjson.str(json, "msg"));
-                        case "prov" -> {
-                            String genStr = Ndjson.str(json, "gen");
-                            if (genStr == null) break;
-                            Path gen = Path.of(genStr);
-                            Set<Path> origins = new TreeSet<>();
-                            for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
-                            generated.put(gen, origins);
-                        }
-                        case "result" -> status = Ndjson.str(json, "status");
-                        default -> { /* ignore */ }
+            String[] status = {null};
+            // Non-protocol lines (javac chatter) are dropped, as before.
+            int exit = WorkerProcess.run(cmd, PREFIX, json -> {
+                String t = Ndjson.str(json, "t");
+                if (t == null) return;
+                switch (t) {
+                    case "diag" -> diagnostics.add(Ndjson.str(json, "msg"));
+                    case "prov" -> {
+                        String genStr = Ndjson.str(json, "gen");
+                        if (genStr == null) return;
+                        Path gen = Path.of(genStr);
+                        Set<Path> origins = new TreeSet<>();
+                        for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
+                        generated.put(gen, origins);
                     }
+                    case "result" -> status[0] = Ndjson.str(json, "status");
+                    default -> { /* ignore */ }
                 }
-            }
-            int exit = process.waitFor();
-            boolean success = exit == 0 && "OK".equals(status);
+            }, null);
+            boolean success = exit == 0 && "OK".equals(status[0]);
             return new Result(success, diagnostics, generated);
         } finally {
             Files.deleteIfExists(spec);
