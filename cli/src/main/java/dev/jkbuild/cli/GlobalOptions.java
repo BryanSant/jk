@@ -1,9 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
+import dev.jkbuild.model.command.Opt;
 import picocli.CommandLine.Option;
 
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Flags that apply to every {@code jk} subcommand. Surfaced under a
@@ -99,4 +101,28 @@ public final class GlobalOptions {
     @Option(names = {"-V", "--version"}, versionHelp = true,
             description = "Print version information and exit")
     public boolean version;
+
+    /**
+     * The same options as data, for commands parsed by jk's own
+     * {@link dev.jkbuild.cli.args.ArgParser} (the picocli-free path). The
+     * dispatcher merges these into every command's option set so global flags
+     * are accepted everywhere and shown in the "Global options" help section.
+     * Mirrors the {@code @Option} fields above; kept in lockstep until picocli
+     * is removed, after which this becomes the single source.
+     */
+    public static List<Opt> globalOpts() {
+        return List.of(
+                Opt.flag("Suppress informational output", "-q", "--quiet"),
+                Opt.flag("Print additional diagnostic output", "-v", "--verbose"),
+                Opt.value("<WHEN>", "When to colorize output: auto, always, never", "--color"),
+                Opt.flag("Disable network access for this run", "--offline"),
+                Opt.flag("Bypass build caches for this run", "--no-cache"),
+                Opt.flag("Disable all progress bars and spinners", "--no-progress"),
+                Opt.value("<FORMAT>", "Output format: text (default) or json", "--output"),
+                Opt.value("<FILE>", "Use this jk.toml for configuration", "--config-file"),
+                Opt.flag("Skip jk.toml discovery; use built-in defaults only", "--no-config"),
+                Opt.value("<DIR>", "Change to this directory before running the command", "-C", "--directory"),
+                Opt.flag("Show this help message and exit", "-h", "--help"),
+                Opt.flag("Print version information and exit", "-V", "--version"));
+    }
 }

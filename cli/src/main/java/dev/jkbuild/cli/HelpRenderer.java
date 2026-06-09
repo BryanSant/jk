@@ -182,6 +182,11 @@ public final class HelpRenderer {
         if (customTakeover(help)) return "";
         boolean ansi = help.colorScheme().ansi().enabled();
         List<ParameterModel> params = CommandModelExtractor.extract(help.commandSpec()).parameters();
+        return parameterRows(params, ansi);
+    }
+
+    /** Shared positional-parameter row painter (used by the picocli + model paths). */
+    private static String parameterRows(List<ParameterModel> params, boolean ansi) {
         if (params.isEmpty()) return "";
         int width = params.stream().mapToInt(p -> p.label().length()).max().orElse(0) + 2;
         String indent = " ".repeat(2 + width); // continuation lines align under the first description char
@@ -200,6 +205,63 @@ public final class HelpRenderer {
             }
         }
         return sb.toString();
+    }
+
+    // --- model-driven full-screen render (picocli-free path) -------------
+
+    /**
+     * Assemble a complete help screen from a {@link CommandModel} for commands
+     * parsed by jk's own {@link dev.jkbuild.cli.args.ArgParser} (no picocli
+     * {@code Help}). Mirrors the section order and styling of the
+     * {@code IHelpSectionRenderer} methods above and reuses the same private
+     * painters, so a ported command's help is byte-identical to an unported one.
+     */
+    public static String renderHelp(CommandModel model, boolean ansi) {
+        StringBuilder out = new StringBuilder();
+        String nl = System.lineSeparator();
+
+        for (String line : model.description()) {
+            out.append(line).append(nl);
+        }
+        if (model.description().length > 0) out.append(nl);
+
+        StringBuilder suffix = new StringBuilder();
+        if (!model.leaf()) {
+            suffix.append(" <COMMAND>");
+        } else {
+            for (ParameterModel p : model.parameters()) suffix.append(" ").append(p.label());
+        }
+        suffix.append(" [OPTIONS]");
+        out.append(heading("Usage:", ansi)).append(" ");
+        if (ansi) {
+            out.append(commandName(model.qualifiedName(), true)).append(paramLabel(suffix.toString(), true));
+        } else {
+            out.append(model.qualifiedName()).append(suffix);
+        }
+        out.append(nl);
+
+        if (!model.parameters().isEmpty()) {
+            out.append(nl).append(heading("Parameters:", ansi)).append(nl);
+            out.append(parameterRows(model.parameters(), ansi));
+        }
+        if (!model.options().isEmpty()) {
+            out.append(nl).append(heading("Options:", ansi)).append(nl);
+            out.append(renderOptionRows(model.options(), ansi));
+        }
+        if (!model.subcommands().isEmpty()) {
+            out.append(nl).append(heading("Commands:", ansi)).append(nl);
+            int width = model.subcommands().stream()
+                    .filter(s -> !s.hidden()).mapToInt(s -> s.name().length()).max().orElse(0) + 2;
+            for (SubcommandModel sub : model.subcommands()) {
+                if (sub.hidden()) continue;
+                appendCommandRow(out, sub.name(), sub, width, ansi);
+            }
+        }
+        if (!model.globalOptions().isEmpty()) {
+            out.append(nl).append(heading("Global options:", ansi)).append(nl);
+            out.append(renderOptionRows(model.globalOptions(), ansi));
+        }
+        return out.toString();
     }
 
     /**
