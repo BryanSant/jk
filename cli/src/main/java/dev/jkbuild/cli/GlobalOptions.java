@@ -3,54 +3,26 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import picocli.CommandLine.Option;
 
 import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Flags that apply to every {@code jk} subcommand. Surfaced under a
- * separate "Global options:" section in every help screen so the
- * command-specific {@code Options:} block stays focused on what's unique
- * to that verb.
- *
- * <p>Installed programmatically as a picocli mixin (see
- * {@code Jk.installGlobalOptions}). Behavior wiring is incremental: the
- * options are recognised everywhere on day one, and individual commands
- * read the values they care about over time.
+ * Global flags that apply to every {@code jk} subcommand. Populated from a
+ * parsed {@link dev.jkbuild.model.command.Invocation} via {@link #from(dev.jkbuild.model.command.Invocation)}.
  *
  * <p>Precedence for resolving each setting: explicit flag &gt; env var
  * &gt; project {@code jk.toml} &gt; {@code ~/.config/jk/jk.toml} &gt;
  * {@code /etc/jk/jk.toml}.
  */
 public final class GlobalOptions {
-
-    @Option(names = {"-q", "--quiet"},
-            description = "Suppress informational output")
     public boolean quiet;
-
-    @Option(names = {"-v", "--verbose"},
-            description = "Print additional diagnostic output")
     public boolean verbose;
-
-    @Option(names = "--color", paramLabel = "<WHEN>",
-            description = "When to colorize output: auto, always, never")
     public String color;
-
-    @Option(names = "--offline",
-            description = "Disable network access for this run")
     public boolean offline;
-
-    @Option(names = "--no-cache",
-            description = "Bypass build caches for this run")
     public boolean noCache;
-
-    @Option(names = "--no-progress",
-            description = "Disable all progress bars and spinners")
     public boolean noProgress;
 
-    @Option(names = "--output", paramLabel = "<FORMAT>",
-            description = "Output format: text (default) or json")
     public String output;
 
     /**
@@ -66,17 +38,8 @@ public final class GlobalOptions {
         }
         return resolved != null && resolved.equalsIgnoreCase("json");
     }
-
-    @Option(names = "--config-file", paramLabel = "<FILE>",
-            description = "Use this jk.toml for configuration")
     public Path configFile;
-
-    @Option(names = "--no-config",
-            description = "Skip jk.toml discovery; use built-in defaults only")
     public boolean noConfig;
-
-    @Option(names = {"-C", "--directory"}, paramLabel = "<DIR>",
-            description = "Change to this directory before running the command")
     public Path directory;
 
     /**
@@ -94,13 +57,7 @@ public final class GlobalOptions {
         }
         return raw.toAbsolutePath().normalize();
     }
-
-    @Option(names = {"-h", "--help"}, usageHelp = true,
-            description = "Show this help message and exit")
     public boolean help;
-
-    @Option(names = {"-V", "--version"}, versionHelp = true,
-            description = "Print version information and exit")
     public boolean version;
 
     /**
@@ -126,12 +83,9 @@ public final class GlobalOptions {
     }
 
     /**
-     * The same options as data, for commands parsed by jk's own
-     * {@link dev.jkbuild.cli.args.ArgParser} (the picocli-free path). The
+     * The global options as {@link dev.jkbuild.model.command.Opt} data. The
      * dispatcher merges these into every command's option set so global flags
      * are accepted everywhere and shown in the "Global options" help section.
-     * Mirrors the {@code @Option} fields above; kept in lockstep until picocli
-     * is removed, after which this becomes the single source.
      */
     public static List<Opt> globalOpts() {
         return List.of(

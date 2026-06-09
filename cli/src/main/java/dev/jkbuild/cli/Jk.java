@@ -2,34 +2,17 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.command.*;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.config.JkConfigLoader;
-import picocli.CommandLine;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Spec;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/**
- * jk CLI entrypoint. Verbs are registered as subcommands; each one is a
- * {@link java.util.concurrent.Callable} returning a {@code sysexits.h}-style
- * exit code (PRD §6).
- */
-@Command(
-        name = "jk",
-        // -h/--help and -V/--version come from GlobalOptions; mixinStandardHelpOptions stays off
-        // so picocli doesn't try to register them twice.
-        version = "jk " + Jk.VERSION,
-        description = "A fast build tool and package manager for Java & Kotlin",
-        subcommands = {
-                // All commands ported to jk's own CliCommand model (run via
-                // CommandDispatch, listed in `jk --help` by newCommandLine()).
-        })
-public final class Jk implements Runnable {
+/** jk CLI entrypoint — routes verbs through {@link CommandDispatch}. */
+public final class Jk {
 
     /** Alias of {@link dev.jkbuild.util.JkVersion#VERSION} for CLI-side callers. */
     public static final String VERSION = dev.jkbuild.util.JkVersion.VERSION;
@@ -77,14 +60,82 @@ public final class Jk implements Runnable {
         // based on the resolved config (which already knows about env/file/CLI layers).
         dev.jkbuild.config.Quietable.applyIfQuiet(ActiveConfig.get());
         String[] rewritten = rewriteAlias(args);
-        // Coexistence (Phase 3): verbs ported off picocli to jk's own Command
-        // model are parsed + run by CommandDispatch; everything else still
-        // flows through picocli. Returns null when the verb isn't ported.
+        // Every verb is now on the CliCommand model; CommandDispatch handles all
+        // dispatch. The fallback below handles bare `jk` + --help + --version.
         Integer ported = CommandDispatch.tryDispatch(rewritten);
         if (ported != null) return ported;
-        CommandLine cmd = newCommandLine();
-        HelpLayout.applyColorScheme(cmd);
-        return cmd.execute(rewritten);
+        // No verb: check for --help / --version / bare invocation.
+        boolean ansi = CommandDispatch.ansiEnabled();
+        java.util.List<String> argList = java.util.List.of(rewritten);
+        if (argList.contains("-V") || argList.contains("--version")) {
+            System.out.println("jk " + VERSION);
+            return 0;
+        }
+        if (argList.contains("-h") || argList.contains("--help")) {
+            // Full help: all command groups + global options.
+            System.out.print(fullHelp(ansi));
+            return 0;
+        }
+        // Bare `jk` (no verb, no flags): curated short-help screen.
+        HelpRenderer.printShortHelp(CommandDispatch.commands(),
+                "A fast build tool and package manager for Java & Kotlin",
+                "jk", System.out, ansi);
+        return 0;
+    }
+
+    /** Full `jk --help` screen: commands grouped + global options. */
+    private static String fullHelp(boolean ansi) {
+        java.util.Map<String, SubcommandModel> byName = new java.util.LinkedHashMap<>();
+        for (var c : CommandDispatch.commands()) {
+            if (!c.hidden()) byName.put(c.name(), new SubcommandModel(c.name(), new String[]{c.description()}, false));
+        }
+        List<OptionModel> globals = GlobalOptions.globalOpts().stream()
+                .filter(o -> !o.hidden()).map(CommandModels::option).toList();
+        String nl = System.lineSeparator();
+        StringBuilder sb = new StringBuilder();
+        sb.append("A fast build tool and package manager for Java & Kotlin").append(nl).append(nl);
+        // Usage line
+        if (ansi) {
+            sb.append(HelpRenderer.paint("Usage:", Theme.active().sectionHeading(), true)).append(" ")
+              .append(HelpRenderer.paint("jk", Theme.active().commandName(), true))
+              .append(HelpRenderer.paint(" <COMMAND> [OPTIONS]", Theme.active().paramLabel(), true)).append(nl);
+        } else {
+            sb.append("Usage: jk <COMMAND> [OPTIONS]").append(nl);
+        }
+        // Group by UsageGroups (same grouping as before)
+        java.util.Set<String> placed = new java.util.LinkedHashSet<>();
+        boolean firstGroup = true;
+        for (CommandGroup group : UsageGroups.COMMAND_GROUPS) {
+            List<String> visible = group.names().stream().filter(byName::containsKey).toList();
+            if (visible.isEmpty()) continue;
+            if (!firstGroup) sb.append(nl);
+            firstGroup = false;
+            sb.append(nl).append(HelpRenderer.paint(group.heading(), Theme.active().sectionHeading(), ansi)).append(nl);
+            int width = visible.stream().mapToInt(String::length).max().orElse(0) + 4;
+            for (String name : visible) {
+                SubcommandModel sub = byName.get(name);
+                String padding = " ".repeat(width - name.length());
+                sb.append("  ").append(HelpRenderer.paint(name, Theme.active().commandName(), ansi)).append(padding)
+                  .append(sub.description().length > 0 ? sub.description()[0] : "").append(nl);
+                placed.add(name);
+            }
+        }
+        // Ungrouped leftover
+        List<String> leftover = byName.keySet().stream().filter(n -> !placed.contains(n)).sorted().toList();
+        if (!leftover.isEmpty()) {
+            sb.append(nl).append(HelpRenderer.paint("Other commands:", Theme.active().sectionHeading(), ansi)).append(nl);
+            int width = leftover.stream().mapToInt(String::length).max().orElse(0) + 4;
+            for (String name : leftover) {
+                SubcommandModel sub = byName.get(name);
+                String padding = " ".repeat(width - name.length());
+                sb.append("  ").append(HelpRenderer.paint(name, Theme.active().commandName(), ansi)).append(padding)
+                  .append(sub.description().length > 0 ? sub.description()[0] : "").append(nl);
+            }
+        }
+        // Global options
+        sb.append(nl).append(HelpRenderer.paint("Global options:", Theme.active().sectionHeading(), ansi)).append(nl);
+        sb.append(HelpRenderer.renderOptionRows(globals, ansi));
+        return sb.toString();
     }
 
     /**
@@ -189,43 +240,4 @@ public final class Jk implements Runnable {
         return out;
     }
 
-    /** Subcommands whose unmatched options forward to a wrapped tool — `--help` must pass through. */
-    private static final Set<String> PASSTHROUGH_COMMANDS = Set.of("mvn", "gradle");
-
-    /** Picocli root, configured for jk's passthrough semantics. */
-    public static CommandLine newCommandLine() {
-        CommandLine cmd = new CommandLine(new Jk());
-        // mvn/gradle are passthroughs: jk owns flags listed before the tool's
-        // own args, everything else (including unknown `-X` style flags) gets
-        // forwarded as positional to the child process.
-        for (String name : PASSTHROUGH_COMMANDS) {
-            CommandLine sub = cmd.getSubcommands().get(name);
-            if (sub != null) {
-                sub.setUnmatchedOptionsArePositionalParams(true);
-            }
-        }
-        // Install jk's help system: the GlobalOptions mixin on every command, the
-        // styled parent/leaf section layouts, and the cargo-style error renderers.
-        HelpLayout.install(cmd);
-        // List commands already ported off picocli (run via CommandDispatch) so
-        // they still appear in `jk --help`. Metadata-only specs — picocli never
-        // executes them (the dispatcher intercepts those verbs first).
-        for (dev.jkbuild.model.command.CliCommand c : CommandDispatch.commands()) {
-            if (c.hidden() || cmd.getSubcommands().containsKey(c.name())) continue;
-            CommandSpec sub = CommandSpec.create().name(c.name());
-            sub.usageMessage().description(c.description());
-            cmd.getCommandSpec().addSubcommand(c.name(), new CommandLine(sub));
-        }
-        return cmd;
-    }
-
-    @Spec CommandSpec spec;
-
-    @Override
-    public void run() {
-        // No subcommand: print the curated short-help screen. The full screen
-        // (every verb, every global option) is one keystroke away via --help.
-        boolean ansi = spec.commandLine().getColorScheme().ansi().enabled();
-        HelpRenderer.printShortHelp(spec, System.out, ansi);
-    }
 }

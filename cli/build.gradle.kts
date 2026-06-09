@@ -21,14 +21,6 @@ dependencies {
     implementation(project(":image"))
     implementation(project(":compat"))
 
-    implementation(libs.picocli)
-    // picocli-codegen runs at compile time to emit
-    // META-INF/native-image/picocli-generated/<project>/reflection-config.json
-    // for every @Command-annotated class. Without this the native-image build
-    // strips the annotation metadata picocli needs at runtime, and the binary
-    // throws "AutoHelpMixin is not a command" on first call.
-    annotationProcessor("info.picocli:picocli-codegen:4.7.7")
-
     // JLine 4 FFM terminal provider for raw-mode TUI (jk init wizard).
     // FFM backend requires JDK 22+; the GraalVM-compiled binary embeds the
     // FFM downcalls natively. Reflection/resource hints live under
@@ -40,10 +32,6 @@ dependencies {
     // GitSourceMaterializerTest builds a local git "library" repo fixture with jgit.
     // GitSourceMaterializerTest uses a local git fixture (built with system git or git-runner)
     // testImplementation(libs.jgit)  -- removed, tests use system git or git-runner worker
-}
-
-tasks.withType<JavaCompile>().configureEach {
-    options.compilerArgs.add("-Aproject=dev.jkbuild.cli")
 }
 
 // Tests that fork child-JVM workers locate each jar via a system-property override

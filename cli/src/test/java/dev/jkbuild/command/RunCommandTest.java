@@ -5,7 +5,6 @@ import dev.jkbuild.cli.Jk;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-import picocli.CommandLine;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
