@@ -45,7 +45,7 @@ dependencies {
 tasks.jar {
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.java.compiler.JavaCompilerWorker",
+                "Main-Class" to "dev.jkbuild.plugin.host.PluginHostMain",
                 "Implementation-Title" to "jk-java-compiler",
                 "Implementation-Version" to project.version)
     }

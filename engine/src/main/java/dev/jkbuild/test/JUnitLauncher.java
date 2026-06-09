@@ -95,7 +95,7 @@ public final class JUnitLauncher {
         cmd.add(javaBinary.toString());
         cmd.add("-cp");
         cmd.add(classpath);
-        cmd.add("dev.jkbuild.test.runner.JkRunner");
+        cmd.add("dev.jkbuild.plugin.host.PluginHostMain");
         cmd.add("--scan-classpath=" + testClassesDir);
 
         var pb = new ProcessBuilder(cmd).redirectErrorStream(true);
@@ -140,7 +140,7 @@ public final class JUnitLauncher {
             var pb = new ProcessBuilder(
                     javaBinary.toString(),
                     "-cp", classpath,
-                    "dev.jkbuild.test.runner.JkRunner",
+                    "dev.jkbuild.plugin.host.PluginHostMain",
                     "--pull",
                     "--worker=" + workerId,
                     "--scan-classpath=" + testClassesDir)
@@ -240,7 +240,7 @@ public final class JUnitLauncher {
         var pb = new ProcessBuilder(
                 javaBinary.toString(),
                 "-cp", classpath,
-                "dev.jkbuild.test.runner.JkRunner",
+                "dev.jkbuild.plugin.host.PluginHostMain",
                 "--list-only",
                 "--scan-classpath=" + testClassesDir)
                 .redirectErrorStream(true);

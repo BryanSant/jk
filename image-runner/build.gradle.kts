@@ -36,7 +36,7 @@ tasks.jar {
     dependsOn(configurations.runtimeClasspath)
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.image.runner.ImageRunner",
+                "Main-Class" to "dev.jkbuild.plugin.host.PluginHostMain",
                 "Implementation-Title" to "jk-image-runner",
                 "Implementation-Version" to project.version)
     }

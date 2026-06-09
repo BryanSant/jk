@@ -2,39 +2,29 @@
 package dev.jkbuild.kotlin.compiler;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
-
-import java.io.PrintStream;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
 
 /**
- * Emits the {@code jk-kotlin-compiler} worker's protocol lines to the parent jk
- * process: one JSON object per line, each prefixed with {@link #PREFIX}. The
- * parent treats any line without the prefix as passthrough compiler chatter.
- *
- * <p>String escaping is delegated to the shared {@link Ndjson} codec in
- * plugin-api (bundled into this worker jar), so the worker no longer carries its
- * own copy of the escaping algorithm.
+ * Typed view over the shared {@link ProtocolWriter} for the kotlin-compiler
+ * worker's two message kinds. The prefix and line framing live in the
+ * {@code ProtocolWriter} (built by {@code PluginHostMain} from the plugin
+ * manifest); this just builds the JSON for each event.
  */
 final class KcProtocol {
 
-    /** Marks a structured protocol line; mirrors jk-test-runner's {@code ##JK:}. */
-    static final String PREFIX = "##JKKC:";
+    private final ProtocolWriter out;
 
-    private final PrintStream out;
-
-    KcProtocol(PrintStream out) {
+    KcProtocol(ProtocolWriter out) {
         this.out = out;
     }
 
     /** A compiler diagnostic: {@code {"t":"diag","sev":"ERROR","msg":"..."}}. */
     void diagnostic(String severity, String message) {
-        out.println(PREFIX + "{\"t\":\"diag\",\"sev\":\"" + severity
-                + "\",\"msg\":" + Ndjson.quote(message) + "}");
-        out.flush();
+        out.emit("{\"t\":\"diag\",\"sev\":\"" + severity + "\",\"msg\":" + Ndjson.quote(message) + "}");
     }
 
     /** The terminal outcome: {@code {"t":"result","status":"COMPILATION_SUCCESS"}}. */
     void result(String status) {
-        out.println(PREFIX + "{\"t\":\"result\",\"status\":\"" + status + "\"}");
-        out.flush();
+        out.emit("{\"t\":\"result\",\"status\":\"" + status + "\"}");
     }
 }

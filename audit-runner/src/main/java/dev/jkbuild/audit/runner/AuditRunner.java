@@ -6,10 +6,12 @@ import dev.jkbuild.audit.Auditor;
 import dev.jkbuild.audit.OsvClient;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
 
 import java.io.IOException;
-import java.io.PrintStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,7 +19,10 @@ import java.nio.file.Path;
 import java.util.List;
 
 /**
- * Entry point for the {@code jk-audit-runner} worker subprocess.
+ * The {@code jk-audit-runner} plugin: queries the OSV vulnerability API in an
+ * isolated child JVM so Jackson and the OSV HTTP client never load in jk's own
+ * process. Discovered by the shared {@link dev.jkbuild.plugin.host.PluginHostMain}
+ * via {@link java.util.ServiceLoader}.
  *
  * <p>Receives a single argument: the path to a line-oriented spec file:
  * <pre>
@@ -26,7 +31,7 @@ import java.util.List;
  * VULNS_URL https://api.osv.dev/v1/vulns/       # optional override
  * </pre>
  *
- * <p>Streams NDJSON to stdout, each line prefixed {@value #PREFIX}:
+ * <p>Streams NDJSON to stdout, each line prefixed {@code ##JKAU:}:
  * <pre>
  * ##JKAU:{"t":"finding","module":"g:a","version":"1.0","vuln_id":"GHSA-xx","severity":"HIGH","summary":"..."}
  * ##JKAU:{"t":"result","total":1}
@@ -35,24 +40,22 @@ import java.util.List;
  * <p>Exit codes: 0 success (findings may still be present; threshold is the
  * caller's decision), 1 network/parse error, 2 bad arguments.
  */
-public final class AuditRunner {
+public final class AuditRunner implements Plugin {
 
-    static final String PREFIX = "##JKAU:";
-
-    private AuditRunner() {}
-
-    public static void main(String[] args) {
-        System.exit(run(args, System.out, System.err));
+    @Override
+    public PluginManifest manifest() {
+        return new PluginManifest("jk-audit-runner", "##JKAU:");
     }
 
-    static int run(String[] args, PrintStream out, PrintStream err) {
-        if (args.length < 1) {
-            err.println("jk-audit-runner: expected spec file path as first argument");
+    @Override
+    public int run(List<String> args, ProtocolWriter out) {
+        if (args.isEmpty()) {
+            System.err.println("jk-audit-runner: expected spec file path as first argument");
             return 2;
         }
-        Path specFile = Path.of(args[0]);
+        Path specFile = Path.of(args.get(0));
         if (!Files.isRegularFile(specFile)) {
-            err.println("jk-audit-runner: spec file not found: " + specFile);
+            System.err.println("jk-audit-runner: spec file not found: " + specFile);
             return 2;
         }
 
@@ -71,14 +74,15 @@ public final class AuditRunner {
                     case "LOCKFILE"  -> lockfilePath = Path.of(val);
                     case "BATCH_URL" -> batchUrl = URI.create(val);
                     case "VULNS_URL" -> vulnsUrl = URI.create(val);
+                    default -> { }
                 }
             }
         } catch (IOException e) {
-            err.println("jk-audit-runner: could not read spec file: " + e.getMessage());
+            System.err.println("jk-audit-runner: could not read spec file: " + e.getMessage());
             return 2;
         }
         if (lockfilePath == null) {
-            err.println("jk-audit-runner: spec file missing LOCKFILE line");
+            System.err.println("jk-audit-runner: spec file missing LOCKFILE line");
             return 2;
         }
 
@@ -86,7 +90,7 @@ public final class AuditRunner {
         try {
             lock = LockfileReader.read(lockfilePath);
         } catch (IOException e) {
-            err.println("jk-audit-runner: could not read lockfile: " + e.getMessage());
+            System.err.println("jk-audit-runner: could not read lockfile: " + e.getMessage());
             return 1;
         }
 
@@ -101,13 +105,13 @@ public final class AuditRunner {
             report = new Auditor(client).audit(lock);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            err.println("jk-audit-runner: OSV query failed: " + e.getMessage());
+            System.err.println("jk-audit-runner: OSV query failed: " + e.getMessage());
             return 1;
         }
 
         List<AuditReport.Finding> findings = report.findings();
         for (AuditReport.Finding f : findings) {
-            out.println(PREFIX + "{"
+            out.emit("{"
                     + "\"t\":\"finding\","
                     + "\"module\":" + Ndjson.quote(f.module()) + ","
                     + "\"version\":" + Ndjson.quote(f.version()) + ","
@@ -116,9 +120,7 @@ public final class AuditRunner {
                     + "\"summary\":" + Ndjson.quote(f.summary())
                     + "}");
         }
-        out.println(PREFIX + "{\"t\":\"result\",\"total\":" + findings.size() + "}");
-        out.flush();
+        out.emit("{\"t\":\"result\",\"total\":" + findings.size() + "}");
         return 0;
     }
-
 }

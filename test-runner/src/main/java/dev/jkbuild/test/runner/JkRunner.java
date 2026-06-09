@@ -10,11 +10,15 @@ import org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder;
 import org.junit.platform.launcher.core.LauncherFactory;
 import org.junit.platform.launcher.listeners.SummaryGeneratingListener;
 
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
+
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -37,39 +41,42 @@ import java.util.Set;
  *
  * <p>Exit codes: 0 = success, 1 = at least one test failed, 2 = arg/launcher
  * error. The wire protocol on stdout matches the schema described in
- * {@link EventType}; lines without the {@link JsonEventWriter#PREFIX} marker
- * are user test output and pass through to the parent's stdout.
+ * {@link EventType}; lines without the worker's protocol prefix are user test
+ * output and pass through to the parent's stdout.
  */
-public final class JkRunner {
+public final class JkRunner implements Plugin {
 
-    public static void main(String[] args) {
+    @Override
+    public PluginManifest manifest() {
+        return new PluginManifest("jk-test-runner", "##JK:");
+    }
+
+    @Override
+    public int run(List<String> argList, ProtocolWriter out) {
         Args parsed;
         try {
-            parsed = Args.parse(args);
+            parsed = Args.parse(argList.toArray(new String[0]));
         } catch (IllegalArgumentException e) {
             System.err.println("jk-test-runner: " + e.getMessage());
             System.err.println("usage: jk-test-runner --scan-classpath=<dir> "
                     + "[--list-only] [--pull --worker=<id>] [--filter=<regex>]");
-            System.exit(2);
-            return;
+            return 2;
         }
 
-        var stdout = new PrintStream(System.out, /* autoFlush */ false, StandardCharsets.UTF_8);
-        try (var writer = new JsonEventWriter(stdout)) {
+        try (var writer = new JsonEventWriter(out)) {
             if (parsed.listOnly) {
                 runListOnly(parsed, writer);
+                return 0;
             } else if (parsed.pull) {
-                runPullMode(parsed, writer);
+                return runPullMode(parsed, writer);
             } else {
-                int exit = runOneShot(parsed, writer);
-                System.exit(exit);
+                return runOneShot(parsed, writer);
             }
-            System.exit(0);
         } catch (Throwable t) {
             System.err.println("jk-test-runner: " + t.getClass().getName()
                     + ": " + t.getMessage());
             t.printStackTrace(System.err);
-            System.exit(2);
+            return 2;
         }
     }
 
@@ -162,7 +169,7 @@ public final class JkRunner {
      *   DONE
      * </pre>
      */
-    private static void runPullMode(Args args, JsonEventWriter writer) throws Exception {
+    private static int runPullMode(Args args, JsonEventWriter writer) throws Exception {
         var streaming = new StreamingListener(writer, args.workerId);
         var summary = new SummaryGeneratingListener();
 
@@ -194,7 +201,7 @@ public final class JkRunner {
         // of truth for the overall pass/fail decision. SummaryGeneratingListener
         // resets per-execute (per-class), so this reflects only the last
         // class, which is fine for a per-worker liveness signal.
-        System.exit(summary.getSummary().getTotalFailureCount() == 0 ? 0 : 1);
+        return summary.getSummary().getTotalFailureCount() == 0 ? 0 : 1;
     }
 
     // --- shared --------------------------------------------------------------

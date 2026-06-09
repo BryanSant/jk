@@ -38,7 +38,7 @@ tasks.jar {
     dependsOn(configurations.runtimeClasspath)
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.audit.runner.AuditRunner",
+                "Main-Class" to "dev.jkbuild.plugin.host.PluginHostMain",
                 "Implementation-Title" to "jk-audit-runner",
                 "Implementation-Version" to project.version)
     }

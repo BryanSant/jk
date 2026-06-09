@@ -28,7 +28,7 @@ public final class KotlincDriver {
 
     /** Mirrors the worker's {@code Ndjson.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JKKC:";
-    private static final String WORKER_MAIN = "dev.jkbuild.kotlin.compiler.KotlinCompilerWorker";
+    private static final String WORKER_MAIN = "dev.jkbuild.plugin.host.PluginHostMain";
 
     public KotlincResult compile(KotlincRequest request) {
         try {

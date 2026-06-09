@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.java.compiler;
 
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
 
 import javax.annotation.processing.Processor;
 
 import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileOutputStream;
-import java.io.PrintStream;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -40,32 +40,26 @@ import java.util.Set;
  *   ARG &lt;raw&gt;             extra javac argument (repeatable)
  * </pre>
  */
-public final class JavaCompilerWorker {
+public final class JavaCompilerWorker implements Plugin {
 
-    static final String PREFIX = "##JKJC:";
+    @Override
+    public PluginManifest manifest() {
+        return new PluginManifest("jk-java-compiler", "##JKJC:");
+    }
 
-    private JavaCompilerWorker() {}
-
-    public static void main(String[] argv) {
-        PrintStream out = new PrintStream(
-                new FileOutputStream(FileDescriptor.out), /* autoFlush */ true, StandardCharsets.UTF_8);
-        try {
-            if (argv.length != 1) {
-                System.err.println("usage: JavaCompilerWorker <spec-file>|@<spec-file>");
-                System.exit(2);
-                return;
-            }
-            String spec = argv[0].startsWith("@") ? argv[0].substring(1) : argv[0];
-            System.exit(run(Path.of(spec), out));
-        } catch (Throwable t) {
-            System.err.println("jk-java-compiler: " + t.getClass().getName() + ": " + t.getMessage());
-            t.printStackTrace(System.err);
-            System.exit(2);
+    @Override
+    public int run(List<String> args, ProtocolWriter out) throws Exception {
+        if (args.size() != 1) {
+            System.err.println("usage: jk-java-compiler <spec-file>|@<spec-file>");
+            return 2;
         }
+        String specArg = args.get(0);
+        String spec = specArg.startsWith("@") ? specArg.substring(1) : specArg;
+        return compileSpec(Path.of(spec), out);
     }
 
     /** Run a compile from {@code specFile}, emitting NDJSON to {@code out}; returns the exit code. */
-    public static int run(Path specFile, PrintStream out) throws Exception {
+    static int compileSpec(Path specFile, ProtocolWriter out) throws Exception {
         Spec spec = Spec.parse(specFile);
         List<Processor> processors = loadProcessors(spec.processorPath);
 
@@ -74,7 +68,7 @@ public final class JavaCompilerWorker {
                 spec.release, spec.args, processors);
 
         for (String d : r.diagnostics()) {
-            out.println(PREFIX + "{\"t\":\"diag\",\"msg\":" + Ndjson.quote(d) + "}");
+            out.emit("{\"t\":\"diag\",\"msg\":" + Ndjson.quote(d) + "}");
         }
         for (Map.Entry<Path, Set<Path>> e : r.generated().entrySet()) {
             StringBuilder src = new StringBuilder("[");
@@ -85,11 +79,10 @@ public final class JavaCompilerWorker {
                 first = false;
             }
             src.append(']');
-            out.println(PREFIX + "{\"t\":\"prov\",\"gen\":" + Ndjson.quote(e.getKey().toString())
+            out.emit("{\"t\":\"prov\",\"gen\":" + Ndjson.quote(e.getKey().toString())
                     + ",\"src\":" + src + "}");
         }
-        out.println(PREFIX + "{\"t\":\"result\",\"status\":\"" + (r.success() ? "OK" : "ERROR") + "\"}");
-        out.flush();
+        out.emit("{\"t\":\"result\",\"status\":\"" + (r.success() ? "OK" : "ERROR") + "\"}");
         return r.success() ? 0 : 1;
     }
 

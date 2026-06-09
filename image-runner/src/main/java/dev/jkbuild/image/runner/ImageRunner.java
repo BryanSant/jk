@@ -3,7 +3,10 @@ package dev.jkbuild.image.runner;
 
 import dev.jkbuild.image.ImageBuilder;
 import dev.jkbuild.image.ImageConfig;
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
 
 import java.io.IOException;
 import java.io.PrintStream;
@@ -45,24 +48,22 @@ import java.util.Map;
  *
  * <p>Exit 0 on success, 1 on build/push error, 2 on bad arguments.
  */
-public final class ImageRunner {
+public final class ImageRunner implements Plugin {
 
-    static final String PREFIX = "##JKIM:";
-
-    private ImageRunner() {}
-
-    public static void main(String[] args) {
-        System.exit(run(args, System.out, System.err));
+    @Override
+    public PluginManifest manifest() {
+        return new PluginManifest("jk-image-runner", "##JKIM:");
     }
 
-    static int run(String[] args, PrintStream out, PrintStream err) {
-        if (args.length < 1) {
-            err.println("jk-image-runner: expected spec file path");
+    @Override
+    public int run(List<String> args, ProtocolWriter out) {
+        if (args.isEmpty()) {
+            System.err.println("jk-image-runner: expected spec file path");
             return 2;
         }
-        Path specFile = Path.of(args[0]);
+        Path specFile = Path.of(args.get(0));
         if (!Files.isRegularFile(specFile)) {
-            err.println("jk-image-runner: spec file not found: " + specFile);
+            System.err.println("jk-image-runner: spec file not found: " + specFile);
             return 2;
         }
 
@@ -103,12 +104,12 @@ public final class ImageRunner {
                 }
             }
         } catch (IOException e) {
-            err.println("jk-image-runner: could not read spec: " + e.getMessage());
+            System.err.println("jk-image-runner: could not read spec: " + e.getMessage());
             return 2;
         }
 
         if (mainJar == null || artifact == null || version == null || mainClass == null) {
-            err.println("jk-image-runner: spec missing MAIN_JAR, ARTIFACT, VERSION, or MAIN_CLASS");
+            System.err.println("jk-image-runner: spec missing MAIN_JAR, ARTIFACT, VERSION, or MAIN_CLASS");
             return 2;
         }
 
@@ -119,25 +120,21 @@ public final class ImageRunner {
 
         try {
             if (tarball != null) {
-                emit(out, "{\"t\":\"progress\",\"msg\":\"building OCI tarball\"}");
+                out.emit("{\"t\":\"progress\",\"msg\":\"building OCI tarball\"}");
                 Files.createDirectories(tarball.getParent());
                 ImageBuilder.writeToTarball(plan, tarball);
-                emit(out, "{\"t\":\"result\",\"ok\":true,\"tarball\":" + Ndjson.quote(tarball.toString()) + "}");
+                out.emit("{\"t\":\"result\",\"ok\":true,\"tarball\":" + Ndjson.quote(tarball.toString()) + "}");
             } else {
                 String ref = config.targetReference(artifact, version);
-                emit(out, "{\"t\":\"progress\",\"msg\":\"pushing " + ref + "\"}");
+                out.emit("{\"t\":\"progress\",\"msg\":\"pushing " + ref + "\"}");
                 ImageBuilder.pushToRegistry(plan);
-                emit(out, "{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(ref) + "}");
+                out.emit("{\"t\":\"result\",\"ok\":true,\"ref\":" + Ndjson.quote(ref) + "}");
             }
             return 0;
         } catch (Exception e) {
-            emit(out, "{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
+            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
             return 1;
         }
     }
 
-    private static void emit(PrintStream out, String json) {
-        out.println(PREFIX + json);
-        out.flush();
-    }
 }
