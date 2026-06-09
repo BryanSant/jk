@@ -126,7 +126,7 @@ class LibraryUpdateCommandTest {
     }
 
     private int run(Path cacheFile) {
-        return new CommandLine(new Jk()).execute(
+        return Jk.execute(
                 "library", "update",
                 "--source", base.toString(),
                 "--cache-file", cacheFile.toString());

@@ -1,28 +1,28 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 
-/**
- * {@code jk tool dir} — print the tools install root (parallel to
- * {@code jk cache dir}).
- */
-@Command(name = "dir", description = "Print the tools install root")
-public final class ToolDirCommand implements Callable<Integer> {
+/** {@code jk tool dir} — print the tools install root. */
+public final class ToolDirCommand implements CliCommand {
 
-    @Option(names = "--tools-dir", hidden = true,
-            description = "Override the tools install root. Default: $JK_CACHE_DIR/tools.")
-    Path toolsDir;
+    @Override public String name() { return "dir"; }
+    @Override public String description() { return "Print the tools install root"; }
+
+    @Override public List<Opt> options() {
+        return List.of(Opt.value("<dir>", "Override the tools install root. Default: $JK_CACHE_DIR/tools.", "--tools-dir").hide());
+    }
 
     @Override
-    public Integer call() {
-        Path root = toolsDir != null ? toolsDir : JkDirs.cache().resolve("tools");
-        System.out.println(root);
+    public int run(Invocation in) {
+        Path toolsDir = in.value("tools-dir").map(Path::of).orElse(null);
+        System.out.println(toolsDir != null ? toolsDir : JkDirs.cache().resolve("tools"));
         return 0;
     }
 }

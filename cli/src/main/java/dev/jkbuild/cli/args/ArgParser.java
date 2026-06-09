@@ -34,6 +34,17 @@ public final class ArgParser {
     private ArgParser() {}
 
     public static Invocation parse(Command command, List<String> args) throws ParseException {
+        return parse(command, args, false);
+    }
+
+    /**
+     * @param passthroughUnknown when true, unrecognized options are treated as
+     *     positional arguments rather than errors — needed for passthrough commands
+     *     like {@code jk mvn} / {@code jk gradle} that forward unknown flags to
+     *     a child process.
+     */
+    public static Invocation parse(Command command, List<String> args, boolean passthroughUnknown)
+            throws ParseException {
         Map<String, Opt> byName = new HashMap<>();
         for (Opt opt : command.options()) {
             for (String n : opt.names()) byName.put(n, opt);
@@ -55,9 +66,9 @@ public final class ArgParser {
             }
 
             if (tok.startsWith("--")) {
-                i = parseLong(command, byName, out, args, i, tok);
+                i = parseLong(command, byName, out, args, i, tok, passthroughUnknown);
             } else {
-                i = parseShort(byName, out, args, i, tok);
+                i = parseShort(byName, out, args, i, tok, passthroughUnknown);
             }
         }
 
@@ -68,7 +79,8 @@ public final class ArgParser {
     // --- long options: --name, --name=value, --no-name -----------------------
 
     private static int parseLong(Command command, Map<String, Opt> byName, Invocation.Builder out,
-                                 List<String> args, int i, String tok) throws ParseException {
+                                 List<String> args, int i, String tok,
+                                 boolean passthroughUnknown) throws ParseException {
         String name = tok;
         String inline = null;
         int eq = tok.indexOf('=');
@@ -89,6 +101,10 @@ public final class ArgParser {
                 return i;
             }
         }
+        if (passthroughUnknown) {
+            out.addPositional(tok);   // treat unknown option as passthrough arg
+            return i;
+        }
         throw new ParseException(ParseException.Kind.UNKNOWN_OPTION, tok,
                 "unrecognized option " + name);
     }
@@ -96,13 +112,18 @@ public final class ArgParser {
     // --- short options: -n value, -nvalue, -qv (bundled flags) ---------------
 
     private static int parseShort(Map<String, Opt> byName, Invocation.Builder out,
-                                  List<String> args, int i, String tok) throws ParseException {
+                                  List<String> args, int i, String tok,
+                                  boolean passthroughUnknown) throws ParseException {
         // Walk the cluster char by char; a value-taking short consumes the rest
         // of the token (or the next arg) and ends the cluster.
         for (int c = 1; c < tok.length(); c++) {
             String shortName = "-" + tok.charAt(c);
             Opt opt = byName.get(shortName);
             if (opt == null) {
+                if (passthroughUnknown) {
+                    out.addPositional(tok);   // treat whole cluster as passthrough
+                    return i;
+                }
                 throw new ParseException(ParseException.Kind.UNKNOWN_OPTION, shortName,
                         "unrecognized option " + shortName);
             }

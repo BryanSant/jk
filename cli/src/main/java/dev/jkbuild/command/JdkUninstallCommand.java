@@ -22,9 +22,11 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import org.jline.terminal.Terminal;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -34,7 +36,6 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk jdk uninstall <source>/<spec>} — source-qualified single-target
@@ -54,42 +55,40 @@ import java.util.concurrent.Callable;
  * we get a run-log entry per uninstall. Marked interactive so the
  * progress widget stays out of the way of the spinner + wizard UI.
  */
-@Command(name = "uninstall", aliases = {"remove"},
-        description = "Uninstall JDK versions")
-public final class JdkUninstallCommand implements Callable<Integer> {
+public final class JdkUninstallCommand implements CliCommand {
 
-    /**
-     * Probe names accepted on the left side of {@code <source>/<spec>}.
-     * {@code system} is intentionally excluded — those installs are owned
-     * by the OS package manager and jk can't safely remove them.
-     */
+    @Override public String name() { return "uninstall"; }
+    @Override public java.util.List<String> aliases() { return java.util.List.of("remove"); }
+    @Override public String description() { return "Uninstall JDK versions"; }
+    @Override public java.util.List<Opt> options() {
+        return java.util.List.of(
+                Opt.flag("Skip the confirmation prompt.", "-y", "--yes"),
+                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide());
+    }
+    @Override public java.util.List<Param> parameters() {
+        return java.util.List.of(Param.of("source/spec", Arity.ZERO_OR_ONE,
+                "Source-qualified install (e.g. intellij/temurin-26.0.1). Omit to launch the interactive wizard."));
+    }
+
     private static final Set<String> KNOWN_SOURCES = Set.of(
-            "jk", "intellij", "sdkman", "jbang", "mise", "asdf", "jenv",
-            "homebrew", "java-home");
-
-    /** Probe names jk refuses to uninstall from. Listed for a friendlier error. */
+            "jk", "intellij", "sdkman", "jbang", "mise", "asdf", "jenv", "homebrew", "java-home");
     private static final Set<String> UNINSTALL_FORBIDDEN_SOURCES = Set.of("system");
 
-    @Parameters(arity = "0..1", paramLabel = "<source>/<spec>",
-            description = "Source-qualified install (e.g. intellij/temurin-26.0.1). "
-                    + "Omit to launch the interactive wizard.")
     String argument;
-
-    @Option(names = {"-y", "--yes"},
-            description = "Skip the confirmation prompt.")
     boolean assumeYes;
-
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the JDK install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    GlobalOptions global;
 
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> VICTIMS = GoalKey.of("victims", List.class);
 
     @Override
-    public Integer call() throws Exception {
+    public int run(Invocation in) throws Exception {
+        this.argument = in.positionals().isEmpty() ? null : in.positionals().get(0);
+        this.assumeYes = in.isSet("yes");
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.global = GlobalOptions.from(in);
+
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
 

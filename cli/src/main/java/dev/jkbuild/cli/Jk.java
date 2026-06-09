@@ -26,33 +26,8 @@ import java.util.Set;
         version = "jk " + Jk.VERSION,
         description = "A fast build tool and package manager for Java & Kotlin",
         subcommands = {
-                NewCommand.class,
-                InitCommand.class,
-                CompileCommand.class,
-                BuildCommand.class,
-                TestCommand.class,
-                // Ported to jk's own CliCommand model (run via CommandDispatch,
-                // listed in `jk --help` by newCommandLine()): clean, tree, why,
-                // explain, deactivate, shell, hook-env, lock, sync.
-                JdkCommand.class,
-                ActivateCommand.class,
-                MvnCommand.class,
-                GradleCommand.class,
-                ImportCommand.class,
-                ExportCommand.class,
-                InstallCommand.class,
-                RunCommand.class,
-                PublishCommand.class,
-                AuditCommand.class,
-                DenyCommand.class,
-                ImageCommand.class,
-                NativeCommand.class,
-                VerifyBuildCommand.class,
-                ToolCommand.class,
-                LibraryCommand.class,
-                AuthCommand.class,
-                DoctorCommand.class,
-                CacheCommand.class,
+                // All commands ported to jk's own CliCommand model (run via
+                // CommandDispatch, listed in `jk --help` by newCommandLine()).
         })
 public final class Jk implements Runnable {
 

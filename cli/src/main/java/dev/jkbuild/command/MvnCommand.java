@@ -8,11 +8,13 @@ import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -22,7 +24,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk mvn ...} — passthrough to Maven (PRD §24.1). The
@@ -30,29 +31,36 @@ import java.util.concurrent.Callable;
  * returns its path; the main process then execs {@code bin/mvn} directly so
  * Maven's stdout/stderr reach the terminal unmodified.
  */
-@Command(
-        name = "mvn",
-        description = "Passthrough to Maven (jk manages the install)",
-        mixinStandardHelpOptions = false)
-public final class MvnCommand implements Callable<Integer> {
+public final class MvnCommand implements CliCommand {
 
-    @Option(names = {"-C", "--directory"})
+    @Override public String name() { return "mvn"; }
+    @Override public String description() { return "Passthrough to Maven (jk manages the install)"; }
+    @Override public boolean passthrough() { return true; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<dir>", "Project directory.", "-C", "--directory"),
+                Opt.value("<dir>", "Override the tools install root.", "--tools-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.flag("Skip tool discovery.", "--no-discover"));
+    }
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to Maven."));
+    }
+
     Path directory;
-
-    @Option(names = "--tools-dir", hidden = true)
     Path toolsDir;
-
-    @Option(names = "--jdks-dir", hidden = true)
     Path jdksDir;
-
-    @Option(names = "--no-discover")
     boolean noDiscover;
-
-    @Parameters(arity = "0..*", paramLabel = "<args>")
     List<String> args = new ArrayList<>();
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        this.directory = in.value("directory").map(Path::of).orElse(null);
+        this.toolsDir = in.value("tools-dir").map(Path::of).orElse(null);
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.noDiscover = in.isSet("no-discover");
+        this.args = in.positionals();
+
         Path projectDir = directory != null
                 ? directory.toAbsolutePath().normalize()
                 : Path.of(".").toAbsolutePath().normalize();

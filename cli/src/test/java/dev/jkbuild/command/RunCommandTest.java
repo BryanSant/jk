@@ -72,7 +72,6 @@ class RunCommandTest {
     }
 
     private static int run(String... args) {
-        CommandLine cmd = Jk.newCommandLine();
-        return cmd.execute(args);
+        return Jk.execute(args);
     }
 }

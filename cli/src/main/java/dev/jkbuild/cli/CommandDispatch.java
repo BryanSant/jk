@@ -5,8 +5,32 @@ import dev.jkbuild.cli.args.ArgParser;
 import dev.jkbuild.cli.args.ParseException;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.command.AddCommand;
+import dev.jkbuild.command.AuthCommand;
+import dev.jkbuild.command.ActivateCommand;
+import dev.jkbuild.command.AuditCommand;
+import dev.jkbuild.command.BuildCommand;
+import dev.jkbuild.command.CacheCommand;
+import dev.jkbuild.command.CompileCommand;
+import dev.jkbuild.command.ExportCommand;
+import dev.jkbuild.command.GradleCommand;
+import dev.jkbuild.command.ImageCommand;
+import dev.jkbuild.command.ImportCommand;
+import dev.jkbuild.command.InitCommand;
+import dev.jkbuild.command.InstallCommand;
+import dev.jkbuild.command.JdkCommand;
+import dev.jkbuild.command.MvnCommand;
+import dev.jkbuild.command.NativeCommand;
+import dev.jkbuild.command.NewCommand;
+import dev.jkbuild.command.PublishCommand;
+import dev.jkbuild.command.RunCommand;
+import dev.jkbuild.command.TestCommand;
+import dev.jkbuild.command.ToolCommand;
 import dev.jkbuild.command.CleanCommand;
+import dev.jkbuild.command.LibraryCommand;
 import dev.jkbuild.command.DeactivateCommand;
+import dev.jkbuild.command.DenyCommand;
+import dev.jkbuild.command.DoctorCommand;
+import dev.jkbuild.command.VerifyBuildCommand;
 import dev.jkbuild.command.ExplainCommand;
 import dev.jkbuild.command.HookEnvCommand;
 import dev.jkbuild.command.LockCommand;
@@ -62,7 +86,31 @@ public final class CommandDispatch {
             new AddCommand(),
             new RemoveCommand(),
             new UpdateCommand(),
-            new RepoCommand());
+            new DoctorCommand(),
+            new DenyCommand(),
+            new VerifyBuildCommand(),
+            new AuditCommand(),
+            new AuthCommand(),
+            new CacheCommand(),
+            new JdkCommand(),
+            new ToolCommand(),
+            new LibraryCommand(),
+            new RepoCommand(),
+            new ExportCommand(),
+            new ImportCommand(),
+            new PublishCommand(),
+            new RunCommand(),
+            new InstallCommand(),
+            new CompileCommand(),
+            new BuildCommand(),
+            new TestCommand(),
+            new NativeCommand(),
+            new ImageCommand(),
+            new MvnCommand(),
+            new GradleCommand(),
+            new ActivateCommand(),
+            new NewCommand(),
+            new InitCommand());
 
     private static final Map<String, CliCommand> BY_NAME = index();
 
@@ -121,7 +169,7 @@ public final class CommandDispatch {
         }
         Invocation in;
         try {
-            in = ArgParser.parse(withGlobals(cmd), rest);
+            in = ArgParser.parse(withGlobals(cmd), rest, cmd.passthrough());
         } catch (ParseException e) {
             printError(qualified, cmd, e, ansi);
             return 2;

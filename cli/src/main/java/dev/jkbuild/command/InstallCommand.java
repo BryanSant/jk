@@ -42,9 +42,11 @@ import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.GitUrl;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.net.URI;
@@ -56,7 +58,6 @@ import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk install [<source>]} — install a jk artifact. Three modes:
@@ -87,67 +88,44 @@ import java.util.concurrent.Callable;
  * {@code ensure-built} phase; the nested progress widget overlaps
  * briefly with the outer one, a known UX wrinkle.
  */
-@Command(name = "install",
-        description = "Install the current project or a specified target")
-public final class InstallCommand implements Callable<Integer> {
+public final class InstallCommand implements CliCommand {
 
-    @Parameters(arity = "0..1", paramLabel = "<source>",
-            description = "Maven coord (group:artifact:version), a git URL "
-                    + "(optionally suffixed with @<tag-or-branch> or #<tag-or-branch>), "
-                    + "or a path to a local file. "
-                    + "Omit to install the current jk.toml project.")
+    @Override public String name() { return "install"; }
+    @Override public String description() { return "Install the current project or a specified target"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<group>", "Maven groupId for a local file install.", "--group"),
+                Opt.value("<name>", "Maven artifactId for a local file install.", "--name"),
+                Opt.value("<ver>", "Version for a local file install.", "--ver"),
+                Opt.value("<name>", "Launcher name under $JK_BIN_DIR. Default: the artifact id.", "--bin"),
+                Opt.value("<class>", "Override the Main-Class to exec.", "--main"),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the tool state directory.", "--state-dir").hide(),
+                Opt.value("<dir>", "Override the bin directory.", "--bin-dir").hide(),
+                Opt.value("<dir>", "Override the libexec directory.", "--libexec-dir").hide(),
+                Opt.value("<dir>", "Override the local Maven repo root (~/.m2) for m2install.", "--m2-dir").hide(),
+                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url").hide(),
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+    }
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("source", Arity.ZERO_OR_ONE,
+                "Maven coord, a git URL, or a path to a local file. Omit to install the current jk.toml project."));
+    }
+
     String source;
-
-    @Option(names = "--group",
-            description = "Maven groupId for a local file install. "
-                    + "Auto-detected from JAR metadata when available.")
     String groupFlag;
-
-    @Option(names = "--name",
-            description = "Maven artifactId for a local file install. "
-                    + "Auto-detected from JAR metadata when available.")
     String nameFlag;
-
-    @Option(names = "--ver",
-            description = "Version for a local file install. "
-                    + "Auto-detected from JAR metadata when available.")
     String verFlag;
-
-    @Option(names = "--bin",
-            description = "Launcher name under $JK_BIN_DIR. Default: the artifact id.")
     String binName;
-
-    @Option(names = "--main",
-            description = "Override the Main-Class to exec.")
     String mainClass;
-
-    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
-
-    @Option(names = "--state-dir", hidden = true,
-            description = "Override the tool state directory. Default: $JK_STATE_DIR.")
     Path stateDirOverride;
-
-    @Option(names = "--bin-dir", hidden = true,
-            description = "Override the bin directory. Default: $JK_BIN_DIR or ~/.local/bin.")
     Path binDirOverride;
-
-    @Option(names = "--libexec-dir", hidden = true,
-            description = "Override the libexec directory. Default: $JK_LIBEXEC_DIR or ~/.jk/libexec.")
     Path libexecDirOverride;
-
-    @Option(names = "--m2-dir", hidden = true,
-            description = "Override the local Maven repo root (~/.m2) for m2install.")
     Path m2DirOverride;
-
-    @Option(names = "--repo-url", hidden = true,
-            description = "Override the Maven repository URL (for tests).")
     URI repoUrl;
-
-    @picocli.CommandLine.Mixin dev.jkbuild.cli.BuildOptions buildOpts;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    dev.jkbuild.cli.BuildOptions buildOpts;
+    GlobalOptions global;
 
     // Cross-phase keys.
     private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
@@ -159,7 +137,23 @@ public final class InstallCommand implements Callable<Integer> {
     private static final GoalKey<String> FETCHED_SHA = GoalKey.of("fetched-sha", String.class);
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        this.source = in.positionals().isEmpty() ? null : in.positionals().get(0);
+        this.groupFlag = in.value("group").orElse(null);
+        this.nameFlag = in.value("name").orElse(null);
+        this.verFlag = in.value("ver").orElse(null);
+        this.binName = in.value("bin").orElse(null);
+        this.mainClass = in.value("main").orElse(null);
+        this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
+        this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
+        this.binDirOverride = in.value("bin-dir").map(Path::of).orElse(null);
+        this.libexecDirOverride = in.value("libexec-dir").map(Path::of).orElse(null);
+        this.m2DirOverride = in.value("m2-dir").map(Path::of).orElse(null);
+        this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
+        this.buildOpts = new dev.jkbuild.cli.BuildOptions();
+        this.buildOpts.skipTests = in.isSet("skip-tests");
+        this.global = GlobalOptions.from(in);
+
         if (source == null || source.isBlank()) {
             return installCurrentProject();
         }

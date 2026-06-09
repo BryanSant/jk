@@ -2,74 +2,34 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
  * {@code jk init} — initialize a jk project in the current directory.
- *
- * <p>Like {@code cargo init}: scaffolds {@code jk.toml}, {@code jk.lock},
- * and source stubs into the <em>current</em> directory rather than a new
- * sub-directory. Errors immediately when a {@code jk.toml} already exists.
- * All wizard and flag options are identical to {@code jk new}.
- *
- * <p>Run inside an existing project/workspace (an enclosing {@code jk.toml}
- * found before exiting the git repo or reaching {@code $HOME}), the directory
- * is registered as a member — path appended to the root
- * {@code [workspace].members}, group/JDK/language inherited, no per-member
- * {@code jk.lock} — the same behaviour as {@code jk new}. {@code --no-member}
- * forces a standalone project.
+ * Delegates to {@link NewCommand} with directory pinned to {@code "."}.
  */
-@Command(name = "init",
-        description = "Initialize the current directory into a project (or member)")
-public final class InitCommand implements Callable<Integer> {
+public final class InitCommand implements CliCommand {
 
-    @Option(names = "--name", description = "Project name. Defaults to the current directory name.")
-    String name;
+    @Override public String name() { return "init"; }
+    @Override public String description() { return "Initialize the current directory into a project (or member)"; }
 
-    @Option(names = "--group", description = "Maven groupId. Default: inferred from ~/.gitconfig, else 'com.example'.")
-    String group;
-
-    @Option(names = "--jdk", description = "JDK major version. Default: '25'.")
-    String jdk;
-
-    @Option(names = "--lang", description = "Source language: java | kotlin. Default: java.")
-    String lang;
-
-    @Option(names = "--executable", description = "Generate an executable project (default is library).", negatable = true)
-    Boolean executable;
-
-    @Option(names = "--shadow", description = "Bundle as a shadow (fat) jar. Implies --executable.")
-    boolean shadow;
-
-    @Option(names = "--native", description = "Wire a GraalVM native-image build.")
-    boolean nativeImage;
-
-    @Option(names = "--deps", description = "Comma-separated curated deps: lombok, jspecify, kotest, commons-lang, commons-io, guava.")
-    String depsCsv;
-
-    @Option(names = "--layout", description = "Project layout: simple | traditional | auto. Default: simple.")
-    String layoutFlag;
-
-    @Option(names = "--kotlin-module", description = "Kotlin module name; emitted as project.module in jk.toml.")
-    String kotlinModule;
-
-    @Option(names = "--no-member", description = "Initialize a standalone project even inside an existing project/workspace.")
-    boolean noMember;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    @Override public List<Opt> options() {
+        // Same options as NewCommand (minus the positional directory parameter)
+        return new NewCommand().options();
+    }
 
     @Override
-    public Integer call() throws IOException {
+    public int run(Invocation in) throws IOException {
         Path cwd = Path.of(".").toAbsolutePath().normalize();
         if (Files.exists(cwd.resolve("jk.toml"))) {
             String cancel = Theme.colorize("⊘", Theme.active().warning().bold());
@@ -83,20 +43,20 @@ public final class InitCommand implements Callable<Integer> {
         // resolution, wizard-preset, and existing-project logic all fire
         // correctly against the current directory.
         NewCommand delegate = new NewCommand();
+        delegate.name         = in.value("name").orElse(null);
+        delegate.group        = in.value("group").orElse(null);
+        delegate.jdk          = in.value("jdk").orElse(null);
+        delegate.lang         = in.value("lang").orElse(null);
+        delegate.executable   = in.flag("executable").orElse(null);
+        delegate.shadow       = in.isSet("shadow");
+        delegate.nativeImage  = in.isSet("native");
+        delegate.depsCsv      = in.value("deps").orElse(null);
+        delegate.layoutFlag   = in.value("layout").orElse(null);
+        delegate.kotlinModule = in.value("kotlin-module").orElse(null);
+        delegate.noMember     = in.isSet("no-member");
         delegate.directory    = Path.of(".");
-        delegate.name         = this.name;
-        delegate.group        = this.group;
-        delegate.jdk          = this.jdk;
-        delegate.lang         = this.lang;
-        delegate.executable   = this.executable;
-        delegate.shadow       = this.shadow;
-        delegate.nativeImage  = this.nativeImage;
-        delegate.depsCsv      = this.depsCsv;
-        delegate.layoutFlag = this.layoutFlag;
-        delegate.kotlinModule = this.kotlinModule;
-        delegate.noMember     = this.noMember;
-        delegate.global       = this.global;
-        return delegate.call();
+        delegate.global       = GlobalOptions.from(in);
+        return delegate.callBody();
     }
 
     private static String existingCoord(Path buildFile) {

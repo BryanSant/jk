@@ -32,8 +32,9 @@ import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -41,7 +42,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
 /**
@@ -54,18 +54,19 @@ import java.util.stream.Stream;
  * (if Kotlin sources, after Java). The scratch output directory
  * lives under {@code $TMPDIR} and is deleted on goal completion.
  */
-@Command(name = "compile", description = "Compile this project's source code")
-public final class CompileCommand implements Callable<Integer> {
+public final class CompileCommand implements CliCommand {
 
-    @Option(names = "--profile", paramLabel = "<name>",
-            description = "Build profile to apply. Default: auto (ci if CI=true, else none).")
+    @Override public String name() { return "compile"; }
+    @Override public String description() { return "Compile this project's source code"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<name>", "Build profile to apply. Default: auto (ci if CI=true, else none).", "--profile"),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide());
+    }
+
     String profileName;
-
-    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDir;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    GlobalOptions global;
 
     private static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
     private static final GoalKey<Lockfile> LOCK = GoalKey.of("lock", Lockfile.class);
@@ -78,7 +79,10 @@ public final class CompileCommand implements Callable<Integer> {
     private static final GoalKey<Path> SCRATCH = GoalKey.of("scratch", Path.class);
 
     @Override
-    public Integer call() throws IOException {
+    public int run(Invocation in) throws IOException {
+        this.profileName = in.value("profile").orElse(null);
+        this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+        this.global = GlobalOptions.from(in);
         Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");

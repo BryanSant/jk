@@ -8,9 +8,11 @@ import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -19,35 +21,35 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk import <file>} — convert a Maven or Gradle build to {@code jk.toml}
  * via the {@code jk-compat-runner} worker subprocess (PRD §24.2 / §24.3).
  */
-@Command(name = "import", description = "Convert a Maven or Gradle build to jk.toml")
-public final class ImportCommand implements Callable<Integer> {
+public final class ImportCommand implements CliCommand {
 
     private static final List<String> AUTO_DETECT_ORDER =
             List.of("build.gradle.kts", "build.gradle", "pom.xml");
 
-    @picocli.CommandLine.Mixin GlobalOptions global;
-
-    @Parameters(arity = "0..1", paramLabel = "file",
-            description = "The build file to import (auto-detected if omitted).")
-    Path source;
-
-    @Option(names = "--out", description = "Path to write jk.toml.")
-    Path out;
-
-    @Option(names = "--report", description = "Path to write the import report.")
-    Path reportPath;
-
-    @Option(names = "--force", description = "Overwrite existing jk.toml.")
-    boolean force;
+    @Override public String name() { return "import"; }
+    @Override public String description() { return "Convert a Maven or Gradle build to jk.toml"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<file>", "Path to write jk.toml.", "--out"),
+                Opt.value("<file>", "Path to write the import report.", "--report"),
+                Opt.flag("Overwrite existing jk.toml.", "--force"));
+    }
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("file", Arity.ZERO_OR_ONE, "The build file to import (auto-detected if omitted)."));
+    }
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        Path source = in.positionals().isEmpty() ? null : Path.of(in.positionals().get(0));
+        Path out = in.value("out").map(Path::of).orElse(null);
+        Path reportPath = in.value("report").map(Path::of).orElse(null);
+        boolean force = in.isSet("force");
+        GlobalOptions global = GlobalOptions.from(in);
         Path baseDir = global.workingDir();
 
         if (source == null) {

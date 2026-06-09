@@ -28,15 +28,16 @@ import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
 import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedStyle;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk jdk install [<spec>]} — pull a JDK from the JetBrains JDK feed
@@ -52,39 +53,30 @@ import java.util.concurrent.Callable;
  * the way of the wizard, SpinnerProgressBar and Spinner — those keep ownership
  * of the rendered output.
  */
-@Command(name = "install", aliases = {"add"},
-        description = "Install a Java Development Kit")
-public final class JdkInstallCommand implements Callable<Integer> {
+public final class JdkInstallCommand implements CliCommand {
 
-    @Parameters(arity = "0..1", paramLabel = "<spec>",
-            description = "Keyword (`lts` / `stable` / `latest`) or a denormalized version "
-                    + "(`25`, `21.0.5`, `temurin-21`, `25-graal`, `java-17-openjdk`). "
-                    + "Omit to launch the interactive wizard.")
+    @Override public String name() { return "install"; }
+    @Override public java.util.List<String> aliases() { return java.util.List.of("add"); }
+    @Override public String description() { return "Install a Java Development Kit"; }
+    @Override public java.util.List<Opt> options() {
+        return java.util.List.of(
+                Opt.flag("After install, mark this JDK as the system-wide default.", "-d", "--make-default"),
+                Opt.flag("In the interactive wizard, list every vendor from the JetBrains feed.", "--show-all").hide(),
+                Opt.value("<dir>", "Override the install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide(),
+                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url").hide(),
+                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file").hide());
+    }
+    @Override public java.util.List<Param> parameters() {
+        return java.util.List.of(Param.of("spec", Arity.ZERO_OR_ONE,
+                "Keyword (`lts` / `stable` / `latest`) or a denormalized version. Omit to launch the interactive wizard."));
+    }
+
     String spec;
-
-    @Option(names = {"-d", "--make-default"},
-            description = "After install, mark this JDK as the system-wide default.")
     boolean makeDefault;
-
-    /** Wired from the {@link GlobalOptions} mixin so we can gate the "resolved spec" diagnostic on -v. */
-    @picocli.CommandLine.Mixin
     GlobalOptions global;
-
-    @Option(names = "--show-all", hidden = true,
-            description = "In the interactive wizard, list every vendor from the JetBrains feed "
-                    + "instead of the curated default set.")
     boolean showAll;
-
-    @Option(names = "--jdks-dir", hidden = true,
-            description = "Override the install root. Default: the IntelliJ JDK directory.")
     Path jdksDir;
-
-    @Option(names = "--feed-url", hidden = true,
-            description = "Override the JetBrains JDK feed URL (for tests).")
     URI feedUrl;
-
-    @Option(names = "--cache-file", hidden = true,
-            description = "Override the catalog cache path (for tests).")
     Path cacheFile;
 
     private static final GoalKey<JdkCatalog> CATALOG = GoalKey.of("catalog", JdkCatalog.class);
@@ -95,7 +87,15 @@ public final class JdkInstallCommand implements Callable<Integer> {
     private static final GoalKey<Boolean> WANT_DEFAULT = GoalKey.of("want-default", Boolean.class);
 
     @Override
-    public Integer call() throws Exception {
+    public int run(Invocation in) throws Exception {
+        this.spec = in.positionals().isEmpty() ? null : in.positionals().get(0);
+        this.makeDefault = in.isSet("make-default");
+        this.global = GlobalOptions.from(in);
+        this.showAll = in.isSet("show-all");
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.feedUrl = in.value("feed-url").map(URI::create).orElse(null);
+        this.cacheFile = in.value("cache-file").map(Path::of).orElse(null);
+
         if (!HostPlatform.supported()) {
             System.err.println("jk jdk install: host "
                     + System.getProperty("os.name") + "/" + System.getProperty("os.arch")

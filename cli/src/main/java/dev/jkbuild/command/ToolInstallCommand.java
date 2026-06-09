@@ -23,15 +23,17 @@ import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
 import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
  * {@code jk tool install <coord>} — install a Maven-published tool as a
@@ -43,44 +45,45 @@ import java.util.concurrent.Callable;
  * standard progress widget works fine, and the goal stays
  * {@code --output json}-friendly.
  */
-@Command(name = "install", description = "Install a tool from a Maven coordinate")
-public final class ToolInstallCommand implements Callable<Integer> {
+public final class ToolInstallCommand implements CliCommand {
 
-    @Parameters(arity = "1", paramLabel = "<coord>",
-            description = "Maven coordinate (group:artifact:version).")
+    @Override public String name() { return "install"; }
+    @Override public String description() { return "Install a tool from a Maven coordinate"; }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<name>", "Launcher name under $JK_BIN_DIR. Default: the artifact id.", "--bin"),
+                Opt.value("<class>", "Override the Main-Class to exec (otherwise read from the jar's manifest).", "--main"),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the tool state directory.", "--state-dir").hide(),
+                Opt.value("<dir>", "Override the bin directory.", "--bin-dir").hide(),
+                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url").hide());
+    }
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("coord", Arity.ONE, "Maven coordinate (group:artifact:version)."));
+    }
+
     String coord;
-
-    @Option(names = "--bin",
-            description = "Launcher name under $JK_BIN_DIR. Default: the artifact id.")
     String binName;
-
-    @Option(names = "--main",
-            description = "Override the Main-Class to exec (otherwise read from the jar's manifest).")
     String mainClass;
-
-    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
     Path cacheDirOverride;
-
-    @Option(names = "--state-dir", hidden = true,
-            description = "Override the tool state directory. Default: $JK_STATE_DIR.")
     Path stateDirOverride;
-
-    @Option(names = "--bin-dir", hidden = true,
-            description = "Override the bin directory. Default: $JK_BIN_DIR or ~/.local/bin.")
     Path binDirOverride;
-
-    @Option(names = "--repo-url", hidden = true,
-            description = "Override the Maven repository URL (for tests).")
     URI repoUrl;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    GlobalOptions global;
 
     private static final GoalKey<ToolEnv> TOOL_ENV = GoalKey.of("tool-env", ToolEnv.class);
     private static final GoalKey<Path> LAUNCHER = GoalKey.of("launcher", Path.class);
 
     @Override
-    public Integer call() throws IOException, InterruptedException {
+    public int run(Invocation in) throws IOException, InterruptedException {
+        this.coord = in.positionals().get(0);
+        this.binName = in.value("bin").orElse(null);
+        this.mainClass = in.value("main").orElse(null);
+        this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
+        this.stateDirOverride = in.value("state-dir").map(Path::of).orElse(null);
+        this.binDirOverride = in.value("bin-dir").map(Path::of).orElse(null);
+        this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
+        this.global = GlobalOptions.from(in);
         Coordinate primary = Coordinate.parse(coord);
         String bin = binName != null && !binName.isBlank() ? binName : primary.artifact();
 

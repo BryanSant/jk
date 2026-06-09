@@ -1,35 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Spec;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
 
-/**
- * {@code jk jdk} — JDK management subcommands. Maps to PRD §12.
- */
-@Command(
-        name = "jdk",
-        aliases = {"jdks"},
-        description = "Manage JDK versions and installations",
-        subcommands = {
-                JdkListCommand.class,
-                JdkInstallCommand.class,
-                JdkPinCommand.class,
-                JdkDefaultCommand.class,
-                JdkHomeCommand.class,
-                JdkUninstallCommand.class,
-                JdkReconcileCommand.class,
-                JdkUpdateShellCommand.class,
-        })
-public final class JdkCommand implements Runnable {
+import java.util.List;
 
-    @Spec CommandSpec spec;
+/** {@code jk jdk} parent — Manage JDK versions and installations */
+public final class JdkCommand implements CliCommand {
+
+    @Override public String name() { return "jdk"; }
+    @Override public String description() { return "Manage JDK versions and installations"; }
+    @Override public List<String> aliases() { return List.of("jdks"); }
 
     @Override
-    public void run() {
-        // No subcommand — print help via the active CommandLine so the
-        // alias-stripping renderer registered by Jk.newCommandLine() applies.
-        spec.commandLine().usage(System.out);
+    public List<CliCommand> subcommands() {
+        return List.of(new JdkListCommand(), new JdkInstallCommand(), new JdkPinCommand(), new JdkDefaultCommand(), new JdkHomeCommand(), new JdkUninstallCommand(), new JdkReconcileCommand(), new JdkUpdateShellCommand());
     }
+
+    @Override
+    public int run(Invocation in) { return 64; }
 }

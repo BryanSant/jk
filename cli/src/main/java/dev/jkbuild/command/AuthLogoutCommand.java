@@ -2,57 +2,53 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.forge.AuthException;
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ForgeKind;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Mixin;
-import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
-import picocli.CommandLine.Spec;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
-import java.util.concurrent.Callable;
+import java.nio.file.Path;
+import java.util.List;
 
-/**
- * {@code jk auth logout <provider> [--host H]} — forget jk's stored
- * credential for a host. Leaves environment variables and native-CLI logins
- * ({@code gh}, {@code glab}) untouched — those aren't jk's to remove.
- */
-@Command(name = "logout", description = "Remove jk's stored token for a forge host")
-public final class AuthLogoutCommand implements Callable<Integer> {
+/** {@code jk auth logout <provider>} — forget jk's stored credential for a host. */
+public final class AuthLogoutCommand implements CliCommand {
 
-    @Parameters(arity = "1", paramLabel = "<provider>",
-            description = "github | gitlab | gitea (forgejo/codeberg) | bitbucket")
-    String provider;
-
-    @Option(names = "--host", paramLabel = "<HOST>",
-            description = "Forge host. Defaults per provider; required for Gitea/Forgejo.")
-    String host;
-
-    @Option(names = "--credentials-dir", hidden = true,
-            description = "Override the credentials directory. Default: ~/.jk/credentials.")
-    java.nio.file.Path credentialsDir;
-
-    @Mixin GlobalOptions global;
-    @Spec CommandSpec spec;
+    @Override public String name() { return "logout"; }
+    @Override public String description() { return "Remove jk's stored token for a forge host"; }
 
     @Override
-    public Integer call() {
-        ForgeKind kind = AuthCommand.requireKind(spec, provider);
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<HOST>", "Forge host. Defaults per provider; required for Gitea/Forgejo.", "--host"),
+                Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/credentials.", "--credentials-dir").hide());
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of("provider", Arity.ONE,
+                "github | gitlab | gitea (forgejo/codeberg) | bitbucket"));
+    }
+
+    @Override
+    public int run(Invocation in) {
+        String provider = in.positionals().get(0);
+        String host = in.value("host").orElse(null);
+        Path credentialsDir = in.value("credentials-dir").map(Path::of).orElse(null);
+        GlobalOptions global = GlobalOptions.from(in);
+
+        ForgeKind kind;
+        try { kind = AuthCommand.requireKind(provider); }
+        catch (IllegalArgumentException e) { System.err.println("error: " + e.getMessage()); return 2; }
         String resolvedHost;
-        try {
-            resolvedHost = ForgeAuth.resolveHost(kind, host);
-        } catch (AuthException e) {
-            System.err.println("error: " + e.getMessage());
-            return 2;
-        }
+        try { resolvedHost = ForgeAuth.resolveHost(kind, host); }
+        catch (AuthException e) { System.err.println("error: " + e.getMessage()); return 2; }
 
         AuthCommand.authFor(credentialsDir).logout(kind, resolvedHost);
-        if (!global.quiet) {
-            System.out.println("Logged out of " + kind.displayName() + " (" + resolvedHost + ").");
-        }
+        if (!global.quiet) System.out.println("Logged out of " + kind.displayName() + " (" + resolvedHost + ").");
         return 0;
     }
 }

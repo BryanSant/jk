@@ -17,13 +17,15 @@ import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
 import dev.jkbuild.util.JkDirs;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 import dev.jkbuild.util.JkThreads;
 import org.jline.terminal.Terminal;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStringBuilder;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -34,7 +36,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk new} — create a new jk project (aliases: {@code init}, {@code create}).
@@ -58,47 +59,42 @@ import java.util.concurrent.Callable;
  * first member), and no per-member {@code jk.lock} is written (the root lock
  * owns resolution). Mirrors {@code cargo new} / {@code uv init}.
  */
-@Command(name = "new", aliases = {"create"},
-        description = "Create a new jk project (or workspace member)")
-public final class NewCommand implements Callable<Integer> {
+public final class NewCommand implements CliCommand {
 
-    @Option(names = "--name", description = "Project name — the target directory leaf and [project].name.")
+    @Override public String name() { return "new"; }
+    @Override public String description() { return "Create a new jk project (or workspace member)"; }
+    @Override public List<String> aliases() { return List.of("create"); }
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.value("<name>", "Project name — the target directory leaf and [project].name.", "--name"),
+                Opt.value("<group>", "Maven groupId. Default: inferred from ~/.gitconfig, else 'com.example'.", "--group"),
+                Opt.value("<ver>", "JDK major version. Default: '25'.", "--jdk"),
+                Opt.value("<lang>", "Source language: java | kotlin. Default: java.", "--lang"),
+                Opt.flag("Generate an executable project (default is library).", "--executable").negate(),
+                Opt.flag("Bundle as a shadow (fat) jar. Implies --executable.", "--shadow"),
+                Opt.flag("Wire a GraalVM native-image build.", "--native"),
+                Opt.value("<deps>", "Comma-separated curated deps: lombok, jspecify, kotest, commons-lang, commons-io, guava.", "--deps"),
+                Opt.value("<layout>", "Project layout: simple | traditional | auto. Default: simple.", "--layout"),
+                Opt.value("<module>", "Kotlin module name; emitted as project.module in jk.toml.", "--kotlin-module"),
+                Opt.flag("Create a standalone project even inside an existing project/workspace.", "--no-member"));
+    }
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("directory", Arity.ZERO_OR_ONE, "Target directory. Default: current directory or --name subdir."));
+    }
+
     String name;
-
-    @Option(names = "--group", description = "Maven groupId. Default: inferred from ~/.gitconfig, else 'com.example'.")
     String group;
-
-    @Option(names = "--jdk", description = "JDK major version. Default: '25'.")
     String jdk;
-
-    @Option(names = "--lang", description = "Source language: java | kotlin. Default: java.")
     String lang;
-
-    @Option(names = "--executable", description = "Generate an executable project (default is library).", negatable = true)
     Boolean executable;
-
-    @Option(names = "--shadow", description = "Bundle as a shadow (fat) jar. Implies --executable.")
     boolean shadow;
-
-    @Option(names = "--native", description = "Wire a GraalVM native-image build.")
     boolean nativeImage;
-
-    @Option(names = "--deps", description = "Comma-separated curated deps: lombok, jspecify, kotest, commons-lang, commons-io, guava.")
     String depsCsv;
-
-    @Option(names = "--layout", description = "Project layout: simple | traditional | auto. Default: simple.")
     String layoutFlag;
-
-    @Option(names = "--kotlin-module", description = "Kotlin module name; emitted as project.module in jk.toml.")
     String kotlinModule;
-
-    @Option(names = "--no-member", description = "Create a standalone project even inside an existing project/workspace.")
     boolean noMember;
-
-    @Parameters(arity = "0..1", description = "Target directory. Default: current directory or --name subdir.")
     Path directory;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    GlobalOptions global;
 
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> CANDIDATES = GoalKey.of("candidates", List.class);
@@ -174,7 +170,25 @@ public final class NewCommand implements Callable<Integer> {
     }
 
     @Override
-    public Integer call() throws IOException {
+    public int run(Invocation in) throws IOException {
+        this.name = in.value("name").orElse(null);
+        this.group = in.value("group").orElse(null);
+        this.jdk = in.value("jdk").orElse(null);
+        this.lang = in.value("lang").orElse(null);
+        this.executable = in.flag("executable").orElse(null);
+        this.shadow = in.isSet("shadow");
+        this.nativeImage = in.isSet("native");
+        this.depsCsv = in.value("deps").orElse(null);
+        this.layoutFlag = in.value("layout").orElse(null);
+        this.kotlinModule = in.value("kotlin-module").orElse(null);
+        this.noMember = in.isSet("no-member");
+        this.directory = in.positionals().isEmpty() ? null : Path.of(in.positionals().get(0));
+        this.global = GlobalOptions.from(in);
+        return callBody();
+    }
+
+    /** The body of run(), callable after fields are populated (used by InitCommand delegation). */
+    int callBody() throws IOException {
         Path cwd = Path.of(".").toAbsolutePath().normalize();
 
         // Fail-fast for `jk new .` when the cwd already has a project.

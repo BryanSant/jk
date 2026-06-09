@@ -1,38 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.Spec;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
 
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
- * {@code jk library} parent verb. The short-name library catalog is a
- * layered name → {@code group:artifact} index used to resolve manifest
- * shorthands like {@code picocli = "4.7.7"}. Subcommands here manage the
- * downloaded layer and surface lookups.
- *
- * <p>Layered lookup order (highest → lowest): the current project's
- * {@code [libraries]} table, the user's {@code ~/.jk/libs.local.toml}, the
- * downloaded {@code ~/.jk/libs.global.toml} (refreshed by
- * {@link LibraryUpdateCommand}), then the bundled floor that ships with
- * the binary.
+ * {@code jk library} parent verb — manage the short-name library catalog.
  */
-@Command(name = "library", aliases = {"lib"},
-        description = "Manage the short-name-to-coordinate library catalog",
-        subcommands = {
-                LibraryUpdateCommand.class,
-                LibraryListCommand.class,
-                LibrarySearchCommand.class,
-        })
-public final class LibraryCommand implements Callable<Integer> {
+public final class LibraryCommand implements CliCommand {
 
-    @Spec CommandSpec spec;
+    @Override public String name() { return "library"; }
+    @Override public String description() { return "Manage the short-name-to-coordinate library catalog"; }
+    @Override public List<String> aliases() { return List.of("lib"); }
 
     @Override
-    public Integer call() {
-        spec.commandLine().usage(System.out);
-        return 64;
+    public List<CliCommand> subcommands() {
+        return List.of(new LibraryUpdateCommand(), new LibraryListCommand(), new LibrarySearchCommand());
     }
+
+    @Override
+    public int run(Invocation in) { return 64; }
 }
