@@ -34,7 +34,7 @@ While running (existing `Spinner` frames, primary→accent gradient, 120 ms):
 ```
 On completion the spinner freezes to its **first glyph** (`·`) and a result line is printed:
 ```
-[green]✔[/] Finished syncing 13 artifacts
+[green]✓[/] Finished syncing 13 artifacts
 ```
 or
 ```
@@ -49,12 +49,12 @@ command-supplied.
 ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 45% [bright-black][[/]N of D[bright-black]][/]
 ╰─ ◻ api › Compile › javac 12 sources
    ◻ web › Sync deps › fetching guava
-   ✔ api › Parse build › 
-   ✔ api › Ensure JDK › 
+   ✓ api › Parse build › 
+   ✓ api › Ensure JDK › 
    … +2 completed
 ```
 - `[ ]` brackets and every `›` separator: **bright-black**. Elapsed `(…)`: bright-black.
-- Phase glyphs: `◻` (active/pending), `✔` green (done), `✗` red (failed).
+- Phase glyphs: `◻` (active/pending), `✓` green (done), `✗` red (failed).
 - The `╰─` connector prefixes the **first** list row (bright-black); subsequent rows align
   under it.
 - The list **floats**: outstanding (active/pending) rows on top in start order, completed
@@ -65,7 +65,7 @@ command-supplied.
 
 On completion the whole live region is replaced with a single line:
 ```
-[green]✔[/] Built jktest-0.1.0.jar in 717ms
+[green]✓[/] Built jktest-0.1.0.jar in 717ms
 ```
 or
 ```
@@ -223,7 +223,7 @@ own `group:artifact`), so the code path is uniform.
 
 ## 9. Theme / glyph additions
 
-- Add named glyph constants (check `✔`, cross `✗`, phase-pending `◻`) — a small `Glyphs`
+- Add named glyph constants (check `✓`, cross `✗`, phase-pending `◻`) — a small `Glyphs`
   holder or constants on `Theme`.
 - Reuse existing styles: `success()` (green check), `error()` (red cross), `darkGray()`
   (bright-black for brackets/`›`/elapsed/`╰─`), spinner gradient, progress/failure gradients.
@@ -275,7 +275,7 @@ Delivered on this branch (all `./gradlew test` green):
 - ✅ `ProgressBar` → `SpinnerProgressBar` (rename); new pure `ProgressBar`
   segmented-bar renderer.
 - ✅ `CommandManager` **simple mode** (spinner + verb → freeze-to-first-glyph +
-  `✔`/`✗` result line) and **goal mode** (spinner header + aggregate bar +
+  `✓`/`✗` result line) and **goal mode** (spinner header + aggregate bar +
   floating phase list, region replaced by the result line on finish).
 - ✅ Plumbing: `ConsoleSpec`, `SimpleTaskListener`, `CommandManagerListener`,
   `GoalConsole.run(…, ConsoleSpec)` (simple) and `GoalConsole.runGoal(…, member)`

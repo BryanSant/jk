@@ -11,7 +11,7 @@ public final class Glyphs {
     private Glyphs() {}
 
     /** Success marker — heavy check mark. Paint with {@code Theme.success()}. */
-    public static final String CHECK = "✔";
+    public static final String CHECK = "✓";
 
     /** Failure / cancel marker — heavy ballot X. Paint with {@code Theme.error()}. */
     public static final String CROSS = "✗";

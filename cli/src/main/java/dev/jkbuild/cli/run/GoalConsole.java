@@ -67,7 +67,7 @@ public final class GoalConsole {
 
     /**
      * Simple-task variant: render the goal as a spinner + verb (on a TTY) and a
-     * {@code ✔}/{@code ✗} result line from {@code spec}, instead of the
+     * {@code ✓}/{@code ✗} result line from {@code spec}, instead of the
      * phase-by-phase progress bar. {@code --output json} still emits NDJSON and
      * {@code --verbose} still prints per-phase lines; otherwise the
      * {@link SimpleTaskListener} owns the output (animating only on a TTY).
@@ -111,7 +111,7 @@ public final class GoalConsole {
      * Goal-oriented variant: render the goal with the new {@link CommandManagerListener}
      * (spinner header + aggregate bar + dynamic phase list) attributed to
      * {@code member} (the project's {@code group:artifact}), then a
-     * {@code ✔}/{@code ✗} result line from {@code spec}. {@code --output json}
+     * {@code ✓}/{@code ✗} result line from {@code spec}. {@code --output json}
      * still emits NDJSON and {@code --verbose} still prints per-phase lines.
      */
     public static GoalResult runGoal(Goal goal, Mode mode, Path cacheRoot,
