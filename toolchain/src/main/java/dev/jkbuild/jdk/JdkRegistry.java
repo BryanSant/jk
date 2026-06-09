@@ -104,14 +104,45 @@ public final class JdkRegistry {
         }
         // Walk the futures in probe-chain order so dedup picks the same
         // "winner" every run regardless of which future finished first.
+        //
+        // Attribution rule: $JAVA_HOME is an ephemeral pointer, so we never
+        // surface "java-home" as a source. When some manager probe (SDKMAN,
+        // IntelliJ, jk, …) also reports the same install, its attribution wins
+        // even though EnvVarProbe sits first in the chain — that's the tool
+        // that actually owns the directory. A home that ONLY $JAVA_HOME knows
+        // about (a hand-placed JDK no manager scans) is relabelled SOURCE_PATH
+        // below so it still shows up, just without the misleading label.
         Map<Path, JdkHit> hits = new LinkedHashMap<>();
         for (CompletableFuture<List<JdkHit>> f : futures) {
             for (JdkHit hit : f.join()) {
                 if (!isSupportedHit(hit)) continue;
-                hits.putIfAbsent(hit.home(), hit);
+                JdkHit existing = hits.get(hit.home());
+                if (existing == null) {
+                    hits.put(hit.home(), hit);
+                } else if (isEnvSource(existing.source()) && !isEnvSource(hit.source())) {
+                    // Replace the $JAVA_HOME attribution with the owning manager's
+                    // (home/version/vendor are identical — same release file).
+                    hits.put(hit.home(), hit);
+                }
             }
         }
-        return new ArrayList<>(hits.values());
+        List<JdkHit> result = new ArrayList<>(hits.size());
+        for (JdkHit hit : hits.values()) {
+            result.add(isEnvSource(hit.source())
+                    ? new JdkHit(hit.home(), hit.version(), hit.vendor(), SOURCE_PATH)
+                    : hit);
+        }
+        return result;
+    }
+
+    /** Source label produced by {@link dev.jkbuild.discovery.EnvVarProbe}. */
+    private static final String SOURCE_JAVA_HOME = "java-home";
+
+    /** Replacement label for a JDK reachable only via {@code $JAVA_HOME}. */
+    private static final String SOURCE_PATH = "path";
+
+    private static boolean isEnvSource(String source) {
+        return SOURCE_JAVA_HOME.equals(source);
     }
 
     /**

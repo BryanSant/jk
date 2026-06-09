@@ -93,8 +93,23 @@ public final class JdkCatalogClient {
      * check is skipped and the feed is always re-fetched from the network.
      */
     public JdkCatalog fetch(boolean noCache) throws IOException, InterruptedException {
+        return fetch(noCache, true);
+    }
+
+    /**
+     * Fetch the catalog, choosing how aggressively to prune majors.
+     *
+     * <p>{@code firstClassOnly} = {@code true} (the default for every
+     * resolution / auto-install path) keeps jk's curated set — LTS majors
+     * at or above {@link SupportedJdk#MIN_MAJOR} plus the single most-recent
+     * major. {@code false} keeps <em>every</em> major at or above the floor,
+     * which is what {@code jk jdk list --all} wants: a complete catalogue of
+     * installable vendors / products / majors, not just the recommended ones.
+     */
+    public JdkCatalog fetch(boolean noCache, boolean firstClassOnly)
+            throws IOException, InterruptedException {
         byte[] body = loadBody(noCache);
-        return parse(body);
+        return parse(body, firstClassOnly);
     }
 
     private byte[] loadBody(boolean noCache) throws IOException, InterruptedException {
@@ -152,7 +167,7 @@ public final class JdkCatalogClient {
      * pretty-printed with one key/value per line, so simple line-by-line
      * field extraction is reliable.
      */
-    private JdkCatalog parse(byte[] json) throws IOException {
+    private JdkCatalog parse(byte[] json, boolean firstClassOnly) throws IOException {
         List<JdkCatalog.Entry> entries = new ArrayList<>(256);
 
         // Per-JDK fields (depth 2)
@@ -254,7 +269,7 @@ public final class JdkCatalogClient {
                 }
             }
         }
-        return new JdkCatalog(filterSupported(entries));
+        return new JdkCatalog(filterSupported(entries, firstClassOnly));
     }
 
     /** Strip surrounding double-quotes and unescape basic sequences. */
@@ -267,18 +282,23 @@ public final class JdkCatalogClient {
     }
 
     /**
-     * Drop catalog rows for majors jk doesn't claim to support: anything
-     * below {@link SupportedJdk#MIN_MAJOR}, and any non-LTS that isn't the
-     * single most-recent major in the feed. The JetBrains feed publishes
-     * 8 / 11 / 17 / 21 / 23 / 24 / 25 / 26 / …; after this pass we keep
-     * {17, 21, 25, latestMajor}.
+     * Drop catalog rows for majors jk doesn't claim to support. Always drops
+     * anything below {@link SupportedJdk#MIN_MAJOR}. When {@code firstClassOnly}
+     * is set, also drops any non-LTS that isn't the single most-recent major in
+     * the feed — the JetBrains feed publishes 8 / 11 / 17 / 21 / 23 / 24 / 25 /
+     * 26 / …, so that pass keeps {17, 21, 25, latestMajor}. With it cleared,
+     * every major at or above the floor is kept (for {@code jk jdk list --all}).
      */
-    private static List<JdkCatalog.Entry> filterSupported(List<JdkCatalog.Entry> all) {
+    private static List<JdkCatalog.Entry> filterSupported(
+            List<JdkCatalog.Entry> all, boolean firstClassOnly) {
         if (all.isEmpty()) return all;
         int latest = all.stream().mapToInt(JdkCatalog.Entry::majorVersion).max().orElse(0);
         List<JdkCatalog.Entry> kept = new ArrayList<>(all.size());
         for (JdkCatalog.Entry e : all) {
-            if (SupportedJdk.isFirstClass(e.majorVersion(), latest)) kept.add(e);
+            boolean keep = firstClassOnly
+                    ? SupportedJdk.isFirstClass(e.majorVersion(), latest)
+                    : SupportedJdk.isSupported(e.majorVersion());
+            if (keep) kept.add(e);
         }
         return kept;
     }
