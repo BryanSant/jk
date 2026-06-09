@@ -2,14 +2,14 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
-import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.model.JkBuild;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -19,7 +19,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 import java.util.stream.Stream;
 
 /**
@@ -35,19 +34,32 @@ import java.util.stream.Stream;
  *
  * <p>The shared cache at {@code $JK_CACHE_DIR} is left alone — that's
  * per-machine state, not per-project.
+ *
+ * <p>The first command ported off picocli to jk's own {@link CliCommand}
+ * model (docs/plugin-refactor.md §5).
  */
-@Command(name = "clean", description = "Delete generated build outputs")
-public final class CleanCommand implements Callable<Integer> {
-
-    @Option(names = "--keep-artifacts",
-            description = "Only delete build/ intermediates; keep target/ artifacts.")
-    boolean keepArtifacts;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+public final class CleanCommand implements CliCommand {
 
     @Override
-    public Integer call() throws IOException {
-        Path dir = global.workingDir();
+    public String name() {
+        return "clean";
+    }
+
+    @Override
+    public String description() {
+        return "Delete generated build outputs";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(Opt.flag(
+                "Only delete build/ intermediates; keep target/ artifacts.", "--keep-artifacts"));
+    }
+
+    @Override
+    public int run(Invocation in) throws IOException {
+        boolean keepArtifacts = in.isSet("keep-artifacts");
+        Path dir = new GlobalOptions().workingDir();
         Path workspaceRoot = resolveWorkspaceRoot(dir);
         List<Path> projectDirs = collectProjectDirs(workspaceRoot);
 
