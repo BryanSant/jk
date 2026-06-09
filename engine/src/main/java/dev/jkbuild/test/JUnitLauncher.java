@@ -4,15 +4,11 @@ package dev.jkbuild.test;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.io.PrintWriter;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -91,28 +87,15 @@ public final class JUnitLauncher {
     private Result runSingle(
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
             throws IOException, InterruptedException {
-        var cmd = new ArrayList<String>();
-        cmd.add(javaBinary.toString());
-        cmd.add("-cp");
-        cmd.add(classpath);
-        cmd.add("dev.jkbuild.plugin.host.PluginHostMain");
-        cmd.add("--scan-classpath=" + testClassesDir);
+        List<String> cmd = List.of(
+                javaBinary.toString(), "-cp", classpath,
+                "dev.jkbuild.plugin.host.PluginHostMain",
+                "--scan-classpath=" + testClassesDir);
 
-        var pb = new ProcessBuilder(cmd).redirectErrorStream(true);
-        var process = pb.start();
         var aggregator = new ResultAggregator(listener, /* workerId */ 0);
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (line.startsWith(PROTOCOL_PREFIX)) {
-                    aggregator.accept(line.substring(PROTOCOL_PREFIX.length()));
-                } else {
-                    listener.onUserOutput(0, line);
-                }
-            }
-        }
-        int exit = process.waitFor();
+        int exit = WorkerProcess.run(cmd, PROTOCOL_PREFIX,
+                aggregator::accept,
+                line -> listener.onUserOutput(0, line));
         return aggregator.toResult(exit);
     }
 
@@ -133,36 +116,32 @@ public final class JUnitLauncher {
         var queue = new ConcurrentLinkedDeque<>(classes);
         var aggregators = new java.util.ArrayList<ResultAggregator>();
         var workerThreads = new ArrayList<Thread>();
-        var workerProcesses = new ArrayList<Process>();
+        int[] exits = new int[actualWorkers];
 
-        for (int w = 1; w <= actualWorkers; w++) {
-            final int workerId = w;
-            var pb = new ProcessBuilder(
-                    javaBinary.toString(),
-                    "-cp", classpath,
+        for (int w = 0; w < actualWorkers; w++) {
+            final int workerId = w + 1;
+            final int idx = w;
+            List<String> cmd = List.of(
+                    javaBinary.toString(), "-cp", classpath,
                     "dev.jkbuild.plugin.host.PluginHostMain",
                     "--pull",
                     "--worker=" + workerId,
-                    "--scan-classpath=" + testClassesDir)
-                    .redirectErrorStream(true);
-            var proc = pb.start();
-            workerProcesses.add(proc);
+                    "--scan-classpath=" + testClassesDir);
             var agg = new ResultAggregator(listener, workerId);
             aggregators.add(agg);
             var t = new Thread(
-                    () -> driveWorker(proc, workerId, queue, agg, listener),
+                    () -> exits[idx] = driveWorker(cmd, workerId, queue, agg, listener),
                     "jk-test-worker-" + workerId);
             t.start();
             workerThreads.add(t);
         }
-        // Wait for all reader threads first — they drain stdout fully. Then
-        // join the OS processes (they should already be exiting by the time
-        // we get here since their stdin was closed).
+        // Each worker thread owns its process (via WorkerProcess.converse) and
+        // returns its exit code once stdout is fully drained and the process
+        // has exited. Join them and take the worst exit.
         for (Thread t : workerThreads) t.join();
         int worstExit = 0;
-        for (Process p : workerProcesses) {
-            int exit = p.waitFor();
-            if (exit != 0) worstExit = exit;
+        for (int e : exits) {
+            if (e != 0) worstExit = e;
         }
         // Merge per-worker aggregators into one Result.
         long total = 0, succeeded = 0, failed = 0, skipped = 0;
@@ -189,43 +168,32 @@ public final class JUnitLauncher {
      * to the child's stdin. Non-protocol lines are user test output —
      * passed through to the parent's stdout, tagged with the worker id.
      */
-    private static void driveWorker(
-            Process proc, int workerId, ConcurrentLinkedDeque<String> queue,
+    private static int driveWorker(
+            List<String> cmd, int workerId, ConcurrentLinkedDeque<String> queue,
             ResultAggregator aggregator, TestProgressListener listener) {
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8));
-             PrintWriter writer = new PrintWriter(
-                     new OutputStreamWriter(proc.getOutputStream(), StandardCharsets.UTF_8), true)) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (!line.startsWith(PROTOCOL_PREFIX)) {
-                    listener.onUserOutput(workerId, line);
-                    continue;
-                }
-                String json = line.substring(PROTOCOL_PREFIX.length());
+        try {
+            return WorkerProcess.converse(cmd, PROTOCOL_PREFIX, (json, convo) -> {
                 String event = Ndjson.str(json, "e");
                 if ("ready".equals(event)) {
                     String next = queue.pollFirst();
                     if (next != null) {
-                        writer.println("RUN " + next);
+                        convo.send("RUN " + next);
                     } else {
-                        // Closing stdin makes the child's readLine return
-                        // null so it exits its pull loop cleanly. Sending
-                        // DONE first is for symmetry — either signal works.
-                        writer.println("DONE");
-                        writer.flush();
-                        try {
-                            proc.getOutputStream().close();
-                        } catch (IOException ignored) {
-                            // already-closed pipe is fine
-                        }
+                        // DONE + closing stdin makes the child's readLine return
+                        // null so it exits its pull loop cleanly (either signal works).
+                        convo.send("DONE");
+                        convo.closeInput();
                     }
                 } else {
                     aggregator.accept(json);
                 }
-            }
+            }, line -> listener.onUserOutput(workerId, line));
         } catch (IOException e) {
             listener.onUserOutput(workerId, "reader error: " + e.getMessage());
+            return -1;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return -1;
         }
     }
 
@@ -237,32 +205,22 @@ public final class JUnitLauncher {
     private List<String> discoverClasses(
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
             throws IOException, InterruptedException {
-        var pb = new ProcessBuilder(
-                javaBinary.toString(),
-                "-cp", classpath,
+        List<String> cmd = List.of(
+                javaBinary.toString(), "-cp", classpath,
                 "dev.jkbuild.plugin.host.PluginHostMain",
                 "--list-only",
-                "--scan-classpath=" + testClassesDir)
-                .redirectErrorStream(true);
-        var proc = pb.start();
+                "--scan-classpath=" + testClassesDir);
         var classes = new ArrayList<String>();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(proc.getInputStream(), StandardCharsets.UTF_8))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                if (!line.startsWith(PROTOCOL_PREFIX)) continue;
-                String json = line.substring(PROTOCOL_PREFIX.length());
-                String event = Ndjson.str(json, "e");
-                if ("discovered".equals(event)) {
-                    classes.add(Ndjson.str(json, "class"));
-                } else if ("discovery_total".equals(event)) {
-                    listener.onDiscoveryTotal(
-                            Ndjson.intValue(json, "classes", 0),
-                            Ndjson.intValue(json, "tests", 0));
-                }
+        WorkerProcess.run(cmd, PROTOCOL_PREFIX, json -> {
+            String event = Ndjson.str(json, "e");
+            if ("discovered".equals(event)) {
+                classes.add(Ndjson.str(json, "class"));
+            } else if ("discovery_total".equals(event)) {
+                listener.onDiscoveryTotal(
+                        Ndjson.intValue(json, "classes", 0),
+                        Ndjson.intValue(json, "tests", 0));
             }
-        }
-        proc.waitFor();
+        }, null);  // discovery emits no user output
         return classes;
     }
 
