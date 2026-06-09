@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
-
-import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.config.JkBuildParser;
@@ -13,18 +11,18 @@ import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk explain} — print the planned build with each task's action
@@ -34,16 +32,29 @@ import java.util.concurrent.Callable;
  * compile-test). Full action-graph rendering arrives once tasks
  * become first-class.
  */
-@Command(name = "explain", description = "Print the planned build with cache hit/miss")
-public final class ExplainCommand implements Callable<Integer> {    @Option(names = "--cache-dir", hidden = true,
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.")
-    Path cacheDir;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+public final class ExplainCommand implements CliCommand {
 
     @Override
-    public Integer call() throws IOException {
-        Path dir = global.workingDir();
+    public String name() {
+        return "explain";
+    }
+
+    @Override
+    public String description() {
+        return "Print the planned build with cache hit/miss";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(Opt.value("<dir>",
+                "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                "--cache-dir").hide());
+    }
+
+    @Override
+    public int run(Invocation in) throws IOException {
+        Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+        Path dir = new GlobalOptions().workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile) || !Files.exists(lockFile)) {

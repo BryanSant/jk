@@ -32,19 +32,16 @@ import java.util.Set;
                 RemoveCommand.class,
                 LockCommand.class,
                 UpdateCommand.class,
-                TreeCommand.class,
-                WhyCommand.class,
                 SyncCommand.class,
                 CompileCommand.class,
                 BuildCommand.class,
                 TestCommand.class,
-                // CleanCommand ported to jk's own CliCommand model (run via
-                // CommandDispatch); listed in `jk --help` by newCommandLine().
-                ExplainCommand.class,
+                // Ported to jk's own CliCommand model (run via CommandDispatch,
+                // listed in `jk --help` by newCommandLine()): clean, tree, why,
+                // explain, deactivate.
                 JdkCommand.class,
                 ActivateCommand.class,
                 HookEnvCommand.class,
-                DeactivateCommand.class,
                 ShellCommand.class,
                 MvnCommand.class,
                 GradleCommand.class,

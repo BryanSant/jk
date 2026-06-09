@@ -5,6 +5,10 @@ import dev.jkbuild.cli.args.ArgParser;
 import dev.jkbuild.cli.args.ParseException;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.command.CleanCommand;
+import dev.jkbuild.command.DeactivateCommand;
+import dev.jkbuild.command.ExplainCommand;
+import dev.jkbuild.command.TreeCommand;
+import dev.jkbuild.command.WhyCommand;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.model.command.CliCommand;
@@ -31,7 +35,11 @@ public final class CommandDispatch {
 
     /** Commands parsed/run by jk's own parser. Grows as commands are ported. */
     private static final List<CliCommand> COMMANDS = List.of(
-            new CleanCommand());
+            new CleanCommand(),
+            new TreeCommand(),
+            new WhyCommand(),
+            new ExplainCommand(),
+            new DeactivateCommand());
 
     private static final Map<String, CliCommand> BY_NAME = index();
 
