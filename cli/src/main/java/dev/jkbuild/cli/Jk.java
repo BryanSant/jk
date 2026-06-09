@@ -28,9 +28,6 @@ import java.util.Set;
         subcommands = {
                 NewCommand.class,
                 InitCommand.class,
-                AddCommand.class,
-                RemoveCommand.class,
-                UpdateCommand.class,
                 CompileCommand.class,
                 BuildCommand.class,
                 TestCommand.class,

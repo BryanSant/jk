@@ -4,15 +4,18 @@ package dev.jkbuild.cli;
 import dev.jkbuild.cli.args.ArgParser;
 import dev.jkbuild.cli.args.ParseException;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.command.AddCommand;
 import dev.jkbuild.command.CleanCommand;
 import dev.jkbuild.command.DeactivateCommand;
 import dev.jkbuild.command.ExplainCommand;
 import dev.jkbuild.command.HookEnvCommand;
 import dev.jkbuild.command.LockCommand;
+import dev.jkbuild.command.RemoveCommand;
 import dev.jkbuild.command.RepoCommand;
 import dev.jkbuild.command.ShellCommand;
 import dev.jkbuild.command.SyncCommand;
 import dev.jkbuild.command.TreeCommand;
+import dev.jkbuild.command.UpdateCommand;
 import dev.jkbuild.command.WhyCommand;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
@@ -56,6 +59,9 @@ public final class CommandDispatch {
             new HookEnvCommand(),
             new LockCommand(),
             new SyncCommand(),
+            new AddCommand(),
+            new RemoveCommand(),
+            new UpdateCommand(),
             new RepoCommand());
 
     private static final Map<String, CliCommand> BY_NAME = index();

@@ -2,19 +2,20 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildEditor;
 import dev.jkbuild.model.Scope;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Parameters;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.concurrent.Callable;
+import java.util.List;
 
 /**
  * {@code jk remove &lt;name&gt;} — remove a dependency from {@code jk.toml}
@@ -25,28 +26,43 @@ import java.util.concurrent.Callable;
  * the artifactId is extracted and used as the short name. The
  * recommended form is the bare short name.
  */
-@Command(name = "remove", description = "Remove a dependency, or workspace member, from jk.toml")
-public final class RemoveCommand implements Callable<Integer> {
-
-    @Parameters(arity = "1", paramLabel = "[name]",
-            description = "Short name of the dependency to remove (the manifest key). "
-                    + "A group:artifact[:version] coord is also accepted; the artifactId is used as the name.")
-    String nameArg;
-
-    // Inlined scope flags (see AddCommand for the picocli-codegen rationale).
-    @Option(names = "--test",      description = "Test scope")
-    boolean test;
-    @Option(names = "--runtime",   description = "Runtime scope")
-    boolean runtime;
-    @Option(names = "--provided",  description = "Provided scope")
-    boolean provided;
-    @Option(names = "--processor", description = "Annotation processor scope")
-    boolean processor;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+public final class RemoveCommand implements CliCommand {
 
     @Override
-    public Integer call() throws IOException {
+    public String name() {
+        return "remove";
+    }
+
+    @Override
+    public String description() {
+        return "Remove a dependency, or workspace member, from jk.toml";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.flag("Test scope", "--test"),
+                Opt.flag("Runtime scope", "--runtime"),
+                Opt.flag("Provided scope", "--provided"),
+                Opt.flag("Annotation processor scope", "--processor"));
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of("name", Arity.ONE,
+                "Short name of the dependency to remove (the manifest key). "
+                        + "A group:artifact[:version] coord is also accepted; the artifactId is used as the name."));
+    }
+
+    @Override
+    public int run(Invocation in) throws IOException {
+        GlobalOptions global = GlobalOptions.from(in);
+        boolean test = in.isSet("test");
+        boolean runtime = in.isSet("runtime");
+        boolean provided = in.isSet("provided");
+        boolean processor = in.isSet("processor");
+        String nameArg = in.positionals().get(0);
+
         Path dir = global.workingDir();
         Path file = dir.resolve("jk.toml");
         if (!Files.exists(file)) {

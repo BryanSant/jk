@@ -28,16 +28,16 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.util.JkDirs;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
 
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk update} — re-resolve declared dependencies and overwrite
@@ -52,38 +52,50 @@ import java.util.concurrent.Callable;
  * <p>{@code --precise &lt;coord&gt;@&lt;ver&gt;} per PRD §6 is accepted
  * but a no-op until selective resolution lands.
  */
-@Command(name = "update", description = "Propose version upgrades for declared dependencies")
-public final class UpdateCommand implements Callable<Integer> {
+public final class UpdateCommand implements CliCommand {
 
-    @Option(names = "--precise", paramLabel = "<coord>@<ver>",
-            description = "Pin a single coord to a version for this update (not yet implemented).")
-    String precise;
+    private String precise;
+    private List<String> features = List.of();
+    private boolean noDefaultFeatures;
+    private URI repoUrl;
+    private Path cacheDir;
+    private GlobalOptions global;
 
-    @Option(names = "--features", paramLabel = "<a,b,...>", split = ",",
-            description = "Activate the listed features in addition to defaults.")
-    List<String> features = List.of();
+    @Override
+    public String name() {
+        return "update";
+    }
 
-    @Option(names = "--no-default-features",
-            description = "Don't activate the project's default features.")
-    boolean noDefaultFeatures;
+    @Override
+    public String description() {
+        return "Propose version upgrades for declared dependencies";
+    }
 
-    @Option(names = "--repo-url",
-            description = "Override declared repos with a single URL.",
-            hidden = true)
-    URI repoUrl;
-
-    @Option(names = "--cache-dir",
-            description = "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
-            hidden = true)
-    Path cacheDir;
-
-    @picocli.CommandLine.Mixin GlobalOptions global;
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<coord>@<ver>",
+                        "Pin a single coord to a version for this update (not yet implemented).", "--precise"),
+                Opt.value("<a,b,...>", "Activate the listed features in addition to defaults.", "--features")
+                        .splitOn(","),
+                Opt.flag("Don't activate the project's default features.", "--no-default-features"),
+                Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
+                Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                        "--cache-dir").hide());
+    }
 
     private static final GoalKey<JkBuild> EFFECTIVE = GoalKey.of("effective-build", JkBuild.class);
     private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
 
     @Override
-    public Integer call() throws Exception {
+    public int run(Invocation in) throws Exception {
+        this.precise = in.value("precise").orElse(null);
+        this.features = in.values("features");
+        this.noDefaultFeatures = in.isSet("no-default-features");
+        this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
+        this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
+        this.global = GlobalOptions.from(in);
+
         Path dir = global.workingDir();
         if (!Files.exists(dir.resolve("jk.toml"))) {
             System.err.println("jk update: no jk.toml in " + dir);
