@@ -98,6 +98,19 @@ chmod +x "$JK_BIN"
 
 note "Installed $JK_BIN"
 
+# ---- install a default JDK -------------------------------------------------
+#
+# Pull the latest JDK and mark it the system-wide default so the freshly
+# activated shell has a working `java` immediately. Done before `jk activate`
+# so the shim and PATH wiring land on top of a populated default.
+
+info "Installing the latest JDK and setting it as default"
+if "$JK_BIN" jdk install latest --make-default; then
+  note "Default JDK ready"
+else
+  die "'jk jdk install latest --make-default' failed."
+fi
+
 # ---- activate --------------------------------------------------------------
 
 info "Running jk activate"
