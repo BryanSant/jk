@@ -192,6 +192,14 @@ public final class BuildPipeline {
                             throw new RuntimeException("lock failed");
                         }
                         ctx.put(LOCKFILE, result.lockfile());
+                    } else if (AutoLock.isStale(in.dir(), in.lockFile())) {
+                        ctx.label("jk.toml changed — updating lock");
+                        Lockfile existing = LockfileReader.read(in.lockFile());
+                        Lockfile updated = AutoLock.maybeReLock(
+                                in.dir(), existing, in.lockFile(), in.cache(), null,
+                                dev.jkbuild.util.JkVersion.VERSION,
+                                List.of(), true, dev.jkbuild.resolver.ResolveObserver.NOOP);
+                        ctx.put(LOCKFILE, updated != null ? updated : existing);
                     } else {
                         ctx.put(LOCKFILE, LockfileReader.read(in.lockFile()));
                     }

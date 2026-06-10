@@ -55,6 +55,8 @@ public final class MavenPackageSource implements PackageSource {
     private final RepoGroup repos;
     private final EffectivePomBuilder pomBuilder;
     private final Map<String, String> bomConstraints;
+    /** Locked versions from a prior lock file — preferred but NOT hard-pinned. */
+    private final Map<String, String> lockedVersionPrefs;
     private final Map<String, List<String>> versionCache = new ConcurrentHashMap<>();
     private final Map<String, List<Term>> depsCache = new ConcurrentHashMap<>();
     private final Semaphore prefetchSlots = new Semaphore(PREFETCH_PERMITS);
@@ -71,9 +73,26 @@ public final class MavenPackageSource implements PackageSource {
             RepoGroup repos,
             EffectivePomBuilder pomBuilder,
             Map<String, String> bomConstraints) {
+        this(repos, pomBuilder, bomConstraints, Map.of());
+    }
+
+    /**
+     * Conservative-lock variant: {@code lockedVersionPrefs} contains the exact
+     * versions from a prior lockfile. Unlike BOM constraints (which hard-pin),
+     * these move the locked version to the <em>front</em> of the candidate list.
+     * PubGrub will select it first; if a new dep's constraint rules it out,
+     * PubGrub naturally backtracks to the next candidate — no manual fallback
+     * needed.
+     */
+    public MavenPackageSource(
+            RepoGroup repos,
+            EffectivePomBuilder pomBuilder,
+            Map<String, String> bomConstraints,
+            Map<String, String> lockedVersionPrefs) {
         this.repos = Objects.requireNonNull(repos, "repos");
         this.pomBuilder = Objects.requireNonNull(pomBuilder, "pomBuilder");
         this.bomConstraints = Map.copyOf(Objects.requireNonNull(bomConstraints, "bomConstraints"));
+        this.lockedVersionPrefs = Map.copyOf(Objects.requireNonNull(lockedVersionPrefs, "lockedVersionPrefs"));
     }
 
     @Override
@@ -100,6 +119,14 @@ public final class MavenPackageSource implements PackageSource {
         // PubGrub picks the first version that satisfies — order highest first.
         List<String> sorted = new ArrayList<>(available);
         sorted.sort((a, b) -> Versions.compare(b, a));
+        // Conservative re-lock: if we have a locked version preference for this
+        // package, move it to the front of the candidate list. PubGrub will
+        // select it first; if a new dep rules it out, PubGrub backtracks to
+        // the next candidate naturally — no intervention needed.
+        String preferred = lockedVersionPrefs.get(pkg);
+        if (preferred != null && sorted.remove(preferred)) {
+            sorted.add(0, preferred);
+        }
         List<String> result = List.copyOf(sorted);
         versionCache.put(pkg, result);
         return result;

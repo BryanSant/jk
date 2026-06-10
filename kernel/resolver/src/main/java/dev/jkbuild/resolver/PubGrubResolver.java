@@ -50,9 +50,20 @@ public final class PubGrubResolver implements Resolver {
      *     the user's platform BOMs. Empty map = no BOM constraints.
      */
     public PubGrubResolver(RepoGroup repos, Map<String, String> bomConstraints) {
+        this(repos, bomConstraints, Map.of());
+    }
+
+    /**
+     * Conservative-lock variant: {@code lockedVersionPrefs} moves each locked
+     * version to the front of PubGrub's candidate list so the solver selects
+     * it first. If a new dep's constraint rules it out, PubGrub backtracks to
+     * the next available version naturally.
+     */
+    public PubGrubResolver(RepoGroup repos, Map<String, String> bomConstraints,
+                            Map<String, String> lockedVersionPrefs) {
         EffectivePomBuilder builder = new EffectivePomBuilder(repos);
         this.pomBuilder = builder;
-        this.source = new MavenPackageSource(repos, builder, bomConstraints);
+        this.source = new MavenPackageSource(repos, builder, bomConstraints, lockedVersionPrefs);
     }
 
     /** Test seam: lets unit tests inject an in-memory {@link PackageSource}. */

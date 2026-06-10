@@ -88,7 +88,6 @@ public final class LockOrchestrator {
     }
 
     /** Lock with the project's default feature selection. */
-    /** Lock with the project's default feature selection. */
     public Lockfile lock(JkBuild project, String jkVersion) throws IOException, InterruptedException {
         return lock(project, jkVersion, List.of(), true, ResolveObserver.NOOP);
     }
@@ -113,6 +112,38 @@ public final class LockOrchestrator {
             Collection<String> featuresRequested,
             boolean withDefaults,
             ResolveObserver observer) throws IOException, InterruptedException {
+        return lock(project, jkVersion, featuresRequested, withDefaults, observer, Map.of());
+    }
+
+    /**
+     * Conservative re-lock: same as {@link #lock} but seeds the solver with
+     * the exact versions from {@code existing} as <em>soft preferences</em>.
+     * The solver selects each locked version first; if a new or changed dep's
+     * constraint rules it out, the solver backtracks to the next candidate
+     * automatically. Only versions that genuinely conflict with new constraints
+     * are bumped — everything else stays pinned.
+     */
+    public Lockfile lockConservative(
+            JkBuild project,
+            Lockfile existing,
+            String jkVersion,
+            Collection<String> featuresRequested,
+            boolean withDefaults,
+            ResolveObserver observer) throws IOException, InterruptedException {
+        Map<String, String> prefs = new HashMap<>();
+        for (Lockfile.Package pkg : existing.packages()) {
+            prefs.put(pkg.name(), pkg.version());
+        }
+        return lock(project, jkVersion, featuresRequested, withDefaults, observer, prefs);
+    }
+
+    private Lockfile lock(
+            JkBuild project,
+            String jkVersion,
+            Collection<String> featuresRequested,
+            boolean withDefaults,
+            ResolveObserver observer,
+            Map<String, String> lockedVersionPrefs) throws IOException, InterruptedException {
 
         Set<String> activated = project.features().activate(
                 new LinkedHashSet<>(featuresRequested), withDefaults);
@@ -189,7 +220,7 @@ public final class LockOrchestrator {
 
         Resolver resolver = resolverOverride != null
                 ? resolverOverride
-                : new PubGrubResolver(repos, bomConstraints);
+                : new PubGrubResolver(repos, bomConstraints, lockedVersionPrefs);
         Resolution resolution = resolver.resolve(declared);
         observer.onTotal(resolution.modules().size() + fileDeps.size());
 

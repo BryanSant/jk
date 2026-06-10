@@ -62,7 +62,8 @@ class SelfHostingTomlTest {
         assertThat(root.project().name()).isEqualTo("jk");
         assertThat(root.isWorkspaceRoot()).isTrue();
         assertThat(root.workspace().members()).containsExactly(
-                "kernel/model", "kernel/core", "kernel/io", "kernel/resolver", "kernel/toolchain", "cli");
+                "kernel/model", "plugin-api", "kernel/core", "kernel/io",
+                "kernel/resolver", "kernel/toolchain", "kernel/host", "cli");
     }
 
     @Test
@@ -101,6 +102,8 @@ class SelfHostingTomlTest {
                 root, WorkspaceLoader.loadMembers(REPO, root).values());
         List<String> mergedRootMain = merged.dependencies().of(Scope.MAIN).stream()
                 .map(d -> d.module()).toList();
-        assertThat(mergedRootMain).contains("dev.jkbuild:jk-host");
+        // jk-host is a workspace-internal dep and is filtered by WorkspaceMerge;
+        // verify an external dep that survives the merge.
+        assertThat(mergedRootMain).contains("org.jline:jline-terminal-ffm");
     }
 }

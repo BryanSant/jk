@@ -129,6 +129,16 @@ public final class SyncCommand implements CliCommand {
                         ctx.put(LOCKFILE, result.lockfile());
                         if (result.build() != null) ctx.put(BUILD, result.build());
                         ctx.put(LOCKFILE_CREATED, true);
+                    } else if (dev.jkbuild.runtime.AutoLock.isStale(dir, lockFile)) {
+                        ctx.label("jk.toml changed — updating lock");
+                        Lockfile existing = LockfileReader.read(lockFile);
+                        Lockfile updated = dev.jkbuild.runtime.AutoLock.maybeReLock(
+                                dir, existing, lockFile, cache, repoUrl,
+                                dev.jkbuild.util.JkVersion.VERSION,
+                                List.of(), true, dev.jkbuild.resolver.ResolveObserver.NOOP);
+                        ctx.put(LOCKFILE, updated != null ? updated : existing);
+                        var build = parseBuildIfPresent(dir);
+                        if (build != null) ctx.put(BUILD, build);
                     } else {
                         ctx.put(LOCKFILE, LockfileReader.read(lockFile));
                         var build = parseBuildIfPresent(dir);
