@@ -474,7 +474,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                 .append(Theme.colorize(r.phase, Theme.active().settled()));
         if (r.message != null && !r.message.isEmpty()) {
             sb.append(' ').append(sep).append(' ')
-                    .append(Theme.colorize(r.message, Theme.active().darkGray()));
+                    .append(Theme.colorize(r.message, Theme.active().settled()));
         }
         return sb.toString();
     }
