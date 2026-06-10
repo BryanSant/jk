@@ -113,10 +113,10 @@ public record JkBuild(
      *       or {@code null} for a library.</li>
      *   <li>{@code shadow} — bundle an all-in-one (shadow / fat) jar.</li>
      *   <li>{@code nativeMode} — controls GraalVM native-image participation.
-     *       TOML key {@code native}: absent/{@code false} → DISABLED,
-     *       {@code true} → SUPPORTED (explicit {@code jk native} only),
-     *       {@code "always"} → ALWAYS ({@code jk build} automatically
-     *       produces the binary).</li>
+     *       TOML key {@code native}: {@code false} → DISABLED (never),
+     *       absent → SUPPORTED (only when {@code jk native} is run explicitly),
+     *       {@code true}/{@code "always"} → ALWAYS ({@code jk build} and
+     *       {@code jk native} both produce the binary).</li>
      *   <li>{@code description} — free-form human-readable description.
      *       Surfaces as {@code <description>} in {@code jk publish} POMs and
      *       {@code jk export pom.xml}; {@code null} when omitted.</li>
@@ -177,11 +177,17 @@ public record JkBuild(
     }
 
     public enum NativeMode {
-        /** {@code native = false} or absent — no native support. */
+        /** {@code native = false} — never run native-image (explicit opt-out). */
         DISABLED,
-        /** {@code native = true} — user must run {@code jk native} explicitly. */
+        /**
+         * {@code native} key absent — eligible for {@code jk native} workspace cascade
+         * but NOT auto-built by {@code jk build} or other build commands.
+         */
         SUPPORTED,
-        /** {@code native = "always"} — {@code jk build} automatically produces the binary. */
+        /**
+         * {@code native = true} or {@code native = "always"} — native-image runs on
+         * {@code jk build}, {@code jk install}, and {@code jk native}.
+         */
         ALWAYS;
 
         public boolean isEnabled() { return this != DISABLED; }

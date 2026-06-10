@@ -36,9 +36,9 @@ class JkBuildParserTest {
         assertThat(parsed.project().isKotlin()).isFalse();
         assertThat(parsed.project().main()).isNull();
         assertThat(parsed.project().shadow()).isFalse();
-        // native absent → SUPPORTED (eligible via jk native; not auto-built)
+        // native absent → SUPPORTED (eligible via jk native; NOT auto-built on jk build)
         assertThat(parsed.project().nativeMode()).isEqualTo(JkBuild.NativeMode.SUPPORTED);
-        assertThat(parsed.project().nativeImage()).isTrue();
+        assertThat(parsed.project().nativeImage()).isTrue(); // isTrue: != DISABLED
         assertThat(parsed.project().description()).isNull();
     }
 

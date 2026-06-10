@@ -247,6 +247,16 @@ public final class NativeCommand implements CliCommand {
 
     private int runSingleProject(Path projectDir, Path buildFile, Path cache)
             throws IOException, InterruptedException {
+        // Respect explicit native = false opt-out even for an explicit `jk native` invocation.
+        try {
+            JkBuild build = JkBuildParser.parse(buildFile);
+            if (build.project().nativeMode() == JkBuild.NativeMode.DISABLED) {
+                System.err.println("jk native: " + projectDir.getFileName()
+                        + " has native = false — set native = true or remove the key to enable.");
+                return 2;
+            }
+        } catch (Exception ignored) {}
+
         String resolvedMain = resolveMain(buildFile);
         Path lockFile = projectDir.resolve("jk.lock");
 

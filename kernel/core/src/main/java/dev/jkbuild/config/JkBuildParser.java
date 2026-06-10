@@ -154,17 +154,19 @@ public final class JkBuildParser {
         requireSupportedMajor("project.java", java);
         String main = project.getString("main");
         boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
-        // native = false → DISABLED (explicit opt-out),
-        // native = true or absent → SUPPORTED (eligible for jk native),
-        // native = "always" → ALWAYS (auto-built on jk build).
+        // native = false          → DISABLED  (never run native-image)
+        // native absent           → SUPPORTED (run only on explicit `jk native`)
+        // native = true           → ALWAYS    (run on `jk build` + `jk native`)
+        // native = "always"       → ALWAYS    (same as true)
         Object nativeRaw = project.get("native");
         JkBuild.NativeMode nativeMode;
-        if ("always".equalsIgnoreCase(nativeRaw instanceof String s ? s : "")) {
+        if ("always".equalsIgnoreCase(nativeRaw instanceof String s ? s : "")
+                || Boolean.TRUE.equals(nativeRaw)) {
             nativeMode = JkBuild.NativeMode.ALWAYS;
         } else if (Boolean.FALSE.equals(nativeRaw)) {
             nativeMode = JkBuild.NativeMode.DISABLED;
         } else {
-            // absent or true → SUPPORTED (opt-in via `jk native`, not automatic)
+            // absent → SUPPORTED: eligible for `jk native` cascade but not auto-built
             nativeMode = JkBuild.NativeMode.SUPPORTED;
         }
         String description = project.getString("description");
