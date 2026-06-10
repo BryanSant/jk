@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.tool;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -14,8 +16,13 @@ import java.util.Optional;
 /**
  * Thin driver over GraalVM's {@code native-image} binary (PRD §6
  * {@code jk native} verb). Verifies the JDK ships
- * {@code bin/native-image}, assembles the classpath argument, and execs
- * with inherited IO.
+ * {@code bin/native-image}, assembles the classpath argument, and execs.
+ *
+ * <p>Subprocess stdout and stderr are forwarded line-by-line through
+ * {@code System.out} and {@code System.err} respectively. When the jk TUI
+ * is active those streams have been replaced by {@code CommandManager}'s
+ * {@code LineSink}, so all native-image output appears above the progress
+ * bar rather than interleaved with it.
  *
  * <p>jk does <i>not</i> automatically install GraalVM here — the user
  * pins a GraalVM JDK via {@code project.jdk} or {@code .jdk-version}.
@@ -57,7 +64,35 @@ public final class NativeImageDriver {
         command.add(request.mainClass());
 
         Files.createDirectories(request.outputPath().toAbsolutePath().getParent());
-        return new ProcessBuilder(command).inheritIO().start().waitFor();
+
+        // Do NOT use inheritIO() — that writes directly to fd 1/2, bypassing
+        // System.out/System.err which CommandManager.captureOutput() replaces
+        // with a LineSink to render output above the TUI progress bar.
+        // Instead, pipe both streams and forward line-by-line through the
+        // current System.out/System.err so the TUI always stays at the bottom.
+        Process process = new ProcessBuilder(command).start();
+        Thread fwdOut = forwardStream(process.getInputStream(), System.out);
+        Thread fwdErr = forwardStream(process.getErrorStream(), System.err);
+        int exit = process.waitFor();
+        fwdOut.join();
+        fwdErr.join();
+        return exit;
+    }
+
+    private static Thread forwardStream(java.io.InputStream in,
+                                        java.io.PrintStream dest) {
+        Thread t = new Thread(() -> {
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(in, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    dest.println(line);
+                }
+            } catch (IOException ignored) {}
+        }, "native-image-io");
+        t.setDaemon(true);
+        t.start();
+        return t;
     }
 
     /**
