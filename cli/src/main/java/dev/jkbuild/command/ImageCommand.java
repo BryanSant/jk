@@ -198,7 +198,7 @@ public final class ImageCommand implements CliCommand {
                                    ImageConfig config, String chosen,
                                    List<Path> depJars, Path tarballPath)
             throws IOException, InterruptedException {
-        Path workerJar = WorkerJar.IMAGE_RUNNER.locate(new Cas(cache));
+        Path workerJar = WorkerJar.IMAGE_BUILDER.locate(new Cas(cache));
         List<String> lines = new ArrayList<>();
         lines.add("MAIN_JAR " + layout.mainJar().toAbsolutePath());
         lines.add("ARTIFACT " + project.project().name());

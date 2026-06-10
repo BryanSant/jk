@@ -146,7 +146,7 @@ public final class AuditCommand implements CliCommand {
      */
     private List<AuditReport.Finding> runWorker(Path lockPath, Path cache)
             throws IOException, InterruptedException {
-        Path workerJar = WorkerJar.AUDIT_RUNNER.locate(new Cas(cache));
+        Path workerJar = WorkerJar.AUDITOR.locate(new Cas(cache));
         Path spec = writeSpec(lockPath);
         try {
             Path javaExe = CompileToolchain.runningJavaHome()

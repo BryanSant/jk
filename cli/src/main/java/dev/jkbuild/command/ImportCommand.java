@@ -97,7 +97,7 @@ public final class ImportCommand implements CliCommand {
 
     private int runWorker(Path cache, List<String> specLines)
             throws IOException, InterruptedException {
-        Path workerJar = WorkerJar.COMPAT_RUNNER.locate(new Cas(cache));
+        Path workerJar = WorkerJar.COMPAT_BRIDGE.locate(new Cas(cache));
         Path spec = Files.createTempFile("jk-compat-", ".spec");
         try {
             Files.write(spec, specLines, StandardCharsets.UTF_8);

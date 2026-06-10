@@ -20,25 +20,39 @@ dependencyResolutionManagement {
 rootProject.name = "jk"
 
 include(
+    // Kernel — universal capabilities (no plugin deps)
     ":core",
     ":plugin-api",
     ":io",
     ":resolver",
     ":toolchain",
-    // :engine deleted — absorbed into :host (Phase 5)
-    // :supply-chain deleted — PolicyChecker merged into :core
-    // :supply-chain-testkit deleted — GpgTestFixture merged into :publish-runner/src/test
-    // :image deleted — ImageConfig merged into :core
-    // :compat deleted — tool classes → :toolchain; bridge classes → :compat-runner
+    // Plugins — first-party, shipped with jk
     ":test-runner",
     ":kotlin-compiler",
     ":java-compiler",
-    ":audit-runner",
-    ":publish-runner",
-    ":image-runner",
-    ":compat-runner",
-    ":git-runner",
-    // :runtime deleted — absorbed into :host (Phase 5)
+    ":auditor",        // was :audit-runner
+    ":publisher",      // was :publish-runner
+    ":image-builder",  // was :image-runner
+    ":compat-bridge",  // was :compat-runner
+    ":git-client",     // was :git-runner
+    // Host + CLI
     ":host",
     ":cli",
 )
+
+// Kernel modules live under kernel/
+project(":core").projectDir      = file("kernel/core")
+project(":io").projectDir        = file("kernel/io")
+project(":resolver").projectDir  = file("kernel/resolver")
+project(":toolchain").projectDir = file("kernel/toolchain")
+project(":host").projectDir      = file("kernel/host")
+
+// Plugin modules live under plugins/
+project(":test-runner").projectDir    = file("plugins/test-runner")
+project(":kotlin-compiler").projectDir = file("plugins/kotlin-compiler")
+project(":java-compiler").projectDir  = file("plugins/java-compiler")
+project(":auditor").projectDir        = file("plugins/auditor")
+project(":publisher").projectDir      = file("plugins/publisher")
+project(":image-builder").projectDir  = file("plugins/image-builder")
+project(":compat-bridge").projectDir  = file("plugins/compat-bridge")
+project(":git-client").projectDir     = file("plugins/git-client")

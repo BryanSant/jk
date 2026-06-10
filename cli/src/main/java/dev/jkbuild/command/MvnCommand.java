@@ -83,7 +83,7 @@ public final class MvnCommand implements CliCommand {
 
     static Path provision(Path cache, Path projectDir, Path toolsRoot, boolean noDiscover, boolean isGradle)
             throws IOException, InterruptedException {
-        Path workerJar = WorkerJar.COMPAT_RUNNER.locate(new Cas(cache));
+        Path workerJar = WorkerJar.COMPAT_BRIDGE.locate(new Cas(cache));
         Path spec = Files.createTempFile("jk-compat-", ".spec");
         try {
             Files.write(spec, List.of(

@@ -196,7 +196,7 @@ public final class PublishCommand implements CliCommand {
 
         Path spec = writeSpec(projectDir, jar, cred);
         try {
-            Path workerJar = WorkerJar.PUBLISH_RUNNER.locate(new Cas(cache));
+            Path workerJar = WorkerJar.PUBLISHER.locate(new Cas(cache));
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
                     .resolve(isWindows() ? "java.exe" : "java");

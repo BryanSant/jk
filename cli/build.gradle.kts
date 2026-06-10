@@ -71,41 +71,41 @@ val kotlinWorkerJar by configurations.creating {
 val testRunnerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
-val auditWorkerJar by configurations.creating {
+val auditorWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
-val publishWorkerJar by configurations.creating {
+val publisherWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
-val imageWorkerJar by configurations.creating {
+val imageBuilderWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
-val compatWorkerJar by configurations.creating {
+val compatBridgeWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
-val gitWorkerJar by configurations.creating {
+val gitClientWorkerJar by configurations.creating {
     isCanBeConsumed = false; isCanBeResolved = true; isTransitive = false
 }
 dependencies {
     kotlinWorkerJar(project(":kotlin-compiler"))
     testRunnerJar(project(":test-runner"))
-    auditWorkerJar(project(":audit-runner"))
-    publishWorkerJar(project(":publish-runner"))
-    imageWorkerJar(project(":image-runner"))
-    compatWorkerJar(project(":compat-runner"))
-    gitWorkerJar(project(":git-runner"))
+    auditorWorkerJar(project(":auditor"))
+    publisherWorkerJar(project(":publisher"))
+    imageBuilderWorkerJar(project(":image-builder"))
+    compatBridgeWorkerJar(project(":compat-bridge"))
+    gitClientWorkerJar(project(":git-client"))
 }
 tasks.withType<Test>().configureEach {
-    dependsOn(kotlinWorkerJar, testRunnerJar, auditWorkerJar, publishWorkerJar,
-              imageWorkerJar, compatWorkerJar, gitWorkerJar)
+    dependsOn(kotlinWorkerJar, testRunnerJar, auditorWorkerJar, publisherWorkerJar,
+              imageBuilderWorkerJar, compatBridgeWorkerJar, gitClientWorkerJar)
     doFirst {
-        systemProperty("jk.kotlin.worker.jar",  kotlinWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.test.runner.jar",    testRunnerJar.singleFile.absolutePath)
-        systemProperty("jk.audit.worker.jar",   auditWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.publish.worker.jar", publishWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.image.worker.jar",   imageWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.compat.worker.jar",  compatWorkerJar.singleFile.absolutePath)
-        systemProperty("jk.git.worker.jar",     gitWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.kotlin.worker.jar",       kotlinWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.test.runner.jar",         testRunnerJar.singleFile.absolutePath)
+        systemProperty("jk.auditor.worker.jar",      auditorWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.publisher.worker.jar",    publisherWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.image-builder.worker.jar", imageBuilderWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.compat-bridge.worker.jar", compatBridgeWorkerJar.singleFile.absolutePath)
+        systemProperty("jk.git-client.worker.jar",   gitClientWorkerJar.singleFile.absolutePath)
     }
 }
 
