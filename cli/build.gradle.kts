@@ -11,7 +11,7 @@ plugins {
 description = "jk command-line entrypoint"
 
 dependencies {
-    implementation(project(":runtime"))
+    // :runtime absorbed into :host
     implementation(project(":host"))
     implementation(project(":core"))
     implementation(project(":io"))
@@ -19,7 +19,7 @@ dependencies {
     implementation(project(":plugin-api"))
     implementation(project(":resolver"))
     implementation(project(":toolchain"))
-    implementation(project(":engine"))
+    // :engine absorbed into :host
     // supply-chain deleted: PolicyChecker moved to :core
     // image deleted: ImageConfig moved to :core
     // compat deleted: tool classes moved to :toolchain, bridge classes moved to :compat-runner

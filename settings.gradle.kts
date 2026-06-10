@@ -25,7 +25,7 @@ include(
     ":io",
     ":resolver",
     ":toolchain",
-    ":engine",
+    // :engine deleted — absorbed into :host (Phase 5)
     // :supply-chain deleted — PolicyChecker merged into :core
     // :supply-chain-testkit deleted — GpgTestFixture merged into :publish-runner/src/test
     // :image deleted — ImageConfig merged into :core
@@ -38,7 +38,7 @@ include(
     ":image-runner",
     ":compat-runner",
     ":git-runner",
-    ":runtime",
+    // :runtime deleted — absorbed into :host (Phase 5)
     ":host",
     ":cli",
 )
