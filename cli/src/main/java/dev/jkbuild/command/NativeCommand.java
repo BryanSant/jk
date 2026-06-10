@@ -292,7 +292,9 @@ public final class NativeCommand implements CliCommand {
 
     /**
      * A member qualifies for native compilation if it declares a {@code main}
-     * class and has not explicitly disabled native ({@code native = false}).
+     * class and has not explicitly opted out with {@code native = false}.
+     * Absent {@code native} key (parsed as SUPPORTED) and {@code native = true}
+     * are both eligible; only {@code native = false} (DISABLED) is not.
      */
     static boolean isNativeEligible(JkBuild build) {
         JkBuild.Project p = build.project();

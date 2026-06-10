@@ -404,12 +404,14 @@ public final class InstallCommand implements CliCommand {
         // launcher. (Done here, not in a phase, so we fail before building.)
         JkBuild proj = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         var pj = proj.project();
-        if (pj.isApplication() && !pj.nativeMode().isEnabled() && pj.main() == null) {
+        if (pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.DISABLED && pj.main() == null) {
             System.err.println("jk install: application project at " + projectDir
                     + " has no `main` class set in [project]");
             return 64;
         }
-        boolean isNative = pj.isApplication() && pj.nativeMode().isEnabled();
+        // ALWAYS: native is part of the standard build and install produces a native binary.
+        // SUPPORTED: user runs `jk native` explicitly; install deploys the jar.
+        boolean isNative = pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.ALWAYS;
         boolean needShadow = pj.isApplication() && pj.shadow() && !isNative;
 
         // Build through the one pipeline (jar always; shadow/native per jk.toml),
@@ -542,8 +544,8 @@ public final class InstallCommand implements CliCommand {
         String mainCls = mainClass != null && !mainClass.isBlank() ? mainClass : p.main();
         Path javaHome = CompileToolchain.runningJavaHome();
 
-        // Native binary → ~/.jk/bin/<bin>.
-        if (p.nativeMode().isEnabled()) {
+        // Native binary → ~/.jk/bin/<bin>. Only for ALWAYS (auto-build) mode.
+        if (p.nativeMode() == JkBuild.NativeMode.ALWAYS) {
             Files.createDirectories(binDir);
             Path dest = binDir.resolve(bin);
             Linking.linkOrCopy(layout.nativeBinary(), dest);

@@ -154,16 +154,18 @@ public final class JkBuildParser {
         requireSupportedMajor("project.java", java);
         String main = project.getString("main");
         boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
-        // native = false/absent → DISABLED, native = true → SUPPORTED,
-        // native = "always" → ALWAYS (TOML boolean vs string).
+        // native = false → DISABLED (explicit opt-out),
+        // native = true or absent → SUPPORTED (eligible for jk native),
+        // native = "always" → ALWAYS (auto-built on jk build).
         Object nativeRaw = project.get("native");
         JkBuild.NativeMode nativeMode;
         if ("always".equalsIgnoreCase(nativeRaw instanceof String s ? s : "")) {
             nativeMode = JkBuild.NativeMode.ALWAYS;
-        } else if (Boolean.TRUE.equals(nativeRaw)) {
-            nativeMode = JkBuild.NativeMode.SUPPORTED;
-        } else {
+        } else if (Boolean.FALSE.equals(nativeRaw)) {
             nativeMode = JkBuild.NativeMode.DISABLED;
+        } else {
+            // absent or true → SUPPORTED (opt-in via `jk native`, not automatic)
+            nativeMode = JkBuild.NativeMode.SUPPORTED;
         }
         String description = project.getString("description");
         // application defaults to "has a main class"; an explicit key overrides
