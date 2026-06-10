@@ -25,11 +25,11 @@ include(
     ":io",
     ":resolver",
     ":toolchain",
-    ":engine",
-    ":supply-chain",
-    ":supply-chain-testkit",
-    ":image",
-    ":compat",
+    // :engine deleted — absorbed into :host (Phase 5)
+    // :supply-chain deleted — PolicyChecker merged into :core
+    // :supply-chain-testkit deleted — GpgTestFixture merged into :publish-runner/src/test
+    // :image deleted — ImageConfig merged into :core
+    // :compat deleted — tool classes → :toolchain; bridge classes → :compat-runner
     ":test-runner",
     ":kotlin-compiler",
     ":java-compiler",
@@ -38,7 +38,7 @@ include(
     ":image-runner",
     ":compat-runner",
     ":git-runner",
-    ":runtime",
+    // :runtime deleted — absorbed into :host (Phase 5)
     ":host",
     ":cli",
 )

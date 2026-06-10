@@ -11,7 +11,7 @@ plugins {
 description = "jk command-line entrypoint"
 
 dependencies {
-    implementation(project(":runtime"))
+    // :runtime absorbed into :host
     implementation(project(":host"))
     implementation(project(":core"))
     implementation(project(":io"))
@@ -19,10 +19,10 @@ dependencies {
     implementation(project(":plugin-api"))
     implementation(project(":resolver"))
     implementation(project(":toolchain"))
-    implementation(project(":engine"))
-    implementation(project(":supply-chain"))
-    implementation(project(":image"))
-    implementation(project(":compat"))
+    // :engine absorbed into :host
+    // supply-chain deleted: PolicyChecker moved to :core
+    // image deleted: ImageConfig moved to :core
+    // compat deleted: tool classes moved to :toolchain, bridge classes moved to :compat-runner
 
     // JLine 4 FFM terminal provider for raw-mode TUI (jk init wizard).
     // FFM backend requires JDK 22+; the GraalVM-compiled binary embeds the
@@ -30,7 +30,8 @@ dependencies {
     // src/main/resources/META-INF/native-image/org.jline/jline-terminal-ffm/.
     implementation(libs.jline.terminal.ffm)
 
-    testImplementation(project(":supply-chain-testkit"))
+    // supply-chain-testkit deleted: GpgTestFixture copied to cli/src/test and publish-runner/src/test
+    testImplementation(libs.bouncycastle.bcpg)
     // JdkCommandTest builds xz-compressed feed fixtures via XZCompressorOutputStream.
     // GitSourceMaterializerTest builds a local git "library" repo fixture with jgit.
     // GitSourceMaterializerTest uses a local git fixture (built with system git or git-runner)
