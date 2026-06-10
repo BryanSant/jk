@@ -102,7 +102,10 @@ public final class WorkspaceMerge {
                 member.repositories(),
                 member.profiles(),
                 member.features(),
-                member.workspace());
+                member.workspace(),
+                member.manifest(),
+                member.plugins(),
+                member.nativeConfig());
     }
 
     public static JkBuild merge(JkBuild root, Collection<JkBuild> members) {
@@ -146,7 +149,10 @@ public final class WorkspaceMerge {
                 root.repositories(),
                 root.profiles(),
                 root.features(),
-                root.workspace());
+                root.workspace(),
+                root.manifest(),
+                root.plugins(),
+                root.nativeConfig());
     }
 
     /**
