@@ -301,17 +301,24 @@ public final class BuildCommand implements CliCommand {
      */
     private static List<Path> topoSortMembers(Map<Path, JkBuild> membersByDir) {
         Map<String, Path> dirByCoord = new HashMap<>();
+        Map<String, Path> dirByName  = new HashMap<>(); // for workspace: references
         for (var e : membersByDir.entrySet()) {
             String coord = e.getValue().project().group()
                     + ":" + e.getValue().project().name();
             dirByCoord.put(coord, e.getKey());
+            dirByName.put(e.getValue().project().name(), e.getKey());
         }
         Map<Path, Set<Path>> requires = new LinkedHashMap<>();
         for (var e : membersByDir.entrySet()) {
             Set<Path> prereqs = new LinkedHashSet<>();
             for (Scope scope : Scope.values()) {
                 for (Dependency d : e.getValue().dependencies().of(scope)) {
-                    Path depDir = dirByCoord.get(d.module());
+                    String module = d.module();
+                    Path depDir = dirByCoord.get(module);
+                    // workspace: deps use "workspace:<name>" — resolve by bare name
+                    if (depDir == null && module.startsWith("workspace:")) {
+                        depDir = dirByName.get(module.substring("workspace:".length()));
+                    }
                     if (depDir != null && !depDir.equals(e.getKey())) {
                         prereqs.add(depDir);
                     }

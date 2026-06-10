@@ -61,9 +61,10 @@ public final class WorkspaceClasspath {
         }
 
         // Build bidirectional index: module-coord and bare-name → sibling dir + jar
-        Map<String, Path> siblingDirByModule  = new HashMap<>();
-        Map<String, Path> siblingJarByModule  = new HashMap<>();
-        Map<String, Path> siblingJarByName    = new HashMap<>();
+        Map<String, Path>   siblingDirByModule  = new HashMap<>();
+        Map<String, Path>   siblingJarByModule  = new HashMap<>();
+        Map<String, Path>   siblingJarByName    = new HashMap<>();
+        Map<String, String> siblingCoordByName  = new HashMap<>(); // name → full coord
         for (String memberName : rootManifest.workspace().members()) {
             Path siblingDir = root.resolve(memberName);
             Path siblingManifest = siblingDir.resolve("jk.toml");
@@ -79,6 +80,7 @@ public final class WorkspaceClasspath {
             siblingDirByModule.put(moduleCoord, siblingDir);
             siblingJarByModule.put(moduleCoord, jar);
             siblingJarByName.put(sibling.project().name(), jar);
+            siblingCoordByName.put(sibling.project().name(), moduleCoord);
         }
 
         // Collect the full transitive workspace closure via BFS.  Direct deps
@@ -89,14 +91,7 @@ public final class WorkspaceClasspath {
         Queue<String> queue = new ArrayDeque<>();
         for (Scope scope : scopes) {
             for (Dependency dep : project.dependencies().of(scope)) {
-                String module = dep.module();
-                if (module.startsWith("workspace:")) {
-                    String name = module.substring("workspace:".length());
-                    Path jar = siblingJarByName.get(name);
-                    if (jar != null) module = siblingJarByModule.entrySet().stream()
-                            .filter(e -> e.getValue().equals(jar)).map(Map.Entry::getKey)
-                            .findFirst().orElse(module);
-                }
+                String module = resolveWorkspaceRef(dep.module(), siblingCoordByName);
                 if (siblingJarByModule.containsKey(module) && visited.add(module)) {
                     queue.add(module);
                 }
@@ -113,7 +108,7 @@ public final class WorkspaceClasspath {
             catch (RuntimeException ignored) { continue; }
             for (Scope scope : Set.of(Scope.MAIN)) { // only MAIN propagates transitively
                 for (Dependency dep : sibBuild.dependencies().of(scope)) {
-                    String depModule = dep.module();
+                    String depModule = resolveWorkspaceRef(dep.module(), siblingCoordByName);
                     if (siblingJarByModule.containsKey(depModule) && visited.add(depModule)) {
                         queue.add(depModule);
                     }
@@ -142,6 +137,14 @@ public final class WorkspaceClasspath {
             }
         }
         return new Result(jars, missing, siblingLockfiles);
+    }
+
+    /** Resolve a {@code workspace:<name>} dep reference to its full {@code group:name} coord. */
+    private static String resolveWorkspaceRef(String module, Map<String, String> coordByName) {
+        if (!module.startsWith("workspace:")) return module;
+        String name = module.substring("workspace:".length());
+        String coord = coordByName.get(name);
+        return coord != null ? coord : module;
     }
 
     /**
