@@ -36,7 +36,8 @@ public final class HostEvent {
     public static final String PREFIX = "##JKH:";
 
     public enum Type {
-        GOAL_START, PHASE_START, PROGRESS, SCOPE_UPDATE,
+        GOAL_START, PHASES,  // PHASES emitted before goalStart with the phase-name list
+        PHASE_START, PROGRESS, SCOPE_UPDATE,
         LABEL, OUTPUT, WARN, ERROR, PHASE_FINISH, GOAL_FINISH,
         EXIT;
 
@@ -52,6 +53,27 @@ public final class HostEvent {
     private HostEvent() {}
 
     // --- writers (Host side) ------------------------------------------------
+
+    /**
+     * Emitted by the Host just before {@link #goalStart} to give the CLI the
+     * ordered phase-name list. The CLI can use this to construct a
+     * {@link dev.jkbuild.cli.run.ProgressBarListener} without a live {@link dev.jkbuild.run.Goal}.
+     *
+     * <p>Format: {@code ##JKH:{"e":"phases","names":["parse-build","sync-deps",…]}}
+     */
+    public static String phases(List<String> phaseNames) {
+        StringBuilder sb = new StringBuilder(PREFIX).append("{\"e\":\"phases\",\"names\":[");
+        for (int i = 0; i < phaseNames.size(); i++) {
+            if (i > 0) sb.append(',');
+            sb.append(Ndjson.quote(phaseNames.get(i)));
+        }
+        return sb.append("]}").toString();
+    }
+
+    /** Read the ordered list of phase names from a {@code phases} event. */
+    public static List<String> phaseNames(String json) {
+        return Ndjson.strArray(json, "names");
+    }
 
     public static String goalStart(String goalName, int scope) {
         return PREFIX + "{\"e\":\"goal-start\",\"goal\":" + Ndjson.quote(goalName) + ",\"scope\":" + scope + "}";

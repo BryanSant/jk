@@ -32,9 +32,28 @@ public final class ReceivingGoalListener {
     private volatile String goalName = "build";
     private final ConcurrentHashMap<String, Integer> phaseScopes = new ConcurrentHashMap<>();
 
+    /** Phase names received via the {@code phases} manifest event; null until received. */
+    private volatile List<String> phaseNames = null;
+
+    /** Callback invoked the first time a {@code phases} event is received. */
+    private volatile java.util.function.Consumer<List<String>> onPhasesReceived = null;
+
     public ReceivingGoalListener(List<GoalListener> listeners) {
         this.listeners = List.copyOf(listeners);
     }
+
+    /**
+     * Register a callback to be invoked once the {@code phases} manifest
+     * event arrives from the Host. Lets {@link HostLauncher} upgrade from a
+     * {@link SimpleTaskListener} to a {@link ProgressBarListener} the moment
+     * the phase list is known.
+     */
+    public void onPhasesReceived(java.util.function.Consumer<List<String>> callback) {
+        this.onPhasesReceived = callback;
+    }
+
+    /** Returns the phase-name list if the Host has already sent it, else {@code null}. */
+    public List<String> phaseNames() { return phaseNames; }
 
     /**
      * Process one line from the Host's stdout. Returns {@code true} when the
@@ -48,6 +67,13 @@ public final class ReceivingGoalListener {
         if (type == null) return true;
 
         switch (type) {
+            case PHASES -> {
+                // The Host sends the ordered phase-name list before goalStart so
+                // the CLI can construct a ProgressBarListener without a live Goal.
+                List<String> names = HostEvent.phaseNames(json);
+                this.phaseNames = names;
+                if (onPhasesReceived != null) onPhasesReceived.accept(names);
+            }
             case GOAL_START -> {
                 goalName = HostEvent.goal(json);
                 if (goalName == null) goalName = "build";

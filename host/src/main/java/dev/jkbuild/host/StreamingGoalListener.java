@@ -29,6 +29,12 @@ public final class StreamingGoalListener implements GoalListener {
         this.goalName = goalName;
     }
 
+    // Called by HostMain before adding the listener so the CLI receives phase
+    // names before the first goalStart event — enabling ProgressBarListener.
+    public void emitPhases(java.util.List<String> phaseNames) {
+        emit(HostEvent.phases(phaseNames));
+    }
+
     @Override
     public void goalStart(GoalView view) {
         emit(HostEvent.goalStart(goalName, (int) view.denominator()));
