@@ -12,6 +12,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Thin driver over GraalVM's {@code native-image} binary (PRD §6
@@ -47,10 +49,48 @@ public final class NativeImageDriver {
         }
     }
 
+    /**
+     * Receives structured progress events parsed from native-image's stdout.
+     * All callbacks are invoked from the stdout-reader daemon thread.
+     */
+    public interface ProgressListener {
+        /**
+         * Called for each {@code [N/M] label} header line in native-image output,
+         * including the first. When {@code current == 1} the caller should also
+         * grow the scope to account for all upcoming steps.
+         *
+         * @param current  step number (1-based)
+         * @param total    total steps declared by native-image (e.g. 8)
+         * @param label    human-readable step description stripped of trailing
+         *                 progress indicators and timing (e.g. "Performing analysis")
+         */
+        void onStep(int current, int total, String label);
+    }
+
+    /** {@code [N/M] Some label...} — native-image phase header. */
+    private static final Pattern STEP_PATTERN =
+            Pattern.compile("^\\[(\\d+)/(\\d+)]\\s+(.+?)(?:\\s{2,}.*)?$");
+
     private NativeImageDriver() {}
 
-    /** Exec native-image; return its exit code. */
+    /** Exec native-image with no progress listener; return its exit code. */
     public static int run(Request request) throws IOException, InterruptedException {
+        return run(request, null);
+    }
+
+    /**
+     * Exec native-image; return its exit code.
+     *
+     * <p>stdout is forwarded line-by-line through {@code System.out} (so the
+     * TUI's {@code CommandManager.captureOutput()} displays it above the progress
+     * bar) and parsed for {@code [N/M]} step headers. Each header fires
+     * {@link ProgressListener#onStep} on the stdout-reader thread.
+     *
+     * <p>{@code listener} may be {@code null} — output still flows to
+     * {@code System.out} but no callbacks are invoked.
+     */
+    public static int run(Request request, ProgressListener listener)
+            throws IOException, InterruptedException {
         Path binary = resolve(request.javaHome())
                 .orElseThrow(() -> notFoundError(request.javaHome()));
         List<String> command = new ArrayList<>();
@@ -65,18 +105,46 @@ public final class NativeImageDriver {
 
         Files.createDirectories(request.outputPath().toAbsolutePath().getParent());
 
-        // Do NOT use inheritIO() — that writes directly to fd 1/2, bypassing
+        // Do NOT use inheritIO() — it writes directly to fd 1/2, bypassing
         // System.out/System.err which CommandManager.captureOutput() replaces
         // with a LineSink to render output above the TUI progress bar.
-        // Instead, pipe both streams and forward line-by-line through the
-        // current System.out/System.err so the TUI always stays at the bottom.
         Process process = new ProcessBuilder(command).start();
-        Thread fwdOut = forwardStream(process.getInputStream(), System.out);
+        Thread fwdOut = forwardStdout(process.getInputStream(), listener);
         Thread fwdErr = forwardStream(process.getErrorStream(), System.err);
         int exit = process.waitFor();
         fwdOut.join();
         fwdErr.join();
         return exit;
+    }
+
+    /**
+     * Forward stdout to {@code System.out} line-by-line, parsing
+     * {@code [N/M]} step headers and firing the listener when found.
+     * stderr uses the simpler {@link #forwardStream} (no parsing needed).
+     */
+    private static Thread forwardStdout(java.io.InputStream in,
+                                        ProgressListener listener) {
+        Thread t = new Thread(() -> {
+            try (BufferedReader br = new BufferedReader(
+                    new InputStreamReader(in, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    System.out.println(line);
+                    if (listener != null) {
+                        Matcher m = STEP_PATTERN.matcher(line);
+                        if (m.matches()) {
+                            int current = Integer.parseInt(m.group(1));
+                            int total   = Integer.parseInt(m.group(2));
+                            String label = m.group(3).trim();
+                            listener.onStep(current, total, label);
+                        }
+                    }
+                }
+            } catch (IOException ignored) {}
+        }, "native-image-stdout");
+        t.setDaemon(true);
+        t.start();
+        return t;
     }
 
     private static Thread forwardStream(java.io.InputStream in,
@@ -89,7 +157,7 @@ public final class NativeImageDriver {
                     dest.println(line);
                 }
             } catch (IOException ignored) {}
-        }, "native-image-io");
+        }, "native-image-stderr");
         t.setDaemon(true);
         t.start();
         return t;

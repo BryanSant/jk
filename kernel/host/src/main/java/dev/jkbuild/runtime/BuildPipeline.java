@@ -877,13 +877,46 @@ public final class BuildPipeline {
                     } catch (Exception ignored) {}
 
                     ctx.label("native-image " + out.getFileName());
+
+                    // Progress listener: parse [N/M] headers from native-image stdout
+                    // to advance the bar as each build stage completes.
+                    //
+                    // Scope accounting (e.g. 8-step build = 10 total ticks):
+                    //   scope(1) initial
+                    //   + updateScope(total + 1) on first step  → total + 2
+                    //
+                    // Ticks:
+                    //   1 (preamble, when step 1 fires) +
+                    //   total (one per step) +
+                    //   1 (ctx.progress below, after run() returns)
+                    //   = total + 2  ✓
+                    //
+                    // If no [N/M] lines appear (older GraalVM, --quiet), the listener
+                    // never fires — scope stays at 1 and the single ctx.progress(1) below
+                    // completes it identically to the pre-listener behaviour.
+                    java.util.concurrent.atomic.AtomicBoolean scopeGrown =
+                            new java.util.concurrent.atomic.AtomicBoolean(false);
+                    dev.jkbuild.tool.NativeImageDriver.ProgressListener listener =
+                            (current, total, label) -> {
+                        if (scopeGrown.compareAndSet(false, true)) {
+                            // First step seen: grow scope and tick for the preamble.
+                            ctx.updateScope(total + 1);
+                            ctx.progress(1); // preamble done
+                        }
+                        ctx.label("[" + current + "/" + total + "] " + label);
+                        ctx.progress(1); // this step started = previous step done
+                    };
+
                     int exit = dev.jkbuild.tool.NativeImageDriver.run(
                             new dev.jkbuild.tool.NativeImageDriver.Request(
-                                    javaHome, classpath, mainClass, out, allArgs));
+                                    javaHome, classpath, mainClass, out, allArgs),
+                            listener);
                     if (exit != 0) {
                         ctx.error("native", "native-image exited " + exit);
                         throw new RuntimeException("native-image failed (exit " + exit + ")");
                     }
+                    // Final tick: completes the last native-image step (or the only tick
+                    // when no progress headers were emitted).
                     ctx.progress(1);
                 })
                 .build();
