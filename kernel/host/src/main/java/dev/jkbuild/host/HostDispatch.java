@@ -150,7 +150,7 @@ public final class HostDispatch {
                         java.nio.file.Path jar = cas.pathFor(entry.sha256Hex());
                         if (!Files.isRegularFile(jar)) return;
                         try {
-                            var ctx = new HostPluginContext(project, inv.dir(), goalBuilder);
+                            var ctx = new HostPluginContext(project, inv.dir(), goalBuilder, pd.config());
                             boolean registered = PluginLoader.register(jar, ctx);
                             if (!registered) {
                                 // process-isolated: skipped until protocol is implemented

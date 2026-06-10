@@ -7,6 +7,7 @@ import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.Phase;
 
 import java.nio.file.Path;
+import java.util.Map;
 
 /**
  * Host-side implementation of {@link PluginContext}. Backed by the project's
@@ -19,22 +20,19 @@ final class HostPluginContext implements PluginContext {
     private final JkBuild project;
     private final Path workDir;
     private final Goal.Builder goalBuilder;
+    private final Map<String, Object> config;
 
-    HostPluginContext(JkBuild project, Path workDir, Goal.Builder goalBuilder) {
+    HostPluginContext(JkBuild project, Path workDir, Goal.Builder goalBuilder,
+                     Map<String, Object> config) {
         this.project     = project;
         this.workDir     = workDir;
         this.goalBuilder = goalBuilder;
+        this.config      = config;
     }
 
-    @Override
-    public JkBuild project() {
-        return project;
-    }
-
-    @Override
-    public Path workDir() {
-        return workDir;
-    }
+    @Override public JkBuild project() { return project; }
+    @Override public Path workDir()    { return workDir; }
+    @Override public Map<String, Object> config() { return config; }
 
     @Override
     public void contribute(Phase phase) {

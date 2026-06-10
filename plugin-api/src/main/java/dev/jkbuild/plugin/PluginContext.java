@@ -5,6 +5,7 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.run.Phase;
 
 import java.nio.file.Path;
+import java.util.Map;
 
 /**
  * The context a {@link Plugin} receives during {@link Plugin#register}. Lets
@@ -30,4 +31,19 @@ public interface PluginContext {
      * itself in the DAG.
      */
     void contribute(Phase phase);
+
+    /**
+     * The plugin-specific config keys declared in {@code jk.toml} under
+     * {@code [plugins.<alias>]}, converted to plain JDK types:
+     * <ul>
+     *   <li>{@link String} for string values</li>
+     *   <li>{@link Long} for integer values</li>
+     *   <li>{@link Double} for floating-point values</li>
+     *   <li>{@link Boolean} for boolean values</li>
+     *   <li>{@code List<Object>} for arrays</li>
+     *   <li>{@code Map<String, Object>} for sub-tables</li>
+     * </ul>
+     * Returns an empty map when no plugin-specific keys were declared.
+     */
+    Map<String, Object> config();
 }

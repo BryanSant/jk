@@ -762,6 +762,9 @@ public final class JkBuildParser {
 
     // -----------------------------------------------------------------------
 
+    private static final java.util.Set<String> PLUGIN_RESERVED =
+            java.util.Set.of("group", "name", "version");
+
     private static List<PluginDeclaration> parsePlugins(TomlTable root) {
         TomlTable plugins = root.getTable("plugins");
         if (plugins == null) return List.of();
@@ -769,7 +772,7 @@ public final class JkBuildParser {
         for (String alias : plugins.keySet()) {
             Object val = plugins.get(alias);
             if (!(val instanceof TomlTable entry)) {
-                throw new JkBuildParseException("plugins." + alias + " must be an inline table");
+                throw new JkBuildParseException("plugins." + alias + " must be a table");
             }
             String group   = entry.getString("group");
             String name    = entry.getString("name");
@@ -780,9 +783,32 @@ public final class JkBuildParser {
                 throw new JkBuildParseException("plugins." + alias + " must declare `name`");
             if (version == null || version.isBlank())
                 throw new JkBuildParseException("plugins." + alias + " must declare `version`");
-            result.add(new PluginDeclaration(alias, group, name, version));
+            // Every key other than the reserved identity fields becomes plugin config.
+            java.util.Map<String, Object> config = new java.util.LinkedHashMap<>();
+            for (String key : entry.keySet()) {
+                if (!PLUGIN_RESERVED.contains(key)) {
+                    config.put(key, tomlToJava(entry.get(key)));
+                }
+            }
+            result.add(new PluginDeclaration(alias, group, name, version,
+                    java.util.Collections.unmodifiableMap(config)));
         }
         return List.copyOf(result);
+    }
+
+    /** Convert a tomlj value to a plain JDK type so plugin-api stays tomlj-free. */
+    private static Object tomlToJava(Object value) {
+        if (value instanceof TomlTable t) {
+            java.util.Map<String, Object> map = new java.util.LinkedHashMap<>();
+            for (String k : t.keySet()) map.put(k, tomlToJava(t.get(k)));
+            return java.util.Collections.unmodifiableMap(map);
+        }
+        if (value instanceof TomlArray arr) {
+            java.util.List<Object> list = new ArrayList<>(arr.size());
+            for (int i = 0; i < arr.size(); i++) list.add(tomlToJava(arr.get(i)));
+            return List.copyOf(list);
+        }
+        return value; // String, Long, Double, Boolean — already JDK types
     }
 
     private static String requireString(TomlTable table, String key, String displayPath) {
