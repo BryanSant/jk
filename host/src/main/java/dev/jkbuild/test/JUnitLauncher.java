@@ -87,16 +87,39 @@ public final class JUnitLauncher {
     private Result runSingle(
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
             throws IOException, InterruptedException {
-        List<String> cmd = List.of(
-                javaBinary.toString(), "-cp", classpath,
-                "dev.jkbuild.plugin.host.PluginHostMain",
-                "--scan-classpath=" + testClassesDir);
-
+        // Phase 6: test-runner is a friendly plugin — load in-process by default.
+        // PluginLoader falls back to fork if manifest says isolation=process.
         var aggregator = new ResultAggregator(listener, /* workerId */ 0);
-        int exit = WorkerProcess.run(cmd, PROTOCOL_PREFIX,
+        int exit = dev.jkbuild.host.PluginLoader.run(
+                runnerJarFromClasspath(classpath),
+                classpathEntries(classpath),
+                List.of("--scan-classpath=" + testClassesDir),
                 aggregator::accept,
                 line -> listener.onUserOutput(0, line));
         return aggregator.toResult(exit);
+    }
+
+    /** Extract the runner jar path from the combined classpath string. */
+    private static java.nio.file.Path runnerJarFromClasspath(String classpath) {
+        for (String entry : classpath.split(java.io.File.pathSeparator)) {
+            if (entry.contains("jk-test-runner") || entry.contains("test-runner")) {
+                return java.nio.file.Path.of(entry);
+            }
+        }
+        // Fallback: last entry is usually the runner jar
+        String[] parts = classpath.split(java.io.File.pathSeparator);
+        return java.nio.file.Path.of(parts[parts.length - 1]);
+    }
+
+    /** All classpath entries except the runner jar (go on the extra-classpath). */
+    private static List<java.nio.file.Path> classpathEntries(String classpath) {
+        var result = new java.util.ArrayList<java.nio.file.Path>();
+        for (String entry : classpath.split(java.io.File.pathSeparator)) {
+            if (!entry.contains("jk-test-runner") && !entry.contains("test-runner")) {
+                result.add(java.nio.file.Path.of(entry));
+            }
+        }
+        return result;
     }
 
     // -------- parallel pull-queue ---------------------------------------
@@ -205,22 +228,22 @@ public final class JUnitLauncher {
     private List<String> discoverClasses(
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
             throws IOException, InterruptedException {
-        List<String> cmd = List.of(
-                javaBinary.toString(), "-cp", classpath,
-                "dev.jkbuild.plugin.host.PluginHostMain",
-                "--list-only",
-                "--scan-classpath=" + testClassesDir);
+        // Phase 6: in-process via PluginLoader (same fallback logic as runSingle).
         var classes = new ArrayList<String>();
-        WorkerProcess.run(cmd, PROTOCOL_PREFIX, json -> {
-            String event = Ndjson.str(json, "e");
-            if ("discovered".equals(event)) {
-                classes.add(Ndjson.str(json, "class"));
-            } else if ("discovery_total".equals(event)) {
-                listener.onDiscoveryTotal(
-                        Ndjson.intValue(json, "classes", 0),
-                        Ndjson.intValue(json, "tests", 0));
-            }
-        }, null);  // discovery emits no user output
+        dev.jkbuild.host.PluginLoader.run(
+                runnerJarFromClasspath(classpath),
+                classpathEntries(classpath),
+                List.of("--list-only", "--scan-classpath=" + testClassesDir),
+                json -> {
+                    String event = Ndjson.str(json, "e");
+                    if ("discovered".equals(event)) {
+                        classes.add(Ndjson.str(json, "class"));
+                    } else if ("discovery_total".equals(event)) {
+                        listener.onDiscoveryTotal(
+                                Ndjson.intValue(json, "classes", 0),
+                                Ndjson.intValue(json, "tests", 0));
+                    }
+                }, null);
         return classes;
     }
 
