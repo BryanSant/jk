@@ -1,10 +1,13 @@
 [project]
-group    = "dev.jkbuild"
-name     = "jk-model"
-version  = "0.6.0-SNAPSHOT"
-description = "jk domain model: Goal/Phase/GoalListener, Dependency/Coordinate, zero external deps."
-jdk      = 25
-java     = 25
+group       = "dev.jkbuild"
+name        = "jk-plugin-api"
+version     = "0.6.0-SNAPSHOT"
+description = "jk Plugin SPI + HostEvent wire codec. Zero external dependencies."
+jdk         = 25
+java        = 25
+
+[dependencies.main]
+jk-model = { group = "dev.jkbuild", name = "jk-model", version = "0.6.0-SNAPSHOT" }
 
 [dependencies.test]
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }

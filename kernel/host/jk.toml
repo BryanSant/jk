@@ -1,0 +1,23 @@
+[project]
+group       = "dev.jkbuild"
+name        = "jk-host"
+version     = "0.6.0-SNAPSHOT"
+description = "jk Workspace Host: BuildPipeline, PluginLoader, action cache, compile/test machinery."
+jdk         = 25
+java        = 25
+
+[dependencies.main]
+jk-core       = { group = "dev.jkbuild", name = "jk-core",       version = "0.6.0-SNAPSHOT" }
+jk-io         = { group = "dev.jkbuild", name = "jk-io",         version = "0.6.0-SNAPSHOT" }
+jk-plugin-api = { group = "dev.jkbuild", name = "jk-plugin-api", version = "0.6.0-SNAPSHOT" }
+jk-resolver   = { group = "dev.jkbuild", name = "jk-resolver",   version = "0.6.0-SNAPSHOT" }
+jk-toolchain  = { group = "dev.jkbuild", name = "jk-toolchain",  version = "0.6.0-SNAPSHOT" }
+asm           = { group = "org.ow2.asm", name = "asm",            version = "9.10.1" }
+asm-tree      = { group = "org.ow2.asm", name = "asm-tree",       version = "9.10.1" }
+asm-commons   = { group = "org.ow2.asm", name = "asm-commons",    version = "9.10.1" }
+
+[dependencies.test]
+jgit                    = { group = "org.eclipse.jgit",   name = "org.eclipse.jgit",       version = "7.6.0.202603022253-r" }
+assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
+junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }
+junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }
