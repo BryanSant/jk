@@ -299,7 +299,7 @@ public final class BuildCommand implements CliCommand {
      * detect) result in any unsorted members being appended in
      * declaration order so the build still attempts to make progress.
      */
-    private static List<Path> topoSortMembers(Map<Path, JkBuild> membersByDir) {
+    static List<Path> topoSortMembers(Map<Path, JkBuild> membersByDir) {
         Map<String, Path> dirByCoord = new HashMap<>();
         Map<String, Path> dirByName  = new HashMap<>(); // for workspace: references
         for (var e : membersByDir.entrySet()) {
@@ -502,7 +502,7 @@ public final class BuildCommand implements CliCommand {
     }
 
     /** Dim {@code "in Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */
-    private static String elapsedSince(long startNanos) {
+    static String elapsedSince(long startNanos) {
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
         return dev.jkbuild.cli.run.ConsoleSpec.inTime(java.time.Duration.ofMillis(ms));
     }
