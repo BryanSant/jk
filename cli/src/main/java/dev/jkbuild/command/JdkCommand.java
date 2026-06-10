@@ -15,7 +15,7 @@ public final class JdkCommand implements CliCommand {
 
     @Override
     public List<CliCommand> subcommands() {
-        return List.of(new JdkListCommand(), new JdkInstallCommand(), new JdkPinCommand(), new JdkDefaultCommand(), new JdkHomeCommand(), new JdkUninstallCommand(), new JdkReconcileCommand(), new JdkUpdateShellCommand());
+        return List.of(new JdkListCommand(), new JdkInstallCommand(), new JdkEnsureCommand(), new JdkUpdateCommand(), new JdkPinCommand(), new JdkDefaultCommand(), new JdkHomeCommand(), new JdkUninstallCommand(), new JdkUpdateShellCommand());
     }
 
     @Override

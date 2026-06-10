@@ -15,10 +15,9 @@ import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkCatalogClient;
 import dev.jkbuild.jdk.JdkInstaller;
-import dev.jkbuild.jdk.JdkLts;
+import dev.jkbuild.jdk.JdkKeywords;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
-import dev.jkbuild.jdk.JdkSpec;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
@@ -68,7 +67,8 @@ public final class JdkInstallCommand implements CliCommand {
     }
     @Override public java.util.List<Param> parameters() {
         return java.util.List.of(Param.of("spec", Arity.ZERO_OR_ONE,
-                "Keyword (`lts` / `stable` / `latest`) or a denormalized version. Omit to launch the interactive wizard."));
+                "Keyword (`lts` / `stable` / `latest` / `native`, where `native` is the latest Oracle GraalVM) "
+                + "or a denormalized version. Omit to launch the interactive wizard."));
     }
 
     String spec;
@@ -162,9 +162,12 @@ public final class JdkInstallCommand implements CliCommand {
                         wantDefault = wantDefault || chosen.makeDefault();
                     } else {
                         ctx.label("select " + effective);
-                        JdkSpec parsed = JdkSpec.parse(effective);
+                        // selectPreferred applies the Temurin bias for
+                        // vendor-unqualified specs (e.g. `26`, `25.0.3`); the
+                        // keyword path already resolved `effective` to
+                        // `temurin-<major>`, so it's a no-op bias there.
                         Optional<JdkCatalog.Entry> selected =
-                                JdkSelector.select(catalog, parsed, os, arch);
+                                JdkSelector.selectPreferred(catalog, effective, os, arch);
                         if (selected.isEmpty()) {
                             ctx.error("no-match", "no JDK matches " + effective
                                     + " on " + os + "/" + arch);
@@ -321,31 +324,15 @@ public final class JdkInstallCommand implements CliCommand {
      * selector falls back to the catalog's default-for-major.
      */
     private String resolveKeyword(String raw, JdkCatalog catalog, String os, String arch) {
-        var norm = raw.trim().toLowerCase(java.util.Locale.ROOT);
-        boolean wantLts = norm.equals("lts") || norm.equals("stable");
-        boolean wantLatest = norm.equals("latest");
-        if (!wantLts && !wantLatest) return null;
-
-        var majors = new java.util.TreeSet<Integer>();
-        for (JdkCatalog.Entry e : catalog.entries()) {
-            if (e.preview()) continue;
-            if (!e.os().equals(os) || !e.arch().equals(arch)) continue;
-            majors.add(e.majorVersion());
+        if (!JdkKeywords.isKeyword(raw)) return null;
+        String resolved = JdkKeywords.resolveToMajorSpec(catalog, raw, os, arch).orElse(null);
+        if (resolved == null) {
+            // A keyword resolved to nothing: lts/stable with no LTS major, or
+            // `native` with no Oracle GraalVM, for this host.
+            System.err.println("jk jdk install: could not resolve `" + raw.trim()
+                    + "` against the JetBrains feed for " + os + "/" + arch + ".");
         }
-        if (majors.isEmpty()) return null;
-        int picked;
-        if (wantLatest) {
-            picked = majors.last();
-        } else {
-            var lts = JdkLts.latestLtsIn(majors);
-            if (lts.isEmpty()) {
-                System.err.println("jk jdk install: no LTS major present in the feed for "
-                        + os + "/" + arch + ".");
-                return null;
-            }
-            picked = lts.getAsInt();
-        }
-        return "temurin-" + picked;
+        return resolved;
     }
 
     /**

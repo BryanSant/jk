@@ -58,7 +58,7 @@ jk mvn package
 |---|---|
 | Dependencies | `add` `remove` `lock` `sync` `update` `tree` `why` `fetch` |
 | Build | `compile` `build` `test` `clean` `explain` `why-rebuilt` |
-| Toolchain | `jdk install/list/use/uninstall/reconcile/home` |
+| Toolchain | `jdk install/list/use/uninstall/home` |
 | CLI tools | `tool install/list/uninstall/run/dir` |
 | Maven / Gradle | `mvn` `gradle` (passthroughs), `import` `export` |
 | Publishing | `publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOM) |

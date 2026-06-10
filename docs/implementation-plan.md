@@ -130,7 +130,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 3. **TOML diagnostics.** *Mitigation:* the `dev.jkbuild.config` wrapper maps `com.typesafe.config.ConfigException` positions to source lines and renders Rust-style carets. Required to close requirements.md §31 #3.
 4. **Self-hosting chicken-and-egg.** *Mitigation:* the Gradle bootstrap build is kept at the repo root through v1.1 as an escape hatch; parity CI runs per §7.
 5. **IntelliJ plugin staffing (requirements.md §31 #1).** Out of scope for this document; flagged as a v1.0 blocker that requires a separate effort and is not on the critical path of the binary itself.
-6. **Build-tool discovery-link rot.** *Mitigation:* `jk doctor` prunes broken mvn/gradle/kotlin symlinks under `$JK_CACHE_DIR/tools/`. (JDKs are installed directly into IntelliJ's directory now — no symlink layer, no rot. `jk jdk reconcile` walks the directory and reports orphaned entries.) See [tool-discovery-plan.md](./tool-discovery-plan.md).
+6. **Build-tool discovery-link rot.** *Mitigation:* `jk doctor` prunes broken mvn/gradle/kotlin symlinks under `$JK_CACHE_DIR/tools/`. (JDKs are installed directly into IntelliJ's directory now — no symlink layer, no rot.) See [tool-discovery-plan.md](./tool-discovery-plan.md).
 
 ---
 

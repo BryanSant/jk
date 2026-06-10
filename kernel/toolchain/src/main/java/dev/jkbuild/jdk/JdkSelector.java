@@ -27,6 +27,40 @@ public final class JdkSelector {
 
     private JdkSelector() {}
 
+    /**
+     * Default vendor for specs that don't name one. jk's mental model is "the
+     * default JDK is Eclipse Temurin" — see {@link #selectPreferred}.
+     */
+    private static final String PREFERRED_VENDOR = "temurin";
+
+    /**
+     * {@link #select} with jk's default-vendor bias: when {@code rawSpec} names
+     * no vendor (a bare major / version like {@code 26} or {@code 25.0.3}),
+     * Eclipse Temurin is preferred over the feed's {@code default:true}
+     * entry-for-major. Falls back to the unbiased {@link #select} when no
+     * Temurin entry satisfies the spec on this host (or when the spec already
+     * names a vendor, e.g. {@code corretto-25} / {@code temurin-25}).
+     *
+     * <p>This is the entry point every <em>install</em> path should use so the
+     * Temurin bias is consistent across {@code jk jdk install <ver>},
+     * {@code jk jdk ensure <ver>}, and the build pipeline's auto-install — the
+     * keyword path ({@code lts}/{@code latest}) is already Temurin-biased via
+     * {@link JdkKeywords#resolveToMajorSpec}.
+     */
+    public static Optional<JdkCatalog.Entry> selectPreferred(
+            JdkCatalog catalog, String rawSpec, String os, String arch) {
+        if (rawSpec == null || rawSpec.isBlank()) return Optional.empty();
+        FlexibleQuery q = parseFlexible(rawSpec);
+        // Bias only when the user named no vendor AND gave a concrete major/
+        // version (so plain hints like "graal" aren't forced onto Temurin).
+        if (q.hints().isEmpty() && q.major().isPresent()) {
+            Optional<JdkCatalog.Entry> preferred = select(
+                    catalog, JdkSpec.parse(PREFERRED_VENDOR + "-" + rawSpec.trim()), os, arch);
+            if (preferred.isPresent()) return preferred;
+        }
+        return select(catalog, JdkSpec.parse(rawSpec), os, arch);
+    }
+
     public static Optional<JdkCatalog.Entry> select(
             JdkCatalog catalog, JdkSpec spec, String os, String arch) {
         String token = spec.normalized();
@@ -109,7 +143,7 @@ public final class JdkSelector {
     }
 
     /** Outcome of {@link #parseFlexible} — the tokens we extracted from raw input. */
-    record FlexibleQuery(Optional<Integer> major, Optional<String> exactVersion, List<String> hints) {}
+    public record FlexibleQuery(Optional<Integer> major, Optional<String> exactVersion, List<String> hints) {}
 
     /**
      * Token-walker that handles the denormalized forms callers care about.
@@ -118,7 +152,7 @@ public final class JdkSelector {
      * (it's a noise word in inputs like {@code java-17-openjdk}); {@code "jdk"}
      * gets the same treatment.
      */
-    static FlexibleQuery parseFlexible(String raw) {
+    public static FlexibleQuery parseFlexible(String raw) {
         if (raw == null) return new FlexibleQuery(Optional.empty(), Optional.empty(), List.of());
         var tokens = raw.toLowerCase(Locale.ROOT).split("[-_]");
         Integer major = null;

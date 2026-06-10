@@ -250,6 +250,27 @@ public final class JdkRegistry {
     }
 
     /**
+     * Every <em>jk-managed</em> install — those under {@link #jdksRoot()},
+     * surfaced by {@link dev.jkbuild.discovery.JkProbe} with source
+     * {@code "jk"} — optionally narrowed to a spec. A blank/null spec returns
+     * all of them; otherwise the same flexible matcher {@link #findHitBySpec}
+     * uses is applied (so {@code 25} matches major 25 across every vendor,
+     * {@code temurin} matches all Temurin, {@code temurin-25} matches Temurin
+     * 25). Used by {@code jk jdk update}, which only ever touches installs jk
+     * owns. Returned in probe-chain order.
+     */
+    public List<JdkHit> managedHits(String spec) {
+        JdkSelector.FlexibleQuery query =
+                (spec == null || spec.isBlank()) ? null : JdkSelector.parseFlexible(spec);
+        List<JdkHit> out = new ArrayList<>();
+        for (JdkHit hit : listHits()) {
+            if (!"jk".equals(hit.source())) continue;
+            if (query == null || matchesSpec(hit, query)) out.add(hit);
+        }
+        return out;
+    }
+
+    /**
      * Source-scoped variant of {@link #findHitBySpec(String)} — only considers
      * hits whose {@link JdkHit#source()} matches {@code sourceFilter}. Pass
      * {@code null} or empty to disable the source filter. Used by
@@ -285,6 +306,43 @@ public final class JdkRegistry {
         if (!Files.exists(installDir)) return false;
         deleteRecursively(installDir);
         return true;
+    }
+
+    /**
+     * Minimum-version-aware installed lookup, used by {@code jk jdk ensure}.
+     * Returns the first installed JDK (in probe-chain order) that:
+     * <ul>
+     *   <li>is the given {@code major},</li>
+     *   <li>matches every vendor {@code hint} (case-insensitive, against the
+     *       same vendor haystack {@link #findHitBySpec} uses), and</li>
+     *   <li>when {@code minVersion} is non-null, has a version &ge;
+     *       {@code minVersion} per {@link JdkSelector#versionKey} ordering
+     *       ({@code 25.0.3} satisfies a {@code 25.0.3} floor; {@code 25.0.2}
+     *       does not; {@code 25.0.4} does).</li>
+     * </ul>
+     * A {@code null} {@code minVersion} means "any point release of the major"
+     * — the bare-major case.
+     */
+    public Optional<JdkHit> findHitAtLeast(int major, String minVersion, List<String> hints) {
+        String floor = minVersion == null ? null : JdkSelector.versionKey(minVersion);
+        for (JdkHit hit : listHits()) {
+            Integer m = majorOf(hit.version());
+            if (m == null || m != major) continue;
+            if (floor != null) {
+                if (hit.version() == null) continue;
+                if (JdkSelector.versionKey(hit.version()).compareTo(floor) < 0) continue;
+            }
+            if (hints != null && !hints.isEmpty()) {
+                String haystack = hintHaystack(hit.vendor());
+                boolean all = true;
+                for (String hint : hints) {
+                    if (!haystack.contains(hint.toLowerCase(java.util.Locale.ROOT))) { all = false; break; }
+                }
+                if (!all) continue;
+            }
+            return Optional.of(hit);
+        }
+        return Optional.empty();
     }
 
     private static boolean matchesSpec(JdkHit hit, JdkSelector.FlexibleQuery query) {

@@ -1,0 +1,305 @@
+// SPDX-License-Identifier: Apache-2.0
+package dev.jkbuild.command;
+
+import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.SpinnerProgressBar;
+import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.GlobalDefaultJdk;
+import dev.jkbuild.jdk.HostPlatform;
+import dev.jkbuild.jdk.InstalledJdk;
+import dev.jkbuild.jdk.JdkCatalog;
+import dev.jkbuild.jdk.JdkCatalogClient;
+import dev.jkbuild.jdk.JdkHit;
+import dev.jkbuild.jdk.JdkInstaller;
+import dev.jkbuild.jdk.JdkRegistry;
+import dev.jkbuild.jdk.JdkSelector;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
+
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * {@code jk jdk update [spec]} (alias {@code upgrade}) — refresh jk-managed
+ * JDKs to the latest point release of their own family and major.
+ *
+ * <p>Only installs jk owns (under {@code ~/.jk/jdks}, source {@code "jk"}) are
+ * touched; SDKMAN / IntelliJ / system / {@code $JAVA_HOME} JDKs are left alone.
+ * With no spec every managed JDK is considered; a spec narrows the set with the
+ * usual flexible matcher ({@code 25} = major 25 of any vendor, {@code temurin} =
+ * all Temurin, {@code temurin-25} = Temurin 25).
+ *
+ * <p>Each match is updated <em>within its family+major</em>:
+ * {@code temurin-25.0.2 → temurin-25.0.3}, never a major bump and never a
+ * vendor switch. The newer release is installed and the superseded one removed;
+ * if a removed install was the global default, the default is re-pointed at its
+ * replacement. The planned changes are shown and confirmed ({@code [Y/n]})
+ * unless {@code --yes} is passed.
+ */
+public final class JdkUpdateCommand implements CliCommand {
+
+    @Override public String name() { return "update"; }
+    @Override public List<String> aliases() { return List.of("upgrade"); }
+    @Override public String description() { return "Update jk-managed JDKs to the latest point release"; }
+
+    @Override public List<Opt> options() {
+        return List.of(
+                Opt.flag("Skip the confirmation prompt.", "-y", "--yes"),
+                Opt.value("<dir>", "Override the install root. Default: the jk JDK directory.", "--jdks-dir").hide(),
+                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url").hide(),
+                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file").hide());
+    }
+
+    @Override public List<Param> parameters() {
+        return List.of(Param.of("spec", Arity.ZERO_OR_ONE,
+                "Limit to JDKs matching this (e.g. 25, temurin, temurin-25). "
+                + "Omit to update every jk-managed JDK."));
+    }
+
+    /** A planned update: the installed JDK being superseded and the feed entry replacing it. */
+    private record Update(JdkHit old, JdkCatalog.Entry target) {}
+
+    private String spec;
+    private boolean assumeYes;
+    private Path jdksDir;
+    private URI feedUrl;
+    private Path cacheFile;
+
+    @Override
+    public int run(Invocation in) throws Exception {
+        this.spec = in.positionals().isEmpty() ? null : in.positionals().get(0);
+        this.assumeYes = in.isSet("yes");
+        this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.feedUrl = in.value("feed-url").map(URI::create).orElse(null);
+        this.cacheFile = in.value("cache-file").map(Path::of).orElse(null);
+
+        JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
+
+        List<JdkHit> managed = registry.managedHits(spec);
+        if (managed.isEmpty()) {
+            System.out.println(spec == null || spec.isBlank()
+                    ? "(no jk-managed JDKs installed)"
+                    : "(no jk-managed JDK matches `" + spec + "`)");
+            return 0;
+        }
+
+        if (!hostSupported()) return 1;
+        String os = HostPlatform.currentOs();
+        String arch = HostPlatform.currentArch();
+        JdkCatalog catalog = fetchCatalog();
+
+        // Build the plan.
+        List<Update> updates = new ArrayList<>();
+        int upToDate = 0;
+        List<String> noTarget = new ArrayList<>();
+        for (JdkHit hit : managed) {
+            String id = JdkRegistry.identifierFor(hit.home());
+            Optional<JdkCatalog.Entry> target = latestPointRelease(catalog, id, os, arch);
+            if (target.isEmpty()) {
+                noTarget.add(id);
+                continue;
+            }
+            JdkCatalog.Entry e = target.get();
+            if (newerThan(e.version(), hit.version())) {
+                updates.add(new Update(hit, e));
+            } else {
+                upToDate++;
+            }
+        }
+
+        for (String id : noTarget) {
+            System.out.println(Theme.colorize("•", Theme.active().darkGray())
+                    + " " + Theme.colorize(id, Theme.active().cyan())
+                    + Theme.colorize(" — no update available in the feed", Theme.active().normalGray()));
+        }
+
+        if (updates.isEmpty()) {
+            System.out.println(Theme.colorize("✓", Theme.active().completedStep())
+                    + " All " + managed.size() + " jk-managed JDK" + (managed.size() == 1 ? "" : "s")
+                    + " are up to date.");
+            return 0;
+        }
+
+        if (!assumeYes && !confirm(updates)) {
+            System.out.println("Aborted.");
+            return 0;
+        }
+
+        return apply(registry, updates) ? 0 : 1;
+    }
+
+    // --- apply --------------------------------------------------------------
+
+    private boolean apply(JdkRegistry registry, List<Update> updates) {
+        JdkInstaller installer = new JdkInstaller(new Http(), registry);
+        GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
+        Optional<String> currentDefault;
+        try {
+            currentDefault = defaults.currentIdentifier();
+        } catch (IOException e) {
+            currentDefault = Optional.empty();
+        }
+
+        Map<String, InstalledJdk> built = new HashMap<>(); // dedupe installs by target folder
+        int updated = 0;
+        int failed = 0;
+        for (Update u : updates) {
+            String oldId = JdkRegistry.identifierFor(u.old.home());
+            try {
+                InstalledJdk newJdk = built.get(u.target.installFolderName());
+                if (newJdk == null) {
+                    newJdk = installEntry(installer, u.target);
+                    built.put(u.target.installFolderName(), newJdk);
+                }
+                if (!oldId.equals(newJdk.identifier())) {
+                    registry.remove(oldId);
+                }
+                if (currentDefault.isPresent() && currentDefault.get().equals(oldId)) {
+                    defaults.set(newJdk);
+                }
+                System.out.println(Theme.colorize("✓", Theme.active().completedStep())
+                        + " Updated " + Theme.colorize(oldId, Theme.active().cyan())
+                        + " → " + Theme.colorize(newJdk.identifier(), Theme.active().cyan()));
+                updated++;
+            } catch (IOException | InterruptedException e) {
+                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
+                System.out.println(Theme.colorize("✗", Theme.active().error())
+                        + " Failed to update " + Theme.colorize(oldId, Theme.active().warning())
+                        + ": " + e.getMessage());
+                failed++;
+            }
+        }
+
+        System.out.println(updated + " updated"
+                + (failed > 0 ? ", " + failed + " failed" : ""));
+        return failed == 0;
+    }
+
+    /** Download + extract {@code entry} with a progress bar; journal the install. */
+    private InstalledJdk installEntry(JdkInstaller installer, JdkCatalog.Entry entry)
+            throws IOException, InterruptedException {
+        InstalledJdk already = installer.alreadyInstalled(entry);
+        if (already != null) return already;
+
+        String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
+        String downloading = "Downloading " + label + " (" + entry.os() + "/" + entry.arch() + ")";
+        long total = entry.archiveSize();
+        InstalledJdk installed;
+        try (SpinnerProgressBar pb = SpinnerProgressBar.show(System.out)) {
+            pb.update(0, downloading);
+            installed = installer.install(entry, bytes -> {
+                int pct = total > 0 ? (int) Math.min(100, bytes * 100L / total) : 0;
+                pb.update(pct, downloading);
+            });
+            pb.finish(Theme.colorize("✓", Theme.active().completedStep())
+                    + " " + Theme.colorize("Download finished for ", Theme.active().normalGray())
+                    + Theme.colorize(label, Theme.active().focused()));
+        }
+        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "install");
+        return installed;
+    }
+
+    // --- planning helpers ---------------------------------------------------
+
+    /**
+     * Highest-versioned non-preview catalog entry on this host that belongs to
+     * the same family as the installed id (its {@code suggested_sdk_name} is a
+     * delimiter-bounded prefix of the id). The suggested name encodes the major,
+     * so this never crosses majors.
+     */
+    private static Optional<JdkCatalog.Entry> latestPointRelease(
+            JdkCatalog catalog, String installedId, String os, String arch) {
+        JdkCatalog.Entry best = null;
+        for (JdkCatalog.Entry e : catalog.entries()) {
+            if (e.preview()) continue;
+            if (!e.os().equals(os) || !e.arch().equals(arch)) continue;
+            if (!belongsToFamily(installedId, e.suggestedSdkName())) continue;
+            if (best == null || newerThan(e.version(), best.version())) best = e;
+        }
+        return Optional.ofNullable(best);
+    }
+
+    /** Does install id {@code id} belong to the family named by {@code suggested}? */
+    private static boolean belongsToFamily(String id, String suggested) {
+        if (suggested == null || suggested.isEmpty()) return false;
+        return id.equals(suggested)
+                || id.startsWith(suggested + ".")
+                || id.startsWith(suggested + "-")
+                || id.startsWith(suggested + "+");
+    }
+
+    /** {@code a > b} by {@link JdkSelector#versionKey} ordering ({@code 25.0.10 > 25.0.9}). */
+    private static boolean newerThan(String a, String b) {
+        if (a == null) return false;
+        if (b == null) return true;
+        return JdkSelector.versionKey(a).compareTo(JdkSelector.versionKey(b)) > 0;
+    }
+
+    // --- confirmation -------------------------------------------------------
+
+    private boolean confirm(List<Update> updates) throws IOException {
+        System.out.println("\nThe following " + updates.size() + " JDK"
+                + (updates.size() == 1 ? "" : "s") + " will be updated:");
+        for (Update u : updates) {
+            System.out.println("   "
+                    + Theme.colorize(JdkRegistry.identifierFor(u.old.home()), Theme.active().cyan())
+                    + " → " + Theme.colorize(u.target.installFolderName(), Theme.active().focused()));
+        }
+        System.out.print(Theme.colorize("‼", Theme.active().warning())
+                + " Proceed? " + yesNo() + " ");
+        System.out.flush();
+        var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+        String line = reader.readLine();
+        if (line == null) return false;
+        String trimmed = line.trim();
+        return trimmed.isEmpty() || trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
+    }
+
+    /** {@code [Y/n]} with the brackets and slash dimmed, the keys left plain. */
+    private static String yesNo() {
+        var dim = Theme.active().darkGray();
+        return Theme.colorize("[", dim) + "Y" + Theme.colorize("/", dim)
+                + "n" + Theme.colorize("]", dim);
+    }
+
+    // --- shared mechanics (mirrors JdkEnsureCommand) ------------------------
+
+    private boolean hostSupported() {
+        if (HostPlatform.supported()) return true;
+        System.err.println("jk jdk update: host "
+                + System.getProperty("os.name") + "/" + System.getProperty("os.arch")
+                + " is not covered by the JetBrains JDK feed. Set JAVA_HOME explicitly.");
+        return false;
+    }
+
+    private JdkCatalog fetchCatalog() throws IOException, InterruptedException {
+        boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+        JdkCatalogClient client = (feedUrl != null
+                ? new JdkCatalogClient(new Http(), feedUrl,
+                        cacheFile != null ? cacheFile : ephemeralCachePath(),
+                        Duration.ZERO)
+                : new JdkCatalogClient())
+                .onWarning(System.err::println);
+        return client.fetch(noCache);
+    }
+
+    private static Path ephemeralCachePath() throws IOException {
+        Path tmp = java.nio.file.Files.createTempFile("jk-feed-", ".json.xz");
+        tmp.toFile().deleteOnExit();
+        java.nio.file.Files.delete(tmp); // force a fresh fetch
+        return tmp;
+    }
+}
