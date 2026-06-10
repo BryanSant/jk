@@ -9,10 +9,13 @@ import dev.jkbuild.model.Scope;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Queue;
 import java.util.Set;
 
 /**
@@ -57,8 +60,10 @@ public final class WorkspaceClasspath {
             return new Result(List.of(), List.of());
         }
 
-        Map<String, Path> siblingJarByModule = new HashMap<>();
-        Map<String, Path> siblingJarByName   = new HashMap<>();
+        // Build bidirectional index: module-coord and bare-name → sibling dir + jar
+        Map<String, Path> siblingDirByModule  = new HashMap<>();
+        Map<String, Path> siblingJarByModule  = new HashMap<>();
+        Map<String, Path> siblingJarByName    = new HashMap<>();
         for (String memberName : rootManifest.workspace().members()) {
             Path siblingDir = root.resolve(memberName);
             Path siblingManifest = siblingDir.resolve("jk.toml");
@@ -70,41 +75,78 @@ public final class WorkspaceClasspath {
                 continue;
             }
             String moduleCoord = sibling.project().group() + ":" + sibling.project().name();
-            // Each member owns its own target/ — sibling jars are at <siblingDir>/target/.
             Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
+            siblingDirByModule.put(moduleCoord, siblingDir);
             siblingJarByModule.put(moduleCoord, jar);
-            // Also index by bare name so workspace: placeholders resolve correctly.
-            // jk-core.workspace = true produces module "workspace:jk-core" in the
-            // raw parsed manifest (before WorkspaceMerge rewrites it), so we need
-            // a name-keyed lookup for that case.
             siblingJarByName.put(sibling.project().name(), jar);
+        }
+
+        // Collect the full transitive workspace closure via BFS.  Direct deps
+        // seed the queue; each discovered sibling's own workspace deps are then
+        // enqueued so that e.g. io→core→model are all on the classpath even
+        // though the member's jk.toml only declares the direct dep (core).
+        LinkedHashSet<String> visited = new LinkedHashSet<>();
+        Queue<String> queue = new ArrayDeque<>();
+        for (Scope scope : scopes) {
+            for (Dependency dep : project.dependencies().of(scope)) {
+                String module = dep.module();
+                if (module.startsWith("workspace:")) {
+                    String name = module.substring("workspace:".length());
+                    Path jar = siblingJarByName.get(name);
+                    if (jar != null) module = siblingJarByModule.entrySet().stream()
+                            .filter(e -> e.getValue().equals(jar)).map(Map.Entry::getKey)
+                            .findFirst().orElse(module);
+                }
+                if (siblingJarByModule.containsKey(module) && visited.add(module)) {
+                    queue.add(module);
+                }
+            }
+        }
+        while (!queue.isEmpty()) {
+            String coord = queue.poll();
+            Path sibDir = siblingDirByModule.get(coord);
+            if (sibDir == null) continue;
+            Path sibToml = sibDir.resolve("jk.toml");
+            if (!Files.exists(sibToml)) continue;
+            JkBuild sibBuild;
+            try { sibBuild = JkBuildParser.parse(sibToml); }
+            catch (RuntimeException ignored) { continue; }
+            for (Scope scope : Set.of(Scope.MAIN)) { // only MAIN propagates transitively
+                for (Dependency dep : sibBuild.dependencies().of(scope)) {
+                    String depModule = dep.module();
+                    if (siblingJarByModule.containsKey(depModule) && visited.add(depModule)) {
+                        queue.add(depModule);
+                    }
+                }
+            }
         }
 
         List<Path> jars = new ArrayList<>();
         List<String> missing = new ArrayList<>();
-        for (Scope scope : scopes) {
-            for (Dependency dep : project.dependencies().of(scope)) {
-                String module = dep.module();
-                Path siblingJar = siblingJarByModule.get(module);
-                if (siblingJar == null && module.startsWith("workspace:")) {
-                    siblingJar = siblingJarByName.get(module.substring("workspace:".length()));
-                }
-                if (siblingJar == null) continue;
-                if (Files.exists(siblingJar)) {
-                    if (!jars.contains(siblingJar)) jars.add(siblingJar);
-                } else {
-                    missing.add(module + " (expected at " + siblingJar + ")");
-                }
+        List<Path> siblingLockfiles = new ArrayList<>();
+        for (String module : visited) {
+            Path siblingJar = siblingJarByModule.get(module);
+            if (siblingJar == null) continue;
+            if (Files.exists(siblingJar)) {
+                jars.add(siblingJar);
+            } else {
+                missing.add(module + " (expected at " + siblingJar + ")");
+            }
+            // Collect the sibling's lockfile so the caller can include its
+            // external transitive deps on the compile classpath (e.g. tomlj
+            // declared in jk-core is needed by jk-io via the transitive chain).
+            Path sibDir = siblingDirByModule.get(module);
+            if (sibDir != null) {
+                Path lockFile = sibDir.resolve("jk.lock");
+                if (Files.exists(lockFile)) siblingLockfiles.add(lockFile);
             }
         }
-        return new Result(jars, missing);
+        return new Result(jars, missing, siblingLockfiles);
     }
 
     /**
      * When the workspace root itself has source code, all member jars are
      * automatically on its classpath — no explicit dep declaration needed.
-     * Members missing their jars are reported as errors so the root build
-     * fails clearly instead of compiling against stale or absent types.
      */
     private static Result resolveForRoot(Path root, JkBuild rootManifest)
             throws IOException {
@@ -128,13 +170,19 @@ public final class WorkspaceClasspath {
                         + " (expected at " + jar + ")");
             }
         }
-        return new Result(jars, missing);
+        return new Result(jars, missing, List.of());
     }
 
-    public record Result(List<Path> jars, List<String> missingSiblingJars) {
+    public record Result(List<Path> jars, List<String> missingSiblingJars,
+                         List<Path> siblingLockfiles) {
         public Result {
             jars = List.copyOf(jars);
             missingSiblingJars = List.copyOf(missingSiblingJars);
+            siblingLockfiles = List.copyOf(siblingLockfiles);
+        }
+        /** Back-compat constructor for callers that don't use sibling lockfiles. */
+        public Result(List<Path> jars, List<String> missingSiblingJars) {
+            this(jars, missingSiblingJars, List.of());
         }
     }
 }

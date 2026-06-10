@@ -210,6 +210,18 @@ public final class BuildPipeline {
                             ctx.error("workspace", "sibling not built — " + missing);
                         throw new RuntimeException("missing workspace siblings");
                     }
+                    // Add external deps from transitive workspace siblings' lockfiles so
+                    // that e.g. tomlj declared in jk-core is available when compiling jk-io.
+                    for (java.nio.file.Path sibLock : mainSiblings.siblingLockfiles()) {
+                        try {
+                            dev.jkbuild.lock.Lockfile sibLockfile =
+                                    dev.jkbuild.lock.LockfileReader.read(sibLock);
+                            for (Path p : resolver.classpathFor(sibLockfile,
+                                    ClasspathResolver.COMPILE_MAIN)) {
+                                if (!mainCp.contains(p)) mainCp.add(p);
+                            }
+                        } catch (Exception ignored) { /* best-effort */ }
+                    }
 
                     Profile profile = CompileSupport.resolveProfile(project.profiles(), in.profileName());
                     ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
@@ -812,11 +824,30 @@ public final class BuildPipeline {
 
                     List<Path> classpath = new ArrayList<>();
                     classpath.add(mainJar);
+                    ClasspathResolver cpResolver = new ClasspathResolver(new Cas(cache));
                     if (Files.exists(lockFile)) {
                         Lockfile lock = LockfileReader.read(lockFile);
-                        classpath.addAll(new ClasspathResolver(new Cas(cache))
-                                .classpathFor(lock, ClasspathResolver.RUNTIME));
+                        classpath.addAll(cpResolver.classpathFor(lock, ClasspathResolver.RUNTIME));
                     }
+                    // Add workspace sibling JARs (and their external transitive deps)
+                    // so native-image can resolve all referenced classes.
+                    try {
+                        dev.jkbuild.config.WorkspaceClasspath.Result siblings =
+                                dev.jkbuild.config.WorkspaceClasspath.resolve(
+                                        dir, project, Set.of(Scope.MAIN));
+                        for (java.nio.file.Path sj : siblings.jars()) {
+                            if (!classpath.contains(sj)) classpath.add(sj);
+                        }
+                        for (java.nio.file.Path sibLock : siblings.siblingLockfiles()) {
+                            try {
+                                Lockfile sibLockfile = LockfileReader.read(sibLock);
+                                for (Path p : cpResolver.classpathFor(sibLockfile,
+                                        ClasspathResolver.RUNTIME)) {
+                                    if (!classpath.contains(p)) classpath.add(p);
+                                }
+                            } catch (Exception ignored) {}
+                        }
+                    } catch (Exception ignored) {}
 
                     ctx.label("native-image " + out.getFileName());
                     int exit = dev.jkbuild.tool.NativeImageDriver.run(
