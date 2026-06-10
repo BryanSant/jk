@@ -821,21 +821,31 @@ public final class BuildPipeline {
                     }
 
                     JkBuild project = ctx.require(PROJECT);
+                    JkBuild.NativeConfig nativeCfg = project.nativeConfig();
                     BuildLayout layout = ctx.require(LAYOUT);
                     Path mainJar = layout.mainJar();
                     if (!Files.exists(mainJar)) {
                         ctx.error("native", "jar not found at " + mainJar);
                         throw new RuntimeException("missing main jar for native-image");
                     }
+                    // Resolution order: --main CLI flag > [native].main-class > [project].main
                     String mainClass = (mainOverride != null && !mainOverride.isBlank())
-                            ? mainOverride : project.project().main();
+                            ? mainOverride
+                            : (nativeCfg.mainClass() != null ? nativeCfg.mainClass()
+                            : project.project().main());
                     if (mainClass == null || mainClass.isBlank()) {
-                        ctx.error("native", "no main class — set [project] main "
-                                + "or pass --main / [image] main-class.");
+                        ctx.error("native", "no main class — set [project] main, "
+                                + "[native] main-class, or pass --main.");
                         throw new RuntimeException("missing main class");
                     }
-                    Path out = layout.nativeBinary();
+                    // Output path: [native].name overrides the artifact name from BuildLayout
+                    Path out = (nativeCfg.name() != null)
+                            ? layout.memberTargetDir().resolve(nativeCfg.name())
+                            : layout.nativeBinary();
                     Files.createDirectories(out.getParent());
+                    // Args: [native].args (project-level) + extra (CLI --) in that order
+                    List<String> allArgs = new ArrayList<>(nativeCfg.args());
+                    allArgs.addAll(extra);
 
                     Path javaHome = javaHomeEarly; // resolved above in fail-fast check
 
@@ -869,7 +879,7 @@ public final class BuildPipeline {
                     ctx.label("native-image " + out.getFileName());
                     int exit = dev.jkbuild.tool.NativeImageDriver.run(
                             new dev.jkbuild.tool.NativeImageDriver.Request(
-                                    javaHome, classpath, mainClass, out, extra));
+                                    javaHome, classpath, mainClass, out, allArgs));
                     if (exit != 0) {
                         ctx.error("native", "native-image exited " + exit);
                         throw new RuntimeException("native-image failed (exit " + exit + ")");

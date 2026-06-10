@@ -22,7 +22,8 @@ public record JkBuild(
         Features features,
         Workspace workspace,
         Map<String, String> manifest,
-        List<PluginDeclaration> plugins) {
+        List<PluginDeclaration> plugins,
+        NativeConfig nativeConfig) {
 
     public JkBuild {
         Objects.requireNonNull(project, "project");
@@ -38,6 +39,15 @@ public record JkBuild(
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(manifest));
         plugins = plugins == null ? List.of() : List.copyOf(plugins);
+        nativeConfig = nativeConfig == null ? NativeConfig.EMPTY : nativeConfig;
+    }
+
+    /** Back-compat constructor for callers that don't set nativeConfig. */
+    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
+                   Profiles profiles, Features features, Workspace workspace,
+                   Map<String, String> manifest, List<PluginDeclaration> plugins) {
+        this(project, dependencies, repositories, profiles, features, workspace,
+                manifest, plugins, null);
     }
 
     /** Back-compat constructor for callers that don't set plugin declarations. */
@@ -82,7 +92,8 @@ public record JkBuild(
 
     /** Return a copy with the given custom jar-manifest attributes. */
     public JkBuild withManifest(Map<String, String> manifest) {
-        return new JkBuild(project, dependencies, repositories, profiles, features, workspace, manifest, plugins);
+        return new JkBuild(project, dependencies, repositories, profiles, features, workspace,
+                manifest, plugins, nativeConfig);
     }
 
     /** True iff this is a workspace root (has a non-empty {@code workspace} block). */
@@ -268,6 +279,24 @@ public record JkBuild(
         /** {@code "java"} / {@code "kotlin"} — derived from which compiler field is non-zero. */
         public String languageName() {
             return isKotlin() ? "kotlin" : "java";
+        }
+    }
+
+    /**
+     * Configuration for {@code jk native} / GraalVM native-image.
+     * Declared in the {@code [native]} table of {@code jk.toml}.
+     *
+     * @param mainClass  overrides {@code [project].main} for the native binary entry point
+     * @param name       output binary filename; defaults to {@code [project].name}
+     * @param args       extra arguments prepended to every native-image invocation
+     *                   (CLI {@code --} args are appended after these)
+     */
+    public record NativeConfig(String mainClass, String name, List<String> args) {
+
+        public static final NativeConfig EMPTY = new NativeConfig(null, null, List.of());
+
+        public NativeConfig {
+            args = args == null ? List.of() : List.copyOf(args);
         }
     }
 

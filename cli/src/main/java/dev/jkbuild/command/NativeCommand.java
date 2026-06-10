@@ -313,11 +313,19 @@ public final class NativeCommand implements CliCommand {
     }
 
     private String resolveMain(Path buildFile) {
+        // CLI --main flag wins.
         if (mainClass != null && !mainClass.isBlank()) return mainClass;
+        // [native].main-class — dedicated native config, preferred over [image].
         try {
-            return ImageConfigParser.parse(buildFile).mainClass();
-        } catch (Exception ignored) {
-            return null; // fall back to [project] main in the native phase
-        }
+            String fromNative = JkBuildParser.parse(buildFile).nativeConfig().mainClass();
+            if (fromNative != null && !fromNative.isBlank()) return fromNative;
+        } catch (Exception ignored) {}
+        // [image].main-class — backward compat (OCI image section was used historically).
+        try {
+            String fromImage = ImageConfigParser.parse(buildFile).mainClass();
+            if (fromImage != null && !fromImage.isBlank()) return fromImage;
+        } catch (Exception ignored) {}
+        // Fall back to [project].main — handled inside nativePhase.
+        return null;
     }
 }

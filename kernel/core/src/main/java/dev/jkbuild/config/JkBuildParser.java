@@ -97,7 +97,9 @@ public final class JkBuildParser {
         Features features = parseFeatures(result);
         Map<String, String> manifest = parseManifest(result);
         List<PluginDeclaration> plugins = parsePlugins(result);
-        return new JkBuild(project, deps, repos, profiles, features, workspace, manifest, plugins);
+        JkBuild.NativeConfig nativeConfig = parseNativeConfig(result);
+        return new JkBuild(project, deps, repos, profiles, features, workspace, manifest, plugins,
+                nativeConfig);
     }
 
     /**
@@ -765,6 +767,29 @@ public final class JkBuildParser {
     }
 
     // -----------------------------------------------------------------------
+
+    // -----------------------------------------------------------------------
+
+    private static JkBuild.NativeConfig parseNativeConfig(TomlTable root) {
+        TomlTable native_ = root.getTable("native");
+        if (native_ == null) return JkBuild.NativeConfig.EMPTY;
+        String mainClass = native_.getString("main-class");
+        String name      = native_.getString("name");
+        List<String> args = new ArrayList<>();
+        TomlArray argsArr = native_.getArray("args");
+        if (argsArr != null) {
+            for (int i = 0; i < argsArr.size(); i++) {
+                Object val = argsArr.get(i);
+                if (!(val instanceof String s))
+                    throw new JkBuildParseException(
+                            "[native].args must be an array of strings");
+                args.add(s);
+            }
+        }
+        if (mainClass != null && mainClass.isBlank()) mainClass = null;
+        if (name      != null && name.isBlank())      name      = null;
+        return new JkBuild.NativeConfig(mainClass, name, args);
+    }
 
     private static final java.util.Set<String> PLUGIN_RESERVED =
             java.util.Set.of("group", "name", "version");
