@@ -10,21 +10,22 @@
 
 > The fastest way to run your existing Maven or Gradle build, and it just happens to come with a better build tool you can opt into when you're ready.
 
-`jk` is a single-binary build tool inspired by `cargo` and `uv`: PubGrub
-resolver with prose diagnostics, content-addressed action cache,
-reproducible-by-default artifacts, GraalVM-compiled native binary. It
-speaks Maven Central's protocol natively and ships first-class
-`jk mvn` / `jk gradle` passthroughs so you don't have to migrate to
-start using it.
+`jk` is a single-binary build tool for the JVM, inspired by `cargo` and
+`uv`. One ~30 MB GraalVM-compiled native binary gives you a PubGrub
+dependency resolver with prose diagnostics, a content-addressed action
+cache, JDK/toolchain management, reproducible-by-default artifacts, and a
+batteries-included supply-chain pipeline — with **zero runtime
+dependencies** and no daemon. It speaks Maven Central's protocol natively
+and ships first-class `jk mvn` / `jk gradle` passthroughs, so you don't have
+to migrate to start using it.
 
 ## Supported JDKs
 
-`jk` targets the forward-facing Java/Kotlin developer. The supported
-range is **JDK 17 and above** — specifically, every LTS at or after 17
-(17, 21, 25, …) plus the single most recent release on the JetBrains
-feed. There is no support for Java 8, 11, or any other interim release
-before 17. The catalog, registry, and `jk.toml` parser all enforce this
-floor.
+`jk` targets the forward-facing Java/Kotlin developer. The supported range is
+**JDK 17 and above** — specifically, every LTS at or after 17 (17, 21, 25, …)
+plus the single most recent release on the JetBrains feed. There is no support
+for Java 8, 11, or any other interim release before 17. The catalog, registry,
+and `jk.toml` parser all enforce this floor.
 
 ## Quick start
 
@@ -44,13 +45,200 @@ jk test
 # Run a published CLI tool ephemerally (≈ uvx)
 jk tool run com.diffplug.spotless:spotless-cli:2.45.0 -- check
 
-# Pin a JDK per-project
+# Pin a JDK per-project — jk downloads and manages it for you
 jk jdk install 25.0.3-tem
 jk jdk use 25.0.3-tem
 
 # Use your existing Maven build unchanged
 jk mvn package
 ```
+
+---
+
+## What makes `jk` different
+
+The features below are roughly ordered by how quickly they pay off — start at
+the top.
+
+### 1. Batteries included — one binary, no daemon, nothing to install
+
+`jk` is a single native executable. There is no JVM to warm up, no daemon to
+restart when the configuration cache breaks, and **no separate plugins to hunt
+down on a marketplace**. The things you reach for on every project — the Java
+and Kotlin compilers, the test runner, the publisher, the OCI image builder,
+the dependency auditor, the git client — are first-party subsystems compiled
+*into the binary*, not third-party plugins you wire up by hand.
+
+- **Sub-50 ms cold start.** `jk --help` returns before you've let go of Enter.
+- **Built-in toolchain management.** `jk jdk install 25.0.3-tem` downloads and
+  pins a JDK per project (sourced from the JetBrains feed and your existing
+  IntelliJ JDKs). Maven, Gradle, and the Kotlin compiler are auto-discovered or
+  fetched on demand — you never manage a `JAVA_HOME` by hand. `eval $(jk env)`
+  drops the pinned JDK onto your `PATH`.
+- **Ephemeral tool exec (≈ `uvx`).** `jk tool run <coord>` resolves, caches,
+  runs, and LRU-evicts any published CLI without polluting your project.
+- **Reproducible by default.** Locked deps, locked toolchain, scrubbed
+  environment, sorted jar entries, deterministic timestamps. `jk verify-build`
+  rebuilds in a scratch dir and diffs the SHA-256.
+
+### 2. Adopt it without migrating
+
+You can install `jk` today and keep your existing build. `jk mvn …` and
+`jk gradle …` download and run the *real* Maven/Gradle (honouring your
+wrapper properties), adding ANSI output grouping and shared caching on top.
+When you're ready to move:
+
+```bash
+jk import pom.xml              # generate a jk.toml from an existing build
+jk export pom.xml             # emit a Maven-Central-grade POM from jk.toml
+```
+
+`jk import` produces a tiered fidelity report so you know exactly what
+carried over. **Limitations are explicit, not hidden:** POM import is solid;
+Gradle import is string-level (no script evaluation), and only declarative
+constructs are understood — bespoke plugin logic doesn't translate. IntelliJ
+project import is on the roadmap (TODO). Export round-trips your dependencies,
+coordinates, and BOM imports, but not custom `<build>` plugin executions.
+
+### 3. One coherent TOML manifest
+
+No XML, no Groovy/Kotlin DSL, no embedded scripting. A `jk.toml` reads like a
+`Cargo.toml` or a `pyproject.toml` — declarative, schema-validated, and the
+same shape whether you're describing a one-file app or a 40-module workspace.
+
+```toml
+[project]
+group   = "com.acme"
+name    = "widgets"
+version = "1.4.0"
+jdk     = 25
+
+[dependencies.main]
+jackson = "2.18.2"                       # caret by default: ^2.18.2
+guava   = ">=33,<34"
+mylib   = { git = "https://github.com/acme/mylib", tag = "v1.4.0" }
+
+[dependencies.test]
+junit   = "5.11.0"
+```
+
+Because the manifest carries no logic, `jk` can edit it for you safely
+(`jk add` / `jk remove`) and reason about it offline.
+
+### 4. Dependency resolution that's actually correct
+
+`jk` uses a **PubGrub** solver (the algorithm behind Dart's `pub` and `uv`) and
+treats the lockfile as canonical — not as optional verification the way Gradle
+does, and not absent entirely the way Maven leaves it.
+
+- **Highest-version-wins across the whole graph**, never Maven's surprising
+  *nearest-wins* footgun.
+- **Caret semantics by default** (`"1.2.3"` ≡ `^1.2.3`), with `=1.2.3` for an
+  exact pin, `~1.2.3` for patch-only, or arbitrary ranges like `>=1.2,<2`.
+- **`jk.lock` makes builds reproducible and offline.** `jk build` never
+  re-resolves; `jk update` re-resolves from your declared constraints on
+  purpose.
+- **Conflicts come back as English.** Instead of a wall of tree output, you get
+  *"no version of X is compatible with Y because…"* — plus `jk why <coord>` and
+  `jk tree` to trace any edge, all offline.
+
+### 5. A content-addressed action cache (Bazel-shape)
+
+Every build task is keyed by the SHA-256 of its inputs and its outputs are
+stored in a content-addressed store (CAS). If the inputs haven't changed, the
+outputs are *restored*, not recomputed — so a no-op build is instant and a
+partial change rebuilds exactly what it must, and nothing more.
+
+- Identical outputs are stored once and shared across tasks and projects.
+- `jk why-rebuilt` tells you precisely which input invalidated a task.
+- `jk cache info / prune / clean` keep the store in check.
+
+This is the same idea as Gradle's build cache, but it's the default execution
+model rather than an opt-in flag — and because keys are content hashes, a
+restored build is bit-for-bit identical to a fresh one.
+
+### 6. Workspaces & monorepos
+
+A workspace is a root `jk.toml` with a `[workspace]` table listing members.
+There is **one `jk.lock` at the root**, and `jk lock` / `jk build` from any
+member resolve the whole workspace — Cargo/uv semantics, not Maven's
+per-module model.
+
+```bash
+jk new libs/widget        # scaffold a member; auto-registers it in [workspace]
+cd libs/widget-core && jk init
+jk add ../widget          # depend on a local member by path
+jk add :widget            # …or by name (':' marks a local member)
+```
+
+The project commands register members for you, so you never hand-edit
+`[workspace].members`. A bare name with no `:` and no path separator
+(`jk add jackson`) is treated as a catalog name / Maven coordinate, not a path.
+
+### 7. Supply chain, built in — not bolted on
+
+Most JVM builds reach this through a pile of third-party plugins. In `jk` these
+are first-party verbs that work on day one:
+
+| Concern | How |
+|---|---|
+| Vulnerability scanning | `jk audit` (OSV, direct) |
+| Policy gate | `jk deny` (license / source / yanked) |
+| Dependency-confusion defense | `from = "<repo>"` pin per coordinate — `jk` refuses to fetch it anywhere else |
+| Signing | `jk publish --sign` (BouncyCastle, no system `gpg`) |
+| Keyless signing | `jk publish --sigstore` (CI OIDC auto-detected) |
+| Provenance | `jk publish --slsa` (SLSA v1 in-toto) |
+| SBOM | `jk publish --sbom` (CycloneDX 1.6 + SPDX 2.3) |
+
+### 8. Git-source dependencies
+
+Depend on a git repository instead of a published coordinate — the JitPack
+idea, but first-class and built with `jk`'s own pipeline. `jk` clones the repo
+(reusing forge auth), builds it from its `jk.toml`, locally publishes the
+artifact, and hands the resolver an exact coordinate pin — so transitive deps
+resolve like any other dependency.
+
+```toml
+[dependencies.main]
+mylib  = { git = "https://github.com/acme/widgets", tag = "v1.4.0" }
+edge   = { git = "https://gitlab.com/acme/edge",     branch = "main" }
+pinned = { git = "https://github.com/acme/widgets",  rev = "3f2a9c1…" }
+submod = { git = "https://github.com/acme/monorepo", tag = "v2.0.0", path = "libs/core" }
+```
+
+The resolved commit SHA is pinned in `jk.lock`, so a locked build is
+reproducible and offline-friendly. `jk lock` fails loudly if an upstream **tag**
+was force-moved; `jk update` re-resolves branch tips and rebuilds only when the
+SHA changed. Built-in git support also powers `jk auth` across
+GitHub/GitLab/Gitea/Bitbucket (token resolution + OAuth device flow). Only
+`jk.toml`-based source builds are supported for now — see
+[`docs/git-source-deps.md`](docs/git-source-deps.md).
+
+### 9. Comprehensive repository support
+
+`jk` speaks Maven Central's protocol natively and reaches every backend through
+one consistent credential model — reusing your forge token automatically when
+the backend is a forge's package registry.
+
+- **Public & private HTTP:** Maven Central, Nexus, Artifactory, plain
+  HTTP/WebDAV (Basic or Bearer auth).
+- **Forge package registries:** GitHub Packages, GitLab Package Registry —
+  authenticated with the same forge token used for git.
+- **Object stores:** S3 / MinIO, Google Cloud Storage, Azure Blob (phased).
+
+Secrets stay out of committed files — TOML repository entries reference
+`${ENV}` / settings rather than literals, and `~/.m2/settings.xml` is parsed for
+existing credentials. See [`docs/artifact-repos.md`](docs/artifact-repos.md).
+
+### 10. A curated library catalog
+
+Skip memorising coordinates. `jk add jackson` resolves a short name through a
+layered catalog (project → per-user → global registry → bundled-with-the-binary
+floor), so common libraries are one word. The bundled layer works offline; the
+global layer refreshes via `jk library update`, and any name can be overridden
+locally in your `jk.toml`'s `[libraries]` table.
+
+---
 
 ## What's in the box
 
@@ -60,6 +248,7 @@ jk mvn package
 | Build | `compile` `build` `test` `clean` `explain` `why-rebuilt` |
 | Toolchain | `jdk install/list/use/uninstall/reconcile/home` |
 | CLI tools | `tool install/list/uninstall/run/dir` |
+| Library catalog | `library update`, short-name resolution in `add` |
 | Maven / Gradle | `mvn` `gradle` (passthroughs), `import` `export` |
 | Publishing | `publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOM) |
 | Supply chain | `audit` (OSV), `deny` (license/source/yanked policy) |
@@ -73,81 +262,16 @@ jk mvn package
 `jk nativeCompile` → `jk native`, …) are documented in
 [`docs/aliases.md`](docs/aliases.md).
 
-## Workspaces
-
-A workspace is a root `jk.toml` with a `[workspace]` table listing members.
-There is one `jk.lock` at the root, and `jk lock` / `jk build` run from any
-member resolve the whole workspace — Cargo/uv semantics.
-
-Like `cargo new` and `uv init`, the project commands register members for
-you when run inside a workspace, so you never hand-edit
-`[workspace].members`:
-
-```bash
-# Scaffold a new member; appends "libs/widget" to [workspace].members,
-# inherits the workspace group, and writes no per-member jk.lock.
-jk new libs/widget
-
-# Same, but initialise the current directory as a member.
-cd libs/widget-core && jk init
-
-# Depend on a local member from another member: adds the dependency edge
-# AND registers the path as a workspace member (≈ `uv add ./lib`).
-jk add ../widget          # path form
-jk add :widget            # ':' marks a local member by name
-```
-
-A bare name with no `:` and no path separator (e.g. `jk add jackson`) is
-treated as a library-catalog name / Maven coordinate, not a local path.
-
-## Git-source dependencies
-
-Depend on a git repository instead of a published coordinate — the JitPack
-model, but first-class and built with `jk`'s own pipeline. `jk` clones the
-repo (reusing forge auth), builds it from its `jk.toml`, locally publishes
-the artifact, and hands the resolver an exact coordinate pin — so the solver
-resolves it like any other dependency, transitive deps and all.
-
-```toml
-[dependencies.main]
-# Coordinate is discovered from the repo's own [project]; the version is
-# derived from the ref — a tag coerces to SemVer, a branch becomes
-# <branch>-SNAPSHOT, a rev becomes a tag-anchored pseudo-version.
-mylib  = { git = "https://github.com/acme/widgets", tag = "v1.4.0" }
-edge   = { git = "https://gitlab.com/acme/edge",     branch = "main" }
-pinned = { git = "https://github.com/acme/widgets",  rev = "3f2a9c1…" }
-submod = { git = "https://github.com/acme/monorepo", tag = "v2.0.0", path = "libs/core" }
-
-# Override the discovered coordinate / derived version (handy for forks):
-fork   = { git = "https://github.com/me/widgets-fork", branch = "main",
-           group = "com.acme", name = "widgets", version = "1.4.0-acme" }
-```
-
-The resolved commit SHA is pinned in `jk.lock`, so a locked build is
-reproducible and offline-friendly — `jk build` never re-clones. `jk lock`
-fails loudly if an upstream **tag** was force-moved since the lock;
-`jk update` re-resolves branch tips (and accepts moved tags) and rebuilds
-only when the SHA changed. Only `jk.toml`-based source builds are supported
-for now. See [`docs/git-source-deps.md`](docs/git-source-deps.md).
-
-## Why another build tool
-
-- **Native binary, no daemon.** `jk --help` is a sub-50ms cold start. No JVM warmup tax, no daemon to restart when configuration cache breaks.
-- **Reproducibility is the default.** Locked deps, locked toolchain, scrubbed environment, sorted jar entries, deterministic timestamps. `jk verify-build` re-builds in a scratch dir and diffs SHA-256.
-- **Diagnostics are a product.** PubGrub-style English error messages, `jk why`, `jk explain`, `jk why-rebuilt`, all offline.
-- **Adoption first.** `jk mvn` and `jk gradle` work day one. `jk import pom.xml` produces a `jk.toml`; `jk export pom.xml` keeps Maven Central publishing fidelity.
-- **Supply chain is built-in.** GPG, Sigstore, SLSA v1 provenance, CycloneDX, SPDX, OSV vulnerability scanning, dependency-confusion defense — all first-party verbs, not plugins.
-
 ## Status
 
 Pre-v1.0. The v0.1 → v0.9 milestones in the
-[implementation plan](docs/implementation-plan.md#5-milestone-roadmap)
-are shipped — including self-hosting (jk builds itself). v1.0 work
-focuses on IntelliJ / VS Code integration, the benchmark dashboard,
-and the GA release artifact pipeline.
+[implementation plan](docs/implementation-plan.md#5-milestone-roadmap) are
+shipped — including self-hosting (jk builds itself). v1.0 work focuses on
+IntelliJ / VS Code integration, the benchmark dashboard, and the GA release
+artifact pipeline.
 
-The native binary is built via `gradle :cli:nativeCompile`. A
-JVM-mode entry point ships as `./gradlew :cli:run`.
+The native binary is built via `gradle :cli:nativeCompile`. A JVM-mode entry
+point ships as `./gradlew :cli:run`.
 
 ## Documentation
 
