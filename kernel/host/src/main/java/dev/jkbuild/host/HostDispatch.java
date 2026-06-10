@@ -60,6 +60,7 @@ public final class HostDispatch {
                 inv.jdksDir(), skipTests, inv.verbose(), testOnly);
 
         var builder = BuildPipeline.coreBuilder(inputs);
+        registerPlugins(inv, buildFile, builder);
         return builder.build();
     }
 
@@ -109,6 +110,57 @@ public final class HostDispatch {
                         "plugin '" + pd.coordinate() + "' does not expose a "
                         + "dev.jkbuild.plugin.Plugin service entry");
             }
+        }
+    }
+
+    /**
+     * For each in-process third-party plugin that passed {@link #verifyPlugins},
+     * call {@link PluginLoader#register} so the plugin can contribute phases to
+     * the goal before it is built.
+     *
+     * <p>Process-isolated plugins ({@code isolation = "process"}) are skipped here
+     * — their phase-contribution protocol is a follow-on item.
+     */
+    private static void registerPlugins(HostInvocation inv,
+                                        java.nio.file.Path buildFile,
+                                        dev.jkbuild.run.Goal.Builder goalBuilder) {
+        List<PluginDeclaration> decls;
+        dev.jkbuild.model.JkBuild project;
+        try {
+            project = JkBuildParser.parse(buildFile);
+            decls   = project.plugins();
+        } catch (Exception e) {
+            return; // parse error was already caught by verifyPlugins
+        }
+        if (decls.isEmpty()) return;
+
+        dev.jkbuild.lock.Lockfile lock;
+        try {
+            lock = LockfileReader.read(inv.lockFile());
+        } catch (Exception e) {
+            return;
+        }
+        Cas cas = new Cas(inv.cache());
+
+        for (PluginDeclaration pd : decls) {
+            lock.plugins().stream()
+                    .filter(e -> e.coordinate().equals(pd.coordinate()))
+                    .findFirst()
+                    .ifPresent(entry -> {
+                        java.nio.file.Path jar = cas.pathFor(entry.sha256Hex());
+                        if (!Files.isRegularFile(jar)) return;
+                        try {
+                            var ctx = new HostPluginContext(project, inv.dir(), goalBuilder);
+                            boolean registered = PluginLoader.register(jar, ctx);
+                            if (!registered) {
+                                // process-isolated: skipped until protocol is implemented
+                            }
+                        } catch (java.io.IOException e) {
+                            // Log but don't fail — verifyPlugins already confirmed jar validity
+                            System.err.println("jk-host: plugin registration warning for "
+                                    + pd.coordinate() + ": " + e.getMessage());
+                        }
+                    });
         }
     }
 

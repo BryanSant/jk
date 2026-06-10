@@ -2,6 +2,7 @@
 package dev.jkbuild.host;
 
 import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginContext;
 import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
@@ -119,6 +120,36 @@ public final class PluginLoader {
         fullCmd.add(jarPath.toAbsolutePath().toString());
         fullCmd.addAll(args);
         return WorkerProcess.converse(fullCmd, prefix, onProtocol, onPassthrough);
+    }
+
+    /**
+     * Register a plugin's contributed phases into a build goal. The plugin's
+     * {@link Plugin#register} is called in an isolated {@link URLClassLoader}
+     * parented to the plugin-api classloader so the plugin's deps stay
+     * separate from the Host's.
+     *
+     * <p>If the plugin's manifest declares {@code isolation = "process"}, registration
+     * is skipped — the plugin will be invoked later as a forked worker once
+     * the process-isolated registration protocol is implemented.
+     *
+     * @return {@code true} if the plugin was registered in-process;
+     *         {@code false} if skipped (process-isolated or not a plugin jar)
+     */
+    public static boolean register(Path jarPath, PluginContext ctx)
+            throws IOException {
+        PluginManifest manifest = readManifest(jarPath);
+        if (manifest == null) return false;
+        if (!manifest.inProcess()) return false; // process-isolated: deferred
+        URL jarUrl = jarPath.toUri().toURL();
+        try (URLClassLoader loader = new URLClassLoader(
+                new URL[]{jarUrl}, Plugin.class.getClassLoader())) {
+            Plugin plugin = loadPlugin(loader, jarPath);
+            if (plugin == null) return false;
+            plugin.register(ctx);
+            return true;
+        } catch (Exception e) {
+            throw new IOException("Plugin registration failed for " + jarPath + ": " + e.getMessage(), e);
+        }
     }
 
     private static int converseInProcess(Path jarPath, List<Path> extraClasspath,
