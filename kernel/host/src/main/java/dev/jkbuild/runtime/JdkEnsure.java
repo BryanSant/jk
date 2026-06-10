@@ -44,8 +44,8 @@ import java.util.Optional;
  * not. JDKs are large (~200 MB), discovered by probes that often share
  * with IntelliJ, and have a dedicated lifecycle under {@code jk jdk
  * install/uninstall}. This file must not accept a {@code noCache}
- * parameter — anything that wants to re-resolve a JDK should go through
- * {@code jk jdk reconcile} or remove the install explicitly.
+ * parameter — anything that wants to re-resolve a JDK should remove the
+ * install explicitly (e.g. {@code jk jdk uninstall}).
  */
 public final class JdkEnsure {
 
@@ -102,8 +102,10 @@ public final class JdkEnsure {
         }
 
         JdkCatalog catalog = new JdkCatalogClient().onWarning(warn).fetch();
-        Optional<JdkCatalog.Entry> entry = JdkSelector.select(
-                catalog, JdkSpec.parse(spec), HostPlatform.currentOs(), HostPlatform.currentArch());
+        // selectPreferred biases a vendor-unqualified spec (e.g. `25`, `25.0.3`)
+        // to Eclipse Temurin, matching `jk jdk install` / `jk jdk ensure`.
+        Optional<JdkCatalog.Entry> entry = JdkSelector.selectPreferred(
+                catalog, spec, HostPlatform.currentOs(), HostPlatform.currentArch());
         if (entry.isEmpty()) {
             throw new IOException("no JDK matches " + spec + " on "
                     + HostPlatform.currentOs() + "/" + HostPlatform.currentArch());

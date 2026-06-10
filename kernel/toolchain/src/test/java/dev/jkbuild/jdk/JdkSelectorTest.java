@@ -219,6 +219,59 @@ class JdkSelectorTest {
                 .get().extracting(JdkCatalog.Entry::version).isEqualTo("17.0.19");
     }
 
+    @Test
+    void select_preferred_biases_to_temurin_over_feed_default() {
+        JdkCatalog catalog = catalogOf(
+                entry("Oracle", "OpenJDK", "openjdk-26", 26, "26.0.1",
+                        true, false, List.of("openjdk-26", "26", "26.0.1"), "linux", "x86_64"),
+                entry("Eclipse", "Temurin", "temurin-26", 26, "26.0.1",
+                        false, false, List.of("temurin-26", "26", "26.0.1"), "linux", "x86_64"));
+
+        // Plain select honors the feed's default-for-major (Oracle)…
+        assertThat(JdkSelector.select(catalog, JdkSpec.parse("26"), "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::vendor).isEqualTo("Oracle");
+        // …selectPreferred prefers Temurin when no vendor was named.
+        assertThat(JdkSelector.selectPreferred(catalog, "26", "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::vendor).isEqualTo("Eclipse");
+    }
+
+    @Test
+    void select_preferred_full_version_prefers_temurin() {
+        JdkCatalog catalog = catalogOf(
+                entry("Amazon", "Corretto", "corretto-25", 25, "25.0.3",
+                        true, false, List.of("corretto-25", "25.0.3", "25"), "linux", "x86_64"),
+                entry("Eclipse", "Temurin", "temurin-25", 25, "25.0.3",
+                        false, false, List.of("temurin-25", "temurin-25.0.3", "25.0.3", "25"),
+                        "linux", "x86_64"));
+
+        assertThat(JdkSelector.selectPreferred(catalog, "25.0.3", "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::vendor).isEqualTo("Eclipse");
+    }
+
+    @Test
+    void select_preferred_respects_an_explicit_vendor() {
+        JdkCatalog catalog = catalogOf(
+                entry("Oracle", "OpenJDK", "openjdk-26", 26, "26.0.1",
+                        true, false, List.of("openjdk-26", "26"), "linux", "x86_64"),
+                entry("Eclipse", "Temurin", "temurin-26", 26, "26.0.1",
+                        false, false, List.of("temurin-26", "26"), "linux", "x86_64"));
+
+        // The user named OpenJDK — no bias is applied.
+        assertThat(JdkSelector.selectPreferred(catalog, "openjdk-26", "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::vendor).isEqualTo("Oracle");
+    }
+
+    @Test
+    void select_preferred_falls_back_when_no_temurin_for_major() {
+        JdkCatalog catalog = catalogOf(
+                entry("Oracle", "OpenJDK", "openjdk-26", 26, "26.0.1",
+                        true, false, List.of("openjdk-26", "26"), "linux", "x86_64"));
+
+        // No Temurin published for 26 on this host → fall back to the feed default.
+        assertThat(JdkSelector.selectPreferred(catalog, "26", "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::vendor).isEqualTo("Oracle");
+    }
+
     private static JdkCatalog catalogOf(JdkCatalog.Entry... entries) {
         return new JdkCatalog(List.of(entries));
     }

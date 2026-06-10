@@ -246,7 +246,7 @@ locally in your `jk.toml`'s `[libraries]` table.
 |---|---|
 | Dependencies | `add` `remove` `lock` `sync` `update` `tree` `why` `fetch` |
 | Build | `compile` `build` `test` `clean` `explain` `why-rebuilt` |
-| Toolchain | `jdk install/list/use/uninstall/reconcile/home` |
+| Toolchain | `jdk install/list/use/uninstall/home` |
 | CLI tools | `tool install/list/uninstall/run/dir` |
 | Library catalog | `library update`, short-name resolution in `add` |
 | Maven / Gradle | `mvn` `gradle` (passthroughs), `import` `export` |

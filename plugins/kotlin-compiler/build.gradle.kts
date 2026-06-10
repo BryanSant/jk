@@ -24,6 +24,11 @@ dependencies {
     // worker jar stays tiny and the compiler's transitive deps never leak into
     // jk's own classpath.
     compileOnly(libs.kotlin.build.tools.api)
+    // Compile-time only: the BTA API's class files carry Kotlin @Deprecated(level = …)
+    // annotations whose DeprecationLevel enum lives in kotlin-stdlib. Without it on the
+    // compile classpath javac warns "unknown enum constant DeprecationLevel.*". compileOnly
+    // keeps stdlib off the worker jar and out of the resolved runtime closure.
+    compileOnly(libs.kotlin.stdlib)
     // Tests drive the worker against the API directly.
     testImplementation(libs.kotlin.build.tools.api)
     // The shared NDJSON protocol codec. compileOnly so it doesn't drag onto the

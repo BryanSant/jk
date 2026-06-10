@@ -222,11 +222,6 @@ the user passes `--copy-instead-of-link` or similar.
 17.0.13-graalce-x64-linux  downloaded
 ```
 
-Add `jk jdk reconcile` (and `jk tool reconcile`) — a no-op verb that
-walks every entry under `$JK_JDKS_DIR/` and `$JK_CACHE_DIR/tools/`, runs the
-healthiness check, prunes broken links, and reports. Useful in
-post-checkout hooks and CI fixtures.
-
 `jk jdk install` and `jk install` get a new flag `--no-discover` that
 skips the probe chain and always downloads — escape hatch for users
 who hit a probe bug or want isolated jk-owned installs.
@@ -253,11 +248,6 @@ who hit a probe bug or want isolated jk-owned installs.
 - `MvnCommand`, `GradleCommand`, `CompileToolchain.resolveKotlinHome`
   — call provisioner instead of `registry.find().or(installer.install())`.
 - `JdkListCommand` — show source column.
-
-**New verbs:**
-
-- `JdkReconcileCommand` — `jk jdk reconcile`.
-- `ToolReconcileCommand` — `jk tool reconcile`.
 
 **Removed:** nothing. The pure-download path stays as the fallback;
 provisioner just wraps it.
@@ -330,7 +320,7 @@ End-to-end:
 
 1. *Exact version only — no fuzzy match. Implemented in `ToolHealth.isHealthy`.*
 2. *Probe `ServiceLoader`, with the acknowledged limitation that it's JVM-mode only. `Probes.defaultChain()` appends ServiceLoader-discovered entries after the built-ins.*
-3. *`--verify-linked` opt-in. Lives on `jk jdk reconcile` and `jk tool reconcile`. Default-off. Writes `.fingerprint` sidecars via `TreeFingerprint`.*
+3. *`--verify-linked` opt-in, default-off. Writes `.fingerprint` sidecars via `TreeFingerprint`.*
 4. *Tested. `SdkmanProbeTest.user_pinned_tool_already_in_sdkman_resolves_without_download` covers the `.jdk-version`-pins-a-SDKMAN-install path.*
 5. *Containers (see §11 below).*
 6. *No. `jk install` (Maven-coord tool installer) stays as-is.*
@@ -347,8 +337,8 @@ mount is in place. Two gotchas:
 - **jk's cache / state / JDKs dirs should not be shared.** Each
   container gets its own `$JK_CACHE_DIR`, `$JK_STATE_DIR`, and
   `$JK_JDKS_DIR`. Sharing them means linking to host paths that aren't
-  guaranteed to be valid inside the container, and one container's
-  reconcile can prune another's links.
+  guaranteed to be valid inside the container, and pruning in one
+  container can remove another's links.
 - **Mount paths must match.** A link target stored as
   `/home/host-user/.sdkman/candidates/maven/3.9.9` doesn't resolve if
   the container mounts the same dir at `/sdkman/`. Either mount under
@@ -356,7 +346,7 @@ mount is in place. Two gotchas:
   the first invocation and let jk download into the container's
   `$JK_CACHE_DIR/tools/` directly.
 
-If your container CI is sensitive to this, run `jk tool reconcile`
-once at container start — broken links get pruned and the next call
-either re-links (when the mount is visible at the expected path) or
+If your container CI is sensitive to this, clear any broken links under
+`$JK_JDKS_DIR/` and `$JK_CACHE_DIR/tools/` at container start — the next
+call either re-links (when the mount is visible at the expected path) or
 falls back to a download.

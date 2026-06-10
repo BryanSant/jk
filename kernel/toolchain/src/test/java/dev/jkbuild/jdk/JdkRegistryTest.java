@@ -176,6 +176,64 @@ class JdkRegistryTest {
                         org.assertj.core.api.Assertions.tuple(unmanaged, "jdks"));
     }
 
+    @Test
+    void find_hit_at_least_treats_full_version_as_a_floor(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("temurin-25.0.2"), "25.0.2");
+        JdkRegistry registry = isolatedRegistry(tempDir);
+
+        // Older point release does not satisfy a 25.0.3 floor.
+        assertThat(registry.findHitAtLeast(25, "25.0.3", List.of())).isEmpty();
+        // The install itself satisfies its own version and any lower floor.
+        assertThat(registry.findHitAtLeast(25, "25.0.2", List.of())).isPresent();
+        assertThat(registry.findHitAtLeast(25, "25.0.1", List.of())).isPresent();
+        // Bare-major (null floor) is satisfied by any point release of the major.
+        assertThat(registry.findHitAtLeast(25, null, List.of())).isPresent();
+        // Different major never matches.
+        assertThat(registry.findHitAtLeast(21, null, List.of())).isEmpty();
+    }
+
+    @Test
+    void find_hit_at_least_accepts_a_newer_point_release(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("temurin-25.0.10"), "25.0.10");
+        JdkRegistry registry = isolatedRegistry(tempDir);
+
+        // versionKey ordering: 25.0.10 >= 25.0.9 (not a lexical 1 < 9 mistake).
+        assertThat(registry.findHitAtLeast(25, "25.0.9", List.of())).isPresent();
+        assertThat(registry.findHitAtLeast(25, "25.0.3", List.of())).isPresent();
+    }
+
+    @Test
+    void managed_hits_returns_all_jk_installs_when_no_spec(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("temurin-25.0.2"), "25.0.2");
+        makeJdkInstall(tempDir.resolve("temurin-21.0.5"), "21.0.5");
+        makeJdkInstall(tempDir.resolve("corretto-25.0.1"), "25.0.1", "Amazon.com Inc.");
+
+        assertThat(isolatedRegistry(tempDir).managedHits(null))
+                .extracting(h -> JdkRegistry.identifierFor(h.home()))
+                .containsExactlyInAnyOrder("temurin-25.0.2", "temurin-21.0.5", "corretto-25.0.1");
+    }
+
+    @Test
+    void managed_hits_bare_major_matches_across_vendors(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("temurin-25.0.2"), "25.0.2");
+        makeJdkInstall(tempDir.resolve("corretto-25.0.1"), "25.0.1", "Amazon.com Inc.");
+        makeJdkInstall(tempDir.resolve("temurin-21.0.5"), "21.0.5");
+
+        assertThat(isolatedRegistry(tempDir).managedHits("25"))
+                .extracting(h -> JdkRegistry.identifierFor(h.home()))
+                .containsExactlyInAnyOrder("temurin-25.0.2", "corretto-25.0.1");
+    }
+
+    @Test
+    void managed_hits_vendor_spec_limits_to_that_vendor(@TempDir Path tempDir) throws IOException {
+        makeJdkInstall(tempDir.resolve("temurin-25.0.2"), "25.0.2");
+        makeJdkInstall(tempDir.resolve("corretto-25.0.1"), "25.0.1", "Amazon.com Inc.");
+
+        assertThat(isolatedRegistry(tempDir).managedHits("temurin"))
+                .extracting(h -> JdkRegistry.identifierFor(h.home()))
+                .containsExactly("temurin-25.0.2");
+    }
+
     /** A {@link JdkRegistry} backed by a single {@link JkProbe} rooted at {@code root} — isolates the test from any JDKs actually installed on the host. */
     private static JdkRegistry isolatedRegistry(Path root) {
         return new JdkRegistry(root, List.of(new JkProbe(root)));

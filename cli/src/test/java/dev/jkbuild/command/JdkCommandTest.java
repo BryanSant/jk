@@ -70,6 +70,23 @@ class JdkCommandTest {
     }
 
     @Test
+    void install_native_downloads_oracle_graalvm(@TempDir Path tempDir) throws Exception {
+        Path jdksDir = tempDir.resolve("jdks");
+        byte[] archive = buildTarGz(tempDir, "graalvm-jdk-25", Map.of(
+                "bin/java", "#!/fake/java",
+                "release", "JAVA_VERSION=25\nIMPLEMENTOR=\"Oracle Corporation\"\nGRAALVM_VERSION=\"25\"\n"));
+        served.put("/archives/graal.tar.gz", archive);
+        served.put("/feed/jdks.json", graalFeedJson(archive.length, Hashing.sha256Hex(archive),
+                base.resolve("/archives/graal.tar.gz").toString()).getBytes(StandardCharsets.UTF_8));
+
+        int exit = run("jdk", "install", "native",
+                "--jdks-dir", jdksDir.toString(),
+                "--feed-url", base.resolve("/feed/jdks.json").toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(jdksDir.resolve("graalvm-jdk-25").resolve("bin").resolve("java")).exists();
+    }
+
+    @Test
     void list_reports_installed_jdks_offline(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
@@ -434,6 +451,44 @@ class JdkCommandTest {
                           "package_to_java_home_prefix": "",
                           "archive_file_name": "temurin.tar.gz",
                           "install_folder_name": "temurin-21.0.5",
+                          "archive_size": SIZE,
+                          "sha256": "SHA"
+                        }
+                      ]
+                    }
+                  ]
+                }
+                """
+                .replace("OS", HostPlatform.currentOs())
+                .replace("ARCH", HostPlatform.currentArch())
+                .replace("URL", url)
+                .replace("SIZE", Long.toString(size))
+                .replace("SHA", sha256);
+    }
+
+    /** Feed JSON with a single Oracle GraalVM 25 entry — used by `install native`. */
+    private static String graalFeedJson(long size, String sha256, String url) {
+        return """
+                {
+                  "jdks": [
+                    {
+                      "vendor": "Oracle",
+                      "product": "GraalVM",
+                      "default": false,
+                      "jdk_version_major": 25,
+                      "jdk_version": "25",
+                      "suggested_sdk_name": "graalvm-jdk-25",
+                      "shared_index_aliases": ["graalvm-jdk-25", "25"],
+                      "packages": [
+                        {
+                          "os": "OS",
+                          "arch": "ARCH",
+                          "version": "25",
+                          "url": "URL",
+                          "package_type": "targz",
+                          "package_to_java_home_prefix": "",
+                          "archive_file_name": "graal.tar.gz",
+                          "install_folder_name": "graalvm-jdk-25",
                           "archive_size": SIZE,
                           "sha256": "SHA"
                         }

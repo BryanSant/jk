@@ -5,7 +5,9 @@ import dev.jkbuild.jdk.JdkToolUninstaller;
 
 import dev.jkbuild.cli.GlobalOptions;
 
+import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Wizard;
@@ -311,6 +313,9 @@ public final class JdkUninstallCommand implements CliCommand {
         String identifier = JdkRegistry.identifierFor(hit.home());
         Path installDir = IntellijJdkDir.installDirOf(hit.home());
         InstalledJdk installed = new InstalledJdk(identifier, hit.home());
+        // The result lines name the resolved `<source>/<identifier>` in yellow,
+        // matching the cyan target shown in the confirmation prompt.
+        String label = hit.source() + "/" + identifier;
         try (var sp = Spinner.show(System.out,
                 "Deleting " + Theme.colorize(JdkInstallCommand.tildeCollapse(installDir), Theme.active().warning())
                         + "...")) {
@@ -322,11 +327,18 @@ public final class JdkUninstallCommand implements CliCommand {
             if (outcome == JdkToolUninstaller.Outcome.FALL_THROUGH) {
                 registry.purge(installed);
             }
+        } catch (IOException e) {
+            // The spinner has already cleared its line; print the failure where
+            // the confirmation prompt was (confirmDeletion wiped it for us), then
+            // rethrow so the goal records the failure and the exit code is 1.
+            System.out.println(
+                    Theme.colorize(Glyphs.CROSS, Theme.active().error())
+                            + " Failed to remove " + Theme.colorize(label, Theme.active().warning()) + "!");
+            throw e;
         }
         System.out.println(
-                Theme.colorize("✓", Theme.active().completedStep())
-                        + " " + Theme.colorize(identifier, Theme.active().focused())
-                        + " from " + Theme.colorize(hit.source(), Theme.active().focused()));
+                Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
+                        + " Removed " + Theme.colorize(label, Theme.active().warning()));
     }
 
     /**
@@ -354,10 +366,19 @@ public final class JdkUninstallCommand implements CliCommand {
         System.out.flush();
         var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
         String line = reader.readLine();
-        if (line == null) return false;
-        String trimmed = line.trim();
-        if (trimmed.isEmpty()) return true;
-        return trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
+        String trimmed = line == null ? "" : line.trim();
+        boolean proceed = line != null
+                && (trimmed.isEmpty() || trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes"));
+        // For a single-target confirmation on a real terminal, erase the
+        // question so the ✓/✗ result line (printed by uninstallOne) lands in
+        // its place. The user's Enter left the cursor one row below the prompt,
+        // so step back up, return to column 0, and clear to end of line.
+        // Multi-victim prompts span several rows, so leave those intact.
+        if (proceed && victims.size() == 1 && isInteractiveTerminal()) {
+            System.out.print(Ansi.cursorUp(1) + "\r" + Ansi.ERASE_LINE_TO_END);
+            System.out.flush();
+        }
+        return proceed;
     }
 
     /** The {@code source/identifier} a deletion targets, in cyan. */

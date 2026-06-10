@@ -25,8 +25,6 @@ import java.util.Map;
  *   <li>{@code jk jdk default} wizard — surface preferences as defaults.</li>
  *   <li>{@code jk jdk uninstall} wizard — flag dormant installs as
  *       removal candidates ("last used N days ago").</li>
- *   <li>Future {@code jk jdk reconcile --suggest-prune} — nudge the
- *       user to manually clean JDKs they haven't touched in months.</li>
  * </ul>
  *
  * <p>This commit only writes the journal. Wizard surfacing lands in
