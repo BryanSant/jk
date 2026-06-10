@@ -807,7 +807,7 @@ public final class BuildPipeline {
                 .label("Native")
                 .kind(PhaseKind.IO)
                 .requires("package-jar")
-                .scope(1)
+                .scope(10)  // preamble(1) + 8 native-image stages + done(1)
                 .execute(ctx -> {
                     // Fail-fast: verify native-image is available before compilation
                     // has already run and the user has waited for potentially minutes.
@@ -878,33 +878,25 @@ public final class BuildPipeline {
 
                     ctx.label("native-image " + out.getFileName());
 
-                    // Progress listener: parse [N/M] headers from native-image stdout
-                    // to advance the bar as each build stage completes.
+                    // Progress listener: parse [N/M] headers from native-image stdout.
                     //
-                    // Scope accounting (e.g. 8-step build = 10 total ticks):
-                    //   scope(1) initial
-                    //   + updateScope(total + 1) on first step  → total + 2
+                    // scope(10) is declared upfront (preamble + 8 GraalVM stages + done).
+                    // Ticks: 1 preamble (when step 1 first appears) +
+                    //        8 steps ([1/8]…[8/8]) +
+                    //        1 final (ctx.progress after run() returns) = 10.
                     //
-                    // Ticks:
-                    //   1 (preamble, when step 1 fires) +
-                    //   total (one per step) +
-                    //   1 (ctx.progress below, after run() returns)
-                    //   = total + 2  ✓
-                    //
-                    // If no [N/M] lines appear (older GraalVM, --quiet), the listener
-                    // never fires — scope stays at 1 and the single ctx.progress(1) below
-                    // completes it identically to the pre-listener behaviour.
-                    java.util.concurrent.atomic.AtomicBoolean scopeGrown =
+                    // Fallback: if no [N/M] headers appear (older GraalVM, --quiet),
+                    // the listener never fires and the single ctx.progress(1) at the end
+                    // is the only tick — the bar jumps to 1/10, which is acceptable.
+                    java.util.concurrent.atomic.AtomicBoolean preambleDone =
                             new java.util.concurrent.atomic.AtomicBoolean(false);
                     dev.jkbuild.tool.NativeImageDriver.ProgressListener listener =
                             (current, total, label) -> {
-                        if (scopeGrown.compareAndSet(false, true)) {
-                            // First step seen: grow scope and tick for the preamble.
-                            ctx.updateScope(total + 1);
-                            ctx.progress(1); // preamble done
+                        if (preambleDone.compareAndSet(false, true)) {
+                            ctx.progress(1); // preamble done (output before [1/N])
                         }
                         ctx.label("[" + current + "/" + total + "] " + label);
-                        ctx.progress(1); // this step started = previous step done
+                        ctx.progress(1); // stage N started = stage N-1 done
                     };
 
                     int exit = dev.jkbuild.tool.NativeImageDriver.run(
