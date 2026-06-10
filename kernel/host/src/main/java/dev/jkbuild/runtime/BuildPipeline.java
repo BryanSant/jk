@@ -809,6 +809,17 @@ public final class BuildPipeline {
                 .requires("package-jar")
                 .scope(1)
                 .execute(ctx -> {
+                    // Fail-fast: verify native-image is available before compilation
+                    // has already run and the user has waited for potentially minutes.
+                    Path javaHomeEarly = dev.jkbuild.jdk.JdkResolver.forProject(dir, jdksDir)
+                            .map(dev.jkbuild.jdk.InstalledJdk::home)
+                            .orElseGet(CompileToolchain::runningJavaHome);
+                    if (dev.jkbuild.tool.NativeImageDriver.resolve(javaHomeEarly).isEmpty()) {
+                        ctx.error("native", dev.jkbuild.tool.NativeImageDriver
+                                .notFoundError(javaHomeEarly).getMessage());
+                        throw new RuntimeException("native-image not found");
+                    }
+
                     JkBuild project = ctx.require(PROJECT);
                     BuildLayout layout = ctx.require(LAYOUT);
                     Path mainJar = layout.mainJar();
@@ -826,9 +837,7 @@ public final class BuildPipeline {
                     Path out = layout.nativeBinary();
                     Files.createDirectories(out.getParent());
 
-                    Path javaHome = dev.jkbuild.jdk.JdkResolver.forProject(dir, jdksDir)
-                            .map(dev.jkbuild.jdk.InstalledJdk::home)
-                            .orElseGet(CompileToolchain::runningJavaHome);
+                    Path javaHome = javaHomeEarly; // resolved above in fail-fast check
 
                     List<Path> classpath = new ArrayList<>();
                     classpath.add(mainJar);
