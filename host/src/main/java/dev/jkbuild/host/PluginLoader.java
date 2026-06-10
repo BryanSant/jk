@@ -88,6 +88,116 @@ public final class PluginLoader {
         return WorkerProcess.run(fullArgs, prefix, onProtocol, onPassthrough);
     }
 
+    /**
+     * Two-way in-process conversation — the parallel of
+     * {@link WorkerProcess#converse}: each protocol line is delivered to
+     * {@code onProtocol} together with a {@link WorkerProcess.Conversation}
+     * for sending commands back to the plugin's stdin.
+     *
+     * <p>Implemented by redirecting {@link System#in} for the isolated
+     * classloader via a piped stream pair, then running the plugin on a
+     * daemon thread while this thread drives the send/receive loop from the
+     * caller's side.
+     *
+     * <p>Parallels the out-of-process path: if the manifest says
+     * {@code isolation=process} (or is absent), falls back to
+     * {@link WorkerProcess#converse}.
+     */
+    public static int converse(Path jarPath, List<Path> extraClasspath, List<String> args,
+                               java.util.function.BiConsumer<String, WorkerProcess.Conversation> onProtocol,
+                               java.util.function.Consumer<String> onPassthrough)
+            throws IOException, InterruptedException {
+        PluginManifest manifest = readManifest(jarPath);
+        if (manifest != null && manifest.inProcess()) {
+            return converseInProcess(jarPath, extraClasspath, args, manifest, onProtocol, onPassthrough);
+        }
+        // Out-of-process fallback.
+        String prefix = manifest != null ? manifest.protocolPrefix() : "##JK:";
+        var fullCmd = new java.util.ArrayList<String>();
+        fullCmd.add(ProcessHandle.current().info().command().orElse("java"));
+        fullCmd.add("-jar");
+        fullCmd.add(jarPath.toAbsolutePath().toString());
+        fullCmd.addAll(args);
+        return WorkerProcess.converse(fullCmd, prefix, onProtocol, onPassthrough);
+    }
+
+    private static int converseInProcess(Path jarPath, List<Path> extraClasspath,
+                                          List<String> args, PluginManifest manifest,
+                                          java.util.function.BiConsumer<String, WorkerProcess.Conversation> onProtocol,
+                                          java.util.function.Consumer<String> onPassthrough)
+            throws IOException, InterruptedException {
+        // Set up a pipe: caller writes stdin commands → plugin reads from System.in.
+        java.io.PipedInputStream pluginStdin = new java.io.PipedInputStream(4096);
+        java.io.PipedOutputStream callerStdout = new java.io.PipedOutputStream(pluginStdin);
+
+        // Capture plugin output in a buffer replayed after each flush.
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        PrintStream capturedOut = new PrintStream(buf, true, StandardCharsets.UTF_8);
+
+        // Redirect System.in for the plugin thread; reset after.
+        java.io.InputStream origIn = System.in;
+        System.setIn(pluginStdin);
+        int[] exitCode = {-1};
+
+        // Run the plugin on a daemon thread so we can drive the conversation loop here.
+        URL jarUrl = jarPath.toUri().toURL();
+        var urls = new java.util.ArrayList<URL>();
+        urls.add(jarUrl);
+        for (Path p : extraClasspath) urls.add(p.toUri().toURL());
+        ClassLoader apiLoader = Plugin.class.getClassLoader();
+
+        Thread pluginThread;
+        try (URLClassLoader loader = new URLClassLoader(urls.toArray(new URL[0]), apiLoader)) {
+            Plugin plugin = loadPlugin(loader, jarPath);
+            if (plugin == null) {
+                System.setIn(origIn);
+                if (onPassthrough != null) onPassthrough.accept("jk-plugin-loader: no Plugin in " + jarPath.getFileName());
+                return 70;
+            }
+            ProtocolWriter writer = new ProtocolWriter(capturedOut, manifest.protocolPrefix());
+            pluginThread = new Thread(() -> {
+                try { exitCode[0] = plugin.run(args, writer); }
+                catch (Exception e) { exitCode[0] = 1; }
+            }, "jk-plugin-" + manifest.id());
+            pluginThread.setDaemon(true);
+            pluginThread.start();
+        }
+
+        // Drive the conversation: read lines the plugin emits (via capturedOut),
+        // dispatch them to onProtocol which may call convo.send().
+        WorkerProcess.Conversation convo = new WorkerProcess.Conversation() {
+            @Override public void send(String line) {
+                try {
+                    callerStdout.write((line + "\n").getBytes(StandardCharsets.UTF_8));
+                    callerStdout.flush();
+                } catch (IOException ignored) {}
+            }
+            @Override public void closeInput() {
+                try { callerStdout.close(); } catch (IOException ignored) {}
+            }
+        };
+
+        // Poll the buffer while the plugin thread is alive.
+        while (pluginThread.isAlive() || buf.size() > 0) {
+            String chunk = buf.toString(StandardCharsets.UTF_8);
+            buf.reset();
+            for (String line : chunk.split("\n", -1)) {
+                if (line.isEmpty()) continue;
+                if (line.startsWith(manifest.protocolPrefix())) {
+                    onProtocol.accept(line.substring(manifest.protocolPrefix().length()), convo);
+                } else if (onPassthrough != null) {
+                    onPassthrough.accept(line);
+                }
+            }
+            if (pluginThread.isAlive()) {
+                try { Thread.sleep(1); } catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
+            }
+        }
+        pluginThread.join();
+        System.setIn(origIn);
+        return exitCode[0] >= 0 ? exitCode[0] : 1;
+    }
+
     // --- in-process path ---------------------------------------------------
 
     private static int runInProcess(Path jarPath, List<Path> extraClasspath,

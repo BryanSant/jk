@@ -152,8 +152,9 @@ public final class JUnitLauncher {
                     "--scan-classpath=" + testClassesDir);
             var agg = new ResultAggregator(listener, workerId);
             aggregators.add(agg);
+            final String classpathForWorker = classpath;
             var t = new Thread(
-                    () -> exits[idx] = driveWorker(cmd, workerId, queue, agg, listener),
+                    () -> exits[idx] = driveWorker(cmd, classpathForWorker, workerId, queue, agg, listener),
                     "jk-test-worker-" + workerId);
             t.start();
             workerThreads.add(t);
@@ -191,26 +192,40 @@ public final class JUnitLauncher {
      * to the child's stdin. Non-protocol lines are user test output —
      * passed through to the parent's stdout, tagged with the worker id.
      */
-    private static int driveWorker(
-            List<String> cmd, int workerId, ConcurrentLinkedDeque<String> queue,
+    private int driveWorker(
+            List<String> cmd, String classpath, int workerId,
+            ConcurrentLinkedDeque<String> queue,
             ResultAggregator aggregator, TestProgressListener listener) {
-        try {
-            return WorkerProcess.converse(cmd, PROTOCOL_PREFIX, (json, convo) -> {
-                String event = Ndjson.str(json, "e");
-                if ("ready".equals(event)) {
-                    String next = queue.pollFirst();
-                    if (next != null) {
-                        convo.send("RUN " + next);
-                    } else {
-                        // DONE + closing stdin makes the child's readLine return
-                        // null so it exits its pull loop cleanly (either signal works).
-                        convo.send("DONE");
-                        convo.closeInput();
-                    }
+        // Phase 6: pull-mode workers run in-process via PluginLoader.converse.
+        java.util.function.BiConsumer<String, WorkerProcess.Conversation> handler = (json, convo) -> {
+            String event = Ndjson.str(json, "e");
+            if ("ready".equals(event)) {
+                String next = queue.pollFirst();
+                if (next != null) {
+                    convo.send("RUN " + next);
                 } else {
-                    aggregator.accept(json);
+                    convo.send("DONE");
+                    convo.closeInput();
                 }
-            }, line -> listener.onUserOutput(workerId, line));
+            } else {
+                aggregator.accept(json);
+            }
+        };
+        java.util.function.Consumer<String> passthrough = line -> listener.onUserOutput(workerId, line);
+
+        // Extract the plugin args: everything after PluginHostMain in cmd.
+        List<String> pluginArgs = new java.util.ArrayList<>();
+        boolean afterMain = false;
+        for (String s : cmd) {
+            if (afterMain) pluginArgs.add(s);
+            else if ("dev.jkbuild.plugin.host.PluginHostMain".equals(s)) afterMain = true;
+        }
+
+        try {
+            return dev.jkbuild.host.PluginLoader.converse(
+                    runnerJarFromClasspath(classpath),
+                    classpathEntries(classpath),
+                    pluginArgs, handler, passthrough);
         } catch (IOException e) {
             listener.onUserOutput(workerId, "reader error: " + e.getMessage());
             return -1;

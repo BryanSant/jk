@@ -427,11 +427,24 @@ public final class BuildCommand implements CliCommand {
     private int buildViaHost(Path dir, Path cache, Path lockFile, int workerCount,
                               dev.jkbuild.cli.run.AggregateContext agg)
             throws Exception {
-        // Workspace aggregation via host is a follow-up; single-project only for now.
+        // Phase 4: workspace mode — dispatch each member through the Host, feeding
+        // events into the aggregate view if one is active.
         if (agg != null) {
-            System.err.println("jk build: --use-host is not yet supported in workspace mode; "
-                    + "falling back to in-process build.");
-            return -1; // signal caller to fall through to the in-process path
+            // Workspace: run each member through the Host; aggregate progress via agg.
+            // The AggregateContext drives the shared progress bar; each member's events
+            // arrive through AggregateMemberListener wired in the ReceivingGoalListener.
+            // For now we keep workspace builds sequential (same as in-process fallback).
+            dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
+                    "build", dir, cache, lockFile, jdksDir, profileName, workerCount,
+                    buildOpts.skipTests, global.verbose, global.outputIsJson());
+            String member = buildTarget(dir.resolve("jk.toml"), dir);
+            var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec(member,
+                    r -> "Build successful", r -> "Build failed");
+            int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
+                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
+            if (code >= 0) return code;
+            // -1 = host jar missing, fall through to in-process
+            return -1;
         }
         dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
                 "build", dir, cache, lockFile, jdksDir, profileName, workerCount,

@@ -106,15 +106,55 @@ public final class HostLauncher {
         }
         java.nio.file.Path specFile = dev.jkbuild.host.HostInvocation.write(inv);
         try {
+            // Phase 4 / Phase 6 progress bar: start with SimpleTaskListener (spinner),
+            // upgrade to ProgressBarListener once the Host sends the phases event.
+            // Use an AtomicReference so the onPhasesReceived callback can swap it.
             var listeners = new java.util.ArrayList<GoalListener>();
-            var console = GoalConsole.makeListenerWithoutGoal(mode, spec);
-            if (console != null) listeners.add(console);
+            var consoleRef = new java.util.concurrent.atomic.AtomicReference<GoalListener>(
+                    GoalConsole.makeListenerWithoutGoal(mode, spec));
+            if (consoleRef.get() != null) listeners.add(consoleRef.get());
             try { listeners.add(EventLogListener.open(inv.cache(), inv.verb())); }
             catch (Exception ignored) {}
-            return run(specFile, cas, listeners);
+
+            // Build ReceivingGoalListener and wire the phases upgrade callback.
+            var receiver = new ReceivingGoalListener(listeners);
+            receiver.onPhasesReceived(names -> {
+                GoalListener upgraded = GoalConsole.makeListenerWithPhases(mode, spec, names);
+                GoalListener old = consoleRef.getAndSet(upgraded);
+                // Replace old console listener in the list atomically.
+                synchronized (listeners) {
+                    int idx = listeners.indexOf(old);
+                    if (idx >= 0) listeners.set(idx, upgraded);
+                    else if (upgraded != null) listeners.add(0, upgraded);
+                }
+            });
+
+            return runWithReceiver(specFile, cas, receiver);
         } finally {
             java.nio.file.Files.deleteIfExists(specFile);
         }
+    }
+
+    /** Variant of {@link #run} that uses a pre-built {@link ReceivingGoalListener}. */
+    private static int runWithReceiver(Path specFile, dev.jkbuild.cache.Cas cas,
+                                        ReceivingGoalListener receiver)
+            throws IOException, InterruptedException {
+        Path hostJar = WorkerJar.HOST.locate(cas);
+        Path javaExe = runningJavaExe();
+        List<String> cmd = List.of(
+                javaExe.toString(),
+                "-jar", hostJar.toString(),
+                specFile.toAbsolutePath().toString());
+
+        int[] reportedExit = {-1};
+        int procExit = WorkerProcess.run(cmd, HostEvent.PREFIX, json -> {
+            if (HostEvent.type(json) == HostEvent.Type.EXIT) {
+                reportedExit[0] = HostEvent.exitCode(json);
+            }
+            receiver.accept(HostEvent.PREFIX + json);
+        }, line -> System.err.println(line));
+
+        return reportedExit[0] >= 0 ? reportedExit[0] : procExit;
     }
 
     private static Path runningJavaExe() {

@@ -76,7 +76,12 @@ public final class HostMain {
             return 2;
         }
 
-        goal.addListener(new StreamingGoalListener(eventOut, inv.verb()));
+        StreamingGoalListener streamer = new StreamingGoalListener(eventOut, inv.verb());
+        // Emit the ordered phase-name list before goalStart so the CLI can
+        // construct a ProgressBarListener without a live Goal object.
+        streamer.emitPhases(goal.phases().stream()
+                .map(dev.jkbuild.run.Phase::name).collect(java.util.stream.Collectors.toList()));
+        goal.addListener(streamer);
 
         // Note: the event-log listener is NOT attached here — the CLI receives
         // GOAL_FINISH and records it on its side (where it has access to

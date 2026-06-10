@@ -61,7 +61,8 @@ public final class CompileCommand implements CliCommand {
     @Override public List<Opt> options() {
         return List.of(
                 Opt.value("<name>", "Build profile to apply. Default: auto (ci if CI=true, else none).", "--profile"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide());
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.flag("Run the compile in-process instead of via the Workspace Host JVM.", "--no-host").hide());
     }
 
     String profileName;
@@ -79,10 +80,11 @@ public final class CompileCommand implements CliCommand {
     private static final GoalKey<Path> SCRATCH = GoalKey.of("scratch", Path.class);
 
     @Override
-    public int run(Invocation in) throws IOException {
+    public int run(Invocation in) throws IOException, InterruptedException {
         this.profileName = in.value("profile").orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         this.global = GlobalOptions.from(in);
+        boolean useHost = !in.isSet("no-host");
         Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
@@ -95,6 +97,18 @@ public final class CompileCommand implements CliCommand {
             return 2;
         }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
+
+        // Phase 4: use Host by default; --no-host forces in-process.
+        if (useHost) {
+            dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
+                    "compile", dir, cache, lockFile, null, profileName, 1,
+                    false, global.verbose, global.outputIsJson());
+            var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec("Compile",
+                    r -> "Compiled successfully", r -> "Compile failed");
+            int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
+                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
+            if (code >= 0) return code;
+        }
 
         Phase parseBuild = Phase.builder("parse-build")
                 .scope(1)
