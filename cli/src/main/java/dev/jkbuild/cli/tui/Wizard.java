@@ -289,11 +289,12 @@ public final class Wizard {
             }
         }
 
-        // Print without a trailing newline — the `finally` block writes
-        // `\r\n` to land the shell prompt on a fresh line, so a println here
-        // would leave a blank gap between the wizard and whatever the caller
-        // emits next (e.g. a progress bar).
-        writer.print(Rail.closer(Glyphs.CHECK + " Done", Theme.active().success()).toAnsi(terminal));
+        // Print the closing line then one CRLF to create a blank-line gap
+        // between the wizard and whatever the caller emits next (progress bar,
+        // confirmation prompt, etc.). The `finally` block writes a second \r\n
+        // that lands the cursor on the fresh line where the caller starts.
+        writer.print(Rail.closer("Done", Theme.active().success()).toAnsi(terminal));
+        writer.print("\r\n");
         writer.flush();
         return Answers.of(Map.copyOf(answers));
     }

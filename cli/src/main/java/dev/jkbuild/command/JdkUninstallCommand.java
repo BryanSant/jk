@@ -368,7 +368,7 @@ public final class JdkUninstallCommand implements CliCommand {
 
     /** {@code [Y/n]} with the brackets and slash dimmed, the keys left plain. */
     private static String yesNo() {
-        var dim = Theme.active().black();
+        var dim = Theme.active().darkGray();
         return Theme.colorize("[", dim) + "Y" + Theme.colorize("/", dim)
                 + "n" + Theme.colorize("]", dim);
     }

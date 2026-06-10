@@ -244,8 +244,9 @@ public final class JdkInstallCommand implements CliCommand {
                     String installing = "Installing "
                             + Theme.colorize(label, Theme.active().focused()) + "...";
                     ctx.label("extract " + label);
+                    InstalledJdk installed;
                     try (Spinner sp = Spinner.show(System.out, installing)) {
-                        InstalledJdk installed = installer.extractInstalled(
+                        installed = installer.extractInstalled(
                                 entry, ctx.require(ARCHIVE));
                         ctx.put(INSTALLED, installed);
                         // Journal the install event for the JDK-usage stats —
@@ -253,12 +254,12 @@ public final class JdkInstallCommand implements CliCommand {
                         // preferred vendors / versions.
                         dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath()
                                 .touch(installed.identifier(), "install");
-                        System.out.println(doneLine(label, installed.home(),
-                                "has been installed to"));
                     } catch (Exception e) {
                         ctx.error("extract", e.getMessage());
                         throw new RuntimeException(e);
                     }
+                    // Print after close() so the done line overwrites the cleared spinner line.
+                    System.out.println(doneLine(label, installed.home(), "has been installed to"));
                     ctx.progress(1);
                 })
                 .build();
