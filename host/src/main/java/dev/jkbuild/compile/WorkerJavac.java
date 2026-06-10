@@ -65,16 +65,15 @@ public final class WorkerJavac {
     private static Result run(Request req) throws IOException, InterruptedException {
         Path spec = writeSpec(req);
         try {
-            List<String> cmd = List.of(
-                    req.javaHome().resolve("bin").resolve("java").toString(),
-                    "-cp", req.workerJar().toString(),
-                    WORKER_MAIN, "@" + spec.toAbsolutePath());
-
             List<String> diagnostics = new ArrayList<>();
             Map<Path, Set<Path>> generated = new TreeMap<>();
             String[] status = {null};
-            // Non-protocol lines (javac chatter) are dropped, as before.
-            int exit = WorkerProcess.run(cmd, PREFIX, json -> {
+
+            // Phase 6: java-compiler is a friendly (no heavy deps) plugin — run
+            // in-process by default. PluginLoader falls back to fork if the manifest
+            // declares isolation=process or can't be loaded in-process.
+            int exit = dev.jkbuild.host.PluginLoader.run(
+                    req.workerJar(), List.of("@" + spec.toAbsolutePath()), json -> {
                 String t = Ndjson.str(json, "t");
                 if (t == null) return;
                 switch (t) {
