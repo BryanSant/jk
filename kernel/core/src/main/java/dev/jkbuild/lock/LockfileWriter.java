@@ -85,6 +85,20 @@ public final class LockfileWriter {
                 out.append("]\n");
             }
         }
+
+        List<Lockfile.PluginEntry> sortedPlugins = new ArrayList<>(lockfile.plugins());
+        sortedPlugins.sort(Comparator
+                .comparing(Lockfile.PluginEntry::coordinate)
+                .thenComparing(Lockfile.PluginEntry::version));
+
+        for (Lockfile.PluginEntry p : sortedPlugins) {
+            out.append('\n');
+            out.append("[[plugin]]\n");
+            out.append("coordinate = ").append(quote(p.coordinate())).append('\n');
+            out.append("version    = ").append(quote(p.version())).append('\n');
+            out.append("checksum   = ").append(quote(p.checksum())).append('\n');
+        }
+
         return out.toString();
     }
 

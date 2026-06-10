@@ -1,10 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.host;
 
+import dev.jkbuild.cache.Cas;
+import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.lock.LockfileReader;
+import dev.jkbuild.model.PluginDeclaration;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.runtime.BuildPipeline;
 
 import java.nio.file.Files;
+import java.util.List;
 
 /**
  * Maps a {@link HostInvocation#verb()} to the {@link Goal} it should run.
@@ -40,6 +45,8 @@ public final class HostDispatch {
             throw new IllegalArgumentException("jk-host: no jk.toml in " + dir);
         }
 
+        verifyPlugins(dir, buildFile, lockFile, cache);
+
         boolean testOnly = "compile".equals(inv.verb()) || "test".equals(inv.verb());
         boolean skipTests = inv.skipTests()
                 || "compile".equals(inv.verb())
@@ -54,6 +61,55 @@ public final class HostDispatch {
 
         var builder = BuildPipeline.coreBuilder(inputs);
         return builder.build();
+    }
+
+    /**
+     * For each plugin declared in {@code jk.toml}, verify its JAR is present
+     * in the CAS (pinned SHA from {@code jk.lock}). Throws
+     * {@link IllegalStateException} with a clear message when any plugin is
+     * missing so the Host emits a user-facing error before the build starts.
+     *
+     * <p>Third-party plugins run with {@code isolation=process} — this method
+     * only verifies presence and manifest validity; actual execution is
+     * deferred to the phase that invokes the plugin.
+     */
+    private static void verifyPlugins(java.nio.file.Path dir,
+                                      java.nio.file.Path buildFile,
+                                      java.nio.file.Path lockFile,
+                                      java.nio.file.Path cache) throws Exception {
+        List<PluginDeclaration> plugins = JkBuildParser.parse(buildFile).plugins();
+        if (plugins.isEmpty()) return;
+
+        if (!Files.exists(lockFile)) {
+            throw new IllegalStateException(
+                    "jk.lock is missing but plugins are declared — run `jk sync` first");
+        }
+        var lock = LockfileReader.read(lockFile);
+        var cas  = new Cas(cache);
+
+        for (PluginDeclaration pd : plugins) {
+            var entry = lock.plugins().stream()
+                    .filter(e -> e.coordinate().equals(pd.coordinate()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException(
+                            "plugin '" + pd.coordinate() + "' is declared in jk.toml "
+                            + "but not locked — run `jk sync` to pin it"));
+
+            java.nio.file.Path jar = cas.pathFor(entry.sha256Hex());
+            if (!Files.isRegularFile(jar)) {
+                throw new IllegalStateException(
+                        "plugin '" + pd.coordinate() + "' is locked (sha256:" + entry.sha256Hex()
+                        + ") but the JAR is not in the CAS — run `jk sync`");
+            }
+
+            // Confirm the JAR contains a valid Plugin service entry.
+            var manifest = PluginLoader.readManifest(jar);
+            if (manifest == null) {
+                throw new IllegalStateException(
+                        "plugin '" + pd.coordinate() + "' does not expose a "
+                        + "dev.jkbuild.plugin.Plugin service entry");
+            }
+        }
     }
 
     private static int estimateTestCount(java.nio.file.Path dir) {

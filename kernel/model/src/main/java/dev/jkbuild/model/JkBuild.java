@@ -21,7 +21,8 @@ public record JkBuild(
         Profiles profiles,
         Features features,
         Workspace workspace,
-        Map<String, String> manifest) {
+        Map<String, String> manifest,
+        List<PluginDeclaration> plugins) {
 
     public JkBuild {
         Objects.requireNonNull(project, "project");
@@ -36,12 +37,20 @@ public record JkBuild(
         manifest = manifest == null || manifest.isEmpty()
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(manifest));
+        plugins = plugins == null ? List.of() : List.copyOf(plugins);
+    }
+
+    /** Back-compat constructor for callers that don't set plugin declarations. */
+    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
+                   Profiles profiles, Features features, Workspace workspace,
+                   Map<String, String> manifest) {
+        this(project, dependencies, repositories, profiles, features, workspace, manifest, List.of());
     }
 
     /** Back-compat constructor for callers that don't set manifest attributes. */
     public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
                    Profiles profiles, Features features, Workspace workspace) {
-        this(project, dependencies, repositories, profiles, features, workspace, Map.of());
+        this(project, dependencies, repositories, profiles, features, workspace, Map.of(), List.of());
     }
 
     /** Project + deps only — no repos, no profiles, no features, no workspace. */
@@ -73,7 +82,7 @@ public record JkBuild(
 
     /** Return a copy with the given custom jar-manifest attributes. */
     public JkBuild withManifest(Map<String, String> manifest) {
-        return new JkBuild(project, dependencies, repositories, profiles, features, workspace, manifest);
+        return new JkBuild(project, dependencies, repositories, profiles, features, workspace, manifest, plugins);
     }
 
     /** True iff this is a workspace root (has a non-empty {@code workspace} block). */

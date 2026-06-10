@@ -3,6 +3,7 @@ package dev.jkbuild.config;
 
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.PluginDeclaration;
 import dev.jkbuild.library.LibraryCatalog;
 import dev.jkbuild.model.Feature;
 import dev.jkbuild.model.Features;
@@ -95,7 +96,8 @@ public final class JkBuildParser {
         Profiles profiles = parseProfiles(result);
         Features features = parseFeatures(result);
         Map<String, String> manifest = parseManifest(result);
-        return new JkBuild(project, deps, repos, profiles, features, workspace, manifest);
+        List<PluginDeclaration> plugins = parsePlugins(result);
+        return new JkBuild(project, deps, repos, profiles, features, workspace, manifest, plugins);
     }
 
     /**
@@ -756,6 +758,31 @@ public final class JkBuildParser {
         }
         VersionSelector selector = VersionSelector.parseFloating(versionRaw);
         return new WorkspaceDependency(group, artifact, selector, null, null);
+    }
+
+    // -----------------------------------------------------------------------
+
+    private static List<PluginDeclaration> parsePlugins(TomlTable root) {
+        TomlTable plugins = root.getTable("plugins");
+        if (plugins == null) return List.of();
+        List<PluginDeclaration> result = new ArrayList<>();
+        for (String alias : plugins.keySet()) {
+            Object val = plugins.get(alias);
+            if (!(val instanceof TomlTable entry)) {
+                throw new JkBuildParseException("plugins." + alias + " must be an inline table");
+            }
+            String group   = entry.getString("group");
+            String name    = entry.getString("name");
+            String version = entry.getString("version");
+            if (group == null || group.isBlank())
+                throw new JkBuildParseException("plugins." + alias + " must declare `group`");
+            if (name == null || name.isBlank())
+                throw new JkBuildParseException("plugins." + alias + " must declare `name`");
+            if (version == null || version.isBlank())
+                throw new JkBuildParseException("plugins." + alias + " must declare `version`");
+            result.add(new PluginDeclaration(alias, group, name, version));
+        }
+        return List.copyOf(result);
     }
 
     private static String requireString(TomlTable table, String key, String displayPath) {

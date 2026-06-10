@@ -33,7 +33,8 @@ public record Lockfile(
         String resolutionAlgorithm,
         String jdk,
         String kotlin,
-        List<Package> packages) {
+        List<Package> packages,
+        List<PluginEntry> plugins) {
 
     public static final int CURRENT_VERSION = 1;
     public static final int MIN_SUPPORTED_VERSION = 1;
@@ -44,22 +45,34 @@ public record Lockfile(
         Objects.requireNonNull(resolutionAlgorithm, "resolutionAlgorithm");
         Objects.requireNonNull(packages, "packages");
         packages = List.copyOf(packages);
+        plugins  = plugins == null ? List.of() : List.copyOf(plugins);
+    }
+
+    /** Back-compat constructor without plugin entries. */
+    public Lockfile(int version, String generatedBy, String resolutionAlgorithm,
+                    String jdk, String kotlin, List<Package> packages) {
+        this(version, generatedBy, resolutionAlgorithm, jdk, kotlin, packages, List.of());
     }
 
     /** Back-compat constructor for callers that stamp a JDK but no Kotlin version. */
     public Lockfile(int version, String generatedBy, String resolutionAlgorithm,
                     String jdk, List<Package> packages) {
-        this(version, generatedBy, resolutionAlgorithm, jdk, null, packages);
+        this(version, generatedBy, resolutionAlgorithm, jdk, null, packages, List.of());
     }
 
     /** Back-compat constructor for callers that don't yet stamp a JDK. */
     public Lockfile(int version, String generatedBy, String resolutionAlgorithm, List<Package> packages) {
-        this(version, generatedBy, resolutionAlgorithm, null, null, packages);
+        this(version, generatedBy, resolutionAlgorithm, null, null, packages, List.of());
     }
 
     /** Return a copy with the resolved Kotlin compiler version stamped in. */
     public Lockfile withKotlin(String kotlinVersion) {
-        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlinVersion, packages);
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlinVersion, packages, plugins);
+    }
+
+    /** Return a copy with the given plugin entries (replaces any existing). */
+    public Lockfile withPlugins(List<PluginEntry> newPlugins) {
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlin, packages, newPlugins);
     }
 
     public static Lockfile empty(String jkVersion) {
@@ -68,7 +81,27 @@ public record Lockfile(
 
     /** Empty package set with a resolved JDK pinned for the project. */
     public static Lockfile empty(String jkVersion, String jdk) {
-        return new Lockfile(CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, jdk, null, List.of());
+        return new Lockfile(CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, jdk, null, List.of(), List.of());
+    }
+
+    /**
+     * A third-party plugin pinned in {@code jk.lock}.
+     *
+     * @param coordinate  Maven {@code group:name} (e.g. {@code "com.example:my-jk-plugin"})
+     * @param version     exact version (e.g. {@code "1.2.0"})
+     * @param checksum    {@code sha256:<hex>} content hash of the plugin JAR
+     */
+    public record PluginEntry(String coordinate, String version, String checksum) {
+        public PluginEntry {
+            Objects.requireNonNull(coordinate, "coordinate");
+            Objects.requireNonNull(version,    "version");
+            Objects.requireNonNull(checksum,   "checksum");
+        }
+
+        /** The raw hex SHA-256 (strips the {@code "sha256:"} prefix if present). */
+        public String sha256Hex() {
+            return checksum.startsWith("sha256:") ? checksum.substring(7) : checksum;
+        }
     }
 
     public record Package(

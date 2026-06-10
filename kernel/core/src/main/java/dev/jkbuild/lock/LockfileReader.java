@@ -58,11 +58,23 @@ public final class LockfileReader {
         TomlArray pkgArray = result.getArray("package");
         if (pkgArray != null) {
             for (int i = 0; i < pkgArray.size(); i++) {
-                TomlTable table = pkgArray.getTable(i);
-                packages.add(toPackage(table));
+                packages.add(toPackage(pkgArray.getTable(i)));
             }
         }
-        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, kotlin, packages);
+
+        List<Lockfile.PluginEntry> plugins = new ArrayList<>();
+        TomlArray pluginArray = result.getArray("plugin");
+        if (pluginArray != null) {
+            for (int i = 0; i < pluginArray.size(); i++) {
+                TomlTable t    = pluginArray.getTable(i);
+                String coord   = requireString(t, "coordinate");
+                String ver     = requireString(t, "version");
+                String chk     = requireString(t, "checksum");
+                plugins.add(new Lockfile.PluginEntry(coord, ver, chk));
+            }
+        }
+
+        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, kotlin, packages, plugins);
     }
 
     private static Lockfile.Package toPackage(TomlTable table) {

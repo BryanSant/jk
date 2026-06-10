@@ -291,8 +291,41 @@ public final class LockCommand implements CliCommand {
                 })
                 .build();
 
-        Phase write = Phase.builder("write-lockfile")
+        // Resolve declared plugin jars (fetch from Maven, pin SHA to lockfile).
+        Phase lockPlugins = Phase.builder("lock-plugins")
+                .kind(PhaseKind.IO)
                 .requires("resolve")
+                .scope(() -> effective.plugins().isEmpty() ? 0 : effective.plugins().size())
+                .execute(ctx -> {
+                    var decls = effective.plugins();
+                    if (decls.isEmpty()) return;
+                    ctx.label("lock plugins");
+                    Cas cas = new Cas(cache);
+                    dev.jkbuild.repo.RepoGroup repos =
+                            dev.jkbuild.runtime.RepoGroupBuilder.buildFor(effective, repoUrl, cas);
+                    var entries = new java.util.ArrayList<Lockfile.PluginEntry>();
+                    for (var pd : decls) {
+                        ctx.label("lock " + pd.coordinate());
+                        var coord = dev.jkbuild.model.Coordinate.of(pd.group(), pd.name(), pd.version());
+                        try {
+                            var fetched = repos.tryFetchArtifact(coord)
+                                    .orElseThrow(() -> new RuntimeException(
+                                            pd.coordinateWithVersion() + " not found in any repo"));
+                            entries.add(new Lockfile.PluginEntry(
+                                    pd.coordinate(), pd.version(),
+                                    "sha256:" + fetched.fetched().sha256()));
+                        } catch (Exception e) {
+                            ctx.error("plugin", pd.coordinate() + " — " + e.getMessage());
+                            throw new RuntimeException(e);
+                        }
+                        ctx.progress(1);
+                    }
+                    ctx.put(LOCKFILE, ctx.require(LOCKFILE).withPlugins(entries));
+                })
+                .build();
+
+        Phase write = Phase.builder("write-lockfile")
+                .requires("lock-plugins")
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("write " + lockFile.getFileName());
@@ -304,14 +337,20 @@ public final class LockCommand implements CliCommand {
         Goal goal = Goal.builder("lock")
                 .addPhase(parseBuild)
                 .addPhase(resolve)
+                .addPhase(lockPlugins)
                 .addPhase(write)
                 .build();
 
         ConsoleSpec spec = new ConsoleSpec(label,
                 r -> {
-                    int pkgs = goal.get(LOCKFILE).orElseThrow().packages().size();
-                    return "Resolved " + pkgs + " dependenc"
+                    Lockfile lock = goal.get(LOCKFILE).orElseThrow();
+                    int pkgs = lock.packages().size();
+                    int plgs = lock.plugins().size();
+                    String depStr = "Resolved " + pkgs + " dependenc"
                             + (pkgs == 1 ? "y" : "ies");
+                    return plgs > 0
+                            ? depStr + ", " + plgs + " plugin" + (plgs == 1 ? "" : "s")
+                            : depStr;
                 },
                 r -> "Failed to resolve dependencies");
 

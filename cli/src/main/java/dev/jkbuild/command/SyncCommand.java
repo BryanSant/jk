@@ -247,10 +247,58 @@ public final class SyncCommand implements CliCommand {
                 })
                 .build();
 
+        // Sync declared third-party plugin jars from Maven to CAS.
+        Phase syncPlugins = Phase.builder("sync-plugins")
+                .kind(PhaseKind.IO)
+                .requires("parse-lock")
+                .scope(0)
+                .execute(ctx -> {
+                    Lockfile lock = ctx.require(LOCKFILE);
+                    var pluginEntries = lock.plugins();
+                    if (pluginEntries.isEmpty()) return;
+                    ctx.updateScope(pluginEntries.size());
+                    ctx.label("sync plugins");
+                    Cas cas = new Cas(cache);
+                    JkBuild build = ctx.get(BUILD).orElse(null);
+                    dev.jkbuild.repo.RepoGroup repos = build != null
+                            ? dev.jkbuild.runtime.RepoGroupBuilder.buildFor(build, repoUrl, cas)
+                            : dev.jkbuild.runtime.RepoGroupBuilder.buildFor(
+                                dev.jkbuild.config.JkBuildParser.parse(dir.resolve("jk.toml")),
+                                repoUrl, cas);
+                    for (var pe : pluginEntries) {
+                        ctx.label("sync " + pe.coordinate());
+                        String hex = pe.sha256Hex();
+                        if (cas.contains(hex)) {
+                            ctx.progress(1);
+                            continue;
+                        }
+                        String[] parts = pe.coordinate().split(":", 2);
+                        if (parts.length != 2) {
+                            ctx.error("plugin", "malformed coordinate: " + pe.coordinate());
+                            ctx.progress(1);
+                            continue;
+                        }
+                        var coord = dev.jkbuild.model.Coordinate.of(parts[0], parts[1], pe.version());
+                        try {
+                            var r = repos.tryFetchArtifact(coord);
+                            if (r.isPresent()) {
+                                ctx.label("fetched " + pe.coordinate() + ":" + pe.version());
+                            } else {
+                                ctx.error("plugin", pe.coordinate() + " not found in any repo");
+                            }
+                        } catch (Exception e) {
+                            ctx.error("plugin", pe.coordinate() + " — " + e.getMessage());
+                        }
+                        ctx.progress(1);
+                    }
+                })
+                .build();
+
         Goal goal = Goal.builder("sync")
                 .addPhase(parseLock)
                 .addPhase(ensureJdk)
                 .addPhase(syncCas)
+                .addPhase(syncPlugins)
                 .addPhase(syncWorkers)
                 .addPhase(writeManifest)
                 .build();
