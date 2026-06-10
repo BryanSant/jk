@@ -62,7 +62,7 @@ class SelfHostingTomlTest {
         assertThat(root.project().name()).isEqualTo("jk");
         assertThat(root.isWorkspaceRoot()).isTrue();
         assertThat(root.workspace().members()).containsExactly(
-                "kernel/core", "kernel/io", "kernel/resolver", "kernel/toolchain", "cli");
+                "kernel/model", "kernel/core", "kernel/io", "kernel/resolver", "kernel/toolchain", "cli");
     }
 
     @Test

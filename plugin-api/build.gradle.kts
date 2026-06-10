@@ -5,9 +5,10 @@ plugins {
 }
 
 description = "jk plugin SPI: the stable surface plugins compile against, plus " +
-        "the host<->plugin wire protocol codec. Depends on nothing but the JDK."
+        "the host<->plugin wire protocol codec."
 
-// Intentionally dependency-free. plugin-api is the contract shared by the host
-// and by first- and third-party plugins; keeping it JDK-only is what lets a
-// plugin jar stay tiny and lets the codec be bundled anywhere without dragging
-// in jk internals. (model is added here once the Command/Goal types move in.)
+dependencies {
+    // model exposes Goal, Phase, GoalListener, Coordinate, Dependency, etc. —
+    // the types plugins reference. Zero external deps of its own.
+    api(project(":model"))
+}

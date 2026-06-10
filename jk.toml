@@ -7,4 +7,4 @@ jdk      = 25
 java     = 25
 
 [workspace]
-members = ["kernel/core", "kernel/io", "kernel/resolver", "kernel/toolchain", "cli"]
+members = ["kernel/model", "kernel/core", "kernel/io", "kernel/resolver", "kernel/toolchain", "cli"]

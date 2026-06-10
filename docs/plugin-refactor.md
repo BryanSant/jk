@@ -1,7 +1,6 @@
 # jk — Plugin Architecture Refactor
 
-**Status:** Proposal / RFC. Not yet scheduled against a milestone.
-**Author:** (drafted with Claude Code)
+**Status:** Phases 0–6 complete. Phase 7 (third-party plugin resolution) next.
 **Companion to:** [implementation-plan.md](./implementation-plan.md), [requirements.md](./requirements.md)
 
 ---
@@ -45,7 +44,7 @@ It also folds in two adjacent asks that the same refactor should settle:
 - **Core modules have no picocli imports.** `core`, `io`, `resolver`,
   `toolchain`, `engine` are framework-clean.
 - **The child-JVM isolation goal is already met.** Heavy/conflicting deps
-  (JGit, Jib + Guava + Protobuf, BouncyCastle, sigstore, Jackson, the Kotlin
+  (JGit, Jib + Guava + Protobuf, BouncyCastle, sigstore-java, Jackson, the Kotlin
   compiler closure) are kept out of the native binary's reachable set by living
   in forked workers. The native image stays small precisely because of this.
 - **CAS-keyed worker delivery works.** Workers are addressed by SHA-256, placed
@@ -69,24 +68,6 @@ The same eight-runner pattern is open-coded eight times:
 There is **no `Plugin` or `Runner` interface, no shared protocol module, no
 shared launcher.** Adding a ninth runner today means copying all seven rows
 above.
-
-Worse, several capabilities live in **two places at once**, violating DRY:
-
-- **`compat/`** (Maven/Gradle import-export, tool installer, `JkBuildRenderer`)
-  is on the **main jk classpath** *and* duplicated through `compat-runner`.
-- **`engine/compile/` + `engine/test/`** hold parent-side compile/test logic
-  that overlaps the `java-compiler` / `kotlin-compiler` / `test-runner` workers
-  (e.g. `engine/compile/WorkerJavac.java` is the parent half of the
-  `java-compiler` worker; `engine/compile/Ndjson.java` is duplicated in the
-  kotlin worker).
-- **`supply-chain/`** has been hollowed out to a single class
-  (`deny/PolicyChecker.java`) now that audit/publish/sbom moved to runners — the
-  module is vestigial.
-- **`image/`** is a single record (`ImageConfig.java`) plus the `image-runner`.
-
-And the command surface (78 classes under `cli/command/`, 67 importing picocli)
-has **no model-level abstraction** — every command is just a
-`@Command`-annotated `Callable<Integer>`.
 
 ---
 
@@ -148,54 +129,37 @@ Why this shape:
   `--stop` surface) and the warm-JVM upside a daemon buys shrinks as AOT /
   Project Leyden land. Per-invocation startup is the cost we accept for it.
 
-### 3.2 Module map (target)
-
-Split the tree cleanly into **kernel**, **SPI**, and **plugins**.
+### 3.2 Module map (current)
 
 ```
 jk/
-├── kernel/                      # the "core/engine/runtime" — universal only
-│   ├── model/        (was core/model + core/run)      # JDK + Lombok + JSpecify ONLY
-│   ├── core/         (was core/{util,event,config,lock,layout,library,credential})
-│   ├── io/           (was io/*  — http, cache/CAS, repo, forge; git client → plugin)
-│   ├── resolver/     (unchanged — PubGrub, version coercion, deny policy)
-│   ├── toolchain/    (jdk, script, tool, discovery)
-│   └── host/         (was engine/task + runtime — scheduler, plugin host, launcher)
+├── kernel/                      # universal capabilities — no plugin deps
+│   ├── model/        ✓ done     # Goal/Phase/GoalListener, Dependency/Coordinate
+│   │                            # Zero external deps (JDK + Lombok + JSpecify)
+│   ├── core/         ✓ done     # TOML config parser, lockfile, layout, deny policy
+│   │                            # Depends on :model + tomlj
+│   ├── io/           ✓ done     # HTTP, CAS, repo, forge — depends on :core
+│   ├── resolver/     ✓ done     # PubGrub solver, version coercion
+│   ├── toolchain/    ✓ done     # JDK manager, tools, Gradle/Maven importers
+│   └── host/         ✓ done     # Workspace Host JVM, PluginLoader, BuildPipeline,
+│                                # action cache, WorkerProcess/WorkerJar registry
 │
-├── plugin-api/                  # the SPI. Tiny. JDK + Lombok + JSpecify ONLY.
-│   └── (Plugin, PluginContext, services, protocol types, Command model)
+├── plugin-api/       ✓ done     # Plugin SPI + HostEvent wire codec
+│                                # Depends on :model only
 │
-├── plugins/
-│   ├── java-compiler/   (was java-compiler + engine/compile/{javac,incremental})
-│   ├── kotlin-compiler/ (was kotlin-compiler + engine/compile/{kotlinc})
-│   ├── test-runner/     (was test-runner + engine/test)
-│   ├── auditor/         (was audit-runner)
-│   ├── publisher/       (was publish-runner + supply-chain/sbom)
-│   ├── image-builder/   (was image + image-runner)
-│   ├── git-client/      (was git-runner + io/git)
-│   ├── maven-bridge/    (was compat/mvn + compat-runner share)
-│   ├── gradle-bridge/   (was compat/gradle)
-│   └── intellij-bridge/ (new; v1.0 target)
+├── plugins/                     # first-party plugins, shipped with jk
+│   ├── java-compiler/  ✓ done  # in-process via PluginLoader (URLClassLoader)
+│   ├── kotlin-compiler/ ✓ done # in-process via PluginLoader
+│   ├── test-runner/   ✓ done   # in-process (pull-mode via PluginLoader.converse)
+│   ├── auditor/       ✓ done   # isolation=process (stays forked)
+│   ├── publisher/     ✓ done   # isolation=process (BouncyCastle)
+│   ├── image-builder/ ✓ done   # isolation=process (Jib + Guava)
+│   ├── compat-bridge/ ✓ done   # isolation=process; maven+gradle import in one module
+│   │                            # (future: split into maven-bridge + gradle-bridge)
+│   └── git-client/    ✓ done   # isolation=process (JGit)
 │
-└── cli/                         # native image; own help renderer (no picocli)
+└── cli/              ✓ done     # GraalVM native image; own arg parser + TUI
 ```
-
-Notes:
-
-- **`model` has zero deps beyond JDK + Lombok + JSpecify**, as required. `Build`,
-  `Workspace`, `Command`, `Goal`, `Phase`, `Dependency`, `Coordinate`, `Scope`,
-  `VersionSelector`, etc. all live here. `core/run/` merges into `model` (Goal/
-  Phase are domain types) or sits beside it in the same dep tier.
-- **`host` is the merge of `engine/task/` (action graph, ActionCache, CAS sweep,
-  freshness) and today's `runtime/`** (BuildPipeline, the `*WorkerSetup`
-  locators, `JkWorkerSync`) — minus all the per-runner duplication, which
-  collapses into one launcher.
-- **`supply-chain` disappears**: `deny/PolicyChecker` is lightweight policy →
-  moves to `resolver` (it gates resolution) or `kernel/core`; sbom → `publisher`
-  plugin.
-- **`engine` and `compat` disappear** as standalone modules; their parent-side
-  halves merge into `host` (scheduling) or into the owning plugin (compile/test/
-  import logic). This is the DRY win: one home per capability.
 
 ### 3.3 The Plugin SPI (`:plugin-api`)
 
@@ -230,7 +194,7 @@ public interface Services {
 
 Key properties:
 
-- **`plugin-api` depends only on `model`** (so plugins see `Goal`, `Phase`,
+- **`plugin-api` depends only on `:model`** (so plugins see `Goal`, `Phase`,
   `Coordinate`, `Dependency`, …) plus JDK/Lombok/JSpecify. It is the *only*
   thing a third-party plugin compiles against.
 - **Plugins contribute Phases, not whole pipelines.** They hand the Host
@@ -312,28 +276,28 @@ Replace the eight ad-hoc `##JK*:`-prefixed encodings with **one** versioned,
 typed protocol in `plugin-api`, used for both Host↔plugin (process mode) and
 CLI↔Host:
 
-- **Framing:** length-prefixed or single-prefix NDJSON (keep NDJSON for
-  debuggability; one prefix, one parser — kill both `Ndjson.java` copies).
-- **Messages map to the existing event vocabulary:** `phaseStart`, `progress`,
-  `scopeUpdate`, `label`, `output`, `warn`, `error`, `phaseFinish`, `result` —
-  i.e. the `GoalListener` interface serialized. The Host deserializes a child
-  plugin's stream straight into `GoalListener` calls, so process-mode and
-  in-process plugins are indistinguishable to the TUI.
+- **Framing:** single-prefix NDJSON (keep NDJSON for debuggability; one prefix
+  `##JKH:`, one parser — both `Ndjson.java` copies collapsed into one in
+  `plugin-api`).
+- **Messages map to the existing event vocabulary:** `phases`, `goalStart`,
+  `phaseStart`, `progress`, `scopeUpdate`, `label`, `output`, `warn`, `error`,
+  `phaseFinish`, `goalFinish`, `exit` — i.e. the `GoalListener` interface
+  serialized. The Host deserializes a child plugin's stream straight into
+  `GoalListener` calls, so process-mode and in-process plugins are
+  indistinguishable to the TUI.
 - **One codec, one `WorkerLauncher`** replaces the six `*WorkerSetup` classes,
   the `JkWorkerSync.WORKERS` list, and the per-runner `main()` boilerplate. A
-  plugin's process-mode entry point is a single shared `PluginHostMain` that
-  loads the plugin via ServiceLoader and bridges stdio ↔ `PluginContext` — so a
-  new plugin writes *zero* protocol/launch code.
+  plugin's process-mode entry point is `PluginHostMain` — zero protocol/launch
+  code per plugin.
 
 ### 3.7 Plugin packaging & build wiring
 
-- One Gradle convention plugin (`jk.plugin-conventions`) replaces the
+- One Gradle convention plugin (`jk.worker-conventions`) replaces the
   copy-pasted `maven-publish` + fat-jar + `installLocalCas` + `writeXxxSha`
   blocks. Applying it to a module under `plugins/` gives it the manifest
   resource, the CAS side-load task, and the SHA emission automatically.
-- The Host reads available plugins from a generated manifest index (one resource
-  listing `{id, sha256, coordinates}`), regenerated by the convention plugin —
-  no hand-edited `WORKERS` array.
+- The Host reads available plugins from the `WorkerJar` enum (one registry, no
+  hand-edited list), generated SHA resources embedded in the jar.
 
 ### 3.8 Plugin trust model
 
@@ -411,133 +375,78 @@ deferred — a natural follow-on if/when a third-party plugin *registry* with
 untrusted authors appears. Posture C's real OS sandboxing stays out of scope —
 it's at odds with jk's single-static-binary, keep-it-simple ethos.
 
-(The `Services` facade is still built capability-first — the Host only hands a
-plugin the services it uses — but in v1 that's an internal API-hygiene measure,
-not a declared/audited contract.)
-
 Note this is orthogonal to `jk tool run` / `jkx`: those run published CLIs the
 user explicitly invoked — arbitrary code by definition, user-initiated, and not
 loaded into the Host. They keep their current model.
 
 ---
 
-## 4. What moves where
+## 4. What moves where (status)
 
-| Today | Target | Disposition |
+| Today | Target | Status |
 |---|---|---|
-| `core/model`, `core/run` | `kernel/model` | Keep; add Command model; ensure JDK+Lombok+JSpecify-only |
-| `core/{util,event,config,lock,layout,library,credential}` | `kernel/core` | Keep |
-| `io/{http,cache,repo,forge}` | `kernel/io` | Keep (CAS, action-cache, HTTP are universal) |
-| `io/git` | `plugins/git-client` | Move (JGit is a plugin dep) |
-| `resolver/*` + `supply-chain/deny` | `kernel/resolver` | Merge deny policy in |
-| `toolchain/*` | `kernel/toolchain` | Keep |
-| `engine/task/*` | `kernel/host` | Move (action graph = universal scheduler) |
-| `engine/compile/*`, `engine/test/*` | `plugins/{java,kotlin}-compiler`, `plugins/test-runner` | Merge parent halves into the owning plugin |
-| `runtime/*` (BuildPipeline, `*WorkerSetup`, `JkWorkerSync`) | `kernel/host` | Collapse 6 setups + sync + 8 launch sites → 1 launcher |
-| `supply-chain/*` (now just deny) | — | Module deleted |
-| `image/ImageConfig` + `image-runner` | `plugins/image-builder` | Merge |
-| `compat/{mvn,kotlin}` + `compat-runner` | `plugins/maven-bridge` | Merge; de-dup |
-| `compat/gradle` | `plugins/gradle-bridge` | Move |
-| `compat/{ToolInstaller,ToolProvisioning,…}` | `kernel/toolchain` | These are tool/JDK provisioning — universal |
-| `*-runner` modules | `plugins/*` | Renamed/merged; share `PluginHostMain` |
-| `Ndjson.java` ×2, `##JK*:` markers ×8 | `plugin-api` protocol codec | One implementation |
-| `cli/command/*` (78, picocli) | `BuildCommand`/`UiCommand` impls + own renderer | §5 |
+| `core/model`, `core/run` | `kernel/model` | ✓ Done |
+| `core/{util,credential,publish,image}` | `kernel/model` | ✓ Done |
+| `core/{config,lock,library,deny,layout,audit}` | `kernel/core` | ✓ Done |
+| `io/*` | `kernel/io` | ✓ Done |
+| `resolver/*` | `kernel/resolver` | ✓ Done |
+| `toolchain/*` | `kernel/toolchain` | ✓ Done |
+| `engine/task/*`, `runtime/*` | `kernel/host` | ✓ Done (Phase 5) |
+| `engine/compile/*`, `engine/test/*` | absorbed into `kernel/host` + plugins | ✓ Done (Phase 5) |
+| `supply-chain/*`, `image/`, `compat/` | — | ✓ Deleted (Phase 5) |
+| `engine`, `runtime` | — | ✓ Deleted (Phase 5) |
+| `audit-runner` | `plugins/auditor` | ✓ Done (renamed) |
+| `publish-runner` | `plugins/publisher` | ✓ Done (renamed) |
+| `image-runner` | `plugins/image-builder` | ✓ Done (renamed) |
+| `compat-runner` | `plugins/compat-bridge` | ✓ Done (renamed; split into maven+gradle deferred) |
+| `git-runner` | `plugins/git-client` | ✓ Done (renamed) |
+| `java-compiler`, `kotlin-compiler`, `test-runner` | `plugins/*` | ✓ Done (moved) |
+| `cli/command/*` (picocli) | own renderer + `CliCommand` impls | ✓ Done (Phase 3) |
+| `Ndjson.java` ×2, `##JK*:` markers ×8 | `plugin-api` protocol codec | ✓ Done (Phase 0–1) |
+| `*WorkerSetup` ×6, `JkWorkerSync.WORKERS` | `WorkerJar` enum | ✓ Done (Phase 2) |
+| `compat-bridge` → `maven-bridge` + `gradle-bridge` | `plugins/maven-bridge`, `plugins/gradle-bridge` | Deferred (Phase 7+) |
 
 ---
 
-## 5. Removing picocli
+## 5. Removing picocli — done (Phase 3)
 
-picocli is confined to `cli/` (67 files) and reached only through annotations +
-`Callable<Integer>`. Replace it incrementally:
-
-1. **Define the Command model** (§3.4) in `model`. Parameters/options/usage
-   become data, not annotations.
-2. **Build a parser + help renderer in `cli/`.** A small recursive-descent arg
-   parser over `Command.parameters()/options()` (jk already owns its terminal,
-   theme, `Glyphs`, and `HelpLayout`/`HelpRenderer` — the rendering half mostly
-   exists). Alias rewriting (`package`→`build`, etc.) stays a pre-parse pass as
-   it is today in `Jk.rewriteAlias`.
-3. **Port commands in tranches** (leaf verbs first, then parent/subcommand
-   groups like `jdk`, `tool`, `auth`). Each ported command drops its picocli
-   imports and implements `CliCommand`.
-4. **Delete picocli + picocli-codegen** once the last command is ported; drop
-   the `-Aproject=` annotation-processor arg and the picocli native-image
-   reflection config. Net native-image-size and cold-start win.
-
-This is independent of the plugin work and can land first or in parallel — it
-unblocks the GUI/IntelliJ story (a `Command` is renderable by any front-end).
+picocli was confined to `cli/` (67 files) and removed in Phase 3. jk now uses
+its own recursive-descent arg parser over `Command.parameters()/options()` and
+its own `HelpRenderer`. The native-image reflection config for picocli and the
+`picocli-codegen` annotation processor were both dropped.
 
 ---
 
-## 6. DRY cleanups this enables (concrete deletions)
+## 6. DRY wins delivered
 
-- Delete 5 of 6 `*WorkerSetup` classes → one `WorkerLauncher`.
-- Delete the `JkWorkerSync.WORKERS` hand-list → generated manifest index.
-- Delete both `Ndjson.java` copies → one protocol codec in `plugin-api`.
-- Delete 8 `writeXxxWorkerSha` blocks in `runtime/build.gradle.kts` + 1 in
-  `engine/build.gradle.kts` → one convention plugin.
-- Delete the repeated `-Djk.*.worker.jar` test plumbing (3 build files) → one
-  helper in the convention plugin.
-- Delete the duplicated `compat/` ↔ `compat-runner` split → single plugin.
-- Delete `supply-chain` and `image` as modules (absorbed).
-- Collapse 8 per-runner `main()`+spec-parse+JSON-escape implementations → one
-  `PluginHostMain`.
+- Deleted 5 of 6 `*WorkerSetup` classes → `WorkerJar` enum.
+- Deleted the `JkWorkerSync.WORKERS` hand-list → `WorkerJar` enum + SHA resources.
+- Deleted both `Ndjson.java` copies → one codec in `plugin-api`.
+- Deleted 8 `writeXxxWorkerSha` blocks → one `jk.worker-conventions` plugin.
+- Deleted the repeated `-Djk.*.worker.jar` test plumbing → one block per module.
+- Collapsed all per-runner `main()`+spec-parse+JSON-escape impls → `PluginHostMain`.
+- Deleted `supply-chain`, `image`, `compat`, `engine`, `runtime` as standalone modules.
 
 ---
 
 ## 7. Migration plan (phased — keep self-hosting & native build green at every step)
 
-jk builds itself, so the bar is: **`jk verify-build` stays byte-reproducible and
-the native image keeps building after every phase.** Sequence to minimize
-risk:
+- **Phase 0** ✓ — Extract `plugin-api` + protocol codec, no behaviour change.
+- **Phase 1** ✓ — `WorkerProcess` / `PluginHostMain` unified launcher; `WorkerJar` registry.
+- **Phase 2** ✓ — `jk.worker-conventions` convention plugin; SHA emission per-module.
+- **Phase 3** ✓ — Own arg parser + help renderer; picocli deleted.
+- **Phase 4** ✓ — Workspace Host (`HostMain`, `HostDispatch`, `HostLauncher`, `StreamingGoalListener`, `ReceivingGoalListener`); progress bar upgrade via `phases` event.
+- **Phase 5** ✓ — Module reorg: `engine`/`runtime` → `kernel/host`; vestigial modules deleted; module moves + renames.
+- **Phase 6** ✓ — `PluginLoader` in-process dispatch (URLClassLoader isolation for friendly plugins); `PluginManifest.isolation` field.
+- **Phase 7** — Third-party plugin resolution from `[plugins]` in `jk.toml`: resolve coordinates → CAS, pin SHA in `jk.lock`, forced `isolation=process`. Prerequisite: `plugin-api` exposes `Goal`/`Phase` to plugins via `:model` dependency (done).
 
-- **Phase 0 — Extract `plugin-api` + protocol codec, no behaviour change.**
-  Create the module; land one canonical NDJSON codec (the parent-side *reader* —
-  `str`/`intValue`/`bool`/`has`/`strArray`/`nested` — plus a `quote()` *writer*
-  helper). Repoint the parent-side reader consumers (engine: `KotlincDriver`,
-  `WorkerJavac`, `JUnitLauncher`) and delete `engine/compile/Ndjson.java`.
-  Note: the two `Ndjson.java` files are *not* duplicates — one is the reader,
-  one is the kotlin worker's `quote()` *writer*. The writer lives in a thin-jar
-  worker whose runtime classpath is assembled by the launcher, so migrating it
-  off its private copy is folded into Phase 1 (where that classpath is reworked)
-  rather than forced here. Phase 0 verifies the codec is sufficient before
-  anything depends on it.
-- **Phase 1 — One `WorkerLauncher` + `PluginHostMain`.** Collapse the 6
-  `*WorkerSetup` classes and the 8 launch sites behind one launcher; put
-  `plugin-api` on every worker's classpath so workers consume the shared codec
-  (retiring `kotlin-compiler/Ndjson.java` and the inline `quote()`s in the other
-  runners). Convert one runner (suggest `git-client`, smallest, self-contained)
-  to the ServiceLoader + manifest + shared-main shape end-to-end. Prove the SPI
-  on one plugin.
-- **Phase 2 — Convention plugin + manifest index.** Replace the per-runner
-  Gradle boilerplate and the `JkWorkerSync.WORKERS` list. Migrate the remaining
-  runners to it mechanically.
-- **Phase 3 — Command model + drop picocli** (§5). Independent; can overlap
-  Phases 0–2.
-- **Phase 4 — The Workspace Host.** Introduce `kernel/host` as the JVM that owns
-  the scheduler and loads plugins in-process via isolated classloaders. The CLI
-  launches it. Initially one-shot (no daemon) to match today's semantics.
-- **Phase 5 — Module reorg & DRY merges** (§4): fold `engine`/`runtime` into
-  `kernel/host`, merge each runner's parent half into its plugin, delete
-  `supply-chain`/`image`/`compat` as standalone modules, move `io/git` →
-  `git-client`. Do this *after* the SPI is proven so merges are mechanical.
-- **Phase 6 — In-process isolation as default; `isolation=process` opt-in.**
-  Flip first-party plugins with friendly classpaths (java-compiler, test-runner)
-  to in-process; keep hostile ones (image-builder/Jib, publisher/BouncyCastle,
-  git-client/JGit) on `isolation=process` until verified. Third-party plugins
-  are forced to `isolation=process` (§3.8).
-- **Phase 7 (optional) — Third-party plugin resolution** from Maven coordinates
-  in `jk.toml`: pin+verify into `jk.lock`, forced `isolation=process` (§3.8,
-  Posture A).
-
-Each phase is independently shippable and leaves the tree green. (There is no
-daemon phase — the Host is one-shot by design, §3.1/§3.8.)
+Each phase is independently shippable and leaves the tree green.
 
 ---
 
 ## 8. Settled decisions
 
-All foundational decisions are settled; none block starting Phase 0.
+All foundational decisions are settled.
 
 1. **Host lifetime — one-shot, no daemon.** The Host starts, runs the workspace
    Goal, exits. Deliberate differentiation from Gradle; keeps the model simple
@@ -550,26 +459,18 @@ All foundational decisions are settled; none block starting Phase 0.
 3. **Third-party trust posture — Posture A for v1 (§3.8).** Pin+verify every
    plugin, load only declared plugins, force `isolation=process` for third-party
    (preserving the sandbox seam). Capability declaration/audit (Posture B) and
-   OS sandboxing (Posture C) are deferred — B is a natural follow-on if/when a
-   third-party plugin registry appears.
+   OS sandboxing (Posture C) are deferred.
 4. **`Command` and friends live in `model`.** `Command`, `CliCommand`,
    `BuildCommand`, `UiCommand`, `Parameter`, `Option`, `Usage` are domain types
    in `kernel/model`, alongside `Goal`/`Phase` — one SPI module, shared by the
-   CLI and any future front-end (GUI, IntelliJ bridge). No separate
-   `command-api`.
-5. **Wire protocol — NDJSON.** Kept for human-readability and debuggability;
-   interactions are string-heavy enough that a binary framing's CPU/throughput
-   edge wouldn't outweigh losing greppable, eyeball-able streams. Lives behind a
-   codec interface in `plugin-api` so the framing can change later without
-   touching call sites — but binary is not planned.
+   CLI and any future front-end.
+5. **Wire protocol — NDJSON.** Single `##JKH:` prefix, one codec in `plugin-api`.
+   Binary framing is not planned.
 
 ---
 
 ## 9. Risks
 
-- **Scope.** This touches every module. Mitigated by the phased plan — each
-  phase is shippable and reversible, and Phase 0–3 deliver most of the DRY win
-  before the risky module reorg.
 - **Reproducibility regression.** Moving code between modules changes jar
   contents/order. Mitigated by `jk verify-build` gating every phase.
 - **Native-image breakage.** Reflection/resource config is currently
@@ -577,15 +478,13 @@ All foundational decisions are settled; none block starting Phase 0.
   config along. The CLI shrinks (picocli gone, plugin bytecode never reachable),
   which should net-improve size and cold start.
 - **In-process classloader isolation leaks.** Two plugins with conflicting deps
-  in-process is the classic failure mode. Mitigated by `isolation=process` as a
+  in-process is the classic failure mode. Mitigated by `isolation=process` as an
   always-correct fallback and by parenting plugin loaders to an API-only loader.
 - **Over-promising plugin security.** Classloader/process isolation is not a
   security boundary (§3.8). Docs and `jk` output must not imply third-party
-  plugins are sandboxed when they run with full user privileges. Mitigated by
-  honest capability surfacing and by treating real containment (Posture C) as
-  explicitly out of scope.
+  plugins are sandboxed when they run with full user privileges.
 
 ---
 
-*End of proposal. Companion design specs (protocol schema, plugin manifest
-format, Host daemon RFC) to be added under `docs/` as phases land.*
+*Companion design specs (protocol schema, plugin manifest format) to be added
+under `docs/` as Phase 7 lands.*

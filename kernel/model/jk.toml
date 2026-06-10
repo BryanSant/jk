@@ -1,0 +1,7 @@
+[project]
+group    = "dev.jkbuild"
+name     = "jk-model"
+version  = "0.6.0-SNAPSHOT"
+description = "jk domain model: Goal/Phase/GoalListener, Dependency/Coordinate, zero external deps."
+jdk      = 25
+java     = 25
