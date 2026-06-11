@@ -13,6 +13,7 @@ import dev.jkbuild.command.CacheCommand;
 import dev.jkbuild.command.CompileCommand;
 import dev.jkbuild.command.ExportCommand;
 import dev.jkbuild.command.GradleCommand;
+import dev.jkbuild.command.IdeaCommand;
 import dev.jkbuild.command.ImageCommand;
 import dev.jkbuild.command.ImportCommand;
 import dev.jkbuild.command.InitCommand;
@@ -96,6 +97,7 @@ public final class CommandDispatch {
             new ToolCommand(),
             new LibraryCommand(),
             new RepoCommand(),
+            new IdeaCommand(),
             new ExportCommand(),
             new ImportCommand(),
             new PublishCommand(),
