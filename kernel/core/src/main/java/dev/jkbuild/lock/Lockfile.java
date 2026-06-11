@@ -113,7 +113,9 @@ public record Lockfile(
             List<Scope> scopes,
             List<String> deps,
             String pinnedBy,
-            GitInfo git) {
+            GitInfo git,
+            /** SHA-256 of the {@code -sources.jar}, or {@code null} when not published. */
+            String sourcesChecksum) {
 
         public Package {
             Objects.requireNonNull(name, "name");
@@ -128,12 +130,20 @@ public record Lockfile(
             deps = List.copyOf(deps);
         }
 
+        /** Without sources checksum (the common case). */
+        public Package(
+                String name, String version, String source,
+                String checksum, String path,
+                List<Scope> scopes, List<String> deps, String pinnedBy, GitInfo git) {
+            this(name, version, source, checksum, path, scopes, deps, pinnedBy, git, null);
+        }
+
         /** Without git provenance — the common Maven-coordinate case. */
         public Package(
                 String name, String version, String source,
                 String checksum, String path,
                 List<Scope> scopes, List<String> deps, String pinnedBy) {
-            this(name, version, source, checksum, path, scopes, deps, pinnedBy, null);
+            this(name, version, source, checksum, path, scopes, deps, pinnedBy, null, null);
         }
 
         /**
@@ -144,7 +154,7 @@ public record Lockfile(
                 String name, String version, String source,
                 String checksum, String path,
                 List<Scope> scopes, List<String> deps) {
-            this(name, version, source, checksum, path, scopes, deps, null, null);
+            this(name, version, source, checksum, path, scopes, deps, null, null, null);
         }
 
         /** Convenience constructor for callers that don't care about scopes (defaults to MAIN). */

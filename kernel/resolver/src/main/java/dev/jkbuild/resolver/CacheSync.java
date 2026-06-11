@@ -139,6 +139,72 @@ public final class CacheSync {
     }
 
     /**
+     * Fetch sources JARs for every locked package that has a
+     * {@code sources-checksum} field. Already-cached sources are skipped.
+     * Packages without a sources checksum are silently ignored.
+     *
+     * @return count of sources JARs fetched (not counting those already cached)
+     */
+    public int syncSources(Lockfile lock, ProgressObserver observer)
+            throws IOException, InterruptedException {
+        Map<String, MavenRepo> repoCache = new HashMap<>();
+        List<PendingFetch> pending = new ArrayList<>();
+        for (Lockfile.Package pkg : lock.packages()) {
+            if (pkg.sourcesChecksum() == null) continue;
+            String hex = pkg.sourcesChecksum().startsWith("sha256:")
+                    ? pkg.sourcesChecksum().substring("sha256:".length())
+                    : pkg.sourcesChecksum();
+            if (cas.contains(hex)) {
+                observer.upToDate(pkg);
+                continue;
+            }
+            // Reuse the existing repoFor() with the package's original source.
+            try { pending.add(new PendingFetch(pkg, hex, repoFor(pkg.source(), repoCache))); }
+            catch (IllegalArgumentException ignored) {} // non-maven source
+        }
+
+        HostRateLimiter limiter = HostRateLimiter.shared();
+        int fetched = 0;
+        List<java.util.concurrent.CompletableFuture<FetchResult>> futures = new ArrayList<>();
+        for (PendingFetch p : pending) {
+            futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
+                    () -> fetchSources(p, limiter), dev.jkbuild.util.JkThreads.io()));
+        }
+        for (int i = 0; i < futures.size(); i++) {
+            FetchResult r;
+            try { r = futures.get(i).get(); }
+            catch (java.util.concurrent.ExecutionException e) {
+                observer.failed(pending.get(i).pkg, e.getMessage());
+                continue;
+            }
+            if (r.error() == null) { fetched++; observer.fetched(pending.get(i).pkg); }
+            else                   { observer.failed(pending.get(i).pkg, r.error()); }
+        }
+        return fetched;
+    }
+
+    private static FetchResult fetchSources(PendingFetch p, HostRateLimiter limiter) {
+        int colon = p.pkg.name().indexOf(':');
+        Coordinate sourcesCoord = new dev.jkbuild.model.Coordinate(
+                p.pkg.name().substring(0, colon),
+                p.pkg.name().substring(colon + 1),
+                p.pkg.version(), "sources", "jar");
+        try {
+            URI host = p.repo.baseUrl();
+            MavenRepo.Fetched f = limiter.run(host, () -> p.repo.fetchArtifact(sourcesCoord));
+            if (!f.sha256().equals(p.expectedHex)) {
+                return FetchResult.failure(p.pkg.name() + " sources: checksum mismatch");
+            }
+            return FetchResult.ok();
+        } catch (IOException e) {
+            return FetchResult.failure(p.pkg.name() + " sources: " + e.getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return FetchResult.failure(p.pkg.name() + " sources: interrupted");
+        }
+    }
+
+    /**
      * Per-package callback driven by {@link #sync(Lockfile, ProgressObserver)}.
      * Methods are invoked once per package, on whatever thread resolved
      * that package's outcome. Implementations need to be thread-safe.

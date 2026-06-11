@@ -112,7 +112,9 @@ public final class LockfileReader {
             git = new Lockfile.Package.GitInfo(gitUrl, requireString(table, "rev"),
                     table.getString("ref"));
         }
-        return new Lockfile.Package(name, version, source, checksum, path, scopes, deps, pinnedBy, git);
+        String sourcesChecksum = table.getString("sources"); // optional
+        return new Lockfile.Package(name, version, source, checksum, path, scopes, deps, pinnedBy,
+                git, sourcesChecksum);
     }
 
     private static String requireString(TomlParseResult result, String key) {

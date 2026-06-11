@@ -52,6 +52,9 @@ public final class LockfileWriter {
             if (pkg.checksum() != null) {
                 out.append("checksum = ").append(quote(pkg.checksum())).append('\n');
             }
+            if (pkg.sourcesChecksum() != null) {
+                out.append("sources  = ").append(quote(pkg.sourcesChecksum())).append('\n');
+            }
             if (pkg.pinnedBy() != null) {
                 out.append("pinned-by = ").append(quote(pkg.pinnedBy())).append('\n');
             }

@@ -92,6 +92,23 @@ public final class LockOrchestrator {
         return lock(project, jkVersion, List.of(), true, ResolveObserver.NOOP);
     }
 
+    /**
+     * Lock and additionally attempt to resolve the {@code -sources.jar} for
+     * every Maven package, populating {@link Lockfile.Package#sourcesChecksum()}
+     * when found. Sources that return 404 are silently skipped — not all
+     * packages publish sources.
+     */
+    public Lockfile lockWithSources(
+            JkBuild project,
+            String jkVersion,
+            Collection<String> featuresRequested,
+            boolean withDefaults,
+            ResolveObserver observer) throws IOException, InterruptedException {
+        Lockfile base = lock(project, jkVersion, featuresRequested, withDefaults, observer,
+                Map.of());
+        return attachSources(base);
+    }
+
     public Lockfile lock(
             JkBuild project,
             String jkVersion,
@@ -333,6 +350,44 @@ public final class LockOrchestrator {
             case VersionSelector.Range ignored -> null;
             case VersionSelector.Latest ignored -> null;
         };
+    }
+
+    /**
+     * Try to fetch {@code -sources.jar} for every Maven package in {@code lock}
+     * and return a copy with {@link Lockfile.Package#sourcesChecksum()} populated
+     * where sources exist. Packages that return 404, have a non-maven source, or
+     * already have a sources checksum are left unchanged.
+     */
+    public Lockfile attachSources(Lockfile lock) throws InterruptedException {
+        List<Lockfile.Package> updated = new ArrayList<>();
+        for (Lockfile.Package pkg : lock.packages()) {
+            // Skip non-Maven packages (git, local, file deps) and those already resolved.
+            if (!pkg.source().contains("maven") && !pkg.source().startsWith("central")
+                    || pkg.sourcesChecksum() != null) {
+                updated.add(pkg);
+                continue;
+            }
+            int colon = pkg.name().indexOf(':');
+            if (colon < 0) { updated.add(pkg); continue; }
+            Coordinate sourcesCoord = new Coordinate(
+                    pkg.name().substring(0, colon),
+                    pkg.name().substring(colon + 1),
+                    pkg.version(), "sources", "jar");
+            try {
+                RepoGroup.RepoFetched hit = repos.tryFetchArtifact(sourcesCoord).orElse(null);
+                if (hit != null) {
+                    updated.add(new Lockfile.Package(
+                            pkg.name(), pkg.version(), pkg.source(),
+                            pkg.checksum(), pkg.path(), pkg.scopes(), pkg.deps(),
+                            pkg.pinnedBy(), pkg.git(),
+                            "sha256:" + hit.fetched().sha256()));
+                    continue;
+                }
+            } catch (Exception ignored) { /* sources not available for this package */ }
+            updated.add(pkg);
+        }
+        return new Lockfile(lock.version(), lock.generatedBy(), lock.resolutionAlgorithm(),
+                lock.jdk(), lock.kotlin(), updated, lock.plugins());
     }
 
     /** BFS through the resolved graph starting from {@code roots}. */

@@ -71,6 +71,7 @@ public final class LockCommand implements CliCommand {
 
     private List<String> features = List.of();
     private boolean noDefaultFeatures;
+    private boolean sources;
     private URI repoUrl;
     private Path cacheDir;
     private GlobalOptions global;
@@ -91,6 +92,7 @@ public final class LockCommand implements CliCommand {
                 Opt.value("<a,b,...>", "Activate the listed features in addition to defaults.", "--features")
                         .splitOn(","),
                 Opt.flag("Don't activate the project's default features.", "--no-default-features"),
+                Opt.flag("Also resolve and pin sources JARs for all Maven dependencies.", "--sources"),
                 Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
                 Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                         "--cache-dir").hide());
@@ -103,6 +105,7 @@ public final class LockCommand implements CliCommand {
     public int run(Invocation in) throws Exception {
         this.features = in.values("features");
         this.noDefaultFeatures = in.isSet("no-default-features");
+        this.sources = in.isSet("sources");
         this.repoUrl = in.value("repo-url").map(URI::create).orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         this.global = GlobalOptions.from(in);
@@ -272,8 +275,11 @@ public final class LockCommand implements CliCommand {
                         }
                     };
                     try {
-                        Lockfile lock = orchestrator.lock(
-                                prep.project(), Jk.VERSION, features, !noDefaultFeatures, observer);
+                        Lockfile lock = sources
+                                ? orchestrator.lockWithSources(
+                                        prep.project(), Jk.VERSION, features, !noDefaultFeatures, observer)
+                                : orchestrator.lock(
+                                        prep.project(), Jk.VERSION, features, !noDefaultFeatures, observer);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         String kotlinVersion = resolveKotlinVersion(eff, repos);
                         if (kotlinVersion != null) {
@@ -346,8 +352,11 @@ public final class LockCommand implements CliCommand {
                     Lockfile lock = goal.get(LOCKFILE).orElseThrow();
                     int pkgs = lock.packages().size();
                     int plgs = lock.plugins().size();
+                    long srcs = lock.packages().stream()
+                            .filter(p -> p.sourcesChecksum() != null).count();
                     String depStr = "Resolved " + pkgs + " dependenc"
                             + (pkgs == 1 ? "y" : "ies");
+                    if (srcs > 0) depStr += ", " + srcs + " with sources";
                     return plgs > 0
                             ? depStr + ", " + plgs + " plugin" + (plgs == 1 ? "" : "s")
                             : depStr;

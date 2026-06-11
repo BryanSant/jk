@@ -58,6 +58,7 @@ public final class SyncCommand implements CliCommand {
     private Path jdksDir;
     private java.net.URI repoUrl;
     private boolean offlinePrepare;
+    private boolean sources;
     private GlobalOptions global;
 
     @Override
@@ -79,7 +80,8 @@ public final class SyncCommand implements CliCommand {
                         "--jdks-dir").hide(),
                 Opt.value("<url>", "Override declared repos with a single URL (for tests).",
                         "--repo-url").hide(),
-                Opt.flag("Prepare for an offline build.", "--offline-prepare"));
+                Opt.flag("Prepare for an offline build.", "--offline-prepare"),
+                Opt.flag("Also download sources JARs for packages that have them.", "--sources"));
     }
 
     /** Cross-phase keys. Lifted out so each phase reads/writes through the same handle. */
@@ -102,6 +104,7 @@ public final class SyncCommand implements CliCommand {
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.repoUrl = in.value("repo-url").map(java.net.URI::create).orElse(null);
         this.offlinePrepare = in.isSet("offline-prepare");
+        this.sources = in.isSet("sources");
         this.global = GlobalOptions.from(in);
 
         Path dir = global.workingDir();
@@ -304,10 +307,45 @@ public final class SyncCommand implements CliCommand {
                 })
                 .build();
 
+        // Sync sources JARs for packages that have sourcesChecksum pinned in lock.
+        Phase syncSources = Phase.builder("sync-sources")
+                .kind(PhaseKind.IO)
+                .requires("parse-lock")
+                .scope(0)
+                .execute(ctx -> {
+                    if (!sources) return; // opt-in only
+                    Lockfile lock = ctx.require(LOCKFILE);
+                    long withSrc = lock.packages().stream()
+                            .filter(p -> p.sourcesChecksum() != null).count();
+                    if (withSrc == 0) return;
+                    ctx.updateScope((int) withSrc);
+                    ctx.label("sync sources");
+                    Cas cas = new Cas(cache);
+                    var observer = new dev.jkbuild.resolver.CacheSync.ProgressObserver() {
+                        @Override public void fetched(Lockfile.Package pkg) {
+                            ctx.label("fetched sources " + pkg.name() + ":" + pkg.version());
+                            ctx.progress(1);
+                        }
+                        @Override public void upToDate(Lockfile.Package pkg) { ctx.progress(1); }
+                        @Override public void failed(Lockfile.Package pkg, String error) {
+                            ctx.warn("sources", pkg.name() + ":" + pkg.version() + " — " + error);
+                            ctx.progress(1);
+                        }
+                    };
+                    try {
+                        new dev.jkbuild.resolver.CacheSync(cas, new dev.jkbuild.http.Http())
+                                .syncSources(lock, observer);
+                    } catch (Exception e) {
+                        ctx.warn("sources", "sources sync failed: " + e.getMessage());
+                    }
+                })
+                .build();
+
         Goal goal = Goal.builder("sync")
                 .addPhase(parseLock)
                 .addPhase(ensureJdk)
                 .addPhase(syncCas)
+                .addPhase(syncSources)
                 .addPhase(syncPlugins)
                 .addPhase(syncWorkers)
                 .addPhase(writeManifest)
