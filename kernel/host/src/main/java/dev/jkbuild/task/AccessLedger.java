@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
+import dev.jkbuild.util.JkDirs;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -19,6 +21,8 @@ import java.util.Map;
  * mtime) or {@code noatime} (never updates). Our own ledger is the only
  * reliable way to know "this dep jar was touched again today."
  *
+ * <p>Default location: {@code ~/.jk/cache/.access.log}.
+ *
  * <p>Format (text, append-only, line-per-touch):
  * <pre>{@code
  *   <epoch-millis>\t<hex>
@@ -34,13 +38,18 @@ import java.util.Map;
  */
 public final class AccessLedger {
 
-    static final String FILE_NAME = "access-log";
+    static final String FILE_NAME = ".access.log";
     static final long COMPACT_THRESHOLD_BYTES = 1L * 1024 * 1024; // 1 MiB
 
     private final Path file;
 
-    public AccessLedger(Path casRoot) {
-        this.file = casRoot.resolve(FILE_NAME);
+    /** Default-path constructor — writes to {@code ~/.jk/cache/.access.log}. */
+    public static AccessLedger atDefaultPath() {
+        return new AccessLedger(JkDirs.cache().resolve(FILE_NAME));
+    }
+
+    public AccessLedger(Path file) {
+        this.file = file;
     }
 
     /**

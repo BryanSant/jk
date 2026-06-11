@@ -50,7 +50,8 @@ public final class ClasspathResolver {
     /** Filtered: only packages tagged with one of {@code scopes}. */
     public List<Path> classpathFor(Lockfile lock, Set<Scope> scopes) {
         List<Path> result = new ArrayList<>(lock.packages().size());
-        dev.jkbuild.task.AccessLedger ledger = new dev.jkbuild.task.AccessLedger(cas.root());
+        dev.jkbuild.task.AccessLedger ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
+        dev.jkbuild.task.ArtifactMap artifacts = dev.jkbuild.task.ArtifactMap.atDefaultPath();
         for (Lockfile.Package pkg : lock.packages()) {
             if (!pkg.inAnyScope(scopes)) continue;
             String checksum = pkg.checksum();
@@ -59,10 +60,8 @@ public final class ClasspathResolver {
                     ? checksum.substring("sha256:".length())
                     : checksum;
             result.add(cas.pathFor(hex));
-            // Each classpath build is one "I used this dep" signal for
-            // the LRU evictor — feeds Cargo-style "stop tracking what
-            // you haven't touched in a while" decisions.
             ledger.touch(hex);
+            artifacts.put(hex, pkg.name() + ":" + pkg.version());
         }
         return result;
     }

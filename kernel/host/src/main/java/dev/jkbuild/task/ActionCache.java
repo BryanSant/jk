@@ -137,7 +137,7 @@ public final class ActionCache {
             deleteRecursively(outputDir);
         }
         Files.createDirectories(outputDir);
-        AccessLedger ledger = new AccessLedger(cas.root());
+        AccessLedger ledger = AccessLedger.atDefaultPath();
         for (Map.Entry<String, String> entry : record.outputs().entrySet()) {
             Path target = outputDir.resolve(entry.getKey());
             // Hard-link from the CAS object on POSIX same-fs; cross-fs and

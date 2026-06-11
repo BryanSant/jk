@@ -213,7 +213,7 @@ public final class CacheCommand implements CliCommand {
                     var sweepReport = dev.jkbuild.task.CasSweep.sweep(cas, liveRefs, dryRun);
                     sweptCount = sweepReport.deleted(); sweptBytes = sweepReport.freedBytes(); sweptKept = sweepReport.kept();
                     if (budgetBytes > 0) {
-                        var ledger = new dev.jkbuild.task.AccessLedger(root);
+                        var ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
                         var evictReport = dev.jkbuild.task.LruEvictor.evictDownTo(cas, budgetBytes, liveRefs, ledger, dryRun);
                         evictedCount = evictReport.deleted(); evictedBytes = evictReport.freedBytes(); evictedReachable = evictReport.reachableEvicted(); finalSize = evictReport.finalSize();
                         if (!dryRun) { try { ledger.compactIfLarge(); } catch (IOException ignored) {} }

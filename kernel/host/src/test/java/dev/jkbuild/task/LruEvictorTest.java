@@ -21,7 +21,7 @@ class LruEvictorTest {
         Cas cas = new Cas(tempDir);
         cas.put("a".repeat(100).getBytes());
         cas.put("b".repeat(100).getBytes());
-        AccessLedger ledger = new AccessLedger(tempDir);
+        AccessLedger ledger = new AccessLedger(tempDir.resolve(".access.log"));
 
         var report = LruEvictor.evictDownTo(cas, 10_000, Set.of(), ledger, false);
 
@@ -41,7 +41,7 @@ class LruEvictorTest {
         Files.setLastModifiedTime(middle, FileTime.fromMillis(now - 20_000));
         Files.setLastModifiedTime(newest, FileTime.fromMillis(now - 10_000));
 
-        AccessLedger ledger = new AccessLedger(tempDir);
+        AccessLedger ledger = new AccessLedger(tempDir.resolve(".access.log"));
         // Budget = newest's size only — should evict oldest + middle.
         long budget = Files.size(newest);
         var report = LruEvictor.evictDownTo(cas, budget, Set.of(), ledger, false);
@@ -63,7 +63,7 @@ class LruEvictorTest {
 
         // Ledger flips the order: olderMtime was touched recently;
         // newerMtime hasn't been touched at all.
-        AccessLedger ledger = new AccessLedger(tempDir);
+        AccessLedger ledger = new AccessLedger(tempDir.resolve(".access.log"));
         ledger.touch(cas.hashFromPath(olderMtime).orElseThrow());
 
         long budget = Files.size(olderMtime);
@@ -80,7 +80,7 @@ class LruEvictorTest {
         String hex = cas.hashFromPath(obj).orElseThrow();
         Files.setLastModifiedTime(obj, FileTime.fromMillis(System.currentTimeMillis() - 60_000));
 
-        AccessLedger ledger = new AccessLedger(tempDir);
+        AccessLedger ledger = new AccessLedger(tempDir.resolve(".access.log"));
         // Budget = 0 forces eviction; declare the object reachable.
         var report = LruEvictor.evictDownTo(cas, 0L, Set.of(hex), ledger, false);
 
@@ -95,7 +95,7 @@ class LruEvictorTest {
         Files.setLastModifiedTime(obj, FileTime.fromMillis(System.currentTimeMillis() - 60_000));
 
         var report = LruEvictor.evictDownTo(cas, 0L,
-                Set.of(), new AccessLedger(tempDir), true);
+                Set.of(), new AccessLedger(tempDir.resolve(".access.log")), true);
 
         assertThat(report.deleted()).isEqualTo(1);
         assertThat(Files.exists(obj)).as("dry-run should not delete").isTrue();

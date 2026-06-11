@@ -15,7 +15,7 @@ import java.util.Map;
 
 /**
  * Append-only journal of JDK usage events. Lives at
- * {@code $JK_DATA_DIR/jdk-access-log} (XDG: {@code ~/.local/share/jk/}).
+ * {@code $JK_JDKS_DIR/.access.log} (default: {@code ~/.jk/jdks/.access.log}).
  *
  * <p>Purpose: build the long-tail "which JDKs does this user actually
  * use, and how often" signal that future wizards lean on:
@@ -49,19 +49,19 @@ import java.util.Map;
  */
 public final class JdkAccessLedger {
 
-    /** XDG-aware default location. */
-    public static final String FILE_NAME = "jdk-access-log";
+    /** Default file name inside the jdks directory. */
+    public static final String FILE_NAME = ".access.log";
 
     private static final long COMPACT_THRESHOLD_BYTES = 1L * 1024 * 1024; // 1 MiB
 
     private final Path file;
 
     /**
-     * Default-path constructor — writes under {@link JkDirs#dataDir()}.
+     * Default-path constructor — writes under {@link JkDirs#jdksDir()}.
      * Callers that need a custom path (tests) use {@link #JdkAccessLedger(Path)}.
      */
     public static JdkAccessLedger atDefaultPath() {
-        return new JdkAccessLedger(JkDirs.data().resolve(FILE_NAME));
+        return new JdkAccessLedger(JkDirs.jdks().resolve(FILE_NAME));
     }
 
     public JdkAccessLedger(Path file) {

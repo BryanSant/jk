@@ -15,7 +15,7 @@ class JdkAccessLedgerTest {
 
     @Test
     void touch_appends_a_journal_line(@TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("jdk-access-log");
+        Path file = tempDir.resolve(".access.log");
         JdkAccessLedger ledger = new JdkAccessLedger(file);
 
         ledger.touch("temurin-21.0.5", "resolve");
@@ -28,7 +28,7 @@ class JdkAccessLedgerTest {
 
     @Test
     void latest_by_identifier_aggregates_events(@TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("jdk-access-log");
+        Path file = tempDir.resolve(".access.log");
         // Hand-stitch the journal so we can control the timestamps.
         Files.writeString(file, """
                 100\tinstall\ttemurin-21.0.5
@@ -49,7 +49,7 @@ class JdkAccessLedgerTest {
 
     @Test
     void most_recent_first_orders_by_latest_event(@TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("jdk-access-log");
+        Path file = tempDir.resolve(".access.log");
         Files.writeString(file, """
                 100\tresolve\told
                 500\tresolve\tnew
@@ -79,7 +79,7 @@ class JdkAccessLedgerTest {
 
     @Test
     void compact_rewrites_above_threshold(@TempDir Path tempDir) throws IOException {
-        Path file = tempDir.resolve("jdk-access-log");
+        Path file = tempDir.resolve(".access.log");
         JdkAccessLedger ledger = new JdkAccessLedger(file);
         // Generate > 1 MiB of duplicate touches against a handful of ids.
         StringBuilder big = new StringBuilder();
