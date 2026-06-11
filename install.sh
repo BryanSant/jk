@@ -5,12 +5,12 @@
 # Usage:
 #   curl -fsSL https://jkbuild.dev/install.sh | bash
 #   wget -qO- https://jkbuild.dev/install.sh | bash
+#   bash install.sh [/path/to/jk[.xz|.gz]]
 #
 # Environment variables:
-#   JK_ARCHIVE_URL  Override the archive URL to download. When set, the
-#                   compression format is inferred from the file extension
-#                   (.xz or .gz). Defaults to the latest release matching the
-#                   compressor available on this machine.
+#   JK_ARCHIVE_URL  Override the archive URL to download. Supports .xz, .gz,
+#                   or a plain binary (no extension). Defaults to the latest
+#                   release matching the compressor available on this machine.
 #   JK_INSTALL_DIR  Override the install directory (default: ~/.jk/bin).
 #
 set -euo pipefail
@@ -18,6 +18,9 @@ set -euo pipefail
 JK_HOME="${JK_HOME:-$HOME/.jk}"
 INSTALL_DIR="${JK_INSTALL_DIR:-$JK_HOME/bin}"
 BASE_URL="https://jkbuild.dev/releases/latest"
+
+# Optional positional argument: local path to jk, jk.xz, or jk.gz.
+LOCAL_FILE="${1:-}"
 
 # ---- pretty output ---------------------------------------------------------
 
@@ -36,44 +39,52 @@ die()   { err "$@"; exit 1; }
 
 have() { command -v "$1" >/dev/null 2>&1; }
 
-# Pick a downloader.
-if have curl; then
-  download() { curl -fsSL "$1" -o "$2"; }
-elif have wget; then
-  download() { wget -q "$1" -O "$2"; }
-else
-  die "neither curl nor wget found on PATH; cannot download jk."
+# Pick a downloader (not needed when a local file is provided).
+if [ -z "$LOCAL_FILE" ]; then
+  if have curl; then
+    download() { curl -fsSL "$1" -o "$2"; }
+  elif have wget; then
+    download() { wget -q "$1" -O "$2"; }
+  else
+    die "neither curl nor wget found on PATH; cannot download jk."
+  fi
 fi
 
-# Pick a decompressor. Prefer xz; fall back to gunzip.
+# Preferred extension for auto URL resolution: xz > gz > plain binary.
 if have xz; then
-  COMPRESSOR="xz"
   EXT="xz"
-  decompress() { xz -dc "$1" > "$2"; }
 elif have gunzip; then
-  COMPRESSOR="gunzip"
   EXT="gz"
-  decompress() { gunzip -c "$1" > "$2"; }
 else
-  die "neither xz nor gunzip found on PATH; cannot decompress the archive."
+  EXT=""
 fi
 
-# ---- resolve archive URL ---------------------------------------------------
+# ---- resolve source (URL or local file) ------------------------------------
 
-if [ -n "${JK_ARCHIVE_URL:-}" ]; then
-  ARCHIVE_URL="$JK_ARCHIVE_URL"
-  case "$ARCHIVE_URL" in
+# Sets decompress() based on the file/URL extension.
+# Plain binary (no .xz/.gz) is installed with cp.
+infer_decompress() {
+  case "$1" in
     *.xz)
-      have xz || die "JK_ARCHIVE_URL points at a .xz archive but xz is not installed."
+      have xz || die "'$1' is a .xz file but xz is not installed."
       decompress() { xz -dc "$1" > "$2"; } ;;
     *.gz)
-      have gunzip || die "JK_ARCHIVE_URL points at a .gz archive but gunzip is not installed."
+      have gunzip || die "'$1' is a .gz file but gunzip is not installed."
       decompress() { gunzip -c "$1" > "$2"; } ;;
     *)
-      note "Unknown archive extension; using $COMPRESSOR to decompress." ;;
+      decompress() { cp "$1" "$2"; } ;;
   esac
+}
+
+if [ -n "$LOCAL_FILE" ]; then
+  [ -f "$LOCAL_FILE" ] || die "local file not found: $LOCAL_FILE"
+  infer_decompress "$LOCAL_FILE"
+elif [ -n "${JK_ARCHIVE_URL:-}" ]; then
+  ARCHIVE_URL="$JK_ARCHIVE_URL"
+  infer_decompress "$ARCHIVE_URL"
 else
-  ARCHIVE_URL="$BASE_URL/jk.$EXT"
+  ARCHIVE_URL="$BASE_URL/jk${EXT:+.$EXT}"
+  infer_decompress "$ARCHIVE_URL"
 fi
 
 # ---- download & install ----------------------------------------------------
@@ -82,18 +93,22 @@ TMPDIR_JK="$(mktemp -d "${TMPDIR:-/tmp}/jk-install.XXXXXX")"
 cleanup() { rm -rf "$TMPDIR_JK"; }
 trap cleanup EXIT
 
-ARCHIVE_FILE="$TMPDIR_JK/jk.archive"
-
-info "Downloading jk from $ARCHIVE_URL"
-download "$ARCHIVE_URL" "$ARCHIVE_FILE" \
-  || die "failed to download $ARCHIVE_URL"
+if [ -n "$LOCAL_FILE" ]; then
+  ARCHIVE_FILE="$LOCAL_FILE"
+  info "Installing jk from $LOCAL_FILE"
+else
+  ARCHIVE_FILE="$TMPDIR_JK/jk.archive"
+  info "Downloading jk from $ARCHIVE_URL"
+  download "$ARCHIVE_URL" "$ARCHIVE_FILE" \
+    || die "failed to download $ARCHIVE_URL"
+fi
 
 info "Installing into $INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 
 JK_BIN="$INSTALL_DIR/jk"
 decompress "$ARCHIVE_FILE" "$JK_BIN" \
-  || die "failed to decompress archive with $COMPRESSOR"
+  || die "failed to install jk"
 chmod +x "$JK_BIN"
 
 note "Installed $JK_BIN"
