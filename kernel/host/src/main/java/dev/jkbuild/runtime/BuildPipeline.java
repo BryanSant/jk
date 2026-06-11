@@ -77,6 +77,8 @@ public final class BuildPipeline {
     @SuppressWarnings("rawtypes")
     public static final GoalKey<List> TEST_RUNTIME_CP = GoalKey.of("cp-runtime",     List.class);
     public static final GoalKey<String>    ACTION_KEY    = GoalKey.of("action-key",     String.class);
+    @SuppressWarnings("rawtypes")
+    public static final GoalKey<List> TEST_SOURCES     = GoalKey.of("test-sources",   List.class);
     public static final GoalKey<String>    BUILD_OUTCOME = GoalKey.of("build-outcome",  String.class);
     public static final GoalKey<String>    KOTLIN_OUTCOME = GoalKey.of("kotlin-outcome", String.class);
     public static final GoalKey<Path>      JAR_PATH      = GoalKey.of("jar-path",       Path.class);
@@ -498,6 +500,11 @@ public final class BuildPipeline {
                         ctx.progress(1);
                         return;
                     }
+                    // Store combined test sources for the TestStamp in run-tests.
+                    List<Path> allTestSources = new ArrayList<>();
+                    allTestSources.addAll(javaTest);
+                    allTestSources.addAll(ktTest);
+                    ctx.put(TEST_SOURCES, allTestSources);
                     @SuppressWarnings("unchecked")
                     List<Path> compileCp = (List<Path>) ctx.require(COMPILE_TEST_CP);
                     List<Path> baseCp = new ArrayList<>();
@@ -565,6 +572,19 @@ public final class BuildPipeline {
                     }
                     @SuppressWarnings("unchecked")
                     List<Path> testRtCp = (List<Path>) ctx.require(TEST_RUNTIME_CP);
+                    Path testClassesForStamp = ctx.require(TEST_CLASSES);
+
+                    // Incremental test skip: if all inputs are unchanged since the
+                    // last clean test run, skip the test runner entirely.
+                    @SuppressWarnings("unchecked")
+                    List<Path> testSrcs = ctx.get(TEST_SOURCES)
+                            .orElse(java.util.List.of());
+                    String stampKey = dev.jkbuild.task.TestStamp.computeKey(
+                            testSrcs, in.lockFile(), testRtCp);
+                    if (dev.jkbuild.task.TestStamp.isFresh(testClassesForStamp, stampKey)) {
+                        ctx.label("tests up-to-date");
+                        return; // skip — nothing changed since last green run
+                    }
                     List<Path> runtimeCp = new ArrayList<>();
                     runtimeCp.add(ctx.require(MAIN_CLASSES));
                     runtimeCp.addAll(testRtCp);
@@ -590,9 +610,13 @@ public final class BuildPipeline {
                     }
                     ctx.put(TEST_RESULT, result);
                     if (!result.allPassed()) {
+                        // Wipe any stale stamp so the next run doesn't skip.
+                        dev.jkbuild.task.TestStamp.write(testClassesForStamp, null);
                         throw new RuntimeException(result.failed() + " test failure"
                                 + (result.failed() == 1 ? "" : "s"));
                     }
+                    // All tests passed — write stamp so subsequent builds can skip.
+                    dev.jkbuild.task.TestStamp.write(testClassesForStamp, stampKey);
                 })
                 .build();
 
