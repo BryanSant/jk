@@ -11,8 +11,11 @@ import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkCatalogClient;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkInstaller;
+import dev.jkbuild.jdk.IntellijJdkDir;
+import dev.jkbuild.jdk.JdkGarbage;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
+import dev.jkbuild.jdk.StableJdkPointer;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -164,8 +167,16 @@ public final class JdkUpdateCommand implements CliCommand {
                     newJdk = installEntry(installer, u.target);
                     built.put(u.target.installFolderName(), newJdk);
                 }
+                // Repoint the stable <vendor>-<major> handle at the new patch
+                // BEFORE the old one is GC'd, so an IntelliJ SDK pinned to the
+                // stable path never dangles. (install() refreshes it too, but
+                // the alreadyInstalled fast path can skip that.)
+                repointStablePointer(registry, newJdk);
                 if (!oldId.equals(newJdk.identifier())) {
-                    registry.remove(oldId);
+                    // Defer-delete the superseded patch: a running JVM may still
+                    // hold it open (Windows can't unlink an in-use dir).
+                    new JdkGarbage(registry.jdksRoot())
+                            .enqueue(IntellijJdkDir.installDirOf(u.old.home()));
                 }
                 if (currentDefault.isPresent() && currentDefault.get().equals(oldId)) {
                     defaults.set(newJdk);
@@ -183,9 +194,29 @@ public final class JdkUpdateCommand implements CliCommand {
             }
         }
 
+        // Reap anything just enqueued (and any survivors from prior runs).
+        new JdkGarbage(registry.jdksRoot()).drain();
+
         System.out.println(updated + " updated"
                 + (failed > 0 ? ", " + failed + " failed" : ""));
         return failed == 0;
+    }
+
+    /**
+     * Idempotently repoint {@code <vendor>-<major> → <install dir>} for a
+     * freshly-built JDK. Derives the names from the install identifier
+     * ({@code temurin-25.0.4} → pointer {@code temurin-25}).
+     */
+    private static void repointStablePointer(JdkRegistry registry, InstalledJdk jdk) {
+        JdkSelector.FlexibleQuery q = JdkSelector.parseFlexible(jdk.identifier());
+        if (q.major().isEmpty() || q.hints().isEmpty()) return;
+        String pointer = q.hints().get(0) + "-" + q.major().get();
+        try {
+            new StableJdkPointer(registry.jdksRoot())
+                    .ensure(pointer, IntellijJdkDir.installDirOf(jdk.home()));
+        } catch (IOException ignored) {
+            // Pointer is a convenience; the update itself already succeeded.
+        }
     }
 
     /** Download + extract {@code entry} with a progress bar; journal the install. */

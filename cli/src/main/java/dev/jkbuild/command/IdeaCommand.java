@@ -8,6 +8,13 @@ import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.IntellijJdkDir;
+import dev.jkbuild.jdk.IntellijSdkRegistrar;
+import dev.jkbuild.jdk.JdkHit;
+import dev.jkbuild.jdk.JdkRegistry;
+import dev.jkbuild.jdk.JdkSelector;
+import dev.jkbuild.jdk.JdkVendor;
+import dev.jkbuild.jdk.StableJdkPointer;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
@@ -31,7 +38,9 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
 /**
@@ -42,7 +51,8 @@ import java.util.Set;
  * <ul>
  *   <li>{@code .idea/modules.xml} — module registry</li>
  *   <li>{@code .idea/misc.xml} — project SDK + language level</li>
- *   <li>{@code .idea/compiler.xml} — per-module output paths</li>
+ *   <li>{@code .idea/compiler.xml} — per-module bytecode target + annotation
+ *       processing profiles</li>
  *   <li>{@code .idea/libraries/*.xml} — one per external dependency;
  *       sources JARs attached when {@code sources-checksum} is in the lock</li>
  *   <li>{@code .idea/runConfigurations/*.xml} — for members with a
@@ -50,6 +60,12 @@ import java.util.Set;
  *   <li>{@code <member>/<module>.iml} — per module: source roots, deps,
  *       scope; workspace siblings become module references</li>
  * </ul>
+ *
+ * <p>Each module maps to a stable {@code jk-<vendor>-<level>} SDK (e.g.
+ * {@code jk-temurin-25}) backed by a {@link StableJdkPointer} path and
+ * registered into the IDEs' global {@code jdk.table.xml} (best-effort — a
+ * running IDE may clobber the edit on exit, so re-run with it closed). The
+ * stable path means jk's point-release JDK upgrades stay transparent to the IDE.
  *
  * <p>Existing files the command generates are overwritten on each run —
  * {@code jk idea} is idempotent and produces the same output for the same
@@ -64,7 +80,10 @@ public final class IdeaCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide());
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
+                Opt.value("<dir>", "Override the JDK install root (for tests).", "--jdks-dir").hide(),
+                Opt.value("<dir>", "Override the IDE config root for SDK registration (for tests).",
+                        "--ide-config-dir").hide());
     }
 
     private GlobalOptions global;
@@ -128,10 +147,53 @@ public final class IdeaCommand implements CliCommand {
         Files.createDirectories(jarsDir);
         resolveJarLinks(allLibs, jarsDir);
 
+        // ---- resolve per-module JDKs --------------------------------------
+        // Each module maps to a stable jk-<vendor>-<level> SDK (e.g.
+        // jk-temurin-25) backed by a StableJdkPointer path, so the generated
+        // project resolves with no "missing SDK" and survives JDK point-release
+        // upgrades. Modules at a different level get their own SDK + per-module
+        // language level, instead of all inheriting the project default.
+        Iterable<Map.Entry<Path, JkBuild>> targets = members.isEmpty()
+                ? List.of(Map.entry(wsRoot, rootBuild))
+                : members.entrySet();
+
+        Path jdksDirOverride   = in.value("jdks-dir").map(Path::of).orElse(null);
+        Path ideConfigOverride = in.value("ide-config-dir").map(Path::of).orElse(null);
+        JdkRegistry jdkRegistry = jdksDirOverride != null
+                ? new JdkRegistry(jdksDirOverride) : new JdkRegistry();
+        StableJdkPointer pointer = jdksDirOverride != null
+                ? new StableJdkPointer(jdksDirOverride) : StableJdkPointer.atDefaultRoot();
+        List<IntellijSdkRegistrar.SdkEntry> sdkEntries = new ArrayList<>();
+        Set<String> seenSdk = new LinkedHashSet<>();
+        Map<Path, SdkRef> sdkRefs = new LinkedHashMap<>();
+        for (Map.Entry<Path, JkBuild> me : targets) {
+            sdkRefs.put(me.getKey(),
+                    sdkRefFor(me.getKey(), me.getValue(), jdkRegistry, pointer, sdkEntries, seenSdk));
+        }
+        SdkRef defaultSdk = defaultSdkRef(wsRoot, rootBuild, members, sdkRefs,
+                jdkRegistry, pointer, sdkEntries, seenSdk);
+
+        // Register the SDKs into every IntelliJ/Android Studio jdk.table.xml
+        // (best-effort; may be clobbered if an IDE is open — see note below).
+        IntellijSdkRegistrar registrar = ideConfigOverride != null
+                ? IntellijSdkRegistrar.of(List.of(
+                        ideConfigOverride.resolve("JetBrains"), ideConfigOverride.resolve("Google")))
+                : IntellijSdkRegistrar.shared();
+        List<Path> touchedTables = registrar.register(sdkEntries);
+
+        // Annotation processors per module → routed to IntelliJ's annotation
+        // processing config (not the compile classpath) and the generated
+        // sources marked as a generated source root.
+        Map<Path, List<String>> processorJars = new LinkedHashMap<>();
+        for (Map.Entry<Path, JkBuild> me : targets) {
+            processorJars.put(me.getKey(),
+                    processorLibFiles(me.getKey(), me.getValue(), members, allLibs));
+        }
+
         int files = 0;
         files += writeModulesXml(ideaDir, wsRoot, rootBuild, members);
-        files += writeMiscXml(ideaDir, wsRoot, rootBuild, members);
-        files += writeCompilerXml(ideaDir, wsRoot, rootBuild, members);
+        files += writeMiscXml(ideaDir, defaultSdk);
+        files += writeCompilerXml(ideaDir, wsRoot, rootBuild, members, processorJars);
 
         Path libsDir = ideaDir.resolve("libraries");
         Files.createDirectories(libsDir);
@@ -162,24 +224,107 @@ public final class IdeaCommand implements CliCommand {
         }
 
         // ---- generate *.iml for each member --------------------------------
-        Iterable<Map.Entry<Path, JkBuild>> targets = members.isEmpty()
-                ? List.of(Map.entry(wsRoot, rootBuild))
-                : members.entrySet();
-
         for (Map.Entry<Path, JkBuild> me : targets) {
             Path memberDir = me.getKey();
             JkBuild member = me.getValue();
             List<ModuleRef> modRefs = siblingModuleRefs(memberDir, member, members);
             List<LibRef>    libRefs = libRefs(memberDir, member, members, cas, allLibs);
             write(memberDir.resolve(moduleName(member) + ".iml"),
-                    imlXml(memberDir, member, modRefs, libRefs));
+                    imlXml(memberDir, member, modRefs, libRefs,
+                            sdkRefs.get(memberDir), defaultSdk,
+                            processorJars.getOrDefault(memberDir, List.of())));
             files++;
         }
 
         System.out.println("✓ Generated " + files + " IntelliJ project file"
                 + (files == 1 ? "" : "s") + " in " + wsRoot.getFileName() + "/.idea/");
+        if (!touchedTables.isEmpty()) {
+            System.out.println("  Registered SDK " + defaultSdk.sdkName() + " in "
+                    + touchedTables.size() + " IDE config" + (touchedTables.size() == 1 ? "" : "s")
+                    + ". Re-run with the IDE closed if it doesn't appear (it rewrites the table on exit).");
+        }
         System.out.println("  Open " + wsRoot.getFileName() + "/ in IntelliJ IDEA.");
         return 0;
+    }
+
+    // =========================================================================
+    // JDK / SDK resolution
+    // =========================================================================
+
+    /**
+     * Resolve a module's stable SDK handle. Prefers the module's locked JDK
+     * identifier ({@code jk.lock}'s {@code jdk}, e.g. {@code temurin-25.0.3});
+     * falls back to the declared {@code project.jdk} level and the default
+     * vendor (Temurin). When the JDK is actually installed, ensures the
+     * {@link StableJdkPointer} and queues an {@link IntellijSdkRegistrar.SdkEntry}
+     * (once per distinct SDK).
+     */
+    private static SdkRef sdkRefFor(Path memberDir, JkBuild member,
+                                    JdkRegistry registry, StableJdkPointer pointer,
+                                    List<IntellijSdkRegistrar.SdkEntry> sdkEntries,
+                                    Set<String> seen) throws IOException {
+        int level = member.project().jdk() > 0
+                ? member.project().jdk() : member.project().javaRelease();
+        String lockJdk = readLockJdk(memberDir);
+        JdkSelector.FlexibleQuery q =
+                JdkSelector.parseFlexible(lockJdk == null ? "" : lockJdk);
+        if (q.major().isPresent()) level = q.major().get();
+        if (level <= 0) level = 21;
+
+        Optional<JdkHit> hit = Optional.empty();
+        if (lockJdk != null && !lockJdk.isBlank()) hit = registry.findHitBySpec(lockJdk);
+        if (hit.isEmpty()) hit = registry.findHitBySpec(String.valueOf(level));
+
+        String vendor;
+        String version = q.exactVersion().orElse(null);
+        if (hit.isPresent()) {
+            JdkVendor v = hit.get().vendor();
+            vendor = v.jbPrefix().orElse(v.vendor().toLowerCase(Locale.ROOT));
+            if (version == null) version = hit.get().version();
+        } else if (!q.hints().isEmpty()) {
+            vendor = q.hints().get(0);
+        } else {
+            vendor = "temurin";
+        }
+
+        String stableName = vendor + "-" + level;
+        String sdkName = "jk-" + stableName;
+        if (hit.isPresent() && seen.add(sdkName)) {
+            pointer.ensure(stableName, IntellijJdkDir.installDirOf(hit.get().home()));
+            sdkEntries.add(new IntellijSdkRegistrar.SdkEntry(
+                    sdkName, pointer.javaHome(stableName),
+                    version != null ? version : String.valueOf(level)));
+        }
+        return new SdkRef(stableName, sdkName, member.project().javaRelease() > 0
+                ? member.project().javaRelease() : level);
+    }
+
+    /**
+     * The project-default SDK: mirrors the legacy rule (root {@code project.jdk},
+     * else the highest member level). Reuses a member's resolved {@link SdkRef}
+     * when one matches that level; otherwise resolves the root build itself.
+     */
+    private static SdkRef defaultSdkRef(Path wsRoot, JkBuild root, Map<Path, JkBuild> members,
+                                        Map<Path, SdkRef> sdkRefs, JdkRegistry registry,
+                                        StableJdkPointer pointer,
+                                        List<IntellijSdkRegistrar.SdkEntry> sdkEntries,
+                                        Set<String> seen) throws IOException {
+        if (sdkRefs.containsKey(wsRoot)) return sdkRefs.get(wsRoot);
+        int level = root.project().jdk();
+        if (level == 0) for (JkBuild m : members.values()) level = Math.max(level, m.project().jdk());
+        for (SdkRef r : sdkRefs.values()) if (r.languageLevel() == level) return r;
+        return sdkRefFor(wsRoot, root, registry, pointer, sdkEntries, seen);
+    }
+
+    /** The resolved JDK identifier stamped in a member's {@code jk.lock}, or null. */
+    private static String readLockJdk(Path memberDir) {
+        Path lf = memberDir.resolve("jk.lock");
+        if (!Files.exists(lf)) return null;
+        try {
+            return LockfileReader.read(lf).jdk();
+        } catch (RuntimeException | IOException e) {
+            return null;
+        }
     }
 
     // =========================================================================
@@ -317,11 +462,49 @@ public final class IdeaCommand implements CliCommand {
         for (Lockfile.Package pkg : lock.packages()) {
             if (pkg.checksum() == null) continue;
             if (siblingCoords.contains(pkg.name())) continue;
+            // Processor-only deps belong on the annotation-processor path
+            // (compiler.xml), not the compile classpath.
+            if (processorOnly(pkg.scopes())) continue;
             String libName = pkg.name() + ":" + pkg.version();
             if (!allLibs.containsKey(libName)) continue;
             result.add(new LibRef(libName, ideaScope(pkg.scopes())));
         }
         return result;
+    }
+
+    /**
+     * The {@code .idea/.libs} file names (no extension) of a member's
+     * processor-scoped deps — fed into the module's annotation-processing
+     * profile. The JARs are already linked by {@link #collectLibDefs}.
+     */
+    private static List<String> processorLibFiles(Path memberDir, JkBuild member,
+                                                  Map<Path, JkBuild> members,
+                                                  Map<String, LibDef> allLibs) throws IOException {
+        Path lockFile = memberDir.resolve("jk.lock");
+        if (!Files.exists(lockFile)) return List.of();
+        Lockfile lock = LockfileReader.read(lockFile);
+        Set<String> siblingCoords = siblingCoordinates(member, members);
+        List<String> out = new ArrayList<>();
+        for (Lockfile.Package pkg : lock.packages()) {
+            if (pkg.checksum() == null) continue;
+            if (siblingCoords.contains(pkg.name())) continue;
+            if (!pkg.inAnyScope(EnumSet.of(Scope.PROCESSOR))) continue;
+            LibDef def = allLibs.get(pkg.name() + ":" + pkg.version());
+            if (def != null) out.add(def.fileName());
+        }
+        return out;
+    }
+
+    /** True when {@code PROCESSOR} is the only classpath-relevant scope on a package. */
+    private static boolean processorOnly(List<Scope> scopes) {
+        if (!scopes.contains(Scope.PROCESSOR)) return false;
+        for (Scope s : scopes) {
+            if (s == Scope.MAIN || s == Scope.EXPORT || s == Scope.PROVIDED
+                    || s == Scope.RUNTIME || s == Scope.TEST) {
+                return false;
+            }
+        }
+        return true;
     }
 
     // =========================================================================
@@ -350,21 +533,12 @@ public final class IdeaCommand implements CliCommand {
         return 1;
     }
 
-    private static int writeMiscXml(Path ideaDir, Path wsRoot,
-                                     JkBuild root, Map<Path, JkBuild> members)
-            throws IOException {
-        // Use the root jdk level, fall back to highest member level.
-        int jdk = root.project().jdk();
-        if (jdk == 0) {
-            for (JkBuild m : members.values()) jdk = Math.max(jdk, m.project().jdk());
-        }
-        if (jdk == 0) jdk = 21;
-
+    private static int writeMiscXml(Path ideaDir, SdkRef defaultSdk) throws IOException {
         StringBuilder sb = xmlHeader();
         sb.append("<project version=\"4\">\n");
         sb.append("  <component name=\"ProjectRootManager\" version=\"2\"");
-        sb.append(" languageLevel=\"JDK_").append(jdk).append("\"");
-        sb.append(" project-jdk-name=\"").append(jdk).append("\"");
+        sb.append(" languageLevel=\"JDK_").append(defaultSdk.languageLevel()).append("\"");
+        sb.append(" project-jdk-name=\"").append(esc(defaultSdk.sdkName())).append("\"");
         sb.append(" project-jdk-type=\"JavaSDK\">\n");
         sb.append("    <output url=\"file://$PROJECT_DIR$/out\" />\n");
         sb.append("  </component>\n</project>\n");
@@ -373,7 +547,8 @@ public final class IdeaCommand implements CliCommand {
     }
 
     private static int writeCompilerXml(Path ideaDir, Path wsRoot,
-                                         JkBuild root, Map<Path, JkBuild> members)
+                                         JkBuild root, Map<Path, JkBuild> members,
+                                         Map<Path, List<String>> processorJars)
             throws IOException {
         StringBuilder sb = xmlHeader();
         sb.append("<project version=\"4\">\n");
@@ -390,7 +565,38 @@ public final class IdeaCommand implements CliCommand {
                   .append("\" targetLevel=\"").append(release).append("\" />\n");
             }
         }
-        sb.append("    </bytecodeTargetLevel>\n  </component>\n</project>\n");
+        sb.append("    </bytecodeTargetLevel>\n");
+
+        // Annotation processing: one profile per module that declares
+        // processor-scoped deps. Each binds the module, its processor JARs (via
+        // the .idea/.libs symlinks), and the generated-sources output dir so
+        // IntelliJ runs the processors the same way `jk build` does.
+        boolean anyProcessors = processorJars.values().stream().anyMatch(l -> !l.isEmpty());
+        if (anyProcessors) {
+            sb.append("    <annotationProcessing>\n");
+            for (Map.Entry<Path, JkBuild> me : targets) {
+                List<String> procs = processorJars.getOrDefault(me.getKey(), List.of());
+                if (procs.isEmpty()) continue;
+                String mod = moduleName(me.getValue());
+                BuildLayout layout = BuildLayout.of(me.getKey(), me.getValue());
+                String genRel = me.getKey().relativize(layout.generatedSourcesDir("annotations"))
+                        .toString().replace('\\', '/');
+                sb.append("      <profile name=\"jk-").append(esc(mod)).append("\" enabled=\"true\">\n");
+                sb.append("        <sourceOutputDir name=\"").append(esc(genRel)).append("\" />\n");
+                sb.append("        <outputRelativeToContentRoot value=\"true\" />\n");
+                sb.append("        <module name=\"").append(esc(mod)).append("\" />\n");
+                sb.append("        <processorPath useClasspath=\"false\">\n");
+                for (String file : procs) {
+                    sb.append("          <entry name=\"$PROJECT_DIR$/.idea/.libs/")
+                      .append(esc(file)).append(".jar\" />\n");
+                }
+                sb.append("        </processorPath>\n");
+                sb.append("      </profile>\n");
+            }
+            sb.append("    </annotationProcessing>\n");
+        }
+
+        sb.append("  </component>\n</project>\n");
         write(ideaDir.resolve("compiler.xml"), sb.toString());
         return 1;
     }
@@ -416,10 +622,22 @@ public final class IdeaCommand implements CliCommand {
     }
 
     private static String imlXml(Path memberDir, JkBuild member,
-                                   List<ModuleRef> modRefs, List<LibRef> libRefs) {
+                                   List<ModuleRef> modRefs, List<LibRef> libRefs,
+                                   SdkRef memberSdk, SdkRef defaultSdk,
+                                   List<String> processorFiles) {
+        boolean ownJdk = memberSdk != null && defaultSdk != null
+                && !memberSdk.sdkName().equals(defaultSdk.sdkName());
+        int langLevel = memberSdk != null ? memberSdk.languageLevel() : 0;
+
         StringBuilder sb = xmlHeader();
         sb.append("<module type=\"JAVA_MODULE\" version=\"4\">\n");
-        sb.append("  <component name=\"NewModuleRootManager\" inherit-compiler-output=\"false\">\n");
+        sb.append("  <component name=\"NewModuleRootManager\" inherit-compiler-output=\"false\"");
+        // Per-module source language level when this module differs from the
+        // project default (e.g. a jdk=21 member under a jdk=25 root).
+        if (ownJdk && langLevel > 0) {
+            sb.append(" LANGUAGE_LEVEL=\"JDK_").append(langLevel).append("\"");
+        }
+        sb.append(">\n");
 
         BuildLayout layout = BuildLayout.of(memberDir, member);
         sb.append("    <output url=\"file://$MODULE_DIR$/")
@@ -430,7 +648,7 @@ public final class IdeaCommand implements CliCommand {
           .append("\" />\n");
         sb.append("    <exclude-output />\n");
 
-        // Source + test folders.
+        // Source / test / resource folders.
         // Traditional layout (Maven convention) takes precedence over simple layout:
         // only add "src" / "test" if no traditional source dirs exist.
         sb.append("    <content url=\"file://$MODULE_DIR$\">\n");
@@ -440,20 +658,44 @@ public final class IdeaCommand implements CliCommand {
                 Files.isDirectory(memberDir.resolve("src/test/java"))  ||
                 Files.isDirectory(memberDir.resolve("src/test/kotlin"));
         if (hasTraditional) {
-            addSourceFolder(sb, memberDir, "src/main/java",   false);
-            addSourceFolder(sb, memberDir, "src/main/kotlin", false);
-            addSourceFolder(sb, memberDir, "src/test/java",   true);
-            addSourceFolder(sb, memberDir, "src/test/kotlin", true);
+            addSourceFolder(sb, memberDir, "src/main/java",      false);
+            addSourceFolder(sb, memberDir, "src/main/kotlin",    false);
+            addResourceFolder(sb, memberDir, "src/main/resources", false);
+            addSourceFolder(sb, memberDir, "src/test/java",      true);
+            addSourceFolder(sb, memberDir, "src/test/kotlin",    true);
+            addResourceFolder(sb, memberDir, "src/test/resources", true);
         } else {
             // simple layout
-            addSourceFolder(sb, memberDir, "src",  false);
-            addSourceFolder(sb, memberDir, "test", true);
+            addSourceFolder(sb, memberDir, "src",            false);
+            addResourceFolder(sb, memberDir, "resources",      false);
+            addSourceFolder(sb, memberDir, "test",           true);
+            addResourceFolder(sb, memberDir, "test-resources", true);
         }
+
+        // Annotation-processor output → a generated source root. Declared even
+        // when it doesn't exist yet (processors run on first build) so the
+        // editor recognises the generated code. An explicit source root nested
+        // under the `target` exclude below still wins — the Maven/Gradle
+        // importers rely on the same precedence.
+        Path gen = layout.generatedSourcesDir("annotations");
+        if (!processorFiles.isEmpty() || Files.isDirectory(gen)) {
+            String genRel = memberDir.relativize(gen).toString().replace('\\', '/');
+            sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/").append(genRel)
+              .append("\" isTestSource=\"false\" generated=\"true\" />\n");
+        }
+
         // exclude build outputs
         sb.append("      <excludeFolder url=\"file://$MODULE_DIR$/target\" />\n");
         sb.append("    </content>\n");
 
-        sb.append("    <orderEntry type=\"inheritedJdk\" />\n");
+        // JDK: a dedicated SDK when this module's level differs from the project
+        // default; otherwise inherit the project SDK.
+        if (ownJdk) {
+            sb.append("    <orderEntry type=\"jdk\" jdkName=\"").append(esc(memberSdk.sdkName()))
+              .append("\" jdkType=\"JavaSDK\" />\n");
+        } else {
+            sb.append("    <orderEntry type=\"inheritedJdk\" />\n");
+        }
         sb.append("    <orderEntry type=\"sourceFolder\" forTests=\"false\" />\n");
 
         // Workspace-sibling module dependencies
@@ -502,6 +744,16 @@ public final class IdeaCommand implements CliCommand {
         if (!Files.isDirectory(dir)) return;
         sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/")
           .append(relative).append("\" isTestSource=\"").append(test).append("\" />\n");
+    }
+
+    /** A resource root ({@code java-resource} / {@code java-test-resource}), only when present. */
+    private static void addResourceFolder(StringBuilder sb, Path memberDir,
+                                          String relative, boolean test) {
+        Path dir = memberDir.resolve(relative);
+        if (!Files.isDirectory(dir)) return;
+        sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/")
+          .append(relative).append("\" type=\"")
+          .append(test ? "java-test-resource" : "java-resource").append("\" />\n");
     }
 
     /** The IntelliJ module name for a workspace member. */
@@ -601,4 +853,13 @@ public final class IdeaCommand implements CliCommand {
 
     private record LibRef(String name, String scope) {}
     private record ModuleRef(String name, String scope) {}
+
+    /**
+     * A module's resolved JDK handle.
+     *
+     * @param stableName    the {@code <vendor>-<level>} pointer name (e.g. {@code temurin-25})
+     * @param sdkName       the IntelliJ SDK name (e.g. {@code jk-temurin-25})
+     * @param languageLevel the source language level for this module ({@code project.java}/{@code jdk})
+     */
+    private record SdkRef(String stableName, String sdkName, int languageLevel) {}
 }

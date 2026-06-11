@@ -10,11 +10,14 @@ checksum = "sha256:6d6978c78092da14d32558305b5ca58b847e2c4639d1b0aec7a3b55bec139
 scopes   = ["test"]
 
 [[package]]
-name     = "org.antlr:antlr4-runtime"
-version  = "4.13.2"
+name     = "org.apache.maven:maven-artifact"
+version  = "3.9.16"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:dd3e8a13a2d669bf84fb8d834de35ce4875f27157698d206241ec8488aadcaf7"
+checksum = "sha256:54cc1c1ef932e3d4a903352111b42b4d3c3ed8e7a1d0de73b625309d9c3ad3e8"
 scopes   = ["main"]
+deps = [
+  "org.codehaus.plexus:plexus-utils@4.0.3",
+]
 
 [[package]]
 name     = "org.apiguardian:apiguardian-api"
@@ -34,10 +37,10 @@ deps = [
 ]
 
 [[package]]
-name     = "org.checkerframework:checker-qual"
-version  = "4.2.0"
+name     = "org.codehaus.plexus:plexus-utils"
+version  = "4.0.3"
 source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:30bb4494b13f41cbd1502b094caafeb2b1d1f347311c72e7c74f83160acbdf0e"
+checksum = "sha256:421ff6ed146c53a9d4eaade8f629b52b12af7187101f1bd06c2c64e904019f3c"
 scopes   = ["main"]
 
 [[package]]
@@ -139,14 +142,3 @@ version  = "1.3.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
 checksum = "sha256:48e2df636cab6563ced64dcdff8abb2355627cb236ef0bf37598682ddf742f1b"
 scopes   = ["test"]
-
-[[package]]
-name     = "org.tomlj:tomlj"
-version  = "1.1.1"
-source   = "central+https://repo.maven.apache.org/maven2/"
-checksum = "sha256:383b7c66966c42ee4913ec977a7b6573631866bddc5318ec4a6215b688dd0d6c"
-scopes   = ["main"]
-deps = [
-  "org.antlr:antlr4-runtime@4.13.2",
-  "org.checkerframework:checker-qual@4.2.0",
-]

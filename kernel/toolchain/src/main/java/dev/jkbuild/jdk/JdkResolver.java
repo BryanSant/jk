@@ -10,11 +10,16 @@ import java.util.Optional;
 /**
  * Resolves the JDK a project should use. Lookup order:
  * <ol>
- *   <li>{@code .jdk-version} — its content is parsed as a {@link JdkSpec}
- *       and resolved through {@link JdkProvisioning} (which consults the
- *       IntelliJ JDK directory and {@code JAVA_HOME}).</li>
+ *   <li>{@code .jdk-version} — must name a {@code <vendor>-<major>} (e.g.
+ *       {@code temurin-25}); resolved against installed JDKs (the flexible
+ *       vendor+major matcher) and, failing that, provisioned.</li>
  *   <li>None — caller falls back to {@code JAVA_HOME} / the running JVM.</li>
  * </ol>
+ *
+ * <p>A patch-level pin ({@code temurin-25.0.2}) or a vendorless one ({@code 25})
+ * is rejected with an {@link IllegalArgumentException}: jk keeps the patch
+ * current via the stable {@code <vendor>-<major>} pointer, so a patch pin would
+ * fight its aggressive point-release upgrades.
  */
 public final class JdkResolver {
 
@@ -27,16 +32,27 @@ public final class JdkResolver {
     public Optional<InstalledJdk> resolve(Path projectDir) throws IOException {
         Optional<String> pin = readJdkVersion(projectDir);
         if (pin.isEmpty()) return Optional.empty();
-        JdkSpec spec = JdkSpec.parse(pin.get());
-        Optional<InstalledJdk> direct = registry.find(spec.value())
-                .or(() -> {
-                    try { return registry.findByPrefix(spec.value()); }
-                    catch (IOException e) { throw new RuntimeException(e); }
-                });
+        String spec = validatePin(pin.get());
+        Optional<InstalledJdk> direct = registry.findBySpec(spec);
         if (direct.isPresent()) return direct;
         return new JdkProvisioning(registry)
-                .resolve(spec)
+                .resolve(JdkSpec.parse(spec))
                 .map(JdkProvisioning.Result::jdk);
+    }
+
+    /**
+     * Enforce the {@code <vendor>-<major>} pin format. Returns the trimmed spec;
+     * throws {@link IllegalArgumentException} for patch-level or vendorless pins.
+     */
+    static String validatePin(String raw) {
+        String pin = raw.trim();
+        JdkSelector.FlexibleQuery q = JdkSelector.parseFlexible(pin);
+        if (q.major().isEmpty() || q.exactVersion().isPresent() || q.hints().isEmpty()) {
+            throw new IllegalArgumentException(
+                    ".jdk-version must be <vendor>-<major> (e.g. \"temurin-25\"), not \"" + pin
+                    + "\". Pin a vendor and major release — jk keeps the patch version current.");
+        }
+        return pin;
     }
 
     public static Optional<String> readJdkVersion(Path projectDir) throws IOException {

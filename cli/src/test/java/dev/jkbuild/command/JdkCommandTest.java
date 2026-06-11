@@ -83,7 +83,8 @@ class JdkCommandTest {
                 "--jdks-dir", jdksDir.toString(),
                 "--feed-url", base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(jdksDir.resolve("graalvm-jdk-25").resolve("bin").resolve("java")).exists();
+        // jk owns the on-disk name: <vendor>-<version> via jbPrefix (here version == major).
+        assertThat(jdksDir.resolve("graalvm-25").resolve("bin").resolve("java")).exists();
     }
 
     @Test
@@ -152,12 +153,13 @@ class JdkCommandTest {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
 
-        int exit = run("jdk", "pin", "temurin-21",
+        int exit = run("jdk", "pin", "temurin-21.0.5",
                 "-C", tempDir.toString(),
                 "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
+        // pin normalizes any spec down to <vendor>-<major>; jk floats the patch.
         assertThat(Files.readString(tempDir.resolve(".jdk-version")).trim())
-                .isEqualTo("temurin-21.0.5");
+                .isEqualTo("temurin-21");
     }
 
     @Test
@@ -249,7 +251,7 @@ class JdkCommandTest {
         Path jdks = tempDir.resolve("jdks");
         Path jdkHome = jdks.resolve("temurin-21.0.5");
         makeJdkInstall(jdkHome);
-        Files.writeString(tempDir.resolve(".jdk-version"), "temurin-21.0.5\n");
+        Files.writeString(tempDir.resolve(".jdk-version"), "temurin-21\n");
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream origOut = System.out;

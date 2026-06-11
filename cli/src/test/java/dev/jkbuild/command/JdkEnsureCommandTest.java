@@ -171,7 +171,8 @@ class JdkEnsureCommandTest {
                 "--jdks-dir", jdks.toString(),
                 "--feed-url", base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(jdks.resolve("graalvm-jdk-25").resolve("bin").resolve("java")).exists();
+        // jk owns the on-disk name: <vendor>-<version> via jbPrefix (here version == major).
+        assertThat(jdks.resolve("graalvm-25").resolve("bin").resolve("java")).exists();
         assertThat(jdks.resolve("temurin-25.0.3")).doesNotExist();
     }
 

@@ -123,6 +123,23 @@ public enum JdkVendor {
      * parsed the release file — this method exists so callers that only have
      * a {@link Path} don't have to load the file themselves.
      */
+    /**
+     * Resolve a vendor from the JetBrains feed's {@code vendor} + {@code product}
+     * strings (e.g. {@code "Oracle"} + {@code "GraalVM"} → {@link #ORACLE_GRAALVM}).
+     * Returns {@link #UNKNOWN} when no enum constant matches both fields.
+     */
+    public static JdkVendor fromFeed(String vendor, String product) {
+        if (vendor == null || product == null) return UNKNOWN;
+        for (JdkVendor v : values()) {
+            if (v != UNKNOWN
+                    && v.vendor.equalsIgnoreCase(vendor)
+                    && v.product.equalsIgnoreCase(product)) {
+                return v;
+            }
+        }
+        return UNKNOWN;
+    }
+
     public static JdkVendor fromRelease(Path home) {
         Path release = home.resolve("release");
         if (!Files.isRegularFile(release)) return UNKNOWN;

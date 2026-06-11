@@ -97,6 +97,9 @@ public final class JdkInstaller {
      */
     public InstalledJdk install(JdkCatalog.Entry entry, LongConsumer onBytesRead)
             throws IOException, InterruptedException {
+        // Clean up patches superseded by an earlier upgrade (Windows defers
+        // deletion of in-use JDKs; POSIX drains immediately).
+        new JdkGarbage(registry.jdksRoot()).drain();
         InstalledJdk already = alreadyInstalled(entry);
         if (already != null) return already;
         DownloadedArchive dl = download(entry, onBytesRead);
@@ -109,9 +112,10 @@ public final class JdkInstaller {
      * Returns {@code null} when nothing's installed yet.
      */
     public InstalledJdk alreadyInstalled(JdkCatalog.Entry entry) {
-        Path target = registry.jdksRoot().resolve(entry.installFolderName());
+        String installName = installName(entry);
+        Path target = registry.jdksRoot().resolve(installName);
         if (!Files.exists(target)) return null;
-        return new InstalledJdk(entry.installFolderName(), javaHomeFor(entry, target));
+        return new InstalledJdk(installName, javaHomeFor(entry, target));
     }
 
     /**
@@ -146,7 +150,8 @@ public final class JdkInstaller {
      */
     public InstalledJdk extractInstalled(JdkCatalog.Entry entry, DownloadedArchive dl)
             throws IOException {
-        Path target = registry.jdksRoot().resolve(entry.installFolderName());
+        String installName = installName(entry);
+        Path target = registry.jdksRoot().resolve(installName);
         Path javaHome = javaHomeFor(entry, target);
         try {
             Path stagingDir = Files.createTempDirectory(registry.jdksRoot(), ".stage-");
@@ -165,13 +170,57 @@ public final class JdkInstaller {
         } finally {
             Files.deleteIfExists(dl.path());
         }
-        return new InstalledJdk(entry.installFolderName(), javaHome);
+        // Refresh the stable <vendor>-<major> pointer so IntelliJ (and anything
+        // pinning a path) survives point-release upgrades. Best-effort — a
+        // failure here must not fail the install itself.
+        try {
+            new StableJdkPointer(registry.jdksRoot())
+                    .ensure(pointerName(entry), target);
+        } catch (IOException ignored) {
+            // Pointer is a convenience; the install is already complete.
+        }
+        return new InstalledJdk(installName, javaHome);
     }
 
     private static Path javaHomeFor(JdkCatalog.Entry entry, Path target) {
         return entry.javaHomeSubpath().isEmpty()
                 ? target
                 : target.resolve(entry.javaHomeSubpath());
+    }
+
+    // jk owns the on-disk names: the durable install dir is
+    // <vendor>-<version> and the stable pointer is <vendor>-<major>, both keyed
+    // off the vendor's jbPrefix rather than the feed's (inconsistent)
+    // install_folder_name / suggested_sdk_name. This guarantees the pointer and
+    // the install never collide (unless a feed reports version == major, where
+    // the install dir harmlessly doubles as its own pointer).
+
+    /** Durable install dir name, e.g. {@code temurin-25.0.3} / {@code graalvm-25.0.4}. */
+    private static String installName(JdkCatalog.Entry e) {
+        return vendorToken(e) + "-" + e.version();
+    }
+
+    /** Stable pointer name, e.g. {@code temurin-25} / {@code graalvm-25}. */
+    private static String pointerName(JdkCatalog.Entry e) {
+        return vendorToken(e) + "-" + e.majorVersion();
+    }
+
+    private static String vendorToken(JdkCatalog.Entry e) {
+        return JdkVendor.fromFeed(e.vendor(), e.product())
+                .jbPrefix()
+                .orElseGet(() -> stripTrailingMajor(e.suggestedSdkName()));
+    }
+
+    /** {@code "graalvm-jdk-25"} → {@code "graalvm-jdk"}; leaves names without a trailing major intact. */
+    private static String stripTrailingMajor(String suggested) {
+        int dash = suggested.lastIndexOf('-');
+        if (dash > 0) {
+            String tail = suggested.substring(dash + 1);
+            if (!tail.isEmpty() && tail.chars().allMatch(Character::isDigit)) {
+                return suggested.substring(0, dash);
+            }
+        }
+        return suggested;
     }
 
     /**
