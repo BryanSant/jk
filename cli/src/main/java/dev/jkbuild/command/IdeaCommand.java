@@ -24,6 +24,7 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -119,6 +120,14 @@ public final class IdeaCommand implements CliCommand {
         Path ideaDir = wsRoot.resolve(".idea");
         Files.createDirectories(ideaDir);
 
+        // CAS files are stored without extensions (hash-addressed). IntelliJ's
+        // VFS won't treat extension-less files as JARs even behind a jar:// URL.
+        // Fix: create .idea/.libs/ with symlinks carrying proper .jar names.
+        // Falls back to copying if the filesystem doesn't support symlinks.
+        Path jarsDir = ideaDir.resolve(".libs");
+        Files.createDirectories(jarsDir);
+        resolveJarLinks(allLibs, jarsDir);
+
         int files = 0;
         files += writeModulesXml(ideaDir, wsRoot, rootBuild, members);
         files += writeMiscXml(ideaDir, wsRoot, rootBuild, members);
@@ -127,7 +136,7 @@ public final class IdeaCommand implements CliCommand {
         Path libsDir = ideaDir.resolve("libraries");
         Files.createDirectories(libsDir);
         for (LibDef lib : allLibs.values()) {
-            write(libsDir.resolve(lib.fileName + ".xml"), libraryXml(lib, wsRoot, cas));
+            write(libsDir.resolve(lib.fileName + ".xml"), libraryXml(lib, wsRoot, ideaDir));
             files++;
         }
 
@@ -177,6 +186,47 @@ public final class IdeaCommand implements CliCommand {
     // Library collection
     // =========================================================================
 
+    /**
+     * Populate {@code linkedJar}/{@code linkedSrc} on every {@link LibDef} by
+     * creating a {@code .jar}-named symlink inside {@code jarsDir} that points at
+     * the CAS entry. Falls back to copying if symlinks fail (no admin on Windows).
+     *
+     * <p>IntelliJ's VFS won't treat extension-less files as JARs behind a
+     * {@code jar://} URL; the symlinks/copies give every library a proper name.
+     */
+    private static void resolveJarLinks(Map<String, LibDef> allLibs, Path jarsDir)
+            throws IOException {
+        for (Map.Entry<String, LibDef> e : allLibs.entrySet()) {
+            LibDef lib = e.getValue();
+            Path linked = link(jarsDir, lib.fileName + ".jar", lib.jarPath);
+            Path linkedSrc = null;
+            if (lib.sourcesPath != null) {
+                linkedSrc = link(jarsDir, lib.fileName + "-sources.jar", lib.sourcesPath);
+            }
+            e.setValue(new LibDef(lib.name, lib.fileName,
+                    lib.jarPath, linked, lib.sourcesPath, linkedSrc));
+        }
+    }
+
+    /** Create a symlink {@code jarsDir/name → target}; fall back to copy. */
+    private static Path link(Path jarsDir, String name, Path target) throws IOException {
+        Path link = jarsDir.resolve(name);
+        if (Files.exists(link, LinkOption.NOFOLLOW_LINKS)) {
+            // Already linked/copied — check if it still points at the same target.
+            if (Files.isSymbolicLink(link) && Files.readSymbolicLink(link).equals(target)) {
+                return link;
+            }
+            Files.delete(link);
+        }
+        try {
+            Files.createSymbolicLink(link, target);
+        } catch (UnsupportedOperationException | IOException ex) {
+            // Symlinks not supported (Windows without privileges) — copy instead.
+            Files.copy(target, link);
+        }
+        return link;
+    }
+
     /** Collect all external (non-workspace) dep library definitions for one member. */
     private static void collectLibDefs(Path memberDir, JkBuild member,
                                         Map<Path, JkBuild> members, Cas cas,
@@ -215,7 +265,7 @@ public final class IdeaCommand implements CliCommand {
 
             String libName = pkg.name() + ":" + pkg.version();
             allLibs.put(libName, new LibDef(libName, libFileName(libName),
-                    jarPath, sourcesPath));
+                    jarPath, null, sourcesPath, null));
         }
     }
 
@@ -345,17 +395,20 @@ public final class IdeaCommand implements CliCommand {
         return 1;
     }
 
-    private static String libraryXml(LibDef lib, Path wsRoot, Cas cas) {
+    private static String libraryXml(LibDef lib, Path wsRoot, Path ideaDir) {
         StringBuilder sb = xmlHeader();
         sb.append("<component name=\"libraryTable\">\n");
         sb.append("  <library name=\"").append(esc(lib.name)).append("\">\n");
         sb.append("    <CLASSES>\n");
-        sb.append("      <root url=\"").append(jarUrl(lib.jarPath)).append("\" />\n");
+        // Use the .jar-named symlink/copy so IntelliJ recognises it as an archive.
+        // Emit a $PROJECT_DIR$-relative URL when the file lives under the workspace.
+        Path jar = lib.linkedJar != null ? lib.linkedJar : lib.jarPath;
+        sb.append("      <root url=\"").append(jarUrl(jar, wsRoot)).append("\" />\n");
         sb.append("    </CLASSES>\n");
         sb.append("    <JAVADOC />\n");
         sb.append("    <SOURCES>\n");
-        if (lib.sourcesPath != null) {
-            sb.append("      <root url=\"").append(jarUrl(lib.sourcesPath)).append("\" />\n");
+        if (lib.linkedSrc != null) {
+            sb.append("      <root url=\"").append(jarUrl(lib.linkedSrc, wsRoot)).append("\" />\n");
         }
         sb.append("    </SOURCES>\n");
         sb.append("  </library>\n</component>\n");
@@ -467,16 +520,24 @@ public final class IdeaCommand implements CliCommand {
     }
 
     /**
-     * Convert an absolute JAR path to IntelliJ's {@code jar://...!/} URL format.
-     * Paths under the user's home directory use {@code $USER_HOME$}.
+     * Convert a JAR path to IntelliJ's {@code jar://...!/} URL format.
+     * Paths inside the workspace use {@code $PROJECT_DIR$} (portable);
+     * other paths fall back to {@code $USER_HOME$}-relative or absolute.
      */
-    private static String jarUrl(Path jar) {
-        String abs = jar.toAbsolutePath().normalize().toString().replace('\\', '/');
-        String home = System.getProperty("user.home", "").replace('\\', '/');
-        if (!home.isBlank() && abs.startsWith(home + "/")) {
-            abs = "$USER_HOME$/" + abs.substring(home.length() + 1);
+    private static String jarUrl(Path jar, Path wsRoot) {
+        Path abs = jar.toAbsolutePath().normalize();
+        // Prefer $PROJECT_DIR$ for paths inside the workspace (e.g. .idea/.libs/).
+        if (abs.startsWith(wsRoot.toAbsolutePath().normalize())) {
+            String rel = wsRoot.toAbsolutePath().normalize()
+                    .relativize(abs).toString().replace('\\', '/');
+            return "jar://$PROJECT_DIR$/" + rel + "!/";
         }
-        return "jar://" + abs + "!/";
+        String absStr = abs.toString().replace('\\', '/');
+        String home = System.getProperty("user.home", "").replace('\\', '/');
+        if (!home.isBlank() && absStr.startsWith(home + "/")) {
+            absStr = "$USER_HOME$/" + absStr.substring(home.length() + 1);
+        }
+        return "jar://" + absStr + "!/";
     }
 
     /** Extract the raw hex SHA from a {@code "sha256:<hex>"} checksum string. */
@@ -528,7 +589,16 @@ public final class IdeaCommand implements CliCommand {
     // Data records
     // =========================================================================
 
-    private record LibDef(String name, String fileName, Path jarPath, Path sourcesPath) {}
+    /**
+     * @param jarPath     absolute CAS path (no .jar extension — used to create the symlink)
+     * @param linkedJar   path inside .idea/.libs/ with .jar extension — what IntelliJ references
+     * @param sourcesPath CAS path to the sources JAR (may be null)
+     * @param linkedSrc   path inside .idea/.libs/ to the linked sources JAR (may be null)
+     */
+    private record LibDef(String name, String fileName,
+                          Path jarPath, Path linkedJar,
+                          Path sourcesPath, Path linkedSrc) {}
+
     private record LibRef(String name, String scope) {}
     private record ModuleRef(String name, String scope) {}
 }
