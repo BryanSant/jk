@@ -201,9 +201,21 @@ public final class GoalConsole {
      */
     public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String member,
                                          AggregateContext agg) {
+        return runGoalInto(goal, cacheRoot, member, agg, 0);
+    }
+
+    /**
+     * As {@link #runGoalInto(Goal, Path, String, AggregateContext)}, but with the
+     * member's reserved {@code slice} of the calibrated total (its pre-scan
+     * estimate). The slice scales the member's own 0→100% into its share of the
+     * aggregate bar so the bar advances cumulatively without backtracking. Pass
+     * the same estimate that was summed into {@link AggregateContext#calibrate}.
+     */
+    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String member,
+                                         AggregateContext agg, long slice) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
-        goal.addListener(new AggregateMemberListener(agg, member, goal.phases()));
+        goal.addListener(new AggregateMemberListener(agg, member, goal.phases(), slice));
         return goal.run();
     }
 

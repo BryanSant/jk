@@ -135,6 +135,45 @@ public final class HostLauncher {
         }
     }
 
+    /**
+     * Run a workspace member through the Host, feeding its streamed events into a
+     * shared {@link AggregateContext} (the calibrated workspace bar) via an
+     * {@link AggregateMemberListener} — the Host-mode counterpart of
+     * {@link GoalConsole#runGoalInto}. The member's own 0→100% is scaled into
+     * {@code slice} (its reserved share of the aggregate total), and {@code phases}
+     * — taken from the locally pre-scanned goal — drives the merged phase display,
+     * since the forked Host has no in-process {@link dev.jkbuild.run.Goal} for the
+     * CLI to read phase labels from.
+     *
+     * <p>Returns the Host's exit code, or {@code -1} when the host jar isn't in the
+     * CAS, so the caller can fall back to in-process execution.
+     */
+    public static int tryRunInto(dev.jkbuild.host.HostInvocation inv,
+                                 AggregateContext agg, String member,
+                                 List<dev.jkbuild.run.Phase> phases, long slice,
+                                 boolean verbose)
+            throws IOException, InterruptedException {
+        Cas cas = new Cas(inv.cache());
+        try {
+            WorkerJar.HOST.locate(cas);
+        } catch (IllegalStateException e) {
+            if (verbose) System.err.println("jk: host jar not in CAS, running in-process");
+            return -1;
+        }
+        Path specFile = dev.jkbuild.host.HostInvocation.write(inv);
+        try {
+            var listeners = new java.util.ArrayList<GoalListener>();
+            listeners.add(new AggregateMemberListener(agg, member, phases, slice));
+            try {
+                GoalListener log = EventLogListener.open(inv.cache(), inv.verb());
+                if (log != null) listeners.add(log);
+            } catch (Exception ignored) {}
+            return runWithReceiver(specFile, cas, new ReceivingGoalListener(listeners));
+        } finally {
+            Files.deleteIfExists(specFile);
+        }
+    }
+
     /** Variant of {@link #run} that uses a pre-built {@link ReceivingGoalListener}. */
     private static int runWithReceiver(Path specFile, dev.jkbuild.cache.Cas cas,
                                         ReceivingGoalListener receiver)

@@ -4,7 +4,6 @@ package dev.jkbuild.command;
 import dev.jkbuild.runtime.BuildPipeline;
 
 import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.AggregateContext;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -20,7 +19,6 @@ import dev.jkbuild.model.Scope;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.model.command.CliCommand;
@@ -202,11 +200,42 @@ public final class BuildCommand implements CliCommand {
         long buildStart = System.nanoTime();
         // Route every member's phase/process output above the one shared region.
         try (var cap = view.captureOutput()) {
+            // Breadth-first pre-scan — build every member's goal and sum its
+            // estimated ticks so the bar calibrates to the whole-workspace total
+            // and advances 0→100% without resetting per member. This runs for BOTH
+            // execution paths: the in-process path runs these very goals, while the
+            // Host path runs each member in a forked JVM but still scales its
+            // streamed progress into the slice we reserve here (and reuses the
+            // goal's phase list for the merged phase display, since the forked Host
+            // has no in-process Goal the CLI can read labels from).
+            Map<Path, PreparedMember> prepared = new LinkedHashMap<>();
+            long total = 0;
+            for (Path memberDir : sorted) {
+                PreparedMember pm;
+                try {
+                    pm = prepareMember(memberDir);
+                } catch (Exception e) {
+                    view.finishFailure("Build failed " + elapsedSince(buildStart));
+                    throw e;
+                }
+                if (pm == null) {
+                    view.finishFailure("No jk.toml in "
+                            + workspaceRoot.relativize(memberDir) + " " + elapsedSince(buildStart));
+                    return 2;
+                }
+                total += pm.estimatedScope();
+                prepared.put(memberDir, pm);
+            }
+            agg.calibrate(total);
+
             for (Path memberDir : sorted) {
                 String member = workspaceRoot.relativize(memberDir).toString();
+                PreparedMember pm = prepared.get(memberDir);
                 int exit;
                 try {
-                    exit = runForDir(memberDir, agg);
+                    exit = useHost
+                            ? runPreparedViaHost(pm, agg)
+                            : runPrepared(pm, agg);
                 } catch (Exception e) {
                     view.finishFailure("Build failed in " + member
                             + " " + elapsedSince(buildStart));
@@ -366,19 +395,12 @@ public final class BuildCommand implements CliCommand {
      */
     private int runForDir(Path dir, AggregateContext agg) throws Exception {
         Path cache  = cacheDir != null ? cacheDir : JkDirs.cache();
-        Cas cas     = new Cas(cache);
-        ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
         Path buildFile = dir.resolve("jk.toml");
-        int workerCount = workers != null && workers > 0 ? workers : 1;
-        // Lexical pre-discovery so the runTests phase's scope is known
-        // before any phase runs — see TestCommand.estimateTestCount.
-        int estimatedTestCount = TestCommand.estimateTestCount(dir.resolve("src/test/java"));
-
         if (!Files.exists(buildFile)) {
             System.err.println("jk build: no jk.toml in " + dir);
             return 2;
         }
-
+        int workerCount = workers != null && workers > 0 ? workers : 1;
         // Each project owns its own jk.lock alongside its jk.toml.
         final Path lockFile = dir.resolve("jk.lock");
 
@@ -386,35 +408,64 @@ public final class BuildCommand implements CliCommand {
         // JVM instead of running the pipeline in-process. The host streams
         // HostEvents; HostLauncher bridges them back to the GoalConsole listeners.
         if (useHost) {
-            int hostResult = buildViaHost(dir, cache, lockFile, workerCount, agg);
+            int hostResult = buildViaHost(dir, cache, lockFile, workerCount);
             if (hostResult >= 0) return hostResult;
             // -1 = fallback to in-process (host jar missing, workspace, or other)
         }
 
+        return runPrepared(prepareMember(dir), agg);
+    }
+
+    /**
+     * Construct (but do not run) a member's build goal: inputs → core phases →
+     * declared tails. Returns {@code null} when {@code dir} has no {@code jk.toml}.
+     * Split out of {@link #runForDir} so the workspace path can build every
+     * member's goal up front and sum {@link Goal#estimatedTotalScope()} to
+     * calibrate the shared progress bar before any member runs.
+     */
+    private PreparedMember prepareMember(Path dir) {
+        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
+        Path buildFile = dir.resolve("jk.toml");
+        if (!Files.exists(buildFile)) return null;
+        Path lockFile = dir.resolve("jk.lock");
+        int workerCount = workers != null && workers > 0 ? workers : 1;
+        // Lexical pre-discovery so the run-tests phase's scope is known before
+        // any phase runs — see TestCommand.estimateTestCount.
+        int estimatedTestCount = TestCommand.estimateTestCount(dir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 dir, cache, buildFile, lockFile, dir,
                 workerCount, estimatedTestCount, profileName, jdksDir, buildOpts.skipTests, global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
+        // Estimate the member's ticks once, here — the workspace pre-scan sums
+        // these into the calibrated total, and the same value is the member's slice
+        // of the aggregate bar (see AggregateMemberListener). Computing it once
+        // keeps the slice byte-for-byte equal to what was summed into `total`.
+        return new PreparedMember(dir, buildTarget(buildFile, dir), cache, goal,
+                goal.estimatedTotalScope());
+    }
 
-        String target = buildTarget(buildFile, dir);
+    /** Run an already-built member goal and map its result to an exit code. */
+    private int runPrepared(PreparedMember pm, AggregateContext agg) {
+        Goal goal = pm.goal();
         GoalResult result;
         if (agg != null) {
-            // Workspace member: feed the one shared aggregate view.
-            result = GoalConsole.runGoalInto(goal, cache, target, agg);
+            // Workspace member: feed the one shared aggregate view, scaling this
+            // member's progress into its reserved slice of the calibrated total.
+            result = GoalConsole.runGoalInto(goal, pm.cache(), pm.target(), agg, pm.estimatedScope());
         } else {
             ConsoleSpec spec = new ConsoleSpec("Build",
                     r -> successMessage(goal, r),
                     r -> failureMessage(goal, r));
-            result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, target);
+            result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
 
         if (result.success()) {
             try {
-                var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(buildFile);
+                var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(pm.dir().resolve("jk.toml"));
                 dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
-                        dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+                        dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, pm.cache(), exe));
             } catch (IOException ignored) {}
             return 0;
         }
@@ -424,35 +475,44 @@ public final class BuildCommand implements CliCommand {
         return 1;
     }
 
+    /**
+     * A workspace member's goal, built and ready to run, paired with its pre-scan
+     * tick estimate — the member's slice of the calibrated aggregate total.
+     */
+    private record PreparedMember(Path dir, String target, Path cache, Goal goal,
+                                  long estimatedScope) {}
+
     // ---- Workspace Host dispatch (Phase 4 coexistence) ----------------------
 
     /**
-     * Fork the Workspace Host JVM, stream its events back through the CLI's
-     * existing GoalConsole listeners, and return the exit code.
-     * Used when {@code --use-host} is set (hidden flag, Phase 4 preview).
+     * Run a pre-scanned workspace member through the Workspace Host, feeding its
+     * streamed events into the shared aggregate view. The member's progress is
+     * scaled into the slice reserved for it at calibration ({@link
+     * PreparedMember#estimatedScope()}), and the pre-scanned goal's phase list
+     * drives the merged phase display. Falls back to running the prepared goal
+     * in-process when the host jar isn't in the CAS.
      */
-    private int buildViaHost(Path dir, Path cache, Path lockFile, int workerCount,
-                              dev.jkbuild.cli.run.AggregateContext agg)
+    private int runPreparedViaHost(PreparedMember pm, AggregateContext agg) throws Exception {
+        Path lockFile = pm.dir().resolve("jk.lock");
+        int workerCount = workers != null && workers > 0 ? workers : 1;
+        dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
+                "build", pm.dir(), pm.cache(), lockFile, jdksDir, profileName, workerCount,
+                buildOpts.skipTests, global.verbose, global.outputIsJson());
+        int code = dev.jkbuild.cli.run.HostLauncher.tryRunInto(
+                inv, agg, pm.target(), pm.goal().phases(), pm.estimatedScope(), global.verbose);
+        if (code >= 0) return code;
+        // -1 = host jar missing; run the prepared goal in-process instead.
+        return runPrepared(pm, agg);
+    }
+
+    /**
+     * Fork the Workspace Host JVM for a single (non-workspace) project, streaming
+     * its events through the CLI's standard per-goal listeners, and return the
+     * exit code. Workspace members take {@link #runPreparedViaHost} instead so
+     * they feed the shared aggregate bar.
+     */
+    private int buildViaHost(Path dir, Path cache, Path lockFile, int workerCount)
             throws Exception {
-        // Phase 4: workspace mode — dispatch each member through the Host, feeding
-        // events into the aggregate view if one is active.
-        if (agg != null) {
-            // Workspace: run each member through the Host; aggregate progress via agg.
-            // The AggregateContext drives the shared progress bar; each member's events
-            // arrive through AggregateMemberListener wired in the ReceivingGoalListener.
-            // For now we keep workspace builds sequential (same as in-process fallback).
-            dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
-                    "build", dir, cache, lockFile, jdksDir, profileName, workerCount,
-                    buildOpts.skipTests, global.verbose, global.outputIsJson());
-            String member = buildTarget(dir.resolve("jk.toml"), dir);
-            var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec(member,
-                    r -> "Build successful", r -> "Build failed");
-            int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
-                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
-            if (code >= 0) return code;
-            // -1 = host jar missing, fall through to in-process
-            return -1;
-        }
         dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
                 "build", dir, cache, lockFile, jdksDir, profileName, workerCount,
                 buildOpts.skipTests, global.verbose, global.outputIsJson());
