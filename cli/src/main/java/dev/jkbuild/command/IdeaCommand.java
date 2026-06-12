@@ -9,6 +9,9 @@ import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.IntellijJdkDir;
+import dev.jkbuild.model.Coordinate;
+import dev.jkbuild.repo.JkMavenLocalRepo;
+import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.jdk.IntellijSdkRegistrar;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
@@ -31,7 +34,6 @@ import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -139,13 +141,9 @@ public final class IdeaCommand implements CliCommand {
         Path ideaDir = wsRoot.resolve(".idea");
         Files.createDirectories(ideaDir);
 
-        // CAS files are stored without extensions (hash-addressed). IntelliJ's
-        // VFS won't treat extension-less files as JARs even behind a jar:// URL.
-        // Fix: create .idea/.libs/ with symlinks carrying proper .jar names.
-        // Falls back to copying if the filesystem doesn't support symlinks.
-        Path jarsDir = ideaDir.resolve(".libs");
-        Files.createDirectories(jarsDir);
-        resolveJarLinks(allLibs, jarsDir);
+        // Libraries are served from the repo directory (~/.jk/cache/repo/) which
+        // stores hard-linked copies with proper Maven-layout filenames and .jar
+        // extensions — IntelliJ can index them without any extra local linking.
 
         // ---- resolve per-module JDKs --------------------------------------
         // Each module maps to a stable jk-<vendor>-<level> SDK (e.g.
@@ -184,7 +182,7 @@ public final class IdeaCommand implements CliCommand {
         // Annotation processors per module → routed to IntelliJ's annotation
         // processing config (not the compile classpath) and the generated
         // sources marked as a generated source root.
-        Map<Path, List<String>> processorJars = new LinkedHashMap<>();
+        Map<Path, List<Path>> processorJars = new LinkedHashMap<>();
         for (Map.Entry<Path, JkBuild> me : targets) {
             processorJars.put(me.getKey(),
                     processorLibFiles(me.getKey(), me.getValue(), members, allLibs));
@@ -198,7 +196,7 @@ public final class IdeaCommand implements CliCommand {
         Path libsDir = ideaDir.resolve("libraries");
         Files.createDirectories(libsDir);
         for (LibDef lib : allLibs.values()) {
-            write(libsDir.resolve(lib.fileName + ".xml"), libraryXml(lib, wsRoot, ideaDir));
+            write(libsDir.resolve(lib.fileName + ".xml"), libraryXml(lib));
             files++;
         }
 
@@ -331,47 +329,6 @@ public final class IdeaCommand implements CliCommand {
     // Library collection
     // =========================================================================
 
-    /**
-     * Populate {@code linkedJar}/{@code linkedSrc} on every {@link LibDef} by
-     * creating a {@code .jar}-named symlink inside {@code jarsDir} that points at
-     * the CAS entry. Falls back to copying if symlinks fail (no admin on Windows).
-     *
-     * <p>IntelliJ's VFS won't treat extension-less files as JARs behind a
-     * {@code jar://} URL; the symlinks/copies give every library a proper name.
-     */
-    private static void resolveJarLinks(Map<String, LibDef> allLibs, Path jarsDir)
-            throws IOException {
-        for (Map.Entry<String, LibDef> e : allLibs.entrySet()) {
-            LibDef lib = e.getValue();
-            Path linked = link(jarsDir, lib.fileName + ".jar", lib.jarPath);
-            Path linkedSrc = null;
-            if (lib.sourcesPath != null) {
-                linkedSrc = link(jarsDir, lib.fileName + "-sources.jar", lib.sourcesPath);
-            }
-            e.setValue(new LibDef(lib.name, lib.fileName,
-                    lib.jarPath, linked, lib.sourcesPath, linkedSrc));
-        }
-    }
-
-    /** Create a symlink {@code jarsDir/name → target}; fall back to copy. */
-    private static Path link(Path jarsDir, String name, Path target) throws IOException {
-        Path link = jarsDir.resolve(name);
-        if (Files.exists(link, LinkOption.NOFOLLOW_LINKS)) {
-            // Already linked/copied — check if it still points at the same target.
-            if (Files.isSymbolicLink(link) && Files.readSymbolicLink(link).equals(target)) {
-                return link;
-            }
-            Files.delete(link);
-        }
-        try {
-            Files.createSymbolicLink(link, target);
-        } catch (UnsupportedOperationException | IOException ex) {
-            // Symlinks not supported (Windows without privileges) — copy instead.
-            Files.copy(target, link);
-        }
-        return link;
-    }
-
     /** Collect all external (non-workspace) dep library definitions for one member. */
     private static void collectLibDefs(Path memberDir, JkBuild member,
                                         Map<Path, JkBuild> members, Cas cas,
@@ -380,7 +337,7 @@ public final class IdeaCommand implements CliCommand {
         if (!Files.exists(lockFile)) return;
         Lockfile lock = LockfileReader.read(lockFile);
 
-        // Fetch any missing JARs so the library XML has valid CAS paths.
+        // Fetch any missing JARs so the repo has entries to reference.
         // This mirrors `jk sync` — `jk idea` should work without a prior sync.
         try {
             new CacheSync(cas, new Http()).sync(lock, CacheSync.ProgressObserver.NOOP);
@@ -390,27 +347,52 @@ public final class IdeaCommand implements CliCommand {
 
         // Build a set of workspace-sibling coordinates so we can skip them.
         Set<String> siblingCoords = siblingCoordinates(member, members);
+        JkMavenLocalRepo repo = new JkMavenLocalRepo(cas.root());
 
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) continue;            // path/git dep
             if (siblingCoords.contains(pkg.name())) continue; // workspace sibling → module dep
             if (allLibs.containsKey(pkg.name() + ":" + pkg.version())) continue;
 
-            String hex = hexOf(pkg.checksum());
-            if (hex == null || !cas.contains(hex)) continue; // not yet synced
+            int colon = pkg.name().indexOf(':');
+            if (colon < 0) continue;
+            Coordinate coord = Coordinate.of(
+                    pkg.name().substring(0, colon),
+                    pkg.name().substring(colon + 1),
+                    pkg.version());
 
-            Path jarPath     = cas.pathFor(hex);
+            // Use the repo (Maven-layout with proper .jar extension) rather than
+            // the CAS (extension-less hash paths). IntelliJ requires .jar extension.
+            String artifactRelPath = MavenLayout.artifactPath(coord);
+            Optional<Path> jarOpt = repo.locate(artifactRelPath);
+            if (jarOpt.isEmpty()) {
+                // CAS has the blob but jk sync pre-dated the repo mirror — materialize now.
+                String hex = hexOf(pkg.checksum());
+                if (hex != null && cas.contains(hex)) {
+                    repo.materialize(artifactRelPath, cas.pathFor(hex));
+                    jarOpt = repo.locate(artifactRelPath);
+                }
+            }
+            if (jarOpt.isEmpty()) continue; // not yet synced / non-Maven dep
+
             Path sourcesPath = null;
             if (pkg.sourcesChecksum() != null) {
-                String srcHex = hexOf(pkg.sourcesChecksum());
-                if (srcHex != null && cas.contains(srcHex)) {
-                    sourcesPath = cas.pathFor(srcHex);
+                Coordinate srcCoord = new Coordinate(
+                        coord.group(), coord.artifact(), coord.version(), "sources", "jar");
+                String srcRelPath = MavenLayout.artifactPath(srcCoord);
+                sourcesPath = repo.locate(srcRelPath).orElse(null);
+                if (sourcesPath == null) {
+                    String srcHex = hexOf(pkg.sourcesChecksum());
+                    if (srcHex != null && cas.contains(srcHex)) {
+                        repo.materialize(srcRelPath, cas.pathFor(srcHex));
+                        sourcesPath = repo.locate(srcRelPath).orElse(null);
+                    }
                 }
             }
 
             String libName = pkg.name() + ":" + pkg.version();
             allLibs.put(libName, new LibDef(libName, libFileName(libName),
-                    jarPath, null, sourcesPath, null));
+                    jarOpt.get(), sourcesPath));
         }
     }
 
@@ -477,20 +459,20 @@ public final class IdeaCommand implements CliCommand {
      * processor-scoped deps — fed into the module's annotation-processing
      * profile. The JARs are already linked by {@link #collectLibDefs}.
      */
-    private static List<String> processorLibFiles(Path memberDir, JkBuild member,
-                                                  Map<Path, JkBuild> members,
-                                                  Map<String, LibDef> allLibs) throws IOException {
+    private static List<Path> processorLibFiles(Path memberDir, JkBuild member,
+                                                 Map<Path, JkBuild> members,
+                                                 Map<String, LibDef> allLibs) throws IOException {
         Path lockFile = memberDir.resolve("jk.lock");
         if (!Files.exists(lockFile)) return List.of();
         Lockfile lock = LockfileReader.read(lockFile);
         Set<String> siblingCoords = siblingCoordinates(member, members);
-        List<String> out = new ArrayList<>();
+        List<Path> out = new ArrayList<>();
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) continue;
             if (siblingCoords.contains(pkg.name())) continue;
             if (!pkg.inAnyScope(EnumSet.of(Scope.PROCESSOR))) continue;
             LibDef def = allLibs.get(pkg.name() + ":" + pkg.version());
-            if (def != null) out.add(def.fileName());
+            if (def != null && def.jarPath() != null) out.add(def.jarPath());
         }
         return out;
     }
@@ -548,7 +530,7 @@ public final class IdeaCommand implements CliCommand {
 
     private static int writeCompilerXml(Path ideaDir, Path wsRoot,
                                          JkBuild root, Map<Path, JkBuild> members,
-                                         Map<Path, List<String>> processorJars)
+                                         Map<Path, List<Path>> processorJars)
             throws IOException {
         StringBuilder sb = xmlHeader();
         sb.append("<project version=\"4\">\n");
@@ -568,14 +550,14 @@ public final class IdeaCommand implements CliCommand {
         sb.append("    </bytecodeTargetLevel>\n");
 
         // Annotation processing: one profile per module that declares
-        // processor-scoped deps. Each binds the module, its processor JARs (via
-        // the .idea/.libs symlinks), and the generated-sources output dir so
-        // IntelliJ runs the processors the same way `jk build` does.
+        // processor-scoped deps. Each binds the module, its processor JARs (from
+        // the Maven-layout repo with proper .jar extension), and the generated-
+        // sources output dir so IntelliJ runs the processors the same way jk does.
         boolean anyProcessors = processorJars.values().stream().anyMatch(l -> !l.isEmpty());
         if (anyProcessors) {
             sb.append("    <annotationProcessing>\n");
             for (Map.Entry<Path, JkBuild> me : targets) {
-                List<String> procs = processorJars.getOrDefault(me.getKey(), List.of());
+                List<Path> procs = processorJars.getOrDefault(me.getKey(), List.of());
                 if (procs.isEmpty()) continue;
                 String mod = moduleName(me.getValue());
                 BuildLayout layout = BuildLayout.of(me.getKey(), me.getValue());
@@ -586,9 +568,8 @@ public final class IdeaCommand implements CliCommand {
                 sb.append("        <outputRelativeToContentRoot value=\"true\" />\n");
                 sb.append("        <module name=\"").append(esc(mod)).append("\" />\n");
                 sb.append("        <processorPath useClasspath=\"false\">\n");
-                for (String file : procs) {
-                    sb.append("          <entry name=\"$PROJECT_DIR$/.idea/.libs/")
-                      .append(esc(file)).append(".jar\" />\n");
+                for (Path jar : procs) {
+                    sb.append("          <entry name=\"").append(repoJarUrl(jar)).append("\" />\n");
                 }
                 sb.append("        </processorPath>\n");
                 sb.append("      </profile>\n");
@@ -601,20 +582,17 @@ public final class IdeaCommand implements CliCommand {
         return 1;
     }
 
-    private static String libraryXml(LibDef lib, Path wsRoot, Path ideaDir) {
+    private static String libraryXml(LibDef lib) {
         StringBuilder sb = xmlHeader();
         sb.append("<component name=\"libraryTable\">\n");
         sb.append("  <library name=\"").append(esc(lib.name)).append("\">\n");
         sb.append("    <CLASSES>\n");
-        // Use the .jar-named symlink/copy so IntelliJ recognises it as an archive.
-        // Emit a $PROJECT_DIR$-relative URL when the file lives under the workspace.
-        Path jar = lib.linkedJar != null ? lib.linkedJar : lib.jarPath;
-        sb.append("      <root url=\"").append(jarUrl(jar, wsRoot)).append("\" />\n");
+        sb.append("      <root url=\"").append(repoJarUrl(lib.jarPath)).append("\" />\n");
         sb.append("    </CLASSES>\n");
         sb.append("    <JAVADOC />\n");
         sb.append("    <SOURCES>\n");
-        if (lib.linkedSrc != null) {
-            sb.append("      <root url=\"").append(jarUrl(lib.linkedSrc, wsRoot)).append("\" />\n");
+        if (lib.sourcesPath != null) {
+            sb.append("      <root url=\"").append(repoJarUrl(lib.sourcesPath)).append("\" />\n");
         }
         sb.append("    </SOURCES>\n");
         sb.append("  </library>\n</component>\n");
@@ -624,7 +602,7 @@ public final class IdeaCommand implements CliCommand {
     private static String imlXml(Path memberDir, JkBuild member,
                                    List<ModuleRef> modRefs, List<LibRef> libRefs,
                                    SdkRef memberSdk, SdkRef defaultSdk,
-                                   List<String> processorFiles) {
+                                   List<Path> processorFiles) {
         boolean ownJdk = memberSdk != null && defaultSdk != null
                 && !memberSdk.sdkName().equals(defaultSdk.sdkName());
         int langLevel = memberSdk != null ? memberSdk.languageLevel() : 0;
@@ -776,15 +754,12 @@ public final class IdeaCommand implements CliCommand {
      * Paths inside the workspace use {@code $PROJECT_DIR$} (portable);
      * other paths fall back to {@code $USER_HOME$}-relative or absolute.
      */
-    private static String jarUrl(Path jar, Path wsRoot) {
-        Path abs = jar.toAbsolutePath().normalize();
-        // Prefer $PROJECT_DIR$ for paths inside the workspace (e.g. .idea/.libs/).
-        if (abs.startsWith(wsRoot.toAbsolutePath().normalize())) {
-            String rel = wsRoot.toAbsolutePath().normalize()
-                    .relativize(abs).toString().replace('\\', '/');
-            return "jar://$PROJECT_DIR$/" + rel + "!/";
-        }
-        String absStr = abs.toString().replace('\\', '/');
+    /**
+     * Convert a repo JAR path to IntelliJ's {@code jar://...!/} URL format.
+     * Repo files live under {@code ~/.jk/cache/repo/} and use {@code $USER_HOME$}.
+     */
+    private static String repoJarUrl(Path jar) {
+        String absStr = jar.toAbsolutePath().normalize().toString().replace('\\', '/');
         String home = System.getProperty("user.home", "").replace('\\', '/');
         if (!home.isBlank() && absStr.startsWith(home + "/")) {
             absStr = "$USER_HOME$/" + absStr.substring(home.length() + 1);
@@ -842,14 +817,10 @@ public final class IdeaCommand implements CliCommand {
     // =========================================================================
 
     /**
-     * @param jarPath     absolute CAS path (no .jar extension — used to create the symlink)
-     * @param linkedJar   path inside .idea/.libs/ with .jar extension — what IntelliJ references
-     * @param sourcesPath CAS path to the sources JAR (may be null)
-     * @param linkedSrc   path inside .idea/.libs/ to the linked sources JAR (may be null)
+     * @param jarPath     repo path with proper .jar extension (e.g. ~/.jk/cache/repo/.../lib-1.0.jar)
+     * @param sourcesPath repo path for the -sources.jar (may be null)
      */
-    private record LibDef(String name, String fileName,
-                          Path jarPath, Path linkedJar,
-                          Path sourcesPath, Path linkedSrc) {}
+    private record LibDef(String name, String fileName, Path jarPath, Path sourcesPath) {}
 
     private record LibRef(String name, String scope) {}
     private record ModuleRef(String name, String scope) {}

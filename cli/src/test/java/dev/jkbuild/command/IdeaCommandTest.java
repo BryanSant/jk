@@ -182,7 +182,7 @@ class IdeaCommandTest {
         assertThat(compiler)
                 .contains("<annotationProcessing>")
                 .contains("profile name=\"jk-widget\"")
-                .contains("org_example_myprocessor_1_0_0.jar")
+                .contains("myprocessor-1.0.0.jar")  // repo path with proper Maven name + .jar
                 .contains("target/build/generated/sources/annotations/main");
 
         String iml = Files.readString(ws.resolve("widget.iml"));
