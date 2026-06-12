@@ -59,16 +59,16 @@ public final class JkDarkTheme implements Theme {
 
     // --- gradients --------------------------------------------------------
     // Named gradients, each independently tunable (all from the Jk Dark scheme):
-    // title bright-blue → accent; spinner primary → accent; progress green →
-    // bright-green.
+    // title bright-blue → accent; spinner primary → accent; progress green
+    // 50% darker → 50% brighter.
     /** Gradient for {@code jk init}/wizard titles — Jk Dark bright-blue → accent. */
     private static final Gradient TITLE_GRADIENT = new Gradient(BRIGHT_BLUE, ACCENT);
     /**
-     * Gradient for the progress-bar fill — Jk Dark green (30% darker) →
-     * bright-green (10% brighter), for a punchier fill than the raw palette greens.
+     * Gradient for the progress-bar fill — the Jk Dark green spanning 50% darker
+     * → 50% brighter, so the fill is a single hue deepening as it grows.
      */
     private static final Gradient PROGRESS_GRADIENT =
-            new Gradient(NORMAL_GREEN.darker(0.30), BRIGHT_GREEN.brighter(0.10));
+            new Gradient(NORMAL_GREEN.darker(0.50), NORMAL_GREEN.brighter(0.50));
     /** Gradient for the spinner frames — Jk Dark primary → accent. */
     private static final Gradient SPINNER_GRADIENT = new Gradient(PRIMARY, ACCENT);
     /** Gradient a failed progress bar repaints in: dark red #7f1d1d → bright red #ef4444. */

@@ -66,11 +66,11 @@ class SpinnerProgressBarTest {
 
     @Test
     void rightmost_filled_glyph_is_always_the_gradient_end() {
-        // The frontier glyph is pinned to the gradient end (bright-green +10%)
+        // The frontier glyph is pinned to the gradient end (green +50%)
         // at every fill level; the band trails leftward toward the darker green.
-        assertThat(frontierColor(5)).isEqualTo("38;2;116;255;191");
-        assertThat(frontierColor(50)).isEqualTo("38;2;116;255;191");
-        assertThat(frontierColor(100)).isEqualTo("38;2;116;255;191");
+        assertThat(frontierColor(5)).isEqualTo("38;2;114;255;120");
+        assertThat(frontierColor(50)).isEqualTo("38;2;114;255;120");
+        assertThat(frontierColor(100)).isEqualTo("38;2;114;255;120");
     }
 
     @Test
@@ -81,7 +81,7 @@ class SpinnerProgressBarTest {
             pb.update(2, "x");   // round(2 * 40 / 100) = 1 filled
         }
         var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));
-        assertThat(colors).containsExactly("38;2;116;255;191");
+        assertThat(colors).containsExactly("38;2;114;255;120");
     }
 
     @Test
@@ -175,11 +175,11 @@ class SpinnerProgressBarTest {
     void gradient_runs_from_green_to_bright_green() {
         var colors = SpinnerProgressBar.buildGradient(20);
         assertThat(colors).hasSize(20);
-        // Jk Dark green #4CAF50 −30% → bright-green #69F0AE +10%.
+        // Jk Dark green #4CAF50 spanning −50% → +50%.
         String first = colors[0].toAnsi();
         String last = colors[19].toAnsi();
-        assertThat(first).isEqualTo("38;2;53;122;56");     // #4CAF50 × 0.70
-        assertThat(last).isEqualTo("38;2;116;255;191");    // #69F0AE × 1.10 (G clamped)
+        assertThat(first).isEqualTo("38;2;38;88;40");      // #4CAF50 × 0.50
+        assertThat(last).isEqualTo("38;2;114;255;120");    // #4CAF50 × 1.50 (G clamped)
     }
 
     private static PrintStream stream(ByteArrayOutputStream buf) {

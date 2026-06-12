@@ -59,9 +59,10 @@ class GradientTest {
     }
 
     @Test
-    void progress_runs_green_30pct_darker_to_bright_green_10pct_brighter() {
+    void progress_runs_green_50pct_darker_to_50pct_brighter() {
+        // #4CAF50 (76,175,80) × 0.50 → (38,88,40); × 1.50 → (114,255,120) (G clamps).
         assertThat(Theme.active().progressGradient())
-                .isEqualTo(new Gradient(new Rgb(53, 122, 56), new Rgb(116, 255, 191)));
+                .isEqualTo(new Gradient(new Rgb(38, 88, 40), new Rgb(114, 255, 120)));
     }
 
     @Test

@@ -45,12 +45,12 @@ class ProgressBarTest {
 
     @Test
     void frontier_glyph_is_the_gradient_end() {
-        // Jk Dark green #4CAF50 −30% → bright-green #69F0AE +10%; the right-most
-        // filled glyph is pinned to the bright-green end at every fill level.
+        // Jk Dark green #4CAF50 spanning −50% → +50%; the right-most filled glyph
+        // is pinned to the bright end (#4CAF50 × 1.50, green clamped) at every fill.
         assertThat(frontierColor(new ProgressBar().render(2, 100)))   // 1 filled
-                .isEqualTo("38;2;116;255;191");
+                .isEqualTo("38;2;114;255;120");
         assertThat(frontierColor(new ProgressBar().render(100, 100))) // 40 filled
-                .isEqualTo("38;2;116;255;191");
+                .isEqualTo("38;2;114;255;120");
     }
 
     /** SGR of the right-most filled (▰) glyph in {@code raw}, or null. */

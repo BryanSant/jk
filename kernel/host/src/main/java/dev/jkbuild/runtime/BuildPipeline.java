@@ -113,6 +113,30 @@ public final class BuildPipeline {
         }
     }
 
+    // ---- progress-bar weights -------------------------------------------
+    //
+    // Each phase's share of the progress bar, as a rough *time* budget rather
+    // than a unit count — so a 300-source compile and a 5-test run each occupy
+    // their expected slice instead of the compile (scoped by file count) dwarfing
+    // everything. These are relative: the bar normalises against their sum. Tuned
+    // for the common warm build (JDK installed, deps cached); the three CPU/IO
+    // heavyweights — compile, test-run, test-compile — own the bulk. Phases that
+    // report fine-grained progress (sync per-artifact, run-tests per-test) advance
+    // smoothly within their slice; opaque ones (javac) fill theirs on completion.
+    static final int W_PARSE        = 4;
+    static final int W_SYNC         = 6;
+    static final int W_JDK          = 3;
+    static final int W_COMPILE      = 30;
+    static final int W_COMPILE_KT   = 30;
+    static final int W_ASSEMBLE     = 2;
+    static final int W_RESOURCES    = 1;
+    static final int W_COMPILE_TEST = 12;
+    static final int W_RUN_TESTS    = 30;
+    static final int W_PACKAGE      = 5;
+    static final int W_STAMP        = 1;
+    static final int W_SHADOW       = 8;
+    static final int W_NATIVE       = 50;
+
     /**
      * Assemble the goal builder with the core build phases (parse → sync → jdk →
      * compile → resources → [test] → package → stamp) plus the shadow/native
@@ -159,6 +183,7 @@ public final class BuildPipeline {
         // ---- parse-build ------------------------------------------------
         Phase parseBuild = Phase.builder("parse-build")
                 .label("Parsing")
+                .weight(W_PARSE)
                 .scope(() -> {
                     if (Files.exists(in.lockFile())) {
                         try { return LockfileReader.read(in.lockFile()).artifacts().size() + 5; }
@@ -270,14 +295,15 @@ public final class BuildPipeline {
                 .label("Syncing")
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
+                .weight(W_SYNC)
                 .scope(() -> {
                     try { return LockfileReader.read(in.lockFile()).artifacts().size(); }
                     catch (Exception ignored) { return 10; }
                 })
                 .execute(ctx -> {
                     Lockfile lock = ctx.require(LOCKFILE);
-                    int packages = lock.artifacts().size();
-                    if (packages > 0) ctx.updateScope(packages);
+                    // Scope is already counted up front by estimateScope() (artifact
+                    // count); progress(1)-per-artifact below fills it.
                     var observer = new CacheSync.ProgressObserver() {
                         @Override public void fetched(Lockfile.Artifact pkg) {
                             ctx.label("fetched " + pkg.name());
@@ -301,6 +327,7 @@ public final class BuildPipeline {
                 .label("JDK")
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
+                .weight(W_JDK)
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("resolve JDK");
@@ -325,7 +352,11 @@ public final class BuildPipeline {
                 .requires(mixed
                         ? new String[]{"parse-build", "sync-deps", "ensure-jdk", "compile-kotlin"}
                         : new String[]{"parse-build", "sync-deps", "ensure-jdk"})
-                .scope(0)
+                // Scope counts sources (granularity); weight is the bar share. The
+                // body reports one progress(sources.size()) on completion, so this
+                // slice fills when javac finishes rather than per source file.
+                .weight(W_COMPILE)
+                .scope(() -> estimateJavaSources(in, compact))
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
                     // javac always writes to the canonical classes dir (java/main/).
@@ -339,7 +370,6 @@ public final class BuildPipeline {
                         ctx.put(BUILD_OUTCOME, "no-sources");
                         return;
                     }
-                    ctx.updateScope(sources.size());
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
                     if (mixed) {
@@ -411,7 +441,10 @@ public final class BuildPipeline {
                 // Kotlin compiles first (reads Java declarations from source), so it
                 // only needs the base phases — javac runs after it in a mixed module.
                 .requires("parse-build", "sync-deps", "ensure-jdk")
-                .scope(0)
+                // Scope counts Kotlin sources (granularity); weight is the bar share
+                // (see compile-java). Execute fills it via progress(ktSources.size()).
+                .weight(W_COMPILE_KT)
+                .scope(() -> estimateKotlinSources(in, compact))
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Files.createDirectories(classes);   // compile-java may be skipped
@@ -421,7 +454,6 @@ public final class BuildPipeline {
                         ctx.put(KOTLIN_OUTCOME, "no-sources");
                         return;
                     }
-                    ctx.updateScope(ktSources.size());
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
                     // Freshness inputs: Kotlin sources plus — in a mixed module —
@@ -475,6 +507,7 @@ public final class BuildPipeline {
                 .label("Resources")
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile)
+                .weight(W_RESOURCES)
                 .scope(1)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
@@ -491,6 +524,7 @@ public final class BuildPipeline {
                 .label("Test compile")
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile, "sync-deps")
+                .weight(W_COMPILE_TEST)
                 .scope(1)
                 .execute(ctx -> {
                     Path javaTestSrc = compact ? in.dir().resolve("test") : in.dir().resolve("src/test/java");
@@ -566,6 +600,7 @@ public final class BuildPipeline {
                 .label("Testing")
                 .kind(PhaseKind.IO)
                 .requires("compile-test", "copy-resources")
+                .weight(W_RUN_TESTS)
                 .scope(in.estimatedTestCount())
                 .execute(ctx -> {
                     if (ctx.get(NO_TEST_SOURCES).orElse(false)) {
@@ -629,6 +664,7 @@ public final class BuildPipeline {
                 .requires(in.skipTests()
                         ? new String[]{"copy-resources"}
                         : new String[]{"copy-resources", "run-tests"})
+                .weight(W_PACKAGE)
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
@@ -653,6 +689,7 @@ public final class BuildPipeline {
         // ---- write-stamp ------------------------------------------------
         Phase writeStamp = Phase.builder("write-stamp")
                 .requires("compile-java")
+                .weight(W_STAMP)
                 .scope(1)
                 .execute(ctx -> {
                     String outcome = ctx.get(BUILD_OUTCOME).orElse("");
@@ -687,6 +724,7 @@ public final class BuildPipeline {
         // path leaves it empty until incremental Kotlin lands.
         Phase writeStampKotlin = Phase.builder("write-stamp-kotlin")
                 .requires("compile-kotlin")
+                .weight(W_STAMP)
                 .scope(1)
                 .execute(ctx -> {
                     String outcome = ctx.get(KOTLIN_OUTCOME).orElse("");
@@ -715,6 +753,7 @@ public final class BuildPipeline {
                 .label("Assembling")
                 .kind(PhaseKind.CPU)
                 .requires("compile-java", "compile-kotlin")
+                .weight(W_ASSEMBLE)
                 .scope(1)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
@@ -794,6 +833,7 @@ public final class BuildPipeline {
                 .label("Shadow")
                 .kind(PhaseKind.CPU)
                 .requires("package-jar")
+                .weight(W_SHADOW)
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
@@ -833,6 +873,7 @@ public final class BuildPipeline {
                 .label("Native")
                 .kind(PhaseKind.IO)
                 .requires("package-jar")
+                .weight(W_NATIVE)
                 .scope(10)  // preamble(1) + 8 native-image stages + done(1)
                 .execute(ctx -> {
                     // Fail-fast: verify native-image is available before compilation
@@ -950,6 +991,29 @@ public final class BuildPipeline {
     @SuppressWarnings("unchecked")
     private static List<Path> kotlinSources(PhaseContext ctx) {
         return (List<Path>) ctx.get(KOTLIN_SOURCES).orElse(List.of());
+    }
+
+    /**
+     * Predicted Java-source count for {@code compile-java}'s up-front scope,
+     * collected the same way {@code parse-build} populates {@link #JAVA_SOURCES}.
+     * Best-effort — a walk failure yields 0 (a flat segment), never an error.
+     */
+    private static int estimateJavaSources(Inputs in, boolean compact) {
+        Path javaMainSrc = compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java");
+        try {
+            return CompileSupport.collectJavaSources(javaMainSrc).size();
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    /** Predicted Kotlin-source count for {@code compile-kotlin}'s up-front scope. */
+    private static int estimateKotlinSources(Inputs in, boolean compact) {
+        try {
+            return CompileSupport.collectKotlinSources(in.dir(), compact).size();
+        } catch (Exception ignored) {
+            return 0;
+        }
     }
 
     /**

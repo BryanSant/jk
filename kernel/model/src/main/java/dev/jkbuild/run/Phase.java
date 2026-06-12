@@ -20,15 +20,17 @@ public final class Phase {
     private final PhaseKind kind;
     private final List<String> requires;
     private final IntSupplier scope;
+    private final IntSupplier weight;   // null → weight tracks scope (legacy behaviour)
     private final Body body;
 
     Phase(String name, String label, PhaseKind kind, List<String> requires,
-          IntSupplier scope, Body body) {
+          IntSupplier scope, IntSupplier weight, Body body) {
         this.name = Objects.requireNonNull(name);
         this.label = label != null ? label : name;
         this.kind = Objects.requireNonNull(kind);
         this.requires = List.copyOf(requires);
         this.scope = Objects.requireNonNull(scope);
+        this.weight = weight;
         this.body = Objects.requireNonNull(body);
     }
 
@@ -37,7 +39,28 @@ public final class Phase {
     public String label() { return label; }
     public PhaseKind kind() { return kind; }
     public List<String> requires() { return requires; }
+
+    /**
+     * Internal unit count — how granularly this phase ticks (sources, artifacts,
+     * tests). Drives the within-phase fraction, <em>not</em> the share of the bar
+     * the phase occupies; see {@link #estimateWeight}.
+     */
     public int estimateScope() { return Math.max(0, scope.getAsInt()); }
+
+    /** True when a {@link Builder#weight} was set, so the phase self-weights. */
+    public boolean hasExplicitWeight() { return weight != null; }
+
+    /**
+     * The phase's share of the progress bar — a time-proportional cost, not a
+     * unit count. The goal's denominator sums these, and a phase's own
+     * 0→100% (its {@link #estimateScope} internal progress) is scaled into this
+     * many ticks. Defaults to {@link #estimateScope} when no weight was set, so
+     * goals that don't opt in keep counting units exactly as before.
+     */
+    public int estimateWeight() {
+        return Math.max(0, weight != null ? weight.getAsInt() : scope.getAsInt());
+    }
+
     public boolean async() { return kind != PhaseKind.SYNC; }
 
     /** Phase body — runs on whatever thread the scheduler dispatched it on. */
@@ -59,6 +82,7 @@ public final class Phase {
         private PhaseKind kind = PhaseKind.SYNC;
         private final List<String> requires = new ArrayList<>();
         private IntSupplier scope = () -> 1;
+        private IntSupplier weight = null;   // null → weight tracks scope
         private Body body = ctx -> {};
 
         Builder(String name) {
@@ -86,10 +110,23 @@ public final class Phase {
         /** Fixed scope — equivalent to {@code scope(() -> n)}. */
         public Builder scope(int n) { this.scope = () -> n; return this; }
 
+        /**
+         * Set the phase's share of the progress bar — a time-proportional cost,
+         * independent of its {@link #scope} unit count. Use this to keep a
+         * file-count- or test-count-scoped phase from dominating the bar: e.g. a
+         * compile over 300 sources and a 5-test run can each be weighted by their
+         * expected duration so the bar paces by time, not by raw counts. When
+         * unset, the weight tracks the scope (legacy behaviour).
+         */
+        public Builder weight(IntSupplier supplier) { this.weight = supplier; return this; }
+
+        /** Fixed weight — equivalent to {@code weight(() -> n)}. */
+        public Builder weight(int n) { this.weight = () -> n; return this; }
+
         public Builder execute(Body body) { this.body = body; return this; }
 
         public Phase build() {
-            return new Phase(name, label, kind, requires, scope, body);
+            return new Phase(name, label, kind, requires, scope, weight, body);
         }
     }
 }

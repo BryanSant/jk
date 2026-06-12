@@ -53,6 +53,23 @@ class GoalTest {
     }
 
     @Test
+    void estimated_total_weight_sums_phase_estimates_without_running() {
+        AtomicInteger ran = new AtomicInteger();
+        var goal = Goal.builder("estimate")
+                .addPhase(Phase.builder("a").scope(3).execute(ctx -> ran.incrementAndGet()).build())
+                .addPhase(Phase.builder("b").scope(() -> 7).execute(ctx -> ran.incrementAndGet()).build())
+                .addPhase(Phase.builder("c").execute(ctx -> ran.incrementAndGet()).build()) // default scope 1
+                .build();
+
+        // No explicit weights → weight tracks scope, so the total is unchanged.
+        assertThat(goal.estimatedTotalWeight()).isEqualTo(11); // 3 + 7 + 1
+        // Pure estimate: no phase executed, no progress accrued.
+        assertThat(ran).hasValue(0);
+        assertThat(goal.snapshot().numerator()).isZero();
+        assertThat(goal.snapshot().denominator()).isZero();
+    }
+
+    @Test
     void interleaved_progress_and_update_scope_never_overshoot() {
         // Regression for the "318 of 161" bug: when a phase calls
         // updateScope(1) followed by progress(1) repeatedly (jk test's

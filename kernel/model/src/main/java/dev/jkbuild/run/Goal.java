@@ -107,6 +107,29 @@ public final class Goal {
     }
 
     /**
+     * Sum of every phase's {@link Phase#estimateWeight} <em>without running the
+     * goal</em> — the same total {@link #run()} sets as the denominator at start.
+     * Used to pre-calibrate a workspace's cumulative progress bar to the aggregate
+     * tick total before any member builds, and as each member's slice of it. A
+     * phase whose estimate throws contributes 0, mirroring {@code run()}.
+     */
+    public int estimatedTotalWeight() {
+        List<CompletableFuture<Integer>> futures = new ArrayList<>(phases.size());
+        for (Phase p : phases) {
+            futures.add(CompletableFuture.supplyAsync(p::estimateWeight, JkThreads.io()));
+        }
+        int total = 0;
+        for (CompletableFuture<Integer> f : futures) {
+            try {
+                total += f.get();
+            } catch (Exception ignored) {
+                // best-effort estimate; a failing phase just contributes 0
+            }
+        }
+        return total;
+    }
+
+    /**
      * Run the goal. Blocks until every phase reaches a terminal state.
      * Throws no checked exceptions — phase failures are folded into
      * {@link GoalResult#success()}.
@@ -114,20 +137,31 @@ public final class Goal {
     public GoalResult run() {
         Instant goalStart = Instant.now();
 
-        // Step 1: scope estimation (parallel on IO).
+        // Step 1: scope estimation (parallel on IO). `initialScope` is each phase's
+        // internal unit count (how granularly it ticks); `weights` is its share of
+        // the bar (time-proportional). The denominator sums weights, not units, so a
+        // file-count-scoped compile can't dwarf a quick phase. A phase without an
+        // explicit weight reuses its scope, so the denominator is unchanged for it.
         List<CompletableFuture<Integer>> scopeFutures = new ArrayList<>(phases.size());
         for (Phase p : phases) {
             scopeFutures.add(CompletableFuture.supplyAsync(p::estimateScope, JkThreads.io()));
         }
         Map<String, Integer> initialScope = new HashMap<>();
+        Map<String, Integer> weights = new HashMap<>();
         for (int i = 0; i < phases.size(); i++) {
+            Phase p = phases.get(i);
+            int s = 0;
             try {
-                int s = scopeFutures.get(i).get();
-                initialScope.put(phases.get(i).name(), s);
-                denominator.add(s);
-            } catch (Exception e) {
-                initialScope.put(phases.get(i).name(), 0);
+                s = scopeFutures.get(i).get();
+            } catch (Exception ignored) {
+                // best-effort; a failing estimate contributes 0
             }
+            initialScope.put(p.name(), s);
+            // Reuse the computed scope when no weight was set — avoids re-walking
+            // sources just to learn the weight equals the scope.
+            int w = p.hasExplicitWeight() ? p.estimateWeight() : s;
+            weights.put(p.name(), w);
+            denominator.add(w);
         }
 
         for (Phase p : phases) {
@@ -148,7 +182,7 @@ public final class Goal {
                 break;
             }
             remaining.removeAll(ready);
-            boolean levelOk = runLevel(ready, initialScope);
+            boolean levelOk = runLevel(ready, initialScope, weights);
             for (Phase p : ready) {
                 if (statuses.get(p.name()) == PhaseStatus.SUCCESS) {
                     completedOk.add(p.name());
@@ -194,18 +228,20 @@ public final class Goal {
      * true when every phase in the level succeeded; false on the first
      * fail (triggers cooperative cancellation).
      */
-    private boolean runLevel(List<Phase> ready, Map<String, Integer> initialScope) {
+    private boolean runLevel(List<Phase> ready, Map<String, Integer> initialScope,
+                             Map<String, Integer> weights) {
         List<CompletableFuture<PhaseStatus>> futures = new ArrayList<>();
         for (Phase p : ready) {
             int scope = initialScope.getOrDefault(p.name(), 0);
+            int weight = weights.getOrDefault(p.name(), scope);
             statuses.put(p.name(), PhaseStatus.RUNNING);
             String phaseName = p.name();
             emit(l -> l.phaseStart(phaseName, scope));
             Executor exec = executorFor(p.kind());
             if (p.kind() == PhaseKind.SYNC) {
-                futures.add(CompletableFuture.completedFuture(runOnePhase(p, scope)));
+                futures.add(CompletableFuture.completedFuture(runOnePhase(p, scope, weight)));
             } else {
-                futures.add(CompletableFuture.supplyAsync(() -> runOnePhase(p, scope), exec));
+                futures.add(CompletableFuture.supplyAsync(() -> runOnePhase(p, scope, weight), exec));
             }
         }
 
@@ -234,20 +270,21 @@ public final class Goal {
         return ok;
     }
 
-    private PhaseStatus runOnePhase(Phase phase, int initialScope) {
+    private PhaseStatus runOnePhase(Phase phase, int initialScope, int weight) {
         Instant start = Instant.now();
         long startNum = numerator.sum();
-        DefaultPhaseContext ctx = new DefaultPhaseContext(phase.name(), this);
+        DefaultPhaseContext ctx = new DefaultPhaseContext(
+                phase.name(), this, initialScope, weight, phase.hasExplicitWeight());
         try {
             phase.execute(ctx);
-            // Auto-fill: if the phase reported less progress than its scope
+            // Auto-fill: if the phase reported less progress than its bar budget
             // promised, top up the difference on a clean success so the bar
             // visually settles. Failures don't auto-fill — the bar stays
             // where the work actually stopped.
             long phaseProgress = numerator.sum() - startNum;
-            long phaseScope = initialScope + ctx.scopeGrowth();
-            if (phaseProgress < phaseScope) {
-                int gap = (int) Math.min(Integer.MAX_VALUE, phaseScope - phaseProgress);
+            long phaseBudget = ctx.phaseBudget();
+            if (phaseProgress < phaseBudget) {
+                int gap = (int) Math.min(Integer.MAX_VALUE, phaseBudget - phaseProgress);
                 numerator.add(gap);
                 ctx.notifyProgress(gap);
             }

@@ -2,6 +2,7 @@
 package dev.jkbuild.run;
 
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Internal {@link PhaseContext} the scheduler hands to each phase.
@@ -17,23 +18,77 @@ final class DefaultPhaseContext implements PhaseContext {
 
     private final String phase;
     private final Goal goal;
-    private final AtomicInteger scopeGrowth = new AtomicInteger(0);
 
-    DefaultPhaseContext(String phase, Goal goal) {
+    /**
+     * Weighted phases occupy a fixed {@code weight} of bar ticks regardless of
+     * how many internal units ({@code internalScope}) they count; their
+     * 0→internalScope progress is scaled into that weight. Legacy phases (no
+     * explicit weight) keep the old 1:1 model: {@code progress} deltas hit the
+     * numerator directly and {@code updateScope} grows the goal denominator.
+     */
+    private final boolean weighted;
+    private final long weight;
+    private final AtomicLong internalScope;        // fraction denominator (weighted)
+    private final AtomicLong internalDone = new AtomicLong(0);
+    private final AtomicLong emitted = new AtomicLong(0);   // weight-ticks added so far (weighted)
+    private final AtomicInteger scopeGrowth = new AtomicInteger(0); // legacy denominator growth
+
+    DefaultPhaseContext(String phase, Goal goal, int internalScope, int weight, boolean weighted) {
         this.phase = phase;
         this.goal = goal;
+        this.weighted = weighted;
+        this.weight = weight;
+        this.internalScope = new AtomicLong(internalScope);
     }
 
     @Override
     public void progress(int delta) {
         if (delta <= 0) return;
-        goal.numeratorRef().add(delta);
-        notifyProgress(delta);
+        if (!weighted) {
+            goal.numeratorRef().add(delta);
+            notifyProgress(delta);
+            return;
+        }
+        internalDone.addAndGet(delta);
+        advance();
+    }
+
+    /**
+     * Weighted mode: move the numerator so the phase's share of the bar matches
+     * its internal progress fraction ({@code internalDone / internalScope}) ×
+     * {@code weight}. Monotonic — only ever advances — so a late scope bump never
+     * walks the bar backwards within the phase.
+     */
+    private synchronized void advance() {
+        long scope = internalScope.get();
+        long done = internalDone.get();
+        long target = scope > 0
+                ? Math.round(weight * Math.min(1.0, (double) done / scope))
+                : (done > 0 ? weight : 0);
+        long diff = target - emitted.get();
+        if (diff > 0) {
+            emitted.addAndGet(diff);
+            goal.numeratorRef().add(diff);
+            notifyProgress((int) Math.min(Integer.MAX_VALUE, diff));
+        }
+    }
+
+    /** The phase's full bar budget — what auto-fill tops the numerator up to. */
+    long phaseBudget() {
+        return weighted ? weight : internalScope.get() + scopeGrowth.get();
     }
 
     @Override
     public void updateScope(int additional) {
         if (additional <= 0) return;
+        if (weighted) {
+            // The phase's bar share is fixed at `weight`; discovering more units
+            // just re-bases the fraction (each unit is now worth fewer ticks). Grow
+            // the internal denominator only — the goal denominator stays put, so the
+            // bar neither grows nor jumps; advance() picks up the new ratio.
+            internalScope.addAndGet(additional);
+            return;
+        }
         scopeGrowth.addAndGet(additional);
         // Grow the denominator only — the numerator stays where it is.
         // An older version of this method also advanced the numerator
@@ -102,11 +157,6 @@ final class DefaultPhaseContext implements PhaseContext {
         return goal.get(key).orElseThrow(() ->
                 new IllegalStateException("phase '" + phase + "' required key '"
                         + key.name() + "' but it wasn't set by any upstream phase"));
-    }
-
-    /** How much {@link #updateScope} grew this phase's denominator. */
-    int scopeGrowth() {
-        return scopeGrowth.get();
     }
 
     /**

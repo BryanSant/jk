@@ -223,7 +223,7 @@ public final class BuildCommand implements CliCommand {
                             + workspaceRoot.relativize(memberDir) + " " + elapsedSince(buildStart));
                     return 2;
                 }
-                total += pm.estimatedScope();
+                total += pm.barWeight();
                 prepared.put(memberDir, pm);
             }
             agg.calibrate(total);
@@ -420,7 +420,7 @@ public final class BuildCommand implements CliCommand {
      * Construct (but do not run) a member's build goal: inputs → core phases →
      * declared tails. Returns {@code null} when {@code dir} has no {@code jk.toml}.
      * Split out of {@link #runForDir} so the workspace path can build every
-     * member's goal up front and sum {@link Goal#estimatedTotalScope()} to
+     * member's goal up front and sum {@link Goal#estimatedTotalWeight()} to
      * calibrate the shared progress bar before any member runs.
      */
     private PreparedMember prepareMember(Path dir) {
@@ -438,12 +438,12 @@ public final class BuildCommand implements CliCommand {
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
-        // Estimate the member's ticks once, here — the workspace pre-scan sums
+        // Estimate the member's bar weight once, here — the workspace pre-scan sums
         // these into the calibrated total, and the same value is the member's slice
         // of the aggregate bar (see AggregateMemberListener). Computing it once
         // keeps the slice byte-for-byte equal to what was summed into `total`.
         return new PreparedMember(dir, buildTarget(buildFile, dir), cache, goal,
-                goal.estimatedTotalScope());
+                goal.estimatedTotalWeight());
     }
 
     /** Run an already-built member goal and map its result to an exit code. */
@@ -453,7 +453,7 @@ public final class BuildCommand implements CliCommand {
         if (agg != null) {
             // Workspace member: feed the one shared aggregate view, scaling this
             // member's progress into its reserved slice of the calibrated total.
-            result = GoalConsole.runGoalInto(goal, pm.cache(), pm.target(), agg, pm.estimatedScope());
+            result = GoalConsole.runGoalInto(goal, pm.cache(), pm.target(), agg, pm.barWeight());
         } else {
             ConsoleSpec spec = new ConsoleSpec("Build",
                     r -> successMessage(goal, r),
@@ -477,10 +477,10 @@ public final class BuildCommand implements CliCommand {
 
     /**
      * A workspace member's goal, built and ready to run, paired with its pre-scan
-     * tick estimate — the member's slice of the calibrated aggregate total.
+     * bar weight — the member's slice of the calibrated aggregate total.
      */
     private record PreparedMember(Path dir, String target, Path cache, Goal goal,
-                                  long estimatedScope) {}
+                                  long barWeight) {}
 
     // ---- Workspace Host dispatch (Phase 4 coexistence) ----------------------
 
@@ -488,7 +488,7 @@ public final class BuildCommand implements CliCommand {
      * Run a pre-scanned workspace member through the Workspace Host, feeding its
      * streamed events into the shared aggregate view. The member's progress is
      * scaled into the slice reserved for it at calibration ({@link
-     * PreparedMember#estimatedScope()}), and the pre-scanned goal's phase list
+     * PreparedMember#barWeight()}), and the pre-scanned goal's phase list
      * drives the merged phase display. Falls back to running the prepared goal
      * in-process when the host jar isn't in the CAS.
      */
@@ -499,7 +499,7 @@ public final class BuildCommand implements CliCommand {
                 "build", pm.dir(), pm.cache(), lockFile, jdksDir, profileName, workerCount,
                 buildOpts.skipTests, global.verbose, global.outputIsJson());
         int code = dev.jkbuild.cli.run.HostLauncher.tryRunInto(
-                inv, agg, pm.target(), pm.goal().phases(), pm.estimatedScope(), global.verbose);
+                inv, agg, pm.target(), pm.goal().phases(), pm.barWeight(), global.verbose);
         if (code >= 0) return code;
         // -1 = host jar missing; run the prepared goal in-process instead.
         return runPrepared(pm, agg);

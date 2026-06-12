@@ -28,7 +28,7 @@ public final class AggregateMemberListener implements GoalListener {
 
     /**
      * This member's reserved slice of the calibrated {@code total} — the same
-     * pre-scan {@link dev.jkbuild.run.Goal#estimatedTotalScope()} that was summed
+     * pre-scan {@link dev.jkbuild.run.Goal#estimatedTotalWeight()} that was summed
      * into the aggregate denominator. The member's own 0→100% progress is scaled
      * into this slice, so it can never consume more than its share and the base
      * advances by exactly this much on completion (no boundary drift). Ignored on
