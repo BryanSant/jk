@@ -18,6 +18,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.LongAdder;
@@ -50,6 +53,19 @@ public final class Goal {
 
     /** How long async phases get to notice cancellation before we interrupt them. */
     static final Duration COOPERATIVE_CANCEL_GRACE = Duration.ofMillis(200);
+
+    /** How often the interpolation ticker eases opaque phases forward. */
+    private static final long INTERP_TICK_MS = 100;
+    /**
+     * Expected wall-clock per unit of phase weight, the divisor for time-based
+     * interpolation. Weights are tuned as rough time shares, so treating a weight
+     * unit as a fixed slice of time gives each opaque phase a plausible duration;
+     * the {@code INTERP_CAP} ceiling absorbs the inevitable misestimate.
+     */
+    private static final long INTERP_NANOS_PER_WEIGHT = 150_000_000L; // ~150ms
+
+    /** Running phases currently being eased forward by the interpolation ticker. */
+    private final Set<DefaultPhaseContext> ticking = ConcurrentHashMap.newKeySet();
 
     private final String name;
     private final boolean interactive;
@@ -169,29 +185,38 @@ public final class Goal {
         }
         emit(l -> l.goalStart(snapshot()));
 
+        // Interpolation ticker: while an opaque phase runs, ease its bar slice
+        // forward over elapsed time so the bar doesn't sit flat until the phase's
+        // single body call returns. Only started when some phase opts in.
+        ScheduledExecutorService ticker = startInterpolationTicker();
+
         // Step 2: run phases by readiness levels.
         Set<String> completedOk = new HashSet<>();
         List<Phase> remaining = new ArrayList<>(topoSort(phases));
-        while (!remaining.isEmpty() && !cancelled.get()) {
-            List<Phase> ready = remaining.stream()
-                    .filter(p -> completedOk.containsAll(p.requires()))
-                    .toList();
-            if (ready.isEmpty()) {
-                // Either remaining phases all depend on a failed predecessor
-                // (mark them CANCELLED) or there's a programming bug. Bail.
-                break;
-            }
-            remaining.removeAll(ready);
-            boolean levelOk = runLevel(ready, initialScope, weights);
-            for (Phase p : ready) {
-                if (statuses.get(p.name()) == PhaseStatus.SUCCESS) {
-                    completedOk.add(p.name());
+        try {
+            while (!remaining.isEmpty() && !cancelled.get()) {
+                List<Phase> ready = remaining.stream()
+                        .filter(p -> completedOk.containsAll(p.requires()))
+                        .toList();
+                if (ready.isEmpty()) {
+                    // Either remaining phases all depend on a failed predecessor
+                    // (mark them CANCELLED) or there's a programming bug. Bail.
+                    break;
+                }
+                remaining.removeAll(ready);
+                boolean levelOk = runLevel(ready, initialScope, weights);
+                for (Phase p : ready) {
+                    if (statuses.get(p.name()) == PhaseStatus.SUCCESS) {
+                        completedOk.add(p.name());
+                    }
+                }
+                if (!levelOk) {
+                    cancelled.set(true);
+                    break;
                 }
             }
-            if (!levelOk) {
-                cancelled.set(true);
-                break;
-            }
+        } finally {
+            if (ticker != null) ticker.shutdownNow();
         }
 
         // Any remaining (un-run) phases are CANCELLED because a dep failed.
@@ -221,6 +246,27 @@ public final class Goal {
     }
 
     // --- Scheduling ----------------------------------------------------
+
+    /**
+     * Start the daemon ticker that eases interpolated phases forward over time,
+     * or return {@code null} when no phase opts into interpolation (so the common
+     * case spins up no thread). The caller shuts it down when the run finishes.
+     */
+    private ScheduledExecutorService startInterpolationTicker() {
+        if (phases.stream().noneMatch(Phase::interpolated)) return null;
+        ScheduledExecutorService ticker = Executors.newSingleThreadScheduledExecutor(r -> {
+            Thread t = new Thread(r, "jk-progress-interp");
+            t.setDaemon(true);
+            return t;
+        });
+        ticker.scheduleAtFixedRate(() -> {
+            long now = System.nanoTime();
+            for (DefaultPhaseContext c : ticking) {
+                try { c.tick(now); } catch (RuntimeException ignored) { /* never break the ticker */ }
+            }
+        }, INTERP_TICK_MS, INTERP_TICK_MS, TimeUnit.MILLISECONDS);
+        return ticker;
+    }
 
     /**
      * Dispatch one readiness level. SYNC phases run inline (sequentially);
@@ -273,10 +319,17 @@ public final class Goal {
     private PhaseStatus runOnePhase(Phase phase, int initialScope, int weight) {
         Instant start = Instant.now();
         long startNum = numerator.sum();
+        long startNanos = System.nanoTime();
+        long expectedNanos = phase.interpolated() ? (long) weight * INTERP_NANOS_PER_WEIGHT : 0;
         DefaultPhaseContext ctx = new DefaultPhaseContext(
-                phase.name(), this, initialScope, weight, phase.hasExplicitWeight());
+                phase.name(), this, initialScope, weight, phase.hasExplicitWeight(),
+                expectedNanos, startNanos);
+        boolean ticked = ctx.interpolating();
+        if (ticked) ticking.add(ctx);
         try {
             phase.execute(ctx);
+            // Stop interpolating before auto-fill so no late tick races the top-up.
+            if (ticked) ticking.remove(ctx);
             // Auto-fill: if the phase reported less progress than its bar budget
             // promised, top up the difference on a clean success so the bar
             // visually settles. Failures don't auto-fill — the bar stays
@@ -295,6 +348,7 @@ public final class Goal {
             emit(l -> l.phaseFinish(phase.name(), PhaseStatus.SUCCESS, dur));
             return PhaseStatus.SUCCESS;
         } catch (Throwable t) {
+            if (ticked) ticking.remove(ctx);
             // If the phase body already recorded a specific error via
             // ctx.error(...) and then threw to signal failure, don't
             // pile on a duplicate "exception" diagnostic — the phase

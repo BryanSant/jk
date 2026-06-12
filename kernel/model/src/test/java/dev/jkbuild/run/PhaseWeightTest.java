@@ -99,6 +99,40 @@ class PhaseWeightTest {
     }
 
     @Test
+    void interpolation_eases_toward_the_weight_and_caps() {
+        // A weighted, interpolated phase with expected duration 1ms and weight 100.
+        // Driving tick() with controlled timestamps eases the slice toward
+        // weight × elapsed/expected, then holds at the 90% cap.
+        Goal goal = Goal.builder("g").build();
+        DefaultPhaseContext ctx = new DefaultPhaseContext(
+                "p", goal, /*scope*/ 1, /*weight*/ 100, /*weighted*/ true,
+                /*expectedNanos*/ 1_000_000L, /*startNanos*/ 0L);
+        assertThat(ctx.interpolating()).isTrue();
+
+        ctx.tick(500_000L);                       // 50% elapsed → 50
+        assertThat(goal.snapshot().numerator()).isEqualTo(50);
+        ctx.tick(900_000L);                       // 90% elapsed → 90
+        assertThat(goal.snapshot().numerator()).isEqualTo(90);
+        ctx.tick(5_000_000L);                      // way over → capped at 90% (90)
+        assertThat(goal.snapshot().numerator()).isEqualTo(90);
+    }
+
+    @Test
+    void real_progress_overrides_interpolation_and_fills_past_the_cap() {
+        Goal goal = Goal.builder("g").build();
+        DefaultPhaseContext ctx = new DefaultPhaseContext(
+                "p", goal, /*scope*/ 1, /*weight*/ 100, /*weighted*/ true,
+                /*expectedNanos*/ 1_000_000L, /*startNanos*/ 0L);
+
+        ctx.tick(900_000L);                       // interpolated to the 90 cap
+        assertThat(goal.snapshot().numerator()).isEqualTo(90);
+        ctx.progress(1);                          // real completion (scope 1) → full weight
+        assertThat(goal.snapshot().numerator()).isEqualTo(100);
+        ctx.tick(950_000L);                       // a late tick can't pull it back
+        assertThat(goal.snapshot().numerator()).isEqualTo(100);
+    }
+
+    @Test
     void unweighted_phase_is_unchanged_one_to_one() {
         ProgressTrace trace = new ProgressTrace();
         Goal goal = Goal.builder("g")

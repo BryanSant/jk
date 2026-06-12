@@ -352,10 +352,11 @@ public final class BuildPipeline {
                 .requires(mixed
                         ? new String[]{"parse-build", "sync-deps", "ensure-jdk", "compile-kotlin"}
                         : new String[]{"parse-build", "sync-deps", "ensure-jdk"})
-                // Scope counts sources (granularity); weight is the bar share. The
-                // body reports one progress(sources.size()) on completion, so this
-                // slice fills when javac finishes rather than per source file.
+                // Scope counts sources (granularity); weight is the bar share. javac
+                // is opaque — one progress(sources.size()) on completion — so ease the
+                // slice forward over time while it runs instead of sitting flat.
                 .weight(W_COMPILE)
+                .interpolated()
                 .scope(() -> estimateJavaSources(in, compact))
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
@@ -442,8 +443,9 @@ public final class BuildPipeline {
                 // only needs the base phases — javac runs after it in a mixed module.
                 .requires("parse-build", "sync-deps", "ensure-jdk")
                 // Scope counts Kotlin sources (granularity); weight is the bar share
-                // (see compile-java). Execute fills it via progress(ktSources.size()).
+                // (see compile-java). kotlinc is opaque too, so ease it over time.
                 .weight(W_COMPILE_KT)
+                .interpolated()
                 .scope(() -> estimateKotlinSources(in, compact))
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
@@ -525,6 +527,7 @@ public final class BuildPipeline {
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile, "sync-deps")
                 .weight(W_COMPILE_TEST)
+                .interpolated()   // opaque javac/kotlinc call — ease it over time
                 .scope(1)
                 .execute(ctx -> {
                     Path javaTestSrc = compact ? in.dir().resolve("test") : in.dir().resolve("src/test/java");

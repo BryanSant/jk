@@ -21,16 +21,18 @@ public final class Phase {
     private final List<String> requires;
     private final IntSupplier scope;
     private final IntSupplier weight;   // null → weight tracks scope (legacy behaviour)
+    private final boolean interpolated;
     private final Body body;
 
     Phase(String name, String label, PhaseKind kind, List<String> requires,
-          IntSupplier scope, IntSupplier weight, Body body) {
+          IntSupplier scope, IntSupplier weight, boolean interpolated, Body body) {
         this.name = Objects.requireNonNull(name);
         this.label = label != null ? label : name;
         this.kind = Objects.requireNonNull(kind);
         this.requires = List.copyOf(requires);
         this.scope = Objects.requireNonNull(scope);
         this.weight = weight;
+        this.interpolated = interpolated;
         this.body = Objects.requireNonNull(body);
     }
 
@@ -61,6 +63,16 @@ public final class Phase {
         return Math.max(0, weight != null ? weight.getAsInt() : scope.getAsInt());
     }
 
+    /**
+     * True when the scheduler should ease this phase's bar slice forward over
+     * elapsed time while it runs, rather than leaving it flat until the body
+     * reports progress. Use only for <em>opaque</em> phases (a single black-box
+     * call like javac) — phases that already report fine-grained progress
+     * (per-artifact, per-test, per-stage) must leave this off, or a too-short
+     * time estimate would race the bar ahead and then stall.
+     */
+    public boolean interpolated() { return interpolated; }
+
     public boolean async() { return kind != PhaseKind.SYNC; }
 
     /** Phase body — runs on whatever thread the scheduler dispatched it on. */
@@ -83,6 +95,7 @@ public final class Phase {
         private final List<String> requires = new ArrayList<>();
         private IntSupplier scope = () -> 1;
         private IntSupplier weight = null;   // null → weight tracks scope
+        private boolean interpolated = false;
         private Body body = ctx -> {};
 
         Builder(String name) {
@@ -123,10 +136,16 @@ public final class Phase {
         /** Fixed weight — equivalent to {@code weight(() -> n)}. */
         public Builder weight(int n) { this.weight = () -> n; return this; }
 
+        /**
+         * Ease this phase's bar slice forward over elapsed time while it runs.
+         * For opaque phases only — see {@link Phase#interpolated()}.
+         */
+        public Builder interpolated() { this.interpolated = true; return this; }
+
         public Builder execute(Body body) { this.body = body; return this; }
 
         public Phase build() {
-            return new Phase(name, label, kind, requires, scope, weight, body);
+            return new Phase(name, label, kind, requires, scope, weight, interpolated, body);
         }
     }
 }

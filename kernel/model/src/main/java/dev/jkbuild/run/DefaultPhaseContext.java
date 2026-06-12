@@ -26,6 +26,14 @@ final class DefaultPhaseContext implements PhaseContext {
      * explicit weight) keep the old 1:1 model: {@code progress} deltas hit the
      * numerator directly and {@code updateScope} grows the goal denominator.
      */
+    /**
+     * Interpolation ceiling: a time-driven phase eases up to this fraction of its
+     * weight and then waits for real completion, so a too-short time estimate
+     * can't sprint the bar to 100% and stall — the auto-fill on success closes
+     * the remaining sliver.
+     */
+    private static final double INTERP_CAP = 0.9;
+
     private final boolean weighted;
     private final long weight;
     private final AtomicLong internalScope;        // fraction denominator (weighted)
@@ -33,12 +41,19 @@ final class DefaultPhaseContext implements PhaseContext {
     private final AtomicLong emitted = new AtomicLong(0);   // weight-ticks added so far (weighted)
     private final AtomicInteger scopeGrowth = new AtomicInteger(0); // legacy denominator growth
 
-    DefaultPhaseContext(String phase, Goal goal, int internalScope, int weight, boolean weighted) {
+    /** Wall-clock interpolation: 0 = off; else the phase's expected duration. */
+    private final long expectedNanos;
+    private final long startNanos;
+
+    DefaultPhaseContext(String phase, Goal goal, int internalScope, int weight,
+                        boolean weighted, long expectedNanos, long startNanos) {
         this.phase = phase;
         this.goal = goal;
         this.weighted = weighted;
         this.weight = weight;
         this.internalScope = new AtomicLong(internalScope);
+        this.expectedNanos = weighted ? expectedNanos : 0;
+        this.startNanos = startNanos;
     }
 
     @Override
@@ -56,15 +71,35 @@ final class DefaultPhaseContext implements PhaseContext {
     /**
      * Weighted mode: move the numerator so the phase's share of the bar matches
      * its internal progress fraction ({@code internalDone / internalScope}) ×
-     * {@code weight}. Monotonic — only ever advances — so a late scope bump never
-     * walks the bar backwards within the phase.
+     * {@code weight}. Real progress can fill the whole weight.
      */
-    private synchronized void advance() {
+    private void advance() {
         long scope = internalScope.get();
         long done = internalDone.get();
         long target = scope > 0
                 ? Math.round(weight * Math.min(1.0, (double) done / scope))
                 : (done > 0 ? weight : 0);
+        advanceTo(target);
+    }
+
+    /**
+     * Wall-clock interpolation tick (driven by the goal's scheduler for opaque
+     * phases). Eases the slice toward {@code weight × elapsed/expected}, capped at
+     * {@link #INTERP_CAP}. Never moves the bar past where real progress already
+     * put it — {@link #advanceTo} is monotonic — so it only fills the gap an
+     * opaque phase leaves while its single body call runs.
+     */
+    void tick(long nowNanos) {
+        if (expectedNanos <= 0) return;
+        double frac = Math.min(INTERP_CAP, (double) (nowNanos - startNanos) / expectedNanos);
+        advanceTo(Math.round(weight * frac));
+    }
+
+    /** True when this phase eases its slice forward over time. */
+    boolean interpolating() { return expectedNanos > 0; }
+
+    /** Monotonic advance of the weighted numerator to {@code target} ticks. */
+    private synchronized void advanceTo(long target) {
         long diff = target - emitted.get();
         if (diff > 0) {
             emitted.addAndGet(diff);
