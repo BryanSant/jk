@@ -49,10 +49,9 @@ public final class ClasspathResolver {
 
     /** Filtered: only packages tagged with one of {@code scopes}. */
     public List<Path> classpathFor(Lockfile lock, Set<Scope> scopes) {
-        List<Path> result = new ArrayList<>(lock.packages().size());
+        List<Path> result = new ArrayList<>(lock.artifacts().size());
         dev.jkbuild.task.AccessLedger ledger = dev.jkbuild.task.AccessLedger.atDefaultPath();
-        dev.jkbuild.task.ArtifactMap artifacts = dev.jkbuild.task.ArtifactMap.atDefaultPath();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (!pkg.inAnyScope(scopes)) continue;
             String checksum = pkg.checksum();
             if (checksum == null) continue;
@@ -61,7 +60,6 @@ public final class ClasspathResolver {
                     : checksum;
             result.add(cas.pathFor(hex));
             ledger.touch(hex);
-            artifacts.put(hex, pkg.name() + ":" + pkg.version());
         }
         return result;
     }

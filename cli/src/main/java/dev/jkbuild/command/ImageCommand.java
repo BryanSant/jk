@@ -267,7 +267,7 @@ public final class ImageCommand implements CliCommand {
         Lockfile lock = LockfileReader.read(lockPath);
         List<Path> result = new ArrayList<>();
         Cas cas = new Cas(cache);
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) continue;
             String hex = pkg.checksum().startsWith("sha256:")
                     ? pkg.checksum().substring("sha256:".length()) : pkg.checksum();

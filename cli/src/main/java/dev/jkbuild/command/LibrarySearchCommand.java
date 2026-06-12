@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cache.Journal;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
@@ -11,6 +10,7 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
+import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.util.JkDirs;
 
@@ -51,14 +51,14 @@ public final class LibrarySearchCommand implements CliCommand {
         GlobalOptions global = GlobalOptions.from(in);
 
         LibraryCatalog catalog = LibraryCatalog.layered(System.err::println);
-        Journal journal = new Journal(cacheDir != null ? cacheDir : JkDirs.cache());
+        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(cacheDir != null ? cacheDir : JkDirs.cache());
         List<String> lowerTerms = terms.stream().map(t -> t.toLowerCase(Locale.ROOT)).toList();
 
         List<Hit> hits = new ArrayList<>();
         for (String name : catalog.names()) {
             var src = catalog.source(name).orElseThrow();
             if (!allMatch(lowerTerms, name.toLowerCase(Locale.ROOT), src.module().group().toLowerCase(Locale.ROOT), src.module().artifact().toLowerCase(Locale.ROOT))) continue;
-            List<String> cached = new ArrayList<>(journal.versions(src.module().group(), src.module().artifact()));
+            List<String> cached = new ArrayList<>(localRepo.versions(src.module().group(), src.module().artifact()));
             cached.sort((a, b) -> Versions.compare(b, a));
             if (global.offline && cached.isEmpty()) continue;
             hits.add(new Hit(name, src, cached));

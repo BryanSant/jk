@@ -2,12 +2,12 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.cache.Journal;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoCredentialResolver;
 import dev.jkbuild.repo.RepoGroup;
@@ -33,16 +33,16 @@ public final class RepoGroupBuilder {
 
     public static RepoGroup buildFor(JkBuild project, URI overrideUrl, Cas cas) {
         Http http = new Http();
-        // Coordinate→hash index over the CAS, so fetches are recorded and an
+        // m2 local-repo mirror over the CAS, so fetches are recorded and an
         // offline run can resolve from what's already on disk.
-        Journal journal = new Journal(cas.root());
+        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(cas.root());
         List<MavenRepo> repos = new ArrayList<>();
         if (overrideUrl != null) {
             // Tests pin one URL; project-declared repos are ignored.
-            repos.add(new MavenRepo("central", overrideUrl, http, cas, journal));
+            repos.add(new MavenRepo("central", overrideUrl, http, cas, localRepo));
         } else if (project.repositories().isEmpty()) {
             repos.add(new MavenRepo(RepositorySpec.MAVEN_CENTRAL.name(),
-                    RepositorySpec.MAVEN_CENTRAL.url(), http, cas, journal));
+                    RepositorySpec.MAVEN_CENTRAL.url(), http, cas, localRepo));
         } else {
             // Resolve credentials per declared repo (env / store / settings.xml /
             // forge-token bridge). Public repos resolve to ANONYMOUS, so this is
@@ -54,7 +54,7 @@ public final class RepoGroupBuilder {
                 // transport; HTTP credentials still ride the MavenRepo credential.
                 RepoTransport transport = RepoTransports.forUrl(
                         spec.url(), http, spec.objectStore().orElse(ObjectStoreConfig.EMPTY));
-                repos.add(new MavenRepo(spec.name(), spec.url(), transport, cas, journal, cred));
+                repos.add(new MavenRepo(spec.name(), spec.url(), transport, cas, localRepo, cred));
             }
         }
         return new RepoGroup(repos);

@@ -25,7 +25,7 @@ import java.util.stream.Stream;
 public final class DependencyTree {
 
     /**
-     * Suffix appended to a node whose module has no resolved {@link Lockfile.Package}
+     * Suffix appended to a node whose module has no resolved {@link Lockfile.Artifact}
      * — it is present in the graph but absent from the lockfile/local cache. Callers
      * can scan rendered output for this marker to decide whether to surface a hint.
      */
@@ -80,7 +80,7 @@ public final class DependencyTree {
      */
     public static String render(JkBuild project, Lockfile lock, int maxDepth,
                                 Styling styling) {
-        Map<String, Lockfile.Package> byModule = indexByModule(lock);
+        Map<String, Lockfile.Artifact> byModule = indexByModule(lock);
         StringBuilder out = new StringBuilder();
         // Root project: group:artifact:version, styled like every other line.
         out.append(formatCoord(
@@ -99,7 +99,7 @@ public final class DependencyTree {
     }
 
     private static void renderNode(
-            Map<String, Lockfile.Package> byModule,
+            Map<String, Lockfile.Artifact> byModule,
             String module,
             int depth,
             int maxDepth,
@@ -109,7 +109,7 @@ public final class DependencyTree {
             Set<String> seen,
             StringBuilder out) {
 
-        Lockfile.Package pkg = byModule.get(module);
+        Lockfile.Artifact pkg = byModule.get(module);
         // module is "group:artifact"; split for per-segment styling.
         int colon = module.indexOf(':');
         String groupId = colon > 0 ? module.substring(0, colon) : module;
@@ -153,9 +153,9 @@ public final class DependencyTree {
                 + ":" + styling.version().apply(version);
     }
 
-    static Map<String, Lockfile.Package> indexByModule(Lockfile lock) {
-        Map<String, Lockfile.Package> result = new HashMap<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+    static Map<String, Lockfile.Artifact> indexByModule(Lockfile lock) {
+        Map<String, Lockfile.Artifact> result = new HashMap<>();
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             result.put(pkg.name(), pkg);
         }
         return result;
@@ -177,7 +177,7 @@ public final class DependencyTree {
     }
 
     // Sorting helper exposed for tests that want a deterministic order.
-    static Comparator<Lockfile.Package> byName() {
-        return Comparator.comparing(Lockfile.Package::name);
+    static Comparator<Lockfile.Artifact> byName() {
+        return Comparator.comparing(Lockfile.Artifact::name);
     }
 }

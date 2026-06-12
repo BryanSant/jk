@@ -2,7 +2,6 @@
 package dev.jkbuild.resolver;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.cache.Journal;
 import dev.jkbuild.http.HostRateLimiter;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
@@ -34,7 +33,7 @@ public final class CacheSync {
 
     private final Cas cas;
     private final Http http;
-    private final Journal journal;
+    private final dev.jkbuild.repo.JkMavenLocalRepo localRepo;
     private final dev.jkbuild.repo.RepoCredentialResolver creds;
 
     public CacheSync(Cas cas, Http http) {
@@ -46,9 +45,9 @@ public final class CacheSync {
         this.cas = Objects.requireNonNull(cas, "cas");
         this.http = Objects.requireNonNull(http, "http");
         this.creds = Objects.requireNonNull(creds, "creds");
-        // Populate the coordinate→hash index as `jk sync` downloads artifacts,
+        // Mirror artifacts into the m2 local repo as `jk sync` downloads them,
         // so an offline resolve later has them addressable by coordinate.
-        this.journal = new Journal(cas.root());
+        this.localRepo = new dev.jkbuild.repo.JkMavenLocalRepo(cas.root());
     }
 
     public Report sync(Lockfile lock) throws IOException, InterruptedException {
@@ -81,7 +80,7 @@ public final class CacheSync {
         // single-writer).
         Map<String, MavenRepo> repoCache = new HashMap<>();
         List<PendingFetch> pending = new ArrayList<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) {
                 skipped++; // POM-only / path / git deps
                 observer.skipped(pkg);
@@ -149,7 +148,7 @@ public final class CacheSync {
             throws IOException, InterruptedException {
         Map<String, MavenRepo> repoCache = new HashMap<>();
         List<PendingFetch> pending = new ArrayList<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.sourcesChecksum() == null) continue;
             String hex = pkg.sourcesChecksum().startsWith("sha256:")
                     ? pkg.sourcesChecksum().substring("sha256:".length())
@@ -212,10 +211,10 @@ public final class CacheSync {
     public interface ProgressObserver {
         ProgressObserver NOOP = new ProgressObserver() {};
 
-        default void upToDate(Lockfile.Package pkg) {}
-        default void fetched(Lockfile.Package pkg) {}
-        default void skipped(Lockfile.Package pkg) {}
-        default void failed(Lockfile.Package pkg, String error) {}
+        default void upToDate(Lockfile.Artifact pkg) {}
+        default void fetched(Lockfile.Artifact pkg) {}
+        default void skipped(Lockfile.Artifact pkg) {}
+        default void failed(Lockfile.Artifact pkg, String error) {}
     }
 
     private static FetchResult fetch(PendingFetch p, HostRateLimiter limiter) {
@@ -248,12 +247,12 @@ public final class CacheSync {
         String name = source.substring(0, plus);
         URI url = URI.create(source.substring(plus + 1));
         var cred = creds.resolve(name, url, java.util.Optional.empty());
-        MavenRepo repo = new MavenRepo(name, url, http, cas, journal, cred);
+        MavenRepo repo = new MavenRepo(name, url, http, cas, localRepo, cred);
         cache.put(source, repo);
         return repo;
     }
 
-    private static Coordinate toCoord(Lockfile.Package pkg) {
+    private static Coordinate toCoord(Lockfile.Artifact pkg) {
         int colon = pkg.name().indexOf(':');
         return Coordinate.of(
                 pkg.name().substring(0, colon),
@@ -262,7 +261,7 @@ public final class CacheSync {
     }
 
     /** A package whose CAS entry is missing and needs to be fetched. */
-    private record PendingFetch(Lockfile.Package pkg, String expectedHex, MavenRepo repo) {}
+    private record PendingFetch(Lockfile.Artifact pkg, String expectedHex, MavenRepo repo) {}
 
     /** Outcome of one parallel fetch — null error means success. */
     private record FetchResult(String error) {

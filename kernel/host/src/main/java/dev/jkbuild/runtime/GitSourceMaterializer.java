@@ -35,7 +35,7 @@ public final class GitSourceMaterializer {
 
     /** Outcome: the published coordinate, the {@code file://} repo, and lock provenance. */
     record Materialized(String group, String artifact, String version,
-                        URI repoUrl, Lockfile.Package.GitInfo gitInfo) {
+                        URI repoUrl, Lockfile.Artifact.GitInfo gitInfo) {
         String coordinate() {
             return group + ":" + artifact;
         }
@@ -128,8 +128,8 @@ public final class GitSourceMaterializer {
             Files.writeString(metaPath, metadataXml(group, artifact, version));
         }
 
-        Lockfile.Package.GitInfo gitInfo =
-                new Lockfile.Package.GitInfo(source.canonicalUrl(), sha, source.ref().token());
+        Lockfile.Artifact.GitInfo gitInfo =
+                new Lockfile.Artifact.GitInfo(source.canonicalUrl(), sha, source.ref().token());
         return new Materialized(group, artifact, version, repo.toUri(), gitInfo);
     }
 

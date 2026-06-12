@@ -85,8 +85,8 @@ class PolicyCheckerTest {
         assertThat(policy.isEmpty()).isTrue();
     }
 
-    private static Lockfile.Package pkg(String name, String version, String source) {
-        return new Lockfile.Package(name, version, source, "sha256:0", null,
+    private static Lockfile.Artifact pkg(String name, String version, String source) {
+        return new Lockfile.Artifact(name, version, source, "sha256:0", null,
                 List.of(Scope.MAIN), List.of());
     }
 }

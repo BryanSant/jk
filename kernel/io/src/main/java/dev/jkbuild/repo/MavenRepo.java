@@ -2,7 +2,6 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.cache.Journal;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
@@ -23,12 +22,13 @@ import java.util.Optional;
  * describing both the on-disk path and the SHA-256 of the bytes — the
  * resolver needs both to populate {@code jk.lock}.
  *
- * <p>Every successful fetch is also recorded in the {@link Journal} so the
- * blob is later addressable by coordinate. When {@code --offline} is in
- * effect, fetches are served from the journal + CAS instead of the network;
- * a coordinate that isn't journaled (or whose blob has been GC'd) surfaces as
- * {@link ArtifactNotFoundException}, so {@link RepoGroup}'s try-each and the
- * resolver get a clean "not found" rather than a network error.
+ * <p>Every successful fetch is also mirrored into the {@link JkMavenLocalRepo}
+ * (an m2 hard-link back to the CAS blob) so the artifact is later addressable
+ * by coordinate. When {@code --offline} is in effect, fetches are served from
+ * that local repo instead of the network; a coordinate that isn't mirrored
+ * surfaces as {@link ArtifactNotFoundException}, so {@link RepoGroup}'s
+ * try-each and the resolver get a clean "not found" rather than a network
+ * error.
  *
  * <p>HTTPS only by default per PRD §10.5; the constructor will reject
  * {@code http://} URIs unless explicitly marked insecure (deferred).
@@ -39,16 +39,16 @@ public final class MavenRepo {
     private final URI baseUrl;
     private final RepoTransport transport;
     private final Cas cas;
-    private final Journal journal;
+    private final JkMavenLocalRepo localRepo;
     private final RepoCredential credential;
 
-    /** Without a journal — offline resolve is unavailable through this repo. */
+    /** Without a local repo — offline resolve is unavailable through this repo. */
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas) {
-        this(name, baseUrl, http, cas, Journal.NONE);
+        this(name, baseUrl, http, cas, JkMavenLocalRepo.NONE);
     }
 
-    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, Journal journal) {
-        this(name, baseUrl, http, cas, journal, RepoCredential.ANONYMOUS);
+    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, JkMavenLocalRepo localRepo) {
+        this(name, baseUrl, http, cas, localRepo, RepoCredential.ANONYMOUS);
     }
 
     /**
@@ -57,23 +57,23 @@ public final class MavenRepo {
      * authenticates with {@code credential} (anonymous repos pass
      * {@link RepoCredential#ANONYMOUS}).
      */
-    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, Journal journal,
+    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, JkMavenLocalRepo localRepo,
                      RepoCredential credential) {
         this(name, baseUrl, RepoTransports.forUrl(baseUrl, Objects.requireNonNull(http, "http")),
-                cas, journal, credential);
+                cas, localRepo, credential);
     }
 
     /**
      * General constructor over any {@link RepoTransport} — the entry point for
      * non-HTTP backends (s3://, file://, …) selected by the caller.
      */
-    public MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas, Journal journal,
-                     RepoCredential credential) {
+    public MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas,
+                     JkMavenLocalRepo localRepo, RepoCredential credential) {
         this.name = Objects.requireNonNull(name, "name");
         this.baseUrl = normalize(Objects.requireNonNull(baseUrl, "baseUrl"));
         this.transport = Objects.requireNonNull(transport, "transport");
         this.cas = Objects.requireNonNull(cas, "cas");
-        this.journal = Objects.requireNonNull(journal, "journal");
+        this.localRepo = Objects.requireNonNull(localRepo, "localRepo");
         this.credential = Objects.requireNonNull(credential, "credential");
     }
 
@@ -86,28 +86,28 @@ public final class MavenRepo {
     }
 
     public Fetched fetchPom(Coordinate coord) throws IOException, InterruptedException {
-        return fetch(coord, "pom", MavenLayout.pomPath(coord), true);
+        return fetch(coord, MavenLayout.pomPath(coord), true);
     }
 
     public Fetched fetchArtifact(Coordinate coord) throws IOException, InterruptedException {
-        return fetch(coord, artifactKind(coord), MavenLayout.artifactPath(coord), true);
+        return fetch(coord, MavenLayout.artifactPath(coord), true);
     }
 
     public Fetched fetchMetadata(Coordinate coord) throws IOException, InterruptedException {
         // maven-metadata.xml has no version key and is stale offline, so it's
-        // never journaled; offline version enumeration uses availableVersions().
-        return fetch(coord, "metadata", MavenLayout.metadataPath(coord), false);
+        // never mirrored; offline version enumeration uses availableVersions().
+        return fetch(coord, MavenLayout.metadataPath(coord), false);
     }
 
     /**
      * Versions of this coordinate's {@code group:artifact} available here.
-     * Online: parses {@code maven-metadata.xml}. Offline: lists what the
-     * journal holds locally. A missing artifact yields an empty list rather
-     * than an error so {@link RepoGroup} can union across repos.
+     * Online: parses {@code maven-metadata.xml}. Offline: lists what the local
+     * repo holds. A missing artifact yields an empty list rather than an error
+     * so {@link RepoGroup} can union across repos.
      */
     public List<String> availableVersions(Coordinate coord) throws IOException, InterruptedException {
         if (ActiveConfig.get().offlineOr(false)) {
-            return journal.versions(coord.group(), coord.artifact());
+            return localRepo.versions(coord.group(), coord.artifact());
         }
         try {
             Fetched f = fetchMetadata(coord);
@@ -117,10 +117,10 @@ public final class MavenRepo {
         }
     }
 
-    private Fetched fetch(Coordinate coord, String kind, String relativePath, boolean journalable)
+    private Fetched fetch(Coordinate coord, String relativePath, boolean mirror)
             throws IOException, InterruptedException {
         if (ActiveConfig.get().offlineOr(false)) {
-            return fetchOffline(coord, kind);
+            return fetchOffline(coord, relativePath);
         }
         URI uri = baseUrl.resolve(relativePath);
         Optional<byte[]> fetched = transport.fetch(uri, credential);
@@ -130,32 +130,27 @@ public final class MavenRepo {
         byte[] body = fetched.get();
         Path path = cas.put(body);
         String sha = Hashing.sha256Hex(body);
-        if (journalable) {
-            journal.record(coord, kind, sha, body.length, name, uri.toString());
+        if (mirror) {
+            localRepo.materialize(relativePath, path);
         }
         return new Fetched(uri, path, sha, body.length);
     }
 
     /**
-     * Serve a fetch from the local journal + CAS. The journal pointer is only
-     * trusted when its blob is actually present in the CAS — a pointer to a
-     * GC'd blob is treated as not-found, so the resolver falls through cleanly.
+     * Serve a fetch from the local repo. The mirrored file <em>is</em> the
+     * artifact (a hard link to the CAS blob), so a present entry is served
+     * directly; a coordinate that was never mirrored is treated as not-found
+     * and the resolver falls through cleanly.
      */
-    private Fetched fetchOffline(Coordinate coord, String kind) throws ArtifactNotFoundException {
-        Optional<Journal.Blob> found = journal.lookup(coord, kind);
-        if (found.isEmpty() || !cas.contains(found.get().sha256())) {
+    private Fetched fetchOffline(Coordinate coord, String relativePath) throws IOException {
+        Optional<Path> found = localRepo.locate(relativePath);
+        if (found.isEmpty()) {
             throw new ArtifactNotFoundException(
-                    "offline: " + coord + " (" + kind + ") not in local cache for " + name);
+                    "offline: " + coord + " (" + relativePath + ") not in local repo for " + name);
         }
-        Journal.Blob blob = found.get();
-        Path path = cas.pathFor(blob.sha256());
-        URI uri = blob.url() != null ? URI.create(blob.url()) : path.toUri();
-        return new Fetched(uri, path, blob.sha256(), blob.size());
-    }
-
-    /** Journal key for a primary/secondary artifact: {@code <type>[:<classifier>]}. */
-    private static String artifactKind(Coordinate coord) {
-        return coord.classifier() == null ? coord.type() : coord.type() + ":" + coord.classifier();
+        Path path = found.get();
+        byte[] body = Files.readAllBytes(path);
+        return new Fetched(path.toUri(), path, Hashing.sha256Hex(body), body.length);
     }
 
     private static URI normalize(URI uri) {

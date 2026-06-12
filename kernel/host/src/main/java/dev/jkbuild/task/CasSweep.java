@@ -2,10 +2,12 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.repo.JkMavenLocalRepo;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -58,6 +60,7 @@ public final class CasSweep {
         int deleted = 0;
         long freedBytes = 0;
         int kept = 0;
+        Set<String> deletedShas = new HashSet<>();
         try (Stream<Path> stream = Files.walk(shaRoot)) {
             for (Path file : (Iterable<Path>) stream::iterator) {
                 if (!Files.isRegularFile(file)) continue;
@@ -88,8 +91,12 @@ public final class CasSweep {
                 }
                 deleted++;
                 freedBytes += size;
+                deletedShas.add(hex);
             }
         }
+        // Drop the m2 mirror's hard-links for everything swept, else the
+        // inode (and its bytes) survives behind the repo/ path.
+        new JkMavenLocalRepo(cas.root()).removeShas(deletedShas, dryRun);
         return new Report(deleted, freedBytes, kept);
     }
 }

@@ -88,12 +88,12 @@ class CacheCommandTest {
     }
 
     @Test
-    void clean_wipes_contents_but_keeps_root(@TempDir Path tempDir) throws Exception {
+    void purge_with_yes_wipes_contents_but_keeps_root(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
         writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), new byte[4096]);
         writeBlob(cache.resolve("actions/keys/task1"), new byte[1024]);
 
-        String stdout = capture(() -> run("cache", "clean", "--cache-dir", cache.toString()));
+        String stdout = capture(() -> run("cache", "purge", "--cache-dir", cache.toString(), "--yes"));
 
         assertThat(stdout).contains("Removed 2 files");
         assertThat(Files.exists(cache)).isTrue();
@@ -103,11 +103,35 @@ class CacheCommandTest {
     }
 
     @Test
-    void clean_dry_run_reports_without_deleting(@TempDir Path tempDir) throws Exception {
+    void purge_aborts_when_not_confirmed(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
         writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), new byte[4096]);
 
-        String stdout = capture(() -> run("cache", "clean",
+        String stdout = withStdin("n\n", () ->
+                capture(() -> run("cache", "purge", "--cache-dir", cache.toString())));
+
+        assertThat(stdout).contains("Aborted");
+        assertThat(Files.exists(cache.resolve("sha256/ab/cd/deadbeef"))).isTrue();
+    }
+
+    @Test
+    void purge_proceeds_on_yes_at_the_prompt(@TempDir Path tempDir) throws Exception {
+        Path cache = tempDir.resolve("cache");
+        writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), new byte[4096]);
+
+        String stdout = withStdin("y\n", () ->
+                capture(() -> run("cache", "purge", "--cache-dir", cache.toString())));
+
+        assertThat(stdout).contains("Removed 1 files");
+        assertThat(Files.exists(cache.resolve("sha256/ab/cd/deadbeef"))).isFalse();
+    }
+
+    @Test
+    void purge_dry_run_reports_without_deleting_or_prompting(@TempDir Path tempDir) throws Exception {
+        Path cache = tempDir.resolve("cache");
+        writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), new byte[4096]);
+
+        String stdout = capture(() -> run("cache", "purge",
                 "--cache-dir", cache.toString(), "--dry-run"));
 
         assertThat(stdout).contains("Would remove 1 files");
@@ -115,22 +139,18 @@ class CacheCommandTest {
     }
 
     @Test
-    void clean_missing_cache_dir_is_a_noop(@TempDir Path tempDir) throws Exception {
+    void purge_missing_cache_dir_is_a_noop(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
-        String stdout = capture(() -> run("cache", "clean", "--cache-dir", cache.toString()));
-        assertThat(stdout).contains("nothing to clean");
+        String stdout = capture(() -> run("cache", "purge", "--cache-dir", cache.toString(), "--yes"));
+        assertThat(stdout).contains("nothing to purge");
     }
 
     @Test
     void search_lists_cached_coordinates_with_versions(@TempDir Path tempDir) {
         Path cache = tempDir.resolve("cache");
-        dev.jkbuild.cache.Journal journal = new dev.jkbuild.cache.Journal(cache);
-        journal.record(dev.jkbuild.model.Coordinate.of("com.fasterxml.jackson.core",
-                "jackson-databind", "2.18.2"), "pom", "a", 1, "central", "u");
-        journal.record(dev.jkbuild.model.Coordinate.of("com.fasterxml.jackson.core",
-                "jackson-databind", "2.17.1"), "jar", "b", 1, "central", "u");
-        journal.record(dev.jkbuild.model.Coordinate.of("com.google.guava",
-                "guava", "33.0.0-jre"), "pom", "c", 1, "central", "u");
+        seedRepo(cache, "com.fasterxml.jackson.core", "jackson-databind", "2.18.2");
+        seedRepo(cache, "com.fasterxml.jackson.core", "jackson-databind", "2.17.1");
+        seedRepo(cache, "com.google.guava", "guava", "33.0.0-jre");
 
         // Coordinates print in color; strip ANSI to assert on the visible text.
         String stdout = stripAnsi(capture(() -> run("cache", "search", "jackson",
@@ -152,6 +172,19 @@ class CacheCommandTest {
 
     // --- helpers -----------------------------------------------------------
 
+    /** Materialise a jar for {@code group:artifact:version} into the m2 local repo. */
+    private static void seedRepo(Path cache, String group, String artifact, String version) {
+        try {
+            dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(cache);
+            Path blob = cas.put((group + ":" + artifact + ":" + version).getBytes(StandardCharsets.UTF_8));
+            var coord = dev.jkbuild.model.Coordinate.of(group, artifact, version);
+            new dev.jkbuild.repo.JkMavenLocalRepo(cache)
+                    .materialize(dev.jkbuild.repo.MavenLayout.artifactPath(coord), blob);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     private static String stripAnsi(String s) {
         return s.replaceAll("\\033\\[[0-9;?]*[a-zA-Z]", "");
     }
@@ -164,6 +197,17 @@ class CacheCommandTest {
 
     private static int run(String... args) {
         return Jk.execute(args);
+    }
+
+    /** Run {@code body} with {@code System.in} fed from {@code input}. */
+    private static String withStdin(String input, java.util.function.Supplier<String> body) {
+        var original = System.in;
+        System.setIn(new java.io.ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)));
+        try {
+            return body.get();
+        } finally {
+            System.setIn(original);
+        }
     }
 
     private static String capture(Runnable body) {

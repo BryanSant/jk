@@ -8,7 +8,6 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.cache.Journal;
 import dev.jkbuild.cache.Linking;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
@@ -27,6 +26,8 @@ import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.publish.PublishablePom;
+import dev.jkbuild.repo.JkMavenLocalRepo;
+import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.run.Goal;
@@ -65,7 +66,7 @@ import java.util.Set;
  * <ul>
  *   <li><b>No source:</b> build the current project (per {@code jk.toml}) and
  *       install it. Always performs a <em>cache install</em> (jar + generated
- *       pom into jk's CAS + journal — the {@code mvn install} equivalent — so
+ *       pom into jk's CAS + m2 local repo — the {@code mvn install} equivalent — so
  *       other local projects can depend on it; also into {@code ~/.m2} when
  *       {@code project.m2install} is set). When the project is an
  *       <em>application</em> ({@code project.application}, default true when a
@@ -181,8 +182,8 @@ public final class InstallCommand implements CliCommand {
     // --- mode 2: local file ----------------------------------------------
 
     /**
-     * Store a local file in the CAS and record it in the Journal under its
-     * Maven coordinate (the {@code mvn install} equivalent for pre-built
+     * Store a local file in the CAS and mirror it into the m2 local repo under
+     * its Maven coordinate (the {@code mvn install} equivalent for pre-built
      * artifacts). The coordinate is auto-detected from
      * {@code META-INF/maven/.../pom.properties} for {@code .jar} files;
      * {@code --group}, {@code --name}, and {@code --ver} override or supply
@@ -227,9 +228,10 @@ public final class InstallCommand implements CliCommand {
         Files.createDirectories(cache);
         byte[] bytes = Files.readAllBytes(filePath);
         String sha256 = Hashing.sha256Hex(bytes);
-        new Cas(cache).putByLink(filePath, sha256);
+        Cas cas = new Cas(cache);
+        cas.putByLink(filePath, sha256);
         Coordinate coord = Coordinate.of(group, artifact, version);
-        new Journal(cache).record(coord, "jar", sha256, bytes.length, "local", null);
+        new JkMavenLocalRepo(cache).materialize(MavenLayout.artifactPath(coord), cas.pathFor(sha256));
 
         if (!global.outputIsJson()) {
             System.out.println("Installed "
@@ -430,7 +432,7 @@ public final class InstallCommand implements CliCommand {
         if (isNative) makeRequires.add("native-image");
         if (needShadow) makeRequires.add("package-shadow");
 
-        // Always: install the jar + pom into jk's CAS + journal (the
+        // Always: install the jar + pom into jk's CAS + m2 local repo (the
         // `mvn install` equivalent), so other local projects can resolve it.
         Phase cacheInstall = Phase.builder("cache-install")
                 .requires("package-jar")
@@ -496,27 +498,29 @@ public final class InstallCommand implements CliCommand {
 
     /**
      * The {@code mvn install} equivalent: hash the built jar and a generated
-     * pom into jk's CAS and record them in the journal as a {@code local}
-     * source so other local jk projects resolve them. When {@code m2install}
-     * is set, also materialise jar+pom into {@code ~/.m2/repository}.
+     * pom into jk's CAS and mirror them into the m2 local repo as a
+     * {@code local} source so other local jk projects resolve them. When
+     * {@code m2install} is set, also materialise jar+pom into
+     * {@code ~/.m2/repository}.
      */
     private void cacheInstallArtifact(JkBuild project, BuildLayout layout, Path cacheDir)
             throws IOException {
         var p = project.project();
         Coordinate coord = Coordinate.of(p.group(), p.name(), p.version());
         Cas cas = new Cas(cacheDir);
-        Journal journal = new Journal(cacheDir);
+        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(cacheDir);
 
         Path jar = layout.mainJar();
         byte[] jarBytes = Files.readAllBytes(jar);
         String jarHex = Hashing.sha256Hex(jarBytes);
         cas.putByLink(jar, jarHex);
-        journal.record(coord, "jar", jarHex, jarBytes.length, "local", null);
+        localRepo.materialize(MavenLayout.artifactPath(coord), cas.pathFor(jarHex));
 
         String pomXml = PublishablePom.render(project, null).xml();
         byte[] pomBytes = pomXml.getBytes(StandardCharsets.UTF_8);
+        String pomHex = Hashing.sha256Hex(pomBytes);
         cas.put(pomBytes);
-        journal.record(coord, "pom", Hashing.sha256Hex(pomBytes), pomBytes.length, "local", null);
+        localRepo.materialize(MavenLayout.pomPath(coord), cas.pathFor(pomHex));
 
         if (p.m2install()) {
             Path dir = m2Dir().resolve("repository");
@@ -572,7 +576,7 @@ public final class InstallCommand implements CliCommand {
         if (Files.exists(lockFile)) {
             Cas cas = new Cas(cacheDir);
             Lockfile lock = LockfileReader.read(lockFile);
-            for (Lockfile.Package pkg : lock.packages()) {
+            for (Lockfile.Artifact pkg : lock.artifacts()) {
                 if (pkg.checksum() == null) continue;
                 if (!(pkg.scopes().contains(Scope.MAIN) || pkg.scopes().contains(Scope.RUNTIME))) continue;
                 String hex = pkg.checksum().startsWith("sha256:")

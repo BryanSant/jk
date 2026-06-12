@@ -1,17 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cache.Journal;
 import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
+import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.util.JkDirs;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -29,7 +33,7 @@ public final class CacheCommand implements CliCommand {
 
     @Override
     public List<CliCommand> subcommands() {
-        return List.of(new CacheDirCommand(), new CacheInfoCommand(), new CacheSearchCommand(), new CachePruneCommand(), new CacheCleanCommand());
+        return List.of(new CacheDirCommand(), new CacheInfoCommand(), new CacheSearchCommand(), new CachePruneCommand(), new CachePurgeCommand());
     }
 
     @Override
@@ -121,11 +125,11 @@ public final class CacheCommand implements CliCommand {
             List<String> terms = in.positionals();
             Integer limit = in.value("limit").map(Integer::parseInt).orElse(null);
             Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
-            Journal journal = new Journal(resolveCacheRoot(cacheDir));
+            JkMavenLocalRepo localRepo = new JkMavenLocalRepo(resolveCacheRoot(cacheDir));
             List<String> lowerTerms = terms.stream().map(t -> t.toLowerCase(Locale.ROOT)).toList();
-            List<Journal.Module> hits = journal.modules().stream()
+            List<JkMavenLocalRepo.Module> hits = localRepo.modules().stream()
                     .filter(m -> allMatch(lowerTerms, m.group().toLowerCase(Locale.ROOT), m.artifact().toLowerCase(Locale.ROOT)))
-                    .sorted(Comparator.comparing(Journal.Module::moduleKey)).toList();
+                    .sorted(Comparator.comparing(JkMavenLocalRepo.Module::moduleKey)).toList();
             if (hits.isEmpty()) { System.out.println("No cached coordinates match: " + String.join(" ", terms)); return 1; }
             int total = hits.size();
             int shown = limit != null && limit > 0 && total > limit ? limit : total;
@@ -133,7 +137,7 @@ public final class CacheCommand implements CliCommand {
             for (int i = 0; i < shown; i++) keyWidth = Math.max(keyWidth, hits.get(i).moduleKey().length());
             long versionCount = 0;
             for (int i = 0; i < shown; i++) {
-                Journal.Module m = hits.get(i);
+                JkMavenLocalRepo.Module m = hits.get(i);
                 List<String> versions = new ArrayList<>(m.versions());
                 versions.sort((a, b) -> Versions.compare(b, a));
                 versionCount += versions.size();
@@ -248,23 +252,59 @@ public final class CacheCommand implements CliCommand {
         }
     }
 
-    public static final class CacheCleanCommand implements CliCommand {
-        @Override public String name() { return "clean"; }
-        @Override public String description() { return "Delete everything in the cache"; }
+    public static final class CachePurgeCommand implements CliCommand {
+        @Override public String name() { return "purge"; }
+        @Override public String description() { return "Delete the entire cache (asks to confirm)"; }
         @Override public List<Opt> options() {
             return List.of(
                     Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                    Opt.flag("Print what would be removed; touch nothing.", "--dry-run"));
+                    Opt.flag("Print what would be removed; touch nothing.", "--dry-run"),
+                    Opt.flag("Skip the confirmation prompt.", "-y", "--yes"));
         }
         @Override public int run(Invocation in) throws IOException {
             Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
             boolean dryRun = in.isSet("dry-run");
+            boolean assumeYes = in.isSet("yes");
             Path root = resolveCacheRoot(cacheDir);
-            if (!Files.isDirectory(root)) { System.out.println(root + " does not exist; nothing to clean."); return 0; }
+            if (!Files.isDirectory(root)) { System.out.println(root + " does not exist; nothing to purge."); return 0; }
             Stats stats = statsOf(root);
-            if (!dryRun) deleteContents(root);
-            System.out.printf("%s %s files (%s) from %s%n", dryRun ? "Would remove" : "Removed", fmtCount(stats.files), fmtBytes(stats.bytes), root);
+            if (dryRun) {
+                System.out.printf("Would remove %s files (%s) from %s%n", fmtCount(stats.files), fmtBytes(stats.bytes), root);
+                return 0;
+            }
+            if (!assumeYes && !confirmPurge(root, stats)) {
+                System.out.println("Aborted; nothing removed.");
+                return 1;
+            }
+            deleteContents(root);
+            System.out.printf("Removed %s files (%s) from %s%n", fmtCount(stats.files), fmtBytes(stats.bytes), root);
             return 0;
+        }
+
+        /** Stern, default-to-no confirmation before wiping the whole cache. */
+        private static boolean confirmPurge(Path root, Stats stats) throws IOException {
+            Theme t = Theme.active();
+            String bang = Theme.colorize("‼", t.error());
+            System.out.println();
+            System.out.println(bang + " " + Theme.colorize("This permanently deletes the ENTIRE jk cache.", t.errorLabel()));
+            System.out.println("  " + root);
+            System.out.printf("  %s files, %s — every cached dependency, CAS blob, and the m2 repo mirror.%n",
+                    fmtCount(stats.files), fmtBytes(stats.bytes));
+            System.out.println("  jk will re-download everything on the next build.");
+            System.out.print(bang + " Purge the whole cache? " + yesNo() + " ");
+            System.out.flush();
+            var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
+            String line = reader.readLine();
+            if (line == null) return false; // non-interactive / EOF → treat as "no"
+            String trimmed = line.trim();
+            return trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
+        }
+
+        /** {@code [y/N]} — default No — with the brackets and slash dimmed. */
+        private static String yesNo() {
+            var dim = Theme.active().darkGray();
+            return Theme.colorize("[", dim) + "y" + Theme.colorize("/", dim)
+                    + "N" + Theme.colorize("]", dim);
         }
     }
 }

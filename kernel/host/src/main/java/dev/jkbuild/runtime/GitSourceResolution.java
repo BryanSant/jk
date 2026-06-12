@@ -2,7 +2,7 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.cache.Journal;
+import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Dependency;
@@ -52,7 +52,7 @@ public final class GitSourceResolution {
      * to stamp onto the matching lockfile package.
      */
     public record Prepared(JkBuild project, RepoGroup repos,
-                    Map<String, Lockfile.Package.GitInfo> gitInfoByKey) {}
+                    Map<String, Lockfile.Artifact.GitInfo> gitInfoByKey) {}
 
     /**
      * Materialize every git dependency in {@code effective}, augment
@@ -94,7 +94,7 @@ public final class GitSourceResolution {
         // several scopes (main + test) is built and published only once.
         Map<String, GitSourceMaterializer.Materialized> bySource = new LinkedHashMap<>();
         List<MavenRepo> extraRepos = new ArrayList<>();
-        Map<String, Lockfile.Package.GitInfo> gitInfo = new LinkedHashMap<>();
+        Map<String, Lockfile.Artifact.GitInfo> gitInfo = new LinkedHashMap<>();
         for (List<Dependency> list : byScope.values()) {
             for (Dependency d : list) {
                 if (!d.isGit()) continue;
@@ -107,7 +107,7 @@ public final class GitSourceResolution {
                 bySource.put(key, m);
                 extraRepos.add(new MavenRepo(
                         "git:" + m.coordinate() + ":" + m.version(),
-                        m.repoUrl(), new Http(), cas, Journal.NONE));
+                        m.repoUrl(), new Http(), cas, JkMavenLocalRepo.NONE));
                 gitInfo.put(provenanceKey(m.coordinate(), m.version()), m.gitInfo());
             }
         }
@@ -147,16 +147,16 @@ public final class GitSourceResolution {
     /**
      * Stamp git provenance onto the resolved packages produced from a
      * {@link #prepare}d build. Packages whose {@code group:artifact@version}
-     * matches a materialized git artifact gain a {@link Lockfile.Package.GitInfo};
+     * matches a materialized git artifact gain a {@link Lockfile.Artifact.GitInfo};
      * everything else is copied through unchanged.
      */
-    public static Lockfile stamp(Lockfile lock, Map<String, Lockfile.Package.GitInfo> gitInfoByKey) {
+    public static Lockfile stamp(Lockfile lock, Map<String, Lockfile.Artifact.GitInfo> gitInfoByKey) {
         if (gitInfoByKey.isEmpty()) return lock;
-        List<Lockfile.Package> out = new ArrayList<>(lock.packages().size());
-        for (Lockfile.Package p : lock.packages()) {
-            Lockfile.Package.GitInfo gi = gitInfoByKey.get(provenanceKey(p.name(), p.version()));
+        List<Lockfile.Artifact> out = new ArrayList<>(lock.artifacts().size());
+        for (Lockfile.Artifact p : lock.artifacts()) {
+            Lockfile.Artifact.GitInfo gi = gitInfoByKey.get(provenanceKey(p.name(), p.version()));
             if (gi != null && p.git() == null) {
-                out.add(new Lockfile.Package(p.name(), p.version(), p.source(),
+                out.add(new Lockfile.Artifact(p.name(), p.version(), p.source(),
                         p.checksum(), p.path(), p.scopes(), p.deps(), p.pinnedBy(), gi));
             } else {
                 out.add(p);
@@ -190,8 +190,8 @@ public final class GitSourceResolution {
      */
     public static Map<String, String> lockedImmutableShas(Lockfile lock) {
         Map<String, String> out = new LinkedHashMap<>();
-        for (Lockfile.Package p : lock.packages()) {
-            Lockfile.Package.GitInfo g = p.git();
+        for (Lockfile.Artifact p : lock.artifacts()) {
+            Lockfile.Artifact.GitInfo g = p.git();
             if (g == null || g.ref() == null) continue;
             if (g.ref().startsWith("tag=") || g.ref().startsWith("rev=")) {
                 out.put(g.url() + "|" + g.ref(), g.rev());

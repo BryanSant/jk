@@ -54,7 +54,7 @@ public final class WhyCommand implements CliCommand {
         JkBuild project = JkBuildParser.parse(buildFile);
         Lockfile lock = LockfileReader.read(lockFile);
 
-        List<Lockfile.Package> matches = lock.packages().stream()
+        List<Lockfile.Artifact> matches = lock.artifacts().stream()
                 .filter(p -> matchesQuery(p.name(), query))
                 .toList();
         if (matches.isEmpty()) {
@@ -63,7 +63,7 @@ public final class WhyCommand implements CliCommand {
         }
 
         System.out.println(Theme.active().gradientHeaderAnsi("Jk - Dependency Lookup"));
-        for (Lockfile.Package target : matches) {
+        for (Lockfile.Artifact target : matches) {
             System.out.println(Coords.module(target.name(), target.version()) + " is pulled in by:");
             List<Provenance.Path> paths = Provenance.pathsTo(project, lock, target.name());
             if (paths.isEmpty()) {

@@ -29,7 +29,7 @@ class SbomTest {
     @Test
     void cyclonedx_with_lockfile_lists_resolved_deps() {
         Lockfile lock = new Lockfile(5, "jk test", "pubgrub-v1", List.of(
-                new Lockfile.Package(
+                new Lockfile.Artifact(
                         "com.example:lib", "1.2.3",
                         "central+https://repo.maven.apache.org/maven2/",
                         "sha256:abcdef", null, List.of(Scope.MAIN), List.of())));
@@ -53,11 +53,11 @@ class SbomTest {
     @Test
     void spdx_with_lockfile_emits_one_package_per_dep() {
         Lockfile lock = new Lockfile(5, "jk test", "pubgrub-v1", List.of(
-                new Lockfile.Package(
+                new Lockfile.Artifact(
                         "com.example:a", "1.0.0",
                         "central+https://repo.maven.apache.org/maven2/",
                         "sha256:aaaa", null, List.of(Scope.MAIN), List.of()),
-                new Lockfile.Package(
+                new Lockfile.Artifact(
                         "com.example:b", "2.0.0",
                         "central+https://repo.maven.apache.org/maven2/",
                         "sha256:bbbb", null, List.of(Scope.MAIN), List.of())));

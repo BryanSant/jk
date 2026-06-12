@@ -153,7 +153,7 @@ class IdeaCommandTest {
                 resolution-algorithm = "pubgrub-v1"
                 jdk = "temurin-25.0.3"
 
-                [[package]]
+                [[artifact]]
                 name = "org.example:myprocessor"
                 version = "1.0.0"
                 source = "central+https://repo.maven.apache.org/maven2/"

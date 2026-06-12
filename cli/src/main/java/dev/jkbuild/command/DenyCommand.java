@@ -57,7 +57,7 @@ public final class DenyCommand implements CliCommand {
 
         Phase check = Phase.builder("check").requires("parse-policy").scope(1).execute(ctx -> {
             Lockfile lock = ctx.require(LOCK);
-            ctx.label("check " + lock.packages().size() + " packages");
+            ctx.label("check " + lock.artifacts().size() + " packages");
             List<PolicyChecker.Violation> violations = new PolicyChecker(ctx.require(POLICY)).check(lock);
             ctx.put(VIOLATIONS, violations);
             ctx.progress(1);
@@ -73,7 +73,7 @@ public final class DenyCommand implements CliCommand {
 
         if (violations.isEmpty()) {
             if (!global.outputIsJson())
-                System.out.println("jk deny: " + lock.packages().size() + " package(s) checked — no violations.");
+                System.out.println("jk deny: " + lock.artifacts().size() + " package(s) checked — no violations.");
             return 0;
         }
         System.err.println("jk deny: " + violations.size() + " violation(s):");

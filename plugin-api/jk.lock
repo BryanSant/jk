@@ -2,21 +2,21 @@ version = 1
 generated-by = "jk 0.1.0-SNAPSHOT"
 resolution-algorithm = "pubgrub-v1"
 
-[[package]]
+[[artifact]]
 name     = "net.bytebuddy:byte-buddy"
 version  = "1.18.10-jdk5"
 source   = "central+https://repo.maven.apache.org/maven2/"
 checksum = "sha256:6d6978c78092da14d32558305b5ca58b847e2c4639d1b0aec7a3b55bec1391d7"
 scopes   = ["test"]
 
-[[package]]
+[[artifact]]
 name     = "org.apiguardian:apiguardian-api"
 version  = "1.1.2"
 source   = "central+https://repo.maven.apache.org/maven2/"
 checksum = "sha256:b509448ac506d607319f182537f0b35d71007582ec741832a1f111e5b5b70b38"
 scopes   = ["test"]
 
-[[package]]
+[[artifact]]
 name     = "org.assertj:assertj-core"
 version  = "3.27.7"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -26,14 +26,14 @@ deps = [
   "net.bytebuddy:byte-buddy@1.18.10-jdk5",
 ]
 
-[[package]]
+[[artifact]]
 name     = "org.jspecify:jspecify"
 version  = "1.0.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
 checksum = "sha256:1fad6e6be7557781e4d33729d49ae1cdc8fdda6fe477bb0cc68ce351eafdfbab"
 scopes   = ["test"]
 
-[[package]]
+[[artifact]]
 name     = "org.junit.jupiter:junit-jupiter"
 version  = "6.1.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -45,7 +45,7 @@ deps = [
   "org.junit.jupiter:junit-jupiter-params@6.1.0",
 ]
 
-[[package]]
+[[artifact]]
 name     = "org.junit.jupiter:junit-jupiter-api"
 version  = "6.1.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -58,7 +58,7 @@ deps = [
   "org.opentest4j:opentest4j@1.3.0",
 ]
 
-[[package]]
+[[artifact]]
 name     = "org.junit.jupiter:junit-jupiter-engine"
 version  = "6.1.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -71,7 +71,7 @@ deps = [
   "org.junit.platform:junit-platform-engine@6.1.0",
 ]
 
-[[package]]
+[[artifact]]
 name     = "org.junit.jupiter:junit-jupiter-params"
 version  = "6.1.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -83,7 +83,7 @@ deps = [
   "org.junit.jupiter:junit-jupiter-api@6.1.0",
 ]
 
-[[package]]
+[[artifact]]
 name     = "org.junit.platform:junit-platform-commons"
 version  = "6.1.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -94,7 +94,7 @@ deps = [
   "org.jspecify:jspecify@1.0.0",
 ]
 
-[[package]]
+[[artifact]]
 name     = "org.junit.platform:junit-platform-engine"
 version  = "6.1.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -107,7 +107,7 @@ deps = [
   "org.opentest4j:opentest4j@1.3.0",
 ]
 
-[[package]]
+[[artifact]]
 name     = "org.junit.platform:junit-platform-launcher"
 version  = "6.1.0"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -119,7 +119,7 @@ deps = [
   "org.junit.platform:junit-platform-engine@6.1.0",
 ]
 
-[[package]]
+[[artifact]]
 name     = "org.opentest4j:opentest4j"
 version  = "1.3.0"
 source   = "central+https://repo.maven.apache.org/maven2/"

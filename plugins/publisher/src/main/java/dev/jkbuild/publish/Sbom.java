@@ -63,7 +63,7 @@ public final class Sbom {
         sb.append("\"components\":[");
         if (lock != null) {
             boolean first = true;
-            for (Lockfile.Package pkg : lock.packages()) {
+            for (Lockfile.Artifact pkg : lock.artifacts()) {
                 String[] ga = splitModule(pkg.name());
                 if (!first) sb.append(',');
                 first = false;
@@ -111,7 +111,7 @@ public final class Sbom {
                 project.project().version(), null);
         if (lock != null) {
             int i = 0;
-            for (Lockfile.Package pkg : lock.packages()) {
+            for (Lockfile.Artifact pkg : lock.artifacts()) {
                 String[] ga = splitModule(pkg.name());
                 sb.append(',');
                 appendSpdxPackage(sb,

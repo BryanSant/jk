@@ -227,8 +227,8 @@ public final class UpdateCommand implements CliCommand {
 
         Lockfile lock = goal.get(LOCKFILE).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println("Updated " + lockFile + " (" + lock.packages().size() + " package"
-                    + (lock.packages().size() == 1 ? "" : "s") + ")");
+            System.out.println("Updated " + lockFile + " (" + lock.artifacts().size() + " package"
+                    + (lock.artifacts().size() == 1 ? "" : "s") + ")");
         }
         return 0;
     }

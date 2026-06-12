@@ -17,7 +17,7 @@ class LockfileScopeTest {
                 Lockfile.CURRENT_VERSION,
                 "jk test",
                 Lockfile.RESOLUTION_ALGORITHM,
-                List.of(new Lockfile.Package(
+                List.of(new Lockfile.Artifact(
                         "com.example:widget",
                         "1.2.3",
                         "central+https://repo.maven.apache.org/maven2/",
@@ -29,14 +29,14 @@ class LockfileScopeTest {
         String rendered = LockfileWriter.render(original);
         Lockfile parsed = LockfileReader.parse(rendered);
 
-        assertThat(parsed.packages().getFirst().scopes())
+        assertThat(parsed.artifacts().getFirst().scopes())
                 .containsExactlyInAnyOrder(Scope.MAIN, Scope.TEST);
     }
 
     @Test
     void scopes_render_in_canonical_order() {
         // Constructor canonicalizes (de-duped, declaration-order via EnumSet).
-        Lockfile.Package pkg = new Lockfile.Package(
+        Lockfile.Artifact pkg = new Lockfile.Artifact(
                 "com.example:widget", "1.0", "central+x",
                 "sha256:abcd", null,
                 List.of(Scope.TEST, Scope.MAIN, Scope.MAIN),
@@ -52,25 +52,25 @@ class LockfileScopeTest {
                 generated-by = "jk 0.1.0"
                 resolution-algorithm = "pubgrub-v1"
 
-                [[package]]
+                [[artifact]]
                 name = "com.foo:bar"
                 version = "1.0"
                 source = "central+https://repo.maven.apache.org/maven2/"
                 checksum = "sha256:dead"
                 """;
         Lockfile parsed = LockfileReader.parse(content);
-        assertThat(parsed.packages().getFirst().scopes()).containsExactly(Scope.MAIN);
+        assertThat(parsed.artifacts().getFirst().scopes()).containsExactly(Scope.MAIN);
     }
 
     @Test
     void in_any_scope_filters_correctly() {
-        Lockfile.Package mainOnly = new Lockfile.Package(
+        Lockfile.Artifact mainOnly = new Lockfile.Artifact(
                 "com.foo:a", "1.0", "central+x", "sha256:a", null,
                 List.of(Scope.MAIN), List.of());
-        Lockfile.Package testOnly = new Lockfile.Package(
+        Lockfile.Artifact testOnly = new Lockfile.Artifact(
                 "com.foo:b", "1.0", "central+x", "sha256:b", null,
                 List.of(Scope.TEST), List.of());
-        Lockfile.Package both = new Lockfile.Package(
+        Lockfile.Artifact both = new Lockfile.Artifact(
                 "com.foo:c", "1.0", "central+x", "sha256:c", null,
                 List.of(Scope.MAIN, Scope.TEST), List.of());
 

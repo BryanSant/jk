@@ -20,9 +20,9 @@ class SyncManifestTest {
         Path lockFile = tempDir.resolve("jk.lock");
         Files.writeString(lockFile, "stub");
         Lockfile lock = new Lockfile(1, "jk test", "pubgrub-v1", null, List.of(
-                new Lockfile.Package("com.foo:bar", "1.0", "central+https://...",
+                new Lockfile.Artifact("com.foo:bar", "1.0", "central+https://...",
                         "sha256:aaaaaa", null, List.of(Scope.MAIN), List.of()),
-                new Lockfile.Package("com.foo:baz", "2.0", "central+https://...",
+                new Lockfile.Artifact("com.foo:baz", "2.0", "central+https://...",
                         "sha256:bbbbbb", null, List.of(Scope.MAIN), List.of())));
 
         Path actionRoot = tempDir.resolve("actions");
@@ -42,10 +42,10 @@ class SyncManifestTest {
         Path lockFile = tempDir.resolve("jk.lock");
         Files.writeString(lockFile, "stub");
         Lockfile lock = new Lockfile(1, "jk test", "pubgrub-v1", null, List.of(
-                new Lockfile.Package("com.foo:bar", "1.0", "central+https://...",
+                new Lockfile.Artifact("com.foo:bar", "1.0", "central+https://...",
                         "sha256:aaaaaa", null, List.of(Scope.MAIN), List.of()),
                 // POM-only / path-style — no checksum to root.
-                new Lockfile.Package("com.foo:nope", "2.0", "central+https://...",
+                new Lockfile.Artifact("com.foo:nope", "2.0", "central+https://...",
                         null, null, List.of(Scope.MAIN), List.of())));
 
         Path actionRoot = tempDir.resolve("actions");

@@ -161,7 +161,7 @@ public final class BuildPipeline {
                 .label("Parsing")
                 .scope(() -> {
                     if (Files.exists(in.lockFile())) {
-                        try { return LockfileReader.read(in.lockFile()).packages().size() + 5; }
+                        try { return LockfileReader.read(in.lockFile()).artifacts().size() + 5; }
                         catch (Exception ignored) {}
                     }
                     return 10;
@@ -207,6 +207,8 @@ public final class BuildPipeline {
                     }
 
                     Lockfile lock = ctx.require(LOCKFILE);
+                    // Reading the lock keeps its deps fresh against the 90-day cache GC.
+                    dev.jkbuild.task.AccessLedger.atDefaultPath().touchLock(lock);
                     ctx.label("resolve classpath");
                     ClasspathResolver resolver = new ClasspathResolver(cas);
 
@@ -269,21 +271,21 @@ public final class BuildPipeline {
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
                 .scope(() -> {
-                    try { return LockfileReader.read(in.lockFile()).packages().size(); }
+                    try { return LockfileReader.read(in.lockFile()).artifacts().size(); }
                     catch (Exception ignored) { return 10; }
                 })
                 .execute(ctx -> {
                     Lockfile lock = ctx.require(LOCKFILE);
-                    int packages = lock.packages().size();
+                    int packages = lock.artifacts().size();
                     if (packages > 0) ctx.updateScope(packages);
                     var observer = new CacheSync.ProgressObserver() {
-                        @Override public void fetched(Lockfile.Package pkg) {
+                        @Override public void fetched(Lockfile.Artifact pkg) {
                             ctx.label("fetched " + pkg.name());
                             ctx.progress(1);
                         }
-                        @Override public void upToDate(Lockfile.Package pkg) { ctx.progress(1); }
-                        @Override public void skipped(Lockfile.Package pkg)  { ctx.progress(1); }
-                        @Override public void failed(Lockfile.Package pkg, String err) {
+                        @Override public void upToDate(Lockfile.Artifact pkg) { ctx.progress(1); }
+                        @Override public void skipped(Lockfile.Artifact pkg)  { ctx.progress(1); }
+                        @Override public void failed(Lockfile.Artifact pkg, String err) {
                             ctx.error("dep", pkg.name() + " — " + err);
                             ctx.progress(1);
                         }

@@ -94,7 +94,7 @@ public final class LockOrchestrator {
 
     /**
      * Lock and additionally attempt to resolve the {@code -sources.jar} for
-     * every Maven package, populating {@link Lockfile.Package#sourcesChecksum()}
+     * every Maven package, populating {@link Lockfile.Artifact#sourcesChecksum()}
      * when found. Sources that return 404 are silently skipped — not all
      * packages publish sources.
      */
@@ -148,7 +148,7 @@ public final class LockOrchestrator {
             boolean withDefaults,
             ResolveObserver observer) throws IOException, InterruptedException {
         Map<String, String> prefs = new HashMap<>();
-        for (Lockfile.Package pkg : existing.packages()) {
+        for (Lockfile.Artifact pkg : existing.artifacts()) {
             prefs.put(pkg.name(), pkg.version());
         }
         return lock(project, jkVersion, featuresRequested, withDefaults, observer, prefs);
@@ -266,7 +266,7 @@ public final class LockOrchestrator {
         MavenRepo first = repos.repos().getFirst();
         String fallbackSource = first.name() + "+" + first.baseUrl();
 
-        List<Lockfile.Package> packages = new ArrayList<>(resolution.modules().size());
+        List<Lockfile.Artifact> packages = new ArrayList<>(resolution.modules().size());
         for (Resolution.ResolvedModule mod : resolution.modules().values()) {
             int colon = mod.module().indexOf(':');
             Coordinate coord = Coordinate.of(
@@ -298,7 +298,7 @@ public final class LockOrchestrator {
                 pinnedBy = constraintProvenance.get(mod.module());
             }
 
-            packages.add(new Lockfile.Package(
+            packages.add(new Lockfile.Artifact(
                     mod.module(),
                     mod.version(),
                     source,
@@ -323,7 +323,7 @@ public final class LockOrchestrator {
                 }
             }
             if (tags.isEmpty()) tags.add(Scope.MAIN);
-            packages.add(new Lockfile.Package(
+            packages.add(new Lockfile.Artifact(
                     dep.module(), version, "local",
                     "sha256:" + dep.sha256(),
                     null, new ArrayList<>(tags), List.of(), null));
@@ -354,13 +354,13 @@ public final class LockOrchestrator {
 
     /**
      * Try to fetch {@code -sources.jar} for every Maven package in {@code lock}
-     * and return a copy with {@link Lockfile.Package#sourcesChecksum()} populated
+     * and return a copy with {@link Lockfile.Artifact#sourcesChecksum()} populated
      * where sources exist. Packages that return 404, have a non-maven source, or
      * already have a sources checksum are left unchanged.
      */
     public Lockfile attachSources(Lockfile lock) throws InterruptedException {
-        List<Lockfile.Package> updated = new ArrayList<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        List<Lockfile.Artifact> updated = new ArrayList<>();
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             // Skip non-Maven packages (git, local, file deps) and those already resolved.
             if (!pkg.source().contains("maven") && !pkg.source().startsWith("central")
                     || pkg.sourcesChecksum() != null) {
@@ -376,7 +376,7 @@ public final class LockOrchestrator {
             try {
                 RepoGroup.RepoFetched hit = repos.tryFetchArtifact(sourcesCoord).orElse(null);
                 if (hit != null) {
-                    updated.add(new Lockfile.Package(
+                    updated.add(new Lockfile.Artifact(
                             pkg.name(), pkg.version(), pkg.source(),
                             pkg.checksum(), pkg.path(), pkg.scopes(), pkg.deps(),
                             pkg.pinnedBy(), pkg.git(),

@@ -2,7 +2,7 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.cache.Journal;
+import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.repo.MavenRepo;
@@ -94,8 +94,8 @@ public final class JkWorkerSync {
 
     private static RepoGroup mavenLocal(Path m2, Cas cas) {
         URI base = m2.toUri();   // file:///<home>/.m2/repository/
-        Journal journal = new Journal(cas.root());
-        return RepoGroup.of(new MavenRepo("mavenLocal", base, new Http(), cas, journal));
+        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(cas.root());
+        return RepoGroup.of(new MavenRepo("mavenLocal", base, new Http(), cas, localRepo));
     }
 
     private static String shortSha(String sha) {

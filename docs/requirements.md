@@ -515,7 +515,7 @@ version = 4
 generated-by = "jk 1.0.0"
 resolution-algorithm = "pubgrub-v1"
 
-[[package]]
+[[artifact]]
 name     = "com.fasterxml.jackson.core:jackson-databind"
 version  = "2.18.2"
 source   = "central+https://repo.maven.apache.org/maven2/"
@@ -525,7 +525,7 @@ deps = [
   "com.fasterxml.jackson.core:jackson-core@2.18.2",
 ]
 
-[[package]]
+[[artifact]]
 name     = "com.squareup.okhttp3:okhttp"
 version  = "5.0.0"
 source   = "git+https://github.com/square/okhttp?tag=parent-5.0.0#a1b2c3d4e5f6..."

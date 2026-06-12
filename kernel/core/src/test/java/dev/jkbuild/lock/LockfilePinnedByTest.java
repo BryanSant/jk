@@ -9,7 +9,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Round-trip the optional {@code pinned-by} field on {@link Lockfile.Package}.
+ * Round-trip the optional {@code pinned-by} field on {@link Lockfile.Artifact}.
  *
  * <p>{@code pinned-by} records the BOM coord ({@code group:artifact:version})
  * that constrained a package to its locked version. It's optional — packages
@@ -24,7 +24,7 @@ class LockfilePinnedByTest {
                 Lockfile.CURRENT_VERSION,
                 "jk 0.1.0-SNAPSHOT",
                 Lockfile.RESOLUTION_ALGORITHM,
-                List.of(new Lockfile.Package(
+                List.of(new Lockfile.Artifact(
                         "com.fasterxml.jackson.core:jackson-annotations",
                         "2.21",
                         "central+https://repo.maven.apache.org/maven2/",
@@ -38,7 +38,7 @@ class LockfilePinnedByTest {
         assertThat(rendered).contains("pinned-by = \"tools.jackson:jackson-bom:3.1.3\"");
 
         Lockfile parsed = LockfileReader.parse(rendered);
-        assertThat(parsed.packages()).singleElement().satisfies(p -> {
+        assertThat(parsed.artifacts()).singleElement().satisfies(p -> {
             assertThat(p.name()).isEqualTo("com.fasterxml.jackson.core:jackson-annotations");
             assertThat(p.version()).isEqualTo("2.21");
             assertThat(p.pinnedBy()).isEqualTo("tools.jackson:jackson-bom:3.1.3");
@@ -51,7 +51,7 @@ class LockfilePinnedByTest {
                 Lockfile.CURRENT_VERSION,
                 "jk 0.1.0-SNAPSHOT",
                 Lockfile.RESOLUTION_ALGORITHM,
-                List.of(new Lockfile.Package(
+                List.of(new Lockfile.Artifact(
                         "com.example:widget",
                         "1.0.0",
                         "central+https://repo.maven.apache.org/maven2/",
@@ -64,6 +64,6 @@ class LockfilePinnedByTest {
         assertThat(rendered).doesNotContain("pinned-by");
 
         Lockfile parsed = LockfileReader.parse(rendered);
-        assertThat(parsed.packages().getFirst().pinnedBy()).isNull();
+        assertThat(parsed.artifacts().getFirst().pinnedBy()).isNull();
     }
 }

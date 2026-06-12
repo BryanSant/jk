@@ -210,7 +210,7 @@ public final class LockCommand implements CliCommand {
                 .scope(() -> {
                     // Best case: existing lockfile is accurate (re-runs).
                     try {
-                        int n = LockfileReader.read(lockFile).packages().size();
+                        int n = LockfileReader.read(lockFile).artifacts().size();
                         if (n > 0) { resolveEstimate.set(n); return n; }
                     } catch (Exception ignored) {}
                     // Fallback: declared deps × rough transitive expansion.
@@ -232,7 +232,7 @@ public final class LockCommand implements CliCommand {
                         try {
                             Lockfile existing = LockfileReader.read(lockFile);
                             requireOfflineSatisfiable(eff, existing, cas);
-                            ctx.progress(existing.packages().size());
+                            ctx.progress(existing.artifacts().size());
                             ctx.put(LOCKFILE, existing);
                             return;
                         } catch (Exception e) {
@@ -350,9 +350,9 @@ public final class LockCommand implements CliCommand {
         ConsoleSpec spec = new ConsoleSpec(label,
                 r -> {
                     Lockfile lock = goal.get(LOCKFILE).orElseThrow();
-                    int pkgs = lock.packages().size();
+                    int pkgs = lock.artifacts().size();
                     int plgs = lock.plugins().size();
-                    long srcs = lock.packages().stream()
+                    long srcs = lock.artifacts().stream()
                             .filter(p -> p.sourcesChecksum() != null).count();
                     String depStr = "Resolved " + pkgs + " dependenc"
                             + (pkgs == 1 ? "y" : "ies");
@@ -417,7 +417,7 @@ public final class LockCommand implements CliCommand {
      */
     private static void requireOfflineSatisfiable(JkBuild effective, Lockfile lock, Cas cas) {
         java.util.Set<String> locked = new java.util.HashSet<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             locked.add(pkg.name());
         }
         for (var entry : effective.dependencies().byScope().entrySet()) {
@@ -429,7 +429,7 @@ public final class LockCommand implements CliCommand {
                 }
             }
         }
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             String checksum = pkg.checksum();
             if (checksum == null) continue;
             String hex = checksum.startsWith("sha256:")

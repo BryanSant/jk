@@ -113,7 +113,7 @@ public final class SyncManifest {
     private static Set<String> collectRefs(Lockfile lock) {
         Set<String> sorted = new TreeSet<>();
         Set<String> seen = new LinkedHashSet<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             String checksum = pkg.checksum();
             if (checksum == null || checksum.isBlank()) continue;
             String hex = checksum.startsWith("sha256:")

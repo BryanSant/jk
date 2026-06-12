@@ -116,12 +116,12 @@ class CacheSyncTest {
         served.put(path, bytes);
     }
 
-    private Lockfile lockOf(Lockfile.Package... packages) {
+    private Lockfile lockOf(Lockfile.Artifact... packages) {
         return new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
                 Lockfile.RESOLUTION_ALGORITHM, List.of(packages));
     }
 
-    private Lockfile.Package pkg(String module, String version, String checksum) {
-        return new Lockfile.Package(module, version, "central+" + base + "/", checksum, null, List.of());
+    private Lockfile.Artifact pkg(String module, String version, String checksum) {
+        return new Lockfile.Artifact(module, version, "central+" + base + "/", checksum, null, List.of());
     }
 }

@@ -10,6 +10,8 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.task.CacheGc;
+import dev.jkbuild.util.JkDirs;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -32,8 +34,11 @@ import java.util.stream.Stream;
  * test reports, etc.) is removed — handy when you want a fresh compile but
  * still need the existing jars around for downstream consumers.
  *
- * <p>The shared cache at {@code $JK_CACHE_DIR} is left alone — that's
- * per-machine state, not per-project.
+ * <p>The shared cache at {@code $JK_CACHE_DIR} is left alone by default —
+ * that's per-machine state, not per-project. Pass {@code --cache} to also run
+ * a cache GC: a mark-and-sweep that purges unreferenced CAS blobs (and their
+ * {@code repo/} mirror links) idle for more than 90 days, then compacts the
+ * access log.
  *
  * <p>The first command ported off picocli to jk's own {@link CliCommand}
  * model (docs/plugin-refactor.md §5).
@@ -52,13 +57,15 @@ public final class CleanCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.flag(
-                "Only delete build/ intermediates; keep target/ artifacts.", "--keep-artifacts"));
+        return List.of(
+                Opt.flag("Only delete build/ intermediates; keep target/ artifacts.", "--keep-artifacts"),
+                Opt.flag("Also GC the shared cache: purge unreferenced blobs idle 90+ days.", "--cache"));
     }
 
     @Override
     public int run(Invocation in) throws IOException {
         boolean keepArtifacts = in.isSet("keep-artifacts");
+        boolean gcCache = in.isSet("cache");
         Path dir = new GlobalOptions().workingDir();
         Path workspaceRoot = resolveWorkspaceRoot(dir);
         List<Path> projectDirs = collectProjectDirs(workspaceRoot);
@@ -93,7 +100,29 @@ public final class CleanCommand implements CliCommand {
             String inTime  = Theme.colorize("in " + fmtMs(elapsedMs), Theme.active().darkGray());
             System.out.println(check + " " + removed + " " + stats_ + " " + inTime);
         }
+
+        if (gcCache) {
+            gcCache();
+        }
         return 0;
+    }
+
+    /** Run the cache GC and print a one-line summary. */
+    private static void gcCache() throws IOException {
+        CacheGc.Report report;
+        try (Spinner spinner = Spinner.show(System.out, "Collecting cache...")) {
+            report = CacheGc.run(JkDirs.cache(), false);
+        }
+        String check = Theme.colorize("✓", Theme.active().success());
+        if (report.purgedBlobs() == 0) {
+            System.out.println(check + " Cache GC: nothing idle past 90 days");
+        } else {
+            String gc = Theme.colorize("Cache GC", Theme.active().focused());
+            System.out.printf("%s %s: purged %,d blob%s (%s), %,d repo link%s%n",
+                    check, gc, report.purgedBlobs(), report.purgedBlobs() == 1 ? "" : "s",
+                    CacheCommand.fmtBytes(report.freedBytes()),
+                    report.repoLinksRemoved(), report.repoLinksRemoved() == 1 ? "" : "s");
+        }
     }
 
     /**

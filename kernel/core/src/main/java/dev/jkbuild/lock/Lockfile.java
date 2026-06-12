@@ -33,7 +33,7 @@ public record Lockfile(
         String resolutionAlgorithm,
         String jdk,
         String kotlin,
-        List<Package> packages,
+        List<Artifact> artifacts,
         List<PluginEntry> plugins) {
 
     public static final int CURRENT_VERSION = 1;
@@ -43,43 +43,43 @@ public record Lockfile(
     public Lockfile {
         Objects.requireNonNull(generatedBy, "generatedBy");
         Objects.requireNonNull(resolutionAlgorithm, "resolutionAlgorithm");
-        Objects.requireNonNull(packages, "packages");
-        packages = List.copyOf(packages);
+        Objects.requireNonNull(artifacts, "artifacts");
+        artifacts = List.copyOf(artifacts);
         plugins  = plugins == null ? List.of() : List.copyOf(plugins);
     }
 
     /** Back-compat constructor without plugin entries. */
     public Lockfile(int version, String generatedBy, String resolutionAlgorithm,
-                    String jdk, String kotlin, List<Package> packages) {
-        this(version, generatedBy, resolutionAlgorithm, jdk, kotlin, packages, List.of());
+                    String jdk, String kotlin, List<Artifact> artifacts) {
+        this(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, List.of());
     }
 
     /** Back-compat constructor for callers that stamp a JDK but no Kotlin version. */
     public Lockfile(int version, String generatedBy, String resolutionAlgorithm,
-                    String jdk, List<Package> packages) {
-        this(version, generatedBy, resolutionAlgorithm, jdk, null, packages, List.of());
+                    String jdk, List<Artifact> artifacts) {
+        this(version, generatedBy, resolutionAlgorithm, jdk, null, artifacts, List.of());
     }
 
     /** Back-compat constructor for callers that don't yet stamp a JDK. */
-    public Lockfile(int version, String generatedBy, String resolutionAlgorithm, List<Package> packages) {
-        this(version, generatedBy, resolutionAlgorithm, null, null, packages, List.of());
+    public Lockfile(int version, String generatedBy, String resolutionAlgorithm, List<Artifact> artifacts) {
+        this(version, generatedBy, resolutionAlgorithm, null, null, artifacts, List.of());
     }
 
     /** Return a copy with the resolved Kotlin compiler version stamped in. */
     public Lockfile withKotlin(String kotlinVersion) {
-        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlinVersion, packages, plugins);
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlinVersion, artifacts, plugins);
     }
 
     /** Return a copy with the given plugin entries (replaces any existing). */
     public Lockfile withPlugins(List<PluginEntry> newPlugins) {
-        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlin, packages, newPlugins);
+        return new Lockfile(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, newPlugins);
     }
 
     public static Lockfile empty(String jkVersion) {
         return empty(jkVersion, null);
     }
 
-    /** Empty package set with a resolved JDK pinned for the project. */
+    /** Empty artifact set with a resolved JDK pinned for the project. */
     public static Lockfile empty(String jkVersion, String jdk) {
         return new Lockfile(CURRENT_VERSION, "jk " + jkVersion, RESOLUTION_ALGORITHM, jdk, null, List.of(), List.of());
     }
@@ -104,7 +104,7 @@ public record Lockfile(
         }
     }
 
-    public record Package(
+    public record Artifact(
             String name,
             String version,
             String source,
@@ -117,7 +117,7 @@ public record Lockfile(
             /** SHA-256 of the {@code -sources.jar}, or {@code null} when not published. */
             String sourcesChecksum) {
 
-        public Package {
+        public Artifact {
             Objects.requireNonNull(name, "name");
             Objects.requireNonNull(version, "version");
             Objects.requireNonNull(source, "source");
@@ -131,7 +131,7 @@ public record Lockfile(
         }
 
         /** Without sources checksum (the common case). */
-        public Package(
+        public Artifact(
                 String name, String version, String source,
                 String checksum, String path,
                 List<Scope> scopes, List<String> deps, String pinnedBy, GitInfo git) {
@@ -139,7 +139,7 @@ public record Lockfile(
         }
 
         /** Without git provenance — the common Maven-coordinate case. */
-        public Package(
+        public Artifact(
                 String name, String version, String source,
                 String checksum, String path,
                 List<Scope> scopes, List<String> deps, String pinnedBy) {
@@ -150,7 +150,7 @@ public record Lockfile(
          * Back-compat constructor without {@code pinnedBy} — for callers that
          * don't track BOM provenance. Equivalent to passing {@code null}.
          */
-        public Package(
+        public Artifact(
                 String name, String version, String source,
                 String checksum, String path,
                 List<Scope> scopes, List<String> deps) {
@@ -158,7 +158,7 @@ public record Lockfile(
         }
 
         /** Convenience constructor for callers that don't care about scopes (defaults to MAIN). */
-        public Package(
+        public Artifact(
                 String name, String version, String source,
                 String checksum, String path, List<String> deps) {
             this(name, version, source, checksum, path, List.of(Scope.MAIN), deps, null, null);
@@ -170,7 +170,7 @@ public record Lockfile(
         }
 
         /**
-         * Provenance for a git-source package: the canonical repo URL, the
+         * Provenance for a git-source artifact: the canonical repo URL, the
          * resolved commit SHA, and the original ref token (e.g. {@code tag:v1}).
          * Present only for git-built artifacts; null for Maven coordinates.
          */

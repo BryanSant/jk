@@ -54,11 +54,11 @@ public final class LockfileReader {
         String jdk = result.getString("jdk"); // optional
         String kotlin = result.getString("kotlin"); // optional, resolved Kotlin compiler version
 
-        List<Lockfile.Package> packages = new ArrayList<>();
-        TomlArray pkgArray = result.getArray("package");
-        if (pkgArray != null) {
-            for (int i = 0; i < pkgArray.size(); i++) {
-                packages.add(toPackage(pkgArray.getTable(i)));
+        List<Lockfile.Artifact> artifacts = new ArrayList<>();
+        TomlArray artifactArray = result.getArray("artifact");
+        if (artifactArray != null) {
+            for (int i = 0; i < artifactArray.size(); i++) {
+                artifacts.add(toArtifact(artifactArray.getTable(i)));
             }
         }
 
@@ -74,10 +74,10 @@ public final class LockfileReader {
             }
         }
 
-        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, kotlin, packages, plugins);
+        return new Lockfile(lockVersion, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, plugins);
     }
 
-    private static Lockfile.Package toPackage(TomlTable table) {
+    private static Lockfile.Artifact toArtifact(TomlTable table) {
         String name = requireString(table, "name");
         String version = requireString(table, "version");
         String source = requireString(table, "source");
@@ -106,14 +106,14 @@ public final class LockfileReader {
             }
         }
 
-        Lockfile.Package.GitInfo git = null;
+        Lockfile.Artifact.GitInfo git = null;
         String gitUrl = table.getString("git");
         if (gitUrl != null) {
-            git = new Lockfile.Package.GitInfo(gitUrl, requireString(table, "rev"),
+            git = new Lockfile.Artifact.GitInfo(gitUrl, requireString(table, "rev"),
                     table.getString("ref"));
         }
         String sourcesChecksum = table.getString("sources"); // optional
-        return new Lockfile.Package(name, version, source, checksum, path, scopes, deps, pinnedBy,
+        return new Lockfile.Artifact(name, version, source, checksum, path, scopes, deps, pinnedBy,
                 git, sourcesChecksum);
     }
 
@@ -128,7 +128,7 @@ public final class LockfileReader {
     private static String requireString(TomlTable table, String key) {
         String value = table.getString(key);
         if (value == null) {
-            throw new IllegalArgumentException("[[package]] is missing required key `" + key + "`");
+            throw new IllegalArgumentException("[[artifact]] is missing required key `" + key + "`");
         }
         return Objects.requireNonNull(value);
     }

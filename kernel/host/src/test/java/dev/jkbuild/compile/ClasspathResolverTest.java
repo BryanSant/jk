@@ -53,8 +53,8 @@ class ClasspathResolverTest {
         assertThat(cp).containsExactly(cas.pathFor("abcd1234"));
     }
 
-    private static Lockfile.Package pkg(String module, String version, String checksum) {
-        return new Lockfile.Package(module, version,
+    private static Lockfile.Artifact pkg(String module, String version, String checksum) {
+        return new Lockfile.Artifact(module, version,
                 "central+https://repo.maven.apache.org/maven2/",
                 checksum, null, List.of());
     }

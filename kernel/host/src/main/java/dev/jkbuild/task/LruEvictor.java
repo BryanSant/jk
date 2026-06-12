@@ -2,12 +2,14 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.repo.JkMavenLocalRepo;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -89,6 +91,7 @@ public final class LruEvictor {
         long freed = 0;
         int reachableEvicted = 0;
         long remaining = totalSize;
+        Set<String> deletedShas = new HashSet<>();
         for (Entry e : entries) {
             if (remaining <= maxBytes) break;
             if (!dryRun) Files.deleteIfExists(e.file());
@@ -96,7 +99,10 @@ public final class LruEvictor {
             freed += e.size();
             if (e.reachable()) reachableEvicted++;
             remaining -= e.size();
+            deletedShas.add(e.hex());
         }
+        // Keep the m2 mirror in lock-step — drop hard-links to evicted blobs.
+        new JkMavenLocalRepo(cas.root()).removeShas(deletedShas, dryRun);
         return new Report(deleted, freed, reachableEvicted, remaining);
     }
 

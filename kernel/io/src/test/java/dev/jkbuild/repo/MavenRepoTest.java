@@ -3,7 +3,6 @@ package dev.jkbuild.repo;
 
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.cache.Journal;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.http.Http;
@@ -103,37 +102,37 @@ class MavenRepoTest {
     }
 
     @Test
-    void online_fetch_records_to_journal(@TempDir Path tempDir) throws Exception {
+    void online_fetch_mirrors_into_local_repo(@TempDir Path tempDir) throws Exception {
         byte[] pom = "<project/>".getBytes(StandardCharsets.UTF_8);
         serve("/com/example/widget/1.0/widget-1.0.pom", 200, pom);
-        Journal journal = new Journal(tempDir);
-        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir), journal);
+        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(tempDir);
+        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir), localRepo);
 
         Coordinate coord = Coordinate.of("com.example", "widget", "1.0");
         repo.fetchPom(coord);
 
-        Optional<Journal.Blob> blob = journal.lookup(coord, "pom");
-        assertThat(blob).isPresent();
-        assertThat(blob.get().sha256()).isEqualTo(Hashing.sha256Hex(pom));
-        // metadata is deliberately not journaled
-        assertThat(journal.versions("com.example", "widget")).containsExactly("1.0");
+        Path mirrored = tempDir.resolve("repo/com/example/widget/1.0/widget-1.0.pom");
+        assertThat(mirrored).exists();
+        assertThat(Files.readAllBytes(mirrored)).isEqualTo(pom);
+        // metadata is deliberately not mirrored
+        assertThat(localRepo.versions("com.example", "widget")).containsExactly("1.0");
     }
 
     @Test
-    void offline_fetch_is_served_from_journal_and_cas(@TempDir Path tempDir) throws Exception {
+    void offline_fetch_is_served_from_local_repo(@TempDir Path tempDir) throws Exception {
         byte[] pom = "<project/>".getBytes(StandardCharsets.UTF_8);
         serve("/com/example/widget/1.0/widget-1.0.pom", 200, pom);
-        Journal journal = new Journal(tempDir);
+        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(tempDir);
         Cas cas = new Cas(tempDir);
         Coordinate coord = Coordinate.of("com.example", "widget", "1.0");
 
-        // Warm the cache + journal online.
-        new MavenRepo("test", base, new Http(), cas, journal).fetchPom(coord);
+        // Warm the cache + local repo online.
+        new MavenRepo("test", base, new Http(), cas, localRepo).fetchPom(coord);
 
         // Now offline: stop the server so any network attempt would fail loudly.
         server.stop(0);
         goOffline();
-        MavenRepo offline = new MavenRepo("test", base, new Http(), cas, journal);
+        MavenRepo offline = new MavenRepo("test", base, new Http(), cas, localRepo);
         MavenRepo.Fetched fetched = offline.fetchPom(coord);
 
         assertThat(fetched.sha256()).isEqualTo(Hashing.sha256Hex(pom));
@@ -141,34 +140,25 @@ class MavenRepoTest {
     }
 
     @Test
-    void offline_fetch_of_unjournaled_coord_is_not_found(@TempDir Path tempDir) {
+    void offline_fetch_of_unmirrored_coord_is_not_found(@TempDir Path tempDir) {
         goOffline();
-        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir), new Journal(tempDir));
+        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir), new JkMavenLocalRepo(tempDir));
         assertThatThrownBy(() -> repo.fetchPom(Coordinate.of("com.example", "absent", "1.0")))
                 .isInstanceOf(MavenRepo.ArtifactNotFoundException.class);
     }
 
     @Test
-    void offline_pointer_to_gc_d_blob_is_not_found(@TempDir Path tempDir) {
-        Journal journal = new Journal(tempDir);
-        Coordinate coord = Coordinate.of("com.example", "widget", "1.0");
-        // Journal points at a sha that was never stored in the CAS.
-        journal.record(coord, "pom", "deadbeef".repeat(8), 10, "test", "https://repo/widget-1.0.pom");
+    void offline_available_versions_come_from_local_repo(@TempDir Path tempDir) throws Exception {
+        Cas cas = new Cas(tempDir);
+        JkMavenLocalRepo localRepo = new JkMavenLocalRepo(tempDir);
+        Path blob = cas.put("jar-bytes".getBytes(StandardCharsets.UTF_8));
+        localRepo.materialize(
+                MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "1.0")), blob);
+        localRepo.materialize(
+                MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "2.0")), blob);
         goOffline();
 
-        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir), journal);
-        assertThatThrownBy(() -> repo.fetchPom(coord))
-                .isInstanceOf(MavenRepo.ArtifactNotFoundException.class);
-    }
-
-    @Test
-    void offline_available_versions_come_from_journal(@TempDir Path tempDir) throws Exception {
-        Journal journal = new Journal(tempDir);
-        journal.record(Coordinate.of("com.example", "widget", "1.0"), "pom", "a", 1, "t", "u");
-        journal.record(Coordinate.of("com.example", "widget", "2.0"), "pom", "b", 1, "t", "u");
-        goOffline();
-
-        MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir), journal);
+        MavenRepo repo = new MavenRepo("test", base, new Http(), cas, localRepo);
         assertThat(repo.availableVersions(Coordinate.of("com.example", "widget", "0")))
                 .containsExactlyInAnyOrder("1.0", "2.0");
     }

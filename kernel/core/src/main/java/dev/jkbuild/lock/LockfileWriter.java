@@ -38,14 +38,14 @@ public final class LockfileWriter {
             out.append("kotlin = ").append(quote(lockfile.kotlin())).append('\n');
         }
 
-        List<Lockfile.Package> sorted = new ArrayList<>(lockfile.packages());
+        List<Lockfile.Artifact> sorted = new ArrayList<>(lockfile.artifacts());
         sorted.sort(Comparator
-                .comparing(Lockfile.Package::name)
-                .thenComparing(Lockfile.Package::version));
+                .comparing(Lockfile.Artifact::name)
+                .thenComparing(Lockfile.Artifact::version));
 
-        for (Lockfile.Package pkg : sorted) {
+        for (Lockfile.Artifact pkg : sorted) {
             out.append('\n');
-            out.append("[[package]]\n");
+            out.append("[[artifact]]\n");
             out.append("name     = ").append(quote(pkg.name())).append('\n');
             out.append("version  = ").append(quote(pkg.version())).append('\n');
             out.append("source   = ").append(quote(pkg.source())).append('\n');

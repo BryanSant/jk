@@ -88,12 +88,12 @@ class LockCommandTest {
 
         // Inspect the lockfile.
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(lock.packages()).hasSize(2);
-        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+        assertThat(lock.artifacts()).hasSize(2);
+        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
                 .containsExactly("com.foo:leaf", "com.foo:root"); // writer sorts by name
 
-        Lockfile.Package leaf = pkg(lock, "com.foo:leaf");
-        Lockfile.Package root = pkg(lock, "com.foo:root");
+        Lockfile.Artifact leaf = pkg(lock, "com.foo:leaf");
+        Lockfile.Artifact root = pkg(lock, "com.foo:root");
 
         assertThat(leaf.version()).isEqualTo("1.0");
         assertThat(leaf.checksum()).isEqualTo("sha256:" + Hashing.sha256Hex(leafJar));
@@ -122,7 +122,7 @@ class LockCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(lock.packages()).isEmpty();
+        assertThat(lock.artifacts()).isEmpty();
     }
 
     @Test
@@ -182,9 +182,9 @@ class LockCommandTest {
         Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
 
         // External coords are resolved; the workspace sibling is not locked.
-        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
-        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
                 .doesNotContain("com.acme:libb");
 
         // Workspace root's own jk.lock was NOT created by this invocation.
@@ -246,9 +246,9 @@ class LockCommandTest {
 
         // app gets its own lock with external deps; sibling not included.
         Lockfile appLock = LockfileReader.read(app.resolve("jk.lock"));
-        assertThat(appLock.packages()).extracting(Lockfile.Package::name)
+        assertThat(appLock.artifacts()).extracting(Lockfile.Artifact::name)
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
-        assertThat(appLock.packages()).extracting(Lockfile.Package::name)
+        assertThat(appLock.artifacts()).extracting(Lockfile.Artifact::name)
                 .doesNotContain("com.acme:libb");
 
         // libb gets its own lock (empty — no deps declared).
@@ -272,7 +272,7 @@ class LockCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
                 .containsExactly("com.foo:leaf", "com.foo:root");
     }
 
@@ -294,7 +294,7 @@ class LockCommandTest {
     void offline_hard_fails_when_locked_blob_not_cached(@TempDir Path tempDir) throws Exception {
         writeProjectWithRootDep(tempDir);
         // Lock references a checksum whose blob is absent from the (empty) cache.
-        Lockfile.Package root = new Lockfile.Package(
+        Lockfile.Artifact root = new Lockfile.Artifact(
                 "com.foo:root", "1.0", "central+" + base, "sha256:" + "00".repeat(32),
                 null, List.of(), List.of(), null);
         LockfileWriter.write(
@@ -328,7 +328,7 @@ class LockCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(fresh.resolve("jk.lock"));
-        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
     }
 
@@ -424,8 +424,8 @@ class LockCommandTest {
                 """);
     }
 
-    private static Lockfile.Package pkg(Lockfile lock, String module) {
-        return lock.packages().stream()
+    private static Lockfile.Artifact pkg(Lockfile lock, String module) {
+        return lock.artifacts().stream()
                 .filter(p -> p.name().equals(module))
                 .findFirst().orElseThrow();
     }

@@ -37,8 +37,8 @@ public final class Auditor {
 
     public AuditReport audit(Lockfile lock) throws IOException, InterruptedException {
         List<OsvClient.Query> queries = new ArrayList<>();
-        List<Lockfile.Package> pkgs = new ArrayList<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        List<Lockfile.Artifact> pkgs = new ArrayList<>();
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             queries.add(new OsvClient.Query("Maven", pkg.name(), pkg.version()));
             pkgs.add(pkg);
         }
@@ -71,7 +71,7 @@ public final class Auditor {
         List<AuditReport.Finding> findings = new ArrayList<>();
         try {
             for (int i = 0; i < pkgs.size(); i++) {
-                Lockfile.Package pkg = pkgs.get(i);
+                Lockfile.Artifact pkg = pkgs.get(i);
                 for (String vulnId : results.get(i).vulnIds()) {
                     OsvClient.Vulnerability v = futures.get(vulnId).get();
                     findings.add(new AuditReport.Finding(

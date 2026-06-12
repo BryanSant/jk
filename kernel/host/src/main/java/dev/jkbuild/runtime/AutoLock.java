@@ -114,6 +114,7 @@ public final class AutoLock {
             }
 
             LockfileWriter.write(updated, lockFile);
+            dev.jkbuild.task.AccessLedger.atDefaultPath().touchLock(updated);
             return updated;
         } catch (Exception e) {
             // Conservative re-lock failed (e.g. new dep introduced an

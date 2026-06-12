@@ -116,6 +116,7 @@ public final class LockFlow {
         }
         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
         LockfileWriter.write(lock, lockFile);
+        dev.jkbuild.task.AccessLedger.atDefaultPath().touchLock(lock);
         return new Result(0, null, lock, effective, memberCount);
     }
 }

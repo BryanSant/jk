@@ -391,7 +391,7 @@ public final class IdeaCommand implements CliCommand {
         // Build a set of workspace-sibling coordinates so we can skip them.
         Set<String> siblingCoords = siblingCoordinates(member, members);
 
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) continue;            // path/git dep
             if (siblingCoords.contains(pkg.name())) continue; // workspace sibling → module dep
             if (allLibs.containsKey(pkg.name() + ":" + pkg.version())) continue;
@@ -459,7 +459,7 @@ public final class IdeaCommand implements CliCommand {
         Set<String> siblingCoords = siblingCoordinates(member, allMembers);
 
         List<LibRef> result = new ArrayList<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) continue;
             if (siblingCoords.contains(pkg.name())) continue;
             // Processor-only deps belong on the annotation-processor path
@@ -485,7 +485,7 @@ public final class IdeaCommand implements CliCommand {
         Lockfile lock = LockfileReader.read(lockFile);
         Set<String> siblingCoords = siblingCoordinates(member, members);
         List<String> out = new ArrayList<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) continue;
             if (siblingCoords.contains(pkg.name())) continue;
             if (!pkg.inAnyScope(EnumSet.of(Scope.PROCESSOR))) continue;

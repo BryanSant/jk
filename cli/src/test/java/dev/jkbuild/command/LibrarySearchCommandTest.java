@@ -3,8 +3,10 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.Jk;
 
-import dev.jkbuild.cache.Journal;
+import dev.jkbuild.cache.Cas;
 import dev.jkbuild.model.Coordinate;
+import dev.jkbuild.repo.JkMavenLocalRepo;
+import dev.jkbuild.repo.MavenLayout;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -82,12 +84,12 @@ class LibrarySearchCommandTest {
     }
 
     @Test
-    void offline_restricts_to_cached_coords_and_annotates_versions(@TempDir Path tempDir) {
+    void offline_restricts_to_cached_coords_and_annotates_versions(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
         // Cache one of the two "junit" curated coords.
-        new Journal(cache).record(
-                Coordinate.of("org.junit.jupiter", "junit-jupiter", "6.1.0"),
-                "pom", "a", 1, "central", "u");
+        Coordinate coord = Coordinate.of("org.junit.jupiter", "junit-jupiter", "6.1.0");
+        Path blob = new Cas(cache).put("junit-jar".getBytes(StandardCharsets.UTF_8));
+        new JkMavenLocalRepo(cache).materialize(MavenLayout.artifactPath(coord), blob);
 
         int exit = Jk.execute(
                 "library", "search", "junit", "--offline", "--cache-dir", cache.toString());

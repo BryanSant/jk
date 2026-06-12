@@ -62,10 +62,10 @@ class AuditorTest {
     @Test
     void osv_findings_become_severity_classified_report() throws Exception {
         Lockfile lock = new Lockfile(5, "jk test", "pubgrub-v1", List.of(
-                new Lockfile.Package("com.fasterxml.jackson.core:jackson-databind", "2.18.0",
+                new Lockfile.Artifact("com.fasterxml.jackson.core:jackson-databind", "2.18.0",
                         "central+https://...", "sha256:abc", null,
                         List.of(Scope.MAIN), List.of()),
-                new Lockfile.Package("com.example:safe", "1.0.0",
+                new Lockfile.Artifact("com.example:safe", "1.0.0",
                         "central+https://...", "sha256:def", null,
                         List.of(Scope.MAIN), List.of())));
 
@@ -99,9 +99,9 @@ class AuditorTest {
     @Test
     void severity_threshold_filter_blocks_only_at_or_above() throws Exception {
         Lockfile lock = new Lockfile(5, "jk test", "pubgrub-v1", List.of(
-                new Lockfile.Package("g:a", "1.0", "s", "sha256:x", null,
+                new Lockfile.Artifact("g:a", "1.0", "s", "sha256:x", null,
                         List.of(Scope.MAIN), List.of()),
-                new Lockfile.Package("g:b", "1.0", "s", "sha256:y", null,
+                new Lockfile.Artifact("g:b", "1.0", "s", "sha256:y", null,
                         List.of(Scope.MAIN), List.of())));
         post.put("/v1/querybatch", ("""
                 {"results":[

@@ -98,7 +98,7 @@ class GitSourceResolutionTest {
                 .lock(prep.project(), "test", List.of(), true);
         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
 
-        Lockfile.Package widgets = lock.packages().stream()
+        Lockfile.Artifact widgets = lock.artifacts().stream()
                 .filter(p -> p.name().equals("com.acme:widgets"))
                 .findFirst().orElseThrow();
         assertThat(widgets.version()).isEqualTo("1.0.0");

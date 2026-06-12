@@ -178,7 +178,7 @@ public final class SyncCommand implements CliCommand {
                 .scope(0)                 // grown once parse-lock fills lockfile
                 .execute(ctx -> {
                     Lockfile lock = ctx.require(LOCKFILE);
-                    int packages = lock.packages().size();
+                    int packages = lock.artifacts().size();
                     if (packages > 0) ctx.updateScope(packages);
                     ctx.label("fetch deps");
 
@@ -189,17 +189,17 @@ public final class SyncCommand implements CliCommand {
                     // The TUI bar advances as individual deps land; the
                     // event log records them ordered by completion.
                     var observer = new CacheSync.ProgressObserver() {
-                        @Override public void fetched(Lockfile.Package pkg) {
+                        @Override public void fetched(Lockfile.Artifact pkg) {
                             ctx.label("fetched " + Coords.module(pkg.name(), pkg.version()));
                             ctx.progress(1);
                         }
-                        @Override public void upToDate(Lockfile.Package pkg) {
+                        @Override public void upToDate(Lockfile.Artifact pkg) {
                             ctx.progress(1);
                         }
-                        @Override public void skipped(Lockfile.Package pkg) {
+                        @Override public void skipped(Lockfile.Artifact pkg) {
                             ctx.progress(1);
                         }
-                        @Override public void failed(Lockfile.Package pkg, String error) {
+                        @Override public void failed(Lockfile.Artifact pkg, String error) {
                             ctx.error("dep", Coords.module(pkg.name(), pkg.version()) + " — " + error);
                             ctx.progress(1);
                         }
@@ -315,19 +315,19 @@ public final class SyncCommand implements CliCommand {
                 .execute(ctx -> {
                     if (!sources) return; // opt-in only
                     Lockfile lock = ctx.require(LOCKFILE);
-                    long withSrc = lock.packages().stream()
+                    long withSrc = lock.artifacts().stream()
                             .filter(p -> p.sourcesChecksum() != null).count();
                     if (withSrc == 0) return;
                     ctx.updateScope((int) withSrc);
                     ctx.label("sync sources");
                     Cas cas = new Cas(cache);
                     var observer = new dev.jkbuild.resolver.CacheSync.ProgressObserver() {
-                        @Override public void fetched(Lockfile.Package pkg) {
+                        @Override public void fetched(Lockfile.Artifact pkg) {
                             ctx.label("fetched sources " + pkg.name() + ":" + pkg.version());
                             ctx.progress(1);
                         }
-                        @Override public void upToDate(Lockfile.Package pkg) { ctx.progress(1); }
-                        @Override public void failed(Lockfile.Package pkg, String error) {
+                        @Override public void upToDate(Lockfile.Artifact pkg) { ctx.progress(1); }
+                        @Override public void failed(Lockfile.Artifact pkg, String error) {
                             ctx.warn("sources", pkg.name() + ":" + pkg.version() + " — " + error);
                             ctx.progress(1);
                         }
@@ -440,7 +440,7 @@ public final class SyncCommand implements CliCommand {
         boolean created = goal.get(LOCKFILE_CREATED).orElse(false);
         goal.get(LOCKFILE).ifPresent(lock -> {
             if (created) {
-                int n = lock.packages().size();
+                int n = lock.artifacts().size();
                 System.out.println("Created " + lockFile + " (" + n
                         + " package" + (n == 1 ? "" : "s") + ")");
             }

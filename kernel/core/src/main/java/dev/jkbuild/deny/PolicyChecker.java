@@ -26,7 +26,7 @@ public final class PolicyChecker {
 
     public List<Violation> check(Lockfile lock) {
         List<Violation> out = new ArrayList<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             // Source format: `<name>+<url>`; we test the host portion.
             String source = pkg.source();
             int plus = source.indexOf('+');

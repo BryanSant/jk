@@ -81,13 +81,13 @@ class DependencyTreeTest {
                 new JkBuild.Dependencies(Map.of(Scope.MAIN, deps)));
     }
 
-    private static Lockfile lockOf(Lockfile.Package... packages) {
+    private static Lockfile lockOf(Lockfile.Artifact... packages) {
         return new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
                 Lockfile.RESOLUTION_ALGORITHM, List.of(packages));
     }
 
-    private static Lockfile.Package pkg(String module, String version, List<String> deps) {
-        return new Lockfile.Package(module, version,
+    private static Lockfile.Artifact pkg(String module, String version, List<String> deps) {
+        return new Lockfile.Artifact(module, version,
                 "central+https://repo.maven.apache.org/maven2/",
                 "sha256:dummy", null, deps);
     }

@@ -151,7 +151,7 @@ partial change rebuilds exactly what it must, and nothing more.
 
 - Identical outputs are stored once and shared across tasks and projects.
 - `jk why-rebuilt` tells you precisely which input invalidated a task.
-- `jk cache info / prune / clean` keep the store in check.
+- `jk cache info / prune / purge` keep the store in check.
 
 This is the same idea as Gradle's build cache, but it's the default execution
 model rather than an opt-in flag — and because keys are content hashes, a
@@ -254,7 +254,7 @@ locally in your `jk.toml`'s `[libraries]` table.
 | Supply chain | `audit` (OSV), `deny` (license/source/yanked policy) |
 | Containers / native | `image` (Jib-core OCI), `native` (GraalVM native-image) |
 | Reproducibility | `verify-build` |
-| Cache & maintenance | `cache dir/info/prune/clean`, `doctor` |
+| Cache & maintenance | `cache dir/info/prune/purge`, `doctor` |
 | Scripting | `run script.java` (JBang-compatible) |
 
 `jk --help` lists every canonical verb. Hidden migration aliases

@@ -73,7 +73,7 @@ class UpdateCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
                 .containsExactly("com.foo:leaf");
     }
 
@@ -89,7 +89,7 @@ class UpdateCommandTest {
                 "--repo-url", base.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         Lockfile initial = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(initial.packages()).isEmpty();
+        assertThat(initial.artifacts()).isEmpty();
 
         // Add a dep, then update.
         run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
@@ -100,8 +100,8 @@ class UpdateCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile updated = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(updated.packages()).hasSize(1);
-        assertThat(updated.packages().getFirst().name()).isEqualTo("com.foo:leaf");
+        assertThat(updated.artifacts()).hasSize(1);
+        assertThat(updated.artifacts().getFirst().name()).isEqualTo("com.foo:leaf");
     }
 
     @Test
@@ -171,7 +171,7 @@ class UpdateCommandTest {
 
         // Member owns its own lock; sibling dep filtered out.
         Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
-        assertThat(lock.packages()).extracting(Lockfile.Package::name)
+        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
                 .containsExactly("com.foo:leaf");
 
         // Workspace root lock NOT created by this invocation.

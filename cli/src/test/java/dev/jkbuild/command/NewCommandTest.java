@@ -42,7 +42,7 @@ class NewCommandTest {
 
         Lockfile lock = LockfileReader.read(lockFile);
         assertThat(lock.version()).isEqualTo(Lockfile.CURRENT_VERSION);
-        assertThat(lock.packages()).isEmpty();
+        assertThat(lock.artifacts()).isEmpty();
     }
 
     @Test

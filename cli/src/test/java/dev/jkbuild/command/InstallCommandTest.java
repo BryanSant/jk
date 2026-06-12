@@ -85,8 +85,8 @@ class InstallCommandTest {
         // A library is not a usage error any more — it cache-installs.
         assertThat(exit).isEqualTo(0);
         assertThat(bin.resolve("lib-only")).doesNotExist(); // no launcher
-        // Journal recorded the local install so other projects can resolve it.
-        assertThat(cache.resolve("journal/maven/com/example/lib-only/0.1.0.toml")).exists();
+        // The m2 local repo mirrors the local install so other projects can resolve it.
+        assertThat(cache.resolve("repo/com/example/lib-only/0.1.0/lib-only-0.1.0.jar")).exists();
     }
 
     @Test

@@ -33,14 +33,14 @@ public final class Provenance {
     public static List<Path> pathsTo(JkBuild project, Lockfile lock, String targetModule) {
         Objects.requireNonNull(targetModule, "targetModule");
 
-        Map<String, Lockfile.Package> byModule = DependencyTree.indexByModule(lock);
+        Map<String, Lockfile.Artifact> byModule = DependencyTree.indexByModule(lock);
         if (!byModule.containsKey(targetModule)) {
             return List.of();
         }
 
         // Reverse adjacency: dep → list of (parent, parent-version)
         Map<String, Set<String>> reverseDeps = new HashMap<>();
-        for (Lockfile.Package pkg : lock.packages()) {
+        for (Lockfile.Artifact pkg : lock.artifacts()) {
             for (String depRef : pkg.deps()) {
                 String depModule = DependencyTree.stripVersion(depRef);
                 reverseDeps.computeIfAbsent(depModule, k -> new TreeSet<>())
@@ -57,13 +57,13 @@ public final class Provenance {
 
     private static void walkUp(
             String current,
-            Map<String, Lockfile.Package> byModule,
+            Map<String, Lockfile.Artifact> byModule,
             Map<String, Set<String>> reverseDeps,
             Set<String> declaredRoots,
             List<Step> stack,
             List<Path> out) {
 
-        Lockfile.Package pkg = byModule.get(current);
+        Lockfile.Artifact pkg = byModule.get(current);
         String version = pkg != null ? pkg.version() : "?";
         stack.addLast(new Step(current, version));
 

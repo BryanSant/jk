@@ -38,7 +38,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  *   <li>Two BOMs with conflicting constraints on the same coord surface a
  *       diagnostic listing both BOM coords.</li>
  *   <li>Coords pinned by a BOM get a {@code pinned-by} field in the
- *       resulting {@link Lockfile.Package}.</li>
+ *       resulting {@link Lockfile.Artifact}.</li>
  * </ul>
  */
 class LockOrchestratorBomTest {
@@ -162,7 +162,7 @@ class LockOrchestratorBomTest {
         LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
         Lockfile lock = orchestrator.lock(project, "test");
 
-        Lockfile.Package widget = lock.packages().stream()
+        Lockfile.Artifact widget = lock.artifacts().stream()
                 .filter(p -> p.name().equals("com.foo:widget"))
                 .findFirst().orElseThrow();
         assertThat(widget.version()).isEqualTo("1.0");
@@ -187,7 +187,7 @@ class LockOrchestratorBomTest {
         LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
         Lockfile lock = orchestrator.lock(project, "test");
 
-        Lockfile.Package proc = lock.packages().stream()
+        Lockfile.Artifact proc = lock.artifacts().stream()
                 .filter(p -> p.name().equals("com.foo:proc"))
                 .findFirst().orElseThrow();   // would be absent if PROCESSOR were dropped in resolution
         assertThat(proc.scopes()).contains(Scope.PROCESSOR);

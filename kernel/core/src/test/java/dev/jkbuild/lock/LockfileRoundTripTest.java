@@ -23,11 +23,11 @@ class LockfileRoundTripTest {
 
     @Test
     void git_source_package_round_trips() {
-        Lockfile.Package.GitInfo git = new Lockfile.Package.GitInfo(
+        Lockfile.Artifact.GitInfo git = new Lockfile.Artifact.GitInfo(
                 "https://github.com/acme/widgets", "3f2a9c1b4d5e6f70819203a4b5c6d7e8f9012345", "tag:v1.4.0");
         Lockfile lock = new Lockfile(
                 Lockfile.CURRENT_VERSION, "jk test", Lockfile.RESOLUTION_ALGORITHM,
-                List.of(new Lockfile.Package(
+                List.of(new Lockfile.Artifact(
                         "com.acme:widgets", "1.4.0", "git+https://github.com/acme/widgets",
                         "sha256:abcd", null, List.of(dev.jkbuild.model.Scope.MAIN), List.of(), null, git)));
 
@@ -38,7 +38,7 @@ class LockfileRoundTripTest {
                 .contains("ref      = \"tag:v1.4.0\"");
 
         Lockfile reparsed = LockfileReader.parse(rendered);
-        assertThat(reparsed.packages()).singleElement().satisfies(p ->
+        assertThat(reparsed.artifacts()).singleElement().satisfies(p ->
                 assertThat(p.git()).isEqualTo(git));
     }
 
@@ -49,14 +49,14 @@ class LockfileRoundTripTest {
                 "jk 0.1.0-SNAPSHOT",
                 Lockfile.RESOLUTION_ALGORITHM,
                 List.of(
-                        new Lockfile.Package(
+                        new Lockfile.Artifact(
                                 "com.b:beta",
                                 "1.0.0",
                                 "central+https://repo.maven.apache.org/maven2/",
                                 "sha256:bbbb",
                                 null,
                                 List.of()),
-                        new Lockfile.Package(
+                        new Lockfile.Artifact(
                                 "com.a:alpha",
                                 "2.0.0",
                                 "central+https://repo.maven.apache.org/maven2/",
@@ -77,7 +77,7 @@ class LockfileRoundTripTest {
                 Lockfile.CURRENT_VERSION,
                 "jk 0.1.0-SNAPSHOT",
                 Lockfile.RESOLUTION_ALGORITHM,
-                List.of(new Lockfile.Package(
+                List.of(new Lockfile.Artifact(
                         "com.example:widget",
                         "1.2.3",
                         "central+https://repo.maven.apache.org/maven2/",
@@ -91,9 +91,9 @@ class LockfileRoundTripTest {
         assertThat(parsed.version()).isEqualTo(original.version());
         assertThat(parsed.generatedBy()).isEqualTo(original.generatedBy());
         assertThat(parsed.resolutionAlgorithm()).isEqualTo(original.resolutionAlgorithm());
-        assertThat(parsed.packages()).hasSize(1);
-        assertThat(parsed.packages().getFirst().name()).isEqualTo("com.example:widget");
-        assertThat(parsed.packages().getFirst().deps()).containsExactly("com.example:dep@2.0.0");
+        assertThat(parsed.artifacts()).hasSize(1);
+        assertThat(parsed.artifacts().getFirst().name()).isEqualTo("com.example:widget");
+        assertThat(parsed.artifacts().getFirst().deps()).containsExactly("com.example:dep@2.0.0");
     }
 
     @Test
