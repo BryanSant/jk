@@ -436,8 +436,15 @@ public final class BuildPipeline {
                                     taskId, request, dev.jkbuild.util.JkVersion.VERSION,
                                     !noCache, cas, actionCache, javaStateDir, ap);
                     ctx.put(ACTION_KEY, r.actionKey());
-                    for (CompileResult.Diagnostic d : r.diagnostics())
-                        ctx.error("javac", d.render());
+                    // Forward every javac diagnostic to the terminal, by severity:
+                    // errors fail the build, warnings/notes (e.g. deprecation) are
+                    // surfaced but don't. Strip the leading severity word — the
+                    // console renderer adds its own ✗/⚠ marker.
+                    for (CompileResult.Diagnostic d : r.diagnostics()) {
+                        String msg = diagnosticMessage(d);
+                        if (d.severity() == CompileResult.Severity.ERROR) ctx.error("javac", msg);
+                        else ctx.warn("javac", msg);
+                    }
                     if (!r.success())
                         throw new RuntimeException("javac reported errors");
                     if (r.cacheHit())
@@ -1000,6 +1007,18 @@ public final class BuildPipeline {
     }
 
     // ---- helpers --------------------------------------------------------
+
+    /** {@code <file>:<line>: <message>} — a diagnostic without its severity word
+     *  (the console renderer supplies the ✗/⚠ marker). */
+    private static String diagnosticMessage(CompileResult.Diagnostic d) {
+        StringBuilder sb = new StringBuilder();
+        if (d.source() != null) {
+            sb.append(d.source());
+            if (d.line() > 0) sb.append(':').append(d.line());
+            sb.append(": ");
+        }
+        return sb.append(d.message()).toString();
+    }
 
     @SuppressWarnings("unchecked")
     private static List<Path> javaSources(PhaseContext ctx) {

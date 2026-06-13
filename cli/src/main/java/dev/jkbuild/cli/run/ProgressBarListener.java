@@ -368,7 +368,8 @@ public final class ProgressBarListener implements GoalListener {
         out.flush();
     }
 
-    private static String renderDiagnostic(
+    /** Shared with {@link AggregateMemberListener} so workspace + single-project render alike. */
+    static String renderDiagnostic(
             String prefix, AttributedStyle prefixStyle,
             String phase, String code, String message) {
         String summary = message == null ? "" : message;

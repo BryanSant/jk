@@ -75,6 +75,15 @@ public final class AggregateMemberListener implements GoalListener {
     }
 
     @Override
+    public void warn(String phase, String code, String message) {
+        // Surface warnings (e.g. javac deprecation) above the shared bar as they
+        // arrive — same rendering as the single-project ProgressBarListener.
+        cm.writeAbove(ProgressBarListener.renderDiagnostic(
+                "⚠ Warning", dev.jkbuild.cli.theme.Theme.active().warning().bold(),
+                phase, code, message));
+    }
+
+    @Override
     public void progress(String phase, int delta, GoalView view) {
         push(view);
     }
