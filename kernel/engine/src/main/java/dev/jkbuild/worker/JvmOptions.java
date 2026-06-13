@@ -15,23 +15,19 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * JVM tuning for the JVMs jk forks — the host and its workers.
+ * JVM tuning for the worker JVMs jk forks (compilers, test runners, etc.).
  *
- * <p>jk launches a one-shot <b>host</b> JVM that runs the build pipeline, and the
- * host (or the CLI) forks <b>worker</b> JVMs for compilers, tests, etc. Because
- * the host stays resident while a worker runs — and {@code jk build --workers N}
- * forks {@code N} test JVMs at once — a flat "use 70% of RAM" would overcommit.
- * The default here is a conservative {@link #DEFAULT_MAX_RAM_PERCENT}; for a set
- * of {@code N} concurrently-launched JVMs the cap is divided by {@code N}
- * (see {@link #flags(Settings, int)}), so the host plus the live workers fit.
+ * <p>jk runs the build pipeline in the CLI process and forks <b>worker</b> JVMs
+ * for compile/test/etc. Because {@code jk build --workers N} forks {@code N} test
+ * JVMs at once, a flat "use 70% of RAM" would overcommit. The default here is a
+ * conservative {@link #DEFAULT_MAX_RAM_PERCENT}; for a set of {@code N}
+ * concurrently-launched JVMs the cap is divided by {@code N}
+ * (see {@link #flags(Settings, int)}), so the live workers fit.
  *
  * <p>Settings resolve highest-precedence-first: <b>CLI flag</b>
  * ({@code --max-ram-percent} / {@code --jvm-arg}) &gt; <b>env</b>
  * ({@code JK_MAX_RAM_PERCENT}, {@code JK_JVM_GC}, {@code JK_JVM_STRING_DEDUP},
- * {@code JK_JVM_ARGS}) &gt; <b>{@code [jvm]} in jk.toml</b> &gt; default. The CLI
- * resolves once and {@linkplain #toEnv exports the effective values as env vars}
- * onto the host process, so the host's worker forks ({@link #flagsFromEnv}) see
- * the same configuration without re-reading anything.
+ * {@code JK_JVM_ARGS}) &gt; <b>{@code [jvm]} in jk.toml</b> &gt; default.
  */
 public final class JvmOptions {
 
@@ -146,7 +142,7 @@ public final class JvmOptions {
      * Assemble a worker JVM command line: {@code javaExe}, then the env-resolved
      * tuning flags ({@link #flagsFromEnv}), then {@code rest} (e.g.
      * {@code -jar <worker.jar> <spec>}). For forks not driven by {@link
-     * dev.jkbuild.host.PluginLoader} — the host-side compiler/git workers and the
+     * dev.jkbuild.worker.PluginLoader} — the host-side compiler/git workers and the
      * CLI's standalone worker commands. Host-side forks inherit the host's
      * exported {@code JK_*} env (full CLI/toml fidelity); CLI-side forks get the
      * caller's env plus the built-in defaults.

@@ -7,7 +7,7 @@ import dev.jkbuild.plugin.protocol.ProtocolWriter;
 /**
  * Typed view over the shared {@link ProtocolWriter} for the kotlin-compiler
  * worker's two message kinds. The prefix and line framing live in the
- * {@code ProtocolWriter} (built by {@code PluginHostMain} from the plugin
+ * {@code ProtocolWriter} (built by {@code PluginWorkerMain} from the plugin
  * manifest); this just builds the JSON for each event.
  */
 final class KcProtocol {

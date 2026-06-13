@@ -12,7 +12,7 @@ dependencies {
     implementation(project(":core"))
     implementation(project(":io"))
     // The plugin SPI + shared host main + NDJSON codec. Bundled into the fat
-    // worker jar; the jar's Main-Class is plugin-api's PluginHostMain, which
+    // worker jar; the jar's Main-Class is plugin-api's PluginWorkerMain, which
     // ServiceLoader-loads GitPlugin.
     implementation(project(":plugin-api"))
     implementation(libs.jgit)

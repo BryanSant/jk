@@ -92,7 +92,7 @@ public final class JUnitLauncher {
         // throwable / System.exit before any test event) can be explained instead
         // of surfacing only as "runner exited N".
         var crash = new CaptureBuffer();
-        int exit = dev.jkbuild.host.PluginLoader.run(
+        int exit = dev.jkbuild.worker.PluginLoader.run(
                 javaBinary, classpath, dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PROTOCOL_PREFIX,
                 List.of("--scan-classpath=" + testClassesDir),
                 aggregator::accept,
@@ -206,7 +206,7 @@ public final class JUnitLauncher {
         };
 
         try {
-            return dev.jkbuild.host.PluginLoader.converse(
+            return dev.jkbuild.worker.PluginLoader.converse(
                     javaBinary, classpath,
                     // N test JVMs run at once → divide the heap cap by N so they fit.
                     dev.jkbuild.worker.JvmOptions.flagsFromEnv(totalWorkers),
@@ -229,7 +229,7 @@ public final class JUnitLauncher {
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
             throws IOException, InterruptedException {
         var classes = new ArrayList<String>();
-        dev.jkbuild.host.PluginLoader.run(
+        dev.jkbuild.worker.PluginLoader.run(
                 javaBinary, classpath, dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PROTOCOL_PREFIX,
                 List.of("--list-only", "--scan-classpath=" + testClassesDir),
                 json -> {

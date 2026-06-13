@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.plugin.host;
+package dev.jkbuild.plugin.worker;
 
 import dev.jkbuild.plugin.Plugin;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
@@ -22,9 +22,9 @@ import java.util.ServiceLoader;
  * <p>Exit codes: the plugin's own return value on success; {@code 70} when no
  * plugin is on the classpath; {@code 1} when {@code run} throws.
  */
-public final class PluginHostMain {
+public final class PluginWorkerMain {
 
-    private PluginHostMain() {}
+    private PluginWorkerMain() {}
 
     public static void main(String[] args) {
         List<Plugin> plugins = new ArrayList<>();

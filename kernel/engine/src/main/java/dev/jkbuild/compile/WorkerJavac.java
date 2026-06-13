@@ -73,7 +73,7 @@ public final class WorkerJavac {
             // worker JVM classpath), so its own jar is the whole classpath.
             boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
             Path javaExe = req.javaHome().resolve("bin").resolve(win ? "java.exe" : "java");
-            int exit = dev.jkbuild.host.PluginLoader.run(
+            int exit = dev.jkbuild.worker.PluginLoader.run(
                     javaExe, req.workerJar().toString(),
                     dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PREFIX,
                     List.of("@" + spec.toAbsolutePath()), json -> {

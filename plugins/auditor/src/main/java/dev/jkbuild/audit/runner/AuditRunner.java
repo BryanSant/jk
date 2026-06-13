@@ -21,7 +21,7 @@ import java.util.List;
 /**
  * The {@code jk-audit-runner} plugin: queries the OSV vulnerability API in an
  * isolated child JVM so Jackson and the OSV HTTP client never load in jk's own
- * process. Discovered by the shared {@link dev.jkbuild.plugin.host.PluginHostMain}
+ * process. Discovered by the shared {@link dev.jkbuild.plugin.worker.PluginWorkerMain}
  * via {@link java.util.ServiceLoader}.
  *
  * <p>Receives a single argument: the path to a line-oriented spec file:

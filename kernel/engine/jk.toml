@@ -1,8 +1,8 @@
 [project]
 group       = "dev.jkbuild"
-name        = "jk-host"
+name        = "jk-engine"
 version     = "0.6.0-SNAPSHOT"
-description = "jk Workspace Host: BuildPipeline, PluginLoader, action cache, compile/test machinery."
+description = "jk build engine: BuildPipeline, plugin dispatch, action cache, compile/test machinery."
 jdk         = 25
 java        = 25
 

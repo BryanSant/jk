@@ -2,7 +2,7 @@
 
 // Shared conventions for jk's child-JVM worker modules (the "runner" plugins).
 // Each worker jar is published to the local Maven repo so `jk sync` can pull it
-// into the CAS, is launchable as `java -jar` via the shared PluginHostMain entry
+// into the CAS, is launchable as `java -jar` via the shared PluginWorkerMain entry
 // point, and ships an `installLocalCas` task that side-loads the freshly-built
 // jar into ~/.jk/cache by its SHA-256.
 //
@@ -38,7 +38,7 @@ publishing {
 tasks.jar {
     manifest {
         attributes(
-                "Main-Class" to "dev.jkbuild.plugin.host.PluginHostMain",
+                "Main-Class" to "dev.jkbuild.plugin.worker.PluginWorkerMain",
                 "Implementation-Title" to workerArtifact,
                 "Implementation-Version" to project.version)
     }

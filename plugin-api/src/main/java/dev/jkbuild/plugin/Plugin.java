@@ -9,7 +9,7 @@ import java.util.List;
  * The jk plugin SPI. A plugin jar exposes exactly one implementation via
  * {@link java.util.ServiceLoader} ({@code META-INF/services/dev.jkbuild.plugin.Plugin}).
  *
- * <p>Every plugin runs as a forked worker JVM: {@code PluginHostMain} on the
+ * <p>Every plugin runs as a forked worker JVM: {@code PluginWorkerMain} on the
  * worker's classpath {@code ServiceLoader}-loads the plugin and calls
  * {@link #run}, which emits structured results through the {@link ProtocolWriter}
  * tagged with the plugin's {@link PluginManifest#protocolPrefix()}.

@@ -10,7 +10,7 @@ description = "jk command-line entrypoint"
 
 dependencies {
     // :runtime absorbed into :host
-    implementation(project(":host"))
+    implementation(project(":engine"))
     implementation(project(":core"))
     implementation(project(":io"))
     // Shared NDJSON reader + WorkerProcess launch helper for worker-driving commands.

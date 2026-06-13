@@ -11,7 +11,7 @@ jk-core         = { group = "dev.jkbuild", name = "jk-core",         version = "
 jk-io           = { group = "dev.jkbuild", name = "jk-io",           version = "0.6.0-SNAPSHOT" }
 jk-resolver     = { group = "dev.jkbuild", name = "jk-resolver",     version = "0.6.0-SNAPSHOT" }
 jk-toolchain    = { group = "dev.jkbuild", name = "jk-toolchain",    version = "0.6.0-SNAPSHOT" }
-jk-host         = { group = "dev.jkbuild", name = "jk-host",         version = "0.6.0-SNAPSHOT" }
+jk-engine       = { group = "dev.jkbuild", name = "jk-engine",       version = "0.6.0-SNAPSHOT" }
 jline-terminal-ffm = { group = "org.jline", name = "jline-terminal-ffm", version = "4.1.2" }
 
 [dependencies.test]

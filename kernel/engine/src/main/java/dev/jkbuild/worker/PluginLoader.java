@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
-package dev.jkbuild.host;
+package dev.jkbuild.worker;
 
 import dev.jkbuild.worker.WorkerProcess;
 
@@ -13,8 +13,8 @@ import java.util.function.Consumer;
 /**
  * Forks a jk plugin worker JVM and bridges its NDJSON event stream back to the
  * caller. A worker is launched as
- * {@code <java> <jvmFlags> -cp <classpath> dev.jkbuild.plugin.host.PluginHostMain <args>}:
- * {@code PluginHostMain} {@code ServiceLoader}-loads the single
+ * {@code <java> <jvmFlags> -cp <classpath> dev.jkbuild.plugin.worker.PluginWorkerMain <args>}:
+ * {@code PluginWorkerMain} {@code ServiceLoader}-loads the single
  * {@link dev.jkbuild.plugin.Plugin} on that classpath, runs it, and the plugin
  * emits {@code <prefix>}-tagged protocol lines on stdout.
  *
@@ -30,7 +30,7 @@ public final class PluginLoader {
     private PluginLoader() {}
 
     /** Fully-qualified main class every worker jar runs under (vendored from plugin-api). */
-    static final String WORKER_MAIN = "dev.jkbuild.plugin.host.PluginHostMain";
+    static final String WORKER_MAIN = "dev.jkbuild.plugin.worker.PluginWorkerMain";
 
     /**
      * Fork a worker and stream its events. Returns the worker's exit code.
@@ -39,7 +39,7 @@ public final class PluginLoader {
      * @param classpath   the worker's classpath (must include the plugin jar)
      * @param jvmFlags    heap/GC/etc. tuning flags (see {@link dev.jkbuild.worker.JvmOptions})
      * @param prefix      the protocol-line marker the plugin emits (its manifest prefix)
-     * @param args        program args passed after {@code PluginHostMain}
+     * @param args        program args passed after {@code PluginWorkerMain}
      */
     public static int run(Path javaExe, String classpath, List<String> jvmFlags, String prefix,
                           List<String> args,

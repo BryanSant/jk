@@ -21,7 +21,7 @@ import java.util.List;
  *
  * <p>This is the first runner converted to the {@link Plugin} SPI
  * (docs/plugin-refactor.md, Phase 1): the worker entry point is the shared
- * {@link dev.jkbuild.plugin.host.PluginHostMain}, which discovers this class via
+ * {@link dev.jkbuild.plugin.worker.PluginWorkerMain}, which discovers this class via
  * {@link java.util.ServiceLoader} and drives it. The hand-rolled {@code main()},
  * NDJSON escaping, and exit-code plumbing the old {@code GitRunner} carried are
  * now shared infrastructure.

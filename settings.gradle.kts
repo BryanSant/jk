@@ -37,7 +37,7 @@ include(
     ":compat-bridge",  // was :compat-runner
     ":git-client",     // was :git-runner
     // Host + CLI
-    ":host",
+    ":engine",
     ":cli",
 )
 
@@ -47,7 +47,7 @@ project(":core").projectDir      = file("kernel/core")
 project(":io").projectDir        = file("kernel/io")
 project(":resolver").projectDir  = file("kernel/resolver")
 project(":toolchain").projectDir = file("kernel/toolchain")
-project(":host").projectDir      = file("kernel/host")
+project(":engine").projectDir      = file("kernel/engine")
 
 // Plugin modules live under plugins/
 project(":test-runner").projectDir    = file("plugins/test-runner")
