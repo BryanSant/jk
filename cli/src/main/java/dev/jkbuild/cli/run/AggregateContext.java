@@ -22,9 +22,8 @@ import java.util.List;
  * its pre-scan estimate; its own 0→100% is scaled into that slice and {@code base}
  * advances by exactly the slice on completion, so the bar never backtracks at a
  * member boundary and the denominator never grows past the up-front estimate.
- * Without calibration (e.g. {@code --use-host}, where goals run in a forked JVM
- * and can't be pre-scanned) it falls back to the growing
- * {@code completedBase + memberDenominator}.
+ * Without calibration (e.g. {@code jk native}'s workspace cascade, which doesn't
+ * pre-scan) it falls back to the growing {@code completedBase + memberDenominator}.
  */
 public final class AggregateContext {
 

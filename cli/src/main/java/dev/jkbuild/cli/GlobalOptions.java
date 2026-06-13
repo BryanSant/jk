@@ -60,9 +60,9 @@ public final class GlobalOptions {
     public boolean help;
     public boolean version;
 
-    /** {@code --max-ram-percent}: per-JVM heap cap for the host/workers, or null. */
+    /** {@code --max-ram-percent}: per-JVM heap cap for jk's worker JVMs, or null. */
     public Double maxRamPercent;
-    /** {@code --jvm-arg}: extra raw flags for the host/worker JVMs (repeatable). */
+    /** {@code --jvm-arg}: extra raw flags for jk's worker JVMs (repeatable). */
     public List<String> jvmArgs = List.of();
 
     /**
@@ -118,9 +118,9 @@ public final class GlobalOptions {
                 Opt.value("<FILE>", "Use this jk.toml for configuration", "--config-file"),
                 Opt.flag("Skip jk.toml discovery; use built-in defaults only", "--no-config"),
                 Opt.value("<DIR>", "Change to this directory before running the command", "-C", "--directory"),
-                Opt.value("<PCT>", "Max heap as a percentage of RAM for jk's host/worker JVMs "
+                Opt.value("<PCT>", "Max heap as a percentage of RAM for jk's worker JVMs "
                         + "(divided across parallel test workers). Default 50.", "--max-ram-percent"),
-                Opt.value("<ARG>", "Extra JVM flag for jk's host/worker JVMs (repeatable)", "--jvm-arg").repeat(),
+                Opt.value("<ARG>", "Extra JVM flag for jk's worker JVMs (repeatable)", "--jvm-arg").repeat(),
                 Opt.flag("Show this help message and exit", "-h", "--help"),
                 Opt.flag("Print version information and exit", "-V", "--version"));
     }

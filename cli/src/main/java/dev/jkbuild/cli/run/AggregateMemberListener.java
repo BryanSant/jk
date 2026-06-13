@@ -9,7 +9,6 @@ import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseStatus;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -37,14 +36,6 @@ public final class AggregateMemberListener implements GoalListener {
     private final long slice;
 
     private long lastDenominator;
-
-    /**
-     * Diagnostics gathered from {@code error} events. The in-process path also
-     * carries them on the terminal {@link GoalResult}, but the Host bridge builds
-     * a diagnostic-free result (errors stream as events and live in the run log),
-     * so we collect them here to surface a failed Host member's errors too.
-     */
-    private final List<GoalResult.Diagnostic> errors = new ArrayList<>();
 
     public AggregateMemberListener(AggregateContext agg, String member, List<Phase> phases) {
         this(agg, member, phases, 0);
@@ -99,16 +90,9 @@ public final class AggregateMemberListener implements GoalListener {
     }
 
     @Override
-    public void error(String phase, String code, String message) {
-        errors.add(new GoalResult.Diagnostic(phase, code, message));
-    }
-
-    @Override
     public void goalFinish(GoalResult result) {
         if (!result.success()) {
-            // Prefer the result's diagnostics (in-process); fall back to the ones
-            // we gathered from error events (Host, whose result carries none).
-            agg.notifyErrors(result.errors().isEmpty() ? List.copyOf(errors) : result.errors());
+            agg.notifyErrors(result.errors());
         }
         // Calibrated: advance the base by exactly the slice we reserved in `total`,
         // so the next member starts precisely where this one's slice ended — Σ
@@ -131,7 +115,7 @@ public final class AggregateMemberListener implements GoalListener {
             long num = Math.min(base + advanced, total);
             cm.progress(num, total);
         } else {
-            // Uncalibrated (--use-host / native workspace): no pre-scan, so fall
+            // Uncalibrated (jk native's workspace cascade doesn't pre-scan): fall
             // back to live ticks against a denominator that grows as members start.
             cm.progress(base + view.numerator(), base + view.denominator());
         }

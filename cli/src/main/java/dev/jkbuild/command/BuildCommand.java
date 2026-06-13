@@ -197,12 +197,8 @@ public final class BuildCommand implements CliCommand {
         try (var cap = view.captureOutput()) {
             // Breadth-first pre-scan — build every member's goal and sum its
             // estimated ticks so the bar calibrates to the whole-workspace total
-            // and advances 0→100% without resetting per member. This runs for BOTH
-            // execution paths: the in-process path runs these very goals, while the
-            // Host path runs each member in a forked JVM but still scales its
-            // streamed progress into the slice we reserve here (and reuses the
-            // goal's phase list for the merged phase display, since the forked Host
-            // has no in-process Goal the CLI can read labels from).
+            // and advances 0→100% without resetting per member. These are the very
+            // goals we then run in-process, one member at a time.
             Map<Path, PreparedMember> prepared = new LinkedHashMap<>();
             long total = 0;
             for (Path memberDir : sorted) {

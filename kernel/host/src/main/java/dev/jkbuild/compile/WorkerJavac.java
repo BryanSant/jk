@@ -29,7 +29,6 @@ import java.util.TreeSet;
 public final class WorkerJavac {
 
     private static final String PREFIX = "##JKJC:";
-    private static final String WORKER_MAIN = "dev.jkbuild.plugin.host.PluginHostMain";
 
     private WorkerJavac() {}
 
@@ -69,11 +68,15 @@ public final class WorkerJavac {
             Map<Path, Set<Path>> generated = new TreeMap<>();
             String[] status = {null};
 
-            // Phase 6: java-compiler is a friendly (no heavy deps) plugin — run
-            // in-process by default. PluginLoader falls back to fork if the manifest
-            // declares isolation=process or can't be loaded in-process.
+            // Fork the java-compiler worker under the project JDK. It's a thin,
+            // JDK-only plugin (the compile classpath travels in the spec, not on the
+            // worker JVM classpath), so its own jar is the whole classpath.
+            boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
+            Path javaExe = req.javaHome().resolve("bin").resolve(win ? "java.exe" : "java");
             int exit = dev.jkbuild.host.PluginLoader.run(
-                    req.workerJar(), List.of("@" + spec.toAbsolutePath()), json -> {
+                    javaExe, req.workerJar().toString(),
+                    dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PREFIX,
+                    List.of("@" + spec.toAbsolutePath()), json -> {
                 String t = Ndjson.str(json, "t");
                 if (t == null) return;
                 switch (t) {

@@ -87,43 +87,17 @@ public final class JUnitLauncher {
     private Result runSingle(
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
             throws IOException, InterruptedException {
-        // Phase 6: test-runner is a friendly plugin — load in-process by default.
-        // PluginLoader falls back to fork if manifest says isolation=process.
         var aggregator = new ResultAggregator(listener, /* workerId */ 0);
         // Capture the worker's non-protocol output so a hard crash (uncaught
         // throwable / System.exit before any test event) can be explained instead
         // of surfacing only as "runner exited N".
         var crash = new CaptureBuffer();
         int exit = dev.jkbuild.host.PluginLoader.run(
-                runnerJarFromClasspath(classpath),
-                classpathEntries(classpath),
+                javaBinary, classpath, dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PROTOCOL_PREFIX,
                 List.of("--scan-classpath=" + testClassesDir),
                 aggregator::accept,
                 line -> { crash.add(line); listener.onUserOutput(0, line); });
         return aggregator.toResult(exit, crash.text());
-    }
-
-    /** Extract the runner jar path from the combined classpath string. */
-    private static java.nio.file.Path runnerJarFromClasspath(String classpath) {
-        for (String entry : classpath.split(java.io.File.pathSeparator)) {
-            if (entry.contains("jk-test-runner") || entry.contains("test-runner")) {
-                return java.nio.file.Path.of(entry);
-            }
-        }
-        // Fallback: last entry is usually the runner jar
-        String[] parts = classpath.split(java.io.File.pathSeparator);
-        return java.nio.file.Path.of(parts[parts.length - 1]);
-    }
-
-    /** All classpath entries except the runner jar (go on the extra-classpath). */
-    private static List<java.nio.file.Path> classpathEntries(String classpath) {
-        var result = new java.util.ArrayList<java.nio.file.Path>();
-        for (String entry : classpath.split(java.io.File.pathSeparator)) {
-            if (!entry.contains("jk-test-runner") && !entry.contains("test-runner")) {
-                result.add(java.nio.file.Path.of(entry));
-            }
-        }
-        return result;
     }
 
     // -------- parallel pull-queue ---------------------------------------
@@ -149,9 +123,7 @@ public final class JUnitLauncher {
         for (int w = 0; w < actualWorkers; w++) {
             final int workerId = w + 1;
             final int idx = w;
-            List<String> cmd = List.of(
-                    javaBinary.toString(), "-cp", classpath,
-                    "dev.jkbuild.plugin.host.PluginHostMain",
+            List<String> args = List.of(
                     "--pull",
                     "--worker=" + workerId,
                     "--scan-classpath=" + testClassesDir);
@@ -159,11 +131,10 @@ public final class JUnitLauncher {
             aggregators.add(agg);
             final var crash = new CaptureBuffer();
             captures.add(crash);
-            final String classpathForWorker = classpath;
             final int totalWorkers = actualWorkers;
             var t = new Thread(
-                    () -> exits[idx] = driveWorker(cmd, classpathForWorker, workerId, totalWorkers,
-                            queue, agg, listener, crash),
+                    () -> exits[idx] = driveWorker(javaBinary, classpath, workerId, totalWorkers,
+                            args, queue, agg, listener, crash),
                     "jk-test-worker-" + workerId);
             t.start();
             workerThreads.add(t);
@@ -211,10 +182,10 @@ public final class JUnitLauncher {
      * passed through to the parent's stdout, tagged with the worker id.
      */
     private int driveWorker(
-            List<String> cmd, String classpath, int workerId, int totalWorkers,
-            ConcurrentLinkedDeque<String> queue,
+            Path javaBinary, String classpath, int workerId, int totalWorkers,
+            List<String> args, ConcurrentLinkedDeque<String> queue,
             ResultAggregator aggregator, TestProgressListener listener, CaptureBuffer crash) {
-        // Phase 6: pull-mode workers run in-process via PluginLoader.converse.
+        // Pull protocol: each "ready" pulls the next class from the shared queue.
         java.util.function.BiConsumer<String, WorkerProcess.Conversation> handler = (json, convo) -> {
             String event = Ndjson.str(json, "e");
             if ("ready".equals(event)) {
@@ -234,22 +205,12 @@ public final class JUnitLauncher {
             listener.onUserOutput(workerId, line);
         };
 
-        // Extract the plugin args: everything after PluginHostMain in cmd.
-        List<String> pluginArgs = new java.util.ArrayList<>();
-        boolean afterMain = false;
-        for (String s : cmd) {
-            if (afterMain) pluginArgs.add(s);
-            else if ("dev.jkbuild.plugin.host.PluginHostMain".equals(s)) afterMain = true;
-        }
-
         try {
             return dev.jkbuild.host.PluginLoader.converse(
-                    runnerJarFromClasspath(classpath),
-                    classpathEntries(classpath),
-                    pluginArgs,
+                    javaBinary, classpath,
                     // N test JVMs run at once → divide the heap cap by N so they fit.
                     dev.jkbuild.worker.JvmOptions.flagsFromEnv(totalWorkers),
-                    handler, passthrough);
+                    PROTOCOL_PREFIX, args, handler, passthrough);
         } catch (IOException e) {
             listener.onUserOutput(workerId, "reader error: " + e.getMessage());
             return -1;
@@ -267,11 +228,9 @@ public final class JUnitLauncher {
     private List<String> discoverClasses(
             Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
             throws IOException, InterruptedException {
-        // Phase 6: in-process via PluginLoader (same fallback logic as runSingle).
         var classes = new ArrayList<String>();
         dev.jkbuild.host.PluginLoader.run(
-                runnerJarFromClasspath(classpath),
-                classpathEntries(classpath),
+                javaBinary, classpath, dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PROTOCOL_PREFIX,
                 List.of("--list-only", "--scan-classpath=" + testClassesDir),
                 json -> {
                     String event = Ndjson.str(json, "e");
