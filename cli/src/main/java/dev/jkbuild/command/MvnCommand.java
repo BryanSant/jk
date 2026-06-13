@@ -94,8 +94,8 @@ public final class MvnCommand implements CliCommand {
 
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin").resolve(isWindows() ? "java.exe" : "java");
-            List<String> cmd = List.of(javaExe.toString(), "-jar",
-                    workerJar.toString(), spec.toAbsolutePath().toString());
+            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
+                    List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
             String[] bin = {null};
             StringBuilder diag = new StringBuilder();
             int exit = WorkerProcess.run(cmd, "##JKCMP:", json -> {

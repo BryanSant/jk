@@ -127,9 +127,9 @@ public final class GitFetcher {
             Files.write(spec, lines, StandardCharsets.UTF_8);
 
             Path workerJar = WorkerJar.GIT_CLIENT.locate();
-            List<String> cmd = List.of(
-                    javaExe().toString(), "-jar",
-                    workerJar.toString(), spec.toAbsolutePath().toString());
+            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
+                    javaExe().toString(), 1,
+                    List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
 
             Result result = new Result();
             StringBuilder diag = new StringBuilder();

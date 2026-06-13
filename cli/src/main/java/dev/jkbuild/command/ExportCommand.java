@@ -75,8 +75,8 @@ public final class ExportCommand implements CliCommand {
 
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin").resolve(isWindows() ? "java.exe" : "java");
-            List<String> cmd = List.of(javaExe.toString(), "-jar",
-                    workerJar.toString(), spec.toAbsolutePath().toString());
+            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
+                    List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
             StringBuilder diag = new StringBuilder();
             int exit = WorkerProcess.run(cmd, "##JKCMP:", json -> {
                 String t = Ndjson.str(json, "t");

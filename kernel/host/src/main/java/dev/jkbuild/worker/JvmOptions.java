@@ -143,6 +143,23 @@ public final class JvmOptions {
     }
 
     /**
+     * Assemble a worker JVM command line: {@code javaExe}, then the env-resolved
+     * tuning flags ({@link #flagsFromEnv}), then {@code rest} (e.g.
+     * {@code -jar <worker.jar> <spec>}). For forks not driven by {@link
+     * dev.jkbuild.host.PluginLoader} — the host-side compiler/git workers and the
+     * CLI's standalone worker commands. Host-side forks inherit the host's
+     * exported {@code JK_*} env (full CLI/toml fidelity); CLI-side forks get the
+     * caller's env plus the built-in defaults.
+     */
+    public static List<String> javaCommand(String javaExe, int concurrency, List<String> rest) {
+        List<String> cmd = new ArrayList<>();
+        cmd.add(javaExe);
+        cmd.addAll(flagsFromEnv(concurrency));
+        cmd.addAll(rest);
+        return cmd;
+    }
+
+    /**
      * The <em>effective</em> settings as {@code JK_*} env vars, for propagating a
      * CLI-resolved configuration onto the forked host so its own worker forks
      * ({@link #flagsFromEnv}) inherit it. Defaults are baked in so the host need

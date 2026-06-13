@@ -43,13 +43,14 @@ public final class KotlincDriver {
     private KotlincResult run(KotlincRequest request) throws IOException, InterruptedException {
         Path spec = writeSpec(request);
         try {
-            List<String> cmd = List.of(
-                    request.javaHome().resolve("bin").resolve("java").toString(),
-                    // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
-                    "--enable-native-access=ALL-UNNAMED",
-                    "-cp", request.workerClasspath().stream()
-                            .map(Path::toString).collect(Collectors.joining(java.io.File.pathSeparator)),
-                    WORKER_MAIN, "@" + spec.toAbsolutePath());
+            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
+                    request.javaHome().resolve("bin").resolve("java").toString(), 1,
+                    List.of(
+                        // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
+                        "--enable-native-access=ALL-UNNAMED",
+                        "-cp", request.workerClasspath().stream()
+                                .map(Path::toString).collect(Collectors.joining(java.io.File.pathSeparator)),
+                        WORKER_MAIN, "@" + spec.toAbsolutePath()));
 
             List<String> diagnostics = new ArrayList<>();
             String[] status = {null};
