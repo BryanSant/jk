@@ -153,7 +153,10 @@ class TestCommandUserOutputTest {
                 "java.lang.AssertionError", "expected 5 got 4", 0);
 
         assertThat(ctx.errors).hasSize(1);
-        assertThat(ctx.errors.get(0).code()).isEqualTo("test");
+        // "test-failure" (not "test") so human listeners can suppress the inline
+        // echo — the run-tests failure block already prints it in full — while the
+        // diagnostic still reaches --output json.
+        assertThat(ctx.errors.get(0).code()).isEqualTo("test-failure");
         assertThat(ctx.errors.get(0).message())
                 .isEqualTo("ClassA.brokenTest: java.lang.AssertionError — expected 5 got 4");
     }

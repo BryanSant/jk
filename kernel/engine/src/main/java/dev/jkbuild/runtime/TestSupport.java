@@ -89,7 +89,12 @@ public final class TestSupport {
             @Override
             public void onFailure(String id, String display, String exClass,
                                   String message, int workerId) {
-                ctx.error("test", display + ": " + exClass
+                // Code "test-failure" (not "test") marks a per-test failure that is
+                // already shown in full by the run-tests renderFailures block. The
+                // diagnostic still flows to JSON consumers, but the human listeners
+                // suppress it so the same failure isn't printed twice. Test *infra*
+                // errors (interrupt/IO) keep code "test" and still surface in text mode.
+                ctx.error("test-failure", display + ": " + exClass
                         + (message.isEmpty() ? "" : " — " + message));
             }
 

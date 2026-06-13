@@ -156,6 +156,12 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void error(String phase, String code, String message) {
+        // Per-test failures (code "test-failure") are rendered in full by the
+        // run-tests phase's failure block; the diagnostic is kept only for
+        // --output json, so don't also print it inline here.
+        if ("test-failure".equals(code)) {
+            return;
+        }
         if ("verbatim".equals(code)) {
             writeAboveInternal(message);
         } else {

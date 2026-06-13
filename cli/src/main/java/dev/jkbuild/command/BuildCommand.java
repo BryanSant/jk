@@ -232,6 +232,10 @@ public final class BuildCommand implements CliCommand {
                 if (exit != 0) {
                     view.finishFailure(buildFailedAt(member, buildStart));
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
+                        // Per-test failures (code "test-failure") were already printed
+                        // in full by the run-tests phase; keep them for --output json
+                        // but don't echo them again here.
+                        if ("test-failure".equals(d.code())) continue;
                         System.err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
                     }
                     return exit;
