@@ -9,10 +9,8 @@ import org.tomlj.TomlTable;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 /**
  * JVM tuning for the worker JVMs jk forks (compilers, test runners, etc.).
@@ -33,9 +31,9 @@ public final class JvmOptions {
 
     private JvmOptions() {}
 
-    /** Conservative default: host + one worker (or two test workers) fit under it. */
+    /** Conservative default: a worker plus the resident CLI fit under it. */
     public static final double DEFAULT_MAX_RAM_PERCENT = 50.0;
-    /** Default collector: low-pause, and uncommits idle heap (good for the resident host). */
+    /** Default collector: low-pause, uncommits idle heap. */
     public static final String DEFAULT_GC = "zgc";
 
     public static final String ENV_MAX_RAM      = "JK_MAX_RAM_PERCENT";
@@ -107,8 +105,8 @@ public final class JvmOptions {
 
     /**
      * Build the JVM flag list for {@code settings}, dividing the heap cap across
-     * {@code concurrency} simultaneously-launched JVMs (pass {@code 1} for the
-     * host or a lone worker; the test-runner passes its worker count).
+     * {@code concurrency} simultaneously-launched JVMs (pass {@code 1} for a
+     * lone worker; the test-runner passes its worker count).
      */
     public static List<String> flags(Settings settings, int concurrency) {
         Settings s = settings == null ? Settings.NONE : settings;
@@ -133,42 +131,47 @@ public final class JvmOptions {
         return out;
     }
 
-    /** Flags resolved from the {@code JK_*} env layer only — used inside the host for worker forks. */
-    public static List<String> flagsFromEnv(int concurrency) {
-        return flags(fromEnv(), concurrency);
+    /**
+     * Process-wide resolved tuning for this jk invocation. The CLI resolves it
+     * once (flag &gt; env &gt; jk.toml &gt; default) via {@link #setProcessSettings}
+     * and every worker fork reads it through {@link #workerFlags}. Since jk runs
+     * the pipeline and forks workers all in one process, a process-global is the
+     * propagation channel that the now-removed host JVM used to provide.
+     */
+    private static volatile Settings processSettings;
+
+    /** Stash the fully-resolved tuning so every subsequent worker fork picks it up. */
+    public static void setProcessSettings(Settings settings) {
+        processSettings = settings;
+    }
+
+    /** The resolved process tuning, or the env layer when unset (e.g. direct test calls). */
+    public static Settings processSettings() {
+        Settings s = processSettings;
+        return s != null ? s : fromEnv();
     }
 
     /**
-     * Assemble a worker JVM command line: {@code javaExe}, then the env-resolved
-     * tuning flags ({@link #flagsFromEnv}), then {@code rest} (e.g.
-     * {@code -jar <worker.jar> <spec>}). For forks not driven by {@link
-     * dev.jkbuild.worker.PluginLoader} — the host-side compiler/git workers and the
-     * CLI's standalone worker commands. Host-side forks inherit the host's
-     * exported {@code JK_*} env (full CLI/toml fidelity); CLI-side forks get the
-     * caller's env plus the built-in defaults.
+     * Worker-fork JVM flags for {@code concurrency} simultaneously-launched JVMs,
+     * built from the resolved {@linkplain #processSettings() process tuning} — so a
+     * {@code --max-ram-percent} flag or a {@code [jvm]} table reaches the worker.
+     */
+    public static List<String> workerFlags(int concurrency) {
+        return flags(processSettings(), concurrency);
+    }
+
+    /**
+     * Assemble a worker JVM command line: {@code javaExe}, then the tuning flags
+     * ({@link #workerFlags}), then {@code rest} (e.g. {@code -cp <jar> Main <spec>}).
+     * For forks not driven by {@link dev.jkbuild.worker.PluginLoader} — the
+     * compiler/git workers and the CLI's standalone worker commands.
      */
     public static List<String> javaCommand(String javaExe, int concurrency, List<String> rest) {
         List<String> cmd = new ArrayList<>();
         cmd.add(javaExe);
-        cmd.addAll(flagsFromEnv(concurrency));
+        cmd.addAll(workerFlags(concurrency));
         cmd.addAll(rest);
         return cmd;
-    }
-
-    /**
-     * The <em>effective</em> settings as {@code JK_*} env vars, for propagating a
-     * CLI-resolved configuration onto the forked host so its own worker forks
-     * ({@link #flagsFromEnv}) inherit it. Defaults are baked in so the host need
-     * not re-resolve.
-     */
-    public static Map<String, String> toEnv(Settings settings) {
-        Settings s = settings == null ? Settings.NONE : settings;
-        Map<String, String> env = new LinkedHashMap<>();
-        env.put(ENV_MAX_RAM, fmt(s.maxRamPercent() != null ? s.maxRamPercent() : DEFAULT_MAX_RAM_PERCENT));
-        env.put(ENV_GC, s.gc() != null ? s.gc() : DEFAULT_GC);
-        env.put(ENV_STRING_DEDUP, String.valueOf(s.stringDedup() == null || s.stringDedup()));
-        if (!s.extraArgs().isEmpty()) env.put(ENV_ARGS, String.join(" ", s.extraArgs()));
-        return env;
     }
 
     // ---- helpers --------------------------------------------------------

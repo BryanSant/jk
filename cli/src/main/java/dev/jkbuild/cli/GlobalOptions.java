@@ -98,6 +98,12 @@ public final class GlobalOptions {
             try { return Double.valueOf(s.trim()); } catch (NumberFormatException e) { return null; }
         }).orElse(null);
         g.jvmArgs = in.values("jvm-arg");
+        // Resolve JVM tuning (flag > env > jk.toml > default) once for the whole
+        // invocation and stash it process-wide, so every worker fork the build
+        // spawns picks it up — not just the JK_* env layer. (With no host JVM to
+        // carry it across a process boundary, this static is the channel.)
+        dev.jkbuild.worker.JvmOptions.setProcessSettings(
+                dev.jkbuild.worker.JvmOptions.resolve(g.jvmCli(), g.workingDir()));
         return g;
     }
 

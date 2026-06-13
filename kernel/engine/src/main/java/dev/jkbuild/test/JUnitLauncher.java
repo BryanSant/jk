@@ -93,7 +93,7 @@ public final class JUnitLauncher {
         // of surfacing only as "runner exited N".
         var crash = new CaptureBuffer();
         int exit = dev.jkbuild.worker.PluginLoader.run(
-                javaBinary, classpath, dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PROTOCOL_PREFIX,
+                javaBinary, classpath, dev.jkbuild.worker.JvmOptions.workerFlags(1), PROTOCOL_PREFIX,
                 List.of("--scan-classpath=" + testClassesDir),
                 aggregator::accept,
                 line -> { crash.add(line); listener.onUserOutput(0, line); });
@@ -209,7 +209,7 @@ public final class JUnitLauncher {
             return dev.jkbuild.worker.PluginLoader.converse(
                     javaBinary, classpath,
                     // N test JVMs run at once → divide the heap cap by N so they fit.
-                    dev.jkbuild.worker.JvmOptions.flagsFromEnv(totalWorkers),
+                    dev.jkbuild.worker.JvmOptions.workerFlags(totalWorkers),
                     PROTOCOL_PREFIX, args, handler, passthrough);
         } catch (IOException e) {
             listener.onUserOutput(workerId, "reader error: " + e.getMessage());
@@ -230,7 +230,7 @@ public final class JUnitLauncher {
             throws IOException, InterruptedException {
         var classes = new ArrayList<String>();
         dev.jkbuild.worker.PluginLoader.run(
-                javaBinary, classpath, dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PROTOCOL_PREFIX,
+                javaBinary, classpath, dev.jkbuild.worker.JvmOptions.workerFlags(1), PROTOCOL_PREFIX,
                 List.of("--list-only", "--scan-classpath=" + testClassesDir),
                 json -> {
                     String event = Ndjson.str(json, "e");

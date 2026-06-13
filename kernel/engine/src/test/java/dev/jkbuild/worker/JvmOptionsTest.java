@@ -40,11 +40,17 @@ class JvmOptionsTest {
     }
 
     @Test
-    void toEnv_bakes_in_effective_values() {
-        assertThat(JvmOptions.toEnv(Settings.NONE))
-                .containsEntry(JvmOptions.ENV_MAX_RAM, "50")
-                .containsEntry(JvmOptions.ENV_GC, "zgc")
-                .containsEntry(JvmOptions.ENV_STRING_DEDUP, "true");
+    void process_settings_drive_worker_flags() {
+        try {
+            // The CLI stashes resolved settings; worker forks read them back.
+            JvmOptions.setProcessSettings(new Settings(80.0, "g1", false, java.util.List.of()));
+            assertThat(JvmOptions.workerFlags(1))
+                    .containsExactly("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC");
+            // Concurrency still divides the resolved cap.
+            assertThat(JvmOptions.workerFlags(4)).contains("-XX:MaxRAMPercentage=20");
+        } finally {
+            JvmOptions.setProcessSettings(null);   // don't leak into other tests
+        }
     }
 
     @Test

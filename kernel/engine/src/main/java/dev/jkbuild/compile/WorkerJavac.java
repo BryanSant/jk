@@ -75,7 +75,7 @@ public final class WorkerJavac {
             Path javaExe = req.javaHome().resolve("bin").resolve(win ? "java.exe" : "java");
             int exit = dev.jkbuild.worker.PluginLoader.run(
                     javaExe, req.workerJar().toString(),
-                    dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), PREFIX,
+                    dev.jkbuild.worker.JvmOptions.workerFlags(1), PREFIX,
                     List.of("@" + spec.toAbsolutePath()), json -> {
                 String t = Ndjson.str(json, "t");
                 if (t == null) return;
