@@ -40,15 +40,15 @@ class CommandManagerTest {
     }
 
     @Test
-    void finish_failure_prints_red_cross_line() {
+    void finish_failure_prints_red_failure_marker_line() {
         var buf = new ByteArrayOutputStream();
         var cm = new CommandManager(stream(buf), true);
         cm.label("Syncing");
         cm.finishFailure("Failed to sync remote artifacts");
 
         String raw = buf.toString(StandardCharsets.UTF_8);
-        assertThat(stripAnsi(raw)).contains("✗ Failed to sync remote artifacts");
-        assertThat(raw).contains(Theme.colorize("✗", Theme.active().error()));
+        assertThat(stripAnsi(raw)).contains("‼ Failed to sync remote artifacts");
+        assertThat(raw).contains(Theme.colorize("‼", Theme.active().error()));
     }
 
     @Test

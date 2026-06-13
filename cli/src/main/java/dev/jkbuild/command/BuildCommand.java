@@ -226,13 +226,11 @@ public final class BuildCommand implements CliCommand {
                 try {
                     exit = runPrepared(pm, agg);
                 } catch (Exception e) {
-                    view.finishFailure("Build failed in " + member
-                            + " " + elapsedSince(buildStart));
+                    view.finishFailure(buildFailedAt(member, buildStart));
                     throw e;
                 }
                 if (exit != 0) {
-                    view.finishFailure("Build failed in " + member
-                            + " " + elapsedSince(buildStart));
+                    view.finishFailure(buildFailedAt(member, buildStart));
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
                         System.err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
                     }
@@ -518,6 +516,17 @@ public final class BuildCommand implements CliCommand {
     static String elapsedSince(long startNanos) {
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
         return dev.jkbuild.cli.run.ConsoleSpec.inTime(java.time.Duration.ofMillis(ms));
+    }
+
+    /**
+     * Workspace build-failure result line: red "Build failed", the failing member
+     * in cyan, dim duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s}
+     * (the {@code ‼} + red is added by {@code finishFailure}).
+     */
+    private static String buildFailedAt(String member, long buildStart) {
+        return Theme.colorize("Build failed", Theme.active().error())
+                + ": Failure at " + Theme.colorize(member, Theme.active().cyan())
+                + " " + elapsedSince(buildStart);
     }
 
 }
