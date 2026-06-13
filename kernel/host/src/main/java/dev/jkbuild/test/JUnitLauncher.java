@@ -153,8 +153,10 @@ public final class JUnitLauncher {
             var agg = new ResultAggregator(listener, workerId);
             aggregators.add(agg);
             final String classpathForWorker = classpath;
+            final int totalWorkers = actualWorkers;
             var t = new Thread(
-                    () -> exits[idx] = driveWorker(cmd, classpathForWorker, workerId, queue, agg, listener),
+                    () -> exits[idx] = driveWorker(cmd, classpathForWorker, workerId, totalWorkers,
+                            queue, agg, listener),
                     "jk-test-worker-" + workerId);
             t.start();
             workerThreads.add(t);
@@ -193,7 +195,7 @@ public final class JUnitLauncher {
      * passed through to the parent's stdout, tagged with the worker id.
      */
     private int driveWorker(
-            List<String> cmd, String classpath, int workerId,
+            List<String> cmd, String classpath, int workerId, int totalWorkers,
             ConcurrentLinkedDeque<String> queue,
             ResultAggregator aggregator, TestProgressListener listener) {
         // Phase 6: pull-mode workers run in-process via PluginLoader.converse.
@@ -225,7 +227,10 @@ public final class JUnitLauncher {
             return dev.jkbuild.host.PluginLoader.converse(
                     runnerJarFromClasspath(classpath),
                     classpathEntries(classpath),
-                    pluginArgs, handler, passthrough);
+                    pluginArgs,
+                    // N test JVMs run at once → divide the heap cap by N so they fit.
+                    dev.jkbuild.worker.JvmOptions.flagsFromEnv(totalWorkers),
+                    handler, passthrough);
         } catch (IOException e) {
             listener.onUserOutput(workerId, "reader error: " + e.getMessage());
             return -1;

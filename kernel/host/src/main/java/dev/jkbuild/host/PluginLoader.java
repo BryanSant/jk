@@ -75,16 +75,32 @@ public final class PluginLoader {
                           java.util.function.Consumer<String> onProtocol,
                           java.util.function.Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
+        return run(jarPath, extraClasspath, args,
+                dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), onProtocol, onPassthrough);
+    }
+
+    /**
+     * As {@link #run(Path, List, List, java.util.function.Consumer, java.util.function.Consumer)},
+     * with explicit {@code jvmFlags} prepended to an out-of-process fork (e.g. heap
+     * sizing divided across concurrent test workers). Ignored on the in-process path,
+     * which shares the already-tuned host JVM.
+     */
+    public static int run(Path jarPath, List<Path> extraClasspath, List<String> args,
+                          List<String> jvmFlags,
+                          java.util.function.Consumer<String> onProtocol,
+                          java.util.function.Consumer<String> onPassthrough)
+            throws IOException, InterruptedException {
         PluginManifest manifest = readManifest(jarPath);
         if (manifest != null && manifest.inProcess()) {
             return runInProcess(jarPath, extraClasspath, args, manifest, onProtocol, onPassthrough);
         }
         // Out-of-process: fork via PluginHostMain (existing path).
         String prefix = manifest != null ? manifest.protocolPrefix() : "##JK:";
-        List<String> cmd = List.of(
-                ProcessHandle.current().info().command().orElse("java"),
-                "-jar", jarPath.toAbsolutePath().toString());
-        var fullArgs = new java.util.ArrayList<>(cmd);
+        var fullArgs = new java.util.ArrayList<String>();
+        fullArgs.add(ProcessHandle.current().info().command().orElse("java"));
+        fullArgs.addAll(jvmFlags);
+        fullArgs.add("-jar");
+        fullArgs.add(jarPath.toAbsolutePath().toString());
         fullArgs.addAll(args);
         return WorkerProcess.run(fullArgs, prefix, onProtocol, onPassthrough);
     }
@@ -108,6 +124,20 @@ public final class PluginLoader {
                                java.util.function.BiConsumer<String, WorkerProcess.Conversation> onProtocol,
                                java.util.function.Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
+        return converse(jarPath, extraClasspath, args,
+                dev.jkbuild.worker.JvmOptions.flagsFromEnv(1), onProtocol, onPassthrough);
+    }
+
+    /**
+     * As {@link #converse(Path, List, List, java.util.function.BiConsumer, java.util.function.Consumer)},
+     * with explicit {@code jvmFlags} for an out-of-process fork — the test-runner
+     * passes a heap cap divided across its concurrent workers. Ignored in-process.
+     */
+    public static int converse(Path jarPath, List<Path> extraClasspath, List<String> args,
+                               List<String> jvmFlags,
+                               java.util.function.BiConsumer<String, WorkerProcess.Conversation> onProtocol,
+                               java.util.function.Consumer<String> onPassthrough)
+            throws IOException, InterruptedException {
         PluginManifest manifest = readManifest(jarPath);
         if (manifest != null && manifest.inProcess()) {
             return converseInProcess(jarPath, extraClasspath, args, manifest, onProtocol, onPassthrough);
@@ -116,6 +146,7 @@ public final class PluginLoader {
         String prefix = manifest != null ? manifest.protocolPrefix() : "##JK:";
         var fullCmd = new java.util.ArrayList<String>();
         fullCmd.add(ProcessHandle.current().info().command().orElse("java"));
+        fullCmd.addAll(jvmFlags);
         fullCmd.add("-jar");
         fullCmd.add(jarPath.toAbsolutePath().toString());
         fullCmd.addAll(args);

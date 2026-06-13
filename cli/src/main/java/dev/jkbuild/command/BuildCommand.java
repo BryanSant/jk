@@ -500,7 +500,7 @@ public final class BuildCommand implements CliCommand {
                 "build", pm.dir(), pm.cache(), lockFile, jdksDir, profileName, workerCount,
                 buildOpts.skipTests, global.verbose, global.outputIsJson());
         int code = dev.jkbuild.cli.run.HostLauncher.tryRunInto(
-                inv, agg, pm.target(), pm.goal().phases(), pm.barWeight(), global.verbose);
+                inv, agg, pm.target(), pm.goal().phases(), pm.barWeight(), global.verbose, global.jvmCli());
         if (code >= 0) return code;
         // -1 = host jar missing; run the prepared goal in-process instead.
         return runPrepared(pm, agg);
@@ -520,7 +520,7 @@ public final class BuildCommand implements CliCommand {
         var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec("Build",
                 r -> "Build successful", r -> "Build failed");
         return dev.jkbuild.cli.run.HostLauncher.tryRun(
-                inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
+                inv, GoalConsole.modeFor(global), consoleSpec, global.verbose, global.jvmCli());
     }
 
     // ---- success summary -----------------------------------------------

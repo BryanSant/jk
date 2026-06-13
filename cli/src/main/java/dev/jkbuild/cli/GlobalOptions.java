@@ -60,6 +60,21 @@ public final class GlobalOptions {
     public boolean help;
     public boolean version;
 
+    /** {@code --max-ram-percent}: per-JVM heap cap for the host/workers, or null. */
+    public Double maxRamPercent;
+    /** {@code --jvm-arg}: extra raw flags for the host/worker JVMs (repeatable). */
+    public List<String> jvmArgs = List.of();
+
+    /**
+     * The CLI-supplied JVM tuning as the highest-precedence
+     * {@link dev.jkbuild.worker.JvmOptions.Settings} layer. {@code gc} /
+     * {@code string-dedup} are left unset here — those come from env /
+     * {@code jk.toml}; the CLI exposes only the two most common knobs.
+     */
+    public dev.jkbuild.worker.JvmOptions.Settings jvmCli() {
+        return new dev.jkbuild.worker.JvmOptions.Settings(maxRamPercent, null, null, jvmArgs);
+    }
+
     /**
      * Populate a {@code GlobalOptions} from a parsed {@link Invocation} — the
      * picocli-free counterpart to the {@code @Mixin}. A ported command's
@@ -79,6 +94,10 @@ public final class GlobalOptions {
         g.configFile = in.value("config-file").map(Path::of).orElse(null);
         g.noConfig = in.isSet("no-config");
         g.directory = in.value("directory").map(Path::of).orElse(null);
+        g.maxRamPercent = in.value("max-ram-percent").map(s -> {
+            try { return Double.valueOf(s.trim()); } catch (NumberFormatException e) { return null; }
+        }).orElse(null);
+        g.jvmArgs = in.values("jvm-arg");
         return g;
     }
 
@@ -99,6 +118,9 @@ public final class GlobalOptions {
                 Opt.value("<FILE>", "Use this jk.toml for configuration", "--config-file"),
                 Opt.flag("Skip jk.toml discovery; use built-in defaults only", "--no-config"),
                 Opt.value("<DIR>", "Change to this directory before running the command", "-C", "--directory"),
+                Opt.value("<PCT>", "Max heap as a percentage of RAM for jk's host/worker JVMs "
+                        + "(divided across parallel test workers). Default 50.", "--max-ram-percent"),
+                Opt.value("<ARG>", "Extra JVM flag for jk's host/worker JVMs (repeatable)", "--jvm-arg").repeat(),
                 Opt.flag("Show this help message and exit", "-h", "--help"),
                 Opt.flag("Print version information and exit", "-V", "--version"));
     }

@@ -100,7 +100,7 @@ public final class ImageCommand implements CliCommand {
             var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec("Image Build",
                     r -> "Built image", r -> "Image build failed");
             int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
-                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
+                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose, global.jvmCli());
             if (code >= 0) return code;
         }
 

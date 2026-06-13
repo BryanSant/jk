@@ -55,7 +55,14 @@ public final class WorkerProcess {
     public static int run(List<String> command, String prefix,
                           Consumer<String> onProtocol, Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
-        return converse(command, prefix, (json, convo) -> onProtocol.accept(json), onPassthrough);
+        return run(command, java.util.Map.of(), prefix, onProtocol, onPassthrough);
+    }
+
+    /** As {@link #run(List, String, Consumer, Consumer)}, adding {@code extraEnv} to the child's environment. */
+    public static int run(List<String> command, java.util.Map<String, String> extraEnv, String prefix,
+                          Consumer<String> onProtocol, Consumer<String> onPassthrough)
+            throws IOException, InterruptedException {
+        return converse(command, extraEnv, prefix, (json, convo) -> onProtocol.accept(json), onPassthrough);
     }
 
     /**
@@ -75,7 +82,17 @@ public final class WorkerProcess {
                                BiConsumer<String, Conversation> onProtocol,
                                Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
-        Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
+        return converse(command, java.util.Map.of(), prefix, onProtocol, onPassthrough);
+    }
+
+    /** As {@link #converse(List, String, BiConsumer, Consumer)}, adding {@code extraEnv} to the child's environment. */
+    public static int converse(List<String> command, java.util.Map<String, String> extraEnv, String prefix,
+                               BiConsumer<String, Conversation> onProtocol,
+                               Consumer<String> onPassthrough)
+            throws IOException, InterruptedException {
+        ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
+        if (extraEnv != null && !extraEnv.isEmpty()) pb.environment().putAll(extraEnv);
+        Process process = pb.start();
         try (BufferedReader reader = new BufferedReader(
                      new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
              BufferedWriter stdin = new BufferedWriter(

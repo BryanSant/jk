@@ -99,7 +99,7 @@ public final class TestCommand implements CliCommand {
                     false, global.verbose, global.outputIsJson());
             var consoleSpec = new ConsoleSpec("Testing", r -> "Tests passed", r -> "Tests failed");
             int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
-                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose);
+                    inv, GoalConsole.modeFor(global), consoleSpec, global.verbose, global.jvmCli());
             if (code >= 0) return code;
         }
 

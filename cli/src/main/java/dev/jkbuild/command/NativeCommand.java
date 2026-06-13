@@ -216,7 +216,7 @@ public final class NativeCommand implements CliCommand {
                 // Fall through to HostLauncher without aggregate wiring for now.
             }
             int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
-                    inv, GoalConsole.modeFor(global), spec, global.verbose);
+                    inv, GoalConsole.modeFor(global), spec, global.verbose, global.jvmCli());
             if (code >= 0) return code;
         }
 
@@ -267,7 +267,7 @@ public final class NativeCommand implements CliCommand {
             ConsoleSpec spec = new ConsoleSpec("Native Build",
                     r -> "Built native binary", r -> "Native build failed");
             int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
-                    inv, GoalConsole.modeFor(global), spec, global.verbose);
+                    inv, GoalConsole.modeFor(global), spec, global.verbose, global.jvmCli());
             if (code >= 0) return code;
         }
 

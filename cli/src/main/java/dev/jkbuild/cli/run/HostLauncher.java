@@ -4,6 +4,7 @@ package dev.jkbuild.cli.run;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.plugin.host.HostEvent;
 import dev.jkbuild.run.GoalListener;
+import dev.jkbuild.worker.JvmOptions;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
 
@@ -45,15 +46,14 @@ public final class HostLauncher {
      */
     public static int run(Path specFile, Path javaExe, Path hostJar, List<GoalListener> listeners)
             throws IOException, InterruptedException {
-        List<String> cmd = List.of(
-                javaExe.toString(),
-                "-jar", hostJar.toString(),
-                specFile.toAbsolutePath().toString());
+        // No CLI/toml context here — tune from the env layer + defaults.
+        JvmOptions.Settings settings = JvmOptions.resolve(JvmOptions.Settings.NONE, null);
+        List<String> cmd = hostCommand(javaExe, hostJar, specFile, settings);
 
         ReceivingGoalListener receiver = new ReceivingGoalListener(listeners);
         int[] reportedExit = {-1};
 
-        int procExit = WorkerProcess.run(cmd, HostEvent.PREFIX, json -> {
+        int procExit = WorkerProcess.run(cmd, JvmOptions.toEnv(settings), HostEvent.PREFIX, json -> {
             if (HostEvent.type(json) == HostEvent.Type.EXIT) {
                 reportedExit[0] = HostEvent.exitCode(json);
             }
@@ -97,6 +97,18 @@ public final class HostLauncher {
                               GoalConsole.Mode mode, ConsoleSpec spec,
                               boolean verbose)
             throws IOException, InterruptedException {
+        return tryRun(inv, mode, spec, verbose, JvmOptions.Settings.NONE);
+    }
+
+    /**
+     * As {@link #tryRun(dev.jkbuild.host.HostInvocation, GoalConsole.Mode, ConsoleSpec, boolean)},
+     * with {@code cliJvm} carrying any {@code --max-ram-percent} / {@code --jvm-arg}
+     * CLI overrides (highest precedence over env and {@code jk.toml}).
+     */
+    public static int tryRun(dev.jkbuild.host.HostInvocation inv,
+                              GoalConsole.Mode mode, ConsoleSpec spec,
+                              boolean verbose, JvmOptions.Settings cliJvm)
+            throws IOException, InterruptedException {
         dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(inv.cache());
         try {
             WorkerJar.HOST.locate(cas);
@@ -129,7 +141,8 @@ public final class HostLauncher {
                 }
             });
 
-            return runWithReceiver(specFile, cas, receiver);
+            return runWithReceiver(specFile, cas, receiver,
+                    JvmOptions.resolve(cliJvm, inv.dir()));
         } finally {
             java.nio.file.Files.deleteIfExists(specFile);
         }
@@ -153,6 +166,15 @@ public final class HostLauncher {
                                  List<dev.jkbuild.run.Phase> phases, long slice,
                                  boolean verbose)
             throws IOException, InterruptedException {
+        return tryRunInto(inv, agg, member, phases, slice, verbose, JvmOptions.Settings.NONE);
+    }
+
+    /** As {@link #tryRunInto(dev.jkbuild.host.HostInvocation, AggregateContext, String, List, long, boolean)}, with CLI JVM overrides. */
+    public static int tryRunInto(dev.jkbuild.host.HostInvocation inv,
+                                 AggregateContext agg, String member,
+                                 List<dev.jkbuild.run.Phase> phases, long slice,
+                                 boolean verbose, JvmOptions.Settings cliJvm)
+            throws IOException, InterruptedException {
         Cas cas = new Cas(inv.cache());
         try {
             WorkerJar.HOST.locate(cas);
@@ -168,25 +190,22 @@ public final class HostLauncher {
                 GoalListener log = EventLogListener.open(inv.cache(), inv.verb());
                 if (log != null) listeners.add(log);
             } catch (Exception ignored) {}
-            return runWithReceiver(specFile, cas, new ReceivingGoalListener(listeners));
+            return runWithReceiver(specFile, cas, new ReceivingGoalListener(listeners),
+                    JvmOptions.resolve(cliJvm, inv.dir()));
         } finally {
             Files.deleteIfExists(specFile);
         }
     }
 
-    /** Variant of {@link #run} that uses a pre-built {@link ReceivingGoalListener}. */
+    /** Variant of {@link #run} that uses a pre-built {@link ReceivingGoalListener} and tuned {@code settings}. */
     private static int runWithReceiver(Path specFile, dev.jkbuild.cache.Cas cas,
-                                        ReceivingGoalListener receiver)
+                                        ReceivingGoalListener receiver, JvmOptions.Settings settings)
             throws IOException, InterruptedException {
         Path hostJar = WorkerJar.HOST.locate(cas);
-        Path javaExe = runningJavaExe();
-        List<String> cmd = List.of(
-                javaExe.toString(),
-                "-jar", hostJar.toString(),
-                specFile.toAbsolutePath().toString());
+        List<String> cmd = hostCommand(runningJavaExe(), hostJar, specFile, settings);
 
         int[] reportedExit = {-1};
-        int procExit = WorkerProcess.run(cmd, HostEvent.PREFIX, json -> {
+        int procExit = WorkerProcess.run(cmd, JvmOptions.toEnv(settings), HostEvent.PREFIX, json -> {
             if (HostEvent.type(json) == HostEvent.Type.EXIT) {
                 reportedExit[0] = HostEvent.exitCode(json);
             }
@@ -194,6 +213,21 @@ public final class HostLauncher {
         }, line -> System.err.println(line));
 
         return reportedExit[0] >= 0 ? reportedExit[0] : procExit;
+    }
+
+    /**
+     * The host JVM command line: the JVM, its tuning flags (heap cap, GC, string
+     * dedup — see {@link JvmOptions}), then {@code -jar jk-host.jar <spec>}.
+     */
+    private static List<String> hostCommand(Path javaExe, Path hostJar, Path specFile,
+                                            JvmOptions.Settings settings) {
+        List<String> cmd = new java.util.ArrayList<>();
+        cmd.add(javaExe.toString());
+        cmd.addAll(JvmOptions.flags(settings, 1));   // the host is a single resident JVM
+        cmd.add("-jar");
+        cmd.add(hostJar.toString());
+        cmd.add(specFile.toAbsolutePath().toString());
+        return cmd;
     }
 
     private static Path runningJavaExe() {
