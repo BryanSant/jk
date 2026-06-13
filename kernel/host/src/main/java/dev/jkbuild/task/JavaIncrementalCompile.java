@@ -34,6 +34,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.Supplier;
 import java.util.stream.Stream;
 
 /**
@@ -88,13 +89,18 @@ public final class JavaIncrementalCompile {
     }
 
     /**
-     * Annotation-processor setup. When non-null with a located {@code workerJar},
-     * a project known to run <em>source-generating</em> processors compiles via the
-     * {@code jk-java-compiler} worker (in-process javac under the project JDK) so the
-     * generated-file → originating-source provenance can be captured. {@code null}
-     * (or an unavailable worker) keeps the plain subprocess-javac path.
+     * Annotation-processor setup. A project known to run <em>source-generating</em>
+     * processors compiles via the {@code jk-java-compiler} worker (in-process javac
+     * under the project JDK) so generated-file → originating-source provenance can
+     * be captured.
+     *
+     * <p>{@code workerJar} is a <em>lazy</em> resolver: it is invoked only once the
+     * project has proven it needs the worker (the {@code sourceGenAps} flag), so a
+     * project whose processors are bytecode-only (e.g. Lombok) — or any first build —
+     * never pays the worker lookup. The supplier returns {@code null} when no worker
+     * is available, which keeps the plain subprocess-javac path.
      */
-    public record ApSetup(Path workerJar, Path generatedSourceDir) {}
+    public record ApSetup(Supplier<Path> workerJar, Path generatedSourceDir) {}
 
     public static Result run(String taskId, CompileRequest request, String jkVersion,
                              boolean useCache, Cas cas, ActionCache actionCache, Path stateDir)
@@ -137,9 +143,15 @@ public final class JavaIncrementalCompile {
         // for Lombok-style in-bytecode processors that emit no .java — the plain
         // javac path is used and no worker need be present.
         ApFlags flags = useCache ? loadApFlags(stateDir) : ApFlags.NONE;
-        boolean useWorker = ap != null && ap.workerJar() != null && flags.sourceGenAps();
+        // Resolve the worker lazily and only when this project has proven it runs
+        // source-generating processors — so Lombok-style bytecode-only processors
+        // and first builds never trigger the worker lookup (which would fail on a
+        // jk build that didn't bundle the worker). A null resolution (no worker
+        // available) falls back to the plain subprocess-javac path.
+        Path workerJar = (ap != null && flags.sourceGenAps()) ? ap.workerJar().get() : null;
+        boolean useWorker = workerJar != null;
         Compiler compiler = useWorker
-                ? workerCompiler(ap, request.javaHome(), request.processorPath())
+                ? workerCompiler(workerJar, ap.generatedSourceDir(), request.javaHome(), request.processorPath())
                 : javacCompiler(driver, request.javaHome(), request.processorPath());
 
         // Worker mode only goes incremental when the prior build was isolating (every
@@ -646,11 +658,12 @@ public final class JavaIncrementalCompile {
     }
 
     /** In-process javac in the worker: captures generated-file → originating-source. */
-    private static Compiler workerCompiler(ApSetup ap, Path javaHome, List<Path> processorPath) {
+    private static Compiler workerCompiler(Path workerJar, Path generatedSourceDir,
+                                           Path javaHome, List<Path> processorPath) {
         return (sources, classpath, outputDir, release, options) -> {
             WorkerJavac.Result wr = WorkerJavac.compile(new WorkerJavac.Request(
-                    javaHome, ap.workerJar(), sources, classpath, processorPath,
-                    outputDir, ap.generatedSourceDir(), release, options));
+                    javaHome, workerJar, sources, classpath, processorPath,
+                    outputDir, generatedSourceDir, release, options));
             List<CompileResult.Diagnostic> diags = new ArrayList<>();
             for (String m : wr.diagnostics()) {
                 diags.add(new CompileResult.Diagnostic(

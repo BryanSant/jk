@@ -407,16 +407,28 @@ public final class BuildPipeline {
                     Path javaStateDir = in.cache().resolve("actions")
                             .resolve("incremental-java").resolve(taskId);
                     // With processors declared, hand the incremental compiler an AP setup:
-                    // a located worker jar (null-safe → plain javac fallback) + a stable
-                    // generated-sources dir. The engine only routes through the worker once
-                    // it has *detected* source-generating processors (the orphan signal), so
-                    // bytecode-only processors (e.g. Lombok) never need the worker.
+                    // a *lazy* worker-jar resolver + a stable generated-sources dir. The
+                    // engine routes through the worker only once it has detected
+                    // source-generating processors, so bytecode-only processors (e.g.
+                    // Lombok) and first builds never resolve it — which matters because
+                    // a jk build that didn't bundle the worker (or its sha resource)
+                    // would otherwise fail here even though the worker isn't needed.
+                    // When it *is* needed but unavailable, warn once and fall back to
+                    // plain javac (correct, just without incremental AP provenance).
                     dev.jkbuild.task.JavaIncrementalCompile.ApSetup ap = null;
                     if (!processorCp.isEmpty()) {
                         Path genDir = ctx.require(LAYOUT).generatedSourcesDir("annotations");
                         Files.createDirectories(genDir);
-                        ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(
-                                WorkerJar.JAVA_COMPILER.locate(cas), genDir);
+                        ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(() -> {
+                            try {
+                                return WorkerJar.JAVA_COMPILER.locate(cas);
+                            } catch (RuntimeException e) {
+                                ctx.warn("javac", "java-compiler worker unavailable ("
+                                        + e.getMessage() + "); compiling with plain javac"
+                                        + " (no incremental annotation-processing provenance)");
+                                return null;
+                            }
+                        }, genDir);
                     }
                     ctx.label("compiling " + sources.size() + " sources");
                     dev.jkbuild.task.JavaIncrementalCompile.Result r =

@@ -177,7 +177,7 @@ class JavaApIncrementalCompileTest {
                     .processorPath(List.of(procDir))
                     .javaHome(Path.of(System.getProperty("java.home")))
                     .build();
-            var ap = new JavaIncrementalCompile.ApSetup(workerJar, genSrc);
+            var ap = new JavaIncrementalCompile.ApSetup(() -> workerJar, genSrc);
             JavaIncrementalCompile.Result r = JavaIncrementalCompile.run(
                     "compile-main", req, "jk-test", true, cas, actionCache, stateDir, ap);
             assertThat(r.success()).as("compile succeeded: %s", r.diagnostics()).isTrue();
