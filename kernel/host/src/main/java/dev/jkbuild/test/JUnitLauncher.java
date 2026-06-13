@@ -182,7 +182,7 @@ public final class JUnitLauncher {
         }
         if (total == 0 && worstExit != 0) {
             return new Result(1, 0, 1, 0, List.of(
-                    new Failure("(test run)", "runner exited " + worstExit)));
+                    new Failure("(test run)", "runner exited " + worstExit, "")));
         }
         return new Result(total, succeeded, failed, skipped, allFailures);
     }
@@ -403,21 +403,32 @@ public final class JUnitLauncher {
             if (isTest) {
                 switch (status != null ? status : "") {
                     case "SUCCESSFUL" -> succeeded++;
-                    case "FAILED" -> {
-                        failed++;
-                        String throwableJson = Ndjson.nested(json, "throwable");
-                        String exClass = throwableJson != null ? Ndjson.str(throwableJson, "class") : null;
-                        if (exClass == null) exClass = "?";
-                        String message = throwableJson != null ? Ndjson.str(throwableJson, "message") : null;
-                        if (message == null) message = "";
-                        failures.add(new Failure(display, exClass + ": " + message));
-                        listener.onFailure(id, display, exClass, message, workerId);
-                    }
+                    case "FAILED" -> captureFailure(id, display, json);
                     case "ABORTED" -> skipped++;
                     default -> {}
                 }
+            } else if ("FAILED".equals(status)) {
+                // A container-level failure (class initializer / @BeforeAll / engine):
+                // no per-test event follows, so without capturing it the run would
+                // surface only as a bare "runner exited N". Record it with its stack.
+                captureFailure(id, display + " (container)", json);
             }
             listener.onTestFinished(id, display, status, isTest, wasStatic, duration, workerId);
+        }
+
+        /** Record a FAILED test/container: count it and keep its summary + full stack. */
+        private void captureFailure(String id, String display, String json) {
+            failed++;
+            String throwableJson = Ndjson.nested(json, "throwable");
+            String exClass = throwableJson != null ? Ndjson.str(throwableJson, "class") : null;
+            if (exClass == null) exClass = "?";
+            String message = throwableJson != null ? Ndjson.str(throwableJson, "message") : null;
+            if (message == null) message = "";
+            // The runner emits the full stack trace under "stack"; keep it so the
+            // build can print it (we used to read only class + message).
+            String stack = throwableJson != null ? Ndjson.str(throwableJson, "stack") : null;
+            failures.add(new Failure(display, exClass + ": " + message, stack == null ? "" : stack));
+            listener.onFailure(id, display, exClass, message, workerId);
         }
 
         private void onSkipped(String json) {
@@ -439,7 +450,7 @@ public final class JUnitLauncher {
             long total = succeeded + failed + skipped;
             if (total == 0 && exitCode != 0) {
                 return new Result(1, 0, 1, 0, List.of(
-                        new Failure("(test run)", "runner exited " + exitCode)));
+                        new Failure("(test run)", "runner exited " + exitCode, "")));
             }
             return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
         }
@@ -465,5 +476,11 @@ public final class JUnitLauncher {
         public boolean allPassed() { return failed == 0; }
     }
 
-    public record Failure(String testName, String message) {}
+    /**
+     * One failed test. {@code message} is the one-line summary
+     * ({@code ExClass: message}); {@code details} is the full stack trace as the
+     * runner rendered it (empty when the failure has no captured throwable, e.g.
+     * a non-zero runner exit).
+     */
+    public record Failure(String testName, String message, String details) {}
 }

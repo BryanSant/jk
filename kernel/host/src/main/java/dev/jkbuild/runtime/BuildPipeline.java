@@ -664,6 +664,9 @@ public final class BuildPipeline {
                     if (!result.allPassed()) {
                         // Wipe any stale stamp so the next run doesn't skip.
                         dev.jkbuild.task.TestStamp.write(testClassesForStamp, null);
+                        // Surface each failure (name + stack trace) above the bar —
+                        // not just the count — like Maven/Gradle.
+                        for (String line : TestSupport.renderFailures(result)) ctx.output(line);
                         throw new RuntimeException(result.failed() + " test failure"
                                 + (result.failed() == 1 ? "" : "s"));
                     }

@@ -8,12 +8,14 @@ import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.run.PhaseContext;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
+import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkVersion;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -25,6 +27,31 @@ import java.util.List;
 public final class TestSupport {
 
     private TestSupport() {}
+
+    /**
+     * Render a failed test run as console lines — each failing test's name
+     * followed by its full stack trace, indented. Mirrors what Maven/Gradle
+     * print on failure so {@code jk} doesn't just report a count. Returns an
+     * empty list when nothing failed.
+     */
+    public static List<String> renderFailures(JUnitLauncher.Result result) {
+        List<String> out = new ArrayList<>();
+        List<JUnitLauncher.Failure> failures = result.failures();
+        if (failures.isEmpty()) return out;
+        out.add("");
+        out.add(failures.size() + " test" + (failures.size() == 1 ? "" : "s") + " failed:");
+        for (JUnitLauncher.Failure f : failures) {
+            out.add("");
+            out.add("  FAILED  " + f.testName());
+            String detail = (f.details() != null && !f.details().isBlank())
+                    ? f.details() : f.message();
+            for (String line : detail.split("\n", -1)) {
+                if (!line.isEmpty()) out.add("    " + line);
+            }
+        }
+        out.add("");
+        return out;
+    }
 
     /**
      * Adapt the JUnit runner's events onto a {@link PhaseContext}.
