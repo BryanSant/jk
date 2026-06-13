@@ -90,6 +90,7 @@ public final class BuildCommand implements CliCommand {
 
     private static final GoalKey<String> BUILD_OUTCOME = GoalKey.of("build-outcome", String.class);
     private static final GoalKey<Path>   JAR_PATH      = GoalKey.of("jar-path",      Path.class);
+    private static final GoalKey<BuildLayout> LAYOUT   = GoalKey.of("layout",        BuildLayout.class);
     private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
             GoalKey.of("test-result", JUnitLauncher.Result.class);
 
@@ -541,14 +542,32 @@ public final class BuildCommand implements CliCommand {
             return "Up to date";
         }
         String built = Theme.colorize("Built", Theme.active().focused());
-        if (outcome.startsWith("cache-hit:")) {
-            String jarLabel = goal.get(JAR_PATH)
-                    .map(p -> p.getFileName().toString()).orElse("");
-            return built + (jarLabel.isEmpty() ? "" : " " + jarLabel);
+        String label = jarLabel(goal);
+        return label.isEmpty() ? built : built + " " + label;
+    }
+
+    /**
+     * The built jar as a yellow, project-relative path — {@code target/foo-1.0.jar}
+     * rather than the bare filename — so the result line points at the artifact on
+     * disk. Falls back to the filename if the layout can't relativize it, and to
+     * {@code ""} when no jar was produced.
+     */
+    private static String jarLabel(Goal goal) {
+        Path jar = goal.get(JAR_PATH).orElse(null);
+        if (jar == null) return "";
+        String rel = goal.get(LAYOUT)
+                .map(layout -> relativeOrName(layout.memberRoot(), jar))
+                .orElseGet(() -> jar.getFileName().toString());
+        return Theme.colorize(rel, Theme.active().highlight());
+    }
+
+    /** {@code base}-relative path with forward slashes, or the bare filename on failure. */
+    private static String relativeOrName(Path base, Path jar) {
+        try {
+            return base.relativize(jar).toString().replace(java.io.File.separatorChar, '/');
+        } catch (RuntimeException e) {
+            return jar.getFileName().toString();
         }
-        return goal.get(JAR_PATH)
-                .map(jar -> built + " " + jar.getFileName())
-                .orElse(built);
     }
 
     /** Failure result line (sans the leading ✗ and trailing duration). */
