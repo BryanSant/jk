@@ -129,4 +129,53 @@ class JUnitLauncherAggregatorTest {
                 .extracting(JUnitLauncher.Failure::testName)
                 .isEqualTo("(test run)");
     }
+
+    @Test
+    void failed_test_keeps_the_full_stack_trace() {
+        var agg = new JUnitLauncher.ResultAggregator();
+        agg.accept("{\"e\":\"finished\",\"id\":\"c\",\"type\":\"TEST\",\"status\":\"FAILED\","
+                + "\"display\":\"c()\",\"throwable\":{\"class\":\"AssertionError\","
+                + "\"message\":\"nope\",\"stack\":\"AssertionError: nope\\n\\tat Foo.c(Foo.java:9)\"}}");
+        assertThat(agg.toResult(0).failures()).singleElement()
+                .satisfies(f -> assertThat(f.details())
+                        .contains("AssertionError: nope")
+                        .contains("at Foo.c(Foo.java:9)"));
+    }
+
+    @Test
+    void container_failure_is_captured_so_init_errors_are_visible() {
+        // A class initializer / @BeforeAll error finishes the CONTAINER as FAILED
+        // and fires no TEST event — capture it instead of a silent "runner exited".
+        var agg = new JUnitLauncher.ResultAggregator();
+        agg.accept("{\"e\":\"finished\",\"id\":\"cls\",\"type\":\"CONTAINER\",\"status\":\"FAILED\","
+                + "\"display\":\"FooTest\",\"throwable\":{\"class\":\"ExceptionInInitializerError\","
+                + "\"message\":\"\",\"stack\":\"ExceptionInInitializerError\\n\\tat FooTest.<clinit>(FooTest.java:3)\"}}");
+        var result = agg.toResult(0);
+        assertThat(result.allPassed()).isFalse();
+        assertThat(result.failures()).singleElement().satisfies(f -> {
+            assertThat(f.testName()).contains("FooTest");
+            assertThat(f.details()).contains("ExceptionInInitializerError");
+        });
+    }
+
+    @Test
+    void crash_output_is_attached_to_the_synthetic_failure() {
+        var agg = new JUnitLauncher.ResultAggregator();
+        String crash = "Exception in thread \"main\" java.lang.NoClassDefFoundError: Missing\n"
+                + "\tat dev.jkbuild.Boot.main(Boot.java:1)";
+        var result = agg.toResult(1, crash);   // no events, non-zero exit
+        assertThat(result.failures()).singleElement().satisfies(f -> {
+            assertThat(f.testName()).isEqualTo("(test run)");
+            assertThat(f.details()).contains("NoClassDefFoundError").contains("at dev.jkbuild.Boot.main");
+        });
+    }
+
+    @Test
+    void capture_buffer_keeps_only_the_last_lines() {
+        var buf = new JUnitLauncher.CaptureBuffer();
+        for (int i = 0; i < 1000; i++) buf.add("line " + i);
+        String text = buf.text();
+        assertThat(text).contains("line 999").doesNotContain("line 0\n");
+        assertThat(text.split("\n")).hasSizeLessThanOrEqualTo(400);
+    }
 }

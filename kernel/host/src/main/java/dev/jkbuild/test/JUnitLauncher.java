@@ -90,13 +90,17 @@ public final class JUnitLauncher {
         // Phase 6: test-runner is a friendly plugin — load in-process by default.
         // PluginLoader falls back to fork if manifest says isolation=process.
         var aggregator = new ResultAggregator(listener, /* workerId */ 0);
+        // Capture the worker's non-protocol output so a hard crash (uncaught
+        // throwable / System.exit before any test event) can be explained instead
+        // of surfacing only as "runner exited N".
+        var crash = new CaptureBuffer();
         int exit = dev.jkbuild.host.PluginLoader.run(
                 runnerJarFromClasspath(classpath),
                 classpathEntries(classpath),
                 List.of("--scan-classpath=" + testClassesDir),
                 aggregator::accept,
-                line -> listener.onUserOutput(0, line));
-        return aggregator.toResult(exit);
+                line -> { crash.add(line); listener.onUserOutput(0, line); });
+        return aggregator.toResult(exit, crash.text());
     }
 
     /** Extract the runner jar path from the combined classpath string. */
@@ -140,6 +144,7 @@ public final class JUnitLauncher {
         var aggregators = new java.util.ArrayList<ResultAggregator>();
         var workerThreads = new ArrayList<Thread>();
         int[] exits = new int[actualWorkers];
+        var captures = new ArrayList<CaptureBuffer>();
 
         for (int w = 0; w < actualWorkers; w++) {
             final int workerId = w + 1;
@@ -152,11 +157,13 @@ public final class JUnitLauncher {
                     "--scan-classpath=" + testClassesDir);
             var agg = new ResultAggregator(listener, workerId);
             aggregators.add(agg);
+            final var crash = new CaptureBuffer();
+            captures.add(crash);
             final String classpathForWorker = classpath;
             final int totalWorkers = actualWorkers;
             var t = new Thread(
                     () -> exits[idx] = driveWorker(cmd, classpathForWorker, workerId, totalWorkers,
-                            queue, agg, listener),
+                            queue, agg, listener, crash),
                     "jk-test-worker-" + workerId);
             t.start();
             workerThreads.add(t);
@@ -181,8 +188,17 @@ public final class JUnitLauncher {
             allFailures.addAll(r.failures);
         }
         if (total == 0 && worstExit != 0) {
+            // No test events but a worker died — surface what the crashed worker(s)
+            // printed (the dropped stderr) instead of a bare "runner exited N".
+            StringBuilder crash = new StringBuilder();
+            for (int i = 0; i < actualWorkers; i++) {
+                if (exits[i] != 0 && !captures.get(i).isEmpty()) {
+                    if (crash.length() > 0) crash.append('\n');
+                    crash.append(captures.get(i).text());
+                }
+            }
             return new Result(1, 0, 1, 0, List.of(
-                    new Failure("(test run)", "runner exited " + worstExit, "")));
+                    new Failure("(test run)", "runner exited " + worstExit, crash.toString())));
         }
         return new Result(total, succeeded, failed, skipped, allFailures);
     }
@@ -197,7 +213,7 @@ public final class JUnitLauncher {
     private int driveWorker(
             List<String> cmd, String classpath, int workerId, int totalWorkers,
             ConcurrentLinkedDeque<String> queue,
-            ResultAggregator aggregator, TestProgressListener listener) {
+            ResultAggregator aggregator, TestProgressListener listener, CaptureBuffer crash) {
         // Phase 6: pull-mode workers run in-process via PluginLoader.converse.
         java.util.function.BiConsumer<String, WorkerProcess.Conversation> handler = (json, convo) -> {
             String event = Ndjson.str(json, "e");
@@ -213,7 +229,10 @@ public final class JUnitLauncher {
                 aggregator.accept(json);
             }
         };
-        java.util.function.Consumer<String> passthrough = line -> listener.onUserOutput(workerId, line);
+        java.util.function.Consumer<String> passthrough = line -> {
+            crash.add(line);
+            listener.onUserOutput(workerId, line);
+        };
 
         // Extract the plugin args: everything after PluginHostMain in cmd.
         List<String> pluginArgs = new java.util.ArrayList<>();
@@ -447,10 +466,20 @@ public final class JUnitLauncher {
         }
 
         synchronized Result toResult(int exitCode) {
+            return toResult(exitCode, "");
+        }
+
+        /**
+         * As {@link #toResult(int)}, attaching {@code crashOutput} (the worker's
+         * captured stdout/stderr) to the synthetic "runner exited" failure so a
+         * hard crash with no test events still explains itself.
+         */
+        synchronized Result toResult(int exitCode, String crashOutput) {
             long total = succeeded + failed + skipped;
             if (total == 0 && exitCode != 0) {
-                return new Result(1, 0, 1, 0, List.of(
-                        new Failure("(test run)", "runner exited " + exitCode, "")));
+                return new Result(1, 0, 1, 0, List.of(new Failure(
+                        "(test run)", "runner exited " + exitCode,
+                        crashOutput == null ? "" : crashOutput)));
             }
             return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
         }
@@ -460,6 +489,28 @@ public final class JUnitLauncher {
             long total = succeeded + failed + skipped;
             return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
         }
+    }
+
+    /**
+     * Bounded, thread-safe tail of a worker's non-protocol output. Kept so a hard
+     * crash (uncaught throwable / {@code System.exit} before any test event) can be
+     * explained — the runner prints the stack to stderr, which is otherwise dropped
+     * unless {@code --verbose}. Capped to the last {@link #MAX_LINES} lines so a
+     * chatty-then-crashing worker can't blow up memory.
+     */
+    static final class CaptureBuffer {
+        private static final int MAX_LINES = 400;
+        private final java.util.ArrayDeque<String> lines = new java.util.ArrayDeque<>();
+
+        synchronized void add(String line) {
+            if (line == null) return;
+            lines.addLast(line);
+            if (lines.size() > MAX_LINES) lines.removeFirst();
+        }
+
+        synchronized boolean isEmpty() { return lines.isEmpty(); }
+
+        synchronized String text() { return String.join("\n", lines); }
     }
 
     public record Result(
