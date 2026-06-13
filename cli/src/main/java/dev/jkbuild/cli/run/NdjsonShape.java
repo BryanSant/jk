@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.PhaseStatus;
@@ -94,27 +95,13 @@ final class NdjsonShape {
                 + ",\"errors\":" + r.errors().size() + "}";
     }
 
-    /** Bare-bones JSON string escaping — adequate for diagnostic payloads. */
+    /**
+     * JSON string escaping — delegates to the shared {@link Ndjson#quote} codec
+     * (same escaping the worker wire protocol uses) so there's one implementation
+     * to keep correct. A {@code null} encodes as the bare literal {@code null}.
+     */
     static String js(String s) {
-        if (s == null) return "null";
-        StringBuilder sb = new StringBuilder(s.length() + 2);
-        sb.append('"');
-        for (int i = 0; i < s.length(); i++) {
-            char c = s.charAt(i);
-            switch (c) {
-                case '"' -> sb.append("\\\"");
-                case '\\' -> sb.append("\\\\");
-                case '\n' -> sb.append("\\n");
-                case '\r' -> sb.append("\\r");
-                case '\t' -> sb.append("\\t");
-                default -> {
-                    if (c < 0x20) sb.append(String.format("\\u%04x", (int) c));
-                    else sb.append(c);
-                }
-            }
-        }
-        sb.append('"');
-        return sb.toString();
+        return Ndjson.quote(s);
     }
 
     static long nowMillis() {
