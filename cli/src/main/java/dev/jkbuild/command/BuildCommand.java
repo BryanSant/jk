@@ -68,17 +68,13 @@ public final class BuildCommand implements CliCommand {
                 Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"),
-                // Phase 4: the Workspace Host is now the default execution path.
-                // --no-host forces in-process execution (for debugging/fallback only).
-                Opt.flag("Run the build in-process instead of via the Workspace Host JVM.", "--no-host").hide());
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
     }
 
     String profileName;
     Integer workers;
     Path cacheDir;
     Path jdksDir;
-    boolean useHost;
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
 
@@ -102,8 +98,6 @@ public final class BuildCommand implements CliCommand {
         this.workers = in.value("workers").map(Integer::parseInt).orElse(null);
         this.cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
-        // Default: use the Host; --no-host forces in-process (debug/fallback).
-        this.useHost = !in.isSet("no-host");
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
@@ -234,9 +228,7 @@ public final class BuildCommand implements CliCommand {
                 PreparedMember pm = prepared.get(memberDir);
                 int exit;
                 try {
-                    exit = useHost
-                            ? runPreparedViaHost(pm, agg)
-                            : runPrepared(pm, agg);
+                    exit = runPrepared(pm, agg);
                 } catch (Exception e) {
                     view.finishFailure("Build failed in " + member
                             + " " + elapsedSince(buildStart));
@@ -395,25 +387,11 @@ public final class BuildCommand implements CliCommand {
      * a per-member progress display.
      */
     private int runForDir(Path dir, AggregateContext agg) throws Exception {
-        Path cache  = cacheDir != null ? cacheDir : JkDirs.cache();
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
             System.err.println("jk build: no jk.toml in " + dir);
             return 2;
         }
-        int workerCount = workers != null && workers > 0 ? workers : 1;
-        // Each project owns its own jk.lock alongside its jk.toml.
-        final Path lockFile = dir.resolve("jk.lock");
-
-        // Phase 4 coexistence: when --use-host is set, fork the Workspace Host
-        // JVM instead of running the pipeline in-process. The host streams
-        // HostEvents; HostLauncher bridges them back to the GoalConsole listeners.
-        if (useHost) {
-            int hostResult = buildViaHost(dir, cache, lockFile, workerCount);
-            if (hostResult >= 0) return hostResult;
-            // -1 = fallback to in-process (host jar missing, workspace, or other)
-        }
-
         return runPrepared(prepareMember(dir), agg);
     }
 
@@ -482,46 +460,6 @@ public final class BuildCommand implements CliCommand {
      */
     private record PreparedMember(Path dir, String target, Path cache, Goal goal,
                                   long barWeight) {}
-
-    // ---- Workspace Host dispatch (Phase 4 coexistence) ----------------------
-
-    /**
-     * Run a pre-scanned workspace member through the Workspace Host, feeding its
-     * streamed events into the shared aggregate view. The member's progress is
-     * scaled into the slice reserved for it at calibration ({@link
-     * PreparedMember#barWeight()}), and the pre-scanned goal's phase list
-     * drives the merged phase display. Falls back to running the prepared goal
-     * in-process when the host jar isn't in the CAS.
-     */
-    private int runPreparedViaHost(PreparedMember pm, AggregateContext agg) throws Exception {
-        Path lockFile = pm.dir().resolve("jk.lock");
-        int workerCount = workers != null && workers > 0 ? workers : 1;
-        dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
-                "build", pm.dir(), pm.cache(), lockFile, jdksDir, profileName, workerCount,
-                buildOpts.skipTests, global.verbose, global.outputIsJson());
-        int code = dev.jkbuild.cli.run.HostLauncher.tryRunInto(
-                inv, agg, pm.target(), pm.goal().phases(), pm.barWeight(), global.verbose, global.jvmCli());
-        if (code >= 0) return code;
-        // -1 = host jar missing; run the prepared goal in-process instead.
-        return runPrepared(pm, agg);
-    }
-
-    /**
-     * Fork the Workspace Host JVM for a single (non-workspace) project, streaming
-     * its events through the CLI's standard per-goal listeners, and return the
-     * exit code. Workspace members take {@link #runPreparedViaHost} instead so
-     * they feed the shared aggregate bar.
-     */
-    private int buildViaHost(Path dir, Path cache, Path lockFile, int workerCount)
-            throws Exception {
-        dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
-                "build", dir, cache, lockFile, jdksDir, profileName, workerCount,
-                buildOpts.skipTests, global.verbose, global.outputIsJson());
-        var consoleSpec = new dev.jkbuild.cli.run.ConsoleSpec("Build",
-                r -> "Build successful", r -> "Build failed");
-        return dev.jkbuild.cli.run.HostLauncher.tryRun(
-                inv, GoalConsole.modeFor(global), consoleSpec, global.verbose, global.jvmCli());
-    }
 
     // ---- success summary -----------------------------------------------
 

@@ -132,52 +132,6 @@ public final class GoalConsole {
         return goal.run();
     }
 
-    /**
-     * Build a {@link GoalListener} using phase names received from the Host's
-     * {@code phases} manifest event. Uses {@link ProgressBarListener} (full
-     * progress bar) when in AUTO mode, upgrading from the
-     * {@link SimpleTaskListener} used before phase names are available.
-     *
-     * @param mode       rendering mode
-     * @param spec       result-line spec
-     * @param phaseNames ordered phase names from the Host's phases event
-     */
-    public static GoalListener makeListenerWithPhases(Mode mode, ConsoleSpec spec,
-                                                       List<String> phaseNames) {
-        if (mode == Mode.JSON)    return new NdjsonListener(System.out);
-        if (mode == Mode.VERBOSE) return new VerboseListener(System.out, System.err);
-        // Build synthetic Phase stubs so ProgressBarListener can label rows.
-        List<dev.jkbuild.run.Phase> phases = phaseNames.stream()
-                .map(name -> dev.jkbuild.run.Phase.builder(name).build())
-                .collect(java.util.stream.Collectors.toList());
-        boolean interactive = (mode == Mode.AUTO) && isInteractiveTerminal();
-        if (interactive) {
-            return new ProgressBarListener(System.out, System.err, phases);
-        }
-        return new SimpleTaskListener(System.out, System.err, spec, false);
-    }
-
-    /**
-     * Build a {@link GoalListener} for use when there is no pre-built
-     * {@link Goal} object — specifically for the Host path where the Goal runs
-     * inside the forked JVM. Uses {@link SimpleTaskListener} (spinner + result
-     * line) as the initial listener; call
-     * {@link HostLauncher#tryRun} to automatically upgrade to
-     * {@link ProgressBarListener} once the phase list arrives via the
-     * {@code phases} manifest event.
-     *
-     * @param mode   rendering mode (from {@link #modeFor(dev.jkbuild.cli.GlobalOptions)})
-     * @param spec   result-line spec ({@code ✓ Built …} / {@code ✗ Build failed})
-     */
-    public static GoalListener makeListenerWithoutGoal(Mode mode, ConsoleSpec spec) {
-        return switch (mode) {
-            case JSON    -> new NdjsonListener(System.out);
-            case VERBOSE -> new VerboseListener(System.out, System.err);
-            case AUTO    -> new SimpleTaskListener(System.out, System.err, spec, isInteractiveTerminal());
-            case QUIET   -> new SimpleTaskListener(System.out, System.err, spec, false);
-        };
-    }
-
     private static GoalListener chooseConsoleListener(Goal goal, Mode mode) {
         // Interactive goals (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events

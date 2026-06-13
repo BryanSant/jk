@@ -46,8 +46,7 @@ public final class NativeCommand implements CliCommand {
                 Opt.value("<class>", "Main class to compile. Default: read from jk.toml's image.main-class.", "--main"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"),
-                Opt.flag("Run the build in-process instead of via the Workspace Host JVM.", "--no-host").hide());
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
     }
     @Override public List<dev.jkbuild.model.command.Param> parameters() {
         return List.of(dev.jkbuild.model.command.Param.of("native-image-args",
@@ -61,7 +60,6 @@ public final class NativeCommand implements CliCommand {
     List<String> extra = new ArrayList<>();
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
-    boolean useHost;
 
     @Override
     public int run(Invocation in) throws Exception {
@@ -72,7 +70,6 @@ public final class NativeCommand implements CliCommand {
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
-        this.useHost = !in.isSet("no-host");
 
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
@@ -194,33 +191,7 @@ public final class NativeCommand implements CliCommand {
                               dev.jkbuild.cli.run.AggregateContext agg) throws Exception {
         boolean eligible = isNativeEligible(member);
         Path lockFile = memberDir.resolve("jk.lock");
-        String verb = eligible ? "native" : "build";
 
-        if (useHost) {
-            dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
-                    verb, memberDir, cache, lockFile, jdksDir, null, 1,
-                    buildOpts.skipTests, global.verbose, global.outputIsJson());
-            String label = eligible
-                    ? BuildCommand.buildTarget(memberDir.resolve("jk.toml"), memberDir)
-                    : BuildCommand.buildTarget(memberDir.resolve("jk.toml"), memberDir);
-            ConsoleSpec spec = eligible
-                    ? new ConsoleSpec(label, r -> "Built native binary", r -> "Native build failed")
-                    : new ConsoleSpec(label, r -> "Build successful",    r -> "Build failed");
-            if (agg != null) {
-                // Feed into the shared aggregate view.
-                GoalConsole.Mode mode = GoalConsole.modeFor(global);
-                dev.jkbuild.cli.run.ReceivingGoalListener receiver =
-                        new dev.jkbuild.cli.run.ReceivingGoalListener(
-                                List.of(new dev.jkbuild.cli.run.AggregateMemberListener(
-                                        agg, label, List.of())));
-                // Fall through to HostLauncher without aggregate wiring for now.
-            }
-            int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
-                    inv, GoalConsole.modeFor(global), spec, global.verbose, global.jvmCli());
-            if (code >= 0) return code;
-        }
-
-        // In-process fallback.
         Path buildFile = memberDir.resolve("jk.toml");
         int estimatedTests = TestCommand.estimateTestCount(memberDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
@@ -259,17 +230,6 @@ public final class NativeCommand implements CliCommand {
 
         String resolvedMain = resolveMain(buildFile);
         Path lockFile = projectDir.resolve("jk.lock");
-
-        if (useHost) {
-            dev.jkbuild.host.HostInvocation inv = new dev.jkbuild.host.HostInvocation(
-                    "native", projectDir, cache, lockFile, jdksDir, null, 1,
-                    buildOpts.skipTests, global.verbose, global.outputIsJson());
-            ConsoleSpec spec = new ConsoleSpec("Native Build",
-                    r -> "Built native binary", r -> "Native build failed");
-            int code = dev.jkbuild.cli.run.HostLauncher.tryRun(
-                    inv, GoalConsole.modeFor(global), spec, global.verbose, global.jvmCli());
-            if (code >= 0) return code;
-        }
 
         int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
