@@ -123,17 +123,19 @@ public final class MavenRepo {
             return fetchOffline(coord, relativePath);
         }
         URI uri = baseUrl.resolve(relativePath);
-        Optional<byte[]> fetched = transport.fetch(uri, credential);
-        if (fetched.isEmpty()) {
-            throw new ArtifactNotFoundException("not found in " + name + ": " + uri);
+        // Stream the body straight into the CAS, hashing as it flows, so a
+        // multi-hundred-MB JAR never sits in the heap as a single byte[] —
+        // the difference between a cold-cache resolve fitting under the CLI's
+        // heap cap and OOMing on it.
+        Cas.Stored stored;
+        try (var in = transport.fetchStream(uri, credential)
+                .orElseThrow(() -> new ArtifactNotFoundException("not found in " + name + ": " + uri))) {
+            stored = cas.putStream(in);
         }
-        byte[] body = fetched.get();
-        Path path = cas.put(body);
-        String sha = Hashing.sha256Hex(body);
         if (mirror) {
-            localRepo.materialize(relativePath, path);
+            localRepo.materialize(relativePath, stored.path());
         }
-        return new Fetched(uri, path, sha, body.length);
+        return new Fetched(uri, stored.path(), stored.sha256(), stored.size());
     }
 
     /**
@@ -149,8 +151,9 @@ public final class MavenRepo {
                     "offline: " + coord + " (" + relativePath + ") not in local repo for " + name);
         }
         Path path = found.get();
-        byte[] body = Files.readAllBytes(path);
-        return new Fetched(path.toUri(), path, Hashing.sha256Hex(body), body.length);
+        // Hash by streaming the file rather than reading it whole — keeps an
+        // offline resolve of a large mirrored artifact under the heap cap too.
+        return new Fetched(path.toUri(), path, Hashing.sha256Hex(path), Files.size(path));
     }
 
     private static URI normalize(URI uri) {

@@ -26,6 +26,35 @@ class CasTest {
     }
 
     @Test
+    void putStream_keys_by_content_hash_and_round_trips(@TempDir Path tempDir) throws IOException {
+        Cas cas = new Cas(tempDir);
+        byte[] payload = "hello world".getBytes(StandardCharsets.UTF_8);
+
+        Cas.Stored stored = cas.putStream(new java.io.ByteArrayInputStream(payload));
+
+        // Same key and bytes as the buffered put() — streaming must not change the hash.
+        assertThat(stored.path()).isEqualTo(cas.put(payload));
+        assertThat(stored.sha256())
+                .isEqualTo("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
+        assertThat(stored.size()).isEqualTo(payload.length);
+        assertThat(Files.readAllBytes(stored.path())).isEqualTo(payload);
+    }
+
+    @Test
+    void putStream_is_idempotent(@TempDir Path tempDir) throws IOException {
+        Cas cas = new Cas(tempDir);
+        byte[] payload = "hello".getBytes(StandardCharsets.UTF_8);
+        Cas.Stored a = cas.putStream(new java.io.ByteArrayInputStream(payload));
+        Cas.Stored b = cas.putStream(new java.io.ByteArrayInputStream(payload));
+        assertThat(a.path()).isEqualTo(b.path());
+        // No leftover temp files from the second (discarded) write.
+        try (var entries = Files.list(tempDir)) {
+            assertThat(entries.filter(p -> p.getFileName().toString().startsWith(".put-")))
+                    .isEmpty();
+        }
+    }
+
+    @Test
     void path_layout_uses_two_two_then_rest(@TempDir Path tempDir) {
         Cas cas = new Cas(tempDir);
         // 'hello world' SHA-256 = b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9

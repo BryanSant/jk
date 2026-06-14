@@ -71,10 +71,23 @@ final class NdjsonShape {
     }
 
     static String error(String phase, String code, String msg) {
-        return "{\"ts\":" + nowMillis()
-                + ",\"type\":\"error\""
-                + ",\"phase\":" + js(phase) + ",\"code\":" + js(code)
-                + ",\"message\":" + js(msg) + "}";
+        return error(phase, code, msg, "", "");
+    }
+
+    /**
+     * Error event with optional discrete {@code test} / {@code exceptionClass}
+     * fields — emitted (in addition to {@code message}) only when non-empty, so
+     * a test failure's parts stay separate on the wire without bloating the
+     * common diagnostic shape.
+     */
+    static String error(String phase, String code, String msg, String test, String exceptionClass) {
+        StringBuilder sb = new StringBuilder("{\"ts\":").append(nowMillis())
+                .append(",\"type\":\"error\"")
+                .append(",\"phase\":").append(js(phase)).append(",\"code\":").append(js(code))
+                .append(",\"message\":").append(js(msg));
+        if (!test.isEmpty()) sb.append(",\"test\":").append(js(test));
+        if (!exceptionClass.isEmpty()) sb.append(",\"exceptionClass\":").append(js(exceptionClass));
+        return sb.append("}").toString();
     }
 
     static String phaseFinish(String phase, PhaseStatus status, Duration duration) {

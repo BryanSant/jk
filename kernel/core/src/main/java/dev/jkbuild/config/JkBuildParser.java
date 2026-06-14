@@ -27,7 +27,10 @@ import org.tomlj.TomlTable;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
+import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.Optional;
 import java.util.ArrayList;
 import java.util.EnumMap;
@@ -35,6 +38,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Loads {@code jk.toml} into a {@link JkBuild}.
@@ -63,12 +67,38 @@ public final class JkBuildParser {
 
     private JkBuildParser() {}
 
+    /**
+     * Memoises {@link #parse(Path)} results for the life of the process,
+     * keyed by file identity (path + size + mtime). jk is single-shot, so a
+     * manifest's bytes don't change mid-invocation; workspace commands, on the
+     * other hand, re-resolve the same handful of manifests over and over (e.g.
+     * {@code jk idea} runs {@code WorkspaceClasspath.resolve} twice per member,
+     * and each call re-reads the root plus every sibling {@code jk.toml}). That
+     * turns an N-module workspace into O(N²) ANTLR parses; caching collapses it
+     * to one parse per distinct file. Keying on size+mtime means a manifest
+     * that actually changes on disk (a test rewriting it) re-parses cleanly.
+     */
+    private static final Map<CacheKey, JkBuild> PARSE_CACHE = new ConcurrentHashMap<>();
+
+    private record CacheKey(Path path, long size, FileTime modified) {}
+
     public static JkBuild parse(Path file) throws IOException {
         Objects.requireNonNull(file, "file");
-        if (!Files.exists(file)) {
+        BasicFileAttributes attrs;
+        try {
+            attrs = Files.readAttributes(file, BasicFileAttributes.class);
+        } catch (NoSuchFileException e) {
             throw new JkBuildParseException("jk.toml not found: " + file);
         }
-        return parse(Files.readString(file));
+        CacheKey key = new CacheKey(
+                file.toAbsolutePath().normalize(), attrs.size(), attrs.lastModifiedTime());
+        JkBuild cached = PARSE_CACHE.get(key);
+        if (cached != null) {
+            return cached;
+        }
+        JkBuild parsed = parse(Files.readString(file));
+        PARSE_CACHE.put(key, parsed);
+        return parsed;
     }
 
     public static JkBuild parse(String toml) {
@@ -98,8 +128,9 @@ public final class JkBuildParser {
         Map<String, String> manifest = parseManifest(result);
         List<PluginDeclaration> plugins = parsePlugins(result);
         JkBuild.NativeConfig nativeConfig = parseNativeConfig(result);
+        JkBuild.Build build = parseBuild(result);
         return new JkBuild(project, deps, repos, profiles, features, workspace, manifest, plugins,
-                nativeConfig);
+                nativeConfig, build);
     }
 
     /**
@@ -789,6 +820,56 @@ public final class JkBuildParser {
         if (mainClass != null && mainClass.isBlank()) mainClass = null;
         if (name      != null && name.isBlank())      name      = null;
         return new JkBuild.NativeConfig(mainClass, name, args);
+    }
+
+    /**
+     * Parse the optional top-level {@code [build]} table:
+     * <ul>
+     *   <li>{@code order-after} — workspace members (by project name or
+     *       {@code group:artifact}) that must build before this one, with no
+     *       classpath/lockfile edge.</li>
+     *   <li>{@code [build.embed-sha]} — a {@code <resource-basename> = <member>}
+     *       map; the build writes {@code META-INF/<basename>-sha256.txt} = the
+     *       SHA-256 of {@code <member>}'s output jar.</li>
+     * </ul>
+     * Absent table/keys yield {@link JkBuild.Build#EMPTY}.
+     */
+    private static JkBuild.Build parseBuild(TomlTable root) {
+        TomlTable build = root.getTable("build");
+        if (build == null) return JkBuild.Build.EMPTY;
+        List<String> orderAfter = new ArrayList<>();
+        TomlArray arr = build.getArray("order-after");
+        if (arr != null) {
+            for (int i = 0; i < arr.size(); i++) {
+                Object val = arr.get(i);
+                if (!(val instanceof String s))
+                    throw new JkBuildParseException(
+                            "[build].order-after must be an array of strings");
+                if (!s.isBlank()) orderAfter.add(s);
+            }
+        }
+        Map<String, String> embedSha = new LinkedHashMap<>();
+        TomlTable embed = build.getTable("embed-sha");
+        if (embed != null) {
+            for (String key : embed.keySet()) {
+                if (!(embed.get(key) instanceof String member))
+                    throw new JkBuildParseException(
+                            "[build.embed-sha]." + key + " must be a string (the workspace member to hash)");
+                embedSha.put(key, member);
+            }
+        }
+        List<String> testWorkerJars = new ArrayList<>();
+        TomlArray twj = build.getArray("test-worker-jars");
+        if (twj != null) {
+            for (int i = 0; i < twj.size(); i++) {
+                Object val = twj.get(i);
+                if (!(val instanceof String s))
+                    throw new JkBuildParseException(
+                            "[build].test-worker-jars must be an array of strings");
+                if (!s.isBlank()) testWorkerJars.add(s);
+            }
+        }
+        return new JkBuild.Build(orderAfter, embedSha, testWorkerJars);
     }
 
     private static final java.util.Set<String> PLUGIN_RESERVED =

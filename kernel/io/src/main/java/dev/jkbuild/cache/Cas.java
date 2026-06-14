@@ -4,9 +4,13 @@ package dev.jkbuild.cache;
 import dev.jkbuild.util.Hashing;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.Objects;
 
 /**
@@ -95,6 +99,51 @@ public final class Cas {
         }
         return target;
     }
+
+    /**
+     * Stream {@code in} into the CAS, hashing as the bytes flow through a
+     * fixed buffer so the full payload is never resident in memory — the
+     * memory-safe counterpart to {@link #put(byte[])} for large artifacts
+     * fetched off the network. The content's own SHA-256 becomes its key, so
+     * the hash isn't known until the stream is drained: bytes land in a temp
+     * file first, then move atomically into place. The caller owns closing
+     * {@code in}.
+     *
+     * <p>Idempotent — if a blob with the computed hash is already present the
+     * temp file is discarded and the existing entry returned.
+     */
+    public Stored putStream(InputStream in) throws IOException {
+        Files.createDirectories(root);
+        Path tmp = Files.createTempFile(root, ".put-", ".tmp");
+        MessageDigest digest = Hashing.newSha256();
+        long size = 0;
+        try {
+            try (OutputStream out = Files.newOutputStream(tmp)) {
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) > 0) {
+                    digest.update(buf, 0, n);
+                    out.write(buf, 0, n);
+                    size += n;
+                }
+            }
+            String hex = HexFormat.of().formatHex(digest.digest());
+            Path target = pathFor(hex);
+            if (Files.exists(target)) {
+                Files.deleteIfExists(tmp);
+                return new Stored(target, hex, size);
+            }
+            Files.createDirectories(target.getParent());
+            Files.move(tmp, target, StandardCopyOption.ATOMIC_MOVE);
+            return new Stored(target, hex, size);
+        } catch (IOException | RuntimeException e) {
+            Files.deleteIfExists(tmp);
+            throw e;
+        }
+    }
+
+    /** A blob stored in the CAS: its on-disk path, hex hash, and byte size. */
+    public record Stored(Path path, String sha256, long size) {}
 
     /**
      * Materialise a CAS entry as a hard link to {@code source} when the

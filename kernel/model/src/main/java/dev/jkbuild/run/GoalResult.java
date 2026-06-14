@@ -44,6 +44,20 @@ public record GoalResult(
     /** One row in the report's per-phase breakdown. */
     public record PhaseReport(String name, PhaseStatus status, Duration duration) {}
 
-    /** Structured diagnostic from {@link PhaseContext#warn} / {@link PhaseContext#error}. */
-    public record Diagnostic(String phase, String code, String message) {}
+    /**
+     * Structured diagnostic from {@link PhaseContext#warn} / {@link PhaseContext#error}.
+     *
+     * <p>{@code test} and {@code exceptionClass} carry the discrete parts of a
+     * test failure (the failing test's display name and the thrown exception's
+     * class) so structured consumers don't have to parse them back out of a
+     * glued {@code message}. Both are empty for diagnostics that aren't test
+     * failures.
+     */
+    public record Diagnostic(String phase, String code, String message, String test, String exceptionClass) {
+
+        /** Diagnostic with no test identity — the common case (javac, resolver, …). */
+        public Diagnostic(String phase, String code, String message) {
+            this(phase, code, message, "", "");
+        }
+    }
 }

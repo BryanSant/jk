@@ -117,11 +117,16 @@ public final class WorkspaceClasspath {
         }
 
         List<Path> jars = new ArrayList<>();
+        List<Path> closureJars = new ArrayList<>();
         List<String> missing = new ArrayList<>();
         List<Path> siblingLockfiles = new ArrayList<>();
         for (String module : visited) {
             Path siblingJar = siblingJarByModule.get(module);
             if (siblingJar == null) continue;
+            // The full declared closure, whether or not the jar is built yet —
+            // an IDE module graph depends on declared edges, not on compiled
+            // artifacts (IntelliJ compiles the modules itself).
+            closureJars.add(siblingJar);
             if (Files.exists(siblingJar)) {
                 jars.add(siblingJar);
             } else {
@@ -136,7 +141,7 @@ public final class WorkspaceClasspath {
                 if (Files.exists(lockFile)) siblingLockfiles.add(lockFile);
             }
         }
-        return new Result(jars, missing, siblingLockfiles);
+        return new Result(jars, missing, siblingLockfiles, closureJars);
     }
 
     /** Resolve a {@code workspace:<name>} dep reference to its full {@code group:name} coord. */
@@ -154,6 +159,7 @@ public final class WorkspaceClasspath {
     private static Result resolveForRoot(Path root, JkBuild rootManifest)
             throws IOException {
         List<Path> jars = new ArrayList<>();
+        List<Path> closureJars = new ArrayList<>();
         List<String> missing = new ArrayList<>();
         for (String memberName : rootManifest.workspace().members()) {
             Path siblingDir = root.resolve(memberName);
@@ -166,6 +172,7 @@ public final class WorkspaceClasspath {
                 continue;
             }
             Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
+            closureJars.add(jar);
             if (Files.exists(jar)) {
                 jars.add(jar);
             } else {
@@ -173,19 +180,28 @@ public final class WorkspaceClasspath {
                         + " (expected at " + jar + ")");
             }
         }
-        return new Result(jars, missing, List.of());
+        return new Result(jars, missing, List.of(), closureJars);
     }
 
     public record Result(List<Path> jars, List<String> missingSiblingJars,
-                         List<Path> siblingLockfiles) {
+                         List<Path> siblingLockfiles, List<Path> siblingClosureJars) {
         public Result {
             jars = List.copyOf(jars);
             missingSiblingJars = List.copyOf(missingSiblingJars);
             siblingLockfiles = List.copyOf(siblingLockfiles);
+            siblingClosureJars = List.copyOf(siblingClosureJars);
+        }
+        /**
+         * Back-compat constructor for callers that don't distinguish the
+         * declared closure from the built jars (build/run): the closure
+         * defaults to {@code jars}.
+         */
+        public Result(List<Path> jars, List<String> missingSiblingJars, List<Path> siblingLockfiles) {
+            this(jars, missingSiblingJars, siblingLockfiles, jars);
         }
         /** Back-compat constructor for callers that don't use sibling lockfiles. */
         public Result(List<Path> jars, List<String> missingSiblingJars) {
-            this(jars, missingSiblingJars, List.of());
+            this(jars, missingSiblingJars, List.of(), jars);
         }
     }
 }

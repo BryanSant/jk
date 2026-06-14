@@ -175,14 +175,68 @@ public final class IntellijSdkRegistrar {
 
         Element classPath = doc.createElement("classPath");
         Element composite = rootEl(doc, "composite", null);
-        // Modular JDK (9+): a single jrt root over the (stable) home.
-        composite.appendChild(rootEl(doc, "simple", "jrt://" + home + "!/"));
+        // Modular JDK (9+): IntelliJ represents the platform classpath as one
+        // jrt root PER MODULE (jrt://<home>!/<module>), exactly as it writes
+        // them itself. A single jrt://<home>!/ root over the whole image does
+        // not expose any packages — the SDK shows empty and even java.lang.*
+        // fails to resolve. Enumerate the modules and emit one root each; only
+        // fall back to the bare root when enumeration finds nothing (e.g. a
+        // pre-9 JDK or an unreadable home).
+        List<String> modules = moduleNames(sdk.javaHome());
+        if (modules.isEmpty()) {
+            composite.appendChild(rootEl(doc, "simple", "jrt://" + home + "!/"));
+        } else {
+            for (String module : modules) {
+                composite.appendChild(rootEl(doc, "simple", "jrt://" + home + "!/" + module));
+            }
+        }
         classPath.appendChild(composite);
         roots.appendChild(classPath);
         jdk.appendChild(roots);
 
         jdk.appendChild(doc.createElement("additional"));
         return jdk;
+    }
+
+    /**
+     * Platform module names for a modular JDK home, sorted — the source for the
+     * per-module jrt classpath roots IntelliJ requires. Prefers the
+     * {@code MODULES="a b c"} line in the JDK's {@code release} file (present in
+     * every JDK 9+ image, including jlink runtimes that ship no {@code jmods/}),
+     * then falls back to listing {@code jmods/*.jmod}. Returns empty when the
+     * home is non-modular or unreadable, so the caller emits a single bare root.
+     */
+    private static List<String> moduleNames(Path javaHome) {
+        Path release = javaHome.resolve("release");
+        try {
+            for (String line : Files.readAllLines(release)) {
+                if (!line.startsWith("MODULES=")) continue;
+                String v = line.substring("MODULES=".length()).trim();
+                if (v.length() >= 2 && v.startsWith("\"") && v.endsWith("\"")) {
+                    v = v.substring(1, v.length() - 1);
+                }
+                if (v.isBlank()) break;
+                return Stream.of(v.split("\\s+"))
+                        .filter(s -> !s.isBlank())
+                        .sorted()
+                        .toList();
+            }
+        } catch (IOException ignored) {
+            // No release file / unreadable — try jmods next.
+        }
+        Path jmods = javaHome.resolve("jmods");
+        if (Files.isDirectory(jmods)) {
+            try (Stream<Path> entries = Files.list(jmods)) {
+                return entries.map(p -> p.getFileName().toString())
+                        .filter(n -> n.endsWith(".jmod"))
+                        .map(n -> n.substring(0, n.length() - ".jmod".length()))
+                        .sorted()
+                        .toList();
+            } catch (IOException ignored) {
+                // Unreadable jmods dir — give up, fall back to the bare root.
+            }
+        }
+        return List.of();
     }
 
     private static Element valued(Document doc, String tag, String value) {

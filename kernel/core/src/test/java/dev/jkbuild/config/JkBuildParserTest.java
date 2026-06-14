@@ -43,6 +43,79 @@ class JkBuildParserTest {
     }
 
     @Test
+    void absent_build_block_yields_empty_order_after() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT);
+        assertThat(parsed.build()).isEqualTo(JkBuild.Build.EMPTY);
+        assertThat(parsed.build().orderAfter()).isEmpty();
+    }
+
+    @Test
+    void parses_build_order_after() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+
+                [build]
+                order-after = ["kotlin-compiler", "dev.jkbuild:git-client"]
+                """);
+        assertThat(parsed.build().orderAfter())
+                .containsExactly("kotlin-compiler", "dev.jkbuild:git-client");
+    }
+
+    @Test
+    void rejects_non_string_order_after_entry() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+
+                [build]
+                order-after = [123]
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("[build].order-after");
+    }
+
+    @Test
+    void parses_build_embed_sha_and_treats_sources_as_order_after() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+
+                [build]
+                order-after = ["plain-dep"]
+
+                [build.embed-sha]
+                "jk-kotlin-compiler" = "kotlin-compiler"
+                "jk-git-client" = "git-client"
+                """);
+        assertThat(parsed.build().embedSha())
+                .containsEntry("jk-kotlin-compiler", "kotlin-compiler")
+                .containsEntry("jk-git-client", "git-client");
+        // embed-sha sources are build-order prerequisites, merged with explicit order-after
+        assertThat(parsed.build().allOrderAfter())
+                .contains("plain-dep", "kotlin-compiler", "git-client");
+    }
+
+    @Test
+    void parses_build_test_worker_jars_as_order_after() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+
+                [build]
+                test-worker-jars = ["publisher", "compat-bridge"]
+                """);
+        assertThat(parsed.build().testWorkerJars())
+                .containsExactly("publisher", "compat-bridge");
+        // test-worker-jars members must build first → they're order-after prerequisites
+        assertThat(parsed.build().allOrderAfter())
+                .contains("publisher", "compat-bridge");
+    }
+
+    @Test
+    void rejects_non_string_embed_sha_value() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+
+                [build.embed-sha]
+                "jk-x" = 123
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("[build.embed-sha]");
+    }
+
+    @Test
     void parses_optional_description() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 description = "A widget for widgeting."

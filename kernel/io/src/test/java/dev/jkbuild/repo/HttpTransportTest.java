@@ -79,6 +79,47 @@ class HttpTransportTest {
     }
 
     @Test
+    void fetchStream_returns_body_and_sends_auth() throws Exception {
+        AtomicReference<String> seenAuth = new AtomicReference<>();
+        server.createContext("/a.jar", ex -> {
+            seenAuth.set(ex.getRequestHeaders().getFirst("Authorization"));
+            byte[] b = "bytes".getBytes(StandardCharsets.UTF_8);
+            ex.sendResponseHeaders(200, b.length);
+            ex.getResponseBody().write(b);
+            ex.close();
+        });
+
+        Optional<java.io.InputStream> body = transport().fetchStream(base.resolve("/a.jar"),
+                new RepoCredential.Bearer("tok"));
+        assertThat(body).isPresent();
+        try (var in = body.get()) {
+            assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("bytes");
+        }
+        assertThat(seenAuth.get()).isEqualTo("Bearer tok");
+    }
+
+    @Test
+    void fetchStream_404_is_empty_not_an_error() throws Exception {
+        server.createContext("/missing.jar", ex -> {
+            ex.sendResponseHeaders(404, -1);
+            ex.close();
+        });
+        assertThat(transport().fetchStream(base.resolve("/missing.jar"), RepoCredential.ANONYMOUS))
+                .isEmpty();
+    }
+
+    @Test
+    void fetchStream_other_4xx_throws() throws Exception {
+        server.createContext("/denied.jar", ex -> {
+            ex.sendResponseHeaders(403, -1);
+            ex.close();
+        });
+        assertThatThrownBy(() -> transport().fetchStream(base.resolve("/denied.jar"), RepoCredential.ANONYMOUS))
+                .isInstanceOf(IOException.class)
+                .hasMessageContaining("403");
+    }
+
+    @Test
     void put_sends_body_content_type_and_returns_status() throws Exception {
         AtomicReference<String> seenType = new AtomicReference<>();
         AtomicReference<byte[]> seenBody = new AtomicReference<>();

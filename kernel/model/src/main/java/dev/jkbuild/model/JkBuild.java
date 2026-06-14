@@ -23,7 +23,8 @@ public record JkBuild(
         Workspace workspace,
         Map<String, String> manifest,
         List<PluginDeclaration> plugins,
-        NativeConfig nativeConfig) {
+        NativeConfig nativeConfig,
+        Build build) {
 
     public JkBuild {
         Objects.requireNonNull(project, "project");
@@ -40,6 +41,16 @@ public record JkBuild(
                 : Collections.unmodifiableMap(new LinkedHashMap<>(manifest));
         plugins = plugins == null ? List.of() : List.copyOf(plugins);
         nativeConfig = nativeConfig == null ? NativeConfig.EMPTY : nativeConfig;
+        build = build == null ? Build.EMPTY : build;
+    }
+
+    /** Back-compat constructor for callers that don't set the {@code [build]} block. */
+    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
+                   Profiles profiles, Features features, Workspace workspace,
+                   Map<String, String> manifest, List<PluginDeclaration> plugins,
+                   NativeConfig nativeConfig) {
+        this(project, dependencies, repositories, profiles, features, workspace,
+                manifest, plugins, nativeConfig, null);
     }
 
     /** Back-compat constructor for callers that don't set nativeConfig. */
@@ -47,7 +58,7 @@ public record JkBuild(
                    Profiles profiles, Features features, Workspace workspace,
                    Map<String, String> manifest, List<PluginDeclaration> plugins) {
         this(project, dependencies, repositories, profiles, features, workspace,
-                manifest, plugins, null);
+                manifest, plugins, null, null);
     }
 
     /** Back-compat constructor for callers that don't set plugin declarations. */
@@ -93,7 +104,7 @@ public record JkBuild(
     /** Return a copy with the given custom jar-manifest attributes. */
     public JkBuild withManifest(Map<String, String> manifest) {
         return new JkBuild(project, dependencies, repositories, profiles, features, workspace,
-                manifest, plugins, nativeConfig);
+                manifest, plugins, nativeConfig, build);
     }
 
     /** True iff this is a workspace root (has a non-empty {@code workspace} block). */
@@ -297,6 +308,53 @@ public record JkBuild(
 
         public NativeConfig {
             args = args == null ? List.of() : List.copyOf(args);
+        }
+    }
+
+    /**
+     * The optional {@code [build]} block — build-time directives that are not
+     * dependencies and never reach a classpath or {@code jk.lock}.
+     *
+     * <p>{@code orderAfter} lists workspace members (by project name or
+     * {@code group:artifact}) that must build before this one, <em>without</em>
+     * adding a compile/test/runtime edge — the "build-order-only dependency" jk
+     * otherwise can't express.
+     *
+     * <p>{@code embedSha} ({@code [build.embed-sha]}) maps a resource basename to
+     * a workspace member: the build hashes that member's output jar and writes
+     * the digest to {@code META-INF/<basename>-sha256.txt} in this module's
+     * classes. Each value is implicitly an {@code orderAfter} entry — you must
+     * build a sibling before you can hash its jar (see {@link #allOrderAfter()}).
+     * This is how the engine pins the first-party worker jars it locates at runtime.
+     *
+     * <p>{@code testWorkerJars} ({@code [build.test-worker-jars]}) lists workspace
+     * members whose built worker jar must be handed to this module's test JVM (as
+     * {@code -Djk.<worker>.worker.jar}) so tests that fork that worker locate it by
+     * path. Also implicitly {@code orderAfter} (the worker must be built first).
+     */
+    public record Build(List<String> orderAfter, Map<String, String> embedSha,
+                        List<String> testWorkerJars) {
+
+        public static final Build EMPTY = new Build(List.of(), Map.of(), List.of());
+
+        public Build {
+            orderAfter = orderAfter == null ? List.of() : List.copyOf(orderAfter);
+            embedSha = embedSha == null ? Map.of() : Map.copyOf(embedSha);
+            testWorkerJars = testWorkerJars == null ? List.of() : List.copyOf(testWorkerJars);
+        }
+
+        /**
+         * All build-order prerequisites: explicit {@code orderAfter} plus every
+         * {@code embedSha} source and {@code testWorkerJars} member (a sibling
+         * must be built before you can hash its jar or hand it to a test).
+         * De-duplicated, order preserved.
+         */
+        public List<String> allOrderAfter() {
+            if (embedSha.isEmpty() && testWorkerJars.isEmpty()) return orderAfter;
+            var all = new java.util.LinkedHashSet<>(orderAfter);
+            all.addAll(embedSha.values());
+            all.addAll(testWorkerJars);
+            return List.copyOf(all);
         }
     }
 

@@ -30,7 +30,8 @@ class JUnitLauncherAggregatorTest {
         assertThat(result.failures()).singleElement()
                 .satisfies(f -> {
                     assertThat(f.testName()).isEqualTo("c()");
-                    assertThat(f.message()).contains("AssertionError").contains("nope");
+                    assertThat(f.exceptionClass()).isEqualTo("AssertionError");
+                    assertThat(f.message()).isEqualTo("nope");
                 });
     }
 

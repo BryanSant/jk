@@ -105,12 +105,22 @@ graalvmNative {
         //           startup wins from a smaller binary outweigh it.
         // -march=compatibility
         //           Single-arch baseline code, no per-CPU dispatch tables.
-        // --gc=epsilon
-        //           No-op GC. Safe for short verbs; long-running ones leak
-        //           until process exit but jk is single-shot.
+        // --gc=serial
+        //           Generational serial GC. Small/fast for short verbs, and —
+        //           unlike epsilon — it actually reclaims, so verbs that stream
+        //           data (sync/idea/build fetching artifacts) don't accumulate
+        //           every transient byte until the process dies.
+        // -R:MaxHeapSize=268435456
+        //           Hard 256 MiB max heap for the CLI process. jk's own work is
+        //           tiny; with a real collector under it, 256 MiB is plenty, and
+        //           the cap turns any runaway allocation into a fast, loud OOM
+        //           instead of dragging the whole machine into swap. Heavy work
+        //           (compile/test) runs in forked worker JVMs tuned separately
+        //           via JvmOptions, not in this process.
         buildArgs.add("-Ob")
         buildArgs.add("-march=compatibility")
-        buildArgs.add("--gc=epsilon")
+        buildArgs.add("--gc=serial")
+        buildArgs.add("-R:MaxHeapSize=268435456")
         // JLine 4 FFM's signal handler uses Arena.ofShared(), gated behind this
         // flag in GraalVM 25. Without it the wizard crashes on Signal.INT setup.
         buildArgs.add("-H:+SharedArenaSupport")

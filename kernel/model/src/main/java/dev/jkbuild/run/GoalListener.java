@@ -44,6 +44,17 @@ public interface GoalListener {
 
     default void error(String phase, String code, String message) {}
 
+    /**
+     * Error carrying discrete {@code test} / {@code exceptionClass} detail
+     * (see {@link PhaseContext#error(String, String, String, String)}).
+     * Defaults to the plain {@link #error(String, String, String)} so
+     * listeners that don't model the structured form still receive the
+     * diagnostic with its message.
+     */
+    default void error(String phase, String code, String message, String test, String exceptionClass) {
+        error(phase, code, message);
+    }
+
     default void phaseFinish(String phase, PhaseStatus status, Duration duration) {}
 
     default void goalFinish(GoalResult result) {}

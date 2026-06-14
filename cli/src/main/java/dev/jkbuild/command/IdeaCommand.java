@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -234,14 +235,20 @@ public final class IdeaCommand implements CliCommand {
             files++;
         }
 
-        System.out.println("✓ Generated " + files + " IntelliJ project file"
-                + (files == 1 ? "" : "s") + " in " + wsRoot.getFileName() + "/.idea/");
+        Theme t = Theme.active();
+        String wsName = wsRoot.getFileName().toString();
+        System.out.println(Theme.colorize("✓", t.success())
+                + " Generated " + files + " project file" + (files == 1 ? "" : "s")
+                + " in " + Theme.colorize(wsName + "/.idea", t.warning()));
         if (!touchedTables.isEmpty()) {
-            System.out.println("  Registered SDK " + defaultSdk.sdkName() + " in "
-                    + touchedTables.size() + " IDE config" + (touchedTables.size() == 1 ? "" : "s")
-                    + ". Re-run with the IDE closed if it doesn't appear (it rewrites the table on exit).");
+            System.out.println("  Registered " + Theme.colorize(defaultSdk.sdkName(), t.cyan())
+                    + " in " + touchedTables.size() + " IDE config"
+                    + (touchedTables.size() == 1 ? "" : "s")
+                    + ". Re-run the IDE if it doesn't appear.");
         }
-        System.out.println("  Open " + wsRoot.getFileName() + "/ in IntelliJ IDEA.");
+        System.out.println(Theme.colorize("➜", t.brightGreen())
+                + " The " + Theme.colorize(rootBuild.project().name(), t.brightCyan())
+                + " project is ready to be opened in IntelliJ IDEA.");
         return 0;
     }
 
@@ -417,13 +424,18 @@ public final class IdeaCommand implements CliCommand {
             jarToModule.put(layout.mainJar(), moduleName(me.getValue()));
         }
 
+        // Use the full declared closure, not jars() — the latter is filtered to
+        // jars that already exist on disk, so before a first build every sibling
+        // dependency would be dropped and IntelliJ couldn't resolve any
+        // cross-module classes. IntelliJ compiles the modules itself; the edge
+        // is what matters, not the artifact.
         Set<String> added = new LinkedHashSet<>();
-        for (Path sj : mainCp.jars()) {
+        for (Path sj : mainCp.siblingClosureJars()) {
             String name = jarToModule.get(sj);
             if (name != null && added.add(name))
                 result.add(new ModuleRef(name, "COMPILE"));
         }
-        for (Path sj : testCp.jars()) {
+        for (Path sj : testCp.siblingClosureJars()) {
             String name = jarToModule.get(sj);
             if (name != null && added.add(name))
                 result.add(new ModuleRef(name, "TEST"));

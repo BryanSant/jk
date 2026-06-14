@@ -68,6 +68,18 @@ public interface PhaseContext {
     void error(String code, String message);
 
     /**
+     * As {@link #error(String, String)}, but carrying the discrete
+     * {@code test} (failing test display name) and {@code exceptionClass}
+     * detail of a test failure so structured consumers keep them separate
+     * instead of reading them back out of one glued message. Defaults to
+     * dropping the extra fields onto {@link #error(String, String)} for
+     * implementations that don't model the structured form.
+     */
+    default void error(String code, String message, String test, String exceptionClass) {
+        error(code, message);
+    }
+
+    /**
      * True if the goal has been cancelled (sibling failure or Ctrl-C).
      * Long-running phases should check this in their inner loops and
      * exit promptly when set; the scheduler will hard-interrupt after

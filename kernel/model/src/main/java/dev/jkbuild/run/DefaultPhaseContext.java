@@ -166,6 +166,12 @@ final class DefaultPhaseContext implements PhaseContext {
     }
 
     @Override
+    public void error(String code, String message, String test, String exceptionClass) {
+        goal.errorsRef().add(new GoalResult.Diagnostic(phase, code, message, test, exceptionClass));
+        goal.emit(l -> l.error(phase, code, message, test, exceptionClass));
+    }
+
+    @Override
     public boolean cancelled() {
         return goal.cancelledRef().get();
     }

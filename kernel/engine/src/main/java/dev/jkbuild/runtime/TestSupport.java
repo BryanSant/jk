@@ -43,10 +43,15 @@ public final class TestSupport {
         for (JUnitLauncher.Failure f : failures) {
             out.add("");
             out.add("  FAILED  " + f.testName());
-            String detail = (f.details() != null && !f.details().isBlank())
-                    ? f.details() : f.message();
-            for (String line : detail.split("\n", -1)) {
-                if (!line.isEmpty()) out.add("    " + line);
+            if (f.details() != null && !f.details().isBlank()) {
+                for (String line : f.details().split("\n", -1)) {
+                    if (!line.isEmpty()) out.add("    " + line);
+                }
+            } else {
+                // No stack trace: surface the exception class and message on
+                // their own lines rather than gluing them into one summary.
+                if (!f.exceptionClass().isEmpty()) out.add("    " + f.exceptionClass());
+                if (!f.message().isEmpty()) out.add("    " + f.message());
             }
         }
         out.add("");
@@ -94,8 +99,10 @@ public final class TestSupport {
                 // diagnostic still flows to JSON consumers, but the human listeners
                 // suppress it so the same failure isn't printed twice. Test *infra*
                 // errors (interrupt/IO) keep code "test" and still surface in text mode.
-                ctx.error("test-failure", display + ": " + exClass
-                        + (message.isEmpty() ? "" : " — " + message));
+                //
+                // Pass the test name and exception class as discrete fields rather
+                // than gluing them into the message — JSON consumers get them apart.
+                ctx.error("test-failure", message, display, exClass);
             }
 
             @Override

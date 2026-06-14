@@ -155,10 +155,12 @@ class TestCommandUserOutputTest {
         assertThat(ctx.errors).hasSize(1);
         // "test-failure" (not "test") so human listeners can suppress the inline
         // echo — the run-tests failure block already prints it in full — while the
-        // diagnostic still reaches --output json.
+        // diagnostic still reaches --output json. The test name and exception class
+        // ride as discrete fields, not glued into the message.
         assertThat(ctx.errors.get(0).code()).isEqualTo("test-failure");
-        assertThat(ctx.errors.get(0).message())
-                .isEqualTo("ClassA.brokenTest: java.lang.AssertionError — expected 5 got 4");
+        assertThat(ctx.errors.get(0).message()).isEqualTo("expected 5 got 4");
+        assertThat(ctx.errors.get(0).test()).isEqualTo("ClassA.brokenTest");
+        assertThat(ctx.errors.get(0).exceptionClass()).isEqualTo("java.lang.AssertionError");
     }
 
     @Test
@@ -214,14 +216,17 @@ class TestCommandUserOutputTest {
         final List<String> outputs = new ArrayList<>();
         final List<Diag> errors = new ArrayList<>();
 
-        record Diag(String code, String message) {}
+        record Diag(String code, String message, String test, String exceptionClass) {}
 
         @Override public void progress(int delta) { progressTicks.add(delta); }
         @Override public void updateScope(int additionalScope) { scopeAdded += additionalScope; }
         @Override public void label(String description) { labels.add(description); }
         @Override public void output(String line) { outputs.add(line); }
         @Override public void warn(String code, String message) {}
-        @Override public void error(String code, String message) { errors.add(new Diag(code, message)); }
+        @Override public void error(String code, String message) { errors.add(new Diag(code, message, "", "")); }
+        @Override public void error(String code, String message, String test, String exClass) {
+            errors.add(new Diag(code, message, test, exClass));
+        }
         @Override public boolean cancelled() { return false; }
         @Override public <T> void put(GoalKey<T> key, T value) {}
         @Override public <T> Optional<T> get(GoalKey<T> key) { return Optional.empty(); }

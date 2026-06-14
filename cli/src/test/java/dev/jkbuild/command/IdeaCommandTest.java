@@ -132,6 +132,53 @@ class IdeaCommandTest {
     }
 
     @Test
+    void sibling_module_dep_is_wired_even_when_the_jar_is_not_built(@TempDir Path tmp)
+            throws IOException {
+        Path ws = tmp.resolve("ws");
+        Files.createDirectories(ws);
+        Files.writeString(ws.resolve("jk.toml"), """
+                [project]
+                group = "dev.example"
+                name = "root"
+                version = "0.1.0"
+                jdk = 25
+
+                [workspace]
+                members = ["a", "b"]
+                """);
+        member(ws.resolve("a"), "a", 25);
+        // b depends on sibling a — and nothing has been built, so a/target/*.jar
+        // does not exist. The IDE module edge must still be emitted.
+        Files.createDirectories(ws.resolve("b"));
+        Files.writeString(ws.resolve("b/jk.toml"), """
+                [project]
+                group = "dev.example"
+                name = "b"
+                version = "0.1.0"
+                jdk = 25
+
+                [dependencies.main]
+                a = { workspace = true }
+                """);
+
+        Path jdks = tmp.resolve("jdks");
+        Files.createDirectories(jdks);
+        fakeJdk(jdks, "temurin-25.0.3", "25.0.3");
+        Path ideConfig = tmp.resolve("ideconfig");
+        Files.createDirectories(ideConfig.resolve("JetBrains/IntelliJIdea2025.1/options"));
+
+        int exit = runIdea(ws, jdks, ideConfig, tmp.resolve("cache"));
+        assertThat(exit).isEqualTo(0);
+
+        // Precondition: a is genuinely unbuilt — no compiled artifact on disk.
+        assertThat(Files.exists(ws.resolve("a/target"))).isFalse();
+        // Regression: b must declare the module dependency on a regardless, or
+        // IntelliJ can't resolve a's classes from b.
+        assertThat(Files.readString(ws.resolve("b/b.iml")))
+                .contains("<orderEntry type=\"module\" module-name=\"a\" />");
+    }
+
+    @Test
     void annotation_processor_is_wired_not_a_compile_dep(@TempDir Path tmp) throws IOException {
         Path ws = tmp.resolve("ws");
         Files.createDirectories(ws.resolve("src/main/java/example"));

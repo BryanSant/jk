@@ -37,7 +37,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -277,6 +279,20 @@ public final class BuildPipeline {
                     List<Path> testRuntimeCp = new ArrayList<>(
                             resolver.classpathFor(lock, ClasspathResolver.TEST));
                     testRuntimeCp.addAll(testSiblings.jars());
+                    // A sibling's own external deps (e.g. resolver's maven-artifact) must
+                    // also reach the test classpath, or tests exercising sibling code hit
+                    // NoClassDefFoundError. Mirrors the main-cp sibling-lockfile loop above.
+                    for (java.nio.file.Path sibLock : testSiblings.siblingLockfiles()) {
+                        try {
+                            dev.jkbuild.lock.Lockfile sl = dev.jkbuild.lock.LockfileReader.read(sibLock);
+                            for (Path p : resolver.classpathFor(sl, ClasspathResolver.COMPILE_MAIN)) {
+                                if (!compileTestCp.contains(p)) compileTestCp.add(p);
+                            }
+                            for (Path p : resolver.classpathFor(sl, ClasspathResolver.RUNTIME)) {
+                                if (!testRuntimeCp.contains(p)) testRuntimeCp.add(p);
+                            }
+                        } catch (Exception ignored) { /* best-effort */ }
+                    }
                     ctx.put(COMPILE_TEST_CP, compileTestCp);
                     ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
                     Path javaMainSrc = compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java");
@@ -621,7 +637,7 @@ public final class BuildPipeline {
         Phase runTests = Phase.builder("run-tests")
                 .label("Testing")
                 .kind(PhaseKind.IO)
-                .requires("compile-test", "copy-resources")
+                .requires("compile-test", "copy-resources", "embed-sha")
                 .weight(W_RUN_TESTS)
                 .scope(in.estimatedTestCount())
                 .execute(ctx -> {
@@ -654,11 +670,17 @@ public final class BuildPipeline {
 
                     TestProgressListener listener =
                             TestSupport.bridgeListener(ctx, in.workerCount(), in.verbose());
+                    // Hand the test JVM the freshly-built sibling worker jars this
+                    // module's [build.test-worker-jars] declares, so worker-forking
+                    // tests locate them by path — the jk-build equivalent of Gradle's
+                    // -Djk.*.worker.jar test config.
+                    Map<String, String> workerJars = workerJarProps(
+                            in.dir(), ctx.require(PROJECT).build().testWorkerJars());
                     JUnitLauncher.Result result;
                     try {
                         result = new JUnitLauncher().run(
                                 ctx.require(JAVA_HOME), ctx.require(TEST_CLASSES),
-                                runtimeCp, in.cache(), in.workerCount(), listener);
+                                runtimeCp, in.cache(), in.workerCount(), workerJars, listener);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         ctx.error("test", "interrupted");
@@ -687,8 +709,8 @@ public final class BuildPipeline {
                 .label("Packaging")
                 .kind(PhaseKind.CPU)
                 .requires(in.skipTests()
-                        ? new String[]{"copy-resources"}
-                        : new String[]{"copy-resources", "run-tests"})
+                        ? new String[]{"copy-resources", "embed-sha"}
+                        : new String[]{"copy-resources", "embed-sha", "run-tests"})
                 .weight(W_PACKAGE)
                 .scope(1)
                 .execute(ctx -> {
@@ -799,6 +821,54 @@ public final class BuildPipeline {
                 })
                 .build();
 
+        // ---- embed-sha --------------------------------------------------
+        // Pin sibling worker jars: hash each [build.embed-sha] member's output
+        // jar and write META-INF/<basename>-sha256.txt into this module's classes,
+        // so the resource ships in the jar and is on the test classpath. Sibling
+        // build-order is guaranteed by the order-after edges those entries imply
+        // (BuildCommand.topoSortMembers). No-op when the table is empty. Runs
+        // IN-PROCESS — deliberately not a worker, which would need its own sha
+        // resource and recurse.
+        //
+        // An unknown member (not in the workspace) is a config typo → fail. A
+        // member that exists but isn't built yet is skipped, not fatal: a SCOPED
+        // build (jk build -C this-module) doesn't build the order-after siblings,
+        // so their jars are legitimately absent — only a full workspace build
+        // (where order-after runs them first) embeds every sha.
+        Phase embedSha = Phase.builder("embed-sha")
+                .label("Embedding SHAs")
+                .kind(PhaseKind.CPU)
+                .requires("copy-resources")
+                .weight(W_RESOURCES)
+                .scope(1)
+                .execute(ctx -> {
+                    Map<String, String> embed = ctx.require(PROJECT).build().embedSha();
+                    if (embed.isEmpty()) { ctx.label("none"); ctx.progress(1); return; }
+                    Path classes = ctx.require(MAIN_CLASSES);
+                    Map<String, Path> jarByMember = siblingMainJars(in.dir());
+                    Path metaInf = classes.resolve("META-INF");
+                    Files.createDirectories(metaInf);
+                    int written = 0;
+                    int skipped = 0;
+                    for (Map.Entry<String, String> e : embed.entrySet()) {
+                        Path jar = jarByMember.get(e.getValue());
+                        if (jar == null) {
+                            ctx.error("embed-sha", "'" + e.getValue()
+                                    + "' is not a workspace member");
+                            throw new RuntimeException("embed-sha: unknown member '" + e.getValue() + "'");
+                        }
+                        if (!Files.exists(jar)) { skipped++; continue; }  // not built (scoped build)
+                        Files.writeString(metaInf.resolve(e.getKey() + "-sha256.txt"),
+                                dev.jkbuild.util.Hashing.sha256Hex(jar));
+                        written++;
+                    }
+                    ctx.label(skipped == 0
+                            ? "embedded " + written + " SHA" + (written == 1 ? "" : "s")
+                            : "embedded " + written + ", skipped " + skipped + " unbuilt");
+                    ctx.progress(1);
+                })
+                .build();
+
         Goal.Builder b = Goal.builder("build")
                 .addPhase(parseBuild)
                 .addPhase(syncDeps)
@@ -813,6 +883,7 @@ public final class BuildPipeline {
             b.addPhase(assembleClasses);
         }
         b.addPhase(copyResources);
+        b.addPhase(embedSha);
         if (in.testOnly() || !in.skipTests()) {
             b.addPhase(compileTest).addPhase(runTests);
         }
@@ -866,11 +937,28 @@ public final class BuildPipeline {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path shadowJar = layout.shadowJar();
                     ctx.label("package " + shadowJar.getFileName());
-                    List<Path> depJars = List.of();
+                    List<Path> depJars = new ArrayList<>();
                     if (Files.exists(lockFile)) {
-                        Lockfile lock = LockfileReader.read(lockFile);
-                        depJars = new ClasspathResolver(new Cas(cache))
-                                .classpathFor(lock, ClasspathResolver.RUNTIME);
+                        ClasspathResolver resolver = new ClasspathResolver(new Cas(cache));
+                        depJars.addAll(resolver.classpathFor(
+                                LockfileReader.read(lockFile), ClasspathResolver.RUNTIME));
+                        // Workspace siblings are filtered out of the lockfile by
+                        // WorkspaceMerge, but a fat jar must bundle them (and their
+                        // own transitive external deps) or it can't run standalone —
+                        // e.g. a worker jar would be missing PluginWorkerMain.
+                        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(
+                                layout.memberRoot(), project, Set.of(Scope.MAIN));
+                        for (Path j : siblings.jars()) {
+                            if (!depJars.contains(j)) depJars.add(j);
+                        }
+                        for (Path sibLock : siblings.siblingLockfiles()) {
+                            try {
+                                for (Path p : resolver.classpathFor(
+                                        LockfileReader.read(sibLock), ClasspathResolver.RUNTIME)) {
+                                    if (!depJars.contains(p)) depJars.add(p);
+                                }
+                            } catch (Exception ignored) { /* best-effort */ }
+                        }
                     }
                     new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
                             classes, depJars, shadowJar,
@@ -1133,5 +1221,68 @@ public final class BuildPipeline {
                 Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             }
         }
+    }
+
+    /**
+     * Map each workspace sibling to its main output jar, keyed by both project
+     * name and {@code group:artifact} coord. Used by the {@code embed-sha} phase
+     * to find the jar a {@code [build.embed-sha]} entry names. Empty when this
+     * module isn't in a workspace.
+     */
+    static Map<String, Path> siblingMainJars(Path moduleDir) throws IOException {
+        Map<String, Path> out = new LinkedHashMap<>();
+        var rootOpt = dev.jkbuild.config.WorkspaceLocator.findRoot(moduleDir);
+        if (rootOpt.isEmpty()) return out;
+        Path root = rootOpt.get();
+        JkBuild rootManifest = JkBuildParser.parse(root.resolve("jk.toml"));
+        if (!rootManifest.isWorkspaceRoot()) return out;
+        for (String member : rootManifest.workspace().members()) {
+            Path dir = root.resolve(member);
+            Path manifest = dir.resolve("jk.toml");
+            if (!Files.exists(manifest)) continue;
+            JkBuild sib;
+            try { sib = JkBuildParser.parse(manifest); }
+            catch (RuntimeException ignored) { continue; }
+            BuildLayout layout = BuildLayout.of(dir, sib);
+            // A shadow (fat) worker runs from its -all.jar — that's the artifact
+            // that bundles plugin-api/PluginWorkerMain and the worker's deps; a
+            // plain module ships only its main jar.
+            Path jar = sib.project().shadow() ? layout.shadowJar() : layout.mainJar();
+            out.put(sib.project().name(), jar);
+            out.put(sib.project().group() + ":" + sib.project().name(), jar);
+        }
+        return out;
+    }
+
+    /**
+     * {@code jk.<worker>.worker.jar} → built jar path for each member named in this
+     * module's {@code [build.test-worker-jars]}, handed to the test JVM so a test that
+     * forks that worker locates it by path instead of CAS-by-sha. Per-module by design:
+     * {@code engine} declares only {@code git-client} (its {@code KotlinWorkerSetupTest}
+     * deliberately exercises the CAS path, so {@code kotlin} must stay unset), while
+     * {@code cli} declares the workers its publish/import/compile tests fork. The built
+     * sibling jars exist because the declaration also implies an order-after edge
+     * ({@link JkBuild.Build#allOrderAfter()}); a member with no built (or no shadow,
+     * for fat workers) jar is silently skipped. Member name → property comes from the
+     * {@link dev.jkbuild.worker.WorkerJar} registry (artifactId is {@code jk-<member>}).
+     */
+    private static Map<String, String> workerJarProps(Path moduleDir, List<String> members)
+            throws IOException {
+        Map<String, String> props = new LinkedHashMap<>();
+        if (members.isEmpty()) return props;
+        Map<String, Path> jarByMember = siblingMainJars(moduleDir);
+        Map<String, String> propByMember = new LinkedHashMap<>();
+        for (dev.jkbuild.worker.WorkerJar w : dev.jkbuild.worker.WorkerJar.values()) {
+            String a = w.artifactId();
+            propByMember.put(a.startsWith("jk-") ? a.substring("jk-".length()) : a, w.jarProperty());
+        }
+        for (String member : members) {
+            String prop = propByMember.get(member);
+            Path jar = jarByMember.get(member);
+            if (prop != null && jar != null && Files.exists(jar)) {
+                props.put(prop, jar.toAbsolutePath().toString());
+            }
+        }
+        return props;
     }
 }

@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
@@ -45,6 +46,37 @@ public final class JUnitLauncher {
     /** Marker prefix every protocol line carries. Must match {@code JsonEventWriter.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JK:";
 
+    /**
+     * The plugin the worker host must run. The test-runner jar is launched with
+     * the module-under-test on its classpath (to discover its tests); when that
+     * module is itself a plugin, the host would otherwise see two {@code Plugin}
+     * services. Naming the runner explicitly via {@code -Djk.plugin.class} keeps
+     * the host on {@code JkRunner} regardless of what the module registers.
+     */
+    private static final String RUNNER_PLUGIN_CLASS = "dev.jkbuild.test.runner.JkRunner";
+
+    /**
+     * {@code jk.<worker>.worker.jar} overrides handed to the test JVM so tests
+     * that fork a first-party worker (e.g. the git client) locate its jar by
+     * path. Mirrors what Gradle's test config provides; under {@code jk build}
+     * the {@code run-tests} phase resolves the freshly-built sibling worker jars
+     * (built before this module via the {@code [build.embed-sha]} order-after
+     * edges) and passes them here. Empty when none are built (e.g. a scoped
+     * single-module build) — tests then fall back to CAS-by-sha.
+     */
+    private Map<String, String> workerJarProps = Map.of();
+
+    /**
+     * Worker JVM flags: the heap/GC tuning, the {@code jk.plugin.class} selector
+     * for the runner, and any {@code jk.<worker>.worker.jar} overrides.
+     */
+    private List<String> runnerFlags(int concurrency) {
+        List<String> flags = new ArrayList<>(dev.jkbuild.worker.JvmOptions.workerFlags(concurrency));
+        flags.add("-Djk.plugin.class=" + RUNNER_PLUGIN_CLASS);
+        workerJarProps.forEach((prop, jar) -> flags.add("-D" + prop + "=" + jar));
+        return flags;
+    }
+
 
     /**
      * Run the project's tests. {@code workers} of 1 (today's default) takes
@@ -52,6 +84,10 @@ public final class JUnitLauncher {
      *
      * <p>{@code listener} receives a stream of progress callbacks as events
      * arrive — pass {@link TestProgressListener#noop()} when no UI is wired.
+     *
+     * <p>{@code workerJarProps} maps {@code jk.<worker>.worker.jar} property
+     * names to built worker-jar paths, forwarded to the test JVM so worker-forking
+     * tests can locate their worker by path (see {@link #workerJarProps}).
      */
     public Result run(
             Path javaHome,
@@ -59,6 +95,7 @@ public final class JUnitLauncher {
             List<Path> runtimeClasspath,
             Path cacheRoot,
             int workers,
+            Map<String, String> workerJarProps,
             TestProgressListener listener)
             throws IOException, InterruptedException {
         Objects.requireNonNull(javaHome, "javaHome");
@@ -67,6 +104,7 @@ public final class JUnitLauncher {
         Objects.requireNonNull(cacheRoot, "cacheRoot");
         Objects.requireNonNull(listener, "listener");
         if (workers < 1) throw new IllegalArgumentException("workers must be >= 1");
+        this.workerJarProps = workerJarProps == null ? Map.of() : Map.copyOf(workerJarProps);
 
         Path runnerJar = locateRunner(cacheRoot);
         var classpathBase = new LinkedHashSet<Path>();
@@ -93,7 +131,7 @@ public final class JUnitLauncher {
         // of surfacing only as "runner exited N".
         var crash = new CaptureBuffer();
         int exit = dev.jkbuild.worker.PluginLoader.run(
-                javaBinary, classpath, dev.jkbuild.worker.JvmOptions.workerFlags(1), PROTOCOL_PREFIX,
+                javaBinary, classpath, runnerFlags(1), PROTOCOL_PREFIX,
                 List.of("--scan-classpath=" + testClassesDir),
                 aggregator::accept,
                 line -> { crash.add(line); listener.onUserOutput(0, line); });
@@ -169,7 +207,7 @@ public final class JUnitLauncher {
                 }
             }
             return new Result(1, 0, 1, 0, List.of(
-                    new Failure("(test run)", "runner exited " + worstExit, crash.toString())));
+                    new Failure("(test run)", "", "runner exited " + worstExit, crash.toString())));
         }
         return new Result(total, succeeded, failed, skipped, allFailures);
     }
@@ -209,7 +247,7 @@ public final class JUnitLauncher {
             return dev.jkbuild.worker.PluginLoader.converse(
                     javaBinary, classpath,
                     // N test JVMs run at once → divide the heap cap by N so they fit.
-                    dev.jkbuild.worker.JvmOptions.workerFlags(totalWorkers),
+                    runnerFlags(totalWorkers),
                     PROTOCOL_PREFIX, args, handler, passthrough);
         } catch (IOException e) {
             listener.onUserOutput(workerId, "reader error: " + e.getMessage());
@@ -230,7 +268,7 @@ public final class JUnitLauncher {
             throws IOException, InterruptedException {
         var classes = new ArrayList<String>();
         dev.jkbuild.worker.PluginLoader.run(
-                javaBinary, classpath, dev.jkbuild.worker.JvmOptions.workerFlags(1), PROTOCOL_PREFIX,
+                javaBinary, classpath, runnerFlags(1), PROTOCOL_PREFIX,
                 List.of("--list-only", "--scan-classpath=" + testClassesDir),
                 json -> {
                     String event = Ndjson.str(json, "e");
@@ -405,7 +443,7 @@ public final class JUnitLauncher {
             // The runner emits the full stack trace under "stack"; keep it so the
             // build can print it (we used to read only class + message).
             String stack = throwableJson != null ? Ndjson.str(throwableJson, "stack") : null;
-            failures.add(new Failure(display, exClass + ": " + message, stack == null ? "" : stack));
+            failures.add(new Failure(display, exClass, message, stack == null ? "" : stack));
             listener.onFailure(id, display, exClass, message, workerId);
         }
 
@@ -437,7 +475,7 @@ public final class JUnitLauncher {
             long total = succeeded + failed + skipped;
             if (total == 0 && exitCode != 0) {
                 return new Result(1, 0, 1, 0, List.of(new Failure(
-                        "(test run)", "runner exited " + exitCode,
+                        "(test run)", "", "runner exited " + exitCode,
                         crashOutput == null ? "" : crashOutput)));
             }
             return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
@@ -487,10 +525,13 @@ public final class JUnitLauncher {
     }
 
     /**
-     * One failed test. {@code message} is the one-line summary
-     * ({@code ExClass: message}); {@code details} is the full stack trace as the
-     * runner rendered it (empty when the failure has no captured throwable, e.g.
-     * a non-zero runner exit).
+     * One failed test. {@code exceptionClass} and {@code message} are the
+     * failure's throwable split into discrete fields (the exception's class name
+     * and its message); either may be empty when the failure carries no
+     * throwable — e.g. a non-zero runner exit, where {@code message} holds the
+     * synthetic "runner exited N" summary and {@code exceptionClass} is empty.
+     * {@code details} is the full stack trace as the runner rendered it (empty
+     * when there is no captured throwable).
      */
-    public record Failure(String testName, String message, String details) {}
+    public record Failure(String testName, String exceptionClass, String message, String details) {}
 }

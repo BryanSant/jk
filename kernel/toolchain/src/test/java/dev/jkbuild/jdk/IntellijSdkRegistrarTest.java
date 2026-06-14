@@ -35,6 +35,30 @@ class IntellijSdkRegistrarTest {
     }
 
     @Test
+    void emits_one_jrt_root_per_module_for_a_modular_home(@TempDir Path tmp) throws IOException {
+        // A JDK home whose `release` advertises its modules — IntelliJ needs a
+        // jrt root per module, not one bare root over the image.
+        Path home = tmp.resolve("jdk25");
+        Files.createDirectories(home);
+        Files.writeString(home.resolve("release"),
+                "JAVA_VERSION=\"25.0.3\"\nMODULES=\"java.base java.desktop jdk.compiler\"\n");
+        Path jb = tmp.resolve("JetBrains");
+        Files.createDirectories(jb.resolve("IntelliJIdea2025.1/options"));
+
+        IntellijSdkRegistrar.of(List.of(jb, tmp.resolve("Google")))
+                .register(List.of(new IntellijSdkRegistrar.SdkEntry(
+                        "jk-graalvm-25", home, "25.0.3")));
+
+        String xml = Files.readString(jb.resolve("IntelliJIdea2025.1/options/jdk.table.xml"));
+        String h = home.toAbsolutePath().normalize().toString();
+        assertThat(xml)
+                .contains("jrt://" + h + "!/java.base")
+                .contains("jrt://" + h + "!/java.desktop")
+                .contains("jrt://" + h + "!/jdk.compiler")
+                .doesNotContain("jrt://" + h + "!/\"");   // no bare image root
+    }
+
+    @Test
     void upsert_preserves_other_jdks_and_is_idempotent(@TempDir Path tmp) throws IOException {
         Path jb = tmp.resolve("JetBrains");
         Path opt = jb.resolve("IntelliJIdea2025.1/options");

@@ -314,6 +314,11 @@ public final class BuildCommand implements CliCommand {
      * declare sibling deps explicitly with inline coords, no
      * {@code .workspace = true} shorthand needed.
      *
+     * <p>The graph also includes {@code [build].order-after} edges: build-order-only
+     * prerequisites (by project name or {@code group:artifact}) that carry no
+     * classpath or lockfile weight — used when a module must build after a sibling
+     * it doesn't actually depend on (e.g. to embed that sibling's artifact hash).
+     *
      * <p>Cycles (which the workspace's
      * {@link dev.jkbuild.config.WorkspaceLoader} doesn't currently
      * detect) result in any unsorted members being appended in
@@ -342,6 +347,16 @@ public final class BuildCommand implements CliCommand {
                     if (depDir != null && !depDir.equals(e.getKey())) {
                         prereqs.add(depDir);
                     }
+                }
+            }
+            // [build].order-after (+ [build.embed-sha] sources): build-order-only
+            // edges (no classpath/lock). Each entry names a sibling by project name
+            // or group:artifact coord.
+            for (String ref : e.getValue().build().allOrderAfter()) {
+                Path depDir = dirByCoord.get(ref);
+                if (depDir == null) depDir = dirByName.get(ref);
+                if (depDir != null && !depDir.equals(e.getKey())) {
+                    prereqs.add(depDir);
                 }
             }
             requires.put(e.getKey(), prereqs);

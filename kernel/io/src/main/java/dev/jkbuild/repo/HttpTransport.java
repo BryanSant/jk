@@ -5,6 +5,8 @@ import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.util.LinkedHashMap;
@@ -37,6 +39,29 @@ public final class HttpTransport implements RepoTransport {
             throw new IOException("HTTP " + status + " fetching " + uri);
         }
         return Optional.of(response.body());
+    }
+
+    @Override
+    public Optional<InputStream> fetchStream(URI uri, RepoCredential credential)
+            throws IOException, InterruptedException {
+        HttpResponse<InputStream> response = http.getStream(uri, AuthHeaders.of(credential));
+        int status = response.statusCode();
+        if (status == 404) {
+            drain(response.body());
+            return Optional.empty();
+        }
+        if (status >= 400) {
+            drain(response.body());
+            throw new IOException("HTTP " + status + " fetching " + uri);
+        }
+        return Optional.of(response.body());
+    }
+
+    /** Consume and discard a non-success body so the connection can be reused. */
+    private static void drain(InputStream body) throws IOException {
+        try (body) {
+            body.transferTo(OutputStream.nullOutputStream());
+        }
     }
 
     @Override

@@ -21,7 +21,8 @@ class TestFailureRenderingTest {
     void a_failure_renders_name_and_indented_stack() {
         var f = new JUnitLauncher.Failure(
                 "dev.jkbuild.FooTest > bar()",
-                "org.opentest4j.AssertionFailedError: expected: <1> but was: <2>",
+                "org.opentest4j.AssertionFailedError",
+                "expected: <1> but was: <2>",
                 "org.opentest4j.AssertionFailedError: expected: <1> but was: <2>\n"
                         + "\tat dev.jkbuild.FooTest.bar(FooTest.java:42)");
         var result = new JUnitLauncher.Result(1, 0, 1, 0, List.of(f));
@@ -37,8 +38,8 @@ class TestFailureRenderingTest {
 
     @Test
     void pluralises_and_falls_back_to_message_when_no_stack() {
-        var a = new JUnitLauncher.Failure("A > x()", "boom", "boom\n\tat A.x(A.java:1)");
-        var b = new JUnitLauncher.Failure("(test run)", "runner exited 1", "");  // no stack
+        var a = new JUnitLauncher.Failure("A > x()", "", "boom", "boom\n\tat A.x(A.java:1)");
+        var b = new JUnitLauncher.Failure("(test run)", "", "runner exited 1", "");  // no stack
         var result = new JUnitLauncher.Result(2, 0, 2, 0, List.of(a, b));
 
         List<String> lines = TestSupport.renderFailures(result);

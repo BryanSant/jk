@@ -117,12 +117,28 @@ public final class Http {
      * would cut them off on slow links.
      */
     public HttpResponse<InputStream> getStream(URI uri) throws IOException, InterruptedException {
+        return getStream(uri, Map.of());
+    }
+
+    /**
+     * Streaming GET with extra request headers (e.g. {@code Authorization}
+     * for an authenticated repository). Otherwise identical to
+     * {@link #getStream(URI)}: same generous timeout and retry policy, body
+     * delivered as an {@link InputStream} the caller pumps to a sink.
+     */
+    public HttpResponse<InputStream> getStream(URI uri, Map<String, String> headers)
+            throws IOException, InterruptedException {
         checkOffline(uri);
-        HttpRequest request = HttpRequest.newBuilder(uri)
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                 .GET()
-                .header("Accept-Encoding", "gzip")
-                .timeout(Duration.ofMinutes(15))
-                .build();
+                .timeout(Duration.ofMinutes(15));
+        for (Map.Entry<String, String> e : headers.entrySet()) {
+            builder.header(e.getKey(), e.getValue());
+        }
+        if (!hasHeaderIgnoreCase(headers, "Accept-Encoding")) {
+            builder.header("Accept-Encoding", "gzip");
+        }
+        HttpRequest request = builder.build();
         IOException lastIo = null;
         int lastStatus = -1;
         for (int attempt = 0; attempt < backoffs.length + 1; attempt++) {

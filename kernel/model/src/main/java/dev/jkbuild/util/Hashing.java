@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.util;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -18,11 +22,32 @@ public final class Hashing {
         return sha256Hex(data.getBytes(StandardCharsets.UTF_8));
     }
 
-    public static byte[] sha256(byte[] data) {
+    /**
+     * SHA-256 of a file's contents, computed by streaming through a fixed
+     * buffer so a multi-hundred-MB artifact is never held in memory at once.
+     */
+    public static String sha256Hex(Path file) throws IOException {
+        MessageDigest md = newSha256();
+        try (InputStream in = Files.newInputStream(file)) {
+            byte[] buf = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buf)) > 0) {
+                md.update(buf, 0, n);
+            }
+        }
+        return HexFormat.of().formatHex(md.digest());
+    }
+
+    /** A fresh SHA-256 {@link MessageDigest} for incremental hashing. */
+    public static MessageDigest newSha256() {
         try {
-            return MessageDigest.getInstance("SHA-256").digest(data);
+            return MessageDigest.getInstance("SHA-256");
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 not available on this JVM", e);
         }
+    }
+
+    public static byte[] sha256(byte[] data) {
+        return newSha256().digest(data);
     }
 }
