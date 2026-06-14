@@ -194,34 +194,40 @@ public final class NewScaffolder {
     }
 
     /**
-     * JEP 512-style entry point: instance method, no {@code static}, no
-     * explicit {@code java.lang.System} qualifier. Requires JDK 25+ and
-     * targets the {@code --enable-preview}-free GA path.
+     * JEP 512 entry point (JDK 25+): a no-arg instance {@code main} with the
+     * implicit {@code IO}/{@code java.lang.System} imports.
+     *
+     * <p>With no package (the default "simple" layout) we emit a <em>compact
+     * source file</em> — no class declaration at all, just the top-level
+     * {@code void main()} — which lives in the unnamed package. A compact source
+     * file cannot declare a package, so when a package is present (traditional
+     * layout) we wrap the instance main in an explicit {@code class Main}.
      */
     private static String renderJavaInstanceMain(String pkg) {
-        var sb = new StringBuilder();
-        if (!pkg.isEmpty()) {
-            sb.append("package ").append(pkg).append(";\n\n");
+        if (pkg.isEmpty()) {
+            return """
+                    void main() {
+                        IO.println("Hello, world!");
+                    }
+                    """;
         }
-        sb.append("class ").append(MAIN_CLASS).append(" {\n");
-        sb.append("    void main(String... args) {\n");
-        sb.append("        IO.println(\"Hello, world!\");\n");
-        sb.append("    }\n");
-        sb.append("}\n");
-        return sb.toString();
+        return "package " + pkg + ";\n\n"
+                + "class " + MAIN_CLASS + " {\n"
+                + "    void main() {\n"
+                + "        IO.println(\"Hello, world!\");\n"
+                + "    }\n"
+                + "}\n";
     }
 
+    /** Classic entry point for JDK &lt; 25: an explicit {@code class Main} with a static main. */
     private static String renderJavaTraditionalMain(String pkg) {
-        var sb = new StringBuilder();
-        if (!pkg.isEmpty()) {
-            sb.append("package ").append(pkg).append(";\n\n");
-        }
-        sb.append("public final class ").append(MAIN_CLASS).append(" {\n");
-        sb.append("    public static void main(String[] args) {\n");
-        sb.append("        System.out.println(\"Hello, world!\");\n");
-        sb.append("    }\n");
-        sb.append("}\n");
-        return sb.toString();
+        String prefix = pkg.isEmpty() ? "" : "package " + pkg + ";\n\n";
+        return prefix
+                + "class " + MAIN_CLASS + " {\n"
+                + "    public static void main(String... args) {\n"
+                + "        System.out.println(\"Hello, world!\");\n"
+                + "    }\n"
+                + "}\n";
     }
 
     private static String renderKotlinMain(String pkg) {

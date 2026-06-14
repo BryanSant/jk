@@ -24,7 +24,9 @@ class NewScaffolderTest {
     }
 
     @Test
-    void runnable_java_25_uses_instance_main(@TempDir Path tempDir) throws IOException {
+    void runnable_java_25_traditional_wraps_instance_main_in_a_class(@TempDir Path tempDir) throws IOException {
+        // Traditional layout has a package, so the JEP 512 instance main is
+        // wrapped in an explicit class (a compact source file can't be packaged).
         NewScaffolder.write(runnable(tempDir, NewInputs.Language.JAVA, "com.example.Main", 25, false));
 
         var main = tempDir.resolve("src/main/java/com/example/Main.java");
@@ -32,22 +34,39 @@ class NewScaffolderTest {
         var body = Files.readString(main);
         assertThat(body).contains("package com.example;");
         assertThat(body).contains("class Main");
-        // JEP 512: no `public final`, no `static`, no `String[] args`.
+        // JEP 512: no `public final`, no `static`, no args.
         assertThat(body).doesNotContain("public final class");
         assertThat(body).doesNotContain("public static void main");
-        assertThat(body).contains("void main(String... args)");
+        assertThat(body).contains("void main()");
         assertThat(body).contains("IO.println(\"Hello, world!\")");
     }
 
     @Test
-    void runnable_java_pre_25_uses_traditional_main(@TempDir Path tempDir) throws IOException {
+    void runnable_java_25_simple_is_a_compact_source_file(@TempDir Path tempDir) throws IOException {
+        // Default (simple) layout → unnamed package → a true compact source
+        // file: no package, no class, just the top-level instance main.
+        NewScaffolder.write(runnable(tempDir, NewInputs.Language.JAVA, "Main", 25, true));
+
+        var main = tempDir.resolve("src/Main.java");
+        assertThat(main).exists();
+        var body = Files.readString(main);
+        assertThat(body).doesNotContain("package ");
+        assertThat(body).doesNotContain("class ");
+        assertThat(body).contains("void main()");
+        assertThat(body).contains("IO.println(\"Hello, world!\")");
+        assertThat(tempDir.resolve("src/main/java")).doesNotExist();
+    }
+
+    @Test
+    void runnable_java_pre_25_uses_a_static_main(@TempDir Path tempDir) throws IOException {
         NewScaffolder.write(runnable(tempDir, NewInputs.Language.JAVA, "com.example.Main", 21, false));
 
         var main = tempDir.resolve("src/main/java/com/example/Main.java");
         assertThat(main).exists();
         var body = Files.readString(main);
-        assertThat(body).contains("public final class Main");
-        assertThat(body).contains("public static void main(String[] args)");
+        assertThat(body).contains("class Main");
+        assertThat(body).doesNotContain("public final class");
+        assertThat(body).contains("public static void main(String... args)");
         assertThat(body).contains("System.out.println(\"Hello, world!\")");
         assertThat(body).doesNotContain("IO.println");
     }
