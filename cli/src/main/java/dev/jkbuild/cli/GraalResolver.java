@@ -69,12 +69,19 @@ public final class GraalResolver {
         return Optional.ofNullable(home);
     }
 
+    private static String firstNonBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) return v;
+        }
+        return null;
+    }
+
     private Path resolveUncached(Path projectDir, String graalSpec) {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
 
-        // 1. Explicit spec: JK_GRAAL env, else project.graal — use if installed, else install.
-        String effective = (graalSpec != null && !graalSpec.isBlank())
-                ? graalSpec : System.getenv("JK_GRAAL");
+        // 1. Explicit spec: --graal switch (jk.graal) > project.graal > JK_GRAAL env.
+        String effective = firstNonBlank(
+                System.getProperty("jk.graal"), graalSpec, System.getenv("JK_GRAAL"));
         if (effective != null && !effective.isBlank()) {
             Optional<InstalledJdk> hit = registry.findBySpec(effective);
             if (hit.isPresent() && NativeImageDriver.resolve(hit.get().home()).isPresent()) {

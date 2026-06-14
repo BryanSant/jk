@@ -28,7 +28,7 @@ class JdkListCommandTest {
         List<Row> rows = JdkListCommand.buildRows(
                 installed, "corretto-21.0.5", null, "linux", "x64", currentHome, null);
 
-        assertThat(rowFor(rows, "temurin-25.0.1").status()).isEqualTo(Status.CURRENT);
+        assertThat(rowFor(rows, "temurin-25.0.1").status()).isEqualTo(Status.ACTIVE);
         assertThat(rowFor(rows, "corretto-21.0.5").status()).isEqualTo(Status.DEFAULT);
     }
 
@@ -41,7 +41,7 @@ class JdkListCommandTest {
         List<Row> rows = JdkListCommand.buildRows(
                 installed, "temurin-25.0.1", null, "linux", "x64", home, null);
 
-        assertThat(rowFor(rows, "temurin-25.0.1").status()).isEqualTo(Status.CURRENT);
+        assertThat(rowFor(rows, "temurin-25.0.1").status()).isEqualTo(Status.ACTIVE);
         assertThat(rows).noneMatch(r -> r.status() == Status.DEFAULT);
     }
 
@@ -58,7 +58,7 @@ class JdkListCommandTest {
                 installed, null, null, "linux", "x64", currentHome, null);
 
         Row current = rowFor(rows, "temurin-25.0.1");
-        assertThat(current.status()).isEqualTo(Status.CURRENT);
+        assertThat(current.status()).isEqualTo(Status.ACTIVE);
         assertThat(current.location()).isEqualTo("path");   // synthesized rows are attributed to PATH
     }
 
@@ -70,7 +70,7 @@ class JdkListCommandTest {
         List<Row> rows = JdkListCommand.buildRows(
                 installed, null, null, "linux", "x64", null, null);
 
-        assertThat(rows).noneMatch(r -> r.status() == Status.CURRENT);
+        assertThat(rows).noneMatch(r -> r.status() == Status.ACTIVE);
     }
 
     private static Row rowFor(List<Row> rows, String spec) {

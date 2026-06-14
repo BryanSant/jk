@@ -23,6 +23,10 @@ public final class GlobalOptions {
     public boolean noCache;
     public boolean noProgress;
 
+    /** {@code --jdk <spec>} / {@code --graal <spec>}: the top JDK / GraalVM resolution tier. */
+    public String jdk;
+    public String graal;
+
     public String output;
 
     /**
@@ -98,6 +102,13 @@ public final class GlobalOptions {
             try { return Double.valueOf(s.trim()); } catch (NumberFormatException e) { return null; }
         }).orElse(null);
         g.jvmArgs = in.values("jvm-arg");
+        g.jdk = in.value("jdk").orElse(null);
+        g.graal = in.value("graal").orElse(null);
+        // No host JVM carries these across the worker/process boundary, so stash
+        // them process-wide (same channel as JVM tuning above). The shared
+        // JdkResolution / GraalResolver read them as the top resolution tier.
+        applyProp("jk.jdk", g.jdk);
+        applyProp("jk.graal", g.graal);
         // Resolve JVM tuning (flag > env > jk.toml > default) once for the whole
         // invocation and stash it process-wide, so every worker fork the build
         // spawns picks it up — not just the JK_* env layer. (With no host JVM to
@@ -112,6 +123,15 @@ public final class GlobalOptions {
      * dispatcher merges these into every command's option set so global flags
      * are accepted everywhere and shown in the "Global options" help section.
      */
+    /** Stash a CLI spec process-wide (set when present, cleared when absent). */
+    private static void applyProp(String key, String value) {
+        if (value != null && !value.isBlank()) {
+            System.setProperty(key, value.trim());
+        } else {
+            System.clearProperty(key);
+        }
+    }
+
     public static List<Opt> globalOpts() {
         return List.of(
                 Opt.flag("Suppress informational output", "-q", "--quiet"),
@@ -127,6 +147,8 @@ public final class GlobalOptions {
                 Opt.value("<PCT>", "Max heap as a percentage of RAM for jk's worker JVMs "
                         + "(divided across parallel test workers). Default 50.", "--max-ram-percent"),
                 Opt.value("<ARG>", "Extra JVM flag for jk's worker JVMs (repeatable)", "--jvm-arg").repeat(),
+                Opt.value("<spec>", "JDK for this run (e.g. 25, temurin-25, >=21); overrides project pins.", "--jdk"),
+                Opt.value("<spec>", "GraalVM for jk native / GRAALVM_HOME (e.g. graalvm-25, native).", "--graal"),
                 Opt.flag("Show this help message and exit", "-h", "--help"),
                 Opt.flag("Print version information and exit", "-V", "--version"));
     }

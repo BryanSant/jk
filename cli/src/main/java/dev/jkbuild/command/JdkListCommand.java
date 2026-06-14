@@ -68,9 +68,10 @@ public final class JdkListCommand implements CliCommand {
     Path cacheFile;
 
     enum Status {
-        // CURRENT first so it sorts to the top of its version group and wins
-        // the status-priority tie-break in buildRows().
-        CURRENT("current"),
+        // ACTIVE first so it sorts to the top of its version group and wins the
+        // status-priority tie-break (it's also the primary role for styling when
+        // a JDK holds several roles).
+        ACTIVE("active"),
         DEFAULT("default"),
         NATIVE("native"),
         INSTALLED("installed"),
@@ -81,8 +82,21 @@ public final class JdkListCommand implements CliCommand {
         Status(String label) { this.label = label; }
     }
 
-    /** One row in the rendered table. */
-    record Row(int major, String vendor, String spec, Status status, String location) {}
+    /**
+     * One row in the rendered table. {@code status} is the primary role (for
+     * sort + styling); {@code statusLabel} is the displayed text, which may be a
+     * composite of roles a single JDK holds at once (e.g. {@code active/native}).
+     */
+    record Row(int major, String vendor, String spec, Status status, String statusLabel, String location) {}
+
+    /** Build the composite status text from the roles a JDK holds. */
+    private static String compositeLabel(boolean active, boolean isDefault, boolean isNative) {
+        StringBuilder sb = new StringBuilder();
+        if (active) sb.append("active");
+        if (isDefault) { if (sb.length() > 0) sb.append('/'); sb.append("default"); }
+        if (isNative) { if (sb.length() > 0) sb.append('/'); sb.append("native"); }
+        return sb.length() == 0 ? "installed" : sb.toString();
+    }
 
     @Override
     public int run(Invocation in) throws Exception {
@@ -159,23 +173,31 @@ public final class JdkListCommand implements CliCommand {
                     ? e.vendor() + " " + e.product()
                     : (j.vendor() != JdkVendor.UNKNOWN ? j.vendor().displayName() : "");
             int major = e != null ? e.majorVersion() : parseMajor(id);
-            boolean isCurrent = sameHome(currentHome, j.home());
-            Status status = isCurrent ? Status.CURRENT
-                    : id.equals(defaultId) ? Status.DEFAULT
-                    : (graalId != null && id.equals(graalId)) ? Status.NATIVE
+            boolean isActive = sameHome(currentHome, j.home());
+            boolean isDefault = id.equals(defaultId);
+            boolean isNative = graalId != null && id.equals(graalId);
+            // A JDK can hold several roles at once; status is the primary (for
+            // sort/style), statusLabel the composite shown to the user.
+            Status status = isActive ? Status.ACTIVE
+                    : isDefault ? Status.DEFAULT
+                    : isNative ? Status.NATIVE
                     : Status.INSTALLED;
-            if (isCurrent) currentShown = true;
-            rows.add(new Row(major, vendor, id, status, j.source()));
+            if (isActive) currentShown = true;
+            rows.add(new Row(major, vendor, id, status,
+                    compositeLabel(isActive, isDefault, isNative), j.source()));
         }
 
         // The active javac may resolve to a JDK no probe surfaced (e.g. on PATH
-        // but outside every manager's root). Synthesize a CURRENT row so the
+        // but outside every manager's root). Synthesize an ACTIVE row so the
         // JDK this shell actually uses is never absent from the list.
         if (currentHome != null && !currentShown) {
             dev.jkbuild.discovery.ProbeSupport.discoverJdk(currentHome, "path").ifPresent(hit -> {
                 String id = IntellijJdkDir.installDirOf(hit.home()).getFileName().toString();
                 String vendor = hit.vendor() != JdkVendor.UNKNOWN ? hit.vendor().displayName() : "";
-                rows.add(new Row(parseMajor(id), vendor, id, Status.CURRENT, hit.source()));
+                boolean d = id.equals(defaultId);
+                boolean n = graalId != null && id.equals(graalId);
+                rows.add(new Row(parseMajor(id), vendor, id, Status.ACTIVE,
+                        compositeLabel(true, d, n), hit.source()));
             });
         }
 
@@ -204,6 +226,7 @@ public final class JdkListCommand implements CliCommand {
                         e.vendor() + " " + e.product(),
                         e.installFolderName(),
                         Status.AVAILABLE,
+                        "available",
                         "download"));
             }
         }
@@ -285,7 +308,7 @@ public final class JdkListCommand implements CliCommand {
             for (int i = 0; i < groupRows.size(); i++) {
                 Row r = groupRows.get(i);
                 String versionCell = (i == 0) ? String.valueOf(r.major()) : "";
-                out.add(dataRow(versionCell, r.vendor(), r.spec(), r.status(), r.location(), widths));
+                out.add(dataRow(versionCell, r, widths));
             }
         }
 
@@ -300,7 +323,7 @@ public final class JdkListCommand implements CliCommand {
             w[0] = Math.max(w[0], String.valueOf(r.major()).length());
             w[1] = Math.max(w[1], r.vendor() == null ? 0 : r.vendor().length());
             w[2] = Math.max(w[2], r.spec().length());
-            w[3] = Math.max(w[3], r.status().label.length());
+            w[3] = Math.max(w[3], r.statusLabel().length());
             w[4] = Math.max(w[4], r.location() == null ? 0 : r.location().length());
         }
         return w;
@@ -356,9 +379,10 @@ public final class JdkListCommand implements CliCommand {
         return sb.toString();
     }
 
-    private static String dataRow(
-            String version, String vendor, String spec, Status status, String location, int[] widths) {
+    private static String dataRow(String version, Row r, int[] widths) {
         var bar = Theme.colorize("│", Theme.active().darkGray());
+        Status status = r.status();
+        String location = r.location();
         String locStyled;
         if (location == null || location.isEmpty()) {
             locStyled = padRight("", widths[4]);
@@ -369,12 +393,47 @@ public final class JdkListCommand implements CliCommand {
             AttributedStyle locStyle = status == Status.AVAILABLE ? Theme.active().darkGray() : Theme.active().warning();
             locStyled = Theme.colorize(location, locStyle) + " ".repeat(widths[4] - location.length());
         }
+        // The active JDK gets its vendor + spec bolded so the one in effect stands out.
+        boolean active = status == Status.ACTIVE;
+        String vendor = r.vendor() == null ? "" : r.vendor();
+        String vendorCell = active
+                ? Theme.colorize(padRight(vendor, widths[1]), AttributedStyle.DEFAULT.bold())
+                : padRight(vendor, widths[1]);
+        AttributedStyle specStyle = active ? Theme.active().settled().bold() : Theme.active().settled();
+        String specCell = Theme.colorize(padRight(r.spec(), widths[2]), specStyle);
         return bar
                 + " " + center(version, widths[0]) + " " + bar
-                + " " + padRight(vendor == null ? "" : vendor, widths[1]) + " " + bar
-                + " " + Theme.colorize(padRight(spec, widths[2]), Theme.active().settled()) + " " + bar
-                + " " + Theme.colorize(padRight(status.label, widths[3]), statusStyle(status)) + " " + bar
+                + " " + vendorCell + " " + bar
+                + " " + specCell + " " + bar
+                + " " + statusCell(r.statusLabel(), widths[3]) + " " + bar
                 + " " + locStyled + " " + bar;
+    }
+
+    /**
+     * Render the (possibly composite) status label with a distinct color per
+     * role — active = bright-cyan+bold, default = bright-yellow, native =
+     * bright-green — joined by a dim slash, then padded to the column width.
+     */
+    private static String statusCell(String label, int width) {
+        String[] parts = label.split("/");
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < parts.length; i++) {
+            if (i > 0) sb.append(Theme.colorize("/", Theme.active().darkGray()));
+            sb.append(Theme.colorize(parts[i], segmentStyle(parts[i])));
+        }
+        int pad = width - label.length();
+        if (pad > 0) sb.append(" ".repeat(pad));
+        return sb.toString();
+    }
+
+    private static AttributedStyle segmentStyle(String role) {
+        return switch (role) {
+            case "active" -> Theme.active().brightCyan().bold();
+            case "default" -> Theme.active().brightYellow();
+            case "native" -> Theme.active().brightGreen();
+            case "available" -> Theme.active().darkGray();
+            default -> Theme.active().completedStep();   // "installed"
+        };
     }
 
     /**
@@ -393,22 +452,6 @@ public final class JdkListCommand implements CliCommand {
         }
         if (n > 0) sb.append(Ansi.RESET);
         return sb.toString();
-    }
-
-    private static AttributedStyle statusStyle(Status status) {
-        return switch (status) {
-            // Bold + cyan marks the JDK `javac` on PATH actually resolves to —
-            // the compiler this shell runs right now.
-            case CURRENT -> Theme.active().cyan().bold();
-            // Bold + bright-green marks jk's global default; shown only when it
-            // differs from the current (PATH) JDK.
-            case DEFAULT -> Theme.active().brightGreen().bold();
-            // Bold + highlight marks the default GraalVM (`jk jdk graal`) — what
-            // GRAALVM_HOME and `jk native` use.
-            case NATIVE -> Theme.active().highlight().bold();
-            case INSTALLED -> Theme.active().completedStep();
-            case AVAILABLE -> Theme.active().darkGray();
-        };
     }
 
     private static String pad(String s, int width, boolean center) {

@@ -73,7 +73,7 @@ public final class JdkEnsure {
         // Walk the one canonical resolution order (--jdk / JK_JDK / .jdk-version /
         // jk.lock / project.jdk / project.java-floor / current / default / env / PATH).
         JdkResolution.Request req = new JdkResolution.Request(
-                projectDir, /*switch*/ null, System.getenv("JK_JDK"),
+                projectDir, System.getProperty("jk.jdk"), System.getenv("JK_JDK"),
                 lock != null ? lock.jdk() : null,
                 (build != null && build.project() != null) ? build.project().jdk() : null,
                 (build != null && build.project() != null) ? build.project().javaRelease() : 0,

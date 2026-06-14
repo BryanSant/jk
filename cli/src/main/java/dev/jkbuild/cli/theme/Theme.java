@@ -92,6 +92,9 @@ public interface Theme {
     /** Bright cyan — used for artifact short-names in coordinate output. */
     AttributedStyle brightCyan();
 
+    /** Bright yellow — used for the {@code default} JDK status. */
+    AttributedStyle brightYellow();
+
     AttributedStyle bright(int r, int g, int b);
 
     /** {@link Rgb} overload of {@link #bright(int, int, int)}. */

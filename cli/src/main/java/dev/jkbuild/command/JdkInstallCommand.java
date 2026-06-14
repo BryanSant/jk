@@ -4,6 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.tui.Confirm;
 import dev.jkbuild.cli.tui.SpinnerProgressBar;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.theme.Theme;
@@ -310,7 +311,52 @@ public final class JdkInstallCommand implements CliCommand {
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) return 1;
+
+        // Offer to adopt the new install as the default JDK / default GraalVM.
+        // Runs AFTER the goal console closes, so the prompt never lands inside a
+        // captured-output region. Skipped on a non-TTY (and when --make-default
+        // already set the java default).
+        if (Confirm.isInteractiveTerminal()) {
+            boolean wantedDefault = Boolean.TRUE.equals(goal.get(WANT_DEFAULT).orElse(false));
+            goal.get(INSTALLED).ifPresent(jdk -> offerDefaults(jdk, wantedDefault));
+        }
         return 0;
+    }
+
+    /** Prompt to make {@code jdk} the default JDK and/or default GraalVM when it's ≥ the current ones. */
+    private void offerDefaults(InstalledJdk jdk, boolean alreadyMadeDefault) {
+        int newMajor = JdkListCommand.parseMajor(jdk.identifier());
+        if (newMajor == 0) return;
+        try {
+            dev.jkbuild.jdk.GlobalDefaultJdk defaults = dev.jkbuild.jdk.GlobalDefaultJdk.current();
+            if (!alreadyMadeDefault) {
+                Integer cur = defaults.currentIdentifier().map(JdkListCommand::parseMajor).orElse(null);
+                if (cur == null || newMajor >= cur) {
+                    if (Confirm.of("Make " + jdk.identifier() + " the default JDK?", true).ask()) {
+                        defaults.set(jdk);
+                    }
+                }
+            }
+            if (isGraalHome(jdk.home())) {
+                Integer curGraal = defaults.graalIdentifier().map(JdkListCommand::parseMajor).orElse(null);
+                if (curGraal == null || newMajor >= curGraal) {
+                    if (Confirm.of("Make it the default GraalVM (jk native / GRAALVM_HOME)?", true).ask()) {
+                        defaults.setGraal(jdk);
+                    }
+                }
+            }
+        } catch (IOException ignored) {
+            // best-effort — a malformed config just means no prompt
+        }
+    }
+
+    private static boolean isGraalHome(Path home) {
+        try {
+            dev.jkbuild.jdk.JdkVendor v = dev.jkbuild.jdk.JdkVendor.fromRelease(home);
+            return v == dev.jkbuild.jdk.JdkVendor.ORACLE_GRAALVM || v == dev.jkbuild.jdk.JdkVendor.GRAALVM_CE;
+        } catch (RuntimeException e) {
+            return false;
+        }
     }
 
     /**

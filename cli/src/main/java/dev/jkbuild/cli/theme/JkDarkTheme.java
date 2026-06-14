@@ -175,6 +175,11 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle brightYellow() {
+        return withColor(AttributedStyle.DEFAULT, BRIGHT_YELLOW);
+    }
+
+    @Override
     public AttributedStyle bright(int r, int g, int b) {
         return withColor(AttributedStyle.DEFAULT, r, g, b);
     }

@@ -50,7 +50,7 @@ public final class CompileToolchain {
             dev.jkbuild.lock.Lockfile lock = readLockSoft(projectDir);
             JkBuild build = readBuildSoft(projectDir);
             JdkResolution.Request req = new JdkResolution.Request(
-                    projectDir, /*switch*/ null, System.getenv("JK_JDK"),
+                    projectDir, System.getProperty("jk.jdk"), System.getenv("JK_JDK"),
                     lock != null ? lock.jdk() : null,
                     (build != null && build.project() != null) ? build.project().jdk() : null,
                     (build != null && build.project() != null) ? build.project().javaRelease() : 0,
