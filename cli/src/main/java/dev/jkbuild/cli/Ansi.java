@@ -82,6 +82,11 @@ public final class Ansi {
         return CSI + n + "C";
     }
 
+    /** Move the cursor back {@code n} columns (CUB). */
+    public static String cursorBack(int n) {
+        return CSI + n + "D";
+    }
+
     /** Move the cursor to absolute column {@code col}, 1-based (CHA). */
     public static String cursorToColumn(int col) {
         return CSI + col + "G";

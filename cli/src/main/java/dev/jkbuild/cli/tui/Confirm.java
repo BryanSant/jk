@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Theme;
 import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
@@ -15,15 +16,18 @@ import java.nio.charset.StandardCharsets;
  * A single-line yes/no confirmation, styled like {@link Wizard} and driven by a
  * single keystroke (no Enter required): {@code y}/{@code n}, with Enter taking
  * the default and Ctrl-C / Esc declining. On an interactive terminal it briefly
- * enters raw mode (mirroring the Wizard's terminal lifecycle) and echoes the
- * chosen answer; on a non-TTY it falls back to a cooked {@code readLine()} so
- * piped / CI input keeps working.
+ * enters raw mode (mirroring the Wizard's terminal lifecycle); on a non-TTY it
+ * falls back to a cooked {@code readLine()} so piped / CI input keeps working.
  *
  * <p>Renders {@code <question> [Y/n]} (default-yes) or {@code <question> [y/N]}
- * (default-no) with the brackets and slash dimmed, exactly like the prompts it
- * replaces.
+ * (default-no) with the brackets and slash dimmed. Once answered, the
+ * {@code [Y/n]} hint is overwritten in place with a green {@code Yes} or a red
+ * {@code No}, so the settled line reads e.g. {@code <question> Yes}.
  */
 public final class Confirm {
+
+    /** Visible columns to overwrite when settling: "[Y/n]" (5) + trailing space (1). */
+    private static final int HINT_WIDTH = 6;
 
     private final String question;
     private final boolean defaultYes;
@@ -76,9 +80,13 @@ public final class Confirm {
             while (true) {
                 Boolean result = interpret(KeyReader.read(reader));
                 if (result != null) {
-                    // Raw mode: emit an explicit CRLF since ONLCR is off.
-                    System.out.print(Theme.colorize(result ? "Yes" : "No",
-                            Theme.active().focused()) + "\r\n");
+                    // Overwrite the "[Y/n] " hint in place with the colored
+                    // answer: step back over the hint, print green Yes / red No,
+                    // clear the leftover, and end the line (raw mode → explicit CRLF).
+                    String answer = Theme.colorize(result ? "Yes" : "No",
+                            result ? Theme.active().success() : Theme.active().error());
+                    System.out.print(Ansi.cursorBack(HINT_WIDTH) + answer
+                            + Ansi.ERASE_LINE_TO_END + "\r\n");
                     System.out.flush();
                     return result;
                 }
