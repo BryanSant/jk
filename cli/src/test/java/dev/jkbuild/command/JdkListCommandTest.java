@@ -26,10 +26,28 @@ class JdkListCommandTest {
                 new JdkHit(defaultHome, "21.0.5", JdkVendor.UNKNOWN, "jk"));
 
         List<Row> rows = JdkListCommand.buildRows(
-                installed, "corretto-21.0.5", null, "linux", "x64", currentHome, null);
+                installed, defaultHome, null, "linux", "x64", currentHome, null);
 
         assertThat(rowFor(rows, "temurin-25.0.1").status()).isEqualTo(Status.ACTIVE);
         assertThat(rowFor(rows, "corretto-21.0.5").status()).isEqualTo(Status.DEFAULT);
+    }
+
+    @Test
+    void default_is_disambiguated_by_home_when_two_installs_share_an_identifier(@TempDir Path dir) {
+        // Same vendor-major identifier ("temurin-25.0.3") under two roots — only
+        // the install whose home matches the recorded default is marked DEFAULT.
+        Path jkHome = dir.resolve("jk/temurin-25.0.3");
+        Path ideHome = dir.resolve("ide/temurin-25.0.3");
+        List<JdkHit> installed = List.of(
+                new JdkHit(jkHome, "25.0.3", JdkVendor.TEMURIN, "jk"),
+                new JdkHit(ideHome, "25.0.3", JdkVendor.TEMURIN, "intellij"));
+
+        List<Row> rows = JdkListCommand.buildRows(
+                installed, jkHome, null, "linux", "x64", null, null);
+
+        List<Row> defaults = rows.stream().filter(r -> r.status() == Status.DEFAULT).toList();
+        assertThat(defaults).hasSize(1);
+        assertThat(defaults.getFirst().location()).isEqualTo("jk");
     }
 
     @Test
@@ -39,7 +57,7 @@ class JdkListCommandTest {
                 new JdkHit(home, "25.0.1", JdkVendor.UNKNOWN, "sdkman"));
 
         List<Row> rows = JdkListCommand.buildRows(
-                installed, "temurin-25.0.1", null, "linux", "x64", home, null);
+                installed, home, null, "linux", "x64", home, null);
 
         assertThat(rowFor(rows, "temurin-25.0.1").status()).isEqualTo(Status.ACTIVE);
         assertThat(rows).noneMatch(r -> r.status() == Status.DEFAULT);

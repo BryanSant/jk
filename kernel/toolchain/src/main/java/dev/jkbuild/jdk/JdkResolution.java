@@ -112,7 +112,13 @@ public final class JdkResolution {
             return Resolved.found(installed(cur.get()), Tier.CURRENT, null);
         }
 
-        // default (persisted, then the de-facto policy)
+        // default: the exact recorded home wins (unambiguous when two installs
+        // share a vendor-major identifier), then the recorded identifier, then
+        // the de-facto policy.
+        Optional<Path> defHome = defaults.defaultHome();
+        if (defHome.isPresent() && hasBin(defHome.get())) {
+            return Resolved.found(installed(defHome.get()), Tier.DEFAULT, null);
+        }
         try {
             Optional<String> defId = defaults.currentIdentifier();
             if (defId.isPresent()) {

@@ -51,6 +51,9 @@ class GlobalDefaultJdkTest {
                 .contains("default-graal-jdk = \"graalvm-25.0.3\"");
         assertThat(gdj.currentIdentifier()).contains("temurin-25.0.3");
         assertThat(gdj.graalIdentifier()).contains("graalvm-25.0.3");
+        // Home paths are recorded too, so the exact install is unambiguous even
+        // when two installs share a vendor-major identifier.
+        assertThat(gdj.defaultHome()).contains(javaHome);
         assertThat(gdj.graalHome()).contains(graalHome);
 
         // Clearing graal leaves the java default intact (and vice-versa).

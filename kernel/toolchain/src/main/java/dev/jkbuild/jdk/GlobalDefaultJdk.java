@@ -43,6 +43,11 @@ public final class GlobalDefaultJdk {
 
     private static final String DEFAULT_KEY = "default-jdk";
     private static final String GRAAL_KEY = "default-graal-jdk";
+    // The home path uniquely identifies WHICH install is the default, so two
+    // installs that share a vendor-major identifier (e.g. one under ~/.jk/jdks
+    // and one under ~/.jdks) don't both look like the default.
+    private static final String DEFAULT_HOME_KEY = "default-jdk-home";
+    private static final String GRAAL_HOME_KEY = "default-graal-jdk-home";
 
     /** Matches a {@code <key> = ...} line so we can replace/strip it in place. */
     private static Pattern linePattern(String key) {
@@ -97,6 +102,7 @@ public final class GlobalDefaultJdk {
      */
     public void set(InstalledJdk jdk) throws IOException {
         writeConfigRecord(DEFAULT_KEY, jdk.identifier());
+        writeConfigRecord(DEFAULT_HOME_KEY, jdk.home().toString());
         writeSymlink(defaultSymlink, jdk.home());
         writeSymlink(currentSymlink, jdk.home());
     }
@@ -117,6 +123,7 @@ public final class GlobalDefaultJdk {
      */
     public void setGraal(InstalledJdk jdk) throws IOException {
         writeConfigRecord(GRAAL_KEY, jdk.identifier());
+        writeConfigRecord(GRAAL_HOME_KEY, jdk.home().toString());
         writeSymlink(defaultGraalSymlink, jdk.home());
     }
 
@@ -129,20 +136,44 @@ public final class GlobalDefaultJdk {
         return readKey(GRAAL_KEY);
     }
 
-    /** The default-graal symlink's resolved home, if it exists and is live. */
+    /**
+     * The exact home of the default <em>java</em> JDK — the {@code default-jdk-home}
+     * config record (authoritative, cross-platform), else the {@code default-jdk}
+     * symlink's resolved path. This pins which install is the default even when
+     * two installs share a vendor-major identifier.
+     */
+    public Optional<Path> defaultHome() {
+        return resolveHome(DEFAULT_HOME_KEY, defaultSymlink);
+    }
+
+    /** The exact home of the default GraalVM (see {@link #defaultHome()}). */
     public Optional<Path> graalHome() {
+        return resolveHome(GRAAL_HOME_KEY, defaultGraalSymlink);
+    }
+
+    private Optional<Path> resolveHome(String configKey, Path symlink) {
         try {
-            if (!Files.exists(defaultGraalSymlink)) return Optional.empty();
-            return Optional.of(defaultGraalSymlink.toRealPath());
+            Optional<String> recorded = readKey(configKey);
+            if (recorded.isPresent()) {
+                Path home = Path.of(recorded.get());
+                if (Files.isDirectory(home)) return Optional.of(home);
+            }
         } catch (IOException ignored) {
-            return Optional.empty();
+            // malformed config — fall back to the symlink
         }
+        try {
+            if (Files.exists(symlink)) return Optional.of(symlink.toRealPath());
+        } catch (IOException ignored) {
+            // broken/unsupported symlink — give up
+        }
+        return Optional.empty();
     }
 
     /** Drop the default-graal pointer (symlink + config line); other keys kept. */
     public void clearGraal() throws IOException {
         Files.deleteIfExists(defaultGraalSymlink);
         stripKey(GRAAL_KEY);
+        stripKey(GRAAL_HOME_KEY);
     }
 
     /**
@@ -157,6 +188,7 @@ public final class GlobalDefaultJdk {
         Files.deleteIfExists(defaultSymlink);
         Files.deleteIfExists(currentSymlink);
         stripKey(DEFAULT_KEY);
+        stripKey(DEFAULT_HOME_KEY);
     }
 
     /** Remove a single {@code <key> = ...} line from the config, preserving others. */

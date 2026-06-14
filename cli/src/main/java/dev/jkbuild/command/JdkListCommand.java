@@ -12,6 +12,7 @@ import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkCatalogClient;
 import dev.jkbuild.jdk.JdkHit;
+import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
 import dev.jkbuild.resolver.Versions;
@@ -107,8 +108,25 @@ public final class JdkListCommand implements CliCommand {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         Path jdksRoot = registry.jdksRoot();
         List<JdkHit> installed = registry.listHits();
-        Optional<String> defaultId = readDefaultIdentifier();
-        String graalId = readGraalIdentifier().orElse(null);
+        // Match the default / native rows by the recorded HOME path (unique per
+        // install) rather than the vendor-major identifier (which two installs
+        // under different roots can share).
+        GlobalDefaultJdk gd = GlobalDefaultJdk.current();
+        Path defaultHome = gd.defaultHome().orElse(null);
+        Path graalHome = gd.graalHome().orElse(null);
+        // Legacy configs recorded only the identifier (no home). Resolve it via
+        // the registry — jk-managed installs win probe order, so exactly one row
+        // is marked; a re-run of `jk jdk default` then records the exact home.
+        try {
+            if (defaultHome == null) {
+                defaultHome = gd.currentIdentifier().flatMap(id -> findHome(registry, id)).orElse(null);
+            }
+            if (graalHome == null) {
+                graalHome = gd.graalIdentifier().flatMap(id -> findHome(registry, id)).orElse(null);
+            }
+        } catch (IOException ignored) {
+            // malformed config — leave both null (no row marked)
+        }
         // Catalog (and therefore the network fetch) is only consulted when the
         // user opts in to "available" rows via --all. Default `list` is a
         // pure offline view of what's on disk.
@@ -121,7 +139,7 @@ public final class JdkListCommand implements CliCommand {
         // shell actually compiles with, independent of jk's default pointer.
         Path currentHome = ActiveJavac.home().orElse(null);
 
-        List<Row> rows = buildRows(installed, defaultId.orElse(null), catalog, os, arch, currentHome, graalId);
+        List<Row> rows = buildRows(installed, defaultHome, catalog, os, arch, currentHome, graalHome);
         if (!all) {
             rows = rows.stream()
                     .filter(r -> r.status() != Status.AVAILABLE)
@@ -143,12 +161,12 @@ public final class JdkListCommand implements CliCommand {
 
     static List<Row> buildRows(
             List<JdkHit> installed,
-            String defaultId,
+            Path defaultHome,
             JdkCatalog catalog,
             String os,
             String arch,
             Path currentHome,
-            String graalId) {
+            Path graalHome) {
         // Index catalog entries by installFolderName, restricted to current host.
         Map<String, JdkCatalog.Entry> byInstall = new HashMap<>();
         if (catalog != null) {
@@ -174,8 +192,8 @@ public final class JdkListCommand implements CliCommand {
                     : (j.vendor() != JdkVendor.UNKNOWN ? j.vendor().displayName() : "");
             int major = e != null ? e.majorVersion() : parseMajor(id);
             boolean isActive = sameHome(currentHome, j.home());
-            boolean isDefault = id.equals(defaultId);
-            boolean isNative = graalId != null && id.equals(graalId);
+            boolean isDefault = sameHome(defaultHome, j.home());
+            boolean isNative = sameHome(graalHome, j.home());
             // A JDK can hold several roles at once; status is the primary (for
             // sort/style), statusLabel the composite shown to the user.
             Status status = isActive ? Status.ACTIVE
@@ -194,8 +212,8 @@ public final class JdkListCommand implements CliCommand {
             dev.jkbuild.discovery.ProbeSupport.discoverJdk(currentHome, "path").ifPresent(hit -> {
                 String id = IntellijJdkDir.installDirOf(hit.home()).getFileName().toString();
                 String vendor = hit.vendor() != JdkVendor.UNKNOWN ? hit.vendor().displayName() : "";
-                boolean d = id.equals(defaultId);
-                boolean n = graalId != null && id.equals(graalId);
+                boolean d = sameHome(defaultHome, hit.home());
+                boolean n = sameHome(graalHome, hit.home());
                 rows.add(new Row(parseMajor(id), vendor, id, Status.ACTIVE,
                         compositeLabel(true, d, n), hit.source()));
             });
@@ -245,6 +263,15 @@ public final class JdkListCommand implements CliCommand {
      * point at the same JDK. Both are normally already canonical, but we
      * canonicalise defensively (each may be a symlink path) before comparing.
      */
+    /** Resolve an install identifier to its home via the registry (first match), or empty. */
+    private static Optional<Path> findHome(JdkRegistry registry, String id) {
+        try {
+            return registry.find(id).map(InstalledJdk::home);
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
     private static boolean sameHome(Path currentHome, Path hitHome) {
         if (currentHome == null || hitHome == null) return false;
         return canonical(currentHome).equals(canonical(hitHome));
@@ -475,21 +502,6 @@ public final class JdkListCommand implements CliCommand {
     // Helpers / catalog plumbing
     // ---------------------------------------------------------------
 
-    private Optional<String> readDefaultIdentifier() {
-        try {
-            return GlobalDefaultJdk.current().currentIdentifier();
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-    }
-
-    private Optional<String> readGraalIdentifier() {
-        try {
-            return GlobalDefaultJdk.current().graalIdentifier();
-        } catch (IOException e) {
-            return Optional.empty();
-        }
-    }
 
     private JdkCatalog fetchCatalogOrNull() {
         if (!HostPlatform.supported()) return null;
