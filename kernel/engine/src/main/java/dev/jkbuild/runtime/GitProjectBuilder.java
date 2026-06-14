@@ -102,8 +102,8 @@ public final class GitProjectBuilder {
     private static JkBuild withCoordinate(JkBuild project, String group, String artifact, String version) {
         JkBuild.Project p = project.project();
         JkBuild.Project overridden = new JkBuild.Project(
-                group, artifact, version, p.jdk(), p.java(), p.kotlin(), p.main(),
-                p.shadow(), p.nativeMode(), p.description(), p.application(), p.m2install());
+                group, artifact, version, p.jdk(), p.graal(), p.java(), p.kotlin(), p.main(),
+                p.shadow(), p.nativeMode(), p.description(), p.application(), p.m2install(), p.layout());
         return new JkBuild(overridden, project.dependencies(), project.repositories(),
                 project.profiles(), project.features(), project.workspace(), project.manifest());
     }

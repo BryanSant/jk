@@ -180,17 +180,18 @@ public final class JkBuildParser {
         String group = requireString(project, "group", "project.group");
         String name = requireString(project, "name", "project.name");
         String version = requireString(project, "version", "project.version");
-        int jdk = intOrZero(project, "jdk", "project.jdk");
+        String jdk = parseJdkSpec(project);
+        String graal = parseGraalSpec(project);
         int java = intOrZero(project, "java", "project.java");
         VersionSelector kotlin = parseKotlinVersion(project);
-        requireSupportedMajor("project.jdk", jdk);
         requireSupportedMajor("project.java", java);
         String main = project.getString("main");
         boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
-        // native = false          → DISABLED  (never run native-image)
-        // native absent           → SUPPORTED (run only on explicit `jk native`)
-        // native = true           → ALWAYS    (run on `jk build` + `jk native`)
+        // native = true           → ALWAYS    (eligible: `jk native` builds it; `jk install` of an app builds+deploys it)
         // native = "always"       → ALWAYS    (same as true)
+        // native = false          → DISABLED  (never build a native artifact)
+        // native absent           → SUPPORTED (not eligible — `jk native` skips it)
+        // Only ALWAYS is native-eligible; `jk build` never builds native artifacts.
         Object nativeRaw = project.get("native");
         JkBuild.NativeMode nativeMode;
         if ("always".equalsIgnoreCase(nativeRaw instanceof String s ? s : "")
@@ -225,8 +226,74 @@ public final class JkBuildParser {
         } else {
             layout = JkBuild.Layout.AUTO;
         }
-        return new JkBuild.Project(group, name, version, jdk, java, kotlin,
+        return new JkBuild.Project(group, name, version, jdk, graal, java, kotlin,
                 main, shadow, nativeMode, description, application, m2install, layout);
+    }
+
+    /**
+     * {@code project.jdk} is a JDK spec string following the same rules as
+     * {@code .jdk-version}, except a vendorless bare major is allowed: a
+     * vendor+major ({@code "temurin-25"}) or a bare major ({@code "25"}) pins
+     * the feature release; a point release ({@code "25.0.3"}) is rejected
+     * because jk keeps the patch current behind the major pointer. For
+     * convenience an unquoted integer ({@code jdk = 25}) is accepted too and
+     * treated as that bare major. Absent/blank → {@code null} (unset).
+     */
+    private static String parseJdkSpec(TomlTable project) {
+        if (!project.contains("jdk")) return null;
+        Object raw = project.get("jdk");
+        String spec;
+        if (raw instanceof Long l) {
+            spec = Long.toString(l);
+        } else if (raw instanceof String s) {
+            spec = s.trim();
+        } else {
+            throw new JkBuildParseException(
+                    "project.jdk must be a string, e.g. \"temurin-25\" or \"25\"");
+        }
+        if (spec.isEmpty()) return null;
+        if (JkBuild.Project.hasPointRelease(spec)) {
+            throw new JkBuildParseException("project.jdk = \"" + spec
+                    + "\" must not pin a point release — use \"<vendor>-<major>\" or "
+                    + "\"<major>\" (e.g. \"temurin-25\" or \"25\"); jk keeps the patch current.");
+        }
+        int major = JkBuild.Project.majorOf(spec);
+        if (major == 0) {
+            throw new JkBuildParseException("project.jdk = \"" + spec
+                    + "\" must include a major version (e.g. \"temurin-25\" or \"25\")");
+        }
+        requireSupportedMajor("project.jdk", major);
+        return spec;
+    }
+
+    /**
+     * {@code project.graal} selects the GraalVM whose {@code bin/native-image}
+     * {@code jk native} uses. Same shape as {@code project.jdk} — a bare major
+     * ({@code 25} or {@code "25"}) or vendor-hinted spec ({@code "graalvm-25"}) —
+     * plus the keyword {@code "native"} (latest Oracle GraalVM). A point release
+     * is rejected; jk keeps the patch current. Resolution and any auto-install
+     * happen at native-build time (see the CLI's {@code GraalResolver}), so this
+     * parser only normalizes the spec. Absent/blank → {@code null} (unset).
+     */
+    private static String parseGraalSpec(TomlTable project) {
+        if (!project.contains("graal")) return null;
+        Object raw = project.get("graal");
+        String spec;
+        if (raw instanceof Long l) {
+            spec = Long.toString(l);
+        } else if (raw instanceof String s) {
+            spec = s.trim();
+        } else {
+            throw new JkBuildParseException(
+                    "project.graal must be a string, e.g. \"graalvm-25\", \"25\", or \"native\"");
+        }
+        if (spec.isEmpty()) return null;
+        if (JkBuild.Project.hasPointRelease(spec)) {
+            throw new JkBuildParseException("project.graal = \"" + spec
+                    + "\" must not pin a point release — use \"graalvm-<major>\", "
+                    + "\"<major>\", or \"native\"; jk keeps the patch current.");
+        }
+        return spec;
     }
 
     private static int intOrZero(TomlTable table, String key, String path) {

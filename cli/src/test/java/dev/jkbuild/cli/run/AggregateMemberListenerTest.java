@@ -43,9 +43,10 @@ class AggregateMemberListenerTest {
         String all = String.join("\n",
                 view.renderGoalLines(120, 0).stream().map(AggregateMemberListenerTest::strip).toList());
         assertThat(all).contains("75%").contains("[15 of 20]");
-        // Both members' phases appear, tagged by member; A's compile is done (✓).
+        // The phase list renders only the active row: member B's running Test
+        // shows (tagged by member); member A's finished Compile is not listed.
         assertThat(all).contains("g:web › Test");
-        assertThat(all).contains("✓ g:api › Compile");
+        assertThat(all).doesNotContain("g:api");
     }
 
     private static Phase phase(String name, String label) {

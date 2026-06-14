@@ -26,10 +26,12 @@ import java.util.regex.Pattern;
  * {@code LineSink}, so all native-image output appears above the progress
  * bar rather than interleaved with it.
  *
- * <p>jk does <i>not</i> automatically install GraalVM here — the user
- * pins a GraalVM JDK via {@code project.jdk} or {@code .jdk-version}.
- * If {@code native-image} is missing the driver fails with a clear hint
- * to {@code jk jdk install graalvm-25}.
+ * <p>This driver only resolves and execs {@code native-image}; it does not
+ * install GraalVM. Selecting/auto-installing the GraalVM that owns
+ * {@code native-image} (via {@code project.graal}, or a prompt) is the CLI's
+ * job — see {@code GraalResolver}, which passes the resolved GraalVM home in as
+ * {@link Request#javaHome()}. If {@code native-image} is still missing the
+ * driver fails with a clear hint.
  */
 public final class NativeImageDriver {
 
@@ -38,14 +40,25 @@ public final class NativeImageDriver {
             List<Path> classpath,
             String mainClass,
             Path outputPath,
-            List<String> extraArgs) {
+            List<String> extraArgs,
+            boolean shared) {
 
         public Request {
             Objects.requireNonNull(javaHome, "javaHome");
-            Objects.requireNonNull(mainClass, "mainClass");
             Objects.requireNonNull(outputPath, "outputPath");
+            // An executable needs a main class; a shared library (--shared) has
+            // no entry point and must not be given one.
+            if (!shared) {
+                Objects.requireNonNull(mainClass, "mainClass");
+            }
             classpath = List.copyOf(classpath);
             extraArgs = List.copyOf(extraArgs);
+        }
+
+        /** An executable image with the given entry point. */
+        public Request(Path javaHome, List<Path> classpath, String mainClass,
+                       Path outputPath, List<String> extraArgs) {
+            this(javaHome, classpath, mainClass, outputPath, extraArgs, false);
         }
     }
 
@@ -93,15 +106,7 @@ public final class NativeImageDriver {
             throws IOException, InterruptedException {
         Path binary = resolve(request.javaHome())
                 .orElseThrow(() -> notFoundError(request.javaHome()));
-        List<String> command = new ArrayList<>();
-        command.add(binary.toString());
-        command.add("-cp");
-        command.add(joinClasspath(request.classpath()));
-        command.add("-o");
-        command.add(request.outputPath().toAbsolutePath().toString());
-        command.add("--no-fallback");
-        command.addAll(request.extraArgs());
-        command.add(request.mainClass());
+        List<String> command = buildCommand(binary, request);
 
         Files.createDirectories(request.outputPath().toAbsolutePath().getParent());
 
@@ -115,6 +120,30 @@ public final class NativeImageDriver {
         fwdOut.join();
         fwdErr.join();
         return exit;
+    }
+
+    /**
+     * Assemble the {@code native-image} command line. Executable builds end with
+     * the main class; shared-library builds ({@code --shared}) take no main class
+     * and let native-image derive {@code lib<name>.<ext>} + headers from {@code -o}.
+     * Package-private for unit testing the assembly without execing.
+     */
+    static List<String> buildCommand(Path binary, Request request) {
+        List<String> command = new ArrayList<>();
+        command.add(binary.toString());
+        command.add("-cp");
+        command.add(joinClasspath(request.classpath()));
+        if (request.shared()) {
+            command.add("--shared");
+        }
+        command.add("-o");
+        command.add(request.outputPath().toAbsolutePath().toString());
+        command.add("--no-fallback");
+        command.addAll(request.extraArgs());
+        if (!request.shared()) {
+            command.add(request.mainClass());
+        }
+        return command;
     }
 
     /**

@@ -25,17 +25,20 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
- * {@code jk native} — build a GraalVM-compiled native binary for the project,
+ * {@code jk native} — build a GraalVM-compiled native artifact for the project,
  * from source. Runs the full {@linkplain BuildPipeline build pipeline}
  * (compile → test → package) and then composes the native-image tail onto the
- * <em>same</em> goal.
+ * <em>same</em> goal — an executable when a main class resolves, else a shared
+ * library ({@code --shared}).
  *
- * <p>In a workspace, cascades to every member that declares a {@code main}
- * class and has not set {@code native = false}. Library members (no
- * {@code main}, or {@code native = false}) are still compiled and packaged so
- * native-eligible members can depend on them.
+ * <p>Native builds are opt-in: only members with {@code native = true} are
+ * compiled to a native artifact. Other members are still compiled and packaged
+ * (so eligible members can depend on them) but produce no native output. The
+ * GraalVM that owns {@code native-image} is chosen by {@link dev.jkbuild.cli.GraalResolver}
+ * (honoring {@code project.graal}), resolved up front before the progress UI.
  */
 public final class NativeCommand implements CliCommand {
 
@@ -46,6 +49,7 @@ public final class NativeCommand implements CliCommand {
                 Opt.value("<class>", "Main class to compile. Default: read from jk.toml's image.main-class.", "--main"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.flag("Install Oracle GraalVM without prompting if native-image is missing.", "--yes", "-y"),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"));
     }
     @Override public List<dev.jkbuild.model.command.Param> parameters() {
@@ -57,19 +61,23 @@ public final class NativeCommand implements CliCommand {
     String mainClass;
     Path cacheDirOverride;
     Path jdksDir;
+    boolean assumeYes;
     List<String> extra = new ArrayList<>();
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
+    dev.jkbuild.cli.GraalResolver graal;
 
     @Override
     public int run(Invocation in) throws Exception {
         this.mainClass = in.value("main").orElse(null);
         this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
+        this.assumeYes = in.isSet("yes");
         this.extra = in.positionals();
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
         this.global = GlobalOptions.from(in);
+        this.graal = new dev.jkbuild.cli.GraalResolver(jdksDir, assumeYes);
 
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
@@ -122,6 +130,19 @@ public final class NativeCommand implements CliCommand {
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         long buildStart = System.nanoTime();
 
+        // Resolve the GraalVM for every native-eligible member up front — BEFORE
+        // any progress UI opens — so a prompt or install never lands inside the
+        // captured-output region (which would corrupt the display). GraalResolver
+        // memoizes by spec, so a shared graal pin fetches/installs at most once.
+        Map<Path, Path> graalHomes = new java.util.HashMap<>();
+        for (Path memberDir : sorted) {
+            JkBuild member = membersByDir.get(memberDir);
+            if (!isNativeEligible(member)) continue;
+            Optional<Path> home = graal.resolve(memberDir, member.project().graal());
+            if (home.isEmpty()) return 2; // GraalResolver already printed why
+            graalHomes.put(memberDir, home.get());
+        }
+
         // JSON / verbose: per-member banners.
         if (mode != GoalConsole.Mode.AUTO && mode != GoalConsole.Mode.QUIET) {
             for (int i = 0; i < sorted.size(); i++) {
@@ -130,7 +151,8 @@ public final class NativeCommand implements CliCommand {
                 System.out.println();
                 System.out.println("══ " + wsRoot.relativize(memberDir)
                         + " (" + (i + 1) + "/" + sorted.size() + ") ══");
-                int exit = runForMember(memberDir, member, cache);
+                int exit = runPreparedNative(
+                        prepareNativeMember(memberDir, member, cache, graalHomes.get(memberDir)), null);
                 if (exit != 0) {
                     System.err.println("jk native: " + wsRoot.relativize(memberDir)
                             + " failed (exit " + exit + ")");
@@ -147,12 +169,28 @@ public final class NativeCommand implements CliCommand {
         int built = 0;
 
         try (var cap = view.captureOutput()) {
+            // Pre-scan every member's goal — the core phases plus the
+            // native-image tail for eligible members — and sum its estimated
+            // ticks so the bar calibrates to the whole-workspace total up front
+            // (the native-image build's W_NATIVE weight and its per-stage scope
+            // included) and advances 0→100% without resetting per member,
+            // instead of the denominator growing as members start. These are the
+            // very goals we then run, one member at a time.
+            List<PreparedNativeMember> prepared = new ArrayList<>(sorted.size());
+            long total = 0;
             for (Path memberDir : sorted) {
-                JkBuild member = membersByDir.get(memberDir);
-                String memberName = wsRoot.relativize(memberDir).toString();
+                PreparedNativeMember pm = prepareNativeMember(
+                        memberDir, membersByDir.get(memberDir), cache, graalHomes.get(memberDir));
+                total += pm.barWeight();
+                prepared.add(pm);
+            }
+            agg.calibrate(total);
+
+            for (PreparedNativeMember pm : prepared) {
+                String memberName = wsRoot.relativize(pm.dir()).toString();
                 int exit;
                 try {
-                    exit = runForMember(memberDir, member, cache, agg);
+                    exit = runPreparedNative(pm, agg);
                 } catch (Exception e) {
                     view.finishFailure("Native build failed in " + memberName
                             + " " + BuildCommand.elapsedSince(buildStart));
@@ -176,23 +214,24 @@ public final class NativeCommand implements CliCommand {
                 .count();
         String elapsed = " " + BuildCommand.elapsedSince(buildStart);
         String summary = built + " member" + (built == 1 ? "" : "s") + " built"
-                + (nativeCount > 0 ? ", " + nativeCount + " native"
-                        + (nativeCount == 1 ? " binary" : " binaries") : "");
+                + (nativeCount > 0 ? ", " + nativeCount + " native artifact"
+                        + (nativeCount == 1 ? "" : "s") : "");
         view.finishSuccess(summary + elapsed);
         return 0;
     }
 
-    /** Run one workspace member: native if eligible, plain build otherwise. */
-    private int runForMember(Path memberDir, JkBuild member, Path cache) throws Exception {
-        return runForMember(memberDir, member, cache, null);
-    }
-
-    private int runForMember(Path memberDir, JkBuild member, Path cache,
-                              dev.jkbuild.cli.run.AggregateContext agg) throws Exception {
+    /**
+     * Construct (but do not run) one member's goal: core phases plus the
+     * native-image tail when the member is native-eligible. Split out of the run
+     * step so the workspace path can build every member's goal up front and sum
+     * {@link Goal#estimatedTotalWeight()} — including the native phase's weight —
+     * to calibrate the shared progress bar before any member runs.
+     */
+    private PreparedNativeMember prepareNativeMember(Path memberDir, JkBuild member, Path cache,
+                                                     Path graalHome) {
         boolean eligible = isNativeEligible(member);
-        Path lockFile = memberDir.resolve("jk.lock");
-
         Path buildFile = memberDir.resolve("jk.toml");
+        Path lockFile = memberDir.resolve("jk.lock");
         int estimatedTests = TestCommand.estimateTestCount(memberDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 memberDir, cache, buildFile, lockFile, memberDir,
@@ -201,32 +240,59 @@ public final class NativeCommand implements CliCommand {
         if (eligible) {
             String resolvedMain = resolveMain(buildFile);
             goalBuilder.addPhase(BuildPipeline.nativePhase(
-                    memberDir, cache, lockFile, jdksDir, resolvedMain, extra));
+                    memberDir, cache, lockFile, jdksDir, graalHome, resolvedMain, extra));
         }
         Goal goal = goalBuilder.build();
-        String targetLabel = BuildCommand.buildTarget(buildFile, memberDir);
-        ConsoleSpec spec = eligible
-                ? new ConsoleSpec(targetLabel, r -> "Built native binary", r -> "Native build failed")
-                : new ConsoleSpec(targetLabel, r -> "Build successful",    r -> "Build failed");
-        GoalResult result = agg != null
-                ? GoalConsole.runGoalInto(goal, cache, targetLabel, agg)
-                : GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, targetLabel);
+        return new PreparedNativeMember(memberDir, BuildCommand.buildTarget(buildFile, memberDir),
+                cache, goal, goal.estimatedTotalWeight(), eligible);
+    }
+
+    /**
+     * Run an already-built member goal and map its result to an exit code. When
+     * {@code agg} is non-null the member feeds the one shared calibrated bar,
+     * scaling its progress into its reserved slice; otherwise it renders on its
+     * own (the verbose/JSON per-member path).
+     */
+    private int runPreparedNative(PreparedNativeMember pm, dev.jkbuild.cli.run.AggregateContext agg) {
+        GoalResult result;
+        if (agg != null) {
+            result = GoalConsole.runGoalInto(pm.goal(), pm.cache(), pm.target(), agg, pm.barWeight());
+        } else {
+            ConsoleSpec spec = pm.eligible()
+                    ? new ConsoleSpec(pm.target(), r -> "Built native artifact", r -> "Native build failed")
+                    : new ConsoleSpec(pm.target(), r -> "Build successful",      r -> "Build failed");
+            result = GoalConsole.runGoal(pm.goal(), GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
+        }
         return result.success() ? 0 : 1;
     }
+
+    /**
+     * A workspace member's goal, built and ready to run, paired with its pre-scan
+     * bar weight (its slice of the calibrated aggregate total) and whether it
+     * carries the native-image tail.
+     */
+    private record PreparedNativeMember(Path dir, String target, Path cache, Goal goal,
+                                        long barWeight, boolean eligible) {}
 
     // --- single-project (unchanged behaviour) --------------------------------
 
     private int runSingleProject(Path projectDir, Path buildFile, Path cache)
             throws IOException, InterruptedException {
-        // Respect explicit native = false opt-out even for an explicit `jk native` invocation.
-        try {
-            JkBuild build = JkBuildParser.parse(buildFile);
-            if (build.project().nativeMode() == JkBuild.NativeMode.DISABLED) {
-                System.err.println("jk native: " + projectDir.getFileName()
-                        + " has native = false — set native = true or remove the key to enable.");
-                return 2;
-            }
-        } catch (Exception ignored) {}
+        // Native builds are opt-in: require native = true (ALWAYS). Absent or
+        // native = false → not eligible, even for an explicit `jk native`.
+        JkBuild build = JkBuildParser.parse(buildFile);
+        String graalSpec;
+        if (build.project().nativeMode() != JkBuild.NativeMode.ALWAYS) {
+            System.err.println("jk native: " + projectDir.getFileName()
+                    + " is not native-eligible — set `native = true` under [project] to enable.");
+            return 2;
+        }
+        graalSpec = build.project().graal();
+
+        // Resolve GraalVM before the goal/progress UI starts (a prompt/install
+        // can't run inside the captured-output region).
+        Optional<Path> graalHome = graal.resolve(projectDir, graalSpec);
+        if (graalHome.isEmpty()) return 2; // GraalResolver already printed why
 
         String resolvedMain = resolveMain(buildFile);
         Path lockFile = projectDir.resolve("jk.lock");
@@ -238,13 +304,20 @@ public final class NativeCommand implements CliCommand {
 
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         builder.addPhase(BuildPipeline.nativePhase(
-                projectDir, cache, lockFile, jdksDir, resolvedMain, extra));
+                projectDir, cache, lockFile, jdksDir, graalHome.get(), resolvedMain, extra));
         Goal goal = builder.build();
 
+        // Executable when a main class resolves (CLI/[native]/[project]), else a
+        // shared library — mirror the phase's decision for the result line.
+        String effectiveMain = (resolvedMain != null && !resolvedMain.isBlank())
+                ? resolvedMain : build.project().main();
+        boolean library = effectiveMain == null || effectiveMain.isBlank();
         ConsoleSpec spec = new ConsoleSpec("Native Build",
                 r -> goal.get(BuildPipeline.LAYOUT)
-                        .map(l -> "Built native binary " + l.nativeBinary().getFileName())
-                        .orElse("Built native binary"),
+                        .map(l -> library
+                                ? "Built native library " + l.nativeLibrary().getFileName()
+                                : "Built native binary " + l.nativeBinary().getFileName())
+                        .orElse("Built native artifact"),
                 r -> "Native build failed");
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
                 BuildCommand.buildTarget(buildFile, projectDir));
@@ -261,15 +334,14 @@ public final class NativeCommand implements CliCommand {
     // --- helpers -------------------------------------------------------------
 
     /**
-     * A member qualifies for native compilation if it declares a {@code main}
-     * class and has not explicitly opted out with {@code native = false}.
-     * Absent {@code native} key (parsed as SUPPORTED) and {@code native = true}
-     * are both eligible; only {@code native = false} (DISABLED) is not.
+     * A member is native-eligible only when it sets {@code native = true}
+     * (NativeMode.ALWAYS). Absent {@code native} (SUPPORTED) and
+     * {@code native = false} (DISABLED) are both skipped by {@code jk native}.
+     * A main class is <em>not</em> required: with one we build an executable,
+     * without one a shared library.
      */
     static boolean isNativeEligible(JkBuild build) {
-        JkBuild.Project p = build.project();
-        return p.main() != null && !p.main().isBlank()
-                && p.nativeMode() != JkBuild.NativeMode.DISABLED;
+        return build.project().nativeMode() == JkBuild.NativeMode.ALWAYS;
     }
 
     private String resolveMain(Path buildFile) {

@@ -57,6 +57,8 @@ class BuildLayoutTest {
         assertThat(layout.sourcesJar()).isEqualTo(dir.resolve("target/widget-1.2.3-sources.jar"));
         assertThat(layout.javadocJar()).isEqualTo(dir.resolve("target/widget-1.2.3-javadoc.jar"));
         assertThat(layout.nativeBinary()).isEqualTo(dir.resolve("target/widget"));
+        // Shared-library base: lib<artifact>, no extension (native-image adds it).
+        assertThat(layout.nativeLibrary()).isEqualTo(dir.resolve("target/libwidget"));
         assertThat(layout.ociImageTar()).isEqualTo(dir.resolve("target/widget.oci.tar"));
         assertThat(layout.testReportsDir("core"))
                 .isEqualTo(dir.resolve("target/build/reports/core"));

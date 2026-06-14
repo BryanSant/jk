@@ -193,9 +193,19 @@ public final class BuildLayout {
         return targetDir().resolve(artifact + "-" + version + "-javadoc.jar");
     }
 
-    /** {@code target/<artifact>} — GraalVM-compiled native binary. */
+    /** {@code target/<artifact>} — GraalVM-compiled native executable. */
     public Path nativeBinary() {
         return targetDir().resolve(artifact);
+    }
+
+    /**
+     * {@code target/lib<artifact>} — base path for a GraalVM-compiled native
+     * shared library ({@code native-image --shared}). This is the {@code -o}
+     * basename only; native-image appends the platform extension
+     * ({@code .so}/{@code .dylib}/{@code .dll}) and emits C headers alongside it.
+     */
+    public Path nativeLibrary() {
+        return targetDir().resolve("lib" + artifact);
     }
 
     /** {@code target/<artifact>.oci.tar} — default Jib OCI tarball. */

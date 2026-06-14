@@ -31,7 +31,7 @@ class JkBuildParserTest {
         assertThat(parsed.project().group()).isEqualTo("com.example");
         assertThat(parsed.project().name()).isEqualTo("widget");
         assertThat(parsed.project().version()).isEqualTo("1.0.0");
-        assertThat(parsed.project().jdk()).isEqualTo(21);
+        assertThat(parsed.project().jdk()).isEqualTo("21");
         assertThat(parsed.project().java()).isEqualTo(21);
         assertThat(parsed.project().isKotlin()).isFalse();
         assertThat(parsed.project().main()).isNull();
@@ -164,6 +164,103 @@ class JkBuildParserTest {
                 """))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("project.jdk = 8");
+    }
+
+    @Test
+    void parses_jdk_vendor_major_spec() {
+        JkBuild parsed = JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                jdk      = "temurin-25"
+                """);
+        assertThat(parsed.project().jdk()).isEqualTo("temurin-25");
+        assertThat(parsed.project().jdkMajor()).isEqualTo(25);
+        // java falls back to the jdk major when not given explicitly.
+        assertThat(parsed.project().javaRelease()).isEqualTo(25);
+    }
+
+    @Test
+    void parses_jdk_bare_major_string() {
+        JkBuild parsed = JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                jdk      = "25"
+                """);
+        assertThat(parsed.project().jdk()).isEqualTo("25");
+        assertThat(parsed.project().jdkMajor()).isEqualTo(25);
+    }
+
+    @Test
+    void parses_graal_spec_variants() {
+        assertThat(JkBuildParser.parse(graal("\"graalvm-25\"")).project().graal()).isEqualTo("graalvm-25");
+        assertThat(JkBuildParser.parse(graal("25")).project().graal()).isEqualTo("25");
+        assertThat(JkBuildParser.parse(graal("\"native\"")).project().graal()).isEqualTo("native");
+        // Absent → null (the common case).
+        assertThat(JkBuildParser.parse("""
+                [project]
+                group = "com.example"
+                name = "widget"
+                version = "1.0.0"
+                """).project().graal()).isNull();
+    }
+
+    @Test
+    void rejects_graal_point_release() {
+        assertThatThrownBy(() -> JkBuildParser.parse(graal("\"graalvm-25.0.3\"")))
+                .hasMessageContaining("project.graal");
+    }
+
+    private static String graal(String value) {
+        return """
+                [project]
+                group = "com.example"
+                name = "widget"
+                version = "1.0.0"
+                graal = %s
+                """.formatted(value);
+    }
+
+    @Test
+    void accepts_unquoted_integer_jdk_as_bare_major() {
+        // Back-compat: the old integer form coerces to a bare-major string.
+        JkBuild parsed = JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                jdk      = 25
+                """);
+        assertThat(parsed.project().jdk()).isEqualTo("25");
+    }
+
+    @Test
+    void rejects_jdk_point_release() {
+        assertThatThrownBy(() -> JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                jdk      = "25.0.3"
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("point release");
+    }
+
+    @Test
+    void rejects_jdk_vendor_point_release() {
+        assertThatThrownBy(() -> JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                jdk      = "temurin-25.0.3"
+                """))
+                .isInstanceOf(JkBuildParseException.class)
+                .hasMessageContaining("point release");
     }
 
     @Test

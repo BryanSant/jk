@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -216,7 +217,7 @@ public record JkBuild(
     }
 
     public record Project(String group, String name, String version,
-                          int jdk, int java, VersionSelector kotlin,
+                          String jdk, String graal, int java, VersionSelector kotlin,
                           String main, boolean shadow, NativeMode nativeMode,
                           String description, boolean application, boolean m2install,
                           Layout layout) {
@@ -228,35 +229,42 @@ public record JkBuild(
             if (group.isBlank()) throw new IllegalArgumentException("project.group must not be blank");
             if (name.isBlank()) throw new IllegalArgumentException("project.name must not be blank");
             if (version.isBlank()) throw new IllegalArgumentException("project.version must not be blank");
-            if (java < 0 || jdk < 0) {
-                throw new IllegalArgumentException("project.jdk/java must be non-negative");
+            if (java < 0) {
+                throw new IllegalArgumentException("project.java must be non-negative");
             }
+            if (jdk != null && jdk.isBlank()) jdk = null;
+            if (graal != null && graal.isBlank()) graal = null;
             if (nativeMode == null) nativeMode = NativeMode.DISABLED;
             if (layout == null) layout = Layout.AUTO;
             if (description != null && description.isBlank()) description = null;
         }
 
-        /** Back-compat constructor (pre-{@code layout}). */
+        /** Back-compat constructor (pre-{@code layout}); bare-major {@code jdk} (0 → unset). */
         public Project(String group, String name, String version,
                        int jdk, int java, VersionSelector kotlin,
                        String main, boolean shadow, NativeMode nativeMode,
                        String description, boolean application, boolean m2install) {
-            this(group, name, version, jdk, java, kotlin, main, shadow, nativeMode,
+            this(group, name, version, majorSpec(jdk), null, java, kotlin, main, shadow, nativeMode,
                     description, application, m2install, Layout.AUTO);
         }
 
-        /** Back-compat constructor (pre-{@code application}/{@code m2install}). */
+        /** Back-compat constructor (pre-{@code application}/{@code m2install}); bare-major {@code jdk}. */
         public Project(String group, String name, String version,
                        int jdk, int java, VersionSelector kotlin,
                        String main, boolean shadow, NativeMode nativeMode, String description) {
-            this(group, name, version, jdk, java, kotlin, main, shadow, nativeMode,
+            this(group, name, version, majorSpec(jdk), null, java, kotlin, main, shadow, nativeMode,
                     description, main != null, false, Layout.AUTO);
         }
 
-        /** Library project — no main, no shadow, no native; defaults to a Java project. */
+        /** Library project — no main, no shadow, no native; bare-major {@code jdk} (0 → unset). */
         public Project(String group, String name, String version, int jdk) {
-            this(group, name, version, jdk, jdk, null, null, false, NativeMode.DISABLED,
+            this(group, name, version, majorSpec(jdk), null, jdk, null, null, false, NativeMode.DISABLED,
                     null, false, false, Layout.AUTO);
+        }
+
+        /** A bare-major int as a jdk spec string ({@code 25} → {@code "25"}); 0/negative → unset. */
+        private static String majorSpec(int major) {
+            return major > 0 ? Integer.toString(major) : null;
         }
 
         /** Backward-compat: true when native mode is not DISABLED. */
@@ -282,9 +290,60 @@ public record JkBuild(
             return kotlin != null;
         }
 
-        /** The {@code java} compiler release to target. Falls back to {@code jdk} (implicit java=jdk). */
+        /** The {@code java} compiler release to target. Falls back to the {@code jdk} major (implicit java=jdk). */
         public int javaRelease() {
-            return java > 0 ? java : jdk;
+            return java > 0 ? java : jdkMajor();
+        }
+
+        /**
+         * Major version implied by the {@code jdk} spec — {@code "temurin-25"},
+         * {@code "25"}, and {@code "21.0.3"} all yield {@code 25}/{@code 21};
+         * {@code 0} when unset or no numeric token is present.
+         */
+        public int jdkMajor() {
+            return majorOf(jdk);
+        }
+
+        /** Major version implied by the {@code graal} spec, or {@code 0} when unset. */
+        public int graalMajor() {
+            return majorOf(graal);
+        }
+
+        /**
+         * Extract the feature/major version from a JDK spec. Mirrors the
+         * resolver-side parser ({@code JdkSelector.parseFlexible}) for the major
+         * token: splits on {@code -}/{@code _}, takes the first numeric-leading
+         * token (the prefix before any {@code .}). Returns {@code 0} when there
+         * is no such token. Kept here, JDK-only, because the model and the TOML
+         * parser must derive the major without depending on {@code :toolchain}.
+         */
+        public static int majorOf(String spec) {
+            if (spec == null) return 0;
+            for (String tok : spec.toLowerCase(Locale.ROOT).split("[-_]")) {
+                if (tok.isEmpty() || !Character.isDigit(tok.charAt(0))) continue;
+                int dot = tok.indexOf('.');
+                try {
+                    return Integer.parseInt(dot < 0 ? tok : tok.substring(0, dot));
+                } catch (NumberFormatException ignored) {
+                    // not a clean integer — keep scanning later tokens
+                }
+            }
+            return 0;
+        }
+
+        /**
+         * True when the spec pins a point/patch release (a numeric token with a
+         * {@code .}, e.g. {@code "25.0.3"} or {@code "temurin-25.0.3"}). jk
+         * rejects these — it keeps the patch current behind the major pointer.
+         */
+        public static boolean hasPointRelease(String spec) {
+            if (spec == null) return false;
+            for (String tok : spec.toLowerCase(Locale.ROOT).split("[-_]")) {
+                if (!tok.isEmpty() && Character.isDigit(tok.charAt(0)) && tok.indexOf('.') >= 0) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         /** {@code "java"} / {@code "kotlin"} — derived from which compiler field is non-zero. */

@@ -124,8 +124,8 @@ public final class AggregateMemberListener implements GoalListener {
             long num = Math.min(base + advanced, total);
             cm.progress(num, total);
         } else {
-            // Uncalibrated (jk native's workspace cascade doesn't pre-scan): fall
-            // back to live ticks against a denominator that grows as members start.
+            // Uncalibrated caller (slice 0): fall back to live ticks against a
+            // denominator that grows as members start.
             cm.progress(base + view.numerator(), base + view.denominator());
         }
     }

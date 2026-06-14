@@ -281,7 +281,7 @@ public final class JdkUpdateCommand implements CliCommand {
 
     // --- confirmation -------------------------------------------------------
 
-    private boolean confirm(List<Update> updates) throws IOException {
+    private boolean confirm(List<Update> updates) {
         System.out.println("\nThe following " + updates.size() + " JDK"
                 + (updates.size() == 1 ? "" : "s") + " will be updated:");
         for (Update u : updates) {
@@ -289,21 +289,8 @@ public final class JdkUpdateCommand implements CliCommand {
                     + Theme.colorize(JdkRegistry.identifierFor(u.old.home()), Theme.active().cyan())
                     + " → " + Theme.colorize(u.target.installFolderName(), Theme.active().focused()));
         }
-        System.out.print(Theme.colorize("‼", Theme.active().warning())
-                + " Proceed? " + yesNo() + " ");
-        System.out.flush();
-        var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-        String line = reader.readLine();
-        if (line == null) return false;
-        String trimmed = line.trim();
-        return trimmed.isEmpty() || trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
-    }
-
-    /** {@code [Y/n]} with the brackets and slash dimmed, the keys left plain. */
-    private static String yesNo() {
-        var dim = Theme.active().darkGray();
-        return Theme.colorize("[", dim) + "Y" + Theme.colorize("/", dim)
-                + "n" + Theme.colorize("]", dim);
+        return dev.jkbuild.cli.tui.Confirm.of(
+                Theme.colorize("‼", Theme.active().warning()) + " Proceed?", true).ask();
     }
 
     // --- shared mechanics (mirrors JdkEnsureCommand) ------------------------

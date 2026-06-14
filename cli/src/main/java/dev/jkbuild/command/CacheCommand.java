@@ -282,7 +282,7 @@ public final class CacheCommand implements CliCommand {
         }
 
         /** Stern, default-to-no confirmation before wiping the whole cache. */
-        private static boolean confirmPurge(Path root, Stats stats) throws IOException {
+        private static boolean confirmPurge(Path root, Stats stats) {
             Theme t = Theme.active();
             String bang = Theme.colorize("‼", t.error());
             System.out.println();
@@ -291,20 +291,7 @@ public final class CacheCommand implements CliCommand {
             System.out.printf("  %s files, %s — every cached dependency, CAS blob, and the m2 repo mirror.%n",
                     fmtCount(stats.files), fmtBytes(stats.bytes));
             System.out.println("  jk will re-download everything on the next build.");
-            System.out.print(bang + " Purge the whole cache? " + yesNo() + " ");
-            System.out.flush();
-            var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-            String line = reader.readLine();
-            if (line == null) return false; // non-interactive / EOF → treat as "no"
-            String trimmed = line.trim();
-            return trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes");
-        }
-
-        /** {@code [y/N]} — default No — with the brackets and slash dimmed. */
-        private static String yesNo() {
-            var dim = Theme.active().darkGray();
-            return Theme.colorize("[", dim) + "y" + Theme.colorize("/", dim)
-                    + "N" + Theme.colorize("]", dim);
+            return dev.jkbuild.cli.tui.Confirm.of(bang + " Purge the whole cache?", false).ask();
         }
     }
 }

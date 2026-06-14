@@ -7,6 +7,7 @@ import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.tui.Confirm;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.theme.Theme;
@@ -186,7 +187,7 @@ public final class JdkUninstallCommand implements CliCommand {
 
         // The confirmation prompt names the resolved <source>/<spec>, so a bare
         // spec that matched somewhere unexpected can still be cancelled here.
-        if (!confirmDeletion(List.of(hit))) {
+        if (!confirmDeletion(List.of(hit), null)) {
             System.out.println("Aborted.");
             return 0;
         }
@@ -237,7 +238,7 @@ public final class JdkUninstallCommand implements CliCommand {
                 System.out.println("Nothing selected — no JDKs removed.");
                 return 0;
             }
-            if (!confirmDeletion(victims)) {
+            if (!confirmDeletion(victims, terminal)) {
                 System.out.println("Aborted.");
                 return 0;
             }
@@ -348,32 +349,31 @@ public final class JdkUninstallCommand implements CliCommand {
      * this call (see {@link #runWizard}) — once the terminal closes, the
      * underlying {@code System.in} FD goes with it.
      */
-    private boolean confirmDeletion(List<JdkHit> victims) throws IOException {
+    private boolean confirmDeletion(List<JdkHit> victims, Terminal terminal) {
         if (assumeYes) return true;
         String warn = Theme.colorize("‼", Theme.active().warning());
+        String question;
         if (victims.size() == 1) {
-            JdkHit h = victims.getFirst();
-            System.out.print("\n" + warn + " Are you sure you want to delete "
-                    + target(h) + "? " + yesNo() + " ");
+            question = "\n" + warn + " Are you sure you want to delete "
+                    + target(victims.getFirst()) + "?";
         } else {
             System.out.println("\n" + warn + " Are you sure you want to delete the following "
                     + victims.size() + " JDKs?");
             for (JdkHit h : victims) {
                 System.out.println("   " + target(h));
             }
-            System.out.print(yesNo() + " ");
+            question = warn + " Proceed?";
         }
-        System.out.flush();
-        var reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
-        String line = reader.readLine();
-        String trimmed = line == null ? "" : line.trim();
-        boolean proceed = line != null
-                && (trimmed.isEmpty() || trimmed.equalsIgnoreCase("y") || trimmed.equalsIgnoreCase("yes"));
+        // Reuse the wizard's already-open terminal when present (the bulk path);
+        // the single-spec path has none, so the widget opens its own (and falls
+        // back to a cooked read on a non-TTY).
+        Confirm confirm = Confirm.of(question, true);
+        boolean proceed = terminal != null ? confirm.ask(terminal) : confirm.ask();
         // For a single-target confirmation on a real terminal, erase the
         // question so the ✓/✗ result line (printed by uninstallOne) lands in
-        // its place. The user's Enter left the cursor one row below the prompt,
-        // so step back up, return to column 0, and clear to end of line.
-        // Multi-victim prompts span several rows, so leave those intact.
+        // its place. Confirm left the cursor one row below the prompt, so step
+        // back up, return to column 0, and clear to end of line. Multi-victim
+        // prompts span several rows, so leave those intact.
         if (proceed && victims.size() == 1 && isInteractiveTerminal()) {
             System.out.print(Ansi.cursorUp(1) + "\r" + Ansi.ERASE_LINE_TO_END);
             System.out.flush();
@@ -385,13 +385,6 @@ public final class JdkUninstallCommand implements CliCommand {
     private static String target(JdkHit h) {
         return Theme.colorize(h.source() + "/" + JdkRegistry.identifierFor(h.home()),
                 Theme.active().cyan());
-    }
-
-    /** {@code [Y/n]} with the brackets and slash dimmed, the keys left plain. */
-    private static String yesNo() {
-        var dim = Theme.active().darkGray();
-        return Theme.colorize("[", dim) + "Y" + Theme.colorize("/", dim)
-                + "n" + Theme.colorize("]", dim);
     }
 
     /**

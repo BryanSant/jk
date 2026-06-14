@@ -906,19 +906,20 @@ public final class BuildPipeline {
 
     /**
      * Append the artifact tails the project's {@code jk.toml} declares:
-     * {@code shadow = true} → fat-jar phase, {@code native = "always"} →
-     * native-image phase. {@code jk build} / {@code jk run} / {@code jk install}
-     * call this after {@link #coreBuilder}; {@code jk native} composes the
-     * native tail explicitly instead.
+     * {@code shadow = true} → fat-jar phase. {@code jk build} / {@code jk run} /
+     * {@code jk install} call this after {@link #coreBuilder}.
+     *
+     * <p>Native images are <em>not</em> appended here: {@code native = true}
+     * makes a project native-eligible, but a native artifact is only ever built
+     * by {@code jk native} (which composes the native tail explicitly) or by
+     * {@code jk install} of a native application (which adds the phase itself,
+     * resolving GraalVM up front). {@code jk build} stays JVM-only.
      */
     public static void appendDeclaredTails(Goal.Builder b, Inputs in) {
         try {
             JkBuild project = JkBuildParser.parse(in.buildFile());
             if (project.project().shadow()) {
                 b.addPhase(shadowPhase(in.cache(), in.lockFile()));
-            }
-            if (project.project().nativeMode() == JkBuild.NativeMode.ALWAYS) {
-                b.addPhase(nativePhase(in.dir(), in.cache(), in.lockFile(), in.jdksDir()));
             }
         } catch (Exception ignored) {}
     }
@@ -970,19 +971,20 @@ public final class BuildPipeline {
                 .build();
     }
 
-    /** GraalVM native-image, run directly as a subprocess — requires package-jar. */
-    public static Phase nativePhase(Path dir, Path cache, Path lockFile, Path jdksDir) {
-        return nativePhase(dir, cache, lockFile, jdksDir, null, List.of());
-    }
-
     /**
-     * GraalVM native-image phase with an explicit main-class override and extra
-     * native-image arguments — what {@code jk native} composes onto the core
-     * build. A null/blank {@code mainOverride} falls back to {@code [project] main}.
-     * Run directly as a subprocess; requires package-jar.
+     * GraalVM native-image phase — what {@code jk native} composes onto the core
+     * build (and {@code jk install} of a native application adds explicitly).
+     * Builds an <em>executable</em> when a main class is resolvable
+     * ({@code mainOverride} > {@code [native].main-class} > {@code [project].main}),
+     * otherwise a <em>shared library</em> ({@code native-image --shared}). Run
+     * directly as a subprocess; requires package-jar.
+     *
+     * <p>{@code graalHome} is the GraalVM the CLI's {@code GraalResolver} selected
+     * (its {@code bin/native-image} is used); when {@code null} the phase falls
+     * back to the project JDK / {@code $GRAALVM_HOME} / {@code PATH} search.
      */
     public static Phase nativePhase(Path dir, Path cache, Path lockFile, Path jdksDir,
-                                    String mainOverride, List<String> extraArgs) {
+                                    Path graalHome, String mainOverride, List<String> extraArgs) {
         List<String> extra = extraArgs == null ? List.of() : extraArgs;
         return Phase.builder("native-image")
                 .label("Native")
@@ -993,9 +995,10 @@ public final class BuildPipeline {
                 .execute(ctx -> {
                     // Fail-fast: verify native-image is available before compilation
                     // has already run and the user has waited for potentially minutes.
-                    Path javaHomeEarly = dev.jkbuild.jdk.JdkResolver.forProject(dir, jdksDir)
-                            .map(dev.jkbuild.jdk.InstalledJdk::home)
-                            .orElseGet(CompileToolchain::runningJavaHome);
+                    Path javaHomeEarly = graalHome != null ? graalHome
+                            : dev.jkbuild.jdk.JdkResolver.forProject(dir, jdksDir)
+                                    .map(dev.jkbuild.jdk.InstalledJdk::home)
+                                    .orElseGet(CompileToolchain::runningJavaHome);
                     if (dev.jkbuild.tool.NativeImageDriver.resolve(javaHomeEarly).isEmpty()) {
                         ctx.error("native", dev.jkbuild.tool.NativeImageDriver
                                 .notFoundError(javaHomeEarly).getMessage());
@@ -1010,20 +1013,25 @@ public final class BuildPipeline {
                         ctx.error("native", "jar not found at " + mainJar);
                         throw new RuntimeException("missing main jar for native-image");
                     }
-                    // Resolution order: --main CLI flag > [native].main-class > [project].main
+                    // Resolution order: --main CLI flag > [native].main-class > [project].main.
+                    // A resolvable main → executable; none → shared library (--shared).
                     String mainClass = (mainOverride != null && !mainOverride.isBlank())
                             ? mainOverride
                             : (nativeCfg.mainClass() != null ? nativeCfg.mainClass()
                             : project.project().main());
-                    if (mainClass == null || mainClass.isBlank()) {
-                        ctx.error("native", "no main class — set [project] main, "
-                                + "[native] main-class, or pass --main.");
-                        throw new RuntimeException("missing main class");
+                    boolean shared = (mainClass == null || mainClass.isBlank());
+                    if (shared) mainClass = null;
+                    // Output path: [native].name overrides the artifact-derived name.
+                    // Executable → target/<name>; library → target/lib<name> (native-image
+                    // appends the platform extension .so/.dylib/.dll and emits C headers).
+                    Path out;
+                    if (nativeCfg.name() != null) {
+                        String nm = nativeCfg.name();
+                        out = layout.memberTargetDir().resolve(
+                                shared && !nm.startsWith("lib") ? "lib" + nm : nm);
+                    } else {
+                        out = shared ? layout.nativeLibrary() : layout.nativeBinary();
                     }
-                    // Output path: [native].name overrides the artifact name from BuildLayout
-                    Path out = (nativeCfg.name() != null)
-                            ? layout.memberTargetDir().resolve(nativeCfg.name())
-                            : layout.nativeBinary();
                     Files.createDirectories(out.getParent());
                     // Args: [native].args (project-level) + extra (CLI --) in that order
                     List<String> allArgs = new ArrayList<>(nativeCfg.args());
@@ -1083,7 +1091,7 @@ public final class BuildPipeline {
 
                     int exit = dev.jkbuild.tool.NativeImageDriver.run(
                             new dev.jkbuild.tool.NativeImageDriver.Request(
-                                    javaHome, classpath, mainClass, out, allArgs),
+                                    javaHome, classpath, mainClass, out, allArgs, shared),
                             listener);
                     if (exit != 0) {
                         ctx.error("native", "native-image exited " + exit);

@@ -426,6 +426,18 @@ public final class InstallCommand implements CliCommand {
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
 
+        // `jk build` no longer auto-builds native (that's `jk native`), so an
+        // installed native application builds its binary here. Resolve the
+        // GraalVM up front — before GoalConsole opens — so a prompt/install never
+        // lands inside the progress UI.
+        if (isNative) {
+            java.util.Optional<Path> graalHome =
+                    new dev.jkbuild.cli.GraalResolver(null, false).resolve(projectDir, pj.graal());
+            if (graalHome.isEmpty()) return 1; // GraalResolver already printed why
+            builder.addPhase(BuildPipeline.nativePhase(
+                    projectDir, cacheDir, lockFile, null, graalHome.get(), null, List.of()));
+        }
+
         // cache-install reads the freshly-built jar; make-install must wait for
         // whichever runnable artifact this project produces.
         List<String> makeRequires = new ArrayList<>(List.of("cache-install"));
