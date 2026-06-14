@@ -41,17 +41,31 @@ import java.util.regex.Pattern;
  */
 public final class GlobalDefaultJdk {
 
-    private static final Pattern DEFAULT_JDK_LINE =
-            Pattern.compile("(?m)^default-jdk\\s*=\\s*.*$");
+    private static final String DEFAULT_KEY = "default-jdk";
+    private static final String GRAAL_KEY = "default-graal-jdk";
+
+    /** Matches a {@code <key> = ...} line so we can replace/strip it in place. */
+    private static Pattern linePattern(String key) {
+        return Pattern.compile("(?m)^" + Pattern.quote(key) + "\\s*=\\s*.*$");
+    }
 
     private final Path defaultSymlink;
     private final Path currentSymlink;
+    private final Path defaultGraalSymlink;
     private final Path configFile;
 
-    public GlobalDefaultJdk(Path defaultSymlink, Path currentSymlink, Path configFile) {
+    public GlobalDefaultJdk(Path defaultSymlink, Path currentSymlink,
+                            Path defaultGraalSymlink, Path configFile) {
         this.defaultSymlink = defaultSymlink;
         this.currentSymlink = currentSymlink;
+        this.defaultGraalSymlink = defaultGraalSymlink;
         this.configFile = configFile;
+    }
+
+    /** Back-compat: derive the default-graal symlink as a sibling of the default. */
+    public GlobalDefaultJdk(Path defaultSymlink, Path currentSymlink, Path configFile) {
+        this(defaultSymlink, currentSymlink,
+                defaultSymlink.resolveSibling("default-graal-jdk"), configFile);
     }
 
     public static GlobalDefaultJdk current() {
@@ -59,6 +73,7 @@ public final class GlobalDefaultJdk {
         return new GlobalDefaultJdk(
                 data.resolve("default-jdk"),
                 data.resolve("current-jdk"),
+                data.resolve("default-graal-jdk"),
                 JkDirs.userConfigFile());
     }
 
@@ -81,7 +96,7 @@ public final class GlobalDefaultJdk {
      * pin will re-flip it on the next {@code jk env}.
      */
     public void set(InstalledJdk jdk) throws IOException {
-        writeConfigRecord(jdk.identifier());
+        writeConfigRecord(DEFAULT_KEY, jdk.identifier());
         writeSymlink(defaultSymlink, jdk.home());
         writeSymlink(currentSymlink, jdk.home());
     }
@@ -95,6 +110,42 @@ public final class GlobalDefaultJdk {
     }
 
     /**
+     * Point the default <em>GraalVM</em> at {@code jdk} (set by {@code jk jdk
+     * graal}). Independent of the default/current java JDK: it backs
+     * {@code GRAALVM_HOME} and {@code jk native}. Writes the {@code
+     * default-graal-jdk} config record + a best-effort symlink.
+     */
+    public void setGraal(InstalledJdk jdk) throws IOException {
+        writeConfigRecord(GRAAL_KEY, jdk.identifier());
+        writeSymlink(defaultGraalSymlink, jdk.home());
+    }
+
+    public Path graalSymlink() {
+        return defaultGraalSymlink;
+    }
+
+    /** Identifier stored under {@code default-graal-jdk}, if any. */
+    public Optional<String> graalIdentifier() throws IOException {
+        return readKey(GRAAL_KEY);
+    }
+
+    /** The default-graal symlink's resolved home, if it exists and is live. */
+    public Optional<Path> graalHome() {
+        try {
+            if (!Files.exists(defaultGraalSymlink)) return Optional.empty();
+            return Optional.of(defaultGraalSymlink.toRealPath());
+        } catch (IOException ignored) {
+            return Optional.empty();
+        }
+    }
+
+    /** Drop the default-graal pointer (symlink + config line); other keys kept. */
+    public void clearGraal() throws IOException {
+        Files.deleteIfExists(defaultGraalSymlink);
+        stripKey(GRAAL_KEY);
+    }
+
+    /**
      * Drop the system-wide default pointer entirely. Removes both symlinks
      * (best-effort) and strips the {@code default-jdk} line from the config
      * file. Other keys in the config file are preserved. Used by
@@ -105,9 +156,14 @@ public final class GlobalDefaultJdk {
     public void clear() throws IOException {
         Files.deleteIfExists(defaultSymlink);
         Files.deleteIfExists(currentSymlink);
+        stripKey(DEFAULT_KEY);
+    }
+
+    /** Remove a single {@code <key> = ...} line from the config, preserving others. */
+    private void stripKey(String key) throws IOException {
         if (!Files.exists(configFile)) return;
         String existing = Files.readString(configFile, StandardCharsets.UTF_8);
-        Matcher m = DEFAULT_JDK_LINE.matcher(existing);
+        Matcher m = linePattern(key).matcher(existing);
         if (!m.find()) return;
         String updated = m.replaceFirst("");
         // Collapse the blank line we may have left behind so consecutive
@@ -132,6 +188,11 @@ public final class GlobalDefaultJdk {
 
     /** Identifier stored under {@code default-jdk}, if any. */
     public Optional<String> currentIdentifier() throws IOException {
+        return readKey(DEFAULT_KEY);
+    }
+
+    /** Read a string config key, or empty when absent/blank. */
+    private Optional<String> readKey(String key) throws IOException {
         if (!Files.exists(configFile)) return Optional.empty();
         TomlParseResult toml = Toml.parse(configFile);
         if (toml.hasErrors()) {
@@ -139,7 +200,7 @@ public final class GlobalDefaultJdk {
             throw new IOException("malformed " + configFile + ": "
                     + toml.errors().getFirst().getMessage());
         }
-        String value = toml.getString("default-jdk");
+        String value = toml.getString(key);
         return Optional.ofNullable(value).filter(s -> !s.isBlank());
     }
 
@@ -154,15 +215,15 @@ public final class GlobalDefaultJdk {
         }
     }
 
-    private void writeConfigRecord(String identifier) throws IOException {
+    private void writeConfigRecord(String key, String identifier) throws IOException {
         Files.createDirectories(configFile.getParent());
-        String line = "default-jdk = \"" + escape(identifier) + "\"";
+        String line = key + " = \"" + escape(identifier) + "\"";
         if (!Files.exists(configFile)) {
             Files.writeString(configFile, line + "\n", StandardCharsets.UTF_8);
             return;
         }
         String existing = Files.readString(configFile, StandardCharsets.UTF_8);
-        Matcher m = DEFAULT_JDK_LINE.matcher(existing);
+        Matcher m = linePattern(key).matcher(existing);
         String updated = m.find()
                 ? m.replaceFirst(Matcher.quoteReplacement(line))
                 : existing + (existing.endsWith("\n") ? "" : "\n") + line + "\n";

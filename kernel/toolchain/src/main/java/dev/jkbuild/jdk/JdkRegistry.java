@@ -281,14 +281,31 @@ public final class JdkRegistry {
     public Optional<JdkHit> findHitBySpec(String spec, String sourceFilter) {
         if (spec == null || spec.isBlank()) return Optional.empty();
         JdkSelector.FlexibleQuery query = JdkSelector.parseFlexible(spec);
+        List<JdkHit> matches = new ArrayList<>();
         for (JdkHit hit : listHits()) {
             if (sourceFilter != null && !sourceFilter.isEmpty()
                     && !sourceFilter.equals(hit.source())) {
                 continue;
             }
-            if (matchesSpec(hit, query)) return Optional.of(hit);
+            if (matchesSpec(hit, query)) matches.add(hit);
         }
-        return Optional.empty();
+        if (matches.isEmpty()) return Optional.empty();
+        if (query.lowerBound().isPresent()) {
+            // Range (">=21"): the LOWEST installed major satisfying the bound
+            // wins; ties break on vendor preference, then newest version.
+            matches.sort(Comparator
+                    .comparingInt((JdkHit h) -> {
+                        Integer m = majorOf(h.version());
+                        return m == null ? Integer.MAX_VALUE : m;
+                    })
+                    .thenComparingInt(h -> h.vendor() == null
+                            ? Integer.MAX_VALUE : h.vendor().preferenceRank())
+                    .thenComparing(h -> h.version() == null
+                            ? "" : JdkSelector.versionKey(h.version()), Comparator.reverseOrder()));
+            return Optional.of(matches.getFirst());
+        }
+        // Non-range: first match in probe-chain order (unchanged behaviour).
+        return Optional.of(matches.getFirst());
     }
 
     /**
@@ -346,7 +363,10 @@ public final class JdkRegistry {
     }
 
     private static boolean matchesSpec(JdkHit hit, JdkSelector.FlexibleQuery query) {
-        if (query.major().isPresent()) {
+        if (query.lowerBound().isPresent()) {
+            Integer hitMajor = majorOf(hit.version());
+            if (hitMajor == null || !query.lowerBound().get().satisfiedBy(hitMajor)) return false;
+        } else if (query.major().isPresent()) {
             Integer hitMajor = majorOf(hit.version());
             if (hitMajor == null || !hitMajor.equals(query.major().get())) return false;
         }

@@ -33,6 +33,41 @@ class GlobalDefaultJdkTest {
     }
 
     @Test
+    void default_and_default_graal_coexist_independently(@TempDir Path tempDir) throws IOException {
+        Path data = tempDir.resolve("share/jk");
+        Path configFile = tempDir.resolve("config/jk.toml");
+        Path javaHome = Files.createDirectories(tempDir.resolve("jdks/temurin-25.0.3"));
+        Path graalHome = Files.createDirectories(tempDir.resolve("jdks/graalvm-25.0.3"));
+
+        GlobalDefaultJdk gdj = new GlobalDefaultJdk(
+                data.resolve("default-jdk"), data.resolve("current-jdk"),
+                data.resolve("default-graal-jdk"), configFile);
+        gdj.set(new InstalledJdk("temurin-25.0.3", javaHome));
+        gdj.setGraal(new InstalledJdk("graalvm-25.0.3", graalHome));
+
+        // Both keys present, independent.
+        assertThat(Files.readString(configFile))
+                .contains("default-jdk = \"temurin-25.0.3\"")
+                .contains("default-graal-jdk = \"graalvm-25.0.3\"");
+        assertThat(gdj.currentIdentifier()).contains("temurin-25.0.3");
+        assertThat(gdj.graalIdentifier()).contains("graalvm-25.0.3");
+        assertThat(gdj.graalHome()).contains(graalHome);
+
+        // Clearing graal leaves the java default intact (and vice-versa).
+        gdj.clearGraal();
+        assertThat(gdj.graalIdentifier()).isEmpty();
+        assertThat(gdj.currentIdentifier()).contains("temurin-25.0.3");
+        assertThat(Files.readString(configFile))
+                .contains("default-jdk = \"temurin-25.0.3\"")
+                .doesNotContain("default-graal-jdk");
+
+        gdj.setGraal(new InstalledJdk("graalvm-25.0.3", graalHome));
+        gdj.clear();
+        assertThat(gdj.currentIdentifier()).isEmpty();
+        assertThat(gdj.graalIdentifier()).contains("graalvm-25.0.3");
+    }
+
+    @Test
     void set_replaces_existing_symlinks(@TempDir Path tempDir) throws IOException {
         Path defaultSymlink = tempDir.resolve("share/jk/default-jdk");
         Path currentSymlink = tempDir.resolve("share/jk/current-jdk");

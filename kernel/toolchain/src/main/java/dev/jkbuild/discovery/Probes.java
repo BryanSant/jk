@@ -23,6 +23,7 @@ public final class Probes {
         chain.add(new EnvVarProbe());
         chain.add(new JkProbe());           // ~/.jk/jdks — jk's own installs
         chain.add(new IntellijProbe());     // ~/.jdks or ~/Library/Java/JavaVirtualMachines
+        chain.add(new GradleProbe());       // ~/.gradle/jdks — Gradle toolchain auto-provisioned
         chain.add(new SdkmanProbe());
         chain.add(new JbangProbe());
         chain.add(new MiseProbe());

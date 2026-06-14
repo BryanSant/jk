@@ -27,6 +27,15 @@ public final class JdkLts {
     private static final int CADENCE_BASE = 17;
 
     /**
+     * The newest LTS major that has reached GA as of this jk build — the offline
+     * source of truth for "latest LTS" when the JetBrains feed isn't consulted
+     * (e.g. fast build-time JDK resolution / the de-facto-default rule). Bump
+     * when a new LTS ships; the catalog-driven {@link #latestLtsIn} refines it
+     * whenever a feed is actually available.
+     */
+    public static final int OFFLINE_LATEST_LTS = 25;
+
+    /**
      * Is {@code major} an LTS release per Oracle's post-2021 cadence?
      * Does not check whether the major has actually shipped — combine
      * with {@link #latestLtsIn} for that.

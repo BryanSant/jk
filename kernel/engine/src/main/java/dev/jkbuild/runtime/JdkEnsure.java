@@ -2,15 +2,16 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkCatalogClient;
 import dev.jkbuild.jdk.JdkInstaller;
+import dev.jkbuild.jdk.JdkLts;
 import dev.jkbuild.jdk.JdkRegistry;
-import dev.jkbuild.jdk.JdkResolver;
+import dev.jkbuild.jdk.JdkResolution;
 import dev.jkbuild.jdk.JdkSelector;
-import dev.jkbuild.jdk.JdkSpec;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.JkBuild;
 
@@ -63,47 +64,40 @@ public final class JdkEnsure {
     public static Outcome ensure(Path projectDir, Path jdksDirOverride, JkBuild build, Lockfile lock,
                                  java.util.function.Consumer<String> warn)
             throws IOException, InterruptedException {
-        // 1. Already pinned via .jdk-version → use what's there.
-        Optional<InstalledJdk> resolved = JdkResolver.forProject(projectDir, jdksDirOverride);
-        if (resolved.isPresent()) {
-            return new Outcome(resolved, Source.ALREADY_PINNED, null);
-        }
-
-        // 2. Lockfile recorded a specific install identifier — see if it's
-        //    sitting in the registry.
         JdkRegistry registry = jdksDirOverride != null
                 ? new JdkRegistry(jdksDirOverride)
                 : new JdkRegistry();
-        if (lock != null && lock.jdk() != null && !lock.jdk().isBlank()) {
-            Optional<InstalledJdk> byId = registry.find(lock.jdk());
-            if (byId.isPresent()) {
-                return new Outcome(byId, Source.LOCKFILE_INSTALL, lock.jdk());
-            }
-        }
+        GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
+        int latestLts = JdkLts.OFFLINE_LATEST_LTS;
 
-        // 3. Probe chain — same logic as `jk jdk default <spec>`. Walks all
-        //    known JDK sources (IntelliJ dir, SDKMAN, JAVA_HOME, …) and
-        //    returns the first match. This ensures bare-major specs like
-        //    `jdk = 25` resolve the same way in both commands.
-        String spec = chooseSpec(build, lock);
-        if (spec == null) {
+        // Walk the one canonical resolution order (--jdk / JK_JDK / .jdk-version /
+        // jk.lock / project.jdk / project.java-floor / current / default / env / PATH).
+        JdkResolution.Request req = new JdkResolution.Request(
+                projectDir, /*switch*/ null, System.getenv("JK_JDK"),
+                lock != null ? lock.jdk() : null,
+                (build != null && build.project() != null) ? build.project().jdk() : null,
+                (build != null && build.project() != null) ? build.project().javaRelease() : 0,
+                System::getenv);
+        JdkResolution.Resolved r = JdkResolution.resolve(req, registry, defaults, latestLts);
+
+        if (r.jdk().isPresent()) {
+            return new Outcome(r.jdk(), mapSource(r.tier()), r.specUsed());
+        }
+        if (!r.wouldInstall()) {
+            // Nothing pinned and nothing to install (resolution found no spec).
             return new Outcome(Optional.empty(), Source.ALREADY_PINNED, null);
         }
-        Optional<InstalledJdk> probed = registry.findBySpec(spec);
-        if (probed.isPresent()) {
-            return new Outcome(probed, Source.ALREADY_PINNED, spec);
-        }
 
-        // 4. Nothing on disk matches — download from the JetBrains catalog.
+        // A named pin (or the bootstrap latest-LTS) isn't on disk — install it.
         if (!HostPlatform.supported()) {
             throw new IOException("host " + System.getProperty("os.name") + "/"
                     + System.getProperty("os.arch")
                     + " is not covered by the JetBrains JDK feed (set JAVA_HOME explicitly)");
         }
-
+        String spec = r.installSpec();
         JdkCatalog catalog = new JdkCatalogClient().onWarning(warn).fetch();
-        // selectPreferred biases a vendor-unqualified spec (e.g. `25`, `25.0.3`)
-        // to Eclipse Temurin, matching `jk jdk install` / `jk jdk ensure`.
+        // selectPreferred biases a vendor-unqualified spec to jk's vendor order
+        // and resolves range specs (">=26") to the lowest available major.
         Optional<JdkCatalog.Entry> entry = JdkSelector.selectPreferred(
                 catalog, spec, HostPlatform.currentOs(), HostPlatform.currentArch());
         if (entry.isEmpty()) {
@@ -112,17 +106,19 @@ public final class JdkEnsure {
         }
         JdkInstaller installer = new JdkInstaller(new Http(), registry);
         InstalledJdk installed = installer.install(entry.get());
+
+        // A bootstrap install (no JDK was pinned or configured) becomes the
+        // de-facto default — but only when no default is set yet, and only for
+        // the bootstrap case (a named project pin must not hijack the global
+        // default). r.tier() == DEFAULT marks the bootstrap path.
+        if (r.tier() == JdkResolution.Tier.DEFAULT && defaults.currentIdentifier().isEmpty()) {
+            defaults.set(installed);
+        }
         return new Outcome(Optional.of(installed), Source.INSTALLED, spec);
     }
 
-    private static String chooseSpec(JkBuild build, Lockfile lock) {
-        if (lock != null && lock.jdk() != null && !lock.jdk().isBlank()) {
-            return lock.jdk();
-        }
-        if (build != null && build.project() != null
-                && build.project().jdk() != null && !build.project().jdk().isBlank()) {
-            return build.project().jdk();
-        }
-        return null;
+    /** Map a resolution tier to the coarse {@link Source} used for status wording. */
+    private static Source mapSource(JdkResolution.Tier tier) {
+        return tier == JdkResolution.Tier.LOCKFILE ? Source.LOCKFILE_INSTALL : Source.ALREADY_PINNED;
     }
 }

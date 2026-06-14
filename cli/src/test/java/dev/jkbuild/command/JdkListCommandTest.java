@@ -26,7 +26,7 @@ class JdkListCommandTest {
                 new JdkHit(defaultHome, "21.0.5", JdkVendor.UNKNOWN, "jk"));
 
         List<Row> rows = JdkListCommand.buildRows(
-                installed, "corretto-21.0.5", null, "linux", "x64", currentHome);
+                installed, "corretto-21.0.5", null, "linux", "x64", currentHome, null);
 
         assertThat(rowFor(rows, "temurin-25.0.1").status()).isEqualTo(Status.CURRENT);
         assertThat(rowFor(rows, "corretto-21.0.5").status()).isEqualTo(Status.DEFAULT);
@@ -39,7 +39,7 @@ class JdkListCommandTest {
                 new JdkHit(home, "25.0.1", JdkVendor.UNKNOWN, "sdkman"));
 
         List<Row> rows = JdkListCommand.buildRows(
-                installed, "temurin-25.0.1", null, "linux", "x64", home);
+                installed, "temurin-25.0.1", null, "linux", "x64", home, null);
 
         assertThat(rowFor(rows, "temurin-25.0.1").status()).isEqualTo(Status.CURRENT);
         assertThat(rows).noneMatch(r -> r.status() == Status.DEFAULT);
@@ -55,7 +55,7 @@ class JdkListCommandTest {
                 new JdkHit(listed, "21.0.5", JdkVendor.UNKNOWN, "jk"));
 
         List<Row> rows = JdkListCommand.buildRows(
-                installed, null, null, "linux", "x64", currentHome);
+                installed, null, null, "linux", "x64", currentHome, null);
 
         Row current = rowFor(rows, "temurin-25.0.1");
         assertThat(current.status()).isEqualTo(Status.CURRENT);
@@ -68,7 +68,7 @@ class JdkListCommandTest {
                 new JdkHit(dir.resolve("temurin-25.0.1"), "25.0.1", JdkVendor.UNKNOWN, "sdkman"));
 
         List<Row> rows = JdkListCommand.buildRows(
-                installed, null, null, "linux", "x64", null);
+                installed, null, null, "linux", "x64", null, null);
 
         assertThat(rows).noneMatch(r -> r.status() == Status.CURRENT);
     }

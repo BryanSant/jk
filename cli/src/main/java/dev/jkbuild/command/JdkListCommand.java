@@ -72,6 +72,7 @@ public final class JdkListCommand implements CliCommand {
         // the status-priority tie-break in buildRows().
         CURRENT("current"),
         DEFAULT("default"),
+        NATIVE("native"),
         INSTALLED("installed"),
         AVAILABLE("available");
 
@@ -93,6 +94,7 @@ public final class JdkListCommand implements CliCommand {
         Path jdksRoot = registry.jdksRoot();
         List<JdkHit> installed = registry.listHits();
         Optional<String> defaultId = readDefaultIdentifier();
+        String graalId = readGraalIdentifier().orElse(null);
         // Catalog (and therefore the network fetch) is only consulted when the
         // user opts in to "available" rows via --all. Default `list` is a
         // pure offline view of what's on disk.
@@ -105,7 +107,7 @@ public final class JdkListCommand implements CliCommand {
         // shell actually compiles with, independent of jk's default pointer.
         Path currentHome = ActiveJavac.home().orElse(null);
 
-        List<Row> rows = buildRows(installed, defaultId.orElse(null), catalog, os, arch, currentHome);
+        List<Row> rows = buildRows(installed, defaultId.orElse(null), catalog, os, arch, currentHome, graalId);
         if (!all) {
             rows = rows.stream()
                     .filter(r -> r.status() != Status.AVAILABLE)
@@ -131,7 +133,8 @@ public final class JdkListCommand implements CliCommand {
             JdkCatalog catalog,
             String os,
             String arch,
-            Path currentHome) {
+            Path currentHome,
+            String graalId) {
         // Index catalog entries by installFolderName, restricted to current host.
         Map<String, JdkCatalog.Entry> byInstall = new HashMap<>();
         if (catalog != null) {
@@ -159,6 +162,7 @@ public final class JdkListCommand implements CliCommand {
             boolean isCurrent = sameHome(currentHome, j.home());
             Status status = isCurrent ? Status.CURRENT
                     : id.equals(defaultId) ? Status.DEFAULT
+                    : (graalId != null && id.equals(graalId)) ? Status.NATIVE
                     : Status.INSTALLED;
             if (isCurrent) currentShown = true;
             rows.add(new Row(major, vendor, id, status, j.source()));
@@ -399,6 +403,9 @@ public final class JdkListCommand implements CliCommand {
             // Bold + bright-green marks jk's global default; shown only when it
             // differs from the current (PATH) JDK.
             case DEFAULT -> Theme.active().brightGreen().bold();
+            // Bold + highlight marks the default GraalVM (`jk jdk graal`) — what
+            // GRAALVM_HOME and `jk native` use.
+            case NATIVE -> Theme.active().highlight().bold();
             case INSTALLED -> Theme.active().completedStep();
             case AVAILABLE -> Theme.active().darkGray();
         };
@@ -428,6 +435,14 @@ public final class JdkListCommand implements CliCommand {
     private Optional<String> readDefaultIdentifier() {
         try {
             return GlobalDefaultJdk.current().currentIdentifier();
+        } catch (IOException e) {
+            return Optional.empty();
+        }
+    }
+
+    private Optional<String> readGraalIdentifier() {
+        try {
+            return GlobalDefaultJdk.current().graalIdentifier();
         } catch (IOException e) {
             return Optional.empty();
         }

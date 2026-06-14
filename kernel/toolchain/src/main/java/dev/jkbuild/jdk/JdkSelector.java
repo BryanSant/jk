@@ -28,35 +28,34 @@ public final class JdkSelector {
     private JdkSelector() {}
 
     /**
-     * Default vendor for specs that don't name one. jk's mental model is "the
-     * default JDK is Eclipse Temurin" — see {@link #selectPreferred}.
-     */
-    private static final String PREFERRED_VENDOR = "temurin";
-
-    /**
-     * {@link #select} with jk's default-vendor bias: when {@code rawSpec} names
-     * no vendor (a bare major / version like {@code 26} or {@code 25.0.3}),
-     * Eclipse Temurin is preferred over the feed's {@code default:true}
-     * entry-for-major. Falls back to the unbiased {@link #select} when no
-     * Temurin entry satisfies the spec on this host (or when the spec already
-     * names a vendor, e.g. {@code corretto-25} / {@code temurin-25}).
+     * {@link #select} with jk's vendor-preference bias: when {@code rawSpec} names
+     * no vendor (a bare major / version like {@code 26} or {@code 25.0.3}), the
+     * vendors in {@link JdkVendor#PREFERENCE} (Temurin, Liberica, Oracle OpenJDK,
+     * Corretto) are tried in order, preferring the first that satisfies the spec
+     * on this host over the feed's {@code default:true} entry-for-major. Falls
+     * back to the unbiased {@link #select} when none match (or when the spec
+     * already names a vendor, e.g. {@code corretto-25}).
      *
      * <p>This is the entry point every <em>install</em> path should use so the
-     * Temurin bias is consistent across {@code jk jdk install <ver>},
+     * preference is consistent across {@code jk jdk install <ver>},
      * {@code jk jdk ensure <ver>}, and the build pipeline's auto-install — the
      * keyword path ({@code lts}/{@code latest}) is already Temurin-biased via
-     * {@link JdkKeywords#resolveToMajorSpec}.
+     * {@link JdkKeywords#resolveToMajorSpec}. Range specs ({@code >=21}) skip the
+     * bias and resolve via {@link #selectFlexible}'s vendor-ranked tie-break.
      */
     public static Optional<JdkCatalog.Entry> selectPreferred(
             JdkCatalog catalog, String rawSpec, String os, String arch) {
         if (rawSpec == null || rawSpec.isBlank()) return Optional.empty();
         FlexibleQuery q = parseFlexible(rawSpec);
-        // Bias only when the user named no vendor AND gave a concrete major/
-        // version (so plain hints like "graal" aren't forced onto Temurin).
-        if (q.hints().isEmpty() && q.major().isPresent()) {
-            Optional<JdkCatalog.Entry> preferred = select(
-                    catalog, JdkSpec.parse(PREFERRED_VENDOR + "-" + rawSpec.trim()), os, arch);
-            if (preferred.isPresent()) return preferred;
+        // Bias only when the user named no vendor AND gave a concrete major/version.
+        if (q.hints().isEmpty() && q.lowerBound().isEmpty() && q.major().isPresent()) {
+            for (JdkVendor v : JdkVendor.PREFERENCE) {
+                String prefix = v.jbPrefix().orElse(null);
+                if (prefix == null) continue;
+                Optional<JdkCatalog.Entry> preferred = select(
+                        catalog, JdkSpec.parse(prefix + "-" + rawSpec.trim()), os, arch);
+                if (preferred.isPresent()) return preferred;
+            }
         }
         return select(catalog, JdkSpec.parse(rawSpec), os, arch);
     }
@@ -114,10 +113,14 @@ public final class JdkSelector {
         for (JdkCatalog.Entry entry : catalog.entries()) {
             if (!entry.os().equals(os)) continue;
             if (!entry.arch().equals(arch)) continue;
-            // Major (when present) is a hard requirement; otherwise we'd offer
-            // a JDK 21 for input "graal" which the user almost certainly didn't
-            // ask for. Exact-version is also hard when supplied.
-            if (query.major().isPresent() && entry.majorVersion() != query.major().get()) continue;
+            // A range bound (">=21") is a hard filter; otherwise an exact major
+            // (when present) is hard — else we'd offer a JDK 21 for input "graal"
+            // which the user almost certainly didn't ask for. Exact-version too.
+            if (query.lowerBound().isPresent()) {
+                if (!query.lowerBound().get().satisfiedBy(entry.majorVersion())) continue;
+            } else if (query.major().isPresent() && entry.majorVersion() != query.major().get()) {
+                continue;
+            }
             if (query.exactVersion().isPresent()
                     && !entry.version().startsWith(query.exactVersion().get())) continue;
             int score = scoreHints(entry, query.hints());
@@ -128,22 +131,50 @@ public final class JdkSelector {
         }
         if (scored.isEmpty()) return Optional.empty();
 
-        scored.sort(Comparator
-                // Higher hint score first.
-                .comparingInt((Scored s) -> s.score).reversed()
-                // Default-for-major preferred when there are no hint scores to
-                // separate (esp. bare-major inputs like "25").
-                .thenComparing(s -> s.entry.defaultForMajor() ? 0 : 1)
-                // Non-preview preferred.
-                .thenComparing(s -> s.entry.preview() ? 1 : 0)
-                // Highest version wins remaining ties.
-                .thenComparing((Scored s) -> versionKey(s.entry.version()),
-                        Comparator.reverseOrder()));
+        Comparator<Scored> order;
+        if (query.lowerBound().isPresent()) {
+            // Range: the LOWEST major satisfying the bound wins (">=21" → 21, not
+            // the newest), then vendor preference, default-for-major, GA, version.
+            order = Comparator
+                    .comparingInt((Scored s) -> s.entry.majorVersion())
+                    .thenComparingInt(s -> -s.score)
+                    .thenComparingInt(s -> vendorRank(s.entry))
+                    .thenComparing(s -> s.entry.defaultForMajor() ? 0 : 1)
+                    .thenComparing(s -> s.entry.preview() ? 1 : 0)
+                    .thenComparing((Scored s) -> versionKey(s.entry.version()), Comparator.reverseOrder());
+        } else {
+            order = Comparator
+                    // Higher hint score first.
+                    .comparingInt((Scored s) -> s.score).reversed()
+                    // Default-for-major preferred when there are no hint scores to
+                    // separate (esp. bare-major inputs like "25").
+                    .thenComparing(s -> s.entry.defaultForMajor() ? 0 : 1)
+                    // Non-preview preferred.
+                    .thenComparing(s -> s.entry.preview() ? 1 : 0)
+                    // Highest version wins remaining ties.
+                    .thenComparing((Scored s) -> versionKey(s.entry.version()),
+                            Comparator.reverseOrder());
+        }
+        scored.sort(order);
         return Optional.of(scored.getFirst().entry);
     }
 
     /** Outcome of {@link #parseFlexible} — the tokens we extracted from raw input. */
-    public record FlexibleQuery(Optional<Integer> major, Optional<String> exactVersion, List<String> hints) {}
+    public record FlexibleQuery(Optional<Integer> major, Optional<String> exactVersion,
+                                List<String> hints, Optional<Bound> lowerBound) {
+
+        /** Back-compat 3-arg form (no range bound). */
+        public FlexibleQuery(Optional<Integer> major, Optional<String> exactVersion, List<String> hints) {
+            this(major, exactVersion, hints, Optional.empty());
+        }
+
+        /** A {@code >N} / {@code >=N} lower bound on the major version. */
+        public record Bound(int major, boolean inclusive) {
+            public boolean satisfiedBy(int candidateMajor) {
+                return inclusive ? candidateMajor >= major : candidateMajor > major;
+            }
+        }
+    }
 
     /**
      * Token-walker that handles the denormalized forms callers care about.
@@ -157,9 +188,22 @@ public final class JdkSelector {
         var tokens = raw.toLowerCase(Locale.ROOT).split("[-_]");
         Integer major = null;
         String exact = null;
+        FlexibleQuery.Bound bound = null;
         var hints = new ArrayList<String>();
         for (var tok : tokens) {
             if (tok.isEmpty()) continue;
+            if (tok.charAt(0) == '>') {
+                // Range bound: ">N" (exclusive) or ">=N" (inclusive).
+                boolean inclusive = tok.length() > 1 && tok.charAt(1) == '=';
+                String num = tok.substring(inclusive ? 2 : 1);
+                try {
+                    int m = Integer.parseInt(num);
+                    if (bound == null) bound = new FlexibleQuery.Bound(m, inclusive);
+                } catch (NumberFormatException ignored) {
+                    // not a clean ">N" — ignore the token
+                }
+                continue;
+            }
             if (Character.isDigit(tok.charAt(0))) {
                 int dot = tok.indexOf('.');
                 if (dot < 0) {
@@ -183,7 +227,8 @@ public final class JdkSelector {
                 hints.add(tok);
             }
         }
-        return new FlexibleQuery(Optional.ofNullable(major), Optional.ofNullable(exact), List.copyOf(hints));
+        return new FlexibleQuery(Optional.ofNullable(major), Optional.ofNullable(exact),
+                List.copyOf(hints), Optional.ofNullable(bound));
     }
 
     /**
@@ -204,6 +249,11 @@ public final class JdkSelector {
     }
 
     private record Scored(JdkCatalog.Entry entry, int score) {}
+
+    /** Vendor-preference rank of a catalog entry (lower = more preferred). */
+    private static int vendorRank(JdkCatalog.Entry e) {
+        return JdkVendor.fromFeed(e.vendor(), e.product()).preferenceRank();
+    }
 
     private static boolean matchesSpec(JdkCatalog.Entry entry, String token) {
         if (entry.suggestedSdkName().equalsIgnoreCase(token)) return true;

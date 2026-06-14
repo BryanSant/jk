@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-import dev.jkbuild.jdk.JdkResolver;
+import dev.jkbuild.jdk.JdkResolution;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.BuildTool;
 import dev.jkbuild.compat.InstalledTool;
@@ -46,13 +46,43 @@ public final class CompileToolchain {
     private CompileToolchain() {}
 
     public static Path resolveJavaHome(Path projectDir) {
-        Optional<InstalledJdk> pinned;
         try {
-            pinned = JdkResolver.forProject(projectDir, null);
-        } catch (IOException e) {
-            pinned = Optional.empty();
+            dev.jkbuild.lock.Lockfile lock = readLockSoft(projectDir);
+            JkBuild build = readBuildSoft(projectDir);
+            JdkResolution.Request req = new JdkResolution.Request(
+                    projectDir, /*switch*/ null, System.getenv("JK_JDK"),
+                    lock != null ? lock.jdk() : null,
+                    (build != null && build.project() != null) ? build.project().jdk() : null,
+                    (build != null && build.project() != null) ? build.project().javaRelease() : 0,
+                    System::getenv);
+            // Non-installing walk of the canonical order — JdkEnsure already
+            // installed any pin during sync, so this just locates it. Falls back
+            // to the running JVM when nothing resolves.
+            JdkResolution.Resolved r = JdkResolution.resolveForHook(
+                    req, new dev.jkbuild.jdk.JdkRegistry(), dev.jkbuild.jdk.GlobalDefaultJdk.current());
+            if (r.jdk().isPresent()) return r.jdk().get().home();
+        } catch (RuntimeException ignored) {
+            // fall through to the running JVM
         }
-        return pinned.map(InstalledJdk::home).orElseGet(CompileToolchain::runningJavaHome);
+        return runningJavaHome();
+    }
+
+    private static dev.jkbuild.lock.Lockfile readLockSoft(Path projectDir) {
+        try {
+            Path lock = projectDir.resolve("jk.lock");
+            return Files.isRegularFile(lock) ? dev.jkbuild.lock.LockfileReader.read(lock) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private static JkBuild readBuildSoft(Path projectDir) {
+        try {
+            Path toml = projectDir.resolve("jk.toml");
+            return Files.isRegularFile(toml) ? dev.jkbuild.config.JkBuildParser.parse(toml) : null;
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /**

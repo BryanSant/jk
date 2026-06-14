@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -57,73 +58,126 @@ public final class JkEnv {
     }
 
     /**
-     * Resolve the desired env for a {@code cwd}. The project's pinned JDK (from
-     * the nearest {@code jk.toml}'s {@code jk.lock}) wins; failing that, the
-     * global <em>current</em> JDK, then the <em>default</em> JDK, so {@code
-     * java} / {@code javac} resolve to a jk-managed JDK in any activated shell.
-     * Empty only when nothing is pinned and no default is configured. Carries
-     * JAVA_HOME / GRAALVM_HOME / PATH plus the project root (when a
-     * {@code jk.toml} was found upstream) for {@code hook-env} status output.
+     * Resolve the desired env for a {@code cwd} via the one canonical JDK order
+     * ({@link dev.jkbuild.jdk.JdkResolution}): {@code JK_JDK} env, the project's
+     * {@code .jdk-version} / {@code jk.lock} / {@code project.jdk}, then the
+     * global current / default JDK, then {@code JAVA_HOME} / {@code GRAALVM_HOME}
+     * / {@code PATH}. Never installs (the hook must not block the shell). Empty
+     * only when nothing resolves. Carries JAVA_HOME / GRAALVM_HOME / PATH plus
+     * the project root (when a {@code jk.toml} was found upstream).
      */
     public Target resolve(Path cwd) throws IOException {
         var root = findProjectRoot(cwd);
-        var jdk = projectPinnedJdk(root);
-        if (jdk.isEmpty()) {
-            // No project pin — honour the global current, then default JDK.
-            jdk = currentOrDefaultJdk();
+        String lockId = lockJdkId(root);
+        String projectJdk = null;
+        String projectGraal = null;
+        int javaRelease = 0;
+        if (root.isPresent()) {
+            try {
+                var build = dev.jkbuild.config.JkBuildParser.parse(root.get().resolve("jk.toml"));
+                if (build.project() != null) {
+                    projectJdk = build.project().jdk();
+                    projectGraal = build.project().graal();
+                    javaRelease = build.project().javaRelease();
+                }
+            } catch (Exception ignored) {
+                // unparseable / unreadable jk.toml — fail soft
+            }
         }
-        if (jdk.isEmpty()) return Target.empty();
-        return targetFor(root, jdk.get());
+        var req = new dev.jkbuild.jdk.JdkResolution.Request(
+                root.orElse(cwd), /*switch*/ null, System.getenv("JK_JDK"),
+                lockId, projectJdk, javaRelease, System::getenv);
+        var resolved = dev.jkbuild.jdk.JdkResolution.resolveForHook(req, registry, globalDefault);
+        if (resolved.jdk().isEmpty()) return Target.empty();
+        var home = resolved.jdk().get().home();
+        var jdk = new ResolvedJdk(home, matchVendor(home));
+        return targetFor(root, jdk, resolveGraalHome(projectGraal, jdk));
     }
 
-    /** The JDK the project at {@code root} pins via its sibling {@code jk.lock}, if any. */
-    private Optional<ResolvedJdk> projectPinnedJdk(Optional<Path> root) throws IOException {
-        if (root.isEmpty()) return Optional.empty();
+    /** The jdk identifier the project at {@code root} pins via its {@code jk.lock}, if any. */
+    private String lockJdkId(Optional<Path> root) {
+        if (root.isEmpty()) return null;
         var lockPath = root.get().resolve("jk.lock");
-        if (!Files.isRegularFile(lockPath)) return Optional.empty();
-        Lockfile lock;
+        if (!Files.isRegularFile(lockPath)) return null;
         try {
-            lock = LockfileReader.read(lockPath);
-        } catch (RuntimeException e) {
-            // Corrupt lockfile — fail soft; jk hook-env never blocks the shell.
-            return Optional.empty();
+            String id = LockfileReader.read(lockPath).jdk();
+            return (id == null || id.isBlank()) ? null : id;
+        } catch (Exception e) {
+            return null; // corrupt/unreadable lockfile — fail soft
         }
-        var jdkId = lock.jdk();
-        if (jdkId == null || jdkId.isBlank()) return Optional.empty();
-        return lookupJdkHome(jdkId);
     }
 
     /**
-     * The global fallback JDK when no project pins one: the {@code current-jdk}
-     * pointer if it resolves, else the configured {@code default-jdk}. Fails
-     * soft (empty) on a missing/unreadable config so the shell is never blocked.
+     * Build the env vars (JAVA_HOME / GRAALVM_HOME / PATH). GRAALVM_HOME is
+     * managed independently of JAVA_HOME from its own chain ({@code JK_GRAAL} >
+     * {@code project.graal} > the {@code jk jdk graal} default); only when that
+     * chain finds nothing do we fall back to the active JDK if it is itself a
+     * GraalVM. Absent → the hook unsets any GRAALVM_HOME it previously exported.
      */
-    private Optional<ResolvedJdk> currentOrDefaultJdk() throws IOException {
-        var currentHome = globalDefault.currentHome();
-        if (currentHome.isPresent() && Files.isDirectory(currentHome.get().resolve("bin"))) {
-            var home = currentHome.get();
-            return Optional.of(new ResolvedJdk(home, matchVendor(home)));
-        }
-        Optional<String> defaultId;
-        try {
-            defaultId = globalDefault.currentIdentifier();
-        } catch (IOException malformedConfig) {
-            return Optional.empty();
-        }
-        return defaultId.isPresent() ? lookupJdkHome(defaultId.get()) : Optional.empty();
-    }
-
-    /** Build the env vars (JAVA_HOME / GRAALVM_HOME / PATH) for a resolved JDK. */
-    private Target targetFor(Optional<Path> root, ResolvedJdk jdk) {
+    private Target targetFor(Optional<Path> root, ResolvedJdk jdk, Optional<Path> graalHome) {
         var vars = new LinkedHashMap<String, String>();
         var home = jdk.home();
         vars.put(JAVA_HOME, home.toString());
-        if (isGraalvm(jdk)) {
+        if (graalHome.isPresent()) {
+            vars.put(GRAALVM_HOME, graalHome.get().toString());
+        } else if (isGraalvm(jdk)) {
             vars.put(GRAALVM_HOME, home.toString());
         }
         var bin = home.resolve("bin").toString();
         vars.put(PATH, bin + File.pathSeparator + origPath);
         return new Target(root, vars);
+    }
+
+    /**
+     * Resolve the default GraalVM home, independent of JAVA_HOME:
+     * {@code JK_GRAAL} > {@code project.graal} > the {@code jk jdk graal} default
+     * pointer. The {@code native} keyword (or no match) means "the newest
+     * installed GraalVM". Empty when no GraalVM is configured/installed.
+     */
+    private Optional<Path> resolveGraalHome(String projectGraalSpec, ResolvedJdk javaJdk) {
+        for (String spec : new String[]{System.getenv("JK_GRAAL"), projectGraalSpec}) {
+            if (spec == null || spec.isBlank()) continue;
+            if (spec.trim().equalsIgnoreCase("native")) {
+                Optional<Path> g = newestInstalledGraal();
+                if (g.isPresent()) return g;
+                continue;
+            }
+            Optional<dev.jkbuild.jdk.JdkHit> hit =
+                    registry.findHitBySpec(spec).filter(JkEnv::isGraalVendor);
+            if (hit.isPresent()) return Optional.of(hit.get().home());
+        }
+        // The `jk jdk graal` default pointer (symlink, then config identifier).
+        Optional<Path> ghome = globalDefault.graalHome();
+        if (ghome.isPresent() && Files.isDirectory(ghome.get().resolve("bin"))) return ghome;
+        try {
+            Optional<String> gid = globalDefault.graalIdentifier();
+            if (gid.isPresent()) {
+                var m = registry.find(gid.get());
+                if (m.isPresent()) return Optional.of(m.get().home());
+            }
+        } catch (IOException ignored) {
+            // malformed config — no graal default
+        }
+        return Optional.empty();
+    }
+
+    private Optional<Path> newestInstalledGraal() {
+        return registry.listHits().stream()
+                .filter(JkEnv::isGraalVendor)
+                .sorted(Comparator
+                        .comparingInt((dev.jkbuild.jdk.JdkHit h) -> {
+                            int i = JdkVendor.GRAAL_PREFERENCE.indexOf(h.vendor());
+                            return i >= 0 ? i : Integer.MAX_VALUE;
+                        })
+                        .thenComparing(h -> h.version() == null ? ""
+                                : dev.jkbuild.jdk.JdkSelector.versionKey(h.version()),
+                                Comparator.reverseOrder()))
+                .map(dev.jkbuild.jdk.JdkHit::home)
+                .findFirst();
+    }
+
+    private static boolean isGraalVendor(dev.jkbuild.jdk.JdkHit h) {
+        return h.vendor() == JdkVendor.ORACLE_GRAALVM || h.vendor() == JdkVendor.GRAALVM_CE;
     }
 
     /**

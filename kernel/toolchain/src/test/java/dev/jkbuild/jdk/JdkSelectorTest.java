@@ -272,6 +272,74 @@ class JdkSelectorTest {
                 .get().extracting(JdkCatalog.Entry::vendor).isEqualTo("Oracle");
     }
 
+    // -- Range operators (>N / >=N) -----------------------------------------
+
+    @Test
+    void parse_flexible_extracts_lower_bound() {
+        var inclusive = JdkSelector.parseFlexible(">=21");
+        assertThat(inclusive.lowerBound()).isPresent();
+        assertThat(inclusive.lowerBound().get().major()).isEqualTo(21);
+        assertThat(inclusive.lowerBound().get().inclusive()).isTrue();
+        assertThat(inclusive.major()).isEmpty();
+
+        var exclusive = JdkSelector.parseFlexible(">25");
+        assertThat(exclusive.lowerBound().get().major()).isEqualTo(25);
+        assertThat(exclusive.lowerBound().get().inclusive()).isFalse();
+
+        var vendored = JdkSelector.parseFlexible("temurin->=21");
+        assertThat(vendored.lowerBound().get().major()).isEqualTo(21);
+        assertThat(vendored.hints()).containsExactly("temurin");
+    }
+
+    @Test
+    void range_resolves_to_lowest_satisfying_major() {
+        JdkCatalog catalog = catalogOf(
+                entry("Eclipse", "Temurin", "temurin-17", 17, "17.0.13", true, false,
+                        List.of("temurin-17", "17"), "linux", "x86_64"),
+                entry("Eclipse", "Temurin", "temurin-21", 21, "21.0.5", true, false,
+                        List.of("temurin-21", "21"), "linux", "x86_64"),
+                entry("Eclipse", "Temurin", "temurin-25", 25, "25.0.3", true, false,
+                        List.of("temurin-25", "25"), "linux", "x86_64"),
+                entry("Eclipse", "Temurin", "temurin-26", 26, "26.0.1", true, false,
+                        List.of("temurin-26", "26"), "linux", "x86_64"));
+
+        // >=21 → the lowest major at-or-above 21 (i.e. 21), not the newest.
+        assertThat(JdkSelector.select(catalog, JdkSpec.parse(">=21"), "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::majorVersion).isEqualTo(21);
+        // >25 (exclusive) → 26.
+        assertThat(JdkSelector.selectPreferred(catalog, ">25", "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::majorVersion).isEqualTo(26);
+    }
+
+    @Test
+    void range_ties_break_on_vendor_preference() {
+        // Two vendors at the lowest satisfying major (21): Liberica should beat
+        // Corretto per JdkVendor.PREFERENCE.
+        JdkCatalog catalog = catalogOf(
+                entry("Amazon", "Corretto", "corretto-21", 21, "21.0.5", true, false,
+                        List.of("corretto-21", "21"), "linux", "x86_64"),
+                entry("BellSoft", "Liberica", "liberica-21", 21, "21.0.5", false, false,
+                        List.of("liberica-21", "21"), "linux", "x86_64"));
+
+        assertThat(JdkSelector.select(catalog, JdkSpec.parse(">=21"), "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::vendor).isEqualTo("BellSoft");
+    }
+
+    // -- Vendor preference order --------------------------------------------
+
+    @Test
+    void select_preferred_prefers_liberica_over_corretto_when_no_temurin() {
+        JdkCatalog catalog = catalogOf(
+                entry("Amazon", "Corretto", "corretto-25", 25, "25.0.3", true, false,
+                        List.of("corretto-25", "25"), "linux", "x86_64"),
+                entry("BellSoft", "Liberica", "liberica-25", 25, "25.0.3", false, false,
+                        List.of("liberica-25", "25"), "linux", "x86_64"));
+
+        // No Temurin for 25 → next in JdkVendor.PREFERENCE that matches is Liberica.
+        assertThat(JdkSelector.selectPreferred(catalog, "25", "linux", "x86_64"))
+                .get().extracting(JdkCatalog.Entry::vendor).isEqualTo("BellSoft");
+    }
+
     private static JdkCatalog catalogOf(JdkCatalog.Entry... entries) {
         return new JdkCatalog(List.of(entries));
     }

@@ -72,16 +72,36 @@ public final class GraalResolver {
     private Path resolveUncached(Path projectDir, String graalSpec) {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
 
-        // 1. Explicit project.graal pin — use it if installed, else install it.
-        if (graalSpec != null && !graalSpec.isBlank()) {
-            Optional<InstalledJdk> hit = registry.findBySpec(graalSpec);
+        // 1. Explicit spec: JK_GRAAL env, else project.graal — use if installed, else install.
+        String effective = (graalSpec != null && !graalSpec.isBlank())
+                ? graalSpec : System.getenv("JK_GRAAL");
+        if (effective != null && !effective.isBlank()) {
+            Optional<InstalledJdk> hit = registry.findBySpec(effective);
             if (hit.isPresent() && NativeImageDriver.resolve(hit.get().home()).isPresent()) {
                 return hit.get().home();
             }
-            return install(graalSpec, registry, /*announce*/ "project.graal = \"" + graalSpec + "\"");
+            return install(effective, registry, /*announce*/ "graal = \"" + effective + "\"");
         }
 
-        // 2. No pin — current native-image search (project JDK → $GRAALVM_HOME → PATH).
+        // 2. The `jk jdk graal` default-graal pointer, if one is set and usable.
+        try {
+            dev.jkbuild.jdk.GlobalDefaultJdk gd = dev.jkbuild.jdk.GlobalDefaultJdk.current();
+            Optional<Path> gh = gd.graalHome();
+            if (gh.isPresent() && NativeImageDriver.resolve(gh.get()).isPresent()) {
+                return gh.get();
+            }
+            Optional<String> gid = gd.graalIdentifier();
+            if (gid.isPresent()) {
+                Optional<InstalledJdk> byId = registry.find(gid.get());
+                if (byId.isPresent() && NativeImageDriver.resolve(byId.get().home()).isPresent()) {
+                    return byId.get().home();
+                }
+            }
+        } catch (IOException ignored) {
+            // no usable default-graal — fall through to the ambient search
+        }
+
+        // 3. No pin/default — current native-image search (project JDK → $GRAALVM_HOME → PATH).
         // projectJavaHome may be null (jk runs as a native image with no java.home,
         // and the project pins no JDK); NativeImageDriver.resolve tolerates null and
         // still checks $GRAALVM_HOME and PATH.

@@ -5,6 +5,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.Properties;
@@ -112,6 +114,29 @@ public enum JdkVendor {
     /** {@code version + "-" + sdkmanSuffix}, e.g. {@code "26.0.1-amzn"}; empty when no suffix. */
     public Optional<String> sdkmanIdentifier(String version) {
         return sdkmanSuffix().map(s -> version + "-" + s);
+    }
+
+    /**
+     * Vendor preference for a vendor-unqualified spec (and for breaking ties):
+     * Eclipse Temurin, then BellSoft Liberica, Oracle OpenJDK, Amazon Corretto.
+     * Any vendor not listed sorts after all listed ones (see {@link #preferenceRank}).
+     */
+    public static final List<JdkVendor> PREFERENCE =
+            List.of(TEMURIN, LIBERICA, ORACLE_OPENJDK, CORRETTO);
+
+    /** GraalVM-flavour preference for the native / graal chain: Oracle GraalVM, then GraalVM CE. */
+    public static final List<JdkVendor> GRAAL_PREFERENCE =
+            List.of(ORACLE_GRAALVM, GRAALVM_CE);
+
+    /** Lower is more preferred. Listed vendors get their index; others sort after, by enum order. */
+    public int preferenceRank() {
+        int i = PREFERENCE.indexOf(this);
+        return i >= 0 ? i : PREFERENCE.size() + ordinal();
+    }
+
+    /** Comparator ordering vendors most-preferred first (by {@link #preferenceRank}). */
+    public static Comparator<JdkVendor> byPreference() {
+        return Comparator.comparingInt(JdkVendor::preferenceRank);
     }
 
     /**
