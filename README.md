@@ -45,9 +45,9 @@ jk test
 # Run a published CLI tool ephemerally (≈ uvx)
 jk tool run com.diffplug.spotless:spotless-cli:2.45.0 -- check
 
-# Pin a JDK per-project — jk downloads and manages it for you
-jk jdk install 25.0.3-tem
-jk jdk use 25.0.3-tem
+# Install a JDK (jk downloads + manages it) and pin it to this project
+jk jdk install temurin-25
+jk jdk pin temurin-25
 
 # Use your existing Maven build unchanged
 jk mvn package
@@ -70,11 +70,13 @@ the dependency auditor, the git client — are first-party subsystems compiled
 *into the binary*, not third-party plugins you wire up by hand.
 
 - **Sub-50 ms cold start.** `jk --help` returns before you've let go of Enter.
-- **Built-in toolchain management.** `jk jdk install 25.0.3-tem` downloads and
-  pins a JDK per project (sourced from the JetBrains feed and your existing
-  IntelliJ JDKs). Maven, Gradle, and the Kotlin compiler are auto-discovered or
-  fetched on demand — you never manage a `JAVA_HOME` by hand. `eval $(jk env)`
-  drops the pinned JDK onto your `PATH`.
+- **Built-in toolchain management (replaces SDKMAN / jenv / Gradle toolchains).**
+  `jk jdk install temurin-25` downloads a JDK from the JetBrains feed; jk also
+  *discovers* the JDKs SDKMAN, jenv, asdf, Gradle, and IntelliJ already installed.
+  `eval "$(jk activate bash)"` installs a directory-aware hook that keeps
+  `JAVA_HOME` / `GRAALVM_HOME` pointed at the JDK your current project pins — you
+  never manage `JAVA_HOME` by hand. Maven, Gradle, and the Kotlin compiler are
+  auto-discovered or fetched on demand. See [docs/jdk-resolution.md](./docs/jdk-resolution.md).
 - **Ephemeral tool exec (≈ `uvx`).** `jk tool run <coord>` resolves, caches,
   runs, and LRU-evicts any published CLI without polluting your project.
 - **Reproducible by default.** Locked deps, locked toolchain, scrubbed
@@ -246,7 +248,7 @@ locally in your `jk.toml`'s `[libraries]` table.
 |---|---|
 | Dependencies | `add` `remove` `lock` `sync` `update` `tree` `why` `fetch` |
 | Build | `compile` `build` `test` `clean` `explain` `why-rebuilt` |
-| Toolchain | `jdk install/list/use/uninstall/home` |
+| Toolchain | `jdk install/list/default/graal/pin/home/uninstall/update`, `activate` `shell` `deactivate` |
 | CLI tools | `tool install/list/uninstall/run/dir` |
 | Library catalog | `library update`, short-name resolution in `add` |
 | Maven / Gradle | `mvn` `gradle` (passthroughs), `import` `export` |

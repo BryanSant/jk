@@ -8,13 +8,12 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Resolves the JDK a project should use. Lookup order:
- * <ol>
- *   <li>{@code .jdk-version} — must name a {@code <vendor>-<major>} (e.g.
- *       {@code temurin-25}); resolved against installed JDKs (the flexible
- *       vendor+major matcher) and, failing that, provisioned.</li>
- *   <li>None — caller falls back to {@code JAVA_HOME} / the running JVM.</li>
- * </ol>
+ * Reads and resolves the project's {@code .jdk-version} pin — the
+ * {@code .jdk-version} <em>tier</em> of the resolution order. The full
+ * cross-tier order (switch / env / {@code .jdk-version} / lock / {@code [project].jdk}
+ * / current / default / …) lives in {@link JdkResolution}; this class only owns
+ * the file: read it ({@link #readJdkVersion}), validate it ({@link #validatePin}),
+ * and resolve it to an installed (or provisioned) JDK.
  *
  * <p>A patch-level pin ({@code temurin-25.0.2}) or a vendorless one ({@code 25})
  * is rejected with an {@link IllegalArgumentException}: jk keeps the patch

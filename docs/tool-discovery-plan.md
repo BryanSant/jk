@@ -1,12 +1,14 @@
 # Tool discovery / good-neighbor plan
 
 **Status:** implemented as of 2026-05-22 (commits 92e1177, e1f1da6, 72d091f, d75c41b).
-**JDK flow retargeted 2026-05-23:** JDK discovery now goes through the
-JetBrains JDK feed and IntelliJ's JDK directory directly — *not* through
-the probe chain documented here. The chain and its probe classes remain
-in the tree, applied to Maven / Gradle / Kotlin only. See
-[requirements.md §12](./requirements.md#12-jdk-and-toolchain-management)
-for the JDK story.
+**JDK flow (current):** JDK *installation* comes from the JetBrains JDK feed,
+but JDK *discovery* uses the probe chain described here (jk, IntelliJ, Gradle,
+SDKMAN, JBang, mise, asdf, jenv, Homebrew, system), and resolution follows a
+unified order shared by the build and the `jk activate` shell hook. See
+[jdk-resolution.md](./jdk-resolution.md) and
+[requirements.md §12](./requirements.md#12-jdk-and-toolchain-management) for the
+JDK story. (An earlier 2026-05-23 iteration bypassed the chain for JDKs; that was
+reversed.)
 
 **Scope:** `ToolRegistry` + `ToolInstaller` (build tools).
 **Goal:** before downloading, look for tools the user already has — JBang

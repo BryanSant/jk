@@ -42,7 +42,7 @@ centrally by `dev.jkbuild.jdk.SupportedJdk`.
 ### v1.0 Goals
 
 - Build, test, run, package, and publish Java and Kotlin projects (single-module and multi-module workspaces).
-- Manage JDK installations (install/list/use/uninstall) sourced from the JetBrains JDK feed, sharing the IntelliJ JDK directory so IntelliJ users see jk-installed JDKs (and vice versa) automatically.
+- Manage JDK installations (install/list/default/graal/pin/uninstall) sourced from the JetBrains JDK feed, sharing the IntelliJ JDK directory (and discovering SDKMAN/jenv/asdf/Gradle installs) so jk-installed JDKs and existing ones are mutually visible — a full replacement for SDKMAN / jenv / Gradle toolchains (see §12, [docs/jdk-resolution.md](./jdk-resolution.md)).
 - Resolve dependencies from Maven-Central-style repositories and from git URLs (GitHub, GitLab, BitKeeper, Gitea).
 - Produce and consume `jk.lock` with full transitive closure, checksums, and source provenance.
 - Best-effort import of `pom.xml` (Tier 1 lossless, Tier 2 best-effort, Tier 3 stub-with-diagnostic).
@@ -171,8 +171,9 @@ defaults.
     <tool>                      # POSIX shell wrapper (or .cmd on Windows) emitted by `jk tool install`
 
   jdks/                         # JK_JDKS_DIR
-    21.0.5-tem-aarch64-darwin/  # content-addressed by (vendor, version, arch, os)
-    graalvm-jdk-21-aarch64-darwin/
+    temurin-21.0.5/             # install dir = <vendor>-<version>
+    graalvm-25.0.3/
+    temurin-21 -> temurin-21.0.5  # stable <vendor>-<major> pointer (survives patch upgrades)
 
 <project>/
   jk.toml                       # canonical manifest, TOML
@@ -227,7 +228,12 @@ TOML. Sorted, deterministic (LF, terminal newline, two-space indent), no comment
 
 ### 5.3 `.jdk-version`
 
-Single line. JetBrains feed identifier — typically a `suggested_sdk_name` like `temurin-21`, or a bare version like `21` / `21.0.5`. Read on every `jk` invocation. If `jk.toml`'s `[project].jdk` is set, it takes precedence and `jk sync` regenerates `.jdk-version`.
+Single line. A strict `<vendor>-<major>` pin (e.g. `temurin-21`) — `jk jdk pin`
+writes it and jk keeps the patch current behind the stable pointer, so bare
+majors and patch-level pins are rejected here. Read on every `jk` invocation. As
+a project-local override it takes **precedence over** `jk.toml`'s `[project].jdk`
+(it's tier 3 vs tier 5 of the resolution order — see §12.5); only `--jdk` and
+`JK_JDK` outrank it.
 
 ---
 
@@ -264,7 +270,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk exec <coord>[@ver] [-- args...]` | Ephemeral tool execution. (`jk jkx` is a kept alias.) |
 | `jk tool {list,update,uninstall,run}` | Manage installed tools. |
 | `jk jdk {install,list,use,uninstall,pin,gc}` | JDK management. |
-| `jk shell` / `jk env` | Spawn subshell or print env exports for the project's JDK. |
+| `jk activate <shell>` / `jk shell` | Install the directory-aware `JAVA_HOME`/`GRAALVM_HOME` hook (`eval "$(jk activate bash)"`), or spawn a one-off subshell for the project's JDK. (`jk jdk home` prints a single export line.) |
 | `jk mvn ...` | Passthrough to Maven (jk downloads/manages Maven). |
 | `jk gradle ...` | Passthrough to Gradle (jk downloads/manages Gradle). |
 | `jk import {pom.xml\|build.gradle\|build.gradle.kts}` | Best-effort convert to `jk.toml`. |
@@ -673,13 +679,19 @@ URL canonicalization (lowercase host, strip `.git`, drop default port) prevents 
 
 ### 12.1 Goals
 
-One JDK source, one install root. `jk` shares the directory IntelliJ already uses, so a JDK installed via either tool is visible to the other — no parallel install trees, no symlink farms, no SDKMAN/jenv/asdf juggling.
+`jk` is a full replacement for SDKMAN / jenv / asdf / Gradle Java toolchains: it
+**discovers** JDKs from all of those locations, **installs** new ones from the
+JetBrains feed into the directory IntelliJ also uses (so installs are shared, not
+duplicated), and **manages `JAVA_HOME` / `GRAALVM_HOME`** through a directory-aware
+shell hook (`jk activate`). One install root, one resolution order shared by the
+build and the shell. See [docs/jdk-resolution.md](./jdk-resolution.md) for the
+full model; this section is the spec.
 
 ### 12.2 Vendor support (v1)
 
 Whatever the JetBrains JDK feed publishes: Oracle OpenJDK, Eclipse Temurin, Amazon Corretto, BellSoft Liberica, Azul Zulu, SAP SapMachine, IBM Semeru, Microsoft OpenJDK, Alibaba Dragonwell, GraalVM (CE + Oracle), JetBrains Runtime.
 
-Upstream metadata: `https://download.jetbrains.com/jdk/feed/v1/jdks.json.xz` — the same feed IntelliJ consumes. Cached on disk at `$JK_CACHE_DIR/jdks.json.xz` with a 24-hour TTL and conditional-GET revalidation.
+Upstream metadata: `https://download.jetbrains.com/jdk/feed/v1/jdks.json` — the same feed IntelliJ consumes. Cached on disk at `$JK_CACHE_DIR/jdks.json` with a 24-hour TTL and conditional-GET (`If-Modified-Since`) revalidation; a network failure falls back to the cached copy.
 
 ### 12.3 Version grammar
 
@@ -693,7 +705,10 @@ jk jdk install openjdk-26      # Oracle OpenJDK 26
 jk jdk install temurin-21.0.5  # vendor + exact version
 ```
 
-Older SDKMAN-style strings (`21-tem`, `21.0.5-tem`) are no longer accepted; migrate `.jdk-version` pins to the new vocabulary.
+Plus keywords (`lts` / `stable` → latest LTS, `latest` → newest GA, `native` →
+latest Oracle GraalVM) and range bounds (`>=21`, `>25` → lowest installed, else
+available, major satisfying the bound). Older SDKMAN-style strings (`21-tem`,
+`21.0.5-tem`) are not accepted; migrate `.jdk-version` pins to the new vocabulary.
 
 ### 12.4 Install location
 
@@ -708,22 +723,44 @@ packages) are still discovered by the probe chain and exposed via
 
 `install_folder_name` comes from the feed (e.g. `temurin-21.0.5`, `openjdk-26.0.1`). `JAVA_HOME` resolves through the macOS `Contents/Home` subpath automatically.
 
-### 12.5 Discovery before download
+### 12.5 Resolution order
 
-Before fetching, `jk` consults:
+The build and the `jk activate` hook share one canonical order (highest first):
+`--jdk` switch › `JK_JDK` › `.jdk-version` › `jk.lock` › `[project].jdk` ›
+`project.java` floor (`>=<release>` when `project.java` exceeds the latest LTS) ›
+current › default › `JAVA_HOME` › `GRAALVM_HOME` › first `javac` on `PATH`.
+GraalVM resolves through a parallel, independent chain (`--graal` › `JK_GRAAL` ›
+`[project].graal` › the `jk jdk graal` default). With no explicit default, a
+*de-facto* default is computed (the current latest-LTS major if installed, else
+the latest installed version); a build with **no** JDK at all bootstraps the
+latest LTS and persists it.
 
-1. The IntelliJ JDK directory itself (same root jk installs to — so an IntelliJ-installed JDK is reused with zero ceremony).
-2. `JAVA_HOME` — accepted when its `release` file matches the requested spec.
+JDKs are identified by **home path**, so two installs sharing a `vendor-major`
+identifier never both count as the default.
 
-No probing of SDKMAN, JBang, asdf, jenv, Homebrew, or `/usr/lib/jvm`. Users who keep JDKs in those locations can set `JAVA_HOME` explicitly.
+### 12.6 Discovery
 
-### 12.6 Activation
+Discovery is the full probe chain (first to claim a canonical home wins its
+source label): `~/.jk/jdks` (jk) › `~/.jdks` / `~/Library/Java/JavaVirtualMachines`
+(IntelliJ) › `~/.gradle/jdks` (Gradle) › SDKMAN › JBang › mise › asdf › jenv ›
+Homebrew › system (`/usr/lib/jvm`, …) › `$JAVA_HOME`. A JDK installed by any of
+these is reused with zero ceremony and listed by `jk jdk list`. Vendor-unqualified
+specs prefer Temurin › Liberica › Oracle OpenJDK › Corretto › others.
 
-- **`jk shell`** — spawn a subshell with `JAVA_HOME`, `PATH`, and `KOTLIN_HOME` configured for the project. Exit returns to normal.
-- **`jk env`** — print `export` lines for `eval "$(jk env)"`. Primary mechanism on systems where subshells are awkward.
-- For child processes spawned by jk itself (javac, kotlinc, tests, scripts), jk sets `JAVA_HOME` directly and unsets `JDK_HOME` to avoid the common footgun.
+### 12.7 Activation
 
-### 12.7 Kotlin compiler
+- **`jk activate <shell>`** — print the shell-integration script (bash | zsh |
+  fish | pwsh); `eval "$(jk activate bash)"` installs a prompt/`chpwd` hook that
+  keeps `JAVA_HOME` / `GRAALVM_HOME` / `PATH` in sync with the JDK that applies to
+  the current directory (project pin inside a project tree, the default outside).
+  `jk deactivate` removes it.
+- **`jk shell`** — spawn a one-off subshell with `JAVA_HOME`, `PATH`, and
+  `KOTLIN_HOME` configured for the project. **`jk jdk home`** prints a single
+  `export JAVA_HOME=…` line for one-shot `eval`.
+- For child processes spawned by jk itself (javac, kotlinc, tests, scripts), jk
+  sets `JAVA_HOME` directly and unsets `JDK_HOME` to avoid the common footgun.
+
+### 12.8 Kotlin compiler
 
 The Kotlin compiler is a *tool*, not a JDK. `jk.toml` declares `project.kotlin = "2.3.21"` and jk provisions the `kotlinc` distribution on demand: first via the good-neighbor probes (SDKMAN, JBang, asdf, jenv, Homebrew, `KOTLIN_HOME`), then by downloading into `$JK_CACHE_DIR/tools/kotlin/<version>/` if no local install matches. Invocations go through a subprocess `CompileStrategy` so jk's own native binary doesn't embed kotlinc. (The probe chain stays in place for build tools; only JDK discovery bypasses it.)
 
@@ -752,7 +789,7 @@ default-members = ["services/api", "services/web"]
 resolver        = 2                              # one resolver only; this field exists for future-proofing
 
 [toolchain]
-jdk    = "21.0.5-tem"
+jdk    = "temurin-21"
 kotlin = "2.1.0"
 
 [repositories]

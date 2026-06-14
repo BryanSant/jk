@@ -24,16 +24,14 @@ import java.util.Optional;
  * "Make a JDK available for this project" — the resolve-or-install step that
  * {@code jk sync} runs before (or in parallel with) dependency fetching.
  *
- * <p>Lookup order:
- * <ol>
- *   <li>An already-installed JDK keyed on the project's {@code .jdk-version}
- *       (via {@link JdkResolver#forProject}).</li>
- *   <li>The {@code jdk} stamped in {@code jk.lock}, looked up by install
- *       identifier in the local registry.</li>
- *   <li>If neither resolves, derive a {@link JdkSpec} from the lockfile or
- *       {@code jk.toml}'s {@code [project].jdk} and install via the JetBrains
- *       JDK feed.</li>
- * </ol>
+ * <p>Resolution is delegated to {@link dev.jkbuild.jdk.JdkResolution}, the one
+ * canonical order shared with the compile toolchain and the {@code jk activate}
+ * shell hook ({@code --jdk} / {@code JK_JDK} / {@code .jdk-version} / {@code jk.lock}
+ * / {@code [project].jdk} / {@code project.java} floor / current / default /
+ * {@code JAVA_HOME} / {@code GRAALVM_HOME} / {@code PATH}). When a named pin isn't
+ * installed — or no JDK exists at all — this step installs from the JetBrains
+ * feed; a bootstrap install (nothing was configured) becomes the persisted
+ * default. See {@code docs/jdk-resolution.md}.
  *
  * <p>Returns {@link Outcome} describing what happened — the resolved JDK plus
  * a flag for whether an install actually ran — so callers can word their
