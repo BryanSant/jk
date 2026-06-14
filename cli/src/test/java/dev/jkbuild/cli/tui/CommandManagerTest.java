@@ -104,21 +104,25 @@ class CommandManagerTest {
         cm.phaseRunning("acme:api", "compile-java");
         cm.phaseMessage("acme:api", "compile-java", "javac 12 sources");
 
-        String all = String.join("\n", stripAll(cm.renderGoalLines(120, 112_000)));
-        // Header: name › member… (elapsed)
-        assertThat(all).contains("Building").contains("acme:api").contains("(1m 52s)");
+        var raw = cm.renderGoalLines(120, 112_000);
+        String all = String.join("\n", stripAll(raw));
+        // Header: {name} … (elapsed) — bright-white name, member NOT in the header.
+        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("(1m 52s)")
+                .doesNotContain("acme:api");
+        assertThat(raw.get(0)).contains(Theme.colorize("Building", Theme.active().focused()));
         // Bar with percent + count.
         assertThat(all).contains("45%").contains("[45 of 100]");
-        // Active row (◻) on top with its message; completed row (✓) below.
-        assertThat(all).contains("◻ acme:api › Compile java › javac 12 sources");
-        assertThat(all).contains("✓ acme:api › Parse build");
-        int active = all.indexOf("Compile java");
-        int doneRow = all.indexOf("Parse build");
-        assertThat(active).isLessThan(doneRow); // outstanding floats above completed
+        // Active row only: colored member, phase, message, trailing ellipsis.
+        assertThat(all).contains("acme:api › Compile java › javac 12 sources…");
+        assertThat(raw.get(2)).contains(Theme.colorize("acme", Theme.active().cyan()))
+                .contains(Theme.colorize("api", Theme.active().brightCyan()));
+        // Completed phases are not listed, and no status glyphs are drawn.
+        assertThat(all).doesNotContain("Parse build");
+        assertThat(all).doesNotContain("◻").doesNotContain("✓");
     }
 
     @Test
-    void completed_rows_collapse_beyond_the_cap() {
+    void completed_rows_are_not_listed() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
         for (int i = 0; i < 9; i++) {
             cm.addPhase("m", "p" + i);
@@ -127,23 +131,23 @@ class CommandManagerTest {
         cm.phaseRunning("m", "active");
 
         String all = String.join("\n", stripAll(cm.renderGoalLines(120, 0)));
-        assertThat(all).contains("… +3 completed"); // 1 active + 6 shown + 3 hidden = 9 done
+        // Only the running phase shows — no completed rows, no "+N completed".
+        assertThat(all).contains("m › Active");
+        assertThat(all).doesNotContain("completed").doesNotContain("✓");
     }
 
     @Test
     void region_is_capped_to_terminal_height() {
         // A region taller than the viewport scrolls its top off-screen, where
         // the cursor-relative repaint/wipe can't reach it (lingering spinner on
-        // cancel). So the whole region must fit within the terminal height.
+        // cancel). So the active-row list is capped to fit the terminal height.
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
         cm.height = 6;
-        for (int i = 0; i < 20; i++) cm.addPhase("m", "p" + i);
-        cm.phaseRunning("m", "p0");
+        for (int i = 0; i < 20; i++) cm.phaseRunning("m", "p" + i);  // 20 concurrently active
 
         var lines = cm.renderGoalLines(120, 0);
-        // header + bar + phase list, all within height (with a line of headroom).
+        // header + bar + active rows, all within height (with a line of headroom).
         assertThat(lines.size()).isLessThanOrEqualTo(6 - 1);
-        assertThat(String.join("\n", stripAll(lines))).contains("…"); // collapsed
     }
 
     @Test
@@ -151,8 +155,8 @@ class CommandManagerTest {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
         cm.phaseRunning("m", "compile");
         var lines = cm.renderGoalLines(120, 0);
-        // lines[0]=header, lines[1]=bar, lines[2]=first phase row.
-        assertThat(stripAnsi(lines.get(2))).startsWith("╰─ ◻ m › Compile");
+        // lines[0]=header, lines[1]=bar, lines[2]=the running phase row (no glyph).
+        assertThat(stripAnsi(lines.get(2))).startsWith("╰─ m › Compile");
     }
 
     @Test

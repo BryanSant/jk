@@ -412,71 +412,63 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         String sep = Theme.colorize("›", dim);
         List<String> lines = new ArrayList<>();
 
-        // 1. Header: {spinner} {name} › {member}… (elapsed)
+        // 1. Header: {spinner} {name} … (elapsed). The member moved to the active
+        // row, so the header is just the goal name (bright-white) + elapsed.
         StringBuilder header = new StringBuilder();
         header.append(Theme.colorize(FRAMES[frame], frameColors[frame])).append(' ')
-                .append(Theme.colorize(name, Theme.active().settled()));
-        if (!target.isEmpty()) {
-            header.append(' ').append(sep).append(' ')
-                    .append(Theme.colorize(target, Theme.active().settled()));
-        }
-        header.append(ELLIPSIS).append(' ')
+                .append(Theme.colorize(name, Theme.active().focused()))
+                .append(' ').append(ELLIPSIS).append(' ')
                 .append(Theme.colorize("(" + fmtElapsed(elapsedMillis) + ")", dim));
         lines.add(header.toString());
 
         // 2. Aggregate bar.
         lines.add(bar.render(numerator, denominator));
 
-        // 3. Phase list: outstanding on top, completed sinking to the bottom.
-        List<Row> outstanding = new ArrayList<>();
-        List<Row> completed = new ArrayList<>();
+        // 3. Phase list: only the currently-running phase(s). Pending and
+        // completed rows are intentionally not shown — most phases finish in
+        // well under a second, so the tree of boxes/checkmarks (and the per-frame
+        // diff of it) was render cost without telling the user anything they'd
+        // act on. The aggregate bar already conveys overall progress; the rows
+        // map still tracks every phase's state, only the live view is trimmed.
+        List<Row> active = new ArrayList<>();
         for (Row r : rows.values()) {
-            (r.state == RowState.DONE || r.state == RowState.FAILED ? completed : outstanding).add(r);
+            if (r.state == RowState.ACTIVE) active.add(r);
         }
-        outstanding.sort((a, b) -> Boolean.compare(b.state == RowState.ACTIVE, a.state == RowState.ACTIVE));
-        completed.sort((a, b) -> Long.compare(a.seq, b.seq));
-
-        // Cap the phase list so the whole region (header + bar + rows + collapse)
-        // fits the viewport with a line of headroom — otherwise it scrolls and
-        // cursor-relative repaint/wipe can't reach the top. Never exceed MAX_ROWS.
-        int budget = Math.max(1, Math.min(MAX_ROWS, height - 3));
-        int shownOutstanding = Math.min(outstanding.size(), budget - 1);
-        int completedSlots = Math.max(0, budget - 1 - shownOutstanding);
-        int shownCompleted = Math.min(completed.size(), completedSlots);
-        // Newest completed are the most relevant; collapse the older overflow.
-        int firstCompleted = completed.size() - shownCompleted;
-        int hidden = (outstanding.size() - shownOutstanding) + firstCompleted;
-
-        List<Row> visible = new ArrayList<>();
-        for (int i = 0; i < shownOutstanding; i++) visible.add(outstanding.get(i));
-        for (int i = firstCompleted; i < completed.size(); i++) visible.add(completed.get(i));
-
-        for (int i = 0; i < visible.size(); i++) {
+        // Cap to the viewport (header + bar + rows + a line of headroom) so the
+        // region never scrolls past where cursor-relative repaint can reach.
+        int shown = Math.min(active.size(), Math.max(1, Math.min(MAX_ROWS, height - 3)));
+        for (int i = 0; i < shown; i++) {
             String prefix = i == 0 ? Theme.colorize("╰─ ", dim) : "   ";
-            lines.add(prefix + renderRow(visible.get(i), sep));
-        }
-        if (hidden > 0) {
-            lines.add("   " + Theme.colorize("… +" + hidden + " completed", dim));
+            lines.add(prefix + renderActiveRow(active.get(i), sep));
         }
         return lines;
     }
 
-    private static String renderRow(Row r, String sep) {
-        String glyph = switch (r.state) {
-            case DONE -> Theme.colorize(Glyphs.CHECK, Theme.active().success());
-            case FAILED -> Theme.colorize(Glyphs.CROSS, Theme.active().error());
-            default -> Theme.colorize(Glyphs.PENDING, Theme.active().settled());
-        };
+    /**
+     * A running phase row: {@code <group>:<artifact> › <Phase>[ › <message>]…} —
+     * no status glyph, member coordinate colored (cyan group, bright-cyan
+     * artifact), trailing ellipsis marking it in progress.
+     */
+    private static String renderActiveRow(Row r, String sep) {
         StringBuilder sb = new StringBuilder();
-        sb.append(glyph).append(' ')
-                .append(Theme.colorize(r.member, Theme.active().settled()))
+        sb.append(coloredMember(r.member))
                 .append(' ').append(sep).append(' ')
                 .append(Theme.colorize(r.phase, Theme.active().settled()));
         if (r.message != null && !r.message.isEmpty()) {
             sb.append(' ').append(sep).append(' ')
                     .append(Theme.colorize(r.message, Theme.active().settled()));
         }
+        sb.append(ELLIPSIS);
         return sb.toString();
+    }
+
+    /** {@code group:artifact} → cyan group + bright-cyan artifact; plain if no colon. */
+    private static String coloredMember(String member) {
+        int colon = member.indexOf(':');
+        if (colon < 0) return Theme.colorize(member, Theme.active().settled());
+        return Theme.colorize(member.substring(0, colon), Theme.active().cyan())
+                + ":"
+                + Theme.colorize(member.substring(colon + 1), Theme.active().brightCyan());
     }
 
     private long elapsedMillis() {
