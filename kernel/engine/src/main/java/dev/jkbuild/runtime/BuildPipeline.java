@@ -648,14 +648,22 @@ public final class BuildPipeline {
                     @SuppressWarnings("unchecked")
                     List<Path> testRtCp = (List<Path>) ctx.require(TEST_RUNTIME_CP);
                     Path testClassesForStamp = ctx.require(TEST_CLASSES);
-
-                    // Incremental test skip: if all inputs are unchanged since the
-                    // last clean test run, skip the test runner entirely.
                     @SuppressWarnings("unchecked")
                     List<Path> testSrcs = ctx.get(TEST_SOURCES)
                             .orElse(java.util.List.of());
+                    // Worker jars handed to the test JVM ([build.test-worker-jars]) —
+                    // worker-forking tests' behavior depends on their content, so resolve
+                    // them up front so they also feed the freshness key below.
+                    Map<String, String> workerJars = workerJarProps(
+                            in.dir(), ctx.require(PROJECT).build().testWorkerJars());
+
+                    // Incremental test skip: a content key over every input that affects
+                    // the outcome — own main output, test sources, the *content* of the
+                    // runtime classpath (sibling members included), the lock, and the
+                    // toolchain/runner/worker identity. Unchanged → skip the runner.
                     String stampKey = dev.jkbuild.task.TestStamp.computeKey(
-                            testSrcs, in.lockFile(), testRtCp);
+                            testSrcs, ctx.require(MAIN_CLASSES), in.lockFile(), testRtCp,
+                            testStampExtras(workerJars));
                     if (dev.jkbuild.task.TestStamp.isFresh(testClassesForStamp, stampKey)) {
                         ctx.label("tests up-to-date");
                         return; // skip — nothing changed since last green run
@@ -670,12 +678,6 @@ public final class BuildPipeline {
 
                     TestProgressListener listener =
                             TestSupport.bridgeListener(ctx, in.workerCount(), in.verbose());
-                    // Hand the test JVM the freshly-built sibling worker jars this
-                    // module's [build.test-worker-jars] declares, so worker-forking
-                    // tests locate them by path — the jk-build equivalent of Gradle's
-                    // -Djk.*.worker.jar test config.
-                    Map<String, String> workerJars = workerJarProps(
-                            in.dir(), ctx.require(PROJECT).build().testWorkerJars());
                     JUnitLauncher.Result result;
                     try {
                         result = new JUnitLauncher().run(
@@ -1284,5 +1286,29 @@ public final class BuildPipeline {
             }
         }
         return props;
+    }
+
+    /**
+     * Toolchain / runner / forked-worker identity tokens for the test freshness
+     * key — so a jk-version, test-runner, or worker-jar change retests. The
+     * resolved JDK and dependency set are already covered by jk.lock's content,
+     * and a {@code --release} change recompiles main (caught via its output).
+     */
+    private static List<String> testStampExtras(Map<String, String> workerJars) {
+        List<String> extras = new ArrayList<>();
+        extras.add("jk:" + dev.jkbuild.util.JkVersion.VERSION);
+        String runnerSha = dev.jkbuild.worker.WorkerJar.TEST_RUNNER.expectedShaOrNull();
+        if (runnerSha != null) extras.add("runner:" + runnerSha);
+        // Worker jars by content — a worker change retests the module that forks it.
+        for (Map.Entry<String, String> e : workerJars.entrySet()) {
+            String fp;
+            try {
+                fp = dev.jkbuild.task.ClasspathFingerprint.entry(Path.of(e.getValue()));
+            } catch (IOException ex) {
+                fp = "err";
+            }
+            extras.add("worker:" + e.getKey() + "=" + fp);
+        }
+        return extras;
     }
 }

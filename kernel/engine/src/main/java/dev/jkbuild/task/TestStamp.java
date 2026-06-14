@@ -7,7 +7,6 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.BasicFileAttributes;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
@@ -26,19 +25,19 @@ import java.util.List;
  * <ul>
  *   <li><b>Test sources</b> — path + content hash.  Editing or adding a
  *       test file busts the stamp.</li>
- *   <li><b>{@code jk.lock}</b> — content hash.  Any change to the
- *       resolved dependency set busts the stamp even if the JARs on disk
- *       are momentarily the same (e.g. a version was yanked and re-uploaded
- *       with different bytes).</li>
- *   <li><b>Runtime classpath</b> — for CAS-stored JARs the path is
- *       sufficient (the SHA-256 is encoded in the directory layout).  For
- *       workspace-local JARs (sibling members, non-CAS paths) the file
- *       size + mtime provide a fast staleness signal.  This deliberately
- *       matches the two-tier strategy used by {@link FreshnessStamp} for
- *       compilation: cheap stat-based checks for the common case, with the
- *       caveat that a mtime-preserving swap could fool this layer.  The
- *       workspace build ensures sibling JARs are rebuilt with new mtimes
- *       whenever their sources change, so this is not a practical concern.</li>
+ *   <li><b>Own main output</b> — content of the module's {@code MAIN_CLASSES}
+ *       tree.  The tests exercise this code, so a main-only change must retest
+ *       even when no test source changed.</li>
+ *   <li><b>{@code jk.lock}</b> — content hash (resolved dep set + JDK).</li>
+ *   <li><b>Runtime classpath</b> — by <em>content</em> via
+ *       {@link ClasspathFingerprint}: CAS jars by their hash-path, workspace-local
+ *       outputs (sibling members) by their bytes.  Content (not mtime) is what
+ *       makes a sibling member's change ripple into every dependent's key, and
+ *       what stops a byte-identical rebuild — jk re-jars every build with a new
+ *       file mtime but stable bytes — from needlessly busting the stamp.</li>
+ *   <li><b>Toolchain / runner / forked-worker identity</b> — caller-supplied
+ *       tokens (jk version, {@code jk-test-runner} sha, the content of any worker
+ *       jars handed to the test JVM) so a tool or worker change retests.</li>
  * </ul>
  *
  * <h3>Safety invariant</h3>
@@ -53,7 +52,7 @@ public final class TestStamp {
     public static final String FILE = ".test-stamp";
 
     /** Prefix embedded in every stamp so future format changes can be detected. */
-    private static final String FORMAT_VERSION = "test-stamp-v1";
+    private static final String FORMAT_VERSION = "test-stamp-v2";
 
     private TestStamp() {}
 
@@ -99,14 +98,18 @@ public final class TestStamp {
      * "not fresh" and run the tests.
      *
      * @param testSources    all {@code .java}/{@code .kt} test source files
+     * @param mainClasses    the module's own compiled main output dir (may be null)
      * @param lockFile       the project's {@code jk.lock}
      * @param runtimeCp      the full test runtime classpath (external jars +
      *                       workspace sibling jars, already assembled)
+     * @param extraInputs    toolchain / runner / forked-worker identity tokens
      */
     public static String computeKey(
             List<Path> testSources,
+            Path mainClasses,
             Path lockFile,
-            List<Path> runtimeCp) {
+            List<Path> runtimeCp,
+            List<String> extraInputs) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             feed(md, FORMAT_VERSION);
@@ -120,29 +123,26 @@ public final class TestStamp {
                         + ":" + Hashing.sha256Hex(Files.readAllBytes(src)));
             }
 
-            // Lock file: content hash — catches any dep version change.
+            // The module's own compiled main output — a main-only change busts the
+            // stamp even when no test source changed (the tests exercise this code).
+            if (mainClasses != null) {
+                feed(md, "main:" + ClasspathFingerprint.entry(mainClasses));
+            }
+
+            // Lock file: content hash — catches any dep version / JDK change.
             if (Files.isRegularFile(lockFile)) {
                 feed(md, "lock:" + Hashing.sha256Hex(Files.readAllBytes(lockFile)));
             }
 
-            // Runtime classpath entries, sorted for stability.
-            List<Path> sortedCp = new ArrayList<>(runtimeCp);
-            sortedCp.sort(Comparator.comparing(Path::toString));
-            for (Path entry : sortedCp) {
-                if (!Files.exists(entry)) return null; // missing dep → retest
-                String abs = entry.toAbsolutePath().normalize().toString();
-                if (isCasPath(abs)) {
-                    // CAS layout: sha256/AA/BB/<rest> — the path IS the content hash.
-                    feed(md, "cp-cas:" + abs);
-                } else {
-                    // Workspace sibling / local build output: use size + mtime.
-                    // Cheap O(1) check; accurate because the workspace build always
-                    // touches the output JAR when sources or deps change.
-                    BasicFileAttributes attrs = Files.readAttributes(entry, BasicFileAttributes.class);
-                    feed(md, "cp-local:" + abs
-                            + ":" + attrs.size()
-                            + ":" + attrs.lastModifiedTime().toMillis());
-                }
+            // Runtime classpath by CONTENT: a sibling member's change ripples in,
+            // and a byte-identical rebuild (new mtime, same bytes) does not.
+            feed(md, "cp:" + ClasspathFingerprint.of(runtimeCp));
+
+            // Toolchain / runner / forked-worker identity, sorted for stability.
+            if (extraInputs != null) {
+                List<String> extras = new ArrayList<>(extraInputs);
+                extras.sort(Comparator.naturalOrder());
+                for (String e : extras) feed(md, "x:" + e);
             }
 
             return HexFormat.of().formatHex(md.digest());
@@ -157,13 +157,5 @@ public final class TestStamp {
     private static void feed(MessageDigest md, String value) {
         byte[] bytes = (value + "\n").getBytes(StandardCharsets.UTF_8);
         md.update(bytes);
-    }
-
-    /**
-     * Heuristic: a path under {@code sha256/XX/YY/<rest>} is a CAS entry
-     * whose content hash is encoded in the directory structure.
-     */
-    private static boolean isCasPath(String path) {
-        return path.contains("/sha256/") || path.contains("\\sha256\\");
     }
 }
