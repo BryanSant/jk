@@ -67,6 +67,25 @@ class NewCommandTest {
     }
 
     @Test
+    void native_project_keeps_a_normal_jdk_and_writes_no_graal(@TempDir Path tempDir) throws IOException {
+        // A native project's build JDK follows the normal rules (here an explicit
+        // bare major); the GraalVM is never chosen here — it's resolved into
+        // jk.lock when project.native is set — so no `graal` lands in jk.toml.
+        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
+                "--native", "--jdk", "21", "--no-member", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+
+        JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThat(parsed.project().jdk()).isEqualTo("21");        // not forced to a GraalVM
+        assertThat(parsed.project().graal()).isNull();             // graal stays out of jk.toml
+        assertThat(parsed.project().nativeMode()).isEqualTo(JkBuild.NativeMode.ALWAYS);
+
+        String toml = Files.readString(tempDir.resolve("jk.toml"));
+        assertThat(toml).contains("native   = true");
+        assertThat(toml).doesNotContain("graal");
+    }
+
+    @Test
     void point_release_jdk_flag_is_rejected(@TempDir Path tempDir) {
         var prevErr = System.err;
         var captured = new ByteArrayOutputStream();

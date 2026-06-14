@@ -877,13 +877,15 @@ public final class NewCommand implements CliCommand {
                 .when(a -> "java".equals(a.get("lang")) && !member && !hasDefaultJdk)
                 .build();
 
-        // Dynamic choices: restricted to JDKs that can compile the chosen Java
-        // release (major >= the target), then GraalVM-at-latest-LTS when Native
-        // is selected, else the full preference-ordered list (installed plus
-        // auto-installable latest-LTS rows). Rebuilt per render so changing the
-        // language version or the build output refreshes the JDK list. Empty
-        // results fall back so the user can still progress; a bad pick surfaces
-        // as a missing-toolchain error later.
+        // Dynamic choices: the JDKs that can compile the chosen Java release
+        // (major >= the target), in the full preference order (installed plus
+        // auto-installable latest-LTS rows). This is the *build* JDK only —
+        // native projects do NOT pick a GraalVM here. The native-image GraalVM
+        // is resolved automatically (latest Oracle GraalVM) into jk.lock when
+        // project.native is set, so the toolchain choice stays decoupled from
+        // the Java language version. Rebuilt per render so changing the language
+        // version refreshes the list; empty results fall back so the user can
+        // still progress.
         //
         // Only shown when there's a real choice to make: a standalone project,
         // no global default JDK, and more than one eligible installed JDK for
@@ -893,8 +895,7 @@ public final class NewCommand implements CliCommand {
         var jdkStep = WizardStep.RadioStep.vertical("jdk", "Select a JDK:")
                 .choicesFn(answers -> {
                     int floor = jdkFloor(answers, parent);
-                    var nativeSelected = answers.getList("targets").contains("native");
-                    var filtered = NewJdkCandidate.filter(candidates, nativeSelected, LATEST_LTS_MAJOR)
+                    var filtered = NewJdkCandidate.filter(candidates, false, LATEST_LTS_MAJOR)
                             .stream().filter(c -> c.major() >= floor).toList();
                     if (filtered.isEmpty()) {
                         filtered = candidates.stream().filter(c -> c.major() >= floor).toList();
