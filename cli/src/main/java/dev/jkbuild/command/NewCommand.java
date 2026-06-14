@@ -68,7 +68,8 @@ public final class NewCommand implements CliCommand {
         return List.of(
                 Opt.value("<name>", "Project name — the target directory leaf and [project].name.", "--name"),
                 Opt.value("<group>", "Maven groupId. Default: inferred from ~/.gitconfig, else 'com.example'.", "--group"),
-                Opt.value("<ver>", "JDK major version. Default: '25'.", "--jdk"),
+                Opt.value("<spec>", "JDK spec: <major> (e.g. 25), <vendor>-<major> "
+                        + "(e.g. corretto-25), or lts|stable|latest. Default: the latest LTS.", "--jdk"),
                 Opt.value("<lang>", "Source language: java | kotlin. Default: java.", "--lang"),
                 Opt.flag("Generate an executable project (default is library).", "--executable").negate(),
                 Opt.flag("Bundle as a shadow (fat) jar. Implies --executable.", "--shadow"),
@@ -115,13 +116,22 @@ public final class NewCommand implements CliCommand {
      */
     private ParentInfo parent;
 
+    /**
+     * The user's global default JDK identifier ({@code default-jdk} in
+     * {@code ~/.jk/config/jk.toml}, e.g. {@code temurin-25.0.1}), or empty when
+     * none is set. Resolved once in {@link #callBody()} and used to skip the
+     * "Select a JDK" prompt: when a default exists we adopt its major and write
+     * a bare-major pin (the vendor stays out of {@code jk.toml} per policy).
+     */
+    private Optional<String> defaultJdk = Optional.empty();
+
     /** Inherited context from the parent project's {@code [project]} block. */
     private record ParentInfo(Path root, dev.jkbuild.model.JkBuild.Project project) {
         String displayName() { return project.name(); }
         String group() { return project.group(); }
         boolean kotlin() { return project.isKotlin(); }
         /** The JDK toolchain version (which JDK runs the build). */
-        int jdkMajor() { return project.jdk() > 0 ? project.jdk() : project.javaRelease(); }
+        int jdkMajor() { return project.jdkMajor() > 0 ? project.jdkMajor() : project.javaRelease(); }
         /** The {@code java = N} compile target, which flows through even when it diverges from {@link #jdkMajor()}. */
         int javaRelease() { return project.javaRelease(); }
     }
@@ -207,6 +217,7 @@ public final class NewCommand implements CliCommand {
         // a standalone project? Search up from where the project will live (the
         // target's parent). Drives the wizard UX and inherited defaults.
         this.parent = resolveParent(detectionStartDir(cwd));
+        this.defaultJdk = readDefaultJdk();
 
         if (shouldRunWizard()) {
             return runWizardGoal(cwd);
@@ -285,7 +296,7 @@ public final class NewCommand implements CliCommand {
                     var groupGuess = NewGroupGuess.guess(cwd,
                             Optional.ofNullable(System.getProperty("user.home"))
                                     .map(Path::of).orElse(null));
-                    var wizard = buildWizard(candidates, groupGuess, parent);
+                    var wizard = buildWizard(candidates, groupGuess, parent, defaultJdk.isPresent());
                     var wizardResult = wizard.run(terminal, preset);
                     if (wizardResult.isEmpty()) {
                         // Cancelled via Ctrl-C. Wizard.printCancellation
@@ -402,7 +413,13 @@ public final class NewCommand implements CliCommand {
      * a goal still gives us a run-log entry for `jk new --name=X` etc.
      */
     private int runFlagGoal(Path cwd) {
-        var inputs = fromFlags(cwd);
+        NewInputs inputs;
+        try {
+            inputs = fromFlags(cwd);
+        } catch (IllegalArgumentException e) {
+            System.err.println("jk new: " + e.getMessage());
+            return 64; // EX_USAGE
+        }
         if (shadow && inputs.main().isEmpty()) {
             System.err.println("jk new: --shadow requires --executable");
             return 64;
@@ -496,9 +513,25 @@ public final class NewCommand implements CliCommand {
                 : parent != null ? parent.group()
                 : NewGroupGuess.guess(cwd,
                         Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null));
-        var resolvedJdk = (jdk != null && !jdk.isBlank()) ? jdk
-                : parent != null ? String.valueOf(parent.jdkMajor()) : "25";
-        int resolvedJdkMajor = parseJdkMajorOrDefault(resolvedJdk);
+        // Resolve the JDK pin written to jk.toml: an explicit --jdk wins (keeping
+        // a vendor only when the user typed one); else inherit the parent's major
+        // (member); else adopt the global default JDK's major; else the latest
+        // LTS. Every non-explicit path writes a bare major — the vendor stays out
+        // of jk.toml unless the user asked for it.
+        NewJdkPlan.Spec jdkSpec;
+        if (jdk != null && !jdk.isBlank()) {
+            jdkSpec = resolveJdkArg(jdk);
+        } else if (parent != null && parent.jdkMajor() > 0) {
+            int m = parent.jdkMajor();
+            jdkSpec = new NewJdkPlan.Spec(m, Integer.toString(m));
+        } else if (defaultJdk.map(dev.jkbuild.model.JkBuild.Project::majorOf).orElse(0) > 0) {
+            int m = dev.jkbuild.model.JkBuild.Project.majorOf(defaultJdk.get());
+            jdkSpec = new NewJdkPlan.Spec(m, Integer.toString(m));
+        } else {
+            jdkSpec = new NewJdkPlan.Spec(LATEST_LTS_MAJOR, Integer.toString(LATEST_LTS_MAJOR));
+        }
+        var resolvedJdk = jdkSpec.pin();
+        int resolvedJdkMajor = jdkSpec.major();
         // The compile target flows through from the parent (workspace-wide
         // release) even when it diverges from the JDK toolchain; standalone
         // projects target their JDK.
@@ -643,6 +676,38 @@ public final class NewCommand implements CliCommand {
     /** Current Java LTS feature release. Bumped on each new LTS. */
     static final int LATEST_LTS_MAJOR = 25;
 
+    /** The user's global default JDK identifier, or empty (best-effort — never throws). */
+    private static Optional<String> readDefaultJdk() {
+        try {
+            return dev.jkbuild.jdk.GlobalDefaultJdk.current().currentIdentifier();
+        } catch (Exception ignored) {
+            return Optional.empty();
+        }
+    }
+
+    /**
+     * Resolve an explicit {@code --jdk <spec>} into its major + {@code jk.toml}
+     * pin. Keywords ({@code lts} / {@code stable} / {@code latest}) resolve to a
+     * major against the JetBrains feed (falling back to the latest LTS offline)
+     * and always pin a bare major; a {@code <vendor>-<major>} spec keeps its
+     * vendor; a bare major stays bare. Throws {@link IllegalArgumentException}
+     * (caught by the flag path) on a point release or a spec with no major.
+     */
+    private NewJdkPlan.Spec resolveJdkArg(String arg) {
+        String a = arg.trim();
+        if (dev.jkbuild.jdk.JdkKeywords.isKeyword(a) && !"native".equalsIgnoreCase(a)) {
+            String os = dev.jkbuild.jdk.HostPlatform.currentOs();
+            String arch = dev.jkbuild.jdk.HostPlatform.currentArch();
+            int major = fetchCatalogQuiet()
+                    .flatMap(c -> dev.jkbuild.jdk.JdkKeywords.resolveToMajorSpec(c, a, os, arch))
+                    .map(dev.jkbuild.model.JkBuild.Project::majorOf)
+                    .filter(m -> m > 0)
+                    .orElse(LATEST_LTS_MAJOR);
+            return new NewJdkPlan.Spec(major, Integer.toString(major));
+        }
+        return NewJdkPlan.parseExplicit(a);
+    }
+
     /**
      * Best-effort catalog fetch for the wizard's "Select a JDK" step. Network
      * failures (offline, DNS, 5xx) degrade to an empty optional rather than
@@ -662,10 +727,21 @@ public final class NewCommand implements CliCommand {
      * {@link NewJdkCandidate#filter}, so this is just a lookup.
      */
     private NewJdkCandidate pickCandidate(Answers answers, List<NewJdkCandidate> candidates) {
-        var pickedId = answers.get("jdk");
-        return candidates.stream()
-                .filter(c -> c.id().equals(pickedId))
-                .findFirst()
+        if (answers.has("jdk")) {   // the "Select a JDK" step ran
+            var pickedId = answers.get("jdk");
+            return candidates.stream()
+                    .filter(c -> c.id().equals(pickedId))
+                    .findFirst()
+                    .orElseGet(() -> candidates.getFirst());
+        }
+        // Step was skipped — resolve silently: inherit the parent's major
+        // (member), adopt the global default's major, else auto-pick by the
+        // chosen Java level (sole eligible install, or lts to install).
+        int preferred = parent != null
+                ? (parent.jdkMajor() > 0 ? parent.jdkMajor() : parent.javaRelease())
+                : defaultJdk.map(dev.jkbuild.model.JkBuild.Project::majorOf).orElse(0);
+        int floor = jdkFloor(answers, parent);
+        return NewJdkPlan.autoCandidate(candidates, floor, preferred, LATEST_LTS_MAJOR)
                 .orElseGet(() -> candidates.getFirst());
     }
 
@@ -729,7 +805,7 @@ public final class NewCommand implements CliCommand {
     }
 
     private static Wizard buildWizard(List<NewJdkCandidate> candidates, String groupGuess,
-                                      ParentInfo parent) {
+                                      ParentInfo parent, boolean hasDefaultJdk) {
         boolean member = parent != null;
         // Members inherit the parent's group, JDK, and language as defaults; a
         // standalone project guesses the group and defaults to the latest LTS.
@@ -791,13 +867,14 @@ public final class NewCommand implements CliCommand {
         // Java projects pick their language version (the `java = N` target)
         // before choosing a JDK — it shapes the JDK list (you can't target a
         // release newer than the toolchain). Members inherit the parent's
-        // release, so they skip this question. Kotlin projects skip it too.
+        // release, and when a global default JDK is set we adopt its major, so
+        // both skip this question. Kotlin projects skip it too.
         var javaVersion = WizardStep.RadioStep.horizontal("javaVersion", "Java Language Version:")
                 .choice("25", "25")
                 .choice("21", "21")
                 .choice("17", "17")
                 .defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
-                .when(a -> "java".equals(a.get("lang")) && !member)
+                .when(a -> "java".equals(a.get("lang")) && !member && !hasDefaultJdk)
                 .build();
 
         // Dynamic choices: restricted to JDKs that can compile the chosen Java
@@ -807,6 +884,12 @@ public final class NewCommand implements CliCommand {
         // language version or the build output refreshes the JDK list. Empty
         // results fall back so the user can still progress; a bad pick surfaces
         // as a missing-toolchain error later.
+        //
+        // Only shown when there's a real choice to make: a standalone project,
+        // no global default JDK, and more than one eligible installed JDK for
+        // the chosen Java level. Members inherit the parent; a default JDK is
+        // adopted silently; 0/1 eligible resolves without asking (see
+        // pickCandidate / NewJdkPlan).
         var jdkStep = WizardStep.RadioStep.vertical("jdk", "Select a JDK:")
                 .choicesFn(answers -> {
                     int floor = jdkFloor(answers, parent);
@@ -821,6 +904,7 @@ public final class NewCommand implements CliCommand {
                             .map(c -> new dev.jkbuild.cli.tui.Choice(c.id(), c.label(), c.hint()))
                             .toList();
                 })
+                .when(a -> NewJdkPlan.shouldPrompt(member, hasDefaultJdk, candidates, jdkFloor(a, parent)))
                 .defaultChoice(defaultJdkId);
 
         return Wizard.builder()
@@ -882,11 +966,28 @@ public final class NewCommand implements CliCommand {
                 ? answers.get("group")
                 : parent != null ? parent.group() : "com.example";
 
-        var resolvedJdk = String.valueOf(pickedOpt.major());
-        int resolvedJdkMajor = pickedOpt.major();
+        // Resolve the JDK: a member inherits the parent's major; a global
+        // default JDK is adopted; otherwise it's the candidate the user picked
+        // (or the one auto-resolved when the "Select a JDK" step was skipped).
+        // The pin written to jk.toml is always the bare major — the wizard never
+        // emits a vendor (that's reserved for an explicit `--jdk <vendor>-<major>`).
+        int resolvedJdkMajor;
+        Optional<String> resolvedJdkIdentifier;
+        if (parent != null) {
+            resolvedJdkMajor = parent.jdkMajor() > 0 ? parent.jdkMajor() : parent.javaRelease();
+            resolvedJdkIdentifier = Optional.empty();   // members write no lock
+        } else if (defaultJdk.isPresent()) {
+            resolvedJdkMajor = dev.jkbuild.model.JkBuild.Project.majorOf(defaultJdk.get());
+            resolvedJdkIdentifier = defaultJdk;
+        } else {
+            resolvedJdkMajor = pickedOpt.major();
+            resolvedJdkIdentifier = Optional.of(pickedOpt.id());
+        }
+        var resolvedJdk = Integer.toString(resolvedJdkMajor);
         // Compile target: a member inherits the parent's; a standalone Java
         // project uses the Java Language Version it was asked for; otherwise
-        // (Kotlin) it falls back to the chosen JDK.
+        // (Kotlin, or a default-JDK project that skipped the version step) it
+        // falls back to the chosen JDK's major.
         int resolvedJavaRelease;
         if (parent != null) {
             resolvedJavaRelease = parent.javaRelease();
@@ -930,7 +1031,7 @@ public final class NewCommand implements CliCommand {
         return new NewInputs(
                 resolvedGroup, resolvedName,
                 resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
-                Optional.of(pickedOpt.id()),
+                resolvedJdkIdentifier,
                 resolvedMain, resolvedShadow, resolvedNative,
                 resolvedLang, resolvedLayout, resolvedKotlinModule,
                 deps, true, target);

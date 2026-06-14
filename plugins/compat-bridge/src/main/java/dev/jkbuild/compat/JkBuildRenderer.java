@@ -71,8 +71,8 @@ public final class JkBuildRenderer {
             // Longer key than the rest of the block; emit unpadded.
             sb.append("description = ").append(quote(p.description())).append('\n');
         }
-        if (p.jdk() > 0) {
-            sb.append("jdk      = ").append(p.jdk()).append('\n');
+        if (p.jdk() != null) {
+            sb.append("jdk      = ").append(quote(p.jdk())).append('\n');
         }
         if (p.isKotlin()) {
             sb.append("kotlin   = ").append(quote(versionLiteral(p.kotlin()))).append('\n');

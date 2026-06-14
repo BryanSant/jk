@@ -119,8 +119,9 @@ public final class JdkEnsure {
         if (lock != null && lock.jdk() != null && !lock.jdk().isBlank()) {
             return lock.jdk();
         }
-        if (build != null && build.project() != null && build.project().jdk() > 0) {
-            return String.valueOf(build.project().jdk());
+        if (build != null && build.project() != null
+                && build.project().jdk() != null && !build.project().jdk().isBlank()) {
+            return build.project().jdk();
         }
         return null;
     }

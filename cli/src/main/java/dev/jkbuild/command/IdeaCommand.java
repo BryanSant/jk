@@ -268,8 +268,8 @@ public final class IdeaCommand implements CliCommand {
                                     JdkRegistry registry, StableJdkPointer pointer,
                                     List<IntellijSdkRegistrar.SdkEntry> sdkEntries,
                                     Set<String> seen) throws IOException {
-        int level = member.project().jdk() > 0
-                ? member.project().jdk() : member.project().javaRelease();
+        int level = member.project().jdkMajor() > 0
+                ? member.project().jdkMajor() : member.project().javaRelease();
         String lockJdk = readLockJdk(memberDir);
         JdkSelector.FlexibleQuery q =
                 JdkSelector.parseFlexible(lockJdk == null ? "" : lockJdk);
@@ -315,8 +315,8 @@ public final class IdeaCommand implements CliCommand {
                                         List<IntellijSdkRegistrar.SdkEntry> sdkEntries,
                                         Set<String> seen) throws IOException {
         if (sdkRefs.containsKey(wsRoot)) return sdkRefs.get(wsRoot);
-        int level = root.project().jdk();
-        if (level == 0) for (JkBuild m : members.values()) level = Math.max(level, m.project().jdk());
+        int level = root.project().jdkMajor();
+        if (level == 0) for (JkBuild m : members.values()) level = Math.max(level, m.project().jdkMajor());
         for (SdkRef r : sdkRefs.values()) if (r.languageLevel() == level) return r;
         return sdkRefFor(wsRoot, root, registry, pointer, sdkEntries, seen);
     }

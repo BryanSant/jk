@@ -15,8 +15,13 @@ import java.util.Optional;
  * <ul>
  *   <li>{@code name} — project name; the target directory's leaf and the
  *       value written as {@code [project].name} in {@code jk.toml}.</li>
+ *   <li>{@code jdk} — the exact string written as {@code [project].jdk}: a bare
+ *       major ({@code "25"}) in almost every case, or a vendor-hinted pin
+ *       ({@code "corretto-25"}) only when the user passed an explicit
+ *       {@code --jdk <vendor>-<major>}. The wizard never emits a vendor.</li>
  *   <li>{@code jdkMajor} — the JDK toolchain feature-release (which JDK runs
- *       the build). Defaults to the parent's for a member; user-pickable.</li>
+ *       the build), parsed from {@code jdk}. Defaults to the parent's for a
+ *       member; user-pickable.</li>
  *   <li>{@code javaRelease} — the {@code java = N} compile target. Usually
  *       equal to {@code jdkMajor}, but a workspace member inherits the parent's
  *       release even when it diverges (e.g. {@code jdk = 25}, {@code java = 17}).

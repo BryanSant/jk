@@ -16,7 +16,7 @@ import java.util.Map;
  *   group    = "..."
  *   name     = "..."
  *   version  = "0.1.0"
- *   jdk      = 25
+ *   jdk      = "25"
  *   java     = 25
  *
  *   [dependencies.test]
@@ -24,7 +24,9 @@ import java.util.Map;
  * }</pre>
  *
  * <ul>
- *   <li>{@code jdk = <major>} — integer feature release; resolved to a concrete
+ *   <li>{@code jdk = "<spec>"} — a JDK spec string: a bare major ({@code "25"})
+ *       or, only when the user passed {@code --jdk <vendor>-<major>}, a
+ *       vendor-hinted pin ({@code "corretto-25"}). Resolved to a concrete
  *       install identifier in {@code jk.lock}.</li>
  *   <li>{@code java = <major>} (integer) or {@code kotlin = "<version>"}
  *       (compiler version string) — mutually exclusive language indicator.</li>
@@ -46,7 +48,7 @@ public final class NewJkBuildRenderer {
         sb.append("name     = \"").append(inputs.name()).append("\"\n");
         sb.append("group    = \"").append(inputs.group()).append("\"\n");
         sb.append("version  = \"0.1.0\"\n");
-        sb.append("jdk      = ").append(inputs.jdkMajor()).append('\n');
+        sb.append("jdk      = \"").append(inputs.jdk()).append("\"\n");
         switch (inputs.lang()) {
             case JAVA -> sb.append("java     = ").append(inputs.javaRelease()).append('\n');
             case KOTLIN -> sb.append("kotlin   = \"").append(DEFAULT_KOTLIN_VERSION).append("\"\n");

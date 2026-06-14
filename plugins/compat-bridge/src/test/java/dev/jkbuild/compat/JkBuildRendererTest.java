@@ -32,7 +32,7 @@ class JkBuildRendererTest {
                 group    = "com.example"
                 name     = "widget"
                 version  = "1.0.0"
-                jdk      = 21
+                jdk      = "21"
                 java     = 21
                 """);
     }

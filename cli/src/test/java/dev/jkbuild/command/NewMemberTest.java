@@ -72,7 +72,7 @@ class NewMemberTest {
         assertThat(Jk.execute("new", member.toString())).isZero();
 
         String toml = Files.readString(member.resolve("jk.toml"));
-        assertThat(toml).contains("jdk      = 25");   // toolchain inherited
+        assertThat(toml).contains("jdk      = \"25\"");   // toolchain inherited (bare major)
         assertThat(toml).contains("java     = 17");   // compile target flowed through
         assertThat(JkBuildParser.parse(member.resolve("jk.toml")).project().javaRelease()).isEqualTo(17);
     }

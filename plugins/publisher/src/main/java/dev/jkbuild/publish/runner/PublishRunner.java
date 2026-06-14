@@ -177,7 +177,7 @@ public final class PublishRunner implements Plugin {
                         Map.of("group", project.project().group(),
                                 "artifact", project.project().name(),
                                 "version", project.project().version(),
-                                "jdk", String.valueOf(project.project().jdk())));
+                                "jdk", project.project().jdk() == null ? "" : project.project().jdk()));
                 byte[] provenance = SlsaProvenance.generate(
                         List.of(new SlsaProvenance.Subject(jarFilename, Checksums.sha256Hex(jarBytes))), ctx);
                 artifacts.add(new MavenPublisher.Artifact(".intoto.json", provenance));

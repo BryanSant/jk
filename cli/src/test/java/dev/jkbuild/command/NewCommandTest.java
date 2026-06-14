@@ -36,13 +36,51 @@ class NewCommandTest {
         assertThat(parsed.project().group()).isEqualTo("com.example");
         assertThat(parsed.project().name()).isEqualTo("widget");
         assertThat(parsed.project().version()).isEqualTo("0.1.0");
-        assertThat(parsed.project().jdk()).isEqualTo(25);
+        assertThat(parsed.project().jdk()).isEqualTo("25");
         assertThat(parsed.project().java()).isEqualTo(25);
         assertThat(parsed.project().isKotlin()).isFalse();
 
         Lockfile lock = LockfileReader.read(lockFile);
         assertThat(lock.version()).isEqualTo(Lockfile.CURRENT_VERSION);
         assertThat(lock.artifacts()).isEmpty();
+    }
+
+    @Test
+    void explicit_vendor_spec_is_preserved_in_jk_toml(@TempDir Path tempDir) throws IOException {
+        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
+                "--jdk", "corretto-25", "--no-member", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+
+        JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        // The vendor survives only because the user typed it on the command line.
+        assertThat(parsed.project().jdk()).isEqualTo("corretto-25");
+        assertThat(parsed.project().jdkMajor()).isEqualTo(25);
+        assertThat(Files.readString(tempDir.resolve("jk.toml"))).contains("jdk      = \"corretto-25\"");
+    }
+
+    @Test
+    void bare_major_jdk_flag_writes_a_bare_pin(@TempDir Path tempDir) throws IOException {
+        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
+                "--jdk", "21", "--no-member", tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+        assertThat(JkBuildParser.parse(tempDir.resolve("jk.toml")).project().jdk()).isEqualTo("21");
+    }
+
+    @Test
+    void point_release_jdk_flag_is_rejected(@TempDir Path tempDir) {
+        var prevErr = System.err;
+        var captured = new ByteArrayOutputStream();
+        System.setErr(new PrintStream(captured, true, StandardCharsets.UTF_8));
+        int exit;
+        try {
+            exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
+                    "--jdk", "25.0.3", "--no-member", tempDir.toString());
+        } finally {
+            System.setErr(prevErr);
+        }
+        assertThat(exit).isEqualTo(64); // EX_USAGE
+        assertThat(captured.toString(StandardCharsets.UTF_8)).contains("point release");
+        assertThat(tempDir.resolve("jk.toml")).doesNotExist();
     }
 
     @Test
