@@ -57,7 +57,11 @@ public final class ShadowPackager {
         Map<String, ByteArrayOutputStream> services = new TreeMap<>();
 
         try (OutputStream out = Files.newOutputStream(request.outputJar());
-             JarOutputStream jos = new JarOutputStream(out, manifest)) {
+             JarOutputStream jos = new JarOutputStream(out)) {
+            // Write the manifest ourselves with a fixed timestamp; the
+            // JarOutputStream(out, manifest) convenience constructor stamps it
+            // with the current time and churns the jar every build.
+            writeManifest(jos, manifest, request.timestampEpochSeconds());
             written.add("META-INF/MANIFEST.MF");
 
             // 1. Project classes + resources win.
@@ -66,6 +70,7 @@ public final class ShadowPackager {
             for (Path file : files) {
                 String name = normalize(request.classesDir(), file);
                 if (name.equals("META-INF/MANIFEST.MF")) continue;
+                if (isBuildStamp(name)) continue;       // freshness stamp, not jar content
                 if (isServiceFile(name)) {
                     accumulate(services, name, Files.readAllBytes(file));
                     continue;
@@ -122,6 +127,19 @@ public final class ShadowPackager {
         jos.putNextEntry(entry);
         jos.write(data);
         jos.closeEntry();
+    }
+
+    /** Write the manifest as the first entry with a fixed timestamp (reproducible). */
+    private static void writeManifest(JarOutputStream jos, Manifest manifest, long epochSeconds)
+            throws IOException {
+        ByteArrayOutputStream buf = new ByteArrayOutputStream();
+        manifest.write(buf);
+        writeEntry(jos, "META-INF/MANIFEST.MF", buf.toByteArray(), epochSeconds);
+    }
+
+    /** jk's freshness/skip stamps — build-host metadata that must not enter the jar. */
+    private static boolean isBuildStamp(String name) {
+        return name.endsWith(".jstamp") || name.endsWith(".kstamp") || name.endsWith(".test-stamp");
     }
 
     private static boolean isServiceFile(String name) {

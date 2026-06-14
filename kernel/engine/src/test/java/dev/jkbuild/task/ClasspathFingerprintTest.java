@@ -75,21 +75,33 @@ class ClasspathFingerprintTest {
     }
 
     @Test
-    void directory_fingerprint_ignores_jk_build_stamps(@TempDir Path dir) throws IOException {
+    void directory_fingerprint_ignores_freshness_stamps(@TempDir Path dir) throws IOException {
         Path classes = Files.createDirectories(dir.resolve("classes"));
         write(classes.resolve("a/A.class"), "AAAA");
         write(classes.resolve(".jstamp"), "stamp-1");
-        write(classes.resolve("META-INF/jk-git-client-sha256.txt"), "sha-1");
         String before = ClasspathFingerprint.entry(classes);
-        // jk rewrites the stamps and the embed-sha resources every build — they're
-        // build-host metadata, not code, so the fingerprint must ignore them.
+        // jk rewrites the stamps every build — build-host metadata, not code, so
+        // the fingerprint must ignore them.
         write(classes.resolve(".jstamp"), "stamp-2-different");
         write(classes.resolve(".kstamp"), "k");
         write(classes.resolve(".test-stamp"), "t");
-        write(classes.resolve("META-INF/jk-git-client-sha256.txt"), "sha-2-different");
         assertThat(ClasspathFingerprint.entry(classes)).isEqualTo(before);
         // A real class change still busts it.
         write(classes.resolve("a/A.class"), "BBBB");
+        assertThat(ClasspathFingerprint.entry(classes)).isNotEqualTo(before);
+    }
+
+    @Test
+    void directory_fingerprint_tracks_embed_sha_resources(@TempDir Path dir) throws IOException {
+        // [build.embed-sha] writes META-INF/jk-<worker>-sha256.txt holding a
+        // worker jar's SHA. Now that worker jars are byte-reproducible the value
+        // is stable across no-op rebuilds, and a genuine worker change must
+        // ripple in — so unlike the stamps, this resource counts.
+        Path classes = Files.createDirectories(dir.resolve("classes"));
+        write(classes.resolve("a/A.class"), "AAAA");
+        write(classes.resolve("META-INF/jk-git-client-sha256.txt"), "sha-1");
+        String before = ClasspathFingerprint.entry(classes);
+        write(classes.resolve("META-INF/jk-git-client-sha256.txt"), "sha-2-worker-changed");
         assertThat(ClasspathFingerprint.entry(classes)).isNotEqualTo(before);
     }
 

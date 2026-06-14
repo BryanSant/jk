@@ -81,6 +81,36 @@ class ShadowPackagerTest {
         }
     }
 
+    @Test
+    void reproducible_and_excludes_freshness_stamps(@TempDir Path tmp) throws IOException {
+        Path classes = tmp.resolve("classes");
+        Files.createDirectories(classes.resolve("app"));
+        Files.writeString(classes.resolve("app/Main.class"), "APPMAIN");
+        Files.writeString(classes.resolve(".jstamp"), "stamp-run-1");
+        Path dep = tmp.resolve("dep.jar");
+        try (JarOutputStream jos = new JarOutputStream(Files.newOutputStream(dep))) {
+            putEntry(jos, "lib/Helper.class", "LIBHELPER");
+        }
+
+        Path a = tmp.resolve("a-all.jar");
+        new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
+                classes, List.of(dep), a, "app.Main", Map.of(), 0L));
+        // The freshness stamp's content changes every build; the fat jar must
+        // not bundle it (and the manifest must be pinned), or the jar churns.
+        Files.writeString(classes.resolve(".jstamp"), "stamp-run-2-different");
+        Path b = tmp.resolve("b-all.jar");
+        new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
+                classes, List.of(dep), b, "app.Main", Map.of(), 0L));
+
+        assertThat(Files.readAllBytes(a)).isEqualTo(Files.readAllBytes(b));
+        try (JarFile jf = new JarFile(a.toFile())) {
+            assertThat(jf.getJarEntry(".jstamp")).as("freshness stamp excluded").isNull();
+            assertThat(jf.getJarEntry("META-INF/MANIFEST.MF").getTime())
+                    .as("manifest pinned to the same fixed epoch as data entries")
+                    .isEqualTo(jf.getJarEntry("app/Main.class").getTime());
+        }
+    }
+
     private static void putEntry(JarOutputStream jos, String name, String content) throws IOException {
         jos.putNextEntry(new JarEntry(name));
         jos.write(content.getBytes(StandardCharsets.UTF_8));

@@ -57,6 +57,28 @@ class JarPackagerTest {
     }
 
     @Test
+    void manifest_entry_is_pinned_to_the_fixed_epoch_not_wall_clock(@TempDir Path tempDir) throws IOException {
+        // Regression guard: the JarOutputStream(out, manifest) convenience
+        // constructor stamps the manifest with the *current* time, so an
+        // otherwise-identical jar churns every build. The manifest must carry
+        // the same pinned timestamp as every other entry.
+        Path input = tempDir.resolve("classes");
+        Files.createDirectories(input);
+        Files.writeString(input.resolve("Hello.class"), "x");
+
+        Path jar = tempDir.resolve("out.jar");
+        new JarPackager().packageJar(JarPackager.JarRequest.of(input, jar));
+
+        try (JarFile jf = new JarFile(jar.toFile())) {
+            long manifestTime = jf.getJarEntry("META-INF/MANIFEST.MF").getTime();
+            long dataTime = jf.getJarEntry("Hello.class").getTime();
+            assertThat(manifestTime)
+                    .as("manifest pinned to the same fixed epoch as data entries")
+                    .isEqualTo(dataTime);
+        }
+    }
+
+    @Test
     void manifest_carries_only_what_we_set(@TempDir Path tempDir) throws IOException {
         Path input = tempDir.resolve("classes");
         Files.createDirectories(input);

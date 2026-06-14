@@ -41,7 +41,14 @@ public final class JarPackager {
         Manifest manifest = buildManifest(request);
 
         try (OutputStream out = Files.newOutputStream(request.outputJar());
-             JarOutputStream jos = new JarOutputStream(out, manifest)) {
+             JarOutputStream jos = new JarOutputStream(out)) {
+            long epoch = request.timestampEpochSeconds();
+            // Write the manifest ourselves as the first entry with a fixed
+            // timestamp. The JarOutputStream(out, manifest) convenience
+            // constructor stamps the manifest with the *current* time, which is
+            // the one thing that makes an otherwise-identical jar churn every
+            // build (every other entry below is pinned to the fixed epoch).
+            writeManifest(jos, manifest, epoch);
 
             List<Path> files = collectFiles(request.inputDir());
             // Sort by relative path for deterministic entry order.
@@ -50,17 +57,32 @@ public final class JarPackager {
             for (Path file : files) {
                 String name = normalize(request.inputDir(), file);
                 if (name.equals("META-INF/MANIFEST.MF")) continue; // already written
-                if (name.endsWith(".jstamp")) continue;             // build-host artefact, not jar content
+                if (isBuildStamp(name)) continue;                   // build-host artefact, not jar content
                 JarEntry entry = new JarEntry(name);
-                entry.setTimeLocal(LocalDateTime.ofEpochSecond(
-                        request.timestampEpochSeconds(), 0,
-                        ZoneOffset.UTC));
+                entry.setTimeLocal(LocalDateTime.ofEpochSecond(epoch, 0, ZoneOffset.UTC));
                 jos.putNextEntry(entry);
                 Files.copy(file, jos);
                 jos.closeEntry();
             }
         }
         return request.outputJar();
+    }
+
+    /** Write the manifest as the first entry with a fixed timestamp (reproducible). */
+    private static void writeManifest(JarOutputStream jos, Manifest manifest, long epochSeconds)
+            throws IOException {
+        java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+        manifest.write(buf);
+        JarEntry entry = new JarEntry("META-INF/MANIFEST.MF");
+        entry.setTimeLocal(LocalDateTime.ofEpochSecond(epochSeconds, 0, ZoneOffset.UTC));
+        jos.putNextEntry(entry);
+        jos.write(buf.toByteArray());
+        jos.closeEntry();
+    }
+
+    /** jk's freshness/skip stamps — build-host metadata that must not enter the jar. */
+    private static boolean isBuildStamp(String name) {
+        return name.endsWith(".jstamp") || name.endsWith(".kstamp") || name.endsWith(".test-stamp");
     }
 
     private static Manifest buildManifest(JarRequest request) {

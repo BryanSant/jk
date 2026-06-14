@@ -111,24 +111,23 @@ public final class ClasspathFingerprint {
     }
 
     /**
-     * jk's own build-host metadata that lives inside the output tree but is not
-     * code, and whose content changes every build, so it must be excluded from a
-     * content fingerprint:
-     * <ul>
-     *   <li>the freshness/skip stamps ({@code .jstamp}, {@code .kstamp},
-     *       {@code .test-stamp}) — mirrors {@code JarPackager} dropping them;</li>
-     *   <li>{@code [build.embed-sha]} outputs ({@code META-INF/jk-<worker>-sha256.txt})
-     *       — these hold the raw-byte SHA of worker jars, which churn because jk's
-     *       jars aren't byte-reproducible. The worker's actual identity is captured
-     *       elsewhere (the {@code test-worker-jars} extras hash the worker's logical
-     *       content), so dropping the embedded value here loses no real signal.</li>
-     * </ul>
+     * jk's freshness/skip stamps ({@code .jstamp}, {@code .kstamp},
+     * {@code .test-stamp}) — build-host metadata that lives inside the classes
+     * tree but is not code, and whose content changes every build. They must be
+     * excluded from a content fingerprint of a directory (the packagers already
+     * drop them from jars, so {@link #hashArchive} never sees them).
+     *
+     * <p>Note {@code [build.embed-sha]} outputs
+     * ({@code META-INF/jk-<worker>-sha256.txt}) are deliberately <em>not</em>
+     * excluded: now that the packagers build byte-reproducible jars, those
+     * embedded SHAs are stable across no-op rebuilds, and a genuine change to a
+     * worker jar <em>should</em> ripple through the embedded SHA into every
+     * module that pins it.
      */
     private static boolean isBuildMetadata(String name) {
         return name.equals(FreshnessStamp.JAVA_STAMP)
                 || name.equals(FreshnessStamp.KOTLIN_STAMP)
-                || name.equals(TestStamp.FILE)
-                || (name.startsWith("jk-") && name.endsWith("-sha256.txt"));
+                || name.equals(TestStamp.FILE);
     }
 
     private static String baseName(String entryName) {
