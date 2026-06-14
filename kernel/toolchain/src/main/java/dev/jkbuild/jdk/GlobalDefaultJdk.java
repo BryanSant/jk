@@ -116,6 +116,20 @@ public final class GlobalDefaultJdk {
         Files.writeString(configFile, updated, StandardCharsets.UTF_8);
     }
 
+    /**
+     * The {@code current-jdk} pointer's resolved home, if the symlink exists
+     * and points at a live directory. Empty when unset, broken, or unsupported
+     * by the filesystem — callers then fall back to the configured default.
+     */
+    public Optional<Path> currentHome() {
+        try {
+            if (!Files.exists(currentSymlink)) return Optional.empty();
+            return Optional.of(currentSymlink.toRealPath());
+        } catch (IOException ignored) {
+            return Optional.empty();
+        }
+    }
+
     /** Identifier stored under {@code default-jdk}, if any. */
     public Optional<String> currentIdentifier() throws IOException {
         if (!Files.exists(configFile)) return Optional.empty();
