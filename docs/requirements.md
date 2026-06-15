@@ -387,15 +387,15 @@ Supported target predicates in v1: `os(linux|darwin|windows)`, `arch(x86_64|aarc
 
 Named, additive dependency sets. Solve real JVM problems (driver/parser/logger selection) without conditional source compilation.
 
-Features reference **short dep names** from `[dependencies.*]`, not coord strings. The dep entries themselves typically carry `optional = true` (reserved for future enforcement); features pull them into the active set.
+Features reference **short dep names** from `[dependencies.*]`, not coord strings. A dep a feature pulls in is declared `optional = true`. This is **enforced**: an optional dep is *withheld* from the default resolution and enters the graph only when an activated feature names it. Because a feature dep is just an ordinary `[dependencies.*]` entry, it keeps the full dependency grammar — `git` / `path` / `workspace` / catalog short-names / version selectors / `sha256`. Naming a dep that isn't declared `optional = true` (or doesn't exist) is a config error. The active set is the `default` list plus anything passed via `--features=A,B` (resolved at `jk lock` / `jk update`).
 
 ```toml
 [dependencies.main]
-postgres-jdbc    = { group = "org.postgresql",                name = "postgresql",        version = "42.7.4" }
-mysql-connector  = { group = "com.mysql",                     name = "mysql-connector-j", version = "9.0.0"  }
-jackson-databind = { group = "com.fasterxml.jackson.core",    name = "jackson-databind",  version = "2.18.2" }
-gson             = { group = "com.google.code.gson",          name = "gson",              version = "2.11.0" }
-micrometer-core  = { group = "io.micrometer",                 name = "micrometer-core",   version = "1.13.6" }
+postgres-jdbc    = { group = "org.postgresql",             name = "postgresql",        version = "42.7.4", optional = true }
+mysql-connector  = { group = "com.mysql",                  name = "mysql-connector-j", version = "9.0.0",  optional = true }
+jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-databind",  version = "2.18.2", optional = true }
+gson             = { group = "com.google.code.gson",       name = "gson",              version = "2.11.0", optional = true }
+micrometer-core  = { group = "io.micrometer",              name = "micrometer-core",   version = "1.13.6", optional = true }
 
 [features]
 default = ["postgres", "jackson"]
@@ -419,7 +419,7 @@ deps = ["micrometer-core"]
 features = ["postgres", "jackson", "metrics"]
 ```
 
-Consumer side — request specific features from a dependency by adding fields to the dep table:
+Consumer side — request specific features *of a dependency* by adding fields to the dep table (**planned; not yet implemented** — cross-package feature propagation is post-v1; today `features` are local to the current project):
 
 ```toml
 [dependencies.main]

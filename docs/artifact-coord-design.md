@@ -148,6 +148,7 @@ codec = { group = "com.acme", name = "codec", git = "https://github.com/acme/cod
 | `git`        | git source                        | Mutually exclusive with `version` and `path`. |
 | `tag` / `branch` / `rev` | git source              | Exactly one required when `git` is set. |
 | `workspace`  | inheriting from workspace         | `true` only. Mutually exclusive with everything else. |
+| `optional`   | feature-gated dep                 | bool, default false. Withheld from the default resolution; pulled in only when a `[features]` entry names this dep (see [features]). Orthogonal to the source form. |
 | `submodules` | git source                        | bool, default true. |
 | `verify-signed` | git source                     | bool, default false. |
 | `classifier` | future                            | Maven classifier (e.g., `sources`, `javadoc`). |
@@ -229,9 +230,14 @@ features = ["jackson"]                # nested feature reference
 deps     = []
 ```
 
-Activating a feature pulls the listed deps into the build. The dep must
-exist somewhere in `[dependencies.*]` (typically with `optional = true`,
-a field reserved for future work).
+Activating a feature pulls the listed deps into the build. Each listed dep
+must be declared in `[dependencies.*]` with `optional = true` — optional deps
+are withheld from the default resolution and enter the graph only when an
+activated feature names them. Referencing a dep that isn't declared
+`optional` (or doesn't exist) is a config error. Because the listed name
+resolves to a normal dep entry, feature deps support every dep form
+(`version` / `git` / `path` / `workspace` / catalog short-name / `sha256`).
+The active set is the `default` list plus any `--features=A,B`.
 
 ### `[sources]` — **removed**
 
