@@ -75,7 +75,9 @@ class CleanExplainWhyRebuiltTest {
         String stdout = captureStdout(() ->
                 run("explain", "-C", tempDir.toString(),
                         "--cache-dir", tempDir.resolve("cache").toString()));
-        assertThat(stdout).contains("build plan for widget v0.1.0");
+        // New unified-plan format: "build plan for <group>:widget (N units, …)".
+        assertThat(stdout).contains("build plan for").contains("widget");
+        assertThat(stdout).contains("unit");
         assertThat(stdout).contains("compile-main:");
         assertThat(stdout).contains("[MISS");
     }

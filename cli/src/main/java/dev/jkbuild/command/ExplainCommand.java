@@ -4,6 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.Jk;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.config.JkBuildParser;
@@ -14,6 +15,8 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.runtime.BuildGraph;
+import dev.jkbuild.runtime.CompileSupport;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.util.JkDirs;
@@ -22,96 +25,112 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 /**
- * {@code jk explain} — print the planned build with each task's action
- * cache status. Per PRD §25.1, the "build plan" view.
- *
- * <p>v0.2 first iteration: walks the v0.2 task set (compile-main,
- * compile-test). Full action-graph rendering arrives once tasks
- * become first-class.
+ * {@code jk explain} — print the unified build plan (the same {@link BuildGraph}
+ * the build driver uses): every build unit (workspace root + members + transitive
+ * {@code path} / branch-git deps) in dependency order, its origin, what it
+ * depends on, and each unit's compile cache status. {@code --run} executes the
+ * same plan ({@code jk build}). Per PRD §25.1.
  */
 public final class ExplainCommand implements CliCommand {
 
-    @Override
-    public String name() {
-        return "explain";
-    }
-
-    @Override
-    public String description() {
-        return "Print the planned build with cache hit/miss";
-    }
+    @Override public String name() { return "explain"; }
+    @Override public String description() { return "Print the planned build (units, order, cache hit/miss)"; }
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.value("<dir>",
-                "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
-                "--cache-dir").hide());
+        return List.of(
+                Opt.flag("Build the plan instead of just printing it (same as `jk build`).", "--run"),
+                Opt.value("<dir>",
+                        "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                        "--cache-dir").hide());
     }
 
     @Override
-    public int run(Invocation in) throws IOException {
+    public int run(Invocation in) throws Exception {
+        if (in.isSet("run")) {
+            return new BuildCommand().run(in);   // forwards --cache-dir; build options default
+        }
+        GlobalOptions global = GlobalOptions.from(in);
         Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
-        Path dir = new GlobalOptions().workingDir();
-        Path buildFile = dir.resolve("jk.toml");
-        Path lockFile = dir.resolve("jk.lock");
-        if (!Files.exists(buildFile) || !Files.exists(lockFile)) {
-            System.err.println("jk explain: project must have jk.toml and jk.lock (run `jk lock` first)");
+        Path startDir = global.workingDir();
+        Path buildFile = startDir.resolve("jk.toml");
+        if (!Files.exists(buildFile)) {
+            System.err.println("jk explain: no jk.toml in " + startDir);
             return 2;
         }
-        JkBuild project = JkBuildParser.parse(buildFile);
-        Lockfile lock = LockfileReader.read(lockFile);
-
+        JkBuild entry = JkBuildParser.parse(buildFile);
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Cas cas = new Cas(cache);
         ActionCache actionCache = new ActionCache(cas, cache.resolve("actions"));
-        List<Path> lockClasspath = new ClasspathResolver(cas).classpathFor(lock);
-        int release = project.project().javaRelease();
 
-        System.out.println("build plan for " + project.project().name()
-                + " v" + project.project().version() + ":");
+        BuildGraph.Result graph = BuildGraph.resolve(startDir, entry, cache.resolve("git"));
+        if (graph.hasErrors()) {
+            for (String err : graph.errors()) System.err.println("error[composite]: " + err);
+            return 2;
+        }
 
-        BuildLayout layout = BuildLayout.of(dir, project);
-        Path mainClasses = layout.classesDir();
-        explainCompile(dir.resolve("src/main/java"), "compile-main",
-                lockClasspath, release, mainClasses, actionCache);
+        Theme t = Theme.active();
+        Map<Path, String> coordByDir = new LinkedHashMap<>();
+        for (BuildGraph.BuildUnit u : graph.topoOrder()) coordByDir.put(u.dir(), u.coord());
 
-        List<Path> testClasspath = new ArrayList<>();
-        testClasspath.add(mainClasses);
-        testClasspath.addAll(lockClasspath);
-        explainCompile(dir.resolve("src/test/java"), "compile-test",
-                testClasspath, release, layout.testClassesDir(), actionCache);
+        int units = graph.topoOrder().size();
+        System.out.println("build plan for " + Theme.colorize(entry.project().group()
+                + ":" + entry.project().name(), t.brightCyan())
+                + " (" + units + " unit" + (units == 1 ? "" : "s") + ", dependency order):");
 
+        for (BuildGraph.BuildUnit u : graph.topoOrder()) {
+            String origin = switch (u.origin()) {
+                case ROOT -> "root";
+                case MEMBER -> "member";
+                case PATH -> "path dep";
+                case BRANCH_GIT -> "branch git dep";
+            };
+            StringBuilder line = new StringBuilder("  ")
+                    .append(Theme.colorize(u.coord(), t.highlight()))
+                    .append("  ").append(Theme.colorize("[" + origin + "]", t.darkGray()));
+            List<String> prereqs = new ArrayList<>();
+            for (Path p : graph.edges().getOrDefault(u.dir(), Set.of())) {
+                String c = coordByDir.get(p);
+                if (c != null) prereqs.add(c);
+            }
+            if (!prereqs.isEmpty()) {
+                line.append("  ").append(Theme.colorize("← " + String.join(", ", prereqs), t.darkGray()));
+            }
+            System.out.println(line);
+            explainCompile(u.dir(), u.manifest(), cas, actionCache);
+        }
         return 0;
     }
 
-    private static void explainCompile(
-            Path srcDir,
-            String taskId,
-            List<Path> classpath,
-            int release,
-            Path outputDir,
-            ActionCache cache) throws IOException {
-
-        List<Path> sources = CompileCommand.collectJavaSources(srcDir);
-        if (sources.isEmpty()) {
+    /** One {@code compile-main} cache-status line for a unit, mirroring the build's javac action key. */
+    private static void explainCompile(Path dir, JkBuild project, Cas cas, ActionCache actionCache)
+            throws IOException {
+        Path lockFile = dir.resolve("jk.lock");
+        if (!Files.isRegularFile(lockFile)) {
+            System.out.println("      " + "compile-main: not locked yet (run `jk build`)");
             return;
         }
+        boolean simple = CompileSupport.isSimpleLayout(project.project(), dir);
+        Path srcDir = simple ? dir.resolve("src") : dir.resolve("src/main/java");
+        List<Path> sources = CompileSupport.collectJavaSources(srcDir);
+        if (sources.isEmpty()) return;
+
+        Lockfile lock = LockfileReader.read(lockFile);
+        List<Path> classpath = new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
+        int release = project.project().javaRelease();
+        Path outputDir = BuildLayout.of(dir, project).classesDir();
         CompileRequest request = CompileRequest.builder()
-                .sources(sources)
-                .classpath(classpath)
-                .outputDir(outputDir)
-                .release(release)
-                .build();
-        // Qualify identically to the build so the looked-up key matches.
-        String key = ActionKey.forJavac(
-                ActionKey.qualifiedTaskId(taskId, outputDir), request, Jk.VERSION);
-        String status = cache.lookup(key).isPresent() ? "HIT" : "MISS";
-        System.out.println("  " + taskId + ": " + sources.size()
+                .sources(sources).classpath(classpath).outputDir(outputDir).release(release).build();
+        String key = ActionKey.forJavac(ActionKey.qualifiedTaskId("compile-main", outputDir), request, Jk.VERSION);
+        String status = actionCache.lookup(key).isPresent() ? "HIT" : "MISS";
+        System.out.println("      compile-main: " + sources.size()
                 + " source" + (sources.size() == 1 ? "" : "s")
-                + ", javac --release " + release
-                + "  [" + status + " " + key.substring(0, 8) + "]");
+                + ", javac --release " + release + "  [" + status + " " + key.substring(0, 8) + "]");
     }
 }
