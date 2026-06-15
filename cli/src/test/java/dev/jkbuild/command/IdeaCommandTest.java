@@ -18,6 +18,52 @@ import static org.assertj.core.api.Assertions.assertThat;
  */
 class IdeaCommandTest {
 
+    @Test
+    void composite_path_dep_becomes_an_idea_module(@TempDir Path tmp) throws IOException {
+        // A standalone library project, depended on by `app` via a path dep.
+        Path lib = tmp.resolve("lib");
+        Files.createDirectories(lib.resolve("src/main/java/lib"));
+        Files.writeString(lib.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "libcore"
+                version = "0.1.0"
+                jdk = 25
+                """);
+        Files.writeString(lib.resolve("src/main/java/lib/Lib.java"), "package lib; public class Lib {}");
+
+        Path app = tmp.resolve("app");
+        Files.createDirectories(app.resolve("src/main/java/app"));
+        Files.writeString(app.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "app"
+                version = "1.0.0"
+                jdk = 25
+
+                [dependencies.main]
+                libcore = { group = "com.example", name = "libcore", path = "../lib" }
+                """);
+        Files.writeString(app.resolve("src/main/java/app/Main.java"), "package app; public class Main {}");
+
+        Path jdks = tmp.resolve("jdks");
+        fakeJdk(jdks, "temurin-25.0.3", "25.0.3");
+        Path ideConfig = tmp.resolve("ideconfig");
+        Files.createDirectories(ideConfig.resolve("JetBrains/IntelliJIdea2025.1/options"));
+
+        assertThat(runIdea(app, jdks, ideConfig, tmp.resolve("cache"))).isEqualTo(0);
+
+        // The composite target is registered as a module (out-of-tree .iml path)...
+        String modules = Files.readString(app.resolve(".idea/modules.xml"));
+        assertThat(modules).contains("app.iml");
+        assertThat(modules).contains("../lib/libcore.iml");
+        // ...its own .iml was generated...
+        assertThat(lib.resolve("libcore.iml")).exists();
+        // ...and app depends on it as a module, not a phantom library.
+        String appIml = Files.readString(app.resolve("app.iml"));
+        assertThat(appIml).contains("type=\"module\" module-name=\"libcore\"");
+    }
+
     private static void fakeJdk(Path jdksRoot, String name, String version) throws IOException {
         Path home = jdksRoot.resolve(name);
         Files.createDirectories(home.resolve("bin"));

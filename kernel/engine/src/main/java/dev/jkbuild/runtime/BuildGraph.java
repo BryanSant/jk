@@ -107,9 +107,10 @@ public final class BuildGraph {
     /**
      * Resolve a composite dependency's project directory: a {@code path} dep's
      * normalized dir, or a branch git dep's checkout dir (cloned via
-     * {@link GitFetcher}, cached). Shared with {@code CompositeLocator}.
+     * {@link GitFetcher}, cached). Shared with {@code CompositeLocator} and
+     * {@code jk idea}.
      */
-    static Path targetDir(Path fromDir, Dependency dep, Path gitRoot)
+    public static Path targetDir(Path fromDir, Dependency dep, Path gitRoot)
             throws IOException, InterruptedException {
         if (dep.isPath()) {
             return fromDir.resolve(dep.pathSource()).normalize();

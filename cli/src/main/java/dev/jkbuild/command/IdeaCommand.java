@@ -23,7 +23,9 @@ import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.Scope;
+import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
@@ -127,15 +129,19 @@ public final class IdeaCommand implements CliCommand {
                 ? WorkspaceLoader.loadMembers(wsRoot, rootBuild)
                 : Map.of();
 
-        // Collect all library definitions across all members
+        // Unified module set: workspace members (or the single root) PLUS composite
+        // (path / branch-git) dependency targets — each becomes an IDEA module so the
+        // IDE resolves cross-project sources, not just compiled jars.
+        Map<Path, JkBuild> allModules = new LinkedHashMap<>();
+        if (members.isEmpty()) allModules.put(wsRoot, rootBuild);
+        else allModules.putAll(members);
+        allModules.putAll(resolveCompositeModules(wsRoot, rootBuild, cache));
+
+        // Collect all library definitions across every module
         // (name → LibDef). LinkedHashMap preserves stable ordering.
         Map<String, LibDef> allLibs = new LinkedHashMap<>();
-        for (Map.Entry<Path, JkBuild> me : members.entrySet()) {
+        for (Map.Entry<Path, JkBuild> me : allModules.entrySet()) {
             collectLibDefs(me.getKey(), me.getValue(), members, cas, allLibs);
-        }
-        if (members.isEmpty()) {
-            // Single-project mode — treat the root as the only member.
-            collectLibDefs(wsRoot, rootBuild, Map.of(), cas, allLibs);
         }
 
         // ---- generate .idea/ -----------------------------------------------
@@ -152,9 +158,7 @@ public final class IdeaCommand implements CliCommand {
         // project resolves with no "missing SDK" and survives JDK point-release
         // upgrades. Modules at a different level get their own SDK + per-module
         // language level, instead of all inheriting the project default.
-        Iterable<Map.Entry<Path, JkBuild>> targets = members.isEmpty()
-                ? List.of(Map.entry(wsRoot, rootBuild))
-                : members.entrySet();
+        Iterable<Map.Entry<Path, JkBuild>> targets = allModules.entrySet();
 
         Path jdksDirOverride   = in.value("jdks-dir").map(Path::of).orElse(null);
         Path ideConfigOverride = in.value("ide-config-dir").map(Path::of).orElse(null);
@@ -190,9 +194,9 @@ public final class IdeaCommand implements CliCommand {
         }
 
         int files = 0;
-        files += writeModulesXml(ideaDir, wsRoot, rootBuild, members);
+        files += writeModulesXml(ideaDir, wsRoot, allModules);
         files += writeMiscXml(ideaDir, defaultSdk);
-        files += writeCompilerXml(ideaDir, wsRoot, rootBuild, members, processorJars);
+        files += writeCompilerXml(ideaDir, wsRoot, allModules, processorJars);
 
         Path libsDir = ideaDir.resolve("libraries");
         Files.createDirectories(libsDir);
@@ -226,7 +230,8 @@ public final class IdeaCommand implements CliCommand {
         for (Map.Entry<Path, JkBuild> me : targets) {
             Path memberDir = me.getKey();
             JkBuild member = me.getValue();
-            List<ModuleRef> modRefs = siblingModuleRefs(memberDir, member, members);
+            List<ModuleRef> modRefs = new ArrayList<>(siblingModuleRefs(memberDir, member, members));
+            modRefs.addAll(compositeModuleRefs(memberDir, member, cache));
             List<LibRef>    libRefs = libRefs(memberDir, member, members, cas, allLibs);
             write(memberDir.resolve(moduleName(member) + ".iml"),
                     imlXml(memberDir, member, modRefs, libRefs,
@@ -404,6 +409,61 @@ public final class IdeaCommand implements CliCommand {
     }
 
     // =========================================================================
+    // Composite (path / branch-git) dependency modules
+    // =========================================================================
+
+    /**
+     * Every composite ({@code path} / branch-git) dependency target across the
+     * whole graph, as an IDEA module ({@code dir → manifest}). Best-effort: on a
+     * resolution error the IDE is still generated for the workspace, just without
+     * composite modules.
+     */
+    private Map<Path, JkBuild> resolveCompositeModules(Path wsRoot, JkBuild rootBuild, Path cache) {
+        Map<Path, JkBuild> out = new LinkedHashMap<>();
+        try {
+            BuildGraph.Result g = BuildGraph.resolve(wsRoot, rootBuild, cache.resolve("git"));
+            if (g.hasErrors()) {
+                for (String e : g.errors()) System.err.println("jk idea: " + e);
+                return out;
+            }
+            for (BuildGraph.BuildUnit u : g.topoOrder()) {
+                if (u.isDependency()) out.put(u.dir(), u.manifest());
+            }
+        } catch (Exception e) {
+            System.err.println("jk idea: composite dependencies skipped (" + e.getMessage() + ")");
+        }
+        return out;
+    }
+
+    /**
+     * Module references for a project's direct composite deps — each resolves to
+     * the target's IDEA module (by name), so the consumer module depends on the
+     * composite target's sources (jk's includeBuild, in the IDE).
+     */
+    private static List<ModuleRef> compositeModuleRefs(Path dir, JkBuild project, Path cache) {
+        List<ModuleRef> refs = new ArrayList<>();
+        Set<String> seen = new LinkedHashSet<>();
+        for (Scope scope : Scope.values()) {
+            for (Dependency d : project.dependencies().of(scope)) {
+                boolean composite = d.isPath()
+                        || (d.isGit() && !d.gitSource().ref().isImmutable());
+                if (!composite) continue;
+                try {
+                    Path toml = BuildGraph.targetDir(dir, d, cache.resolve("git")).resolve("jk.toml");
+                    if (!Files.isRegularFile(toml)) continue;
+                    String name = moduleName(JkBuildParser.parse(toml));
+                    if (seen.add(name)) {
+                        refs.add(new ModuleRef(name, scope == Scope.TEST ? "TEST" : "COMPILE"));
+                    }
+                } catch (Exception ignored) {
+                    // Unresolved composite (e.g. offline branch dep) — skip the ref.
+                }
+            }
+        }
+        return refs;
+    }
+
+    // =========================================================================
     // Per-module dependency lists
     // =========================================================================
 
@@ -506,17 +566,14 @@ public final class IdeaCommand implements CliCommand {
     // =========================================================================
 
     private static int writeModulesXml(Path ideaDir, Path wsRoot,
-                                        JkBuild root, Map<Path, JkBuild> members)
+                                        Map<Path, JkBuild> modules)
             throws IOException {
         StringBuilder sb = xmlHeader();
         sb.append("<project version=\"4\">\n");
         sb.append("  <component name=\"ProjectModuleManager\">\n");
         sb.append("    <modules>\n");
 
-        Iterable<Map.Entry<Path, JkBuild>> targets = members.isEmpty()
-                ? List.of(Map.entry(wsRoot, root)) : members.entrySet();
-
-        for (Map.Entry<Path, JkBuild> me : targets) {
+        for (Map.Entry<Path, JkBuild> me : modules.entrySet()) {
             Path iml = me.getKey().resolve(moduleName(me.getValue()) + ".iml");
             String rel = "$PROJECT_DIR$/" + wsRoot.relativize(iml).toString().replace('\\', '/');
             sb.append("      <module fileurl=\"file://").append(rel)
@@ -541,7 +598,7 @@ public final class IdeaCommand implements CliCommand {
     }
 
     private static int writeCompilerXml(Path ideaDir, Path wsRoot,
-                                         JkBuild root, Map<Path, JkBuild> members,
+                                         Map<Path, JkBuild> modules,
                                          Map<Path, List<Path>> processorJars)
             throws IOException {
         StringBuilder sb = xmlHeader();
@@ -549,8 +606,7 @@ public final class IdeaCommand implements CliCommand {
         sb.append("  <component name=\"CompilerConfiguration\">\n");
         sb.append("    <bytecodeTargetLevel>\n");
 
-        Iterable<Map.Entry<Path, JkBuild>> targets = members.isEmpty()
-                ? List.of(Map.entry(wsRoot, root)) : members.entrySet();
+        Iterable<Map.Entry<Path, JkBuild>> targets = modules.entrySet();
 
         for (Map.Entry<Path, JkBuild> me : targets) {
             int release = me.getValue().project().javaRelease();
