@@ -1183,22 +1183,27 @@ public final class BuildPipeline {
      * scopes contribute composite deps; {@code externalCpScopes} is the scope set
      * for each target's external deps. Returns failures (empty on success).
      */
+    /**
+     * Add the consumer's composite ({@code path} / branch-git) dependency jars +
+     * their external transitive deps to {@code cp} — <em>locate-only</em>: the
+     * build driver ({@code BuildGraph} in the CLI) has already built every
+     * composite unit via the real pipeline, so this just finds the jars (jk's
+     * includeBuild analog). Returns any not-yet-built coords as "missing", handled
+     * like {@code WorkspaceClasspath.missingSiblingJars}.
+     */
     private static List<String> addCompositeDeps(Path consumerDir, JkBuild project, Cas cas, Path cache,
             Set<Scope> depScopes, Set<Scope> externalCpScopes, List<Path> cp) {
-        if (!CompositeDepResolver.has(project, depScopes)) return List.of();
         try {
-            Path javaHome = CompileToolchain.resolveJavaHome(consumerDir);
-            CompositeDepResolver.Result r = CompositeDepResolver.resolve(
-                    consumerDir, project, depScopes, externalCpScopes, cas, javaHome,
-                    dev.jkbuild.util.JkVersion.VERSION, cache.resolve("git"));
+            CompositeLocator.Located r = CompositeLocator.locate(
+                    consumerDir, project, depScopes, externalCpScopes, cas, cache.resolve("git"));
             for (Path j : r.jars())            if (!cp.contains(j)) cp.add(j);
             for (Path j : r.externalDepJars()) if (!cp.contains(j)) cp.add(j);
-            return r.errors();
+            return r.missing();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return List.of("interrupted building composite dependencies");
+            return List.of("interrupted locating composite dependencies");
         } catch (IOException | RuntimeException e) {
-            return List.of("composite dependency build failed: " + e.getMessage());
+            return List.of("composite dependency lookup failed: " + e.getMessage());
         }
     }
 

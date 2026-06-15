@@ -3,7 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.runtime.CompositeDepResolver;
+import dev.jkbuild.runtime.CompositeLocator;
 import dev.jkbuild.compile.ClasspathResolver;
 
 import dev.jkbuild.cli.GlobalOptions;
@@ -418,6 +418,17 @@ public final class InstallCommand implements CliCommand {
         boolean isNative = pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.ALWAYS;
         boolean needShadow = pj.isApplication() && pj.shadow() && !isNative;
 
+        // Build composite (path / branch-git) dependency units first, so the
+        // project's build can locate their jars on its classpath.
+        try {
+            int dep = CompositeBuild.buildDependencies(projectDir, proj, cacheDir, null, null, global);
+            if (dep != 0) return dep;
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("jk install: interrupted building composite dependencies");
+            return 2;
+        }
+
         // Build through the one pipeline (jar always; shadow/native per jk.toml),
         // then install its outputs — no nested jk process.
         Path lockFile = projectDir.resolve("jk.lock");
@@ -611,25 +622,21 @@ public final class InstallCommand implements CliCommand {
             Linking.linkOrCopy(sib, dest);
             classpath.add(dest);
         }
-        // Composite (path + branch-git) source deps: link their jars + runtime
-        // external deps into libexec so the installed app is self-contained.
-        if (CompositeDepResolver.has(project, EnumSet.of(Scope.MAIN, Scope.RUNTIME))) {
-            try {
-                CompositeDepResolver.Result composite = CompositeDepResolver.resolve(
-                        projectDir, project, EnumSet.of(Scope.MAIN, Scope.RUNTIME),
-                        ClasspathResolver.RUNTIME, new Cas(cacheDir),
-                        CompileToolchain.resolveJavaHome(projectDir),
-                        dev.jkbuild.util.JkVersion.VERSION, cacheDir.resolve("git"));
-                List<Path> compositeJars = new ArrayList<>(composite.jars());
-                compositeJars.addAll(composite.externalDepJars());
-                for (Path j : compositeJars) {
-                    Path dest = libexecDir.resolve(j.getFileName().toString());
-                    Linking.linkOrCopy(j, dest);
-                    if (!classpath.contains(dest)) classpath.add(dest);
-                }
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
+        // Composite (path + branch-git) source deps: link their already-built jars +
+        // runtime external deps into libexec so the installed app is self-contained.
+        try {
+            CompositeLocator.Located composite = CompositeLocator.locate(
+                    projectDir, project, EnumSet.of(Scope.MAIN, Scope.RUNTIME),
+                    ClasspathResolver.RUNTIME, new Cas(cacheDir), cacheDir.resolve("git"));
+            List<Path> compositeJars = new ArrayList<>(composite.jars());
+            compositeJars.addAll(composite.externalDepJars());
+            for (Path j : compositeJars) {
+                Path dest = libexecDir.resolve(j.getFileName().toString());
+                Linking.linkOrCopy(j, dest);
+                if (!classpath.contains(dest)) classpath.add(dest);
             }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         return AppLauncher.install(binDir, javaHome, bin, mainCls, classpath);
     }

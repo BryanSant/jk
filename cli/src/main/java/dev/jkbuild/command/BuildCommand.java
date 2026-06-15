@@ -136,6 +136,8 @@ public final class BuildCommand implements CliCommand {
         } catch (java.io.IOException e) {
             // Workspace discovery failed — fall through to single-project build.
         }
+        int dep = buildCompositeDeps(startDir, peek);
+        if (dep != 0) return dep;
         return runForDir(startDir);
     }
 
@@ -165,6 +167,10 @@ public final class BuildCommand implements CliCommand {
             System.out.println("(workspace declares no members)");
             return 0;
         }
+        // Build any composite (path / branch-git) dependency units the workspace
+        // (or its members) declare, before the members that consume them.
+        int dep = buildCompositeDeps(workspaceRoot, root);
+        if (dep != 0) return dep;
         List<Path> sorted = topoSortMembers(membersByDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
@@ -390,6 +396,19 @@ public final class BuildCommand implements CliCommand {
         return sorted;
     }
 
+    /**
+     * Build the entry's transitive composite ({@code path} / branch-git) dependency
+     * units from source — compile-only, in dependency order — via the SAME real
+     * pipeline as any project ({@code prepareMember} → {@code coreBuilder}). jk's
+     * {@code includeBuild} analog. The consumer/members then locate these jars on
+     * their classpath ({@code CompositeLocator}). No-op when none are declared.
+     * Returns 0 on success, else an exit code (errors already printed).
+     */
+    private int buildCompositeDeps(Path entryDir, JkBuild entry) throws Exception {
+        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
+        return CompositeBuild.buildDependencies(entryDir, entry, cache, jdksDir, profileName, global);
+    }
+
     private int runForDir(Path dir) throws Exception {
         return runForDir(dir, null);
     }
@@ -416,6 +435,15 @@ public final class BuildCommand implements CliCommand {
      * calibrate the shared progress bar before any member runs.
      */
     private PreparedMember prepareMember(Path dir) {
+        return prepareMember(dir, buildOpts.skipTests);
+    }
+
+    /**
+     * As {@link #prepareMember(Path)} but with an explicit {@code skipTests} — used
+     * to build composite dependency units compile-only (a dependency's tests aren't
+     * run when it's consumed as a source dependency).
+     */
+    private PreparedMember prepareMember(Path dir, boolean skipTests) {
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) return null;
@@ -423,10 +451,11 @@ public final class BuildCommand implements CliCommand {
         int workerCount = workers != null && workers > 0 ? workers : 1;
         // Lexical pre-discovery so the run-tests phase's scope is known before
         // any phase runs — see TestCommand.estimateTestCount.
-        int estimatedTestCount = TestCommand.estimateTestCount(dir.resolve("src/test/java"));
+        int estimatedTestCount = skipTests ? 0
+                : TestCommand.estimateTestCount(dir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
                 dir, cache, buildFile, lockFile, dir,
-                workerCount, estimatedTestCount, profileName, jdksDir, buildOpts.skipTests, global.verbose);
+                workerCount, estimatedTestCount, profileName, jdksDir, skipTests, global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
