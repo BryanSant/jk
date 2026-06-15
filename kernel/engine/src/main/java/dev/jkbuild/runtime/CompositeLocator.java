@@ -17,6 +17,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 /**
@@ -44,6 +45,47 @@ public final class CompositeLocator {
     }
 
     private CompositeLocator() {}
+
+    /**
+     * A shared external coordinate resolved to different versions across the
+     * composite boundary — both jars land on the consumer's classpath (deduped by
+     * path, not coordinate), so they coexist unreconciled. {@code versionBySource}
+     * maps each project ({@code group:artifact}) to the version it locked.
+     *
+     * <p>jk surfaces what Gradle/Maven sidestep; the shape (coordinate + versions +
+     * who requires each) is exactly what an assisted reconciler would consume.
+     */
+    public record VersionConflict(String coord, Map<String, String> versionBySource) {}
+
+    /**
+     * Detect external-dependency version disagreements between the consumer and its
+     * composite ({@code path}/branch-git) targets (and among targets). Each project
+     * resolves its own {@code jk.lock} independently — there is no cross-boundary
+     * unification — so a shared coordinate can resolve to different versions.
+     */
+    public static List<VersionConflict> conflicts(Path consumerDir, JkBuild consumer, Path gitRoot)
+            throws IOException, InterruptedException {
+        BuildGraph.Result graph = BuildGraph.resolve(consumerDir, consumer, gitRoot);
+        if (graph.hasErrors()) return List.of();
+        // coord (group:artifact) → (source project coord → its locked version)
+        java.util.LinkedHashMap<String, java.util.LinkedHashMap<String, String>> byCoord = new java.util.LinkedHashMap<>();
+        for (BuildGraph.BuildUnit u : graph.topoOrder()) {
+            Path lock = u.dir().resolve("jk.lock");
+            if (!Files.isRegularFile(lock)) continue;
+            for (Lockfile.Artifact a : LockfileReader.read(lock).artifacts()) {
+                if (a.version() == null || a.version().isBlank()) continue;
+                byCoord.computeIfAbsent(a.name(), k -> new java.util.LinkedHashMap<>())
+                        .putIfAbsent(u.coord(), a.version());
+            }
+        }
+        List<VersionConflict> out = new ArrayList<>();
+        for (var e : byCoord.entrySet()) {
+            if (e.getValue().values().stream().distinct().count() > 1) {
+                out.add(new VersionConflict(e.getKey(), e.getValue()));
+            }
+        }
+        return out;
+    }
 
     public static Located locate(Path consumerDir, JkBuild consumer, Set<Scope> depScopes,
                                  Set<Scope> externalCpScopes, Cas cas, Path gitRoot)

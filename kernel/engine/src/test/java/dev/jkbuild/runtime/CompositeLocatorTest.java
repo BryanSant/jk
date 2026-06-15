@@ -5,6 +5,8 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.layout.BuildLayout;
+import dev.jkbuild.lock.Lockfile;
+import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import org.junit.jupiter.api.Test;
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -80,6 +83,43 @@ class CompositeLocatorTest {
 
         assertThat(r.jars()).isEmpty();
         assertThat(r.missing()).anyMatch(m -> m.contains("com.example:lib") && m.contains("not built"));
+    }
+
+    @Test
+    void detects_cross_boundary_version_conflict(@TempDir Path tmp) throws Exception {
+        // lib (path target) locks guava 2.0; the app locks guava 1.0 — they coexist
+        // on the classpath since each resolves independently.
+        JkBuild lib = project(tmp.resolve("lib"), "lib");
+        writeLock(tmp.resolve("lib"), "com.google.guava:guava", "2.0");
+        JkBuild app = project(tmp.resolve("app"), "app", "lib");
+        writeLock(tmp.resolve("app"), "com.google.guava:guava", "1.0");
+
+        var conflicts = CompositeLocator.conflicts(tmp.resolve("app"), app, tmp.resolve("git"));
+
+        assertThat(conflicts).hasSize(1);
+        CompositeLocator.VersionConflict c = conflicts.get(0);
+        assertThat(c.coord()).isEqualTo("com.google.guava:guava");
+        assertThat(c.versionBySource())
+                .containsEntry("com.example:app", "1.0")
+                .containsEntry("com.example:lib", "2.0");
+    }
+
+    @Test
+    void no_conflict_when_versions_agree(@TempDir Path tmp) throws Exception {
+        project(tmp.resolve("lib"), "lib");
+        writeLock(tmp.resolve("lib"), "com.google.guava:guava", "1.0");
+        JkBuild app = project(tmp.resolve("app"), "app", "lib");
+        writeLock(tmp.resolve("app"), "com.google.guava:guava", "1.0");
+
+        assertThat(CompositeLocator.conflicts(tmp.resolve("app"), app, tmp.resolve("git"))).isEmpty();
+    }
+
+    private static void writeLock(Path dir, String module, String version) throws IOException {
+        Lockfile lock = new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
+                Lockfile.RESOLUTION_ALGORITHM, List.of(new Lockfile.Artifact(
+                        module, version, "central+https://repo.maven.apache.org/maven2/",
+                        "sha256:dummy", null, List.of())));
+        LockfileWriter.write(lock, dir.resolve("jk.lock"));
     }
 
     @Test

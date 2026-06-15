@@ -270,6 +270,7 @@ public final class BuildPipeline {
                         for (String e : mainComposite) ctx.error("composite", e);
                         throw new RuntimeException("composite dependency build failed");
                     }
+                    warnCompositeVersionConflicts(ctx, in.dir(), project, in.cache());
 
                     Profile profile = CompileSupport.resolveProfile(project.profiles(), in.profileName());
                     ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
@@ -1183,6 +1184,37 @@ public final class BuildPipeline {
      * includeBuild analog). Returns any not-yet-built coords as "missing", handled
      * like {@code WorkspaceClasspath.missingSiblingJars}.
      */
+    /**
+     * Warn (best-effort) when the consumer and a composite ({@code path}/branch-git)
+     * dependency disagree on a shared external coordinate's version — both jars are
+     * on the classpath, deduped by path not coordinate, since each project resolves
+     * its own lock independently (no cross-boundary unification). jk surfaces what
+     * Gradle/Maven sidestep.
+     */
+    private static void warnCompositeVersionConflicts(PhaseContext ctx, Path dir, JkBuild project, Path cache) {
+        boolean any = false;
+        for (Scope s : Scope.values()) {
+            for (dev.jkbuild.model.Dependency d : project.dependencies().of(s)) {
+                if (BuildGraph.isComposite(d)) { any = true; break; }
+            }
+            if (any) break;
+        }
+        if (!any) return;
+        try {
+            for (CompositeLocator.VersionConflict c
+                    : CompositeLocator.conflicts(dir, project, cache.resolve("git"))) {
+                String detail = c.versionBySource().entrySet().stream()
+                        .map(e -> e.getKey() + " → " + e.getValue())
+                        .collect(java.util.stream.Collectors.joining(", "));
+                ctx.warn("composite-version", "version conflict on `" + c.coord()
+                        + "` across composite dependencies (" + detail
+                        + "); both versions are on the classpath");
+            }
+        } catch (Exception ignored) {
+            // Diagnostic only — never fail a build over conflict detection.
+        }
+    }
+
     private static List<String> addCompositeDeps(Path consumerDir, JkBuild project, Cas cas, Path cache,
             Set<Scope> depScopes, Set<Scope> externalCpScopes, List<Path> cp) {
         try {

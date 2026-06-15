@@ -4,7 +4,9 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.runtime.BuildGraph;
@@ -12,7 +14,10 @@ import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.util.JkThreads;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -93,7 +98,50 @@ final class CompositeBuild {
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
             remaining.removeAll(ready);
         }
+        writeAudit(entryDir, deps);
         return 0;
+    }
+
+    /**
+     * Record what each composite target built — coordinate, origin, dir, and the
+     * jar's content hash — to {@code <entryDir>/target/jk-composite-audit.json}.
+     * A gitignored build-output file (not {@code jk.lock}, which would churn for a
+     * mutable source) giving "exactly what this build used" provenance. Best-effort.
+     */
+    private static void writeAudit(Path entryDir, List<BuildGraph.BuildUnit> deps) {
+        try {
+            Path target = entryDir.resolve("target");
+            Files.createDirectories(target);
+            StringBuilder json = new StringBuilder("[\n");
+            for (int i = 0; i < deps.size(); i++) {
+                BuildGraph.BuildUnit u = deps.get(i);
+                Path jar = BuildLayout.of(u.dir(), u.manifest()).mainJar();
+                String sha = Files.isRegularFile(jar) ? sha256(jar) : "";
+                json.append("  {\"coord\": ").append(Ndjson.quote(u.coord()))
+                        .append(", \"origin\": ").append(Ndjson.quote(u.origin().name()))
+                        .append(", \"dir\": ").append(Ndjson.quote(u.dir().toString()))
+                        .append(", \"jarSha256\": ").append(Ndjson.quote(sha))
+                        .append("}").append(i < deps.size() - 1 ? "," : "").append("\n");
+            }
+            json.append("]\n");
+            Files.writeString(target.resolve("jk-composite-audit.json"), json.toString(),
+                    StandardCharsets.UTF_8);
+        } catch (Exception ignored) {
+            // Provenance is best-effort; never fail a build over it.
+        }
+    }
+
+    private static String sha256(Path file) throws IOException {
+        try {
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file));
+            StringBuilder sb = new StringBuilder(d.length * 2);
+            for (byte b : d) {
+                sb.append(Character.forDigit((b >> 4) & 0xf, 16)).append(Character.forDigit(b & 0xf, 16));
+            }
+            return sb.toString();
+        } catch (java.security.NoSuchAlgorithmException e) {
+            return "";
+        }
     }
 
     private record UnitResult(BuildGraph.BuildUnit unit, boolean success, long millis, String outcome) {}
