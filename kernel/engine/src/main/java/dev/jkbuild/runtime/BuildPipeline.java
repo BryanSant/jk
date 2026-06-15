@@ -91,6 +91,20 @@ public final class BuildPipeline {
             GoalKey.of("test-result", JUnitLauncher.Result.class);
     public static final GoalKey<Boolean>   NO_TEST_SOURCES = GoalKey.of("no-test-sources", Boolean.class);
 
+    /**
+     * Process-wide gate that serializes the {@code run-tests} phase across
+     * concurrently-built units (parallel workspace member builds). Tests commonly
+     * contend on shared resources — ports, lock files, fixtures — so they run one
+     * at a time by default; {@link #setParallelTests} lifts the gate for users who
+     * opt into true parallel test execution ({@code --parallel-tests}).
+     */
+    private static final java.util.concurrent.Semaphore TEST_GATE =
+            new java.util.concurrent.Semaphore(1);
+    private static volatile boolean parallelTests = false;
+
+    /** Allow concurrent {@code run-tests} phases (opt-in; default serialized). */
+    public static void setParallelTests(boolean enabled) { parallelTests = enabled; }
+
     /** Everything a build needs that isn't carried through the goal's state. */
     public record Inputs(
             Path dir,
@@ -703,6 +717,10 @@ public final class BuildPipeline {
                     TestProgressListener listener =
                             TestSupport.bridgeListener(ctx, in.workerCount(), in.verbose());
                     JUnitLauncher.Result result;
+                    // Serialize test execution across concurrently-built units unless the
+                    // user opted into parallel tests — shared ports/locks/fixtures.
+                    boolean gated = !parallelTests;
+                    if (gated) TEST_GATE.acquireUninterruptibly();
                     try {
                         result = new JUnitLauncher().run(
                                 ctx.require(JAVA_HOME), ctx.require(TEST_CLASSES),
@@ -714,6 +732,8 @@ public final class BuildPipeline {
                     } catch (IOException e) {
                         ctx.error("test", e.getMessage());
                         throw e;
+                    } finally {
+                        if (gated) TEST_GATE.release();
                     }
                     ctx.put(TEST_RESULT, result);
                     if (!result.allPassed()) {

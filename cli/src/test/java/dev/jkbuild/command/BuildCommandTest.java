@@ -122,6 +122,60 @@ class BuildCommandTest {
         assertThat(tempDir.resolve("target/empty-0.1.0.jar")).exists();
     }
 
+    @Test
+    void builds_a_workspace_with_independent_members_in_parallel(@TempDir Path tempDir) throws Exception {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "ws"
+                version = "1.0.0"
+                jdk = 25
+                java = 25
+
+                [workspace]
+                members = ["liba", "libb", "app"]
+                """, StandardCharsets.UTF_8);
+        member(tempDir.resolve("liba"), "liba", "a", "A", "");
+        member(tempDir.resolve("libb"), "libb", "b", "B", "");
+        // app depends on both independent libs → builds after them.
+        member(tempDir.resolve("app"), "app", "app", "Main", """
+
+                [dependencies.main]
+                liba = { group = "com.example", name = "liba", version = "1.0.0" }
+                libb = { group = "com.example", name = "libb", version = "1.0.0" }
+                """);
+
+        int exit = run("build", "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(exit).isEqualTo(0);
+
+        // All three members produced their jars (parallel default).
+        assertThat(tempDir.resolve("liba/target/liba-1.0.0.jar")).exists();
+        assertThat(tempDir.resolve("libb/target/libb-1.0.0.jar")).exists();
+        assertThat(tempDir.resolve("app/target/app-1.0.0.jar")).exists();
+
+        // --no-parallel still builds the workspace (the serial rich path).
+        int serial = run("build", "--no-parallel", "-C", tempDir.toString(),
+                "--cache-dir", tempDir.resolve("cache").toString());
+        assertThat(serial).isEqualTo(0);
+    }
+
+    private static void member(Path dir, String name, String pkg, String cls, String extra)
+            throws IOException {
+        Files.createDirectories(dir.resolve("src/main/java/" + pkg));
+        Files.writeString(dir.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "%s"
+                version = "1.0.0"
+                jdk = 25
+                java = 25
+                %s
+                """.formatted(name, extra), StandardCharsets.UTF_8);
+        Files.writeString(dir.resolve("src/main/java/" + pkg + "/" + cls + ".java"),
+                "package " + pkg + "; public class " + cls + " {}", StandardCharsets.UTF_8);
+    }
+
     private static int run(String... args) {
         return Jk.execute(args);
     }

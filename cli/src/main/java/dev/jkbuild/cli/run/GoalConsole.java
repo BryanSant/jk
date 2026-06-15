@@ -146,6 +146,34 @@ public final class GoalConsole {
         return goal.run();
     }
 
+    /** A buffered run's result paired with its captured output/diagnostic lines. */
+    public record Buffered(GoalResult result, List<String> output) {}
+
+    /**
+     * Run {@code goal} capturing its output + warnings + errors into a buffer
+     * instead of rendering live — for concurrently-built units, where the caller
+     * flushes each unit's buffer as one contiguous block on completion (no
+     * interleaving across parallel builds). Only the event log renders eagerly.
+     */
+    public static Buffered runGoalBuffered(Goal goal, Path cacheRoot) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+        List<String> lines = new java.util.ArrayList<>();
+        goal.addListener(new GoalListener() {
+            @Override public synchronized void output(String phase, String line) { lines.add(line); }
+            @Override public synchronized void warn(String phase, String code, String message) {
+                lines.add("  ⚠ " + phase + ": " + message);
+            }
+            @Override public synchronized void error(String phase, String code, String message) {
+                lines.add("  ✗ " + phase + ": " + message);
+            }
+        });
+        GoalResult r = goal.run();
+        synchronized (lines) {  // visibility barrier after the goal's threads finish
+            return new Buffered(r, new java.util.ArrayList<>(lines));
+        }
+    }
+
     private static GoalListener chooseConsoleListener(Goal goal, Mode mode) {
         // Interactive goals (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events

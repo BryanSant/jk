@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPipeline;
+import dev.jkbuild.util.JkThreads;
 
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.AggregateContext;
@@ -68,7 +70,9 @@ public final class BuildCommand implements CliCommand {
                 Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.flag("Skip compiling and running tests.", "--skip-tests"),
+                Opt.flag("Build workspace modules one at a time (the rich serial view).", "--no-parallel"),
+                Opt.flag("Run modules' tests concurrently too (default: tests serialized).", "--parallel-tests"));
     }
 
     String profileName;
@@ -77,6 +81,7 @@ public final class BuildCommand implements CliCommand {
     Path jdksDir;
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
+    boolean noParallel;
 
     // ---- GoalKeys -------------------------------------------------------
     //
@@ -100,7 +105,11 @@ public final class BuildCommand implements CliCommand {
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
+        this.noParallel = in.isSet("no-parallel");
         this.global = GlobalOptions.from(in);
+        // Opt-in: run modules' tests concurrently. Default serializes them
+        // (shared ports/locks/fixtures) — see BuildPipeline's test gate.
+        BuildPipeline.setParallelTests(in.isSet("parallel-tests"));
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
@@ -119,7 +128,7 @@ public final class BuildCommand implements CliCommand {
             return 2;
         }
         if (peek.isWorkspaceRoot()) {
-            return runWorkspaceBuild(startDir, peek);
+            return buildWorkspace(startDir, peek);
         }
         // Member redirect: discover the enclosing workspace and build from there.
         try {
@@ -131,7 +140,7 @@ public final class BuildCommand implements CliCommand {
                             + root.getFileName()
                             + " (member: " + startDir.getFileName() + ")");
                 }
-                return runWorkspaceBuild(root, JkBuildParser.parse(root.resolve("jk.toml")));
+                return buildWorkspace(root, JkBuildParser.parse(root.resolve("jk.toml")));
             }
         } catch (java.io.IOException e) {
             // Workspace discovery failed — fall through to single-project build.
@@ -139,6 +148,118 @@ public final class BuildCommand implements CliCommand {
         int dep = buildCompositeDeps(startDir, peek);
         if (dep != 0) return dep;
         return runForDir(startDir);
+    }
+
+    /** Default: parallel graph build; {@code --no-parallel}: the serial rich aggregate view. */
+    private int buildWorkspace(Path root, JkBuild rootBuild) throws Exception {
+        return noParallel ? runWorkspaceBuild(root, rootBuild) : runGraphParallel(root, rootBuild);
+    }
+
+    private static final Object OUT_LOCK = new Object();
+
+    /** One unit's build outcome, with its buffered output (flushed together on completion). */
+    private record UnitOutcome(String coord, boolean success, int exitCode, long millis, List<String> output) {}
+
+    /**
+     * Build the whole composite + workspace graph in parallel (Option B): one
+     * {@link BuildGraph}, scheduled by topological level, independent units built
+     * concurrently on {@link JkThreads#io()} (their CPU work shares the bounded cpu
+     * pool, so no oversubscription). Each unit runs buffered — its output is
+     * captured and flushed as one contiguous block on completion, so parallel logs
+     * never interleave. Tests are serialized across units by default
+     * (BuildPipeline's gate); {@code --parallel-tests} lifts that.
+     */
+    private int runGraphParallel(Path entryDir, JkBuild entryBuild) throws Exception {
+        Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
+        BuildGraph.Result graph;
+        try {
+            graph = BuildGraph.resolve(entryDir, entryBuild, cache.resolve("git"));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            System.err.println("jk build: interrupted resolving the build graph");
+            return 2;
+        }
+        if (graph.hasErrors()) {
+            for (String err : graph.errors()) System.err.println("error[composite]: " + err);
+            return 2;
+        }
+        List<BuildGraph.BuildUnit> units = graph.topoOrder();
+        if (units.isEmpty()) {
+            System.out.println("(workspace declares no members)");
+            return 0;
+        }
+        Map<Path, Set<Path>> edges = graph.edges();
+        Set<Path> unitDirs = new java.util.HashSet<>();
+        for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
+
+        Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
+        int total = units.size();
+        int completed = 0;
+        long start = System.nanoTime();
+
+        while (!remaining.isEmpty()) {
+            List<BuildGraph.BuildUnit> ready = remaining.stream()
+                    .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
+                            .filter(unitDirs::contains).allMatch(done::contains))
+                    .toList();
+            List<java.util.concurrent.CompletableFuture<UnitOutcome>> futures = new ArrayList<>();
+            for (BuildGraph.BuildUnit u : ready) {
+                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
+                        () -> buildUnit(u), JkThreads.io()));
+            }
+            for (java.util.concurrent.CompletableFuture<UnitOutcome> f : futures) {
+                UnitOutcome o = f.join();
+                report(o, ++completed, total);
+                if (!o.success()) {
+                    System.err.println("jk build: " + o.coord() + " failed (exit " + o.exitCode() + ")");
+                    return o.exitCode();
+                }
+            }
+            for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
+            remaining.removeAll(ready);
+        }
+        System.out.println(Theme.colorize("✓", Theme.active().success())
+                + " Build Successful: built " + total + " module" + (total == 1 ? "" : "s")
+                + " " + elapsedSince(start));
+        return 0;
+    }
+
+    /** Build one graph unit (dependency units compile-only) with output buffered. */
+    private UnitOutcome buildUnit(BuildGraph.BuildUnit unit) {
+        PreparedMember pm = prepareMember(unit.dir(), unit.isDependency() || buildOpts.skipTests);
+        if (pm == null) {
+            return new UnitOutcome(unit.coord(), false, 2, 0, List.of("no jk.toml in " + unit.dir()));
+        }
+        long t0 = System.nanoTime();
+        try {
+            GoalConsole.Buffered b = GoalConsole.runGoalBuffered(pm.goal(), pm.cache());
+            long ms = (System.nanoTime() - t0) / 1_000_000;
+            int exit = b.result().success() ? 0 : exitCodeFor(pm.goal());
+            return new UnitOutcome(unit.coord(), b.result().success(), exit, ms, b.output());
+        } catch (RuntimeException e) {
+            return new UnitOutcome(unit.coord(), false, 1, (System.nanoTime() - t0) / 1_000_000,
+                    List.of("  ✗ " + (e.getMessage() == null ? e.toString() : e.getMessage())));
+        }
+    }
+
+    /** Test failures exit 4; everything else exits 1 (mirrors {@link #runPrepared}). */
+    private static int exitCodeFor(Goal goal) {
+        var testResult = goal.get(TEST_RESULT).orElse(null);
+        return testResult != null && !testResult.allPassed() ? 4 : 1;
+    }
+
+    /** Flush a finished unit's buffered output, then a one-line [k/N] result. Serialized. */
+    private void report(UnitOutcome o, int k, int total) {
+        if (global.outputIsJson()) return;
+        synchronized (OUT_LOCK) {
+            for (String line : o.output()) System.out.println(line);
+            Theme t = Theme.active();
+            String mark = o.success()
+                    ? Theme.colorize("✓", t.success()) : Theme.colorize("✗", t.error());
+            System.out.println("  " + mark + " [" + k + "/" + total + "] " + o.coord()
+                    + (o.success() ? " (" + o.millis() + "ms)" : " — failed"));
+        }
     }
 
     /**
