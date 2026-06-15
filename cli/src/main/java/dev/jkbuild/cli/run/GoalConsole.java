@@ -132,6 +132,20 @@ public final class GoalConsole {
         return goal.run();
     }
 
+    /**
+     * Run {@code goal} with no console output (only the event log), returning its
+     * result. For builds whose progress must NOT render to the terminal — e.g.
+     * composite dependency units built concurrently, where N live progress bars
+     * can't share one terminal region; the caller prints a compact summary line
+     * per unit instead.
+     */
+    public static GoalResult runGoalSilently(Goal goal, Path cacheRoot) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+        goal.addListener(new SilentListener(System.out, System.err));
+        return goal.run();
+    }
+
     private static GoalListener chooseConsoleListener(Goal goal, Mode mode) {
         // Interactive goals (wizards) must NOT render a progress bar —
         // the wizard owns the terminal. Same for JSON output (events
