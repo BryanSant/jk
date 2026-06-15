@@ -12,7 +12,6 @@ import dev.jkbuild.gradle.GradleResolver;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.mvn.MavenResolver;
-import dev.jkbuild.mvn.PomExporter;
 import dev.jkbuild.mvn.PomImporter;
 import dev.jkbuild.plugin.Plugin;
 import dev.jkbuild.plugin.PluginManifest;
@@ -106,7 +105,6 @@ public final class CompatRunner implements Plugin {
 
         return switch (command) {
             case "import"          -> runImport(out, source, out_, report, tmpDir, baseDir, force);
-            case "export"          -> runExport(out, projectDir, target, force);
             case "provision_mvn"   -> runProvision(out, projectDir, toolsRoot, noDiscover, false);
             case "provision_gradle"-> runProvision(out, projectDir, toolsRoot, noDiscover, true);
             default -> { System.err.println("jk-compat-runner: unknown command: " + command); yield 2; }
@@ -179,44 +177,6 @@ public final class CompatRunner implements Plugin {
             boolean hasErrors = importReport.hasErrors();
             out.emit("{\"t\":\"result\",\"ok\":true,\"warnings\":" + warnings
                     + ",\"errors\":" + hasErrors + "}");
-            return 0;
-        } catch (IOException e) {
-            out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
-            return 1;
-        }
-    }
-
-    private static int runExport(ProtocolWriter out,
-                                  Path projectDir, Path target, boolean force) {
-        if (projectDir == null || target == null) {
-            System.err.println("jk-compat-runner: export requires PROJECT_DIR and TARGET");
-            return 2;
-        }
-        try {
-            dev.jkbuild.config.JkBuildParser jkBuildParser = null; // static access
-            JkBuild root = dev.jkbuild.config.JkBuildParser.parse(projectDir.resolve("jk.toml"));
-            PomExporter.Result rootResult = PomExporter.export(root);
-            Files.writeString(target, rootResult.xml(), StandardCharsets.UTF_8);
-            out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(target.toString()) + "}");
-
-            int totalWarnings = rootResult.report().issues().size();
-            if (root.isWorkspaceRoot()) {
-                Map<Path, JkBuild> members =
-                        dev.jkbuild.config.WorkspaceLoader.loadMembers(projectDir, root);
-                for (Map.Entry<Path, JkBuild> e : members.entrySet()) {
-                    Path memberPom = e.getKey().resolve("pom.xml");
-                    if (Files.exists(memberPom) && !force) {
-                        out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
-                                + memberPom + " — pass --force\"}");
-                        return 73;
-                    }
-                    PomExporter.Result memberResult = PomExporter.export(e.getValue());
-                    Files.writeString(memberPom, memberResult.xml(), StandardCharsets.UTF_8);
-                    out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(memberPom.toString()) + "}");
-                    totalWarnings += memberResult.report().issues().size();
-                }
-            }
-            out.emit("{\"t\":\"result\",\"ok\":true,\"warnings\":" + totalWarnings + "}");
             return 0;
         } catch (IOException e) {
             out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");

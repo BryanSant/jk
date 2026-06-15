@@ -9,6 +9,7 @@ import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Renders a {@link JkBuild} as a Maven-Central-grade {@code pom.xml} (PRD
@@ -36,7 +37,31 @@ public final class PomExporter {
 
     private PomExporter() {}
 
+    /** Back-compat: export with auto layout and no locked versions (collapses selectors). */
     public static Result export(JkBuild jkBuild) {
+        return export(jkBuild, JkBuild.Layout.AUTO, Map.of());
+    }
+
+    /** Back-compat: export with auto layout. */
+    public static Result export(JkBuild jkBuild, Map<String, String> locked) {
+        return export(jkBuild, JkBuild.Layout.AUTO, locked);
+    }
+
+    /**
+     * Export {@code jkBuild} as a {@code pom.xml}. {@code locked} maps a
+     * {@code group:artifact} module to the exact version resolved in {@code jk.lock};
+     * when a module is present there it's emitted verbatim (the build reproduces
+     * what jk builds), otherwise the declared selector collapses with a warning.
+     *
+     * <p>{@code layout} should be a concrete {@link JkBuild.Layout#SIMPLE} or
+     * {@link JkBuild.Layout#TRADITIONAL} (callers resolve {@code AUTO} against the
+     * directory tree); {@code SIMPLE} emits {@code <sourceDirectory>src</…>} +
+     * {@code <testSourceDirectory>test</…>} so Maven finds jk's flat layout.
+     * {@code TRADITIONAL}/{@code AUTO} use Maven's default {@code src/main/java}.
+     */
+    public static Result export(JkBuild jkBuild, JkBuild.Layout layout, Map<String, String> locked) {
+        if (locked == null) locked = Map.of();
+        if (layout == null) layout = JkBuild.Layout.AUTO;
         ImportReport.Builder report = ImportReport.builder();
         StringBuilder sb = new StringBuilder(1024);
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n");
@@ -51,9 +76,9 @@ public final class PomExporter {
         appendProperties(sb, p);
         appendModules(sb, jkBuild);
         appendRepositories(sb, jkBuild.repositories());
-        appendDependencyManagement(sb, jkBuild.dependencies().of(Scope.PLATFORM), report);
-        appendDependencies(sb, jkBuild.dependencies(), report);
-        appendProcessorPlugin(sb, jkBuild.dependencies().of(Scope.PROCESSOR), p.javaRelease(), report);
+        appendDependencyManagement(sb, jkBuild.dependencies().of(Scope.PLATFORM), locked, report);
+        appendDependencies(sb, jkBuild.dependencies(), locked, report);
+        appendBuild(sb, jkBuild, layout, locked, report);
         warnAboutDroppedConcerns(jkBuild, report);
 
         sb.append("</project>\n");
@@ -103,7 +128,7 @@ public final class PomExporter {
     }
 
     private static void appendDependencyManagement(StringBuilder sb, List<Dependency> platforms,
-                                                   ImportReport.Builder report) {
+                                                   Map<String, String> locked, ImportReport.Builder report) {
         if (platforms.isEmpty()) return;
         sb.append('\n');
         sb.append("  <dependencyManagement>\n");
@@ -112,7 +137,7 @@ public final class PomExporter {
             sb.append("      <dependency>\n");
             sb.append("        <groupId>").append(escape(d.group())).append("</groupId>\n");
             sb.append("        <artifactId>").append(escape(d.name())).append("</artifactId>\n");
-            sb.append("        <version>").append(escape(extractVersion(d.version(), d.module(), report)))
+            sb.append("        <version>").append(escape(resolveVersion(d, locked, report)))
                     .append("</version>\n");
             sb.append("        <type>pom</type>\n");
             sb.append("        <scope>import</scope>\n");
@@ -123,7 +148,7 @@ public final class PomExporter {
     }
 
     private static void appendDependencies(StringBuilder sb, JkBuild.Dependencies deps,
-                                            ImportReport.Builder report) {
+                                            Map<String, String> locked, ImportReport.Builder report) {
         // Maven emits compile / runtime / provided / test under <dependencies>;
         // platform and processor are handled elsewhere.
         Scope[] order = {Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST};
@@ -137,18 +162,19 @@ public final class PomExporter {
         sb.append("  <dependencies>\n");
         for (Scope s : order) {
             for (Dependency d : deps.of(s)) {
-                appendDependency(sb, d, mavenScope(s), report);
+                appendDependency(sb, d, mavenScope(s), locked, report);
             }
         }
         sb.append("  </dependencies>\n");
     }
 
     private static void appendDependency(StringBuilder sb, Dependency d, String mavenScope,
-                                         ImportReport.Builder report) {
+                                         Map<String, String> locked, ImportReport.Builder report) {
+        if (warnIfUnmappable(d, report)) return;
         sb.append("    <dependency>\n");
         sb.append("      <groupId>").append(escape(d.group())).append("</groupId>\n");
         sb.append("      <artifactId>").append(escape(d.name())).append("</artifactId>\n");
-        sb.append("      <version>").append(escape(extractVersion(d.version(), d.module(), report)))
+        sb.append("      <version>").append(escape(resolveVersion(d, locked, report)))
                 .append("</version>\n");
         if (mavenScope != null) {
             sb.append("      <scope>").append(mavenScope).append("</scope>\n");
@@ -156,12 +182,93 @@ public final class PomExporter {
         sb.append("    </dependency>\n");
     }
 
-    private static void appendProcessorPlugin(StringBuilder sb, List<Dependency> processors,
-                                              int release, ImportReport.Builder report) {
-        if (processors.isEmpty()) return;
-        sb.append('\n');
-        sb.append("  <build>\n");
-        sb.append("    <plugins>\n");
+    /** Git / path / content-addressed deps have no Maven equivalent — warn and skip. */
+    private static boolean warnIfUnmappable(Dependency d, ImportReport.Builder report) {
+        if (d.isGit()) {
+            report.warning("dependency `" + d.module() + "` is git-sourced; Maven has no git-source"
+                    + " equivalent — dropped. Publish it to a repository, or keep building with jk.");
+            return true;
+        }
+        if (d.isPath()) {
+            report.warning("dependency `" + d.module() + "` is a local path dep; Maven has no direct"
+                    + " equivalent — dropped (install it to your local repo, or use a `<module>`).");
+            return true;
+        }
+        if (d.isFile()) {
+            report.warning("dependency `" + d.module() + "` is content-addressed (sha256); no Maven"
+                    + " equivalent — dropped.");
+            return true;
+        }
+        return false;
+    }
+
+    /** Locked exact version when known, else the collapsed selector (with a warning). */
+    private static String resolveVersion(Dependency d, Map<String, String> locked,
+                                         ImportReport.Builder report) {
+        String fromLock = locked.get(d.module());
+        if (fromLock != null && !fromLock.isBlank()) return fromLock;
+        return extractVersion(d.version(), d.module(), report);
+    }
+
+    // Plugin coordinates baked into exported POMs — bump as upstreams release.
+    private static final String TOOLCHAINS_PLUGIN = "4.5.0";   // org.mvnsearch:toolchains-maven-plugin (foojay)
+    private static final String SHADE_PLUGIN      = "3.6.0";   // org.apache.maven.plugins:maven-shade-plugin
+    private static final String NATIVE_PLUGIN     = "0.10.3";  // org.graalvm.buildtools:native-maven-plugin
+    private static final String JAR_PLUGIN        = "3.4.1";   // org.apache.maven.plugins:maven-jar-plugin
+
+    private static void appendBuild(StringBuilder sb, JkBuild jkBuild, JkBuild.Layout layout,
+                                    Map<String, String> locked, ImportReport.Builder report) {
+        JkBuild.Project p = jkBuild.project();
+        List<Dependency> processors = jkBuild.dependencies().of(Scope.PROCESSOR);
+        boolean kotlin     = p.kotlin() != null;
+        boolean toolchain  = p.jdk() != null && !p.jdk().isBlank();
+        boolean shade      = p.shadow();
+        boolean nativeImg  = p.nativeMode() == JkBuild.NativeMode.ALWAYS;
+        boolean jarManifest = (p.main() != null && !p.main().isBlank()) || !jkBuild.manifest().isEmpty();
+        boolean anyPlugin  = !processors.isEmpty() || kotlin || toolchain || shade || nativeImg || jarManifest;
+        boolean simple     = layout == JkBuild.Layout.SIMPLE;
+        if (!anyPlugin && !simple) return;
+
+        sb.append('\n').append("  <build>\n");
+        // jk's simple layout (flat ./src + ./test) → Maven's source/test dirs.
+        if (simple) {
+            sb.append("    <sourceDirectory>src</sourceDirectory>\n");
+            sb.append("    <testSourceDirectory>test</testSourceDirectory>\n");
+            sb.append("    <resources><resource><directory>resources</directory></resource></resources>\n");
+            sb.append("    <testResources><testResource><directory>test-resources</directory>")
+                    .append("</testResource></testResources>\n");
+        }
+        if (anyPlugin) {
+            sb.append("    <plugins>\n");
+            if (kotlin)                appendKotlinPlugin(sb, p, report);
+            if (!processors.isEmpty()) appendCompilerProcessorPlugin(sb, processors, p.javaRelease(), locked, report);
+            if (toolchain)             appendToolchainsPlugin(sb, p);
+            if (jarManifest)           appendJarPlugin(sb, p, jkBuild.manifest());
+            if (shade)                 appendShadePlugin(sb);
+            if (nativeImg)             appendNativePlugin(sb, jkBuild);
+            sb.append("    </plugins>\n");
+        }
+        sb.append("  </build>\n");
+    }
+
+    private static void appendKotlinPlugin(StringBuilder sb, JkBuild.Project p, ImportReport.Builder report) {
+        String ver = extractVersion(p.kotlin(), "kotlin", report);
+        sb.append("      <plugin>\n");
+        sb.append("        <groupId>org.jetbrains.kotlin</groupId>\n");
+        sb.append("        <artifactId>kotlin-maven-plugin</artifactId>\n");
+        sb.append("        <version>").append(escape(ver)).append("</version>\n");
+        sb.append("        <executions>\n");
+        sb.append("          <execution><id>compile</id><phase>compile</phase>")
+                .append("<goals><goal>compile</goal></goals></execution>\n");
+        sb.append("          <execution><id>test-compile</id><phase>test-compile</phase>")
+                .append("<goals><goal>test-compile</goal></goals></execution>\n");
+        sb.append("        </executions>\n");
+        sb.append("      </plugin>\n");
+    }
+
+    private static void appendCompilerProcessorPlugin(StringBuilder sb, List<Dependency> processors,
+                                                      int release, Map<String, String> locked,
+                                                      ImportReport.Builder report) {
         sb.append("      <plugin>\n");
         sb.append("        <groupId>org.apache.maven.plugins</groupId>\n");
         sb.append("        <artifactId>maven-compiler-plugin</artifactId>\n");
@@ -172,16 +279,80 @@ public final class PomExporter {
             sb.append("            <path>\n");
             sb.append("              <groupId>").append(escape(d.group())).append("</groupId>\n");
             sb.append("              <artifactId>").append(escape(d.name())).append("</artifactId>\n");
-            sb.append("              <version>")
-                    .append(escape(extractVersion(d.version(), d.module(), report)))
+            sb.append("              <version>").append(escape(resolveVersion(d, locked, report)))
                     .append("</version>\n");
             sb.append("            </path>\n");
         }
         sb.append("          </annotationProcessorPaths>\n");
         sb.append("        </configuration>\n");
         sb.append("      </plugin>\n");
-        sb.append("    </plugins>\n");
-        sb.append("  </build>\n");
+    }
+
+    /**
+     * Foojay-backed toolchains plugin — auto-downloads the project's JDK (the
+     * Maven analog of Gradle's foojay-resolver), so `project.jdk` reproduces
+     * jk's JDK auto-provisioning rather than requiring a hand-edited toolchains.xml.
+     */
+    private static void appendToolchainsPlugin(StringBuilder sb, JkBuild.Project p) {
+        int major = p.jdkMajor();
+        sb.append("      <plugin>\n");
+        sb.append("        <groupId>org.mvnsearch</groupId>\n");
+        sb.append("        <artifactId>toolchains-maven-plugin</artifactId>\n");
+        sb.append("        <version>").append(TOOLCHAINS_PLUGIN).append("</version>\n");
+        sb.append("        <executions><execution><goals><goal>toolchain</goal></goals></execution></executions>\n");
+        sb.append("        <configuration>\n          <toolchains>\n            <jdk>\n");
+        sb.append("              <version>").append(major > 0 ? major : p.javaRelease()).append("</version>\n");
+        sb.append("            </jdk>\n          </toolchains>\n        </configuration>\n");
+        sb.append("      </plugin>\n");
+    }
+
+    private static void appendJarPlugin(StringBuilder sb, JkBuild.Project p, Map<String, String> manifest) {
+        sb.append("      <plugin>\n");
+        sb.append("        <groupId>org.apache.maven.plugins</groupId>\n");
+        sb.append("        <artifactId>maven-jar-plugin</artifactId>\n");
+        sb.append("        <version>").append(JAR_PLUGIN).append("</version>\n");
+        sb.append("        <configuration>\n          <archive>\n            <manifest>\n");
+        if (p.main() != null && !p.main().isBlank()) {
+            sb.append("              <mainClass>").append(escape(p.main())).append("</mainClass>\n");
+        }
+        if (!manifest.isEmpty()) {
+            sb.append("            </manifest>\n            <manifestEntries>\n");
+            for (Map.Entry<String, String> e : manifest.entrySet()) {
+                sb.append("              <").append(escape(e.getKey())).append('>')
+                        .append(escape(e.getValue())).append("</").append(escape(e.getKey())).append(">\n");
+            }
+            sb.append("            </manifestEntries>\n");
+        } else {
+            sb.append("            </manifest>\n");
+        }
+        sb.append("          </archive>\n        </configuration>\n");
+        sb.append("      </plugin>\n");
+    }
+
+    private static void appendShadePlugin(StringBuilder sb) {
+        sb.append("      <plugin>\n");
+        sb.append("        <groupId>org.apache.maven.plugins</groupId>\n");
+        sb.append("        <artifactId>maven-shade-plugin</artifactId>\n");
+        sb.append("        <version>").append(SHADE_PLUGIN).append("</version>\n");
+        sb.append("        <executions><execution><phase>package</phase>")
+                .append("<goals><goal>shade</goal></goals></execution></executions>\n");
+        sb.append("      </plugin>\n");
+    }
+
+    private static void appendNativePlugin(StringBuilder sb, JkBuild jkBuild) {
+        JkBuild.Project p = jkBuild.project();
+        String main = jkBuild.nativeConfig() != null && jkBuild.nativeConfig().mainClass() != null
+                ? jkBuild.nativeConfig().mainClass() : p.main();
+        sb.append("      <plugin>\n");
+        sb.append("        <groupId>org.graalvm.buildtools</groupId>\n");
+        sb.append("        <artifactId>native-maven-plugin</artifactId>\n");
+        sb.append("        <version>").append(NATIVE_PLUGIN).append("</version>\n");
+        sb.append("        <extensions>true</extensions>\n");
+        if (main != null && !main.isBlank()) {
+            sb.append("        <configuration><mainClass>").append(escape(main))
+                    .append("</mainClass></configuration>\n");
+        }
+        sb.append("      </plugin>\n");
     }
 
     private static void warnAboutDroppedConcerns(JkBuild jkBuild, ImportReport.Builder report) {

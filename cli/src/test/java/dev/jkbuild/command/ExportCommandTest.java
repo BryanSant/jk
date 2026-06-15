@@ -2,121 +2,167 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.Jk;
-
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.charset.StandardCharsets;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+/**
+ * End-to-end coverage for {@code jk export <gradle|maven|idea>}: the in-process
+ * exporters write runnable build files for a single project and a workspace,
+ * and the overwrite guard / parent-usage behavior holds.
+ */
 class ExportCommandTest {
 
-    @Test
-    void writes_pom_xml_from_build_jk(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("jk.toml"), """
+    private static void writeApp(Path dir) throws IOException {
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("jk.toml"), """
                 [project]
-                group    = "com.example"
-                name     = "widget"
-                version  = "1.0.0"
-                jdk      = 21
+                group = "com.example"
+                name  = "app"
+                version = "1.2.3"
+                jdk  = 21
+                java = 21
+                main = "com.example.Main"
 
                 [dependencies.main]
-                jackson-databind = { group = "com.fasterxml.jackson.core", version = "=2.18.2" }
-                """, StandardCharsets.UTF_8);
+                guava = { group = "com.google.guava", name = "guava", version = "=33.0.0-jre" }
+                """);
+    }
 
-        int exit = run("export", "-C", tempDir.toString(), "pom.xml");
+    @Test
+    void export_gradle_writes_settings_and_build(@TempDir Path tmp) throws IOException {
+        writeApp(tmp);
+
+        int exit = Jk.execute(new String[] {"export", "gradle", "-C", tmp.toString()});
         assertThat(exit).isEqualTo(0);
 
-        String pom = Files.readString(tempDir.resolve("pom.xml"));
-        assertThat(pom).contains("<groupId>com.example</groupId>");
-        assertThat(pom).contains("<artifactId>jackson-databind</artifactId>");
-        assertThat(pom).contains("<version>2.18.2</version>");
+        assertThat(tmp.resolve("settings.gradle.kts")).exists();
+        String build = Files.readString(tmp.resolve("build.gradle.kts"));
+        assertThat(build).contains("application");
+        assertThat(build).contains("mainClass = \"com.example.Main\"");
+        assertThat(build).contains("languageVersion = JavaLanguageVersion.of(21)");
+        assertThat(build).contains("implementation(\"com.google.guava:guava:33.0.0-jre\")");
+        assertThat(Files.readString(tmp.resolve("settings.gradle.kts")))
+                .contains("foojay-resolver-convention");
     }
 
     @Test
-    void refuses_to_overwrite_without_force(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("jk.toml"), """
-                [project]
-                group    = "com.example"
-                name     = "widget"
-                version  = "1.0.0"
-                jdk      = 21
-                """, StandardCharsets.UTF_8);
-        Files.writeString(tempDir.resolve("pom.xml"), "<existing/>\n");
+    void export_maven_writes_pom(@TempDir Path tmp) throws IOException {
+        writeApp(tmp);
 
-        int exit = run("export", "-C", tempDir.toString(), "pom.xml");
-        assertThat(exit).isEqualTo(73);
-        assertThat(Files.readString(tempDir.resolve("pom.xml"))).contains("<existing/>");
-    }
-
-    @Test
-    void workspace_root_export_also_writes_each_member(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("jk.toml"), """
-                [project]
-                group    = "com.example"
-                name     = "widget-parent"
-                version  = "1.0.0"
-                jdk      = 21
-
-                [workspace]
-                members = ["core", "app"]
-                """, StandardCharsets.UTF_8);
-        Files.createDirectories(tempDir.resolve("core"));
-        Files.writeString(tempDir.resolve("core/jk.toml"), """
-                [project]
-                group    = "com.example"
-                name     = "widget-core"
-                version  = "1.0.0"
-                jdk      = 21
-                """, StandardCharsets.UTF_8);
-        Files.createDirectories(tempDir.resolve("app"));
-        Files.writeString(tempDir.resolve("app/jk.toml"), """
-                [project]
-                group    = "com.example"
-                name     = "widget-app"
-                version  = "1.0.0"
-                jdk      = 21
-                """, StandardCharsets.UTF_8);
-
-        int exit = run("export", "-C", tempDir.toString(), "pom.xml");
+        int exit = Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()});
         assertThat(exit).isEqualTo(0);
 
-        String rootPom = Files.readString(tempDir.resolve("pom.xml"));
-        assertThat(rootPom).contains("<packaging>pom</packaging>");
-        assertThat(rootPom).contains("<module>core</module>");
-        assertThat(rootPom).contains("<module>app</module>");
-
-        assertThat(Files.readString(tempDir.resolve("core/pom.xml")))
-                .contains("<artifactId>widget-core</artifactId>")
-                .contains("<packaging>jar</packaging>");
-        assertThat(Files.readString(tempDir.resolve("app/pom.xml")))
-                .contains("<artifactId>widget-app</artifactId>");
+        String pom = Files.readString(tmp.resolve("pom.xml"));
+        assertThat(pom).contains("<artifactId>app</artifactId>");
+        assertThat(pom).contains("<artifactId>guava</artifactId>");
+        assertThat(pom).contains("<artifactId>toolchains-maven-plugin</artifactId>");
     }
 
     @Test
-    void missing_build_jk_returns_no_input(@TempDir Path tempDir) {
-        int exit = run("export", "-C", tempDir.toString(), "pom.xml");
+    void pom_alias_works(@TempDir Path tmp) throws IOException {
+        writeApp(tmp);
+        int exit = Jk.execute(new String[] {"export", "pom", "-C", tmp.toString()});
+        assertThat(exit).isEqualTo(0);
+        assertThat(tmp.resolve("pom.xml")).exists();
+    }
+
+    @Test
+    void overwrite_guard_blocks_then_force_allows(@TempDir Path tmp) throws IOException {
+        writeApp(tmp);
+
+        assertThat(Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()})).isEqualTo(0);
+        // Second run without --force must refuse.
+        assertThat(Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()})).isNotEqualTo(0);
+        // With --force it overwrites.
+        assertThat(Jk.execute(new String[] {"export", "maven", "--force", "-C", tmp.toString()}))
+                .isEqualTo(0);
+    }
+
+    @Test
+    void parent_without_subcommand_is_usage_error(@TempDir Path tmp) throws IOException {
+        writeApp(tmp);
+        int exit = Jk.execute(new String[] {"export", "-C", tmp.toString()});
+        assertThat(exit).isEqualTo(64);
+    }
+
+    @Test
+    void missing_jk_toml_returns_no_input(@TempDir Path tmp) {
+        int exit = Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()});
         assertThat(exit).isEqualTo(66);
     }
 
     @Test
-    void gradle_target_emits_friendly_v1_1_message(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("jk.toml"), """
+    void export_maven_workspace_writes_root_and_member_poms(@TempDir Path tmp) throws IOException {
+        Files.createDirectories(tmp);
+        Files.writeString(tmp.resolve("jk.toml"), """
                 [project]
-                group    = "com.example"
-                name     = "widget"
-                version  = "1.0.0"
-                jdk      = 21
-                """, StandardCharsets.UTF_8);
+                group = "com.example"
+                name  = "root"
+                version = "1.0.0"
+                jdk  = 21
+                java = 21
 
-        int exit = run("export", "-C", tempDir.toString(), "build.gradle.kts");
-        assertThat(exit).isEqualTo(64);
+                [workspace]
+                members = ["mod-a"]
+                """);
+        Path modA = tmp.resolve("mod-a");
+        Files.createDirectories(modA);
+        Files.writeString(modA.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "mod-a"
+                version = "1.0.0"
+                jdk  = 21
+                java = 21
+                """);
+
+        int exit = Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()});
+        assertThat(exit).isEqualTo(0);
+
+        assertThat(Files.readString(tmp.resolve("pom.xml")))
+                .contains("<packaging>pom</packaging>")
+                .contains("<module>mod-a</module>");
+        assertThat(Files.readString(modA.resolve("pom.xml")))
+                .contains("<artifactId>mod-a</artifactId>")
+                .contains("<packaging>jar</packaging>");
     }
 
-    private static int run(String... args) {
-        return Jk.execute(args);
+    @Test
+    void export_gradle_workspace_includes_members(@TempDir Path tmp) throws IOException {
+        Files.createDirectories(tmp);
+        Files.writeString(tmp.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "root"
+                version = "1.0.0"
+                jdk  = 21
+                java = 21
+
+                [workspace]
+                members = ["mod-a"]
+                """);
+        Path modA = tmp.resolve("mod-a");
+        Files.createDirectories(modA);
+        Files.writeString(modA.resolve("jk.toml"), """
+                [project]
+                group = "com.example"
+                name  = "mod-a"
+                version = "1.0.0"
+                jdk  = 21
+                java = 21
+                """);
+
+        int exit = Jk.execute(new String[] {"export", "gradle", "-C", tmp.toString()});
+        assertThat(exit).isEqualTo(0);
+
+        assertThat(Files.readString(tmp.resolve("settings.gradle.kts")))
+                .contains("include(\":mod-a\")");
+        assertThat(modA.resolve("build.gradle.kts")).exists();
     }
 }
