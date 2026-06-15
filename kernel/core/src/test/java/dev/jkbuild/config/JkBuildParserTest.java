@@ -475,6 +475,25 @@ class JkBuildParserTest {
     }
 
     @Test
+    void git_source_parses_fetch_freshness_policy() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                fork = { group = "com.acme", name = "widgets", \
+                         git = "https://github.com/me/widgets", branch = "main", fetch = "48h" }
+                """);
+        assertThat(parsed.dependencies().of(Scope.MAIN).getFirst().gitSource().fetch()).isEqualTo("48h");
+    }
+
+    @Test
+    void git_source_rejects_invalid_fetch_policy() {
+        assertThatThrownBy(() -> JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                fork = { group = "com.acme", name = "widgets", \
+                         git = "https://github.com/me/widgets", branch = "main", fetch = "soon" }
+                """)).hasMessageContaining("fetch");
+    }
+
+    @Test
     void git_source_group_override_defaults_artifact_to_dep_name() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [dependencies.main]

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.git;
 
+import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ForgeGitCredentials;
 import dev.jkbuild.model.GitRefSpec;
@@ -13,6 +14,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -67,12 +70,39 @@ public final class GitFetcher {
         return fetch(source, false);
     }
 
-    /** Resolve and checkout, optionally bypassing the checkout cache. */
+    /**
+     * Resolve and checkout, optionally bypassing the checkout cache. For a moving
+     * <em>branch</em> ref, the remote tip is re-resolved at most once per freshness
+     * window ({@link GitSource#fetch()}; default 12h) — within the window (or under
+     * {@code --offline}) the previously-resolved tip's checkout is reused without a
+     * network round-trip. Immutable tag/rev refs are unaffected.
+     */
     public Fetched fetch(GitSource source, boolean noCache) throws IOException {
         Objects.requireNonNull(source, "source");
+        boolean branch = source.ref() instanceof GitRefSpec.Branch;
+        if (branch && !noCache) {
+            Fetched cached = freshBranchTip(source);
+            if (cached != null) return cached;
+            if (offline()) {
+                throw new IOException("offline: branch tip for " + source.canonicalUrl()
+                        + " is not cached (drop --offline, or run `jk update --git`)");
+            }
+        }
         Result r = runWorker("fetch", source, noCache, null);
         if (!r.ok) throw new IOException(r.error);
-        return new Fetched(r.sha, Path.of(r.checkout));
+        Fetched f = new Fetched(r.sha, Path.of(r.checkout));
+        if (branch) recordBranchTip(source, f);
+        return f;
+    }
+
+    /**
+     * Drop the recorded branch-tip freshness stamp for {@code source}, forcing the
+     * next {@link #fetch} to re-resolve the remote tip ({@code jk update --git}).
+     */
+    public void invalidateBranchTip(GitSource source) {
+        try {
+            Files.deleteIfExists(metaFile(source));
+        } catch (IOException ignored) { /* best-effort */ }
     }
 
     /** Tag-rewrite check: re-resolve and fail if the SHA changed. */
@@ -179,6 +209,86 @@ public final class GitFetcher {
             case GitRefSpec.Branch b -> b.name();
             case GitRefSpec.Rev r    -> r.sha();
         };
+    }
+
+    // --- branch-tip freshness ------------------------------------------------
+
+    private static final long DEFAULT_WINDOW_MS = 12L * 60 * 60 * 1000; // 12h
+
+    /** A {@code <gitRoot>/meta/<hash>} record: {@code <epochMs>\n<sha>\n<checkout>}. */
+    private record TipMeta(long epochMs, String sha, String checkout) {}
+
+    /**
+     * The previously-resolved branch tip when it's still fresh — within the
+     * {@link GitSource#fetch()} window, or any time under {@code --offline} —
+     * else {@code null} to force a re-resolve.
+     */
+    private Fetched freshBranchTip(GitSource source) {
+        TipMeta m = readTip(source);
+        if (m == null) return null;
+        Path checkout = Path.of(m.checkout);
+        if (!Files.isDirectory(checkout)) return null;
+        if (offline()) return new Fetched(m.sha, checkout);   // never hit network offline
+        long window = windowMillis(source.fetch());
+        if (window < 0) return null;                          // "always"/"0" → re-resolve
+        return System.currentTimeMillis() - m.epochMs < window
+                ? new Fetched(m.sha, checkout) : null;
+    }
+
+    private void recordBranchTip(GitSource source, Fetched f) {
+        try {
+            Path meta = metaFile(source);
+            Files.createDirectories(meta.getParent());
+            Files.writeString(meta, System.currentTimeMillis() + "\n" + f.sha() + "\n"
+                    + f.checkoutPath().toAbsolutePath(), StandardCharsets.UTF_8);
+        } catch (IOException ignored) { /* best-effort: a missed stamp just re-resolves sooner */ }
+    }
+
+    private TipMeta readTip(GitSource source) {
+        try {
+            Path meta = metaFile(source);
+            if (!Files.isRegularFile(meta)) return null;
+            List<String> lines = Files.readAllLines(meta, StandardCharsets.UTF_8);
+            if (lines.size() < 3) return null;
+            return new TipMeta(Long.parseLong(lines.get(0).trim()), lines.get(1).trim(), lines.get(2).trim());
+        } catch (RuntimeException | IOException e) {
+            return null;
+        }
+    }
+
+    private Path metaFile(GitSource source) {
+        String key = sha256hex(source.canonicalUrl() + " " + refValue(source.ref()));
+        return gitRoot.resolve("meta").resolve(key);
+    }
+
+    /** Window in millis: {@code null} → 12h default; {@code "always"}/{@code "0"} → -1 (always re-resolve). */
+    static long windowMillis(String fetch) {
+        if (fetch == null || fetch.isBlank()) return DEFAULT_WINDOW_MS;
+        if ("always".equals(fetch) || "0".equals(fetch)) return -1;
+        char unit = fetch.charAt(fetch.length() - 1);
+        long n = Long.parseLong(fetch.substring(0, fetch.length() - 1));
+        return switch (unit) {
+            case 's' -> n * 1000L;
+            case 'm' -> n * 60_000L;
+            case 'h' -> n * 3_600_000L;
+            case 'd' -> n * 86_400_000L;
+            default  -> DEFAULT_WINDOW_MS;
+        };
+    }
+
+    private static boolean offline() {
+        return ActiveConfig.get().offlineOr(false);
+    }
+
+    private static String sha256hex(String s) {
+        try {
+            byte[] d = MessageDigest.getInstance("SHA-256").digest(s.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(d.length * 2);
+            for (byte b : d) sb.append(Character.forDigit((b >> 4) & 0xf, 16)).append(Character.forDigit(b & 0xf, 16));
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
     }
 
     private static Path javaExe() {

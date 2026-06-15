@@ -693,7 +693,18 @@ public final class JkBuildParser {
         String path = obj.getString("path");
         boolean submodules = obj.getBoolean("submodules", () -> true);
         boolean verifySigned = obj.getBoolean("verify-signed", () -> false);
-        return new GitSource(canonical, urlRaw, ref, path, submodules, verifySigned);
+        String fetch = obj.getString("fetch");
+        if (fetch != null && !isValidFetchPolicy(fetch)) {
+            throw new JkBuildParseException(displayPath + ".fetch must be \"always\", \"0\", "
+                    + "or a duration like \"30m\", \"12h\", \"3d\" (got: " + fetch + ")");
+        }
+        return new GitSource(canonical, urlRaw, ref, path, submodules, verifySigned)
+                .withFetch(fetch);
+    }
+
+    /** A git branch-tip freshness policy: {@code "always"}/{@code "0"}, or a duration {@code <n>[smhd]}. */
+    private static boolean isValidFetchPolicy(String policy) {
+        return "always".equals(policy) || "0".equals(policy) || policy.matches("\\d+[smhd]");
     }
 
     // ---------------------------------------------------------------------

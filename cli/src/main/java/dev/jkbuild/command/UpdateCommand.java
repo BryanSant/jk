@@ -15,6 +15,9 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
+import dev.jkbuild.git.GitFetcher;
+import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
@@ -79,6 +82,7 @@ public final class UpdateCommand implements CliCommand {
                 Opt.value("<a,b,...>", "Activate the listed features in addition to defaults.", "--features")
                         .splitOn(","),
                 Opt.flag("Don't activate the project's default features.", "--no-default-features"),
+                Opt.flag("Re-fetch branch git dependencies' tips now (ignore the freshness window).", "--git"),
                 Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
                 Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                         "--cache-dir").hide());
@@ -115,6 +119,12 @@ public final class UpdateCommand implements CliCommand {
         } catch (RuntimeException e) {
             System.err.println("jk update: " + e.getMessage());
             return 2;
+        }
+
+        // `jk update --git`: force branch git deps to re-resolve their tip on the
+        // next build (clears the freshness stamp), instead of a dependency re-lock.
+        if (in.isSet("git")) {
+            return refreshGitBranches(dir, root, cache);
         }
 
         // When updating a workspace member directly, filter sibling-internal deps.
@@ -229,6 +239,39 @@ public final class UpdateCommand implements CliCommand {
         if (!global.outputIsJson()) {
             System.out.println("Updated " + lockFile + " (" + lock.artifacts().size() + " package"
                     + (lock.artifacts().size() == 1 ? "" : "s") + ")");
+        }
+        return 0;
+    }
+
+    /**
+     * {@code jk update --git}: clear the branch-tip freshness stamp for every
+     * branch git dependency (project + workspace members), so the next build
+     * re-resolves the remote tip regardless of the freshness window.
+     */
+    private int refreshGitBranches(Path dir, JkBuild root, Path cache) throws Exception {
+        List<JkBuild> builds = new java.util.ArrayList<>();
+        builds.add(root);
+        if (root.isWorkspaceRoot()) builds.addAll(WorkspaceLoader.loadMembers(dir, root).values());
+
+        GitFetcher fetcher = new GitFetcher(cache.resolve("git"));
+        java.util.Set<String> seen = new java.util.LinkedHashSet<>();
+        int n = 0;
+        for (JkBuild b : builds) {
+            for (List<Dependency> deps : b.dependencies().byScope().values()) {
+                for (Dependency d : deps) {
+                    if (d.isGit() && d.gitSource().ref() instanceof GitRefSpec.Branch
+                            && seen.add(d.module() + "@" + d.gitSource().canonicalUrl())) {
+                        fetcher.invalidateBranchTip(d.gitSource());
+                        n++;
+                    }
+                }
+            }
+        }
+        if (!global.outputIsJson()) {
+            System.out.println(n == 0
+                    ? "No branch git dependencies to refresh."
+                    : "Marked " + n + " branch git dependenc" + (n == 1 ? "y" : "ies")
+                            + " for re-fetch on the next build.");
         }
         return 0;
     }
