@@ -112,7 +112,7 @@ class GitSourceResolutionTest {
     @Test
     void branch_git_dep_is_left_for_composite_not_materialized(@TempDir Path tmp) throws Exception {
         // A branch is a moving target: prepare must leave it untouched (built on
-        // demand by CompositeDepResolver, never materialized or lock-pinned).
+        // demand by the composite build path, never materialized or lock-pinned).
         Path repoDir = tmp.resolve("lib");
         Files.createDirectories(repoDir);
         Files.writeString(repoDir.resolve("jk.toml"), """

@@ -1176,14 +1176,6 @@ public final class BuildPipeline {
     }
 
     /**
-     * Build the consumer's composite ({@code path} + branch-git) deps from source
-     * and add their main jars + external transitive deps to {@code cp} — jk's
-     * {@code includeBuild} analog ({@link CompositeDepResolver}). No-op (and no JDK
-     * resolution) when none are declared. {@code depScopes} selects which consumer
-     * scopes contribute composite deps; {@code externalCpScopes} is the scope set
-     * for each target's external deps. Returns failures (empty on success).
-     */
-    /**
      * Add the consumer's composite ({@code path} / branch-git) dependency jars +
      * their external transitive deps to {@code cp} — <em>locate-only</em>: the
      * build driver ({@code BuildGraph} in the CLI) has already built every

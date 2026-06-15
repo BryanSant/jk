@@ -99,7 +99,7 @@ public final class GitSourceResolution {
             for (Dependency d : list) {
                 // Only immutable (tag/rev) git deps are materialized + lock-pinned.
                 // Branch git deps are moving targets: they pass through to be built
-                // on demand and injected at classpath time (CompositeDepResolver),
+                // on demand and injected at classpath time (the composite build path),
                 // never locked — so skip them here.
                 if (!d.isGit() || !d.gitSource().ref().isImmutable()) continue;
                 String key = sourceKey(d.gitSource());
@@ -122,7 +122,7 @@ public final class GitSourceResolution {
             List<Dependency> out = new ArrayList<>(list.size());
             for (Dependency d : list) {
                 // Non-git and branch-git deps pass through unchanged: branch git
-                // deps stay as-is for CompositeDepResolver, not rewritten to a pin.
+                // deps stay as-is for the composite build path, not rewritten to a pin.
                 if (!d.isGit() || !d.gitSource().ref().isImmutable()) {
                     out.add(d);
                     continue;

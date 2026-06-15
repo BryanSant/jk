@@ -30,8 +30,9 @@ import java.util.stream.Collectors;
  * Builds a {@code jk.toml} project on disk into a jar + POM headlessly —
  * composing the standalone build primitives (resolve → classpath → kotlinc →
  * javac → merge → jar → POM) without the CLI goal/console machinery. The engine
- * of both git-source dependencies (via {@link GitProjectBuilder}) and composite
- * {@code path}/branch-git dependencies (via {@link CompositeDepResolver}).
+ * of immutable git-source dependencies (via {@link GitProjectBuilder} /
+ * {@link GitSourceMaterializer}). Composite {@code path}/branch-git deps now
+ * build through the full pipeline ({@code BuildPipeline.coreBuilder}) instead.
  *
  * <p>Scope: Java + Kotlin sources, layout-aware (jk's flat {@code SIMPLE}
  * layout and Maven-style {@code TRADITIONAL}), plus the project's own (Maven)
@@ -54,22 +55,18 @@ public final class LocalProjectBuilder {
      * Build {@code project} (rooted at {@code projectDir}) into the jar + POM for
      * coordinate {@code group:artifact:version}. Resolves the project's own
      * dependencies through {@code repos} (no network when it declares none) and
-     * compiles with {@code javaHome}. {@code extraClasspath} carries
-     * already-built composite-dependency jars (a target's own {@code path}/
-     * branch-git children) so they're visible to its compilation. The jar is
-     * written to {@link BuildLayout#mainJar()} so callers can reuse it on disk.
+     * compiles with {@code javaHome}. The jar is written to
+     * {@link BuildLayout#mainJar()} so callers can reuse it on disk.
      */
     static Built build(Path projectDir, JkBuild project,
                        String group, String artifact, String version,
-                       Path javaHome, Cas cas, RepoGroup repos, String jkVersion,
-                       List<Path> extraClasspath)
+                       Path javaHome, Cas cas, RepoGroup repos, String jkVersion)
             throws IOException, InterruptedException {
 
         // 1. Resolve the project's own dependencies and the compile classpath.
         Lockfile lock = new LockOrchestrator(repos).lock(project, jkVersion);
         List<Path> classpath = new ArrayList<>(
                 new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
-        classpath.addAll(extraClasspath);
 
         BuildLayout layout = BuildLayout.of(projectDir, project);
         Path classes = layout.classesDir();

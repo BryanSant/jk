@@ -205,7 +205,7 @@ public final class LockOrchestrator {
         // Partition: sha256-pinned file deps are already resolved — they carry
         // their own blob identity and never need PubGrub or a network fetch.
         // Composite source deps (`path = …` and branch git deps) are built from
-        // source and injected onto the classpath at build time (CompositeDepResolver,
+        // source and injected onto the classpath at build time (the composite build path,
         // jk's includeBuild analog); they are NOT coordinates the resolver can
         // resolve and are never written to the lock, so drop them here.
         List<Dependency> fileDeps = new ArrayList<>();

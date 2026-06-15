@@ -41,8 +41,7 @@ public final class GitProjectBuilder {
                        Path javaHome, Cas cas, RepoGroup repos, String jkVersion)
             throws IOException, InterruptedException {
         LocalProjectBuilder.Built b = LocalProjectBuilder.build(
-                projectDir, project, group, artifact, version, javaHome, cas, repos, jkVersion,
-                java.util.List.of());
+                projectDir, project, group, artifact, version, javaHome, cas, repos, jkVersion);
         return new Built(b.group(), b.artifact(), b.version(), b.jar(), b.pomXml());
     }
 }
