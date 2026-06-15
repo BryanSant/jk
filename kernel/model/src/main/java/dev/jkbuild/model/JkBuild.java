@@ -25,7 +25,8 @@ public record JkBuild(
         Map<String, String> manifest,
         List<PluginDeclaration> plugins,
         NativeConfig nativeConfig,
-        Build build) {
+        Build build,
+        FormatConfig format) {
 
     public JkBuild {
         Objects.requireNonNull(project, "project");
@@ -43,6 +44,16 @@ public record JkBuild(
         plugins = plugins == null ? List.of() : List.copyOf(plugins);
         nativeConfig = nativeConfig == null ? NativeConfig.EMPTY : nativeConfig;
         build = build == null ? Build.EMPTY : build;
+        format = format == null ? FormatConfig.EMPTY : format;
+    }
+
+    /** Back-compat constructor for callers that don't set the {@code [format]} block. */
+    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
+                   Profiles profiles, Features features, Workspace workspace,
+                   Map<String, String> manifest, List<PluginDeclaration> plugins,
+                   NativeConfig nativeConfig, Build build) {
+        this(project, dependencies, repositories, profiles, features, workspace,
+                manifest, plugins, nativeConfig, build, null);
     }
 
     /** Back-compat constructor for callers that don't set the {@code [build]} block. */
@@ -51,7 +62,7 @@ public record JkBuild(
                    Map<String, String> manifest, List<PluginDeclaration> plugins,
                    NativeConfig nativeConfig) {
         this(project, dependencies, repositories, profiles, features, workspace,
-                manifest, plugins, nativeConfig, null);
+                manifest, plugins, nativeConfig, null, null);
     }
 
     /** Back-compat constructor for callers that don't set nativeConfig. */
@@ -105,7 +116,7 @@ public record JkBuild(
     /** Return a copy with the given custom jar-manifest attributes. */
     public JkBuild withManifest(Map<String, String> manifest) {
         return new JkBuild(project, dependencies, repositories, profiles, features, workspace,
-                manifest, plugins, nativeConfig, build);
+                manifest, plugins, nativeConfig, build, format);
     }
 
     /** True iff this is a workspace root (has a non-empty {@code workspace} block). */
@@ -414,6 +425,33 @@ public record JkBuild(
             all.addAll(embedSha.values());
             all.addAll(testWorkerJars);
             return List.copyOf(all);
+        }
+    }
+
+    /**
+     * The {@code [format]} block — how {@code jk format} formats sources.
+     *
+     * <p>All three are raw, optional spec strings (never validated here — the
+     * model is dependency-free and knows nothing about formatter tools):
+     * <ul>
+     *   <li>{@code style} — a cross-language preset (e.g. {@code "standard"})
+     *       applied to both languages unless a per-language key overrides it.</li>
+     *   <li>{@code java} — the Java style ({@code palantir} / {@code google} /
+     *       {@code aosp}); {@code null} → inherit {@code style} / the default.</li>
+     *   <li>{@code kotlin} — the Kotlin style ({@code kotlinlang} / {@code google}
+     *       / {@code meta}); {@code null} → inherit {@code style} / the default.</li>
+     * </ul>
+     * Resolution of these strings to concrete formatters lives in the CLI /
+     * {@code jk-formatter} worker, not in the model.
+     */
+    public record FormatConfig(String style, String java, String kotlin) {
+
+        public static final FormatConfig EMPTY = new FormatConfig(null, null, null);
+
+        public FormatConfig {
+            if (style != null && style.isBlank()) style = null;
+            if (java != null && java.isBlank()) java = null;
+            if (kotlin != null && kotlin.isBlank()) kotlin = null;
         }
     }
 

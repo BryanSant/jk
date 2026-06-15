@@ -167,6 +167,31 @@ class JkBuildParserTest {
     }
 
     @Test
+    void parses_format_block() {
+        JkBuild parsed = JkBuildParser.parse("""
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+
+                [format]
+                style  = "standard"
+                java   = "palantir"
+                kotlin = "kotlinlang"
+                """);
+        assertThat(parsed.format().style()).isEqualTo("standard");
+        assertThat(parsed.format().java()).isEqualTo("palantir");
+        assertThat(parsed.format().kotlin()).isEqualTo("kotlinlang");
+    }
+
+    @Test
+    void format_block_absent_is_empty() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT);
+        assertThat(parsed.format()).isEqualTo(JkBuild.FormatConfig.EMPTY);
+        assertThat(parsed.format().java()).isNull();
+    }
+
+    @Test
     void parses_jdk_vendor_major_spec() {
         JkBuild parsed = JkBuildParser.parse("""
                 [project]

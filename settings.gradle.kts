@@ -36,6 +36,7 @@ include(
     ":image-builder",  // was :image-runner
     ":compat-bridge",  // was :compat-runner
     ":git-client",     // was :git-runner
+    ":formatter",      // jk format — Spotless-wrapped Java/Kotlin formatter
     // Host + CLI
     ":engine",
     ":cli",
@@ -58,3 +59,4 @@ project(":publisher").projectDir      = file("plugins/publisher")
 project(":image-builder").projectDir  = file("plugins/image-builder")
 project(":compat-bridge").projectDir  = file("plugins/compat-bridge")
 project(":git-client").projectDir     = file("plugins/git-client")
+project(":formatter").projectDir      = file("plugins/formatter")

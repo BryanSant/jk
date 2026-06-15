@@ -129,8 +129,34 @@ public final class JkBuildParser {
         List<PluginDeclaration> plugins = parsePlugins(result);
         JkBuild.NativeConfig nativeConfig = parseNativeConfig(result);
         JkBuild.Build build = parseBuild(result);
+        JkBuild.FormatConfig format = parseFormat(result);
         return new JkBuild(project, deps, repos, profiles, features, workspace, manifest, plugins,
-                nativeConfig, build);
+                nativeConfig, build, format);
+    }
+
+    /**
+     * Parse the optional {@code [format]} table — the styles {@code jk format}
+     * uses. {@code style} is a cross-language preset; {@code java} / {@code kotlin}
+     * are per-language overrides. All are plain strings, validated downstream by
+     * {@code jk format} (the model + parser stay tool-agnostic). Absent → EMPTY.
+     */
+    private static JkBuild.FormatConfig parseFormat(TomlTable root) {
+        TomlTable format = root.getTable("format");
+        if (format == null) return JkBuild.FormatConfig.EMPTY;
+        return new JkBuild.FormatConfig(
+                stringOrThrow(format, "style", "format.style"),
+                stringOrThrow(format, "java", "format.java"),
+                stringOrThrow(format, "kotlin", "format.kotlin"));
+    }
+
+    /** Read an optional string key; present-but-non-string is a parse error; absent → null. */
+    private static String stringOrThrow(TomlTable table, String key, String path) {
+        if (!table.contains(key)) return null;
+        String value = table.getString(key);
+        if (value == null) {
+            throw new JkBuildParseException(path + " must be a string");
+        }
+        return value;
     }
 
     /**

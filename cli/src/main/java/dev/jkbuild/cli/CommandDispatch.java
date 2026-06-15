@@ -12,6 +12,7 @@ import dev.jkbuild.command.BuildCommand;
 import dev.jkbuild.command.CacheCommand;
 import dev.jkbuild.command.CompileCommand;
 import dev.jkbuild.command.ExportCommand;
+import dev.jkbuild.command.FormatCommand;
 import dev.jkbuild.command.GradleCommand;
 import dev.jkbuild.command.IdeaCommand;
 import dev.jkbuild.command.ImageCommand;
@@ -106,6 +107,7 @@ public final class CommandDispatch {
             new CompileCommand(),
             new BuildCommand(),
             new TestCommand(),
+            new FormatCommand(),
             new NativeCommand(),
             new ImageCommand(),
             new MvnCommand(),

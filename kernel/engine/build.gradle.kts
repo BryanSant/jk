@@ -34,6 +34,7 @@ dependencies {
 val shaWorkerModules = listOf(
     ":kotlin-compiler", ":java-compiler", ":git-client",
     ":auditor", ":publisher", ":image-builder", ":compat-bridge",
+    ":formatter",
 )
 val workerShaTasks = shaWorkerModules.map { path ->
     val artifact = "jk-" + path.removePrefix(":")

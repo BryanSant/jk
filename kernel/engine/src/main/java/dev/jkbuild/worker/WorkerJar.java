@@ -38,7 +38,8 @@ public enum WorkerJar {
     PUBLISHER("jk-publisher", "jk.publisher.worker.jar", ":publisher:installLocalCas"),
     IMAGE_BUILDER("jk-image-builder", "jk.image-builder.worker.jar", ":image-builder:installLocalCas"),
     COMPAT_BRIDGE("jk-compat-bridge", "jk.compat-bridge.worker.jar", ":compat-bridge:installLocalCas"),
-    GIT_CLIENT("jk-git-client", "jk.git-client.worker.jar", ":git-client:installLocalCas");
+    GIT_CLIENT("jk-git-client", "jk.git-client.worker.jar", ":git-client:installLocalCas"),
+    FORMATTER("jk-formatter", "jk.formatter.worker.jar", ":formatter:installLocalCas");
 
     private final String artifactId;
     private final String jarProperty;

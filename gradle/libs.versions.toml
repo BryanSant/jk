@@ -19,6 +19,8 @@ maven-artifact = "3.9.16"
 picocli = "4.7.7"
 sigstore = "2.1.0"
 spdx-java = "2.0.3"
+slf4j = "2.0.16"
+spotless = "4.6.2"
 tomlj = "1.1.1"
 xz = "1.12"
 
@@ -56,6 +58,14 @@ kotlin-build-tools-api = { module = "org.jetbrains.kotlin:kotlin-build-tools-api
 # Compile-time only: lets javac resolve the kotlin.DeprecationLevel enum referenced by
 # the BTA's @Deprecated annotations. Not bundled, not on the worker's runtime closure.
 kotlin-stdlib          = { module = "org.jetbrains.kotlin:kotlin-stdlib",           version.ref = "kotlin-bta" }
+
+# Format worker (Spotless engine — the formatter impls are resolved at runtime
+# via jk's own resolver, NOT bundled, so only spotless-lib is a compile dep).
+spotless-lib           = { module = "com.diffplug.spotless:spotless-lib",           version.ref = "spotless" }
+# spotless-lib declares slf4j-api as compileOnly ("zero runtime deps"), so the
+# worker bundles slf4j-api + a no-op binding to satisfy it at runtime.
+slf4j-api              = { module = "org.slf4j:slf4j-api",                          version.ref = "slf4j" }
+slf4j-nop              = { module = "org.slf4j:slf4j-nop",                          version.ref = "slf4j" }
 
 # CLI
 picocli                = { module = "info.picocli:picocli",                         version.ref = "picocli" }
