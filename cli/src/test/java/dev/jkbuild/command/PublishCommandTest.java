@@ -256,6 +256,26 @@ class PublishCommandTest {
                 """);
     }
 
+    @Test
+    void refuses_to_publish_a_composite_path_dependency(@TempDir Path tempDir) throws Exception {
+        Files.writeString(tempDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.example"
+                name     = "widget"
+                version  = "1.0.0"
+                jdk      = 21
+
+                [dependencies.main]
+                lib = { group = "com.example", name = "lib", path = "../lib" }
+                """);
+        writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
+
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
+
+        assertThat(exit).isNotEqualTo(0);
+        assertThat(received).isEmpty();   // rejected before any upload
+    }
+
     private static void writeJar(Path path) throws IOException {
         Files.createDirectories(path.getParent());
         // The publisher just streams bytes — content doesn't need to be a real jar.

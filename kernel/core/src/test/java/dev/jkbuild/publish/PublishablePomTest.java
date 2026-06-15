@@ -33,6 +33,22 @@ class PublishablePomTest {
     }
 
     @Test
+    void composite_path_dependency_is_skipped_for_publish() {
+        Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
+        byScope.put(Scope.MAIN, List.of(
+                Dependency.path("lib", "com.example:lib", "../lib")));
+        String xml = PublishablePom.render(
+                new JkBuild(
+                        new JkBuild.Project("com.example", "widget", "1.0.0", 21),
+                        new JkBuild.Dependencies(byScope)),
+                null).xml();
+
+        // No broken <version>=path</version>, no phantom dependency.
+        assertThat(xml).doesNotContain("path");
+        assertThat(xml).doesNotContain("<artifactId>lib</artifactId>");
+    }
+
+    @Test
     void emits_dependency_management_for_platform_scope() {
         Map<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
         byScope.put(Scope.PLATFORM, List.of(

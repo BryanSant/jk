@@ -168,6 +168,12 @@ public final class PublishablePom {
         for (Scope s : order) {
             String mavenScope = mavenScope(s);
             for (Dependency d : jkBuild.dependencies().of(s)) {
+                // Composite source deps (path / branch git) have no published coordinate.
+                // `jk publish` rejects them up front; skip here as a safety net so a stray
+                // caller never emits a broken <version>=path</version>.
+                if (d.isPath() || (d.isGit() && !d.gitSource().ref().isImmutable())) {
+                    continue;
+                }
                 sb.append("    <dependency>\n");
                 sb.append("      <groupId>").append(escape(d.group())).append("</groupId>\n");
                 sb.append("      <artifactId>").append(escape(d.name())).append("</artifactId>\n");
