@@ -15,7 +15,9 @@ java {
 tasks.withType<JavaCompile>().configureEach {
     options.encoding = "UTF-8"
     options.release.set(25)
-    options.compilerArgs.add("-Xlint:deprecation")
+    // Keep in lock-step with jk's own default lint policy (dev.jkbuild.compile.JavacLint),
+    // so `gradle build` and `jk build` surface the same javac warnings.
+    options.compilerArgs.add("-Xlint:deprecation,unchecked")
 }
 
 // Reach the version catalog from a convention plugin without the buildSrc

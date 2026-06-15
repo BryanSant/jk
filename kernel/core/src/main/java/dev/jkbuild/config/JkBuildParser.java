@@ -984,7 +984,10 @@ public final class JkBuildParser {
                 if (!s.isBlank()) testWorkerJars.add(s);
             }
         }
-        return new JkBuild.Build(orderAfter, embedSha, testWorkerJars);
+        // `lint` defaults on (surface deprecation/unchecked); `lint = false`
+        // suppresses jk's default javac lint flags for users who don't want it.
+        boolean lint = !Boolean.FALSE.equals(build.getBoolean("lint"));
+        return new JkBuild.Build(orderAfter, embedSha, testWorkerJars, lint);
     }
 
     private static final java.util.Set<String> PLUGIN_RESERVED =

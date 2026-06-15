@@ -29,6 +29,22 @@ public record CompileResult(boolean success, List<Diagnostic> diagnostics) {
             Objects.requireNonNull(message, "message");
         }
 
+        /**
+         * Location-prefixed message <em>without</em> the severity word
+         * ({@code src/Foo.java:12: ...}) — for surfacing through the console,
+         * which adds its own ✗/⚠ marker by severity. Use {@link #render()} when
+         * a standalone, self-describing line is wanted.
+         */
+        public String describe() {
+            StringBuilder sb = new StringBuilder();
+            if (source != null) {
+                sb.append(source);
+                if (line > 0) sb.append(':').append(line);
+                sb.append(": ");
+            }
+            return sb.append(message).toString();
+        }
+
         /** Human-friendly one-line form: {@code error: src/Foo.java:12: ...}. */
         public String render() {
             StringBuilder sb = new StringBuilder();
@@ -55,6 +71,17 @@ public record CompileResult(boolean success, List<Diagnostic> diagnostics) {
                 case WARNING, MANDATORY_WARNING -> WARNING;
                 case NOTE -> NOTE;
                 case OTHER -> OTHER;
+                default -> OTHER;
+            };
+        }
+
+        /** Map a {@code javax.tools.Diagnostic.Kind} name (worker NDJSON) to a severity. */
+        public static Severity fromName(String kind) {
+            if (kind == null) return OTHER;
+            return switch (kind) {
+                case "ERROR" -> ERROR;
+                case "WARNING", "MANDATORY_WARNING" -> WARNING;
+                case "NOTE" -> NOTE;
                 default -> OTHER;
             };
         }

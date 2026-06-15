@@ -91,6 +91,17 @@ class JkBuildParserTest {
     }
 
     @Test
+    void build_lint_defaults_on_and_can_be_disabled() {
+        assertThat(JkBuildParser.parse(PROJECT).build().lint()).isTrue();   // absent → on
+        JkBuild off = JkBuildParser.parse(PROJECT + """
+
+                [build]
+                lint = false
+                """);
+        assertThat(off.build().lint()).isFalse();
+    }
+
+    @Test
     void parses_build_test_worker_jars_as_order_after() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
 

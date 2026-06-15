@@ -273,7 +273,12 @@ public final class BuildPipeline {
                     warnCompositeVersionConflicts(ctx, in.dir(), project, in.cache());
 
                     Profile profile = CompileSupport.resolveProfile(project.profiles(), in.profileName());
-                    ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
+                    // Default lint (deprecation/unchecked) unless [build] lint = false;
+                    // the profile's own javac args win (appended after). Shared by the
+                    // main- and test-compile phases (both read JAVAC_ARGS).
+                    ctx.put(JAVAC_ARGS, dev.jkbuild.compile.JavacLint.effectiveArgs(
+                            project.build().lint(),
+                            profile == null ? List.of() : profile.javacArgs()));
                     ctx.put(CLASSPATH, mainCp);
 
                     // Annotation processors live in their own scope (kept off the

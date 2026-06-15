@@ -168,15 +168,19 @@ public final class CompileCommand implements CliCommand {
                             .classpath(javacCp)
                             .outputDir(scratch)
                             .release(release)
-                            .extraOptions(profile == null ? List.of() : profile.javacArgs())
+                            .extraOptions(dev.jkbuild.compile.JavacLint.effectiveArgs(
+                                    project.build().lint(),
+                                    profile == null ? List.of() : profile.javacArgs()))
                             .javaHome(javaHome)
                             .build();
                     CompileResult result = new JavacDriver().compile(request);
+                    // Surface diagnostics through the console by severity (it adds
+                    // the ✗/⚠ marker); never dump raw compiler text to stderr.
                     for (CompileResult.Diagnostic d : result.diagnostics()) {
-                        System.err.println(d.render());
+                        if (d.severity() == CompileResult.Severity.ERROR) ctx.error("javac", d.describe());
+                        else ctx.warn("javac", d.describe());
                     }
                     if (!result.success() || result.hasErrors()) {
-                        ctx.error("javac", "javac reported errors");
                         throw new RuntimeException("javac failed");
                     }
                     ctx.progress(1);
@@ -239,8 +243,9 @@ public final class CompileCommand implements CliCommand {
                                     .extraArgs(ktArgs)
                                     .build());
                     if (!result.success()) {
-                        System.err.print(result.output());
-                        ctx.error("kotlinc", "kotlinc reported errors");
+                        // Route the compiler's text through the console (it adds the
+                        // marker) rather than dumping raw to stderr.
+                        if (!result.output().isBlank()) ctx.error("kotlinc", result.output());
                         throw new RuntimeException("kotlinc failed");
                     }
                     ctx.progress(1);

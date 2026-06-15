@@ -64,11 +64,31 @@ public final class InProcessJavac {
      * @param generated  generated source file → the input source files it came from
      *                   (only source-resolvable originating elements are recorded)
      */
-    public record Result(boolean success, List<String> diagnostics,
+    public record Result(boolean success, List<Diag> diagnostics,
                          Map<Path, Set<Path>> generated) {
         public Result {
             diagnostics = List.copyOf(diagnostics);
         }
+    }
+
+    /**
+     * One javac diagnostic, ready for the parent to re-surface: {@code kind} is
+     * the {@code javax.tools.Diagnostic.Kind} name (severity); {@code message}
+     * already carries the {@code file:line:} location prefix so the parent
+     * doesn't need the structured coordinates over the wire.
+     */
+    public record Diag(String kind, String message) {}
+
+    /** {@code <file>:<line>: <message>} — location prefix included, severity omitted. */
+    private static String locatedMessage(Diagnostic<? extends JavaFileObject> d) {
+        StringBuilder sb = new StringBuilder();
+        JavaFileObject src = d.getSource();
+        if (src != null) {
+            sb.append(src.getName());
+            if (d.getLineNumber() != Diagnostic.NOPOS) sb.append(':').append(d.getLineNumber());
+            sb.append(": ");
+        }
+        return sb.append(d.getMessage(Locale.ROOT)).toString();
     }
 
     /**
@@ -103,10 +123,10 @@ public final class InProcessJavac {
             task.setProcessors(wrapped);
 
             boolean ok = task.call();
-            List<String> messages = new ArrayList<>();
+            List<Diag> messages = new ArrayList<>();
             boolean errors = false;
             for (Diagnostic<? extends JavaFileObject> d : diags.getDiagnostics()) {
-                messages.add(d.getKind() + ": " + d.getMessage(Locale.ROOT));
+                messages.add(new Diag(d.getKind().name(), locatedMessage(d)));
                 if (d.getKind() == Diagnostic.Kind.ERROR) errors = true;
             }
             return new Result(ok && !errors, messages, provenance.generated);

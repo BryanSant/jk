@@ -125,8 +125,13 @@ public final class ExplainCommand implements CliCommand {
         List<Path> classpath = new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
         int release = project.project().javaRelease();
         Path outputDir = BuildLayout.of(dir, project).classesDir();
+        // Must mirror the build's javac args (incl. the default lint flags) or the
+        // action key won't match what `jk build` cached — explain would always
+        // report MISS. (No --profile here, so just the lint default + nothing.)
         CompileRequest request = CompileRequest.builder()
-                .sources(sources).classpath(classpath).outputDir(outputDir).release(release).build();
+                .sources(sources).classpath(classpath).outputDir(outputDir).release(release)
+                .extraOptions(dev.jkbuild.compile.JavacLint.effectiveArgs(project.build().lint(), List.of()))
+                .build();
         String key = ActionKey.forJavac(ActionKey.qualifiedTaskId("compile-main", outputDir), request, Jk.VERSION);
         String status = actionCache.lookup(key).isPresent() ? "HIT" : "MISS";
         System.out.println("      compile-main: " + sources.size()

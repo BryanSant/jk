@@ -52,6 +52,32 @@ class JavacDriverTest {
     }
 
     @Test
+    void captures_deprecation_warning_with_severity(@TempDir Path tempDir) throws IOException {
+        // Uses a (non-removal) deprecated API; with -Xlint:deprecation javac emits
+        // a WARNING. The build still succeeds — warnings are surfaced, not fatal.
+        Path source = tempDir.resolve("UsesDeprecated.java");
+        Files.writeString(source, """
+                public class UsesDeprecated {
+                    @SuppressWarnings("unused")
+                    static int year() { return new java.util.Date().getYear(); }
+                }
+                """);
+
+        CompileResult result = new JavacDriver().compile(CompileRequest.builder()
+                .sources(List.of(source))
+                .outputDir(tempDir.resolve("out"))
+                .extraOptions(List.of("-Xlint:deprecation"))
+                .build());
+
+        assertThat(result.success()).isTrue();          // warnings don't fail the build
+        assertThat(result.hasErrors()).isFalse();
+        assertThat(result.diagnostics()).anySatisfy(d -> {
+            assertThat(d.severity()).isEqualTo(CompileResult.Severity.WARNING);
+            assertThat(d.describe()).doesNotStartWith("warning:");   // no severity prefix
+        });
+    }
+
+    @Test
     void check_mode_does_not_write_class_files(@TempDir Path tempDir) throws IOException {
         Path source = tempDir.resolve("Hello.java");
         Files.writeString(source, """

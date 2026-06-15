@@ -67,8 +67,9 @@ public final class JavaCompilerWorker implements Plugin {
                 spec.sources, spec.classpath, spec.classOutput, spec.sourceOutput,
                 spec.release, spec.args, processors);
 
-        for (String d : r.diagnostics()) {
-            out.emit("{\"t\":\"diag\",\"msg\":" + Ndjson.quote(d) + "}");
+        for (InProcessJavac.Diag d : r.diagnostics()) {
+            out.emit("{\"t\":\"diag\",\"sev\":" + Ndjson.quote(d.kind())
+                    + ",\"msg\":" + Ndjson.quote(d.message()) + "}");
         }
         for (Map.Entry<Path, Set<Path>> e : r.generated().entrySet()) {
             StringBuilder src = new StringBuilder("[");

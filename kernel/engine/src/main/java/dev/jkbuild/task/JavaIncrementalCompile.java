@@ -664,13 +664,9 @@ public final class JavaIncrementalCompile {
             WorkerJavac.Result wr = WorkerJavac.compile(new WorkerJavac.Request(
                     javaHome, workerJar, sources, classpath, processorPath,
                     outputDir, generatedSourceDir, release, options));
-            List<CompileResult.Diagnostic> diags = new ArrayList<>();
-            for (String m : wr.diagnostics()) {
-                diags.add(new CompileResult.Diagnostic(
-                        m.startsWith("ERROR") ? CompileResult.Severity.ERROR : CompileResult.Severity.OTHER,
-                        null, 0, 0, m));
-            }
-            return new CompileOut(new CompileResult(wr.success(), diags), wr.generated());
+            // The worker now returns structured diagnostics (severity + located
+            // message), so warnings carry the right severity and route to warn.
+            return new CompileOut(new CompileResult(wr.success(), wr.diagnostics()), wr.generated());
         };
     }
 

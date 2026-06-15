@@ -55,7 +55,11 @@ class CompileCommandTest {
         }
 
         assertThat(exit).isEqualTo(1);
-        assertThat(stderr.toString(StandardCharsets.UTF_8)).contains("error:");
+        // The compiler diagnostic is surfaced through jk's error channel (with its
+        // file:line + javac message), not dumped as raw compiler text.
+        assertThat(stderr.toString(StandardCharsets.UTF_8))
+                .contains("Broken.java")
+                .contains("reached end of file");
     }
 
     @Test

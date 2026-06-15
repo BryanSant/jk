@@ -158,8 +158,12 @@ public final class TestSupport {
         ctx.label(taskId + ": " + sources.size() + " sources");
         dev.jkbuild.task.JavaIncrementalCompile.Result r = dev.jkbuild.task.JavaIncrementalCompile.run(
                 cacheTaskId, request, JkVersion.VERSION, useCache, cas, actionCache, stateDir);
+        // Surface javac diagnostics by severity — errors fail, warnings (e.g.
+        // deprecation/unchecked) are shown but don't. Mirrors the main-compile
+        // phase so test sources report warnings the same way.
         for (CompileResult.Diagnostic d : r.diagnostics()) {
-            ctx.error("javac", d.render());
+            if (d.severity() == CompileResult.Severity.ERROR) ctx.error("javac", d.describe());
+            else ctx.warn("javac", d.describe());
         }
         if (!r.success()) return false;
         ctx.label(r.cacheHit()

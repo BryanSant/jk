@@ -33,7 +33,8 @@ public final class WorkerJavac {
     private WorkerJavac() {}
 
     /** @param generated generated source file → the input source file(s) it originated from */
-    public record Result(boolean success, List<String> diagnostics, Map<Path, Set<Path>> generated) {
+    public record Result(boolean success, List<CompileResult.Diagnostic> diagnostics,
+                         Map<Path, Set<Path>> generated) {
         public Result {
             diagnostics = List.copyOf(diagnostics);
         }
@@ -64,7 +65,7 @@ public final class WorkerJavac {
     private static Result run(Request req) throws IOException, InterruptedException {
         Path spec = writeSpec(req);
         try {
-            List<String> diagnostics = new ArrayList<>();
+            List<CompileResult.Diagnostic> diagnostics = new ArrayList<>();
             Map<Path, Set<Path>> generated = new TreeMap<>();
             String[] status = {null};
 
@@ -80,7 +81,9 @@ public final class WorkerJavac {
                 String t = Ndjson.str(json, "t");
                 if (t == null) return;
                 switch (t) {
-                    case "diag" -> diagnostics.add(Ndjson.str(json, "msg"));
+                    case "diag" -> diagnostics.add(new CompileResult.Diagnostic(
+                            CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
+                            null, 0, 0, Ndjson.str(json, "msg")));
                     case "prov" -> {
                         String genStr = Ndjson.str(json, "gen");
                         if (genStr == null) return;

@@ -403,14 +403,23 @@ public record JkBuild(
      * path. Also implicitly {@code orderAfter} (the worker must be built first).
      */
     public record Build(List<String> orderAfter, Map<String, String> embedSha,
-                        List<String> testWorkerJars) {
+                        List<String> testWorkerJars, boolean lint) {
 
-        public static final Build EMPTY = new Build(List.of(), Map.of(), List.of());
+        public static final Build EMPTY = new Build(List.of(), Map.of(), List.of(), true);
 
         public Build {
             orderAfter = orderAfter == null ? List.of() : List.copyOf(orderAfter);
             embedSha = embedSha == null ? Map.of() : Map.copyOf(embedSha);
             testWorkerJars = testWorkerJars == null ? List.of() : List.copyOf(testWorkerJars);
+        }
+
+        /**
+         * Back-compat constructor (pre-{@code lint}); defaults lint <b>on</b> so
+         * {@code jk build} surfaces javac deprecation/unchecked warnings. Set
+         * {@code [build] lint = false} in jk.toml to suppress that default.
+         */
+        public Build(List<String> orderAfter, Map<String, String> embedSha, List<String> testWorkerJars) {
+            this(orderAfter, embedSha, testWorkerJars, true);
         }
 
         /**
