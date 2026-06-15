@@ -110,6 +110,49 @@ class GitSourceResolutionTest {
     }
 
     @Test
+    void branch_git_dep_is_left_for_composite_not_materialized(@TempDir Path tmp) throws Exception {
+        // A branch is a moving target: prepare must leave it untouched (built on
+        // demand by CompositeDepResolver, never materialized or lock-pinned).
+        Path repoDir = tmp.resolve("lib");
+        Files.createDirectories(repoDir);
+        Files.writeString(repoDir.resolve("jk.toml"), """
+                [project]
+                group    = "com.acme"
+                name     = "widgets"
+                version  = "0.1.0"
+                jdk      = 25
+                java     = 25
+                """);
+        Path src = repoDir.resolve("src/main/java/acme/Widget.java");
+        Files.createDirectories(src.getParent());
+        Files.writeString(src, "package acme; public class Widget {}");
+        String branch;
+        try (Git git = Git.init().setDirectory(repoDir.toFile()).call()) {
+            git.add().addFilepattern(".").call();
+            git.commit().setMessage("v1").setAuthor("t", "t@e").setCommitter("t", "t@e").call();
+            branch = git.getRepository().getBranch();
+        }
+        String url = repoDir.toUri().toString();
+        GitSource branchLib = GitSource.of(url, url, new GitRefSpec.Branch(branch));
+
+        Cas cas = new Cas(tmp.resolve("cas"));
+        RepoGroup baseRepos = RepoGroup.of(new MavenRepo(
+                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+
+        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
+                consumer(branchLib), baseRepos, cas,
+                Path.of(System.getProperty("java.home")), "test");
+
+        // The branch dep passes through unchanged — still a git dep, not a pin.
+        List<Dependency> mainDeps = prep.project().dependencies().of(Scope.MAIN);
+        assertThat(mainDeps).hasSize(1);
+        assertThat(mainDeps.get(0).isGit()).isTrue();
+        // No file:// repo prepended and no provenance stamped.
+        assertThat(prep.repos().repos()).hasSize(baseRepos.repos().size());
+        assertThat(prep.gitInfoByKey()).isEmpty();
+    }
+
+    @Test
     void relocking_detects_a_force_moved_tag(@TempDir Path tmp) throws Exception {
         Path libDir = tmp.resolve("lib");
         GitSource lib = buildLibraryRepo(libDir);

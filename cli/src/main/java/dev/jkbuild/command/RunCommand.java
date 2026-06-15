@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.CompositeDepResolver;
 
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Theme;
@@ -235,6 +236,21 @@ public final class RunCommand implements CliCommand {
         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project,
                 EnumSet.of(Scope.MAIN, Scope.RUNTIME));
         classpath.addAll(siblings.jars());
+
+        // Composite (path + branch-git) source deps: their jars + runtime external
+        // deps (built during the build phase; reused here) belong on the run classpath.
+        if (CompositeDepResolver.has(project, EnumSet.of(Scope.MAIN, Scope.RUNTIME))) {
+            try {
+                CompositeDepResolver.Result composite = CompositeDepResolver.resolve(
+                        projectDir, project, EnumSet.of(Scope.MAIN, Scope.RUNTIME),
+                        ClasspathResolver.RUNTIME, cas, CompileToolchain.resolveJavaHome(projectDir),
+                        dev.jkbuild.util.JkVersion.VERSION, cacheDir().resolve("git"));
+                for (Path j : composite.jars())            if (!classpath.contains(j)) classpath.add(j);
+                for (Path j : composite.externalDepJars()) if (!classpath.contains(j)) classpath.add(j);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         return classpath;
     }
 

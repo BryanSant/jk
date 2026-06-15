@@ -262,6 +262,15 @@ public final class BuildPipeline {
                         } catch (Exception ignored) { /* best-effort */ }
                     }
 
+                    // Composite source deps (`path` + branch-git): build from source
+                    // and inject onto the main compile classpath (jk's includeBuild).
+                    List<String> mainComposite = addCompositeDeps(in.dir(), project, cas, in.cache(),
+                            Set.of(Scope.MAIN), ClasspathResolver.COMPILE_MAIN, mainCp);
+                    if (!mainComposite.isEmpty()) {
+                        for (String e : mainComposite) ctx.error("composite", e);
+                        throw new RuntimeException("composite dependency build failed");
+                    }
+
                     Profile profile = CompileSupport.resolveProfile(project.profiles(), in.profileName());
                     ctx.put(JAVAC_ARGS, profile == null ? List.of() : profile.javacArgs());
                     ctx.put(CLASSPATH, mainCp);
@@ -292,6 +301,15 @@ public final class BuildPipeline {
                                 if (!testRuntimeCp.contains(p)) testRuntimeCp.add(p);
                             }
                         } catch (Exception ignored) { /* best-effort */ }
+                    }
+                    // Composite deps on the test classpaths too (compile + runtime scopes).
+                    List<String> testComposite = addCompositeDeps(in.dir(), project, cas, in.cache(),
+                            Set.of(Scope.MAIN, Scope.TEST), ClasspathResolver.COMPILE_TEST, compileTestCp);
+                    addCompositeDeps(in.dir(), project, cas, in.cache(),
+                            Set.of(Scope.MAIN, Scope.TEST), ClasspathResolver.RUNTIME, testRuntimeCp);
+                    if (!testComposite.isEmpty()) {
+                        for (String e : testComposite) ctx.error("composite", e);
+                        throw new RuntimeException("composite dependency build failed");
                     }
                     ctx.put(COMPILE_TEST_CP, compileTestCp);
                     ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
@@ -962,6 +980,9 @@ public final class BuildPipeline {
                                 }
                             } catch (Exception ignored) { /* best-effort */ }
                         }
+                        // Composite (path + branch-git) deps must be bundled into the fat jar too.
+                        addCompositeDeps(layout.memberRoot(), project, new Cas(cache), cache,
+                                Set.of(Scope.MAIN), ClasspathResolver.RUNTIME, depJars);
                     }
                     new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
                             classes, depJars, shadowJar,
@@ -1064,6 +1085,9 @@ public final class BuildPipeline {
                                 }
                             } catch (Exception ignored) {}
                         }
+                        // Composite (path + branch-git) deps: native-image must see their classes.
+                        addCompositeDeps(dir, project, new Cas(cache), cache,
+                                Set.of(Scope.MAIN), ClasspathResolver.RUNTIME, classpath);
                     } catch (Exception ignored) {}
 
                     ctx.label("native-image " + out.getFileName());
@@ -1148,6 +1172,33 @@ public final class BuildPipeline {
             return CompileSupport.collectKotlinSources(in.dir(), compact).size();
         } catch (Exception ignored) {
             return 0;
+        }
+    }
+
+    /**
+     * Build the consumer's composite ({@code path} + branch-git) deps from source
+     * and add their main jars + external transitive deps to {@code cp} — jk's
+     * {@code includeBuild} analog ({@link CompositeDepResolver}). No-op (and no JDK
+     * resolution) when none are declared. {@code depScopes} selects which consumer
+     * scopes contribute composite deps; {@code externalCpScopes} is the scope set
+     * for each target's external deps. Returns failures (empty on success).
+     */
+    private static List<String> addCompositeDeps(Path consumerDir, JkBuild project, Cas cas, Path cache,
+            Set<Scope> depScopes, Set<Scope> externalCpScopes, List<Path> cp) {
+        if (!CompositeDepResolver.has(project, depScopes)) return List.of();
+        try {
+            Path javaHome = CompileToolchain.resolveJavaHome(consumerDir);
+            CompositeDepResolver.Result r = CompositeDepResolver.resolve(
+                    consumerDir, project, depScopes, externalCpScopes, cas, javaHome,
+                    dev.jkbuild.util.JkVersion.VERSION, cache.resolve("git"));
+            for (Path j : r.jars())            if (!cp.contains(j)) cp.add(j);
+            for (Path j : r.externalDepJars()) if (!cp.contains(j)) cp.add(j);
+            return r.errors();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return List.of("interrupted building composite dependencies");
+        } catch (IOException | RuntimeException e) {
+            return List.of("composite dependency build failed: " + e.getMessage());
         }
     }
 

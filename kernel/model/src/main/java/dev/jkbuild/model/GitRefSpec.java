@@ -24,6 +24,15 @@ public sealed interface GitRefSpec {
     /** Whether the spec is intrinsically reproducible (a full SHA). */
     default boolean isPin() { return false; }
 
+    /**
+     * Whether the spec names an effectively-immutable ref ({@link Tag} or
+     * {@link Rev}). Immutable git deps are materialized and pinned in
+     * {@code jk.lock} (a tag's stability is enforced by the tag-rewrite canary).
+     * A {@link Branch} is a moving target: it is built-from-source on demand and
+     * injected onto the classpath like a {@code path} dependency, never locked.
+     */
+    default boolean isImmutable() { return true; }
+
     record Tag(String name) implements GitRefSpec {
         public Tag { Objects.requireNonNull(name, "name"); }
         @Override public String token() { return "tag=" + name; }
@@ -32,6 +41,7 @@ public sealed interface GitRefSpec {
     record Branch(String name) implements GitRefSpec {
         public Branch { Objects.requireNonNull(name, "name"); }
         @Override public String token() { return "branch=" + name; }
+        @Override public boolean isImmutable() { return false; }
     }
 
     record Rev(String sha) implements GitRefSpec {

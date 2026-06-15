@@ -133,6 +133,28 @@ class GradleExporterTest {
     }
 
     @Test
+    void path_dependency_becomes_includeBuild_plus_coordinate() {
+        JkBuild b = parse("""
+                [project]
+                group = "com.example"
+                name  = "app"
+                version = "1.0.0"
+                java = 21
+
+                [dependencies.main]
+                shared = { group = "com.acme", name = "shared", path = "../shared" }
+                """);
+
+        GradleExporter.Result r = GradleExporter.export(b, Map.of());
+
+        // settings.gradle.kts wires the composite build...
+        assertThat(r.settings()).contains("includeBuild(\"../shared\")");
+        // ...and build.gradle.kts depends by coordinate (no version → Gradle substitutes).
+        assertThat(r.buildFiles().get("")).contains("implementation(\"com.acme:shared\")");
+        assertThat(r.buildFiles().get("")).doesNotContain("com.acme:shared:");
+    }
+
+    @Test
     void git_dependency_is_dropped_with_warning() {
         JkBuild b = parse("""
                 [project]
