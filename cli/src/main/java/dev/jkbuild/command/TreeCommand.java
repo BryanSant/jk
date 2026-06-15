@@ -57,7 +57,8 @@ public final class TreeCommand implements CliCommand {
 
         // Header line matching the wizard's gradient title.
         System.out.println(Theme.active().gradientHeaderAnsi("Jk - Project Tree"));
-        String rendered = DependencyTree.render(project, lock, max, styling());
+        // Composite-aware: walks path deps' own trees too (anchored at `dir`).
+        String rendered = DependencyTree.render(project, lock, dir, max, styling());
         System.out.print(rendered);
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();

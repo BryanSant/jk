@@ -1,11 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
+import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.GitRefSpec;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -96,6 +101,98 @@ public final class DependencyTree {
                     i == roots.size() - 1, "", styling, seen, out);
         }
         return out.toString();
+    }
+
+    /**
+     * Composite-aware render: walks the full graph including {@code path} (and
+     * <em>branch</em> git) dependencies, not just lockfile Maven coords.
+     * {@code projectDir} anchors {@code path} deps; each path target's own tree
+     * (its {@code jk.toml} + {@code jk.lock}) is recursed into. Branch git deps
+     * are annotated but not recursed (resolving them needs a clone). Immutable
+     * (tag/rev) git deps are materialized into the lock and render normally.
+     */
+    public static String render(JkBuild project, Lockfile lock, Path projectDir,
+                                int maxDepth, Styling styling) {
+        StringBuilder out = new StringBuilder();
+        out.append(formatCoord(project.project().group(), project.project().name(),
+                project.project().version(), styling)).append('\n');
+        renderComposite(project, lock, projectDir, 0, maxDepth, "", styling,
+                new HashSet<>(), new HashSet<>(), out);
+        return out.toString();
+    }
+
+    private static void renderComposite(
+            JkBuild project, Lockfile lock, Path dir, int depth, int maxDepth,
+            String prefix, Styling styling, Set<String> seenModules, Set<String> seenDirs,
+            StringBuilder out) {
+
+        Map<String, Lockfile.Artifact> byModule = indexByModule(lock);
+        Map<String, Dependency> composite = new HashMap<>();
+        for (Scope s : Scope.values()) {
+            for (Dependency d : project.dependencies().of(s)) {
+                if (d.isPath() || (d.isGit() && d.gitSource().ref() instanceof GitRefSpec.Branch)) {
+                    composite.putIfAbsent(d.module(), d);
+                }
+            }
+        }
+        List<String> roots = collectRoots(project);
+        for (int i = 0; i < roots.size(); i++) {
+            String module = roots.get(i);
+            boolean isLast = i == roots.size() - 1;
+            Dependency comp = composite.get(module);
+            if (comp == null) {
+                renderNode(byModule, module, depth, maxDepth, isLast, prefix, styling, seenModules, out);
+            } else if (comp.isPath()) {
+                renderPathNode(comp, module, dir, depth, maxDepth, isLast, prefix, styling,
+                        seenModules, seenDirs, out);
+            } else {
+                // branch git dep — annotate (no recursion; needs a clone).
+                String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
+                out.append(prefix).append(styling.rail().apply(isLast ? "╰── " : "├── "))
+                        .append(coordLabel(module, styling))
+                        .append(styling.rail().apply(" [git: " + ref + "]")).append('\n');
+            }
+        }
+    }
+
+    /** A path dep node, recursing into the target's own tree (its jk.toml + jk.lock). */
+    private static void renderPathNode(
+            Dependency dep, String module, Path consumerDir, int depth, int maxDepth,
+            boolean isLast, String prefix, Styling styling,
+            Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+
+        String connector = isLast ? "╰── " : "├── ";
+        Path targetDir = consumerDir == null ? null : consumerDir.resolve(dep.pathSource()).normalize();
+        boolean cycle = targetDir != null && !seenDirs.add(targetDir.toString());
+        Path lockPath = targetDir == null ? null : targetDir.resolve("jk.lock");
+        boolean built = lockPath != null && Files.isRegularFile(lockPath);
+        String tag = !built ? " [path, not built]" : " [path]";
+
+        out.append(prefix).append(styling.rail().apply(connector))
+                .append(coordLabel(module, styling))
+                .append(styling.rail().apply(tag))
+                .append(cycle ? " ⎋" : "").append('\n');
+
+        if (cycle || targetDir == null || !built || depth >= maxDepth) return;
+        JkBuild target;
+        Lockfile targetLock;
+        try {
+            target = JkBuildParser.parse(targetDir.resolve("jk.toml"));
+            targetLock = LockfileReader.read(lockPath);
+        } catch (Exception e) {
+            return; // unreadable target — stop descending
+        }
+        String childPrefix = prefix + styling.rail().apply(isLast ? "    " : "│   ");
+        renderComposite(target, targetLock, targetDir, depth + 1, maxDepth, childPrefix,
+                styling, seenModules, seenDirs, out);
+    }
+
+    /** {@code group:artifact} styled (no version — composite deps carry none here). */
+    private static String coordLabel(String module, Styling styling) {
+        int colon = module.indexOf(':');
+        String groupId = colon > 0 ? module.substring(0, colon) : module;
+        String artifactId = colon > 0 ? module.substring(colon + 1) : "";
+        return styling.group().apply(groupId) + ":" + styling.artifact().apply(artifactId);
     }
 
     private static void renderNode(

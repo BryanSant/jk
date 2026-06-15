@@ -69,6 +69,24 @@ class DependencyTreeTest {
         assertThat(rendered).contains("com.foo:not-locked (missing)");
     }
 
+    @Test
+    void composite_deps_are_annotated_not_missing(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) {
+        var deps = new ArrayList<Dependency>();
+        deps.add(Dependency.path("lib", "com.foo:lib", "../lib"));          // ../lib absent → not built
+        deps.add(Dependency.git("com.foo:forked", dev.jkbuild.model.GitSource.of(
+                "https://x/forked", "https://x/forked", new dev.jkbuild.model.GitRefSpec.Branch("main"))));
+        JkBuild project = new JkBuild(
+                new JkBuild.Project("com.example", "widget", "0.1.0", 0),
+                new JkBuild.Dependencies(Map.of(Scope.MAIN, deps)));
+
+        String rendered = DependencyTree.render(project, lockOf(), tmp,
+                Integer.MAX_VALUE, DependencyTree.Styling.plain());
+
+        assertThat(rendered).contains("com.foo:lib [path, not built]");
+        assertThat(rendered).contains("com.foo:forked [git: main]");
+        assertThat(rendered).doesNotContain("(missing)");   // composite deps aren't "missing"
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static JkBuild projectWithMainDeps(String... modules) {
