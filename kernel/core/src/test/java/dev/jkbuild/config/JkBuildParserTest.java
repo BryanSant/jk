@@ -903,6 +903,20 @@ class JkBuildParserTest {
     }
 
     @Test
+    void parses_optional_dependency_flag() {
+        JkBuild parsed = JkBuildParser.parse(PROJECT + """
+                [dependencies.main]
+                guava = { group = "com.google.guava", name = "guava", version = "33.0.0-jre", optional = true }
+                jackson-databind = { group = "com.fasterxml.jackson.core", version = "2.18.2" }
+                """);
+        var deps = parsed.dependencies().of(dev.jkbuild.model.Scope.MAIN);
+        assertThat(deps).filteredOn(d -> d.library().equals("guava"))
+                .singleElement().satisfies(d -> assertThat(d.optional()).isTrue());
+        assertThat(deps).filteredOn(d -> d.library().equals("jackson-databind"))
+                .singleElement().satisfies(d -> assertThat(d.optional()).isFalse());
+    }
+
+    @Test
     void parses_features_block_with_dep_names() {
         // Feature `deps` are now dep names (not coord strings). Resolution
         // happens at activation time, against [dependencies.*].

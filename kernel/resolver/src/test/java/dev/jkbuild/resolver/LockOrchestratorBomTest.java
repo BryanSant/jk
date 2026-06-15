@@ -6,7 +6,11 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.Feature;
+import dev.jkbuild.model.Features;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.Profiles;
+import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.MavenRepo;
@@ -191,6 +195,68 @@ class LockOrchestratorBomTest {
                 .filter(p -> p.name().equals("com.foo:proc"))
                 .findFirst().orElseThrow();   // would be absent if PROCESSOR were dropped in resolution
         assertThat(proc.scopes()).contains(Scope.PROCESSOR);
+    }
+
+    @Test
+    void optional_dep_is_withheld_until_a_feature_activates_it(@TempDir Path tempDir) throws Exception {
+        serveMetadata("/com/foo/core/maven-metadata.xml", "com.foo", "core", List.of("1.0"));
+        servePom("com.foo", "core", "1.0", leaf("core"));
+        serveMetadata("/com/foo/extra/maven-metadata.xml", "com.foo", "extra", List.of("1.0"));
+        servePom("com.foo", "extra", "1.0", leaf("extra"));
+
+        // `extra` is optional; the `with-extra` feature (a default) names it.
+        Dependency core = new Dependency("com.foo:core", VersionSelector.parseFloating("1.0"));
+        Dependency extra = new Dependency("com.foo:extra", VersionSelector.parseFloating("1.0"))
+                .withOptional(true);   // library = "extra"
+        Features features = new Features(
+                Map.of("with-extra", new Feature("with-extra", List.of("extra"), List.of())),
+                List.of("with-extra"));
+        JkBuild project = jkBuildWithFeatures(
+                new JkBuild.Dependencies(new EnumMap<>(Map.of(Scope.MAIN, List.of(core, extra)))),
+                features);
+
+        LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
+
+        // No features, no defaults → the optional dep stays out of the lock.
+        Lockfile withoutFeature = orchestrator.lock(project, "test", List.of(), false);
+        assertThat(modules(withoutFeature)).contains("com.foo:core").doesNotContain("com.foo:extra");
+
+        // Defaults on → the feature pulls the optional dep in.
+        Lockfile withFeature = orchestrator.lock(project, "test");
+        assertThat(modules(withFeature)).contains("com.foo:core", "com.foo:extra");
+    }
+
+    @Test
+    void feature_naming_a_non_optional_dep_is_an_error(@TempDir Path tempDir) {
+        // `core` is a normal (non-optional) dep; a feature referencing it is a
+        // config error — most likely a forgotten `optional = true`.
+        Dependency core = new Dependency("com.foo:core", VersionSelector.parseFloating("1.0"));
+        Features features = new Features(
+                Map.of("x", new Feature("x", List.of("core"), List.of())),
+                List.of("x"));
+        JkBuild project = jkBuildWithFeatures(
+                new JkBuild.Dependencies(new EnumMap<>(Map.of(Scope.MAIN, List.of(core)))),
+                features);
+
+        LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
+        assertThatThrownBy(() -> orchestrator.lock(project, "test"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("not a declared optional dependency");
+    }
+
+    private static JkBuild jkBuildWithFeatures(JkBuild.Dependencies deps, Features features) {
+        return new JkBuild(
+                new JkBuild.Project("com.example", "test", "0.1.0", 25),
+                deps, List.<RepositorySpec>of(), Profiles.empty(), features);
+    }
+
+    private static List<String> modules(Lockfile lock) {
+        return lock.artifacts().stream().map(Lockfile.Artifact::name).toList();
+    }
+
+    private static String leaf(String artifact) {
+        return "<project><groupId>com.foo</groupId><artifactId>" + artifact
+                + "</artifactId><version>1.0</version></project>";
     }
 
     private RepoGroup repoGroup(Path tempDir) {

@@ -58,23 +58,23 @@ public record Features(Map<String, Feature> byName, List<String> defaults) {
     }
 
     /**
-     * Translate the activated feature set into {@link Dependency}s suitable
-     * for adding to the main-scope resolution. Each feature dep coord is
-     * parsed as {@code group:artifact:version}.
+     * The dependency <em>names</em> (the {@code [dependencies.*]} short-name
+     * keys) requested by an activated feature set — the union of each feature's
+     * {@code deps}, in activation order. The resolver maps these to the declared
+     * {@code optional = true} dependencies and pulls them into the graph (see
+     * {@code LockOrchestrator}); a name that isn't a declared optional dep is an
+     * error there. Features carry names, not coords, so they inherit the full
+     * dependency grammar (git / path / workspace / catalog / selectors) for free.
      */
-    public List<Dependency> resolveDeps(Set<String> activated) {
-        List<Dependency> deps = new ArrayList<>();
+    public List<String> requestedDepNames(Set<String> activated) {
+        List<String> names = new ArrayList<>();
         for (String name : activated) {
             Feature feature = byName.get(name);
             if (feature == null) {
                 throw new IllegalArgumentException("unknown feature: " + name);
             }
-            for (String coord : feature.deps()) {
-                Coordinate parsed = Coordinate.parse(coord);
-                deps.add(new Dependency(parsed.module(),
-                        VersionSelector.parse(parsed.version())));
-            }
+            names.addAll(feature.deps());
         }
-        return deps;
+        return names;
     }
 }

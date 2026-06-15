@@ -16,7 +16,7 @@ class FeaturesTest {
     void empty_features_resolve_to_nothing() {
         Features features = Features.empty();
         assertThat(features.activate(Set.of(), true)).isEmpty();
-        assertThat(features.resolveDeps(Set.of())).isEmpty();
+        assertThat(features.requestedDepNames(Set.of())).isEmpty();
     }
 
     @Test
@@ -37,11 +37,11 @@ class FeaturesTest {
 
     @Test
     void nested_feature_activates_transitively() {
+        // Feature deps are dependency NAMES (the [dependencies.*] short-name
+        // keys), not coords — the resolver maps them to declared optional deps.
         Feature full = new Feature("full", List.of(), List.of("postgres", "jackson"));
-        Feature postgres = new Feature("postgres",
-                List.of("org.postgresql:postgresql:42.7.4"), List.of());
-        Feature jackson = new Feature("jackson",
-                List.of("com.fasterxml.jackson.core:jackson-databind:2.18.2"), List.of());
+        Feature postgres = new Feature("postgres", List.of("postgresql"), List.of());
+        Feature jackson = new Feature("jackson", List.of("jackson-databind"), List.of());
 
         Features features = new Features(
                 Map.of("full", full, "postgres", postgres, "jackson", jackson),
@@ -50,11 +50,8 @@ class FeaturesTest {
         Set<String> activated = features.activate(Set.of("full"), false);
         assertThat(activated).containsExactlyInAnyOrder("full", "postgres", "jackson");
 
-        List<Dependency> deps = features.resolveDeps(activated);
-        assertThat(deps).extracting(Dependency::module)
-                .containsExactlyInAnyOrder(
-                        "org.postgresql:postgresql",
-                        "com.fasterxml.jackson.core:jackson-databind");
+        assertThat(features.requestedDepNames(activated))
+                .containsExactlyInAnyOrder("postgresql", "jackson-databind");
     }
 
     @Test

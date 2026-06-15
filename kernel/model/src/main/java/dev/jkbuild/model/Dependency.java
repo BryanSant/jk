@@ -34,7 +34,8 @@ public record Dependency(
         GitSource gitSource,
         String pathSource,
         String sha256,
-        boolean pinned) {
+        boolean pinned,
+        boolean optional) {
 
     public Dependency {
         Objects.requireNonNull(library, "library");
@@ -55,6 +56,21 @@ public record Dependency(
         // value the caller passed. Source-backed deps are always pinned;
         // for coord deps, only an Exact selector pins.
         pinned = derivePinned(version, gitSource, pathSource, sha256);
+    }
+
+    /**
+     * Back-compat constructor for the pre-{@code optional} 7-arg shape — every
+     * existing factory and caller routes through here, defaulting to a
+     * non-optional (always-resolved) dependency.
+     */
+    public Dependency(String library, String module, VersionSelector version,
+                      GitSource gitSource, String pathSource, String sha256, boolean pinned) {
+        this(library, module, version, gitSource, pathSource, sha256, pinned, false);
+    }
+
+    /** A copy of this dependency flagged optional (feature-gated) or not. */
+    public Dependency withOptional(boolean optional) {
+        return new Dependency(library, module, version, gitSource, pathSource, sha256, pinned, optional);
     }
 
     /** Maven-coord constructor (no source override). Library defaults to artifactId. */

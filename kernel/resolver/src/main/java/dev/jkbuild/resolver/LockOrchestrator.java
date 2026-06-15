@@ -164,17 +164,31 @@ public final class LockOrchestrator {
 
         Set<String> activated = project.features().activate(
                 new LinkedHashSet<>(featuresRequested), withDefaults);
-        List<Dependency> featureDeps = project.features().resolveDeps(activated);
 
-        // Union of declared-scope roots + feature deps (deduped — declared wins).
+        // Declared-scope roots, deduped (declared wins). Optional deps are
+        // WITHHELD here — they enter only when an activated feature names them.
         LinkedHashMap<String, Dependency> deduped = new LinkedHashMap<>();
+        LinkedHashMap<String, Dependency> optionalByLib = new LinkedHashMap<>();
         for (Scope scope : SCOPES) {
             for (Dependency dep : project.dependencies().of(scope)) {
-                deduped.putIfAbsent(dep.module(), dep);
+                if (dep.optional()) {
+                    optionalByLib.putIfAbsent(dep.library(), dep);
+                } else {
+                    deduped.putIfAbsent(dep.module(), dep);
+                }
             }
         }
-        for (Dependency featureDep : featureDeps) {
-            deduped.putIfAbsent(featureDep.module(), featureDep);
+        // Pull in the optional deps named by the activated features (by their
+        // [dependencies.*] short name). A name that isn't a declared optional
+        // dep is a config error — most likely a missing `optional = true`.
+        for (String depName : project.features().requestedDepNames(activated)) {
+            Dependency opt = optionalByLib.get(depName);
+            if (opt == null) {
+                throw new IllegalArgumentException(
+                        "feature dependency '" + depName + "' is not a declared optional dependency"
+                        + " — declare it under [dependencies.*] with `optional = true`");
+            }
+            deduped.putIfAbsent(opt.module(), opt);
         }
         // Inject the test-runner's required JUnit Platform deps when the
         // project actually has test-scope deps declared — a strong signal
@@ -246,16 +260,15 @@ public final class LockOrchestrator {
         Resolution resolution = resolver.resolve(declared);
         observer.onTotal(resolution.modules().size() + fileDeps.size());
 
-        // For each scope, BFS the resolution graph from that scope's roots
-        // (feature deps act as additional main-scope roots).
+        // For each scope, BFS the resolution graph from that scope's roots.
+        // Feature-activated optional deps are declared under a scope too, so
+        // they're already covered here (and an un-activated optional dep simply
+        // isn't in the resolution graph, so it contributes nothing).
         Map<String, EnumSet<Scope>> tagsByModule = new HashMap<>();
         for (Scope scope : SCOPES) {
             Set<String> rootModules = new HashSet<>();
             for (Dependency d : project.dependencies().of(scope)) {
                 rootModules.add(d.module());
-            }
-            if (scope == Scope.MAIN) {
-                for (Dependency d : featureDeps) rootModules.add(d.module());
             }
             if (scope == Scope.TEST && injectTestPlatform) {
                 // The implicit JUnit deps seed the TEST scope when injection

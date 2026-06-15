@@ -493,6 +493,17 @@ public final class JkBuildParser {
     private static Dependency parseDepEntry(
             String name, TomlTable entry, Scope scope,
             Workspace workspace, LibraryCatalog catalog) {
+        // `optional = true` withholds the dep from the default resolution; a
+        // [features] entry pulls it in by name. Works with every dep form
+        // (coord / git / path / workspace / sha256) since it's applied to the
+        // parsed result regardless of source.
+        boolean optional = Boolean.TRUE.equals(entry.getBoolean("optional"));
+        return parseDepEntryForm(name, entry, scope, workspace, catalog).withOptional(optional);
+    }
+
+    private static Dependency parseDepEntryForm(
+            String name, TomlTable entry, Scope scope,
+            Workspace workspace, LibraryCatalog catalog) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
