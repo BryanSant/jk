@@ -140,6 +140,43 @@ class EffectivePomBuilderTest {
     }
 
     @Test
+    void inherits_scope_from_dependency_management_not_just_version(@TempDir Path tempDir) throws Exception {
+        // A dep declared with neither version NOR scope must inherit both from
+        // dependencyManagement — Maven semantics. This is what keeps a
+        // test-scoped managed dep (e.g. google-java-format's guava-testlib) off
+        // the compile classpath instead of leaking as the default compile scope.
+        registerPom("org.example", "child", "1.0", """
+                <project>
+                  <groupId>org.example</groupId>
+                  <artifactId>child</artifactId>
+                  <version>1.0</version>
+                  <dependencyManagement>
+                    <dependencies>
+                      <dependency>
+                        <groupId>com.google.guava</groupId>
+                        <artifactId>guava-testlib</artifactId>
+                        <version>32.1.3-jre</version>
+                        <scope>test</scope>
+                      </dependency>
+                    </dependencies>
+                  </dependencyManagement>
+                  <dependencies>
+                    <dependency>
+                      <groupId>com.google.guava</groupId>
+                      <artifactId>guava-testlib</artifactId>
+                    </dependency>
+                  </dependencies>
+                </project>
+                """);
+
+        EffectivePom pom = newBuilder(tempDir).build(Coordinate.of("org.example", "child", "1.0"));
+        assertThat(pom.dependencies()).singleElement().satisfies(d -> {
+            assertThat(d.version()).isEqualTo("32.1.3-jre");
+            assertThat(d.scope()).isEqualTo("test");   // not null/compile
+        });
+    }
+
+    @Test
     void expands_bom_import_into_managed_deps(@TempDir Path tempDir) throws Exception {
         registerPom("com.fasterxml.jackson", "jackson-bom", "2.18.2", """
                 <project>

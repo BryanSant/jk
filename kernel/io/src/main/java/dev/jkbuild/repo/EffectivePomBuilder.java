@@ -135,16 +135,19 @@ public final class EffectivePomBuilder {
         mergedDeps.addAll(child.dependencies());
         mergedDeps = dedupeByModule(mergedDeps);
 
-        // 5. Backfill versions from managed deps.
+        // 5. Apply dependencyManagement defaults. Maven fills in not just the
+        //    version but the scope / type / classifier / exclusions a dep leaves
+        //    unspecified — e.g. google-java-format declares guava-testlib with no
+        //    version OR scope, inheriting <scope>test</scope> from its parent's
+        //    management; backfilling only the version would leak it (and the
+        //    guava-android it drags in) onto the compile classpath.
         Map<String, Pom.Dep> managedByModule = new HashMap<>();
         for (Pom.Dep m : mergedManaged) managedByModule.put(m.module(), m);
         List<Pom.Dep> finalDeps = new ArrayList<>(mergedDeps.size());
         for (Pom.Dep dep : mergedDeps) {
-            if (dep.version() == null || dep.version().isBlank()) {
-                Pom.Dep managed = managedByModule.get(dep.module());
-                if (managed != null && managed.version() != null) {
-                    dep = withVersion(dep, managed.version());
-                }
+            Pom.Dep managed = managedByModule.get(dep.module());
+            if (managed != null) {
+                dep = applyManagedDefaults(dep, managed);
             }
             finalDeps.add(dep);
         }
@@ -184,10 +187,27 @@ public final class EffectivePomBuilder {
         return out;
     }
 
-    private static Pom.Dep withVersion(Pom.Dep dep, String version) {
+    /**
+     * Fill in the version / scope / type / classifier / exclusions a dependency
+     * leaves unspecified from its {@code dependencyManagement} entry (a declared
+     * value on the dependency itself always wins). Mirrors Maven: management
+     * supplies defaults for all of these, not just the version.
+     */
+    private static Pom.Dep applyManagedDefaults(Pom.Dep dep, Pom.Dep managed) {
+        String version = blank(dep.version()) ? managed.version() : dep.version();
+        String scope = blank(dep.scope()) ? managed.scope() : dep.scope();
+        String type = blank(dep.type()) ? managed.type() : dep.type();
+        String classifier = blank(dep.classifier()) ? managed.classifier() : dep.classifier();
+        List<Pom.Dep.Exclusion> exclusions =
+                (dep.exclusions() == null || dep.exclusions().isEmpty())
+                        ? managed.exclusions() : dep.exclusions();
         return new Pom.Dep(
                 dep.groupId(), dep.artifactId(), version,
-                dep.scope(), dep.optional(), dep.classifier(), dep.type(), dep.exclusions());
+                scope, dep.optional(), classifier, type, exclusions);
+    }
+
+    private static boolean blank(String s) {
+        return s == null || s.isBlank();
     }
 
     private static String substitute(String raw, Map<String, String> ctx) {
