@@ -23,6 +23,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * The {@code jk-formatter} worker: formats Java/Kotlin sources through the
@@ -75,6 +76,13 @@ public final class FormatPlugin implements Plugin {
             for (FileRef ref : spec.files) {
                 Formatter fmt = ref.kotlin ? kotlinFmt : javaFmt;
                 if (fmt == null) continue;   // no formatter for this language (shouldn't happen)
+                // Java 21+ unnamed classes (no type declaration) can't be parsed by
+                // palantir/google-java-format — skip them silently.
+                if (!ref.kotlin && isUnnamedClass(ref.file)) {
+                    clean++;
+                    emitFile(out, ref.file, "skipped", null);
+                    continue;
+                }
                 try {
                     DirtyState state = DirtyState.of(fmt, ref.file);
                     if (state.isClean()) {
@@ -145,6 +153,19 @@ public final class FormatPlugin implements Plugin {
         var opts = new KtfmtStep.KtfmtFormattingOptions();
         if (maxWidth > 0) opts.setMaxWidth(maxWidth);
         return opts;
+    }
+
+    // Matches any top-level type declaration (class/interface/enum/record/@interface).
+    private static final Pattern TYPE_DECL =
+            Pattern.compile("\\b(class|interface|enum|record)\\s+\\w|@interface\\s+\\w");
+
+    /** True if the file has no top-level type declaration (Java 21+ unnamed class). */
+    private static boolean isUnnamedClass(File file) throws java.io.IOException {
+        String src = Files.readString(file.toPath(), StandardCharsets.UTF_8);
+        // Strip line and block comments before checking for type declarations.
+        String stripped = src.replaceAll("//[^\n]*", "")
+                             .replaceAll("(?s)/\\*.*?\\*/", " ");
+        return !TYPE_DECL.matcher(stripped).find();
     }
 
     private record FileRef(boolean kotlin, File file) {}
