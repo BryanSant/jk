@@ -124,6 +124,11 @@ public final class IdeaCommand implements CliCommand {
             System.err.println("jk idea: " + e.getMessage());
             return 2;
         }
+        // Canonicalize wsRoot so paths from BuildGraph (which calls toRealPath) and
+        // workspace-loader paths are consistent — critical for correct relativize() on
+        // systems where the temp/project dir is reached via a symlink (e.g. macOS
+        // /var/folders → /private/var/folders).
+        try { wsRoot = wsRoot.toRealPath(); } catch (java.io.IOException ignored) {}
 
         Map<Path, JkBuild> members = rootBuild.isWorkspaceRoot()
                 ? WorkspaceLoader.loadMembers(wsRoot, rootBuild)

@@ -145,7 +145,7 @@ class JdkResolutionTest {
         String version = dirName.substring(dirName.indexOf('-') + 1);
         Files.writeString(home.resolve("release"),
                 "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
-        return home;
+        return home.toRealPath();
     }
 
     private static ReqBuilder req(Path projectDir) {

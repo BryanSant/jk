@@ -565,6 +565,7 @@ public final class BuildCommand implements CliCommand {
      * run when it's consumed as a source dependency).
      */
     private PreparedMember prepareMember(Path dir, boolean skipTests) {
+        try { dir = dir.toRealPath(); } catch (java.io.IOException ignored) {}
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) return null;
