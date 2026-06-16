@@ -900,23 +900,28 @@ public final class BuildPipeline {
                         String key = e.getKey();        // sha-resource basename, e.g. jk-kotlin-compiler
                         String member = e.getValue();   // workspace member name
                         Path jar = jarByMember.get(member);
+                        boolean built = jar != null && Files.exists(jar);
+                        var worker = dev.jkbuild.worker.WorkerJar.byArtifactId(key);
                         String sha;
-                        if (jar != null && Files.exists(jar)) {
+                        if (built) {
                             sha = dev.jkbuild.util.Hashing.sha256Hex(jar);
-                        } else {
+                        } else if (worker.isPresent()) {
                             // Not a built sibling. Gradle-only workers (kotlin-compiler,
                             // git-client, …) aren't jk members, so self-host by reusing the
                             // RUNNING jk's worker identity — the sha this jk was paired with.
-                            sha = dev.jkbuild.worker.WorkerJar.byArtifactId(key)
-                                    .map(dev.jkbuild.worker.WorkerJar::expectedShaOrNull).orElse(null);
-                        }
-                        if (sha == null) {
-                            if (jar == null) {
-                                ctx.error("embed-sha", "'" + member
-                                        + "' is not a workspace member or a known worker");
-                                throw new RuntimeException("embed-sha: unknown '" + member + "'");
+                            sha = worker.get().expectedShaOrNull();
+                            if (sha == null) {
+                                ctx.error("embed-sha", "worker '" + key + "' is known but its sha "
+                                        + "resource isn't bundled in this jk build — rebuild jk so its "
+                                        + "image includes META-INF/" + key + "-sha256.txt");
+                                throw new RuntimeException("embed-sha: missing worker sha for '" + key + "'");
                             }
-                            skipped++; continue;  // member exists but isn't built (scoped build)
+                        } else if (jar != null) {
+                            skipped++; continue;  // declared member, not built in this (scoped) run
+                        } else {
+                            ctx.error("embed-sha", "'" + member
+                                    + "' is not a workspace member or a known worker");
+                            throw new RuntimeException("embed-sha: unknown '" + member + "'");
                         }
                         Files.writeString(metaInf.resolve(key + "-sha256.txt"), sha);
                         written++;

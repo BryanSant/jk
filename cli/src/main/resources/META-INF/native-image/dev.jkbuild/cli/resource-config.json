@@ -4,7 +4,7 @@
       {"pattern": "activate/.*\\.sh"},
       {"pattern": "activate/.*\\.fish"},
       {"pattern": "activate/.*\\.ps1"},
-      {"pattern": "META-INF/jk-test-runner-sha256\\.txt"},
+      {"pattern": "META-INF/jk-.*-sha256\\.txt"},
       {"pattern": "dev/jkbuild/alias/aliases\\.toml"}
     ]
   }
