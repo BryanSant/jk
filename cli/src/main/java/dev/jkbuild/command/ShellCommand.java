@@ -42,6 +42,15 @@ public final class ShellCommand implements CliCommand {
 
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
+        // jk shell hands control to an interactive subshell. Without a terminal
+        // to attach it to (piped, scripted, CI, or running inside a jk worker
+        // whose stdin is a control pipe) the spawned shell would sit at its
+        // prompt forever and waitFor() would block. Fail fast instead.
+        if (System.console() == null) {
+            System.err.println("jk shell: requires an interactive terminal "
+                    + "(run it directly from your shell, not piped or scripted)");
+            return 2;
+        }
         Path jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         Path dir = new GlobalOptions().workingDir();
         var origPath = System.getenv().getOrDefault("PATH", "");
