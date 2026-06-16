@@ -133,10 +133,25 @@ public final class ActionCache {
      * before restoring.
      */
     public void restore(ActionRecord record, Path outputDir) throws IOException {
+        // Build-host freshness stamps (.jstamp/.kstamp/.test-stamp) live inside the
+        // classes tree but are NOT part of the cached compiled output — they're
+        // written by a *later* phase (write-stamp, run-tests) of the previous build.
+        // Preserve them across the clear+restore so a compile cache-hit/incremental
+        // restore doesn't wipe the stamp a later phase relies on. (run-tests' own
+        // key comparison remains the correctness gate; a stale stamp just won't match.)
+        Map<String, byte[]> stamps = new LinkedHashMap<>();
+        for (String f : new String[]{
+                FreshnessStamp.JAVA_STAMP, FreshnessStamp.KOTLIN_STAMP, TestStamp.FILE}) {
+            Path sp = outputDir.resolve(f);
+            if (Files.isRegularFile(sp)) stamps.put(f, Files.readAllBytes(sp));
+        }
         if (Files.exists(outputDir)) {
             deleteRecursively(outputDir);
         }
         Files.createDirectories(outputDir);
+        for (Map.Entry<String, byte[]> e : stamps.entrySet()) {
+            Files.write(outputDir.resolve(e.getKey()), e.getValue());
+        }
         AccessLedger ledger = AccessLedger.atDefaultPath();
         for (Map.Entry<String, String> entry : record.outputs().entrySet()) {
             Path target = outputDir.resolve(entry.getKey());
