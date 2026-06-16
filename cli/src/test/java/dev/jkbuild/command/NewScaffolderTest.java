@@ -42,16 +42,16 @@ class NewScaffolderTest {
     }
 
     @Test
-    void runnable_java_25_simple_is_a_compact_source_file(@TempDir Path tempDir) throws IOException {
-        // Default (simple) layout → unnamed package → a true compact source
-        // file: no package, no class, just the top-level instance main.
-        NewScaffolder.write(runnable(tempDir, NewInputs.Language.JAVA, "Main", 25, true));
+    void runnable_java_25_simple_places_main_in_package_subdir(@TempDir Path tempDir) throws IOException {
+        // Simple layout now puts Main.java under src/{pkg}/ with a package declaration
+        // and explicit class so the formatter and IDEA generator work correctly.
+        NewScaffolder.write(runnable(tempDir, NewInputs.Language.JAVA, "com.example.Main", 25, true));
 
-        var main = tempDir.resolve("src/Main.java");
+        var main = tempDir.resolve("src/com/example/Main.java");
         assertThat(main).exists();
         var body = Files.readString(main);
-        assertThat(body).doesNotContain("package ");
-        assertThat(body).doesNotContain("class ");
+        assertThat(body).contains("package com.example;");
+        assertThat(body).contains("class Main");
         assertThat(body).contains("void main()");
         assertThat(body).contains("IO.println(\"Hello, world!\")");
         assertThat(tempDir.resolve("src/main/java")).doesNotExist();

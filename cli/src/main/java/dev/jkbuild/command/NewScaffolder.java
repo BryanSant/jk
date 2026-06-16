@@ -129,12 +129,13 @@ public final class NewScaffolder {
         switch (inputs.lang()) {
             case JAVA -> {
                 if (inputs.isSimpleLayout()) {
-                    // Compact layout: no package, file lives at ./src/Main.java.
-                    var dir = inputs.directory().resolve("src");
+                    // Simple layout: package lives under ./src/{pkg}/ so the
+                    // formatter and IDEA generator see a proper package structure.
+                    var dir = inputs.directory().resolve("src/" + pkg.replace('.', '/'));
                     Files.createDirectories(dir);
                     // Gate on the compile target, not the toolchain.
                     var body = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN
-                            ? renderJavaInstanceMain("") : renderJavaTraditionalMain("");
+                            ? renderJavaInstanceMain(pkg) : renderJavaTraditionalMain(pkg);
                     Files.writeString(dir.resolve(MAIN_CLASS + ".java"), body, StandardCharsets.UTF_8);
                 } else {
                     var dir = inputs.directory().resolve("src/main/java/" + pkg.replace('.', '/'));
@@ -195,13 +196,9 @@ public final class NewScaffolder {
 
     /**
      * JEP 512 entry point (JDK 25+): a no-arg instance {@code main} with the
-     * implicit {@code IO}/{@code java.lang.System} imports.
-     *
-     * <p>With no package (the default "simple" layout) we emit a <em>compact
-     * source file</em> — no class declaration at all, just the top-level
-     * {@code void main()} — which lives in the unnamed package. A compact source
-     * file cannot declare a package, so when a package is present (traditional
-     * layout) we wrap the instance main in an explicit {@code class Main}.
+     * implicit {@code IO}/{@code java.lang.System} imports, wrapped in an explicit
+     * {@code class Main}. When {@code pkg} is empty the class is emitted without a
+     * package declaration (unnamed package / compact source file).
      */
     private static String renderJavaInstanceMain(String pkg) {
         if (pkg.isEmpty()) {
