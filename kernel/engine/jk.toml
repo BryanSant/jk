@@ -21,3 +21,19 @@ jgit                    = { group = "org.eclipse.jgit",   name = "org.eclipse.jg
 assertj-core            = { group = "org.assertj",        name = "assertj-core",            version = "3.27.7" }
 junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter",           version = "6.1.0" }
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }
+
+# Self-host: engine's tests fork jk's own worker jars. These workers are
+# Gradle-only (no jk.toml), so jk build can't build them as members — it reuses
+# the RUNNING jk's worker identity instead:
+#  - test-worker-jars: GitSource{Resolution,Materializer}Test fork the git-client
+#    worker, injected as -Djk.git-client.worker.jar (located from the running jk's
+#    CAS; requires it present via `jk sync` / `./gradlew :git-client:installLocalCas`).
+#  - embed-sha: KotlinWorkerSetupTest exercises the CAS-by-sha path, so it needs
+#    /META-INF/jk-kotlin-compiler-sha256.txt on the test classpath; embed-sha writes
+#    the running jk's paired sha. (kotlin stays OUT of test-worker-jars on purpose,
+#    so that test isn't short-circuited by a -D override.)
+[build]
+test-worker-jars = ["git-client"]
+
+[build.embed-sha]
+"jk-kotlin-compiler" = "kotlin-compiler"

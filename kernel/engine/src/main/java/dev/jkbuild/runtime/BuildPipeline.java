@@ -897,15 +897,28 @@ public final class BuildPipeline {
                     int written = 0;
                     int skipped = 0;
                     for (Map.Entry<String, String> e : embed.entrySet()) {
-                        Path jar = jarByMember.get(e.getValue());
-                        if (jar == null) {
-                            ctx.error("embed-sha", "'" + e.getValue()
-                                    + "' is not a workspace member");
-                            throw new RuntimeException("embed-sha: unknown member '" + e.getValue() + "'");
+                        String key = e.getKey();        // sha-resource basename, e.g. jk-kotlin-compiler
+                        String member = e.getValue();   // workspace member name
+                        Path jar = jarByMember.get(member);
+                        String sha;
+                        if (jar != null && Files.exists(jar)) {
+                            sha = dev.jkbuild.util.Hashing.sha256Hex(jar);
+                        } else {
+                            // Not a built sibling. Gradle-only workers (kotlin-compiler,
+                            // git-client, …) aren't jk members, so self-host by reusing the
+                            // RUNNING jk's worker identity — the sha this jk was paired with.
+                            sha = dev.jkbuild.worker.WorkerJar.byArtifactId(key)
+                                    .map(dev.jkbuild.worker.WorkerJar::expectedShaOrNull).orElse(null);
                         }
-                        if (!Files.exists(jar)) { skipped++; continue; }  // not built (scoped build)
-                        Files.writeString(metaInf.resolve(e.getKey() + "-sha256.txt"),
-                                dev.jkbuild.util.Hashing.sha256Hex(jar));
+                        if (sha == null) {
+                            if (jar == null) {
+                                ctx.error("embed-sha", "'" + member
+                                        + "' is not a workspace member or a known worker");
+                                throw new RuntimeException("embed-sha: unknown '" + member + "'");
+                            }
+                            skipped++; continue;  // member exists but isn't built (scoped build)
+                        }
+                        Files.writeString(metaInf.resolve(key + "-sha256.txt"), sha);
                         written++;
                     }
                     ctx.label(skipped == 0
@@ -1386,16 +1399,17 @@ public final class BuildPipeline {
         Map<String, String> props = new LinkedHashMap<>();
         if (members.isEmpty()) return props;
         Map<String, Path> jarByMember = siblingMainJars(moduleDir);
-        Map<String, String> propByMember = new LinkedHashMap<>();
-        for (dev.jkbuild.worker.WorkerJar w : dev.jkbuild.worker.WorkerJar.values()) {
-            String a = w.artifactId();
-            propByMember.put(a.startsWith("jk-") ? a.substring("jk-".length()) : a, w.jarProperty());
-        }
         for (String member : members) {
-            String prop = propByMember.get(member);
+            var wj = dev.jkbuild.worker.WorkerJar.byArtifactId("jk-" + member);
+            if (wj.isEmpty()) continue;
             Path jar = jarByMember.get(member);
-            if (prop != null && jar != null && Files.exists(jar)) {
-                props.put(prop, jar.toAbsolutePath().toString());
+            if (jar != null && Files.exists(jar)) {
+                props.put(wj.get().jarProperty(), jar.toAbsolutePath().toString());
+            } else {
+                // Not a built sibling — self-host by reusing the running jk's worker
+                // jar (located via its sha resource + CAS, or a -D override).
+                Path located = wj.get().locateOrNull(new dev.jkbuild.cache.Cas(dev.jkbuild.util.JkDirs.cache()));
+                if (located != null) props.put(wj.get().jarProperty(), located.toString());
             }
         }
         return props;

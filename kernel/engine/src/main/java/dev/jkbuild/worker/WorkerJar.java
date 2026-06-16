@@ -118,4 +118,21 @@ public enum WorkerJar {
     public Path locate() {
         return locate(new Cas(JkDirs.cache()));
     }
+
+    /** As {@link #locate(Cas)} but {@code null} (not throwing) when the worker can't be located. */
+    public Path locateOrNull(Cas cas) {
+        try {
+            return locate(cas);
+        } catch (RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** The worker whose {@code artifactId} (e.g. {@code jk-git-client}) matches, if any. */
+    public static java.util.Optional<WorkerJar> byArtifactId(String artifactId) {
+        for (WorkerJar w : values()) {
+            if (w.artifactId.equals(artifactId)) return java.util.Optional.of(w);
+        }
+        return java.util.Optional.empty();
+    }
 }
