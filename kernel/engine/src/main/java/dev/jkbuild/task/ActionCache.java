@@ -165,6 +165,47 @@ public final class ActionCache {
         }
     }
 
+    /**
+     * Restore recorded outputs by hard-linking them into {@code baseDir} WITHOUT
+     * clearing it first — for single/few-file artifact tasks (jars, fat-jars,
+     * native binaries) whose output dir ({@code target/}) holds unrelated files.
+     * Overwrites a stale artifact already at the path. Returns {@code false}
+     * (restoring nothing) if any cached blob is missing, so the caller rebuilds.
+     */
+    public boolean restoreArtifacts(ActionRecord record, Path baseDir) throws IOException {
+        if (record.outputs().isEmpty()) return false;
+        for (String sha : record.outputs().values()) {
+            if (!Files.isRegularFile(cas.pathFor(sha))) return false;
+        }
+        AccessLedger ledger = AccessLedger.atDefaultPath();
+        for (Map.Entry<String, String> e : record.outputs().entrySet()) {
+            Path target = baseDir.resolve(e.getKey());
+            Files.createDirectories(target.getParent());
+            Files.deleteIfExists(target);
+            Linking.linkOrCopy(cas.pathFor(e.getValue()), target);
+            ledger.touch(e.getValue());
+        }
+        return true;
+    }
+
+    /**
+     * CAS-store already-produced {@code artifacts} (hard-linking each into the
+     * CAS) and write an {@link ActionRecord} keyed by {@code actionKey}, with
+     * each artifact's {@code baseDir}-relative path as its output key. The
+     * companion of {@link #restoreArtifacts} for single/few-file packaging.
+     */
+    public ActionRecord storeArtifacts(String taskId, String actionKey, Map<String, String> inputs,
+                                       Path baseDir, List<Path> artifacts) throws IOException {
+        Map<String, String> outputs = new TreeMap<>();
+        for (Path a : artifacts) {
+            if (!Files.isRegularFile(a)) continue;
+            String hex = Hashing.sha256Hex(a);
+            cas.putByLink(a, hex);
+            outputs.put(baseDir.relativize(a).toString().replace(File.separatorChar, '/'), hex);
+        }
+        return storeWithOutputs(taskId, actionKey, inputs, outputs);
+    }
+
     // --- record + serialization --------------------------------------------
 
     public record ActionRecord(

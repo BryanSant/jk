@@ -765,15 +765,30 @@ public final class BuildPipeline {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path jarPath = layout.mainJar();
                     Files.createDirectories(jarPath.getParent());
+                    String mainClass = project.project().main();
+                    // Packaging cache: the jar is a pure function of the main classes
+                    // (resources already copied in), the main-class, and the manifest.
+                    List<String> tokens = List.of(
+                            "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
+                            "main:" + (mainClass == null ? "" : mainClass),
+                            "manifest:" + project.manifest());
+                    String pkgTask = ActionKey.qualifiedTaskId("package-jar", jarPath);
+                    String pkgKey = ActionKey.forArtifact(pkgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
+                    if (restorePackaged(in.cache(), pkgKey, jarPath.getParent())) {
+                        ctx.put(JAR_PATH, jarPath);
+                        ctx.label(jarPath.getFileName() + " up-to-date");
+                        ctx.progress(1);
+                        return;
+                    }
                     ctx.label("package " + jarPath.getFileName());
                     JarPackager.JarRequest jarRequest =
                             JarPackager.JarRequest.of(classes, jarPath);
-                    String mainClass = project.project().main();
                     if (mainClass != null && !mainClass.isBlank())
                         jarRequest = jarRequest.withMainClass(mainClass);
                     if (!project.manifest().isEmpty())
                         jarRequest = jarRequest.withAttributes(project.manifest());
                     new JarPackager().packageJar(jarRequest);
+                    storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), List.of(jarPath));
                     ctx.put(JAR_PATH, jarPath);
                     ctx.progress(1);
                 })
@@ -1001,7 +1016,6 @@ public final class BuildPipeline {
                     BuildLayout layout = ctx.require(LAYOUT);
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path shadowJar = layout.shadowJar();
-                    ctx.label("package " + shadowJar.getFileName());
                     List<Path> depJars = new ArrayList<>();
                     if (Files.exists(lockFile)) {
                         ClasspathResolver resolver = new ClasspathResolver(new Cas(cache));
@@ -1028,9 +1042,26 @@ public final class BuildPipeline {
                         addCompositeDeps(layout.memberRoot(), project, new Cas(cache), cache,
                                 Set.of(Scope.MAIN), ClasspathResolver.RUNTIME, depJars);
                     }
+                    // Packaging cache: the fat jar is a pure function of the main
+                    // classes, the bundled dependency jars' content, the main-class,
+                    // and the manifest.
+                    List<String> tokens = List.of(
+                            "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
+                            "deps:" + dev.jkbuild.task.ClasspathFingerprint.of(depJars),
+                            "main:" + (project.project().main() == null ? "" : project.project().main()),
+                            "manifest:" + project.manifest());
+                    String shTask = ActionKey.qualifiedTaskId("package-shadow", shadowJar);
+                    String shKey = ActionKey.forArtifact(shTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
+                    if (restorePackaged(cache, shKey, shadowJar.getParent())) {
+                        ctx.label(shadowJar.getFileName() + " up-to-date");
+                        ctx.progress(1);
+                        return;
+                    }
+                    ctx.label("package " + shadowJar.getFileName());
                     new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
                             classes, depJars, shadowJar,
                             project.project().main(), project.manifest(), 0L));
+                    storePackaged(cache, shTask, shKey, tokens, shadowJar.getParent(), List.of(shadowJar));
                     ctx.progress(1);
                 })
                 .build();
@@ -1134,6 +1165,27 @@ public final class BuildPipeline {
                                 Set.of(Scope.MAIN), ClasspathResolver.RUNTIME, classpath);
                     } catch (Exception ignored) {}
 
+                    // Packaging cache (executable only): the binary is a pure function of
+                    // the runtime classpath, the build args, the main class, and the GraalVM
+                    // toolchain. Shared libraries (+ generated C headers) aren't cached yet.
+                    Path releaseFile = javaHome.resolve("release");
+                    String graalTok = Files.isRegularFile(releaseFile)
+                            ? dev.jkbuild.util.Hashing.sha256Hex(releaseFile) : javaHome.toString();
+                    List<String> nativeTokens = List.of(
+                            "cp:" + dev.jkbuild.task.ClasspathFingerprint.of(classpath),
+                            "args:" + String.join(" ", allArgs),
+                            "main:" + (mainClass == null ? "" : mainClass),
+                            "shared:" + shared,
+                            "out:" + out.getFileName(),
+                            "graal:" + graalTok);
+                    String nTask = ActionKey.qualifiedTaskId("native-image", out);
+                    String nKey = ActionKey.forArtifact(nTask, dev.jkbuild.util.JkVersion.VERSION, nativeTokens);
+                    if (!shared && restorePackaged(cache, nKey, out.getParent())) {
+                        ctx.label(out.getFileName() + " up-to-date");
+                        ctx.progress(1);
+                        return;
+                    }
+
                     ctx.label("native-image " + out.getFileName());
 
                     // Progress listener: parse [N/M] headers from native-image stdout.
@@ -1168,6 +1220,9 @@ public final class BuildPipeline {
                     // Final tick: completes the last native-image step (or the only tick
                     // when no progress headers were emitted).
                     ctx.progress(1);
+                    if (!shared) {
+                        storePackaged(cache, nTask, nKey, nativeTokens, out.getParent(), List.of(out));
+                    }
                 })
                 .build();
     }
@@ -1399,6 +1454,27 @@ public final class BuildPipeline {
      * for fat workers) jar is silently skipped. Member name → property comes from the
      * {@link dev.jkbuild.worker.WorkerJar} registry (artifactId is {@code jk-<member>}).
      */
+    /**
+     * Packaging cache (mirrors the compile {@link ActionCache} path, for artifacts).
+     * Returns {@code true} when a cached artifact for {@code key} was hard-linked
+     * back into {@code baseDir} — the caller then skips the (re)packaging work.
+     * Honors {@code --no-cache}.
+     */
+    private static boolean restorePackaged(Path cacheRoot, String key, Path baseDir) throws IOException {
+        if (dev.jkbuild.config.ActiveConfig.get().noCacheOr(false)) return false;
+        ActionCache ac = new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"));
+        var hit = ac.lookup(key);
+        return hit.isPresent() && ac.restoreArtifacts(hit.get(), baseDir);
+    }
+
+    /** Record a freshly-produced packaging artifact so a later build can skip it. */
+    private static void storePackaged(Path cacheRoot, String taskId, String key, List<String> tokens,
+                                      Path baseDir, List<Path> artifacts) throws IOException {
+        if (dev.jkbuild.config.ActiveConfig.get().noCacheOr(false)) return;
+        new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"))
+                .storeArtifacts(taskId, key, Map.of("inputs", String.join(";", tokens)), baseDir, artifacts);
+    }
+
     private static Map<String, String> workerJarProps(Path moduleDir, List<String> members)
             throws IOException {
         Map<String, String> props = new LinkedHashMap<>();

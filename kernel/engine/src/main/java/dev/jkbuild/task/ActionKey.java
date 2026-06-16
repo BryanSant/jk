@@ -106,6 +106,24 @@ public final class ActionKey {
         return Hashing.sha256Hex(sb.toString());
     }
 
+    /**
+     * Action key for a packaging artifact (jar, fat-jar, native binary, OCI
+     * tarball, …). A stable hash of the task id, jk version, and a set of
+     * pre-computed input tokens — typically {@link ClasspathFingerprint} hashes
+     * of the input classes/jars plus config strings (main-class, manifest, build
+     * args, toolchain version, …). The caller MUST include every input that
+     * affects the produced bytes; a missing token risks serving a stale artifact.
+     */
+    public static String forArtifact(String taskId, String jkVersion, List<String> inputTokens) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("task:").append(taskId).append('\n');
+        sb.append("jk:").append(jkVersion).append('\n');
+        List<String> sorted = new ArrayList<>(inputTokens);
+        sorted.sort(Comparator.naturalOrder());
+        for (String t : sorted) sb.append("in:").append(t).append('\n');
+        return Hashing.sha256Hex(sb.toString());
+    }
+
     /** Snapshot of inputs that produced an action — for {@code jk why-rebuilt} diffs. */
     public static Map<String, String> snapshotInputs(CompileRequest request) throws IOException {
         Map<String, String> result = new LinkedHashMap<>();
