@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
@@ -118,7 +119,7 @@ public final class FormatCommand implements CliCommand {
 
         Path spec = writeSpec(check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars);
         try {
-            return forkWorker(cas, spec, !javaFiles.isEmpty(), check, global, startMs);
+            return forkWorker(cas, spec, !javaFiles.isEmpty(), check, global, startMs, projectDir);
         } finally {
             Files.deleteIfExists(spec);
         }
@@ -159,7 +160,7 @@ public final class FormatCommand implements CliCommand {
     }
 
     private int forkWorker(Cas cas, Path spec, boolean hasJava, boolean check, GlobalOptions global,
-                           long startMs)
+                           long startMs, Path projectDir)
             throws IOException, InterruptedException {
         Path workerJar = WorkerJar.FORMATTER.locate(cas);
         Path javaExe = CompileToolchain.runningJavaHome().resolve("bin")
@@ -180,7 +181,9 @@ public final class FormatCommand implements CliCommand {
                 if ("changed".equals(status)) {
                     counts[0]++;
                     if (!global.outputIsJson()) {
-                        System.out.println((check ? "  would format  " : "  formatted  ") + path);
+                        String mark = Theme.colorize("✓", Theme.active().success());
+                        String rel  = Theme.colorize(PathDisplay.of(Path.of(path), projectDir), Theme.active().highlight());
+                        System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
                     }
                 } else if ("error".equals(status)) {
                     counts[2]++;
