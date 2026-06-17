@@ -367,32 +367,28 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * A finished unit's scroll-back line: {@code ✓ [kk/NN] group:artifact (1.3s)}.
+     * A finished unit's scroll-back line: {@code ✓ [01/16] group:artifact took 16ms}.
      * No leading indent (it's complete, not active); the numerator is zero-padded
      * to the denominator's width; the duration is normalized like every other jk
-     * duration ({@link ConsoleSpec#fmtDuration}); and the colors match the rest of
-     * the view — green check / red cross, bright-black brackets·slash·parens, the
-     * count {@code settled}, and the {@code group:artifact} themed exactly like the
-     * active rows and the bar's {@code [N of M]} (via {@link CommandManager#coloredMember}).
+     * duration ({@link ConsoleSpec#took}). The only color is the green check at
+     * the start and the bright-black {@code took …} at the end — the {@code [k/N]}
+     * count is plain and the {@code group:artifact} is plain with a strikethrough
+     * to mark it done. A failed unit keeps the red cross and {@code — failed}.
      */
     private static String completionLine(boolean ok, int index, int total, String coord, long millis) {
         var th = Theme.active();
-        var dim = th.darkGray();
         String mark = Theme.colorize(ok ? "✓" : "✗", ok ? th.success() : th.error());
         String num = String.format("%0" + Integer.toString(total).length() + "d", index);
         StringBuilder sb = new StringBuilder();
         sb.append(mark).append(' ')
-                .append(Theme.colorize("[", dim))
-                .append(Theme.colorize(num, th.settled()))
-                .append(Theme.colorize("/", dim))
-                .append(Theme.colorize(Integer.toString(total), th.settled()))
-                .append(Theme.colorize("]", dim))
-                .append(' ').append(CommandManager.coloredMember(coord));
+                .append('[').append(num).append('/').append(total).append(']')
+                .append(' ');
         if (ok) {
-            sb.append(' ').append(Theme.colorize(
-                    "(" + ConsoleSpec.fmtDuration(java.time.Duration.ofMillis(millis)) + ")", dim));
+            sb.append(Theme.colorize(coord, th.plainWhite().crossedOut()))
+                    .append(' ').append(ConsoleSpec.took(java.time.Duration.ofMillis(millis)));
         } else {
-            sb.append(' ').append(Theme.colorize("— failed", th.error()));
+            sb.append(CommandManager.coloredMember(coord))
+                    .append(' ').append(Theme.colorize("— failed", th.error()));
         }
         return sb.toString();
     }
