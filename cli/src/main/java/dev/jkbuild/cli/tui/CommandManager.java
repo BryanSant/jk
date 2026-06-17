@@ -464,7 +464,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /** {@code group:artifact} → cyan group + bright-cyan artifact; plain if no colon. */
-    private static String coloredMember(String member) {
+    public static String coloredMember(String member) {
         int colon = member.indexOf(':');
         if (colon < 0) return Theme.colorize(member, Theme.active().settled());
         return Theme.colorize(member.substring(0, colon), Theme.active().cyan())

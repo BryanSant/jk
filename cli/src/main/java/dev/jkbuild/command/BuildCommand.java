@@ -326,13 +326,9 @@ public final class BuildCommand implements CliCommand {
         }
         long ms = (System.nanoTime() - t0) / 1_000_000;
         int k = completed.incrementAndGet();
-        Theme t = Theme.active();
-        String mark = ok ? Theme.colorize("✓", t.success()) : Theme.colorize("✗", t.error());
-        String line = "  " + mark + " [" + k + "/" + total + "] " + unit.coord()
-                + (ok ? " (" + ms + "ms)" : " — failed");
         StringBuilder block = new StringBuilder();
         synchronized (buf) { for (String l : buf) block.append(l).append('\n'); }
-        block.append(line);
+        block.append(completionLine(ok, k, total, unit.coord(), ms));
         view.writeAbove(block.toString());
         return new UnitOutcome(unit.coord(), ok, exit, ms, List.of());
     }
@@ -366,12 +362,39 @@ public final class BuildCommand implements CliCommand {
         if (global.outputIsJson()) return;
         synchronized (OUT_LOCK) {
             for (String line : o.output()) System.out.println(line);
-            Theme t = Theme.active();
-            String mark = o.success()
-                    ? Theme.colorize("✓", t.success()) : Theme.colorize("✗", t.error());
-            System.out.println("  " + mark + " [" + k + "/" + total + "] " + o.coord()
-                    + (o.success() ? " (" + o.millis() + "ms)" : " — failed"));
+            System.out.println(completionLine(o.success(), k, total, o.coord(), o.millis()));
         }
+    }
+
+    /**
+     * A finished unit's scroll-back line: {@code ✓ [kk/NN] group:artifact (1.3s)}.
+     * No leading indent (it's complete, not active); the numerator is zero-padded
+     * to the denominator's width; the duration is normalized like every other jk
+     * duration ({@link ConsoleSpec#fmtDuration}); and the colors match the rest of
+     * the view — green check / red cross, bright-black brackets·slash·parens, the
+     * count {@code settled}, and the {@code group:artifact} themed exactly like the
+     * active rows and the bar's {@code [N of M]} (via {@link CommandManager#coloredMember}).
+     */
+    private static String completionLine(boolean ok, int index, int total, String coord, long millis) {
+        var th = Theme.active();
+        var dim = th.darkGray();
+        String mark = Theme.colorize(ok ? "✓" : "✗", ok ? th.success() : th.error());
+        String num = String.format("%0" + Integer.toString(total).length() + "d", index);
+        StringBuilder sb = new StringBuilder();
+        sb.append(mark).append(' ')
+                .append(Theme.colorize("[", dim))
+                .append(Theme.colorize(num, th.settled()))
+                .append(Theme.colorize("/", dim))
+                .append(Theme.colorize(Integer.toString(total), th.settled()))
+                .append(Theme.colorize("]", dim))
+                .append(' ').append(CommandManager.coloredMember(coord));
+        if (ok) {
+            sb.append(' ').append(Theme.colorize(
+                    "(" + ConsoleSpec.fmtDuration(java.time.Duration.ofMillis(millis)) + ")", dim));
+        } else {
+            sb.append(' ').append(Theme.colorize("— failed", th.error()));
+        }
+        return sb.toString();
     }
 
     /**
