@@ -36,6 +36,14 @@ public final class JdkLts {
     public static final int OFFLINE_LATEST_LTS = 25;
 
     /**
+     * The newest GA major as of this jk build, LTS or not — the offline source
+     * of truth for "latest stable". When the newest GA <em>is</em> an LTS this
+     * equals {@link #OFFLINE_LATEST_LTS}; otherwise it is the non-LTS cutting
+     * edge (e.g. 26 while 25 is the current LTS). Bump when a new GA ships.
+     */
+    public static final int OFFLINE_LATEST_STABLE = 26;
+
+    /**
      * Is {@code major} an LTS release per Oracle's post-2021 cadence?
      * Does not check whether the major has actually shipped — combine
      * with {@link #latestLtsIn} for that.

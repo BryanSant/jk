@@ -869,11 +869,15 @@ public final class NewCommand implements CliCommand {
         // release newer than the toolchain). Members inherit the parent's
         // release, and when a global default JDK is set we adopt its major, so
         // both skip this question. Kotlin projects skip it too.
-        var javaVersion = WizardStep.RadioStep.horizontal("javaVersion", "Java Language Version:")
-                .choice("25", "25")
-                .choice("21", "21")
-                .choice("17", "17")
-                .defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
+        // LTS versions from the latest down to 17, then the latest stable if it's
+        // a non-LTS cutting-edge release (e.g. 26 while 25 is the current LTS).
+        var jvb = WizardStep.RadioStep.horizontal("javaVersion", "Java Language Version:");
+        for (int v = LATEST_LTS_MAJOR; v >= dev.jkbuild.jdk.SupportedJdk.MIN_MAJOR; v--) {
+            if (dev.jkbuild.jdk.JdkLts.isLtsMajor(v)) jvb = jvb.choice(String.valueOf(v), String.valueOf(v));
+        }
+        int latestStable = dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_STABLE;
+        if (latestStable > LATEST_LTS_MAJOR) jvb = jvb.choice(String.valueOf(latestStable), String.valueOf(latestStable));
+        var javaVersion = jvb.defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
                 .when(a -> "java".equals(a.get("lang")) && !member && !hasDefaultJdk)
                 .build();
 
