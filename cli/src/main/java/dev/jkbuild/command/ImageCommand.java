@@ -130,6 +130,36 @@ public final class ImageCommand implements CliCommand {
                     List<Path> depJars = (List<Path>) ctx.require(DEP_JARS);
 
                     String chosen = mainClass != null ? mainClass : config.mainClass();
+
+                    // Packaging cache — tarball only. A registry push is a network
+                    // side-effect (the remote's state is unknown), so it's never skipped.
+                    // The tarball is a pure function of the main jar, the dependency jars,
+                    // the main class, the image config, and the image-builder worker version.
+                    dev.jkbuild.task.ActionCache ac =
+                            new dev.jkbuild.task.ActionCache(new Cas(cache), cache.resolve("actions"));
+                    boolean useCache = tarballPath != null
+                            && !dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    String imgTask = null, imgKey = null;
+                    if (tarballPath != null) {
+                        List<String> tokens = List.of(
+                                "mainjar:" + dev.jkbuild.task.ClasspathFingerprint.entry(layout.mainJar()),
+                                "deps:" + dev.jkbuild.task.ClasspathFingerprint.of(depJars),
+                                "main:" + chosen,
+                                "cfg:" + imageConfigToken(config),
+                                "worker:" + WorkerJar.IMAGE_BUILDER.expectedShaOrNull());
+                        imgTask = dev.jkbuild.task.ActionKey.qualifiedTaskId("write-image", tarballPath);
+                        imgKey = dev.jkbuild.task.ActionKey.forArtifact(
+                                imgTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
+                        if (useCache) {
+                            var hit = ac.lookup(imgKey);
+                            if (hit.isPresent() && ac.restoreArtifacts(hit.get(), tarballPath.getParent())) {
+                                ctx.put(IMAGE_REF, "");
+                                ctx.label(tarballPath.getFileName() + " up-to-date");
+                                ctx.progress(1);
+                                return;
+                            }
+                        }
+                    }
                     ctx.label(tarballPath != null
                             ? "write OCI tarball " + tarballPath.getFileName()
                             : "push to " + config.targetReference(
@@ -141,6 +171,10 @@ public final class ImageCommand implements CliCommand {
                     } catch (RuntimeException e) {
                         ctx.error("image", e.getMessage());
                         throw e;
+                    }
+                    if (useCache) {
+                        ac.storeArtifacts(imgTask, imgKey, Map.of(),
+                                tarballPath.getParent(), List.of(tarballPath));
                     }
                     ctx.progress(1);
                 })
@@ -179,6 +213,20 @@ public final class ImageCommand implements CliCommand {
             }
         }
         return 0;
+    }
+
+    /** Stable serialization of the image config for the packaging cache key. */
+    private static String imageConfigToken(ImageConfig c) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("base=").append(c.base()).append(';');
+        sb.append("user=").append(c.user()).append(';');
+        sb.append("registry=").append(c.registry()).append(';');
+        sb.append("tag=").append(c.tag()).append(';');
+        sb.append("ports=").append(new java.util.TreeSet<>(c.ports())).append(';');
+        sb.append("env=").append(new java.util.TreeMap<>(c.env())).append(';');
+        sb.append("labels=").append(new java.util.TreeMap<>(c.labels())).append(';');
+        sb.append("platforms=").append(new java.util.ArrayList<>(c.platforms())).append(';');
+        return sb.toString();
     }
 
     private String runImageWorker(Path cache, JkBuild project, BuildLayout layout,
