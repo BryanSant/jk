@@ -31,6 +31,17 @@ public final class PathDisplay {
      * @param workingDir the command's working directory (see {@link GlobalOptions#workingDir()});
      *                   may be {@code null} to use the JVM cwd
      */
+    /**
+     * Display {@code target} relative to the closest anchor, using the JVM
+     * working directory as the "working dir" anchor. Convenient for static
+     * helpers with no {@link GlobalOptions} in scope — the workspace-root and
+     * git-root anchors don't depend on the working dir, so a path inside the
+     * project still renders relative regardless.
+     */
+    public static String of(Path target) {
+        return of(target, null);
+    }
+
     public static String of(Path target, Path workingDir) {
         Path abs = target.toAbsolutePath().normalize();
         Path anchor = closestAnchor(abs, workingDir);

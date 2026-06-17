@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
@@ -59,11 +60,11 @@ public final class ImportCommand implements CliCommand {
                         + " (looked for build.gradle.kts, build.gradle, pom.xml).");
                 return 66;
             }
-            System.out.println("Importing " + baseDir.relativize(source));
+            System.out.println("Importing " + PathDisplay.of(source, baseDir));
         } else {
             source = source.isAbsolute() ? source : baseDir.resolve(source);
             if (!Files.exists(source)) {
-                System.err.println("jk import: source not found: " + source);
+                System.err.println("jk import: source not found: " + PathDisplay.of(source, baseDir));
                 return 66;
             }
         }
@@ -78,7 +79,7 @@ public final class ImportCommand implements CliCommand {
         Path projectDir = source.toAbsolutePath().getParent();
         Path target = out != null ? out : projectDir.resolve("jk.toml");
         if (Files.exists(target) && !force) {
-            System.err.println("jk import: refusing to overwrite " + target + " (use --force).");
+            System.err.println("jk import: refusing to overwrite " + PathDisplay.of(target, baseDir) + " (use --force).");
             return 73;
         }
 

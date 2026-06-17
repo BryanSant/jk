@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.compat.ImportReport;
 import dev.jkbuild.config.JkBuildParser;
@@ -107,7 +108,7 @@ final class ExportSupport {
     /** True if it's safe to write {@code target} (doesn't exist, or {@code force}); else prints + false. */
     static boolean canWrite(Path target, boolean force, String cmd) {
         if (Files.exists(target) && !force) {
-            System.err.println(cmd + ": refusing to overwrite " + target + " (use --force).");
+            System.err.println(cmd + ": refusing to overwrite " + PathDisplay.of(target) + " (use --force).");
             return false;
         }
         return true;
@@ -126,6 +127,6 @@ final class ExportSupport {
     }
 
     static void wrote(Path path) {
-        System.out.println(Theme.colorize("✓", Theme.active().success()) + " Wrote " + path);
+        System.out.println(Theme.colorize("✓", Theme.active().success()) + " Wrote " + PathDisplay.of(path));
     }
 }

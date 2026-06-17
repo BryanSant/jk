@@ -6,6 +6,7 @@ import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.runtime.CompositeLocator;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.ConsoleSpec;
@@ -182,7 +183,7 @@ public final class RunCommand implements CliCommand {
             // Native binary — "native binary: target/myapp"
             Path bin = Path.of(command.get(0));
             exec = "native binary: "
-                    + Theme.colorize(relativeTo(projectDir, bin), t.warning());
+                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.warning());
         } else {
             // JVM — derive jdk leaf, resolving symlinks so "current" shows the real spec.
             Path javaExe = Path.of(command.get(0));
@@ -196,14 +197,14 @@ public final class RunCommand implements CliCommand {
             if ("-jar".equals(flag)) {
                 // Shadow jar — full relative path, no classpath noise.
                 Path jar = Path.of(command.get(2));
-                javaCmd = "java -jar " + relativeTo(projectDir, jar);
+                javaCmd = "java -jar " + PathDisplay.of(jar, projectDir);
             } else {
                 // Plain jar + classpath — elide the full cp, show project jar.
                 String cpArg = command.size() >= 3 ? command.get(2) : "";
                 String pathSep = System.getProperty("path.separator");
                 String first = cpArg.contains(pathSep)
                         ? cpArg.substring(0, cpArg.indexOf(pathSep)) : cpArg;
-                javaCmd = "java -cp … " + relativeTo(projectDir, Path.of(first));
+                javaCmd = "java -cp … " + PathDisplay.of(Path.of(first), projectDir);
             }
             exec = "(" + jdkLeaf + "): " + Theme.colorize(javaCmd, t.warning());
         }
@@ -211,13 +212,6 @@ public final class RunCommand implements CliCommand {
         System.err.println();
     }
 
-    private static String relativeTo(Path base, Path target) {
-        try {
-            return base.relativize(target.toAbsolutePath()).toString();
-        } catch (IllegalArgumentException ignored) {
-            return target.getFileName() != null ? target.getFileName().toString() : target.toString();
-        }
-    }
 
     private List<Path> assembleRuntimeClasspath(Path projectDir, JkBuild project, Path projectJar)
             throws IOException {

@@ -7,6 +7,7 @@ import dev.jkbuild.runtime.CompositeLocator;
 import dev.jkbuild.compile.ClasspathResolver;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.theme.Coords;
 
 import dev.jkbuild.cache.Cas;
@@ -193,7 +194,7 @@ public final class InstallCommand implements CliCommand {
      */
     private int installFromFile(Path filePath) throws IOException {
         if (!Files.exists(filePath)) {
-            System.err.println("jk install: " + filePath + ": no such file");
+            System.err.println("jk install: " + PathDisplay.of(filePath) + ": no such file");
             return 2;
         }
 
