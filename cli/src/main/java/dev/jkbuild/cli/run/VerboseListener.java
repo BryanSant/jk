@@ -61,7 +61,7 @@ public final class VerboseListener implements GoalListener {
             default      -> "·";
         };
         out.println("  " + glyph + " " + phase + "  "
-                + Theme.colorize(fmtDuration(duration), Theme.active().darkGray()));
+                + Theme.colorize(ConsoleSpec.fmtDuration(duration), Theme.active().darkGray()));
     }
 
     @Override
@@ -86,12 +86,6 @@ public final class VerboseListener implements GoalListener {
         String summary = result.success()
                 ? Theme.colorize("✓ done", Theme.active().completedStep())
                 : Theme.colorize("𝘅 failed", Theme.active().error());
-        out.println(summary + " (" + fmtDuration(result.duration()) + ")");
-    }
-
-    private static String fmtDuration(Duration d) {
-        long ms = d.toMillis();
-        if (ms < 1000) return ms + "ms";
-        return String.format("%.2fs", ms / 1000.0);
+        out.println(summary + " (" + ConsoleSpec.fmtDuration(result.duration()) + ")");
     }
 }

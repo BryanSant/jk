@@ -3,6 +3,8 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.run.ConsoleSpec;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.JkBuild;
@@ -24,6 +26,7 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
@@ -73,6 +76,7 @@ public final class FormatCommand implements CliCommand {
 
     @Override
     public int run(Invocation in) throws IOException, InterruptedException {
+        long startMs = System.currentTimeMillis();
         GlobalOptions global = GlobalOptions.from(in);
         boolean check = in.isSet("check");
         Path projectDir = global.workingDir();
@@ -114,7 +118,7 @@ public final class FormatCommand implements CliCommand {
 
         Path spec = writeSpec(check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars);
         try {
-            return forkWorker(cas, spec, !javaFiles.isEmpty(), check, global);
+            return forkWorker(cas, spec, !javaFiles.isEmpty(), check, global, startMs);
         } finally {
             Files.deleteIfExists(spec);
         }
@@ -154,7 +158,8 @@ public final class FormatCommand implements CliCommand {
                 .reduce((a, b) -> a + File.pathSeparator + b).orElse("");
     }
 
-    private int forkWorker(Cas cas, Path spec, boolean hasJava, boolean check, GlobalOptions global)
+    private int forkWorker(Cas cas, Path spec, boolean hasJava, boolean check, GlobalOptions global,
+                           long startMs)
             throws IOException, InterruptedException {
         Path workerJar = WorkerJar.FORMATTER.locate(cas);
         Path javaExe = CompileToolchain.runningJavaHome().resolve("bin")
@@ -187,9 +192,14 @@ public final class FormatCommand implements CliCommand {
         }, line -> { if (global.verbose) System.err.println("  [formatter] " + line); });
 
         if (!global.outputIsJson()) {
-            System.out.println("jk format: " + counts[0] + (check ? " to format" : " formatted")
-                    + ", " + counts[1] + " already clean"
-                    + (counts[2] > 0 ? ", " + counts[2] + " errors" : ""));
+            String check_ = Theme.colorize("✓", Theme.active().success());
+            String verb   = Theme.colorize(check ? "Checked" : "Formatted", Theme.active().focused());
+            String body   = check
+                    ? counts[0] + " to format, " + counts[1] + " already clean"
+                    : counts[0] + " file" + (counts[0] == 1 ? "" : "s") + ", " + counts[1] + " already clean";
+            if (counts[2] > 0) body += ", " + counts[2] + " error" + (counts[2] == 1 ? "" : "s");
+            String inTime = ConsoleSpec.inTime(Duration.ofMillis(System.currentTimeMillis() - startMs));
+            System.out.println(check_ + " " + verb + " " + body + " " + inTime);
         }
         return exit;
     }

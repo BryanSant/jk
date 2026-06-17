@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.config.JkBuildParser;
@@ -17,6 +18,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -97,7 +99,7 @@ public final class CleanCommand implements CliCommand {
             String stats_  = String.format("%,d file%s, %s total",
                     stats[0], stats[0] == 1 ? "" : "s",
                     CacheCommand.fmtBytes(stats[1]));
-            String inTime  = Theme.colorize("in " + fmtMs(elapsedMs), Theme.active().darkGray());
+            String inTime  = ConsoleSpec.inTime(Duration.ofMillis(elapsedMs));
             System.out.println(check + " " + removed + " " + stats_ + " " + inTime);
         }
 
@@ -173,8 +175,4 @@ public final class CleanCommand implements CliCommand {
         }
     }
 
-    private static String fmtMs(long ms) {
-        if (ms < 1000) return ms + "ms";
-        return String.format("%.2fs", ms / 1000.0);
-    }
 }
