@@ -49,6 +49,34 @@ class AggregateMemberListenerTest {
         assertThat(all).doesNotContain("g:api");
     }
 
+    @Test
+    void concurrent_members_sum_into_the_bar_and_each_shows_a_tree_row() {
+        var buf = new ByteArrayOutputStream();
+        CommandManager view = CommandManager.goal(
+                new PrintStream(buf, true, StandardCharsets.UTF_8), "Building", false);
+        var agg = new AggregateContext(view);
+        agg.calibrate(20);   // two members, slice 10 each
+
+        // Both members running at the same time (neither finished), each half-done.
+        var a = new AggregateMemberListener(agg, "g:api", List.of(phase("compile", "Compile")), 10);
+        a.goalStart(new GoalView("build", 0, 10, 1, 0, false));
+        a.phaseStart("compile", 10);
+        a.progress("compile", 5, new GoalView("build", 5, 10, 1, 0, false));
+
+        var b = new AggregateMemberListener(agg, "g:web", List.of(phase("test", "Test")), 10);
+        b.goalStart(new GoalView("build", 0, 10, 1, 0, false));
+        b.phaseStart("test", 10);
+        b.progress("test", 5, new GoalView("build", 5, 10, 1, 0, false));
+
+        // Aggregate = 5 (A) + 5 (B) of 20 → 50%, and both running rows render as a
+        // tree (├─ for the first active member, ╰─ to close).
+        String all = String.join("\n",
+                view.renderGoalLines(120, 0).stream().map(AggregateMemberListenerTest::strip).toList());
+        assertThat(all).contains("50%").contains("[10 of 20]");
+        assertThat(all).contains("g:api › Compile").contains("g:web › Test");
+        assertThat(all).contains("├─").contains("╰─");
+    }
+
     private static Phase phase(String name, String label) {
         return Phase.builder(name).label(label).scope(1).execute(ctx -> {}).build();
     }

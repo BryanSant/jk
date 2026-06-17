@@ -37,6 +37,19 @@ public final class AggregateMemberListener implements GoalListener {
 
     private long lastDenominator;
 
+    /**
+     * When non-null, this member's process output + warnings are appended here
+     * instead of being written above the live region as they arrive. Parallel
+     * builds set this so concurrent members' output never interleaves — the
+     * caller flushes the whole block (above the region) when the member finishes.
+     */
+    private java.util.List<String> outBuffer;
+
+    /** Route this member's output into {@code buffer} (parallel build); see field doc. */
+    public void bufferOutputInto(java.util.List<String> buffer) {
+        this.outBuffer = buffer;
+    }
+
     public AggregateMemberListener(AggregateContext agg, String member, List<Phase> phases) {
         this(agg, member, phases, 0);
     }
@@ -71,16 +84,25 @@ public final class AggregateMemberListener implements GoalListener {
 
     @Override
     public void output(String phase, String line) {
-        cm.writeAbove(line);
+        emit(line);
     }
 
     @Override
     public void warn(String phase, String code, String message) {
         // Surface warnings (e.g. javac deprecation) above the shared bar as they
         // arrive — same rendering as the single-project ProgressBarListener.
-        cm.writeAbove(ProgressBarListener.renderDiagnostic(
+        emit(ProgressBarListener.renderDiagnostic(
                 "⚠ Warning", dev.jkbuild.cli.theme.Theme.active().warning().bold(),
                 phase, code, message));
+    }
+
+    /** Buffer (parallel) or write-above-now (serial), per {@link #bufferOutputInto}. */
+    private void emit(String line) {
+        if (outBuffer != null) {
+            synchronized (outBuffer) { outBuffer.add(line); }
+        } else {
+            cm.writeAbove(line);
+        }
     }
 
     @Override
@@ -103,11 +125,12 @@ public final class AggregateMemberListener implements GoalListener {
         if (!result.success()) {
             agg.notifyErrors(result.errors());
         }
-        // Calibrated: advance the base by exactly the slice we reserved in `total`,
-        // so the next member starts precisely where this one's slice ended — Σ
-        // slices == total, no boundary drift. Uncalibrated: fold the live final
+        // Calibrated: advance the base by exactly the slice we reserved in `total`
+        // and drop this member's running contribution — Σ slices == total, no
+        // boundary drift, no double-count. Uncalibrated: fold the live final
         // denominator (the pre-fix growing behaviour).
-        agg.completeMember(agg.total() > 0 ? slice : lastDenominator);
+        if (agg.total() > 0) agg.completeMember(member, slice);
+        else agg.completeMember(lastDenominator);
     }
 
     private void push(GoalView view) {
@@ -116,13 +139,13 @@ public final class AggregateMemberListener implements GoalListener {
         long total = agg.total();
         if (total > 0) {
             // Calibrated: scale this member's own 0→100% into its fixed slice and
-            // clamp to it. The numerator is monotonic within the member and can
-            // never exceed base + slice ≤ total, so the bar neither backtracks at
-            // the member boundary nor stretches the denominator past the up-front
-            // estimate. The denominator stays pinned to `total` for the whole run.
+            // report it through the aggregate, which sums every running member's
+            // contribution onto completedBase. Monotonic within the member and
+            // clamped to total, so the bar neither backtracks at a member boundary
+            // nor stretches the denominator past the up-front estimate — and
+            // concurrent members add up instead of clobbering each other.
             long advanced = Math.round(view.fraction() * slice);
-            long num = Math.min(base + advanced, total);
-            cm.progress(num, total);
+            agg.memberProgress(member, advanced);
         } else {
             // Uncalibrated caller (slice 0): fall back to live ticks against a
             // denominator that grows as members start.

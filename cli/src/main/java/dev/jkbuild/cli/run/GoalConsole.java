@@ -215,6 +215,25 @@ public final class GoalConsole {
         return goal.run();
     }
 
+    /**
+     * As {@link #runGoalInto(Goal, Path, String, AggregateContext, long)} but for a
+     * member built <em>concurrently</em>: its process output is appended to
+     * {@code outBuffer} instead of being written above the live region as it
+     * arrives, so parallel members' logs never interleave. The caller flushes the
+     * buffer (above the shared region) when the member completes. Phase/progress
+     * events still feed the shared aggregate view live (the running rows + bar).
+     */
+    public static GoalResult runGoalIntoBuffered(Goal goal, Path cacheRoot, String member,
+                                                 AggregateContext agg, long slice,
+                                                 java.util.List<String> outBuffer) {
+        EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
+        if (log != null) goal.addListener(log);
+        AggregateMemberListener lis = new AggregateMemberListener(agg, member, goal.phases(), slice);
+        lis.bufferOutputInto(outBuffer);
+        goal.addListener(lis);
+        return goal.run();
+    }
+
     /** True when stdout is an interactive terminal (not a pipe, dumb, or CI). */
     public static boolean isInteractiveTerminal() {
         return System.console() != null

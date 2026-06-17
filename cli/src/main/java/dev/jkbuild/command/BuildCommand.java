@@ -188,16 +188,24 @@ public final class BuildCommand implements CliCommand {
             System.out.println("(workspace declares no members)");
             return 0;
         }
-        Map<Path, Set<Path>> edges = graph.edges();
+        // --output json / --verbose keep the buffered, non-live path (NDJSON streams
+        // / full per-phase logs); AUTO/QUIET get the live aggregate view (a single
+        // spinner header + bar + a tree of the members building right now).
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+        return (mode == GoalConsole.Mode.AUTO || mode == GoalConsole.Mode.QUIET)
+                ? runGraphLive(units, graph.edges(), mode)
+                : runGraphPlain(units, graph.edges());
+    }
+
+    /** Buffered, append-only scheduler: each unit flushes a block + a [k/N] line on completion. */
+    private int runGraphPlain(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges) {
         Set<Path> unitDirs = new java.util.HashSet<>();
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
-
         Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
         List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
         int total = units.size();
         int completed = 0;
         long start = System.nanoTime();
-
         while (!remaining.isEmpty()) {
             List<BuildGraph.BuildUnit> ready = remaining.stream()
                     .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
@@ -223,6 +231,110 @@ public final class BuildCommand implements CliCommand {
                 + " Build Successful: built " + total + " module" + (total == 1 ? "" : "s")
                 + " " + elapsedSince(start));
         return 0;
+    }
+
+    /**
+     * Live aggregate scheduler: one {@link CommandManager} (goal mode) shows a
+     * spinner header + a single bar calibrated to the whole graph + a tree of the
+     * members building <em>right now</em>; the tree grows to the parallelism limit
+     * and shrinks back to 0 as units drain. Each unit's process output is buffered
+     * and flushed (with a ✓/✗ {@code [k/N]} line) above the region when it
+     * completes — so concurrent logs never interleave. On a non-interactive
+     * terminal nothing animates; the same blocks + lines print append-only.
+     */
+    private int runGraphLive(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges,
+                             GoalConsole.Mode mode) throws Exception {
+        Set<Path> unitDirs = new java.util.HashSet<>();
+        for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
+        boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
+        CommandManager view = CommandManager.goal(System.out, "Build", animate);
+        AggregateContext agg = new AggregateContext(view);
+        long start = System.nanoTime();
+        int total = units.size();
+
+        // Pre-scan: prepare every unit's goal and sum its estimated weight so the
+        // bar calibrates to the whole-graph total and advances 0→100% across it.
+        Map<Path, PreparedMember> prepared = new LinkedHashMap<>();
+        long totalWeight = 0;
+        for (BuildGraph.BuildUnit u : units) {
+            PreparedMember pm = prepareMember(u.dir(), u.isDependency() || buildOpts.skipTests);
+            if (pm == null) {
+                view.finishFailure("No jk.toml in " + u.dir() + " " + elapsedSince(start));
+                return 2;
+            }
+            prepared.put(u.dir(), pm);
+            totalWeight += pm.barWeight();
+        }
+        agg.calibrate(totalWeight);
+
+        Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
+        List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
+        java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
+        while (!remaining.isEmpty()) {
+            List<BuildGraph.BuildUnit> ready = remaining.stream()
+                    .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
+                            .filter(unitDirs::contains).allMatch(done::contains))
+                    .toList();
+            List<java.util.concurrent.CompletableFuture<UnitOutcome>> futures = new ArrayList<>();
+            for (BuildGraph.BuildUnit u : ready) {
+                PreparedMember pm = prepared.get(u.dir());
+                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
+                        () -> buildUnitLive(u, pm, agg, view, completed, total), JkThreads.io()));
+            }
+            UnitOutcome failure = null;
+            for (java.util.concurrent.CompletableFuture<UnitOutcome> f : futures) {
+                UnitOutcome o = f.join();
+                if (!o.success() && failure == null) failure = o;
+            }
+            if (failure != null) {
+                view.finishFailure(buildFailedAt(failure.coord(), start));
+                for (GoalResult.Diagnostic d : agg.lastErrors()) {
+                    if ("test-failure".equals(d.code())) continue;  // already printed by run-tests
+                    System.err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
+                }
+                return failure.exitCode();
+            }
+            for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
+            remaining.removeAll(ready);
+        }
+        view.finishSuccess("built " + total + " module" + (total == 1 ? "" : "s")
+                + " " + elapsedSince(start));
+        return 0;
+    }
+
+    /**
+     * Build one unit feeding the shared live {@code view}; buffer its output and,
+     * on completion, flush the block + a colored ✓/✗ {@code [k/N]} line above the
+     * region (one atomic {@code writeAbove} so a unit's lines never split).
+     */
+    private UnitOutcome buildUnitLive(BuildGraph.BuildUnit unit, PreparedMember pm, AggregateContext agg,
+                                      CommandManager view, java.util.concurrent.atomic.AtomicInteger completed,
+                                      int total) {
+        List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
+        long t0 = System.nanoTime();
+        boolean ok;
+        int exit;
+        try {
+            GoalResult result = GoalConsole.runGoalIntoBuffered(
+                    pm.goal(), pm.cache(), unit.coord(), agg, pm.barWeight(), buf);
+            ok = result.success();
+            exit = ok ? 0 : exitCodeFor(pm.goal());
+        } catch (RuntimeException e) {
+            synchronized (buf) { buf.add("  ✗ " + (e.getMessage() == null ? e.toString() : e.getMessage())); }
+            ok = false;
+            exit = 1;
+        }
+        long ms = (System.nanoTime() - t0) / 1_000_000;
+        int k = completed.incrementAndGet();
+        Theme t = Theme.active();
+        String mark = ok ? Theme.colorize("✓", t.success()) : Theme.colorize("✗", t.error());
+        String line = "  " + mark + " [" + k + "/" + total + "] " + unit.coord()
+                + (ok ? " (" + ms + "ms)" : " — failed");
+        StringBuilder block = new StringBuilder();
+        synchronized (buf) { for (String l : buf) block.append(l).append('\n'); }
+        block.append(line);
+        view.writeAbove(block.toString());
+        return new UnitOutcome(unit.coord(), ok, exit, ms, List.of());
     }
 
     /** Build one graph unit (dependency units compile-only) with output buffered. */

@@ -31,6 +31,12 @@ public final class AggregateContext {
     private final CommandManager cm;
     private long completedBase;
     private long total;            // fixed aggregate denominator, 0 until calibrated
+    // Calibrated path: each still-running member's current contribution to its
+    // slice. The aggregate numerator is completedBase + Σ(these), so members
+    // building concurrently sum into the bar instead of clobbering one another
+    // (last-writer-wins). A member is removed here when it completes — its slice
+    // moves into completedBase, so it's never double-counted.
+    private final java.util.Map<String, Long> memberAdvanced = new java.util.HashMap<>();
     private volatile List<GoalResult.Diagnostic> lastErrors = List.of();
 
     public AggregateContext(CommandManager cm) {
@@ -67,6 +73,30 @@ public final class AggregateContext {
      */
     public synchronized void completeMember(long memberScope) {
         completedBase += memberScope;
+    }
+
+    /**
+     * Calibrated, concurrency-safe progress for one member: record this member's
+     * current contribution to its slice and repaint the bar at
+     * {@code completedBase + Σ(all running members)}. Use this (not the raw
+     * setter) when members build in parallel so their progress sums.
+     */
+    public synchronized void memberProgress(String member, long advanced) {
+        memberAdvanced.put(member, advanced);
+        long sum = completedBase;
+        for (long v : memberAdvanced.values()) sum += v;
+        cm.progress(Math.min(sum, total), total);
+    }
+
+    /**
+     * Calibrated completion: fold the member's reserved {@code slice} into the
+     * base and drop its running contribution, so the bar neither backtracks nor
+     * double-counts. {@code Σ slices == total}.
+     */
+    public synchronized void completeMember(String member, long slice) {
+        memberAdvanced.remove(member);
+        completedBase += slice;
+        cm.progress(Math.min(completedBase, total), total);
     }
 
     /** Errors from the most recently failed member goal. */

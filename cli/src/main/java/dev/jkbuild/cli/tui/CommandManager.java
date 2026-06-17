@@ -438,7 +438,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         // region never scrolls past where cursor-relative repaint can reach.
         int shown = Math.min(active.size(), Math.max(1, Math.min(MAX_ROWS, height - 3)));
         for (int i = 0; i < shown; i++) {
-            String prefix = i == 0 ? Theme.colorize("╰─ ", dim) : "   ";
+            // Tree branches: ├─ for every active row but the last, ╰─ to close.
+            String prefix = Theme.colorize(i == shown - 1 ? "╰─ " : "├─ ", dim);
             lines.add(prefix + renderActiveRow(active.get(i), sep));
         }
         return lines;
