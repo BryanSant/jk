@@ -98,13 +98,22 @@ graalvmNative {
         // on this host. Force the executable mode explicitly.
         sharedLibrary.set(false)
 
-        // Size-focused build args.
+        // Runtime-perf build args.
         //
-        // -Ob       Optimise for build time = smaller .text than -O2 (default).
-        //           We give up some runtime perf; for a short-lived CLI the
-        //           startup wins from a smaller binary outweigh it.
-        // -march=compatibility
-        //           Single-arch baseline code, no per-CPU dispatch tables.
+        // -O3       Max optimisation. (Was -Ob, build-time/size focused.) -O3 alone
+        //           is only ~10% here; the real win is letting -march light up the
+        //           CPU's vector/crypto instructions below.
+        // -march    Per-CPU baseline. native-image compiles for the BUILD HOST's arch,
+        //           so this is keyed off os.arch. On x86-64 we target x86-64-v3 (AVX2 +
+        //           BMI2 + FMA + F16C — portable to ~2015+ CPUs); benchmarked ≈1.5x
+        //           faster than -march=compatibility on jk's hashing/orchestration
+        //           (no-op `jk build`), since the CAS + ClasspathFingerprint SHA-256
+        //           dominates jk's own time and gets SIMD-accelerated. We deliberately
+        //           do NOT use -march=native (≈1.9x): it would only run on the build
+        //           machine's exact CPU (its extra ~20% is AVX-512 + AES-NI + SHA-NI,
+        //           none of which any portable -march level includes). aarch64/macOS
+        //           builds fall back to `compatibility` for now — tune a crypto-capable
+        //           baseline on aarch64 hardware in a follow-up.
         // --gc=serial
         //           Generational serial GC. Small/fast for short verbs, and —
         //           unlike epsilon — it actually reclaims, so verbs that stream
@@ -117,8 +126,12 @@ graalvmNative {
         //           instead of dragging the whole machine into swap. Heavy work
         //           (compile/test) runs in forked worker JVMs tuned separately
         //           via JvmOptions, not in this process.
-        buildArgs.add("-Ob")
-        buildArgs.add("-march=compatibility")
+        val march = when (System.getProperty("os.arch")) {
+            "amd64", "x86_64" -> "x86-64-v3"
+            else -> "compatibility"
+        }
+        buildArgs.add("-O3")
+        buildArgs.add("-march=$march")
         buildArgs.add("--gc=serial")
         buildArgs.add("-R:MaxHeapSize=268435456")
         // JLine 4 FFM's signal handler uses Arena.ofShared(), gated behind this
