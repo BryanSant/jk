@@ -96,7 +96,7 @@ public final class LibraryUpdateCommand implements CliCommand {
     private void printSummary(int total, Diff diff, Duration elapsed) {
         System.out.println(Theme.colorize("✓ Library catalog updated", Theme.active().completedStep())
                 + " — " + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
-                + " entries cached " + Theme.colorize("in " + ConsoleSpec.fmtDuration(elapsed), Theme.active().darkGray()));
+                + " entries cached " + ConsoleSpec.took(elapsed));
         if (diff.isEmpty()) { System.out.println("\n  (no changes from previous version)"); return; }
         emitList("Added", diff.added, Theme.active().completedStep());
         emitList("Removed", diff.removed, Theme.active().error());

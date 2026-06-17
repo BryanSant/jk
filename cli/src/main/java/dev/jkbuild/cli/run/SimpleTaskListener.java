@@ -50,7 +50,7 @@ public final class SimpleTaskListener implements GoalListener {
     @Override
     public void goalFinish(GoalResult result) {
         if (cm == null) cm = CommandManager.simple(out, spec.verb(), animate);
-        String suffix = " " + ConsoleSpec.inTime(result.duration());
+        String suffix = " " + ConsoleSpec.took(result.duration());
         if (result.success()) {
             cm.finishSuccess(spec.onSuccess().apply(result) + suffix);
         } else {

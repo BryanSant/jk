@@ -23,9 +23,9 @@ public record ConsoleSpec(
         Function<GoalResult, String> onSuccess,
         Function<GoalResult, String> onFailure) {
 
-    /** Dim {@code "in Xms"} suffix — appended by the framework to every result line. */
-    public static String inTime(Duration d) {
-        return Theme.colorize("in " + fmtDuration(d), Theme.active().darkGray());
+    /** Dim {@code "took Xms"} duration suffix — appended by the framework to every result line. */
+    public static String took(Duration d) {
+        return Theme.colorize("took " + fmtDuration(d), Theme.active().darkGray());
     }
 
     /** Human-friendly duration: {@code 712ms}, {@code 3.1s}, {@code 2m 4s}, {@code 1h 3m 2s}, {@code 1d 12h 13m 5s}. */

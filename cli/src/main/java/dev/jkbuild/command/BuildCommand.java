@@ -817,10 +817,10 @@ public final class BuildCommand implements CliCommand {
         return "Build failed";
     }
 
-    /** Dim {@code "in Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */
+    /** Dim {@code "took Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */
     static String elapsedSince(long startNanos) {
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
-        return dev.jkbuild.cli.run.ConsoleSpec.inTime(java.time.Duration.ofMillis(ms));
+        return dev.jkbuild.cli.run.ConsoleSpec.took(java.time.Duration.ofMillis(ms));
     }
 
     /**

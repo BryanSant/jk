@@ -201,7 +201,7 @@ public final class FormatCommand implements CliCommand {
                     ? counts[0] + " to format, " + counts[1] + " already clean"
                     : counts[0] + " file" + (counts[0] == 1 ? "" : "s") + ", " + counts[1] + " already clean";
             if (counts[2] > 0) body += ", " + counts[2] + " error" + (counts[2] == 1 ? "" : "s");
-            String inTime = ConsoleSpec.inTime(Duration.ofMillis(System.currentTimeMillis() - startMs));
+            String inTime = ConsoleSpec.took(Duration.ofMillis(System.currentTimeMillis() - startMs));
             System.out.println(check_ + " " + verb + " " + body + " " + inTime);
         }
         return exit;

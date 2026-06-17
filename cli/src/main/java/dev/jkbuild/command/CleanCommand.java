@@ -99,7 +99,7 @@ public final class CleanCommand implements CliCommand {
             String stats_  = String.format("%,d file%s, %s total",
                     stats[0], stats[0] == 1 ? "" : "s",
                     CacheCommand.fmtBytes(stats[1]));
-            String inTime  = ConsoleSpec.inTime(Duration.ofMillis(elapsedMs));
+            String inTime  = ConsoleSpec.took(Duration.ofMillis(elapsedMs));
             System.out.println(check + " " + removed + " " + stats_ + " " + inTime);
         }
 
