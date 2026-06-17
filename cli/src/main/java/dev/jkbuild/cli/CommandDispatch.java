@@ -45,6 +45,7 @@ import dev.jkbuild.command.UpdateCommand;
 import dev.jkbuild.command.WhyCommand;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
+import dev.jkbuild.worker.WorkerJarNotFoundException;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Command;
 import dev.jkbuild.model.command.Invocation;
@@ -184,6 +185,9 @@ public final class CommandDispatch {
         }
         try {
             return cmd.run(in);
+        } catch (WorkerJarNotFoundException e) {
+            printWorkerJarError(e, ansi);
+            return 1;
         } catch (Exception e) {
             String msg = e.getMessage() != null ? e.getMessage() : e.toString();
             System.err.println(HelpRenderer.paint("error:", Theme.active().errorLabel(), ansi) + " " + msg);
@@ -215,6 +219,19 @@ public final class CommandDispatch {
                 .filter(o -> !o.hidden()).map(CommandModels::option).toList();
         CommandModel model = CommandModels.from(cmd, qualified, globals);
         return HelpRenderer.renderHelp(model, ansi);
+    }
+
+    private static void printWorkerJarError(WorkerJarNotFoundException e, boolean ansi) {
+        Theme t = Theme.active();
+        String label = HelpRenderer.paint("‼ Error:", t.errorLabel(), ansi);
+        String jar   = HelpRenderer.paint(e.artifactId() + ".jar", t.warning(), ansi);
+        String sha   = HelpRenderer.paint(e.sha(), t.cyan(), ansi);
+        String path  = HelpRenderer.paint(e.path().toString(), t.warning(), ansi);
+        String jk    = ansi ? Ansi.sgr(t.helpHint()) + "jk" + Ansi.RESET : "jk";
+        System.err.println(label + " " + jar + " is not in the CAS.");
+        System.err.println("  Expected sha256: " + sha);
+        System.err.println("  Expected path:   " + path);
+        System.err.println("  Reinstall " + jk + " or set -D" + e.jarProperty() + "=<path>");
     }
 
     private static void printError(String qualified, CliCommand cmd, ParseException e, boolean ansi) {

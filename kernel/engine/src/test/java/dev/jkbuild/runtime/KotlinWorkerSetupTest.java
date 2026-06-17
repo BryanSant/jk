@@ -2,6 +2,7 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.worker.WorkerJarNotFoundException;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -37,9 +38,11 @@ class KotlinWorkerSetupTest {
     void throws_with_sideload_hint_when_absent(@TempDir Path dir) {
         Cas cas = new Cas(dir.resolve("cas"));
         assertThatThrownBy(() -> KotlinWorkerSetup.locateWorkerJar(cas))
-                .isInstanceOf(IllegalStateException.class)
-                .hasMessageContaining("installLocalCas")
-                .hasMessageContaining(expectedHashUnchecked());
+                .isInstanceOf(WorkerJarNotFoundException.class)
+                .satisfies(ex -> {
+                    WorkerJarNotFoundException e = (WorkerJarNotFoundException) ex;
+                    assertThat(e.sha()).isEqualTo(expectedHashUnchecked());
+                });
     }
 
     @Test

@@ -106,12 +106,7 @@ public enum WorkerJar {
         String expectedHash = expectedSha();
         Path target = cas.pathFor(expectedHash);
         if (Files.isRegularFile(target)) return target;
-        throw new IllegalStateException(
-                artifactId + ".jar is not in the CAS.\n"
-                + "  expected sha256: " + expectedHash + "\n"
-                + "  expected path:   " + target + "\n"
-                + "  Side-load it:  ./gradlew " + installTask + "\n"
-                + "  or set -D" + jarProperty + "=<path>");
+        throw new WorkerJarNotFoundException(artifactId, expectedHash, target, jarProperty);
     }
 
     /** Locate using the default jk CAS ({@code $JK_CACHE_DIR}). */
