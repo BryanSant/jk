@@ -44,6 +44,7 @@ class UpdateCommandTest {
         });
         server.start();
         base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+        DefaultTestDepsFixture.seed(served);
     }
 
     @AfterEach
@@ -73,7 +74,7 @@ class UpdateCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .containsExactly("com.foo:leaf");
     }
 
@@ -89,7 +90,7 @@ class UpdateCommandTest {
                 "--repo-url", base.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         Lockfile initial = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(initial.artifacts()).isEmpty();
+        assertThat(DefaultTestDepsFixture.projectCoords(initial)).isEmpty();
 
         // Add a dep, then update.
         run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
@@ -100,8 +101,7 @@ class UpdateCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile updated = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(updated.artifacts()).hasSize(1);
-        assertThat(updated.artifacts().getFirst().name()).isEqualTo("com.foo:leaf");
+        assertThat(DefaultTestDepsFixture.projectCoords(updated)).containsExactly("com.foo:leaf");
     }
 
     @Test
@@ -171,7 +171,7 @@ class UpdateCommandTest {
 
         // Member owns its own lock; sibling dep filtered out.
         Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
-        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .containsExactly("com.foo:leaf");
 
         // Workspace root lock NOT created by this invocation.

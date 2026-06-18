@@ -44,6 +44,7 @@ class ReadSideIntegrationTest {
         });
         server.start();
         base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+        DefaultTestDepsFixture.seed(served);
     }
 
     @AfterEach
@@ -101,7 +102,8 @@ class ReadSideIntegrationTest {
         String resync = captureStdout(() -> run("sync",
                 "-C", tempDir.toString(),
                 "--cache-dir", freshCache.toString()));
-        assertThat(resync).contains("2 fetched");
+        // root + leaf + the two defaulted JUnit coords.
+        assertThat(resync).contains("4 fetched");
     }
 
     @Test

@@ -72,6 +72,24 @@ public final class JkRunner implements Plugin {
             } else {
                 return runOneShot(parsed, writer);
             }
+        } catch (LinkageError e) {
+            // A JUnit Platform that's missing or too old for the Launcher API
+            // this runner is built against surfaces as a NoClassDefFound /
+            // NoSuchMethod against org.junit.platform.* — give an actionable
+            // hint instead of a raw stack trace. (Anything else is the user's
+            // own test code and falls through to the generic handler.)
+            String where = String.valueOf(e.getMessage());
+            if (where.contains("junit/platform") || where.contains("junit.platform")) {
+                System.err.println("jk-test-runner: incompatible JUnit Platform on the test classpath — "
+                        + e.getClass().getSimpleName() + ": " + e.getMessage());
+                System.err.println("  jk drives the JUnit Platform Launcher API; ensure "
+                        + "org.junit.platform:junit-platform-launcher resolves to a recent release "
+                        + "(jk defaults to the latest stable when no test dependencies are declared).");
+                return 2;
+            }
+            System.err.println("jk-test-runner: " + e.getClass().getName() + ": " + e.getMessage());
+            e.printStackTrace(System.err);
+            return 2;
         } catch (Throwable t) {
             System.err.println("jk-test-runner: " + t.getClass().getName()
                     + ": " + t.getMessage());

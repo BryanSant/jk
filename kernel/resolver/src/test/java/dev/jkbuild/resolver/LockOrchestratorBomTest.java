@@ -66,6 +66,24 @@ class LockOrchestratorBomTest {
         });
         server.start();
         base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+        serveJUnitDefaults();
+    }
+
+    /**
+     * jk injects latest-stable JUnit into every project's TEST scope, so the
+     * mock repo must offer a resolvable version of those coords for any lock.
+     */
+    private void serveJUnitDefaults() {
+        serveLeaf("org.junit.jupiter", "junit-jupiter", "6.1.0");
+        serveLeaf("org.junit.platform", "junit-platform-launcher", "6.1.0");
+    }
+
+    private void serveLeaf(String group, String artifact, String version) {
+        serveMetadata("/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
+                group, artifact, List.of(version));
+        servePom(group, artifact, version,
+                "<project><groupId>" + group + "</groupId><artifactId>" + artifact
+                        + "</artifactId><version>" + version + "</version></project>");
     }
 
     @AfterEach
@@ -252,6 +270,40 @@ class LockOrchestratorBomTest {
 
     private static List<String> modules(Lockfile lock) {
         return lock.artifacts().stream().map(Lockfile.Artifact::name).toList();
+    }
+
+    @Test
+    void empty_test_scope_defaults_to_latest_stable_junit(@TempDir Path tempDir) throws Exception {
+        // No dependencies at all — jk still defaults the test framework.
+        JkBuild project = jkBuildWithDeps(Map.of());
+        Lockfile lock = new LockOrchestrator(repoGroup(tempDir)).lock(project, "test");
+
+        Lockfile.Artifact jupiter = lock.artifacts().stream()
+                .filter(p -> p.name().equals("org.junit.jupiter:junit-jupiter"))
+                .findFirst().orElseThrow();
+        assertThat(jupiter.version()).isEqualTo("6.1.0");        // latest stable the repo offers
+        assertThat(jupiter.scopes()).contains(Scope.TEST);
+        assertThat(lock.artifacts()).anyMatch(p ->
+                p.name().equals("org.junit.platform:junit-platform-launcher"));
+    }
+
+    @Test
+    void user_declared_junit_version_wins_over_default(@TempDir Path tempDir) throws Exception {
+        // The user pins an older JUnit; the default must not override it.
+        serveMetadata("/org/junit/jupiter/junit-jupiter/maven-metadata.xml",
+                "org.junit.jupiter", "junit-jupiter", List.of("5.10.0", "6.1.0"));
+        servePom("org.junit.jupiter", "junit-jupiter", "5.10.0",
+                "<project><groupId>org.junit.jupiter</groupId>"
+                        + "<artifactId>junit-jupiter</artifactId><version>5.10.0</version></project>");
+
+        JkBuild project = jkBuildWithDeps(Map.of(Scope.TEST, List.of(
+                new Dependency("org.junit.jupiter:junit-jupiter", VersionSelector.parse("=5.10.0")))));
+        Lockfile lock = new LockOrchestrator(repoGroup(tempDir)).lock(project, "test");
+
+        Lockfile.Artifact jupiter = lock.artifacts().stream()
+                .filter(p -> p.name().equals("org.junit.jupiter:junit-jupiter"))
+                .findFirst().orElseThrow();
+        assertThat(jupiter.version()).isEqualTo("5.10.0");
     }
 
     private static String leaf(String artifact) {

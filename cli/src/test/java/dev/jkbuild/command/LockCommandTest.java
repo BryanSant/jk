@@ -47,6 +47,7 @@ class LockCommandTest {
         });
         server.start();
         base = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+        DefaultTestDepsFixture.seed(served);
     }
 
     @AfterEach
@@ -88,8 +89,8 @@ class LockCommandTest {
 
         // Inspect the lockfile.
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(lock.artifacts()).hasSize(2);
-        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(lock)).hasSize(2);
+        assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .containsExactly("com.foo:leaf", "com.foo:root"); // writer sorts by name
 
         Lockfile.Artifact leaf = pkg(lock, "com.foo:leaf");
@@ -113,7 +114,7 @@ class LockCommandTest {
     }
 
     @Test
-    void lock_with_no_dependencies_writes_empty_lockfile(@TempDir Path tempDir) throws Exception {
+    void lock_with_no_dependencies_defaults_to_junit(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
         int exit = run("lock",
                 "-C", tempDir.toString(),
@@ -122,7 +123,10 @@ class LockCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(lock.artifacts()).isEmpty();
+        // No project deps — but jk defaults the test framework to JUnit.
+        assertThat(DefaultTestDepsFixture.projectCoords(lock)).isEmpty();
+        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+                .containsExactlyInAnyOrder(DefaultTestDepsFixture.JUPITER, DefaultTestDepsFixture.LAUNCHER);
     }
 
     @Test
@@ -182,9 +186,9 @@ class LockCommandTest {
         Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
 
         // External coords are resolved; the workspace sibling is not locked.
-        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
-        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .doesNotContain("com.acme:libb");
 
         // Workspace root's own jk.lock was NOT created by this invocation.
@@ -246,9 +250,9 @@ class LockCommandTest {
 
         // app gets its own lock with external deps; sibling not included.
         Lockfile appLock = LockfileReader.read(app.resolve("jk.lock"));
-        assertThat(appLock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(appLock))
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
-        assertThat(appLock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(appLock))
                 .doesNotContain("com.acme:libb");
 
         // libb gets its own lock (empty — no deps declared).
@@ -272,7 +276,7 @@ class LockCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .containsExactly("com.foo:leaf", "com.foo:root");
     }
 
@@ -328,7 +332,7 @@ class LockCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(fresh.resolve("jk.lock"));
-        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
     }
 
