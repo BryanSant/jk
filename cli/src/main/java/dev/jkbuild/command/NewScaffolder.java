@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
-
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileWriter;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -17,9 +12,11 @@ import java.util.Map;
  * Writes the generated project tree from {@link NewInputs}:
  * <ul>
  *   <li>{@code jk.toml} via {@link NewJkBuildRenderer}</li>
- *   <li>empty {@code jk.lock}</li>
+ *   <li>the production + test source roots (see {@link #createSourceTree})</li>
  *   <li>optional sample source tree (Java or Kotlin)</li>
  * </ul>
+ *
+ * <p>No {@code jk.lock} — that's generated on the first build/run.
  *
  * The curated dependency map is the single source of truth for which "short
  * id" maps to which Maven coordinate + version + scope; both the renderer
@@ -62,36 +59,45 @@ public final class NewScaffolder {
     }
 
     /**
-     * Scaffold the project tree. When {@code writeLock} is false the project
-     * is a workspace member: the per-member {@code jk.lock} and the
-     * {@code .gitignore} are both skipped, since the workspace root owns
-     * both (Cargo/uv: members never carry their own lock or gitignore).
+     * Scaffold the project tree. {@code standalone} is false for a workspace
+     * member, whose {@code .gitignore} is owned by the workspace root and so is
+     * skipped here (Cargo/uv: members never carry their own gitignore).
+     *
+     * <p>No {@code jk.lock} is written — it's generated on the first build or
+     * run, so a freshly-scaffolded project carries only its manifest + sources.
      */
-    public static void write(NewInputs inputs, boolean writeLock) throws IOException {
+    public static void write(NewInputs inputs, boolean standalone) throws IOException {
         var dir = inputs.directory();
         Files.createDirectories(dir);
 
         var buildFile = dir.resolve("jk.toml");
         Files.writeString(buildFile, NewJkBuildRenderer.render(inputs), StandardCharsets.UTF_8);
 
-        if (writeLock) {
-            var lockFile = dir.resolve("jk.lock");
-            // Stamp the resolved JDK identifier (from the wizard pick) into the
-            // lockfile so subsequent `jk` invocations see a pinned install. Falls
-            // back to an unpinned empty lockfile when the flag path didn't
-            // resolve to a specific install.
-            var lock = inputs.jdkIdentifier()
-                    .map(id -> Lockfile.empty(Jk.VERSION, id))
-                    .orElseGet(() -> Lockfile.empty(Jk.VERSION));
-            LockfileWriter.write(lock, lockFile);
-        }
-
-        if (writeLock) {
+        if (standalone) {
             writeGitignore(dir);   // members inherit the workspace root's .gitignore
         }
 
+        createSourceTree(inputs);
+
         if (inputs.sample()) {
             writeSample(inputs);
+        }
+    }
+
+    /**
+     * Ensure the production and test source roots both exist from the start:
+     * {@code src/} + {@code test/} for the simple layout, or
+     * {@code src/main/<lang>} + {@code src/test/<lang>} for the traditional one.
+     */
+    private static void createSourceTree(NewInputs inputs) throws IOException {
+        var dir = inputs.directory();
+        if (inputs.isSimpleLayout()) {
+            Files.createDirectories(dir.resolve("src"));
+            Files.createDirectories(dir.resolve("test"));
+        } else {
+            String lang = inputs.lang() == NewInputs.Language.KOTLIN ? "kotlin" : "java";
+            Files.createDirectories(dir.resolve("src").resolve("main").resolve(lang));
+            Files.createDirectories(dir.resolve("src").resolve("test").resolve(lang));
         }
     }
 

@@ -63,8 +63,9 @@ class TestCommandTest {
         assertThat(exit).isEqualTo(2);
     }
 
-    private static void scaffoldNoDeps(Path dir) {
+    private static void scaffoldNoDeps(Path dir) throws IOException {
         run("new", dir.toString());
+        ScaffoldTestSupport.writeEmptyLock(dir);   // jk new no longer locks; jk test needs a lock
     }
 
     private static int run(String... args) {

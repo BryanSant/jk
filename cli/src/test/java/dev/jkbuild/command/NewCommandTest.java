@@ -28,9 +28,12 @@ class NewCommandTest {
         assertThat(exit).isEqualTo(0);
 
         Path buildFile = tempDir.resolve("jk.toml");
-        Path lockFile = tempDir.resolve("jk.lock");
         assertThat(buildFile).exists();
-        assertThat(lockFile).exists();
+        // No jk.lock at scaffold time — it's generated on the first build/run.
+        assertThat(tempDir.resolve("jk.lock")).doesNotExist();
+        // Simple layout: both source roots exist from the start.
+        assertThat(tempDir.resolve("src")).isDirectory();
+        assertThat(tempDir.resolve("test")).isDirectory();
 
         JkBuild parsed = JkBuildParser.parse(buildFile);
         assertThat(parsed.project().group()).isEqualTo("com.example");
@@ -39,10 +42,6 @@ class NewCommandTest {
         assertThat(parsed.project().jdk()).isEqualTo("25");
         assertThat(parsed.project().java()).isEqualTo(25);
         assertThat(parsed.project().isKotlin()).isFalse();
-
-        Lockfile lock = LockfileReader.read(lockFile);
-        assertThat(lock.version()).isEqualTo(Lockfile.CURRENT_VERSION);
-        assertThat(lock.artifacts()).isEmpty();
     }
 
     @Test

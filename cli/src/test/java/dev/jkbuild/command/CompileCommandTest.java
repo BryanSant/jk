@@ -85,6 +85,7 @@ class CompileCommandTest {
 
     private static void scaffold(Path dir) throws IOException {
         run("new", dir.toString());
+        ScaffoldTestSupport.writeEmptyLock(dir);   // jk new no longer locks; check needs a lock
     }
 
     private static int run(String... args) {

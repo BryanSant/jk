@@ -101,8 +101,9 @@ class NewMemberTest {
         int exit = Jk.execute("new", "--no-member", "--group", "com.solo", sub.toString());
         assertThat(exit).isZero();
 
-        // Standalone: has its own lock, its own group, parent untouched.
-        assertThat(sub.resolve("jk.lock")).exists();
+        // Standalone: its own group, parent untouched. No lock at scaffold —
+        // it's generated on the first build/run.
+        assertThat(sub.resolve("jk.lock")).doesNotExist();
         assertThat(JkBuildParser.parse(sub.resolve("jk.toml")).project().group()).isEqualTo("com.solo");
         assertThat(JkBuildParser.parse(tempDir.resolve("jk.toml")).isWorkspaceRoot()).isFalse();
     }

@@ -107,9 +107,11 @@ class ReadSideIntegrationTest {
     }
 
     @Test
-    void why_returns_1_for_unknown_module(@TempDir Path tempDir) {
-        // init writes an empty jk.lock; the queried module isn't in it.
+    void why_returns_1_for_unknown_module(@TempDir Path tempDir) throws java.io.IOException {
+        // The queried module isn't in the (empty) lock — jk new no longer writes
+        // one, so stand in the empty lock a first build would produce.
         run("new", tempDir.toString());
+        ScaffoldTestSupport.writeEmptyLock(tempDir);
         int exit = run("why", "com.foo:bar", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(1);
     }

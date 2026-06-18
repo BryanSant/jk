@@ -489,7 +489,7 @@ public final class NewCommand implements CliCommand {
      * for the success message.
      */
     private void scaffoldAndRegister(NewInputs inputs) throws IOException {
-        NewScaffolder.write(inputs, parent == null);   // members skip the per-member lock
+        NewScaffolder.write(inputs, parent == null);   // members skip the gitignore (root owns it)
         if (parent != null) {
             Path root = parent.root();
             String rel = root.relativize(inputs.directory()).toString().replace('\\', '/');

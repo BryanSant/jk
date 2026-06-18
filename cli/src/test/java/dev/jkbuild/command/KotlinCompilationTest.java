@@ -23,6 +23,7 @@ class KotlinCompilationTest {
     @Test
     void check_passes_for_pure_kotlin_project(@TempDir Path tempDir) throws IOException {
         run("new", "--lang", "kotlin", tempDir.toString());
+        ScaffoldTestSupport.writeEmptyLock(tempDir);   // jk new no longer locks; check needs a lock
         Path src = tempDir.resolve("src/main/kotlin/example/Hello.kt");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
@@ -119,6 +120,7 @@ class KotlinCompilationTest {
     @Test
     void check_fails_on_kotlin_syntax_error(@TempDir Path tempDir) throws IOException {
         run("new", "--lang", "kotlin", tempDir.toString());
+        ScaffoldTestSupport.writeEmptyLock(tempDir);   // jk new no longer locks; check needs a lock
         Path src = tempDir.resolve("src/main/kotlin/Broken.kt");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "fun broken( = oops");
@@ -203,6 +205,7 @@ class KotlinCompilationTest {
         // jk check → CompileCommand, which also compiles Kotlin-first so Java can
         // reference Kotlin within the module.
         run("new", "--name", "mixed", "--lang", "kotlin", "--layout", "traditional", tempDir.toString());
+        ScaffoldTestSupport.writeEmptyLock(tempDir);   // jk new no longer locks; check needs a lock
         Path toml = tempDir.resolve("jk.toml");
         Files.writeString(toml, Files.readString(toml).replace("[project]\n", "[project]\njava = 25\n"));
         Path ktSrc = tempDir.resolve("src/main/kotlin/example/Greeter.kt");

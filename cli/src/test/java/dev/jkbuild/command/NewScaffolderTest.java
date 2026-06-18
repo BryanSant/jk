@@ -204,27 +204,33 @@ class NewScaffolderTest {
     }
 
     @Test
-    void no_sample_skips_source_tree(@TempDir Path tempDir) throws IOException {
+    void no_sample_still_creates_source_roots(@TempDir Path tempDir) throws IOException {
         NewScaffolder.write(library(tempDir, NewInputs.Language.JAVA, false, 25));
 
         assertThat(tempDir.resolve("jk.toml")).exists();
-        assertThat(tempDir.resolve("jk.lock")).exists();
-        assertThat(tempDir.resolve("src")).doesNotExist();
+        // No jk.lock at scaffold — generated on first build/run.
+        assertThat(tempDir.resolve("jk.lock")).doesNotExist();
+        // Traditional layout (library() uses null = traditional): both roots exist,
+        // even though no sample source file was written.
+        assertThat(tempDir.resolve("src/main/java")).isDirectory();
+        assertThat(tempDir.resolve("src/test/java")).isDirectory();
     }
 
     @Test
-    void resolved_jdk_identifier_is_stamped_into_lockfile(@TempDir Path tempDir) throws IOException {
-        var inputs = new NewInputs(
-                "com.example", "widget", "25", 25,
-                Optional.of("temurin-25.0.3"),
-                Optional.of("com.example.Main"), false, false,
-                NewInputs.Language.JAVA, null, Optional.empty(),
-                List.of(), true, tempDir);
-        NewScaffolder.write(inputs);
+    void simple_layout_creates_src_and_test_roots(@TempDir Path tempDir) throws IOException {
+        NewScaffolder.write(runnable(tempDir, NewInputs.Language.JAVA, "com.example.Main", 25, true));
 
-        var lock = Files.readString(tempDir.resolve("jk.lock"));
-        assertThat(lock).contains("jdk = \"temurin-25.0.3\"");
-        assertThat(lock).contains("version = 1");
+        assertThat(tempDir.resolve("src")).isDirectory();
+        assertThat(tempDir.resolve("test")).isDirectory();
+        assertThat(tempDir.resolve("jk.lock")).doesNotExist();
+    }
+
+    @Test
+    void traditional_kotlin_layout_creates_language_roots(@TempDir Path tempDir) throws IOException {
+        NewScaffolder.write(runnable(tempDir, NewInputs.Language.KOTLIN, "com.example.MainKt", 25, false));
+
+        assertThat(tempDir.resolve("src/main/kotlin")).isDirectory();
+        assertThat(tempDir.resolve("src/test/kotlin")).isDirectory();
     }
 
     @Test
@@ -249,20 +255,6 @@ class NewScaffolderTest {
 
         // jk doesn't overwrite an existing .gitignore — user customization wins.
         assertThat(Files.readString(gitignore)).isEqualTo("# pre-existing content\nnode_modules/\n");
-    }
-
-    @Test
-    void absent_jdk_identifier_leaves_no_jdk_line(@TempDir Path tempDir) throws IOException {
-        var inputs = new NewInputs(
-                "com.example", "widget", "25", 25,
-                Optional.empty(),
-                Optional.empty(), false, false,
-                NewInputs.Language.JAVA, null, Optional.empty(),
-                List.of(), false, tempDir);
-        NewScaffolder.write(inputs);
-
-        var lock = Files.readString(tempDir.resolve("jk.lock"));
-        assertThat(lock).doesNotContain("jdk = \"");
     }
 
     private static NewInputs library(Path dir, NewInputs.Language lang, boolean sample, int major) {

@@ -68,6 +68,7 @@ class CleanExplainWhyRebuiltTest {
     void explain_lists_compile_tasks_with_cache_status(@TempDir Path tempDir) throws Exception {
         run("new", "--name", "widget", "--layout", "traditional",
                 tempDir.toString());
+        ScaffoldTestSupport.writeEmptyLock(tempDir);   // jk new no longer locks; explain needs a lock
         Path src = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "package example; public class Hello {}");
