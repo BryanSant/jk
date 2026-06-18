@@ -57,6 +57,9 @@ public interface Theme {
     /** Alias for {@link #settled} — plain white with no weight modifier. */
     AttributedStyle plainWhite();
 
+    /** Bright white with no weight modifier (unlike {@link #focused}, which is bold). */
+    AttributedStyle brightWhite();
+
     /**
      * Dark gray (same as the inactive rail glyphs). Used for the prompt line of
      * a step once it has been settled — the gray de-emphasises the question

@@ -125,6 +125,11 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle brightWhite() {
+        return withColor(AttributedStyle.DEFAULT, BRIGHT_WHITE);
+    }
+
+    @Override
     public AttributedStyle completedPrompt() {
         return darkGray();
     }

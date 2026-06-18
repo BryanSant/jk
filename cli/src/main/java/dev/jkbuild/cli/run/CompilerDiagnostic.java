@@ -20,7 +20,7 @@ import java.util.regex.Pattern;
  *
  * <p>Color map: path {@link Theme#highlight() yellow}, line/column
  * {@link Theme#cyan() cyan}, the offending character above a {@code ^} caret
- * red + underlined, and {@code key: value} trailer values cyan.
+ * bright-white + underlined, and {@code key: value} trailer values cyan.
  */
 public final class CompilerDiagnostic {
 
@@ -75,13 +75,13 @@ public final class CompilerDiagnostic {
         return sb.append(':').append(h.group("rest")).toString();
     }
 
-    /** Red-underline the single character the caret points at in the source line above it. */
+    /** Bright-white-underline the single character the caret points at in the source line above it. */
     private static String sourceWithCaret(String src, String caretLine) {
         int col = caretLine.indexOf('^');
         if (col < 0 || col >= src.length()) return src;   // defensive: misaligned caret
-        AttributedStyle redUnderline = Theme.active().error().underline();
+        AttributedStyle underline = Theme.active().brightWhite().underline();
         return src.substring(0, col)
-                + Theme.colorize(String.valueOf(src.charAt(col)), redUnderline)
+                + Theme.colorize(String.valueOf(src.charAt(col)), underline)
                 + src.substring(col + 1);
     }
 }
