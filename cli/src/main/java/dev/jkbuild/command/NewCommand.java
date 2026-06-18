@@ -788,10 +788,13 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Fully-qualified main class name for an executable project.
+     * Fully-qualified main class name for an executable project — must match
+     * where {@link NewScaffolder} actually writes the file.
      * <ul>
-     *   <li>Java compact → {@code Main} (no package).</li>
-     *   <li>Java standard → {@code <group>.Main}.</li>
+     *   <li>Java (both layouts) → {@code <group>.Main}; the scaffolder always
+     *       packages {@code Main} under {@code <group>}, even in the simple
+     *       layout (it just lives in {@code src/<group>/} rather than
+     *       {@code src/main/java/<group>/}).</li>
      *   <li>Kotlin compact → {@code MainKt} (no package; Kotlin emits a
      *       {@code FilenameKt} synthetic class for top-level {@code fun main}).</li>
      *   <li>Kotlin standard → {@code <group>.MainKt}.</li>
@@ -799,7 +802,7 @@ public final class NewCommand implements CliCommand {
      */
     private static String deriveMainFqcn(String group, NewInputs.Language lang, boolean compact) {
         return switch (lang) {
-            case JAVA   -> compact ? "Main"   : group + ".Main";
+            case JAVA   -> group + ".Main";
             case KOTLIN -> compact ? "MainKt" : group + ".MainKt";
         };
     }

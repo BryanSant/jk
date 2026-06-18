@@ -161,6 +161,28 @@ class NewCommandTest {
     }
 
     @Test
+    void executable_simple_layout_writes_packaged_main_fqcn(@TempDir Path tempDir) throws IOException {
+        // Default (simple) layout still packages Main under the group:
+        // src/<group>/Main.java with `package <group>;`. The jk.toml main field
+        // must therefore be the FQCN, not the bare class name.
+        int exit = Jk.execute(
+                "new",
+                "--group", "com.example",
+                "--name", "widget",
+                "--executable",
+                tempDir.toString());
+        assertThat(exit).isEqualTo(0);
+
+        Path main = tempDir.resolve("src/com/example/Main.java");
+        assertThat(main).exists();
+        assertThat(Files.readString(main)).contains("package com.example;");
+
+        JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
+        assertThat(parsed.project().main()).isEqualTo("com.example.Main");
+        assertThat(parsed.project().isRunnable()).isTrue();
+    }
+
+    @Test
     void library_when_no_main(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute(
                 "new",
