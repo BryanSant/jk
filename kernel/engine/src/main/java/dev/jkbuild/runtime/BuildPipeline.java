@@ -495,9 +495,8 @@ public final class BuildPipeline {
                     // surfaced but don't. Strip the leading severity word — the
                     // console renderer adds its own ✗/⚠ marker.
                     for (CompileResult.Diagnostic d : r.diagnostics()) {
-                        String msg = diagnosticMessage(d);
-                        if (d.severity() == CompileResult.Severity.ERROR) ctx.error("javac", msg);
-                        else ctx.warn("javac", msg);
+                        if (d.severity() == CompileResult.Severity.ERROR) ctx.error("javac", d.describe());
+                        else ctx.warn("javac", d.describe());
                     }
                     if (!r.success())
                         throw new RuntimeException("javac reported errors");
@@ -1228,18 +1227,6 @@ public final class BuildPipeline {
     }
 
     // ---- helpers --------------------------------------------------------
-
-    /** {@code <file>:<line>: <message>} — a diagnostic without its severity word
-     *  (the console renderer supplies the ✗/⚠ marker). */
-    private static String diagnosticMessage(CompileResult.Diagnostic d) {
-        StringBuilder sb = new StringBuilder();
-        if (d.source() != null) {
-            sb.append(d.source());
-            if (d.line() > 0) sb.append(':').append(d.line());
-            sb.append(": ");
-        }
-        return sb.append(d.message()).toString();
-    }
 
     @SuppressWarnings("unchecked")
     private static List<Path> javaSources(PhaseContext ctx) {

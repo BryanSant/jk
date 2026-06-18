@@ -141,29 +141,48 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
         return false;
     }
 
+    /** {@code "<n> errors" / "<n> warnings"} — javac's trailing tally, not part of a block. */
+    private static final Pattern SUMMARY = Pattern.compile("^\\d+ (?:error|warning)s?$");
+
+    /**
+     * Group javac's output into one {@link CompileResult.Diagnostic} per diagnostic,
+     * keeping each block <em>verbatim</em> — the {@code file:line: severity: message}
+     * header plus the source snippet, caret, and any {@code symbol:}/{@code location:}
+     * trailer lines. A block runs from one header line up to (but not including) the
+     * next header or the {@code "N errors"} summary. The full text is the diagnostic's
+     * message; the CLI relativizes paths and colorizes on top.
+     */
     private static List<CompileResult.Diagnostic> parseStream(Process process) throws IOException {
         List<CompileResult.Diagnostic> diagnostics = new ArrayList<>();
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+            CompileResult.Severity sev = null;
+            Path file = null;
+            long lineNo = -1;
+            StringBuilder block = null;
             String line;
             while ((line = reader.readLine()) != null) {
                 Matcher m = DIAGNOSTIC.matcher(line);
                 if (m.matches()) {
-                    diagnostics.add(new CompileResult.Diagnostic(
-                            parseSeverity(m.group("sev")),
-                            Path.of(m.group("file")),
-                            Long.parseLong(m.group("line")),
-                            -1,
-                            m.group("msg")));
-                } else if (!line.isBlank() && !line.startsWith(" ") && !line.startsWith("\t")
-                        && !diagnostics.isEmpty()) {
-                    // Continuation line — append to the prior diagnostic's message.
-                    var prior = diagnostics.removeLast();
-                    diagnostics.add(new CompileResult.Diagnostic(
-                            prior.severity(), prior.source(), prior.line(), prior.column(),
-                            prior.message() + "\n" + line));
+                    if (block != null) {
+                        diagnostics.add(new CompileResult.Diagnostic(sev, file, lineNo, -1, block.toString()));
+                    }
+                    sev = parseSeverity(m.group("sev"));
+                    file = Path.of(m.group("file"));
+                    lineNo = Long.parseLong(m.group("line"));
+                    block = new StringBuilder(line);
+                } else if (block != null && SUMMARY.matcher(line).matches()) {
+                    // Tally line ends the current block and the diagnostic stream's body.
+                    diagnostics.add(new CompileResult.Diagnostic(sev, file, lineNo, -1, block.toString()));
+                    block = null;
+                } else if (block != null) {
+                    // Snippet, caret, symbol:/location:, or wrapped message — keep verbatim.
+                    block.append('\n').append(line);
                 }
-                // Source-snippet / caret lines (indented) are ignored — the message is enough.
+                // Lines before the first header (e.g. stray notes) are dropped.
+            }
+            if (block != null) {
+                diagnostics.add(new CompileResult.Diagnostic(sev, file, lineNo, -1, block.toString()));
             }
         }
         return diagnostics;

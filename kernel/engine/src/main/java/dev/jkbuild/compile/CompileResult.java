@@ -30,19 +30,14 @@ public record CompileResult(boolean success, List<Diagnostic> diagnostics) {
         }
 
         /**
-         * Location-prefixed message <em>without</em> the severity word
-         * ({@code src/Foo.java:12: ...}) — for surfacing through the console,
-         * which adds its own ✗/⚠ marker by severity. Use {@link #render()} when
-         * a standalone, self-describing line is wanted.
+         * The diagnostic as it should reach the console: the compiler's full
+         * verbatim block (header {@code src/Foo.java:12: error: …} plus any
+         * source snippet, caret, and {@code symbol:}/{@code location:} lines).
+         * The CLI relativizes paths and adds color on top, so this stays a
+         * faithful copy of what javac/kotlinc emitted.
          */
         public String describe() {
-            StringBuilder sb = new StringBuilder();
-            if (source != null) {
-                sb.append(source);
-                if (line > 0) sb.append(':').append(line);
-                sb.append(": ");
-            }
-            return sb.append(message).toString();
+            return message;
         }
 
         /** Human-friendly one-line form: {@code error: src/Foo.java:12: ...}. */
