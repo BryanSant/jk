@@ -58,14 +58,10 @@ public final class SimpleTaskListener implements GoalListener {
         }
         // Diagnostics below the result line; the spinner is already stopped.
         for (GoalResult.Diagnostic d : result.errors()) {
-            if ("verbatim".equals(d.code())) {
-                err.println(d.message());
-            } else {
-                err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
-            }
+            err.println(ConsoleSpec.renderError(d));
         }
         for (GoalResult.Diagnostic d : result.warnings()) {
-            err.println("warn[" + d.phase() + "/" + d.code() + "]: " + d.message());
+            err.println(ConsoleSpec.renderWarning(d));
         }
     }
 }

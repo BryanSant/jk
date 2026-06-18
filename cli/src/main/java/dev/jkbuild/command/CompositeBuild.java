@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.layout.BuildLayout;
@@ -58,7 +59,7 @@ final class CompositeBuild {
             throws IOException, InterruptedException {
         BuildGraph.Result graph = BuildGraph.resolve(entryDir, entry, cache.resolve("git"));
         if (graph.hasErrors()) {
-            for (String err : graph.errors()) System.err.println("error[composite]: " + err);
+            for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
             return 2;
         }
         List<BuildGraph.BuildUnit> deps = graph.topoOrder().stream()

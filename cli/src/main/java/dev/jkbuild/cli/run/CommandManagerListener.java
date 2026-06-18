@@ -101,14 +101,10 @@ public final class CommandManagerListener implements GoalListener {
             cm.finishFailure(spec.onFailure().apply(result) + suffix);
         }
         for (GoalResult.Diagnostic d : result.errors()) {
-            if ("verbatim".equals(d.code())) {
-                err.println(d.message());
-            } else {
-                err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
-            }
+            err.println(ConsoleSpec.renderError(d));
         }
         for (GoalResult.Diagnostic d : result.warnings()) {
-            err.println("warn[" + d.phase() + "/" + d.code() + "]: " + d.message());
+            err.println(ConsoleSpec.renderWarning(d));
         }
     }
 

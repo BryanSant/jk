@@ -4,6 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.Jk;
+import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
@@ -71,7 +72,7 @@ public final class ExplainCommand implements CliCommand {
 
         BuildGraph.Result graph = BuildGraph.resolve(startDir, entry, cache.resolve("git"));
         if (graph.hasErrors()) {
-            for (String err : graph.errors()) System.err.println("error[composite]: " + err);
+            for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
             return 2;
         }
 

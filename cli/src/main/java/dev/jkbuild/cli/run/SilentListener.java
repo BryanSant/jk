@@ -32,14 +32,10 @@ public final class SilentListener implements GoalListener {
     public void goalFinish(GoalResult result) {
         if (suppressDiagnostics) return;
         for (GoalResult.Diagnostic d : result.errors()) {
-            if ("verbatim".equals(d.code())) {
-                err.println(d.message());
-            } else {
-                err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
-            }
+            err.println(ConsoleSpec.renderError(d));
         }
         for (GoalResult.Diagnostic d : result.warnings()) {
-            err.println("warn[" + d.phase() + "/" + d.code() + "]: " + d.message());
+            err.println(ConsoleSpec.renderWarning(d));
         }
         // The command body owns the success summary — we don't want to
         // step on the existing "Built ..." / "Created ..." lines. So

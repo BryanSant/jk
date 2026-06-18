@@ -180,7 +180,7 @@ public final class BuildCommand implements CliCommand {
             return 2;
         }
         if (graph.hasErrors()) {
-            for (String err : graph.errors()) System.err.println("error[composite]: " + err);
+            for (String err : graph.errors()) System.err.println(ConsoleSpec.errorLine("composite", err));
             return 2;
         }
         List<BuildGraph.BuildUnit> units = graph.topoOrder();
@@ -290,7 +290,7 @@ public final class BuildCommand implements CliCommand {
                 view.finishFailure(buildFailedAt(failure.coord(), start));
                 for (GoalResult.Diagnostic d : agg.lastErrors()) {
                     if ("test-failure".equals(d.code())) continue;  // already printed by run-tests
-                    System.err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
+                    System.err.println(ConsoleSpec.renderError(d));
                 }
                 return failure.exitCode();
             }
@@ -464,7 +464,8 @@ public final class BuildCommand implements CliCommand {
                 try {
                     pm = prepareMember(memberDir);
                 } catch (Exception e) {
-                    view.finishFailure("Build failed " + elapsedSince(buildStart));
+                    view.finishFailure(Theme.colorize("Build failed", Theme.active().error())
+                            + " " + elapsedSince(buildStart));
                     throw e;
                 }
                 if (pm == null) {
@@ -494,7 +495,7 @@ public final class BuildCommand implements CliCommand {
                         // in full by the run-tests phase; keep them for --output json
                         // but don't echo them again here.
                         if ("test-failure".equals(d.code())) continue;
-                        System.err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
+                        System.err.println(ConsoleSpec.renderError(d));
                     }
                     return exit;
                 }
@@ -803,14 +804,15 @@ public final class BuildCommand implements CliCommand {
         }
     }
 
-    /** Failure result line (sans the leading ✗ and trailing duration). */
+    /** Failure result line (sans the leading ✗ and trailing duration), in red. */
     private static String failureMessage(Goal goal, GoalResult result) {
+        var err = Theme.active().error();
         var testResult = goal.get(TEST_RESULT).orElse(null);
         if (testResult != null && !testResult.allPassed()) {
             String jar = goal.get(JAR_PATH).map(p -> p.getFileName().toString()).orElse("");
-            return jar.isEmpty() ? "Tests failed" : "Tests failed while building " + jar;
+            return Theme.colorize(jar.isEmpty() ? "Tests failed" : "Tests failed while building " + jar, err);
         }
-        return "Build failed";
+        return Theme.colorize("Build failed", err);
     }
 
     /** Dim {@code "took Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */

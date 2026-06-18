@@ -200,7 +200,7 @@ public final class NativeCommand implements CliCommand {
                     view.finishFailure("Native build failed in " + memberName
                             + " " + BuildCommand.elapsedSince(buildStart));
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
-                        System.err.println("error[" + d.phase() + "/" + d.code() + "]: " + d.message());
+                        System.err.println(ConsoleSpec.renderError(d));
                     }
                     return exit;
                 }

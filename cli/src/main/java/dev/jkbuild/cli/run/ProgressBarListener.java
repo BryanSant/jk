@@ -150,8 +150,12 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void warn(String phase, String code, String message) {
-        writeAboveInternal(renderDiagnostic("⚠ Warning", Theme.active().warning().bold(),
-                phase, code, message));
+        if (ConsoleSpec.isCompilerCode(code)) {
+            writeAboveInternal(ConsoleSpec.compilerWarning(phase, message));
+        } else {
+            writeAboveInternal(renderDiagnostic("⚠ Warning", Theme.active().warning().bold(),
+                    phase, code, message));
+        }
     }
 
     @Override
@@ -162,8 +166,8 @@ public final class ProgressBarListener implements GoalListener {
         if ("test-failure".equals(code)) {
             return;
         }
-        if ("verbatim".equals(code)) {
-            writeAboveInternal(message);
+        if ("verbatim".equals(code) || ConsoleSpec.isCompilerCode(code)) {
+            writeAboveInternal(ConsoleSpec.renderError(phase, code, message));
         } else {
             writeAboveInternal(renderDiagnostic("✗ Error", Theme.active().error().bold(),
                     phase, code, message));
