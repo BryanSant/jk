@@ -113,6 +113,26 @@ public final class NewScaffolder {
                 # jk build outputs
                 target/
                 .jk/
+
+                # IntelliJ IDEA
+                .idea/
+                *.iml
+                *.ipr
+                *.iws
+                out/
+
+                # VS Code
+                .vscode/
+                *.code-workspace
+                .history/
+
+                # Eclipse compiler (used by VS Code Java plugins)
+                .classpath
+                .project
+                .settings/
+                .factorypath
+                **/src/**/bin/
+                **/test/**/bin/
                 """, StandardCharsets.UTF_8);
     }
 
@@ -122,133 +142,162 @@ public final class NewScaffolder {
     /** First JDK feature release that supports instance main + implicit IO import. */
     private static final int JAVA_INSTANCE_MAIN_MIN = 25;
 
+    /**
+     * Sample sources mirroring jk's reference layout: a {@code Calc} class with
+     * a JUnit {@code CalcTest}, plus a {@code Main} entry point for runnable
+     * projects. The package follows the project group; the test relies on the
+     * JUnit jk defaults in when no test framework is declared.
+     */
     private static void writeSample(NewInputs inputs) throws IOException {
-        if (inputs.isRunnable()) {
-            writeMain(inputs);
-        } else {
-            writePackageMarker(inputs);
-        }
-    }
-
-    private static void writeMain(NewInputs inputs) throws IOException {
-        var pkg = inputs.group();
         switch (inputs.lang()) {
-            case JAVA -> {
-                if (inputs.isSimpleLayout()) {
-                    // Simple layout: package lives under ./src/{pkg}/ so the
-                    // formatter and IDEA generator see a proper package structure.
-                    var dir = inputs.directory().resolve("src/" + pkg.replace('.', '/'));
-                    Files.createDirectories(dir);
-                    // Gate on the compile target, not the toolchain.
-                    var body = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN
-                            ? renderJavaInstanceMain(pkg) : renderJavaTraditionalMain(pkg);
-                    Files.writeString(dir.resolve(MAIN_CLASS + ".java"), body, StandardCharsets.UTF_8);
-                } else {
-                    var dir = inputs.directory().resolve("src/main/java/" + pkg.replace('.', '/'));
-                    Files.createDirectories(dir);
-                    var body = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN
-                            ? renderJavaInstanceMain(pkg) : renderJavaTraditionalMain(pkg);
-                    Files.writeString(dir.resolve(MAIN_CLASS + ".java"), body, StandardCharsets.UTF_8);
-                }
-            }
-            case KOTLIN -> {
-                Path file;
-                String body;
-                if (inputs.isSimpleLayout()) {
-                    // Compact layout: no package, file lives at ./src/Main.kt.
-                    var dir = inputs.directory().resolve("src");
-                    Files.createDirectories(dir);
-                    file = dir.resolve(MAIN_CLASS + ".kt");
-                    body = renderKotlinMain("");
-                } else {
-                    var dir = inputs.directory().resolve("src/main/kotlin/" + pkg.replace('.', '/'));
-                    Files.createDirectories(dir);
-                    file = dir.resolve(MAIN_CLASS + ".kt");
-                    body = renderKotlinMain(pkg);
-                }
-                Files.writeString(file, body, StandardCharsets.UTF_8);
-            }
+            case JAVA -> writeJavaSample(inputs);
+            case KOTLIN -> writeKotlinSample(inputs);
         }
     }
 
-    private static void writePackageMarker(NewInputs inputs) throws IOException {
-        var pkg = inputs.group();
-        if (inputs.isSimpleLayout()) {
-            // Compact layout: place a single source file at ./src/ with no nesting.
-            var dir = inputs.directory().resolve("src");
-            Files.createDirectories(dir);
-            switch (inputs.lang()) {
-                case JAVA -> Files.writeString(
-                        dir.resolve("package-info.java"),
-                        renderJavaPackageInfo(pkg), StandardCharsets.UTF_8);
-                case KOTLIN -> Files.writeString(
-                        dir.resolve("PackageInfo.kt"),
-                        renderKotlinPackageMarker(pkg), StandardCharsets.UTF_8);
-            }
-        } else {
-            var langDir = inputs.lang().sourceDir();
-            var pkgDir = inputs.directory().resolve("src/main/" + langDir + "/" + pkg.replace('.', '/'));
-            Files.createDirectories(pkgDir);
-            switch (inputs.lang()) {
-                case JAVA -> Files.writeString(
-                        pkgDir.resolve("package-info.java"),
-                        renderJavaPackageInfo(pkg), StandardCharsets.UTF_8);
-                case KOTLIN -> Files.writeString(
-                        pkgDir.resolve("PackageInfo.kt"),
-                        renderKotlinPackageMarker(pkg), StandardCharsets.UTF_8);
-            }
+    private static void writeJavaSample(NewInputs inputs) throws IOException {
+        String pkg = inputs.group();
+        String pkgPath = "/" + pkg.replace('.', '/');
+        Path srcDir = inputs.directory().resolve(mainSourceRoot(inputs) + pkgPath);
+        Path testDir = inputs.directory().resolve(testSourceRoot(inputs) + pkgPath);
+        Files.createDirectories(srcDir);
+        Files.createDirectories(testDir);
+
+        Files.writeString(srcDir.resolve("Calc.java"), renderJavaCalc(pkg), StandardCharsets.UTF_8);
+        Files.writeString(testDir.resolve("CalcTest.java"), renderJavaCalcTest(pkg), StandardCharsets.UTF_8);
+        if (inputs.isRunnable()) {
+            // Gate the instance-main syntax on the compile target, not the toolchain.
+            boolean instanceMain = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN;
+            Files.writeString(srcDir.resolve(MAIN_CLASS + ".java"),
+                    renderJavaMain(pkg, instanceMain), StandardCharsets.UTF_8);
         }
+    }
+
+    private static void writeKotlinSample(NewInputs inputs) throws IOException {
+        // Kotlin keeps its compact convention: the simple layout is package-less
+        // (files at ./src and ./test); the traditional layout nests by package.
+        boolean simple = inputs.isSimpleLayout();
+        String pkg = simple ? "" : inputs.group();
+        String pkgPath = pkg.isEmpty() ? "" : "/" + pkg.replace('.', '/');
+        Path srcDir = inputs.directory().resolve((simple ? "src" : "src/main/kotlin") + pkgPath);
+        Path testDir = inputs.directory().resolve((simple ? "test" : "src/test/kotlin") + pkgPath);
+        Files.createDirectories(srcDir);
+        Files.createDirectories(testDir);
+
+        Files.writeString(srcDir.resolve("Calc.kt"), renderKotlinCalc(pkg), StandardCharsets.UTF_8);
+        Files.writeString(testDir.resolve("CalcTest.kt"), renderKotlinCalcTest(pkg), StandardCharsets.UTF_8);
+        if (inputs.isRunnable()) {
+            Files.writeString(srcDir.resolve(MAIN_CLASS + ".kt"),
+                    renderKotlinMain(pkg), StandardCharsets.UTF_8);
+        }
+    }
+
+    /** Production source root: {@code src} (simple) or {@code src/main/<lang>} (traditional). */
+    private static String mainSourceRoot(NewInputs inputs) {
+        return inputs.isSimpleLayout() ? "src" : "src/main/" + inputs.lang().sourceDir();
+    }
+
+    /** Test source root: {@code test} (simple) or {@code src/test/<lang>} (traditional). */
+    private static String testSourceRoot(NewInputs inputs) {
+        return inputs.isSimpleLayout() ? "test" : "src/test/" + inputs.lang().sourceDir();
     }
 
     /**
-     * JEP 512 entry point (JDK 25+): a no-arg instance {@code main} with the
-     * implicit {@code IO}/{@code java.lang.System} imports, wrapped in an explicit
-     * {@code class Main}. When {@code pkg} is empty the class is emitted without a
-     * package declaration (unnamed package / compact source file).
+     * Entry point referencing the sample {@code Calc}. JDK 25+ gets the JEP 512
+     * instance {@code main} with the implicit {@code IO} import; older targets
+     * get a classic static {@code main}.
      */
-    private static String renderJavaInstanceMain(String pkg) {
-        if (pkg.isEmpty()) {
+    private static String renderJavaMain(String pkg, boolean instanceMain) {
+        if (instanceMain) {
             return """
-                    void main() {
-                        IO.println("Hello, world!");
+                    package %s;
+
+                    class Main {
+                        void main() {
+                            int value = 5;
+                            Calc calc = new Calc();
+                            IO.println("Hello, world! 5 * 2 = " + calc.doubleValue(value));
+                        }
                     }
-                    """;
+                    """.formatted(pkg);
         }
-        return "package " + pkg + ";\n\n"
-                + "class " + MAIN_CLASS + " {\n"
-                + "    void main() {\n"
-                + "        IO.println(\"Hello, world!\");\n"
-                + "    }\n"
-                + "}\n";
+        return """
+                package %s;
+
+                class Main {
+                    public static void main(String... args) {
+                        int value = 5;
+                        Calc calc = new Calc();
+                        System.out.println("Hello, world! 5 * 2 = " + calc.doubleValue(value));
+                    }
+                }
+                """.formatted(pkg);
     }
 
-    /** Classic entry point for JDK &lt; 25: an explicit {@code class Main} with a static main. */
-    private static String renderJavaTraditionalMain(String pkg) {
-        String prefix = pkg.isEmpty() ? "" : "package " + pkg + ";\n\n";
-        return prefix
-                + "class " + MAIN_CLASS + " {\n"
-                + "    public static void main(String... args) {\n"
-                + "        System.out.println(\"Hello, world!\");\n"
-                + "    }\n"
-                + "}\n";
+    private static String renderJavaCalc(String pkg) {
+        return """
+                package %s;
+
+                public class Calc {
+                    public int doubleValue(int value) {
+                        return value * 2;
+                    }
+                }
+                """.formatted(pkg);
+    }
+
+    private static String renderJavaCalcTest(String pkg) {
+        return """
+                package %s;
+
+                import static org.junit.jupiter.api.Assertions.assertEquals;
+
+                import org.junit.jupiter.api.Test;
+
+                public class CalcTest {
+                    @Test
+                    void doubleValueReturnsTwiceTheInput() {
+                        Calc calc = new Calc();
+                        assertEquals(10, calc.doubleValue(5));
+                    }
+                }
+                """.formatted(pkg);
     }
 
     private static String renderKotlinMain(String pkg) {
-        var sb = new StringBuilder();
-        if (!pkg.isEmpty()) {
-            sb.append("package ").append(pkg).append("\n\n");
-        }
-        sb.append("fun main() {\n");
-        sb.append("    println(\"Hello, world!\")\n");
-        sb.append("}\n");
-        return sb.toString();
+        return pkgHeaderKt(pkg) + """
+                fun main() {
+                    val value = 5
+                    val calc = Calc()
+                    println("Hello, world! 5 * 2 = ${calc.doubleValue(value)}")
+                }
+                """;
     }
 
-    private static String renderJavaPackageInfo(String pkg) {
-        return "/** " + pkg + " package. */\npackage " + pkg + ";\n";
+    private static String renderKotlinCalc(String pkg) {
+        return pkgHeaderKt(pkg) + """
+                class Calc {
+                    fun doubleValue(value: Int): Int = value * 2
+                }
+                """;
     }
 
-    private static String renderKotlinPackageMarker(String pkg) {
-        return "package " + pkg + "\n";
+    private static String renderKotlinCalcTest(String pkg) {
+        return pkgHeaderKt(pkg) + """
+                import org.junit.jupiter.api.Assertions.assertEquals
+                import org.junit.jupiter.api.Test
+
+                class CalcTest {
+                    @Test
+                    fun doubleValueReturnsTwiceTheInput() {
+                        assertEquals(10, Calc().doubleValue(5))
+                    }
+                }
+                """;
+    }
+
+    /** {@code "package <pkg>\n\n"}, or empty for the package-less (compact Kotlin) case. */
+    private static String pkgHeaderKt(String pkg) {
+        return pkg.isEmpty() ? "" : "package " + pkg + "\n\n";
     }
 }

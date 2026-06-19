@@ -63,9 +63,13 @@ class TestCommandTest {
         assertThat(exit).isEqualTo(2);
     }
 
+    // A genuinely test-source-free project: bare manifest, no sources. (`jk new`
+    // now scaffolds a sample CalcTest, so it can't stand in for "no tests".)
     private static void scaffoldNoDeps(Path dir) throws IOException {
-        run("new", dir.toString());
-        ScaffoldTestSupport.writeEmptyLock(dir);   // jk new no longer locks; jk test needs a lock
+        Files.createDirectories(dir);
+        Files.writeString(dir.resolve("jk.toml"),
+                "[project]\ngroup = \"com.example\"\nname = \"x\"\nversion = \"0.1.0\"\njdk = \"25\"\njava = 25\n");
+        ScaffoldTestSupport.writeEmptyLock(dir);   // jk test needs a lock; nothing to resolve
     }
 
     private static int run(String... args) {

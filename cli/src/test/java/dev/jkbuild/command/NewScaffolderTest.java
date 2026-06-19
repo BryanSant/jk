@@ -15,12 +15,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 class NewScaffolderTest {
 
     @Test
-    void library_java_writes_package_info(@TempDir Path tempDir) throws IOException {
+    void library_java_writes_calc_and_test(@TempDir Path tempDir) throws IOException {
         NewScaffolder.write(library(tempDir, NewInputs.Language.JAVA, true, 25));
 
-        var pkgInfo = tempDir.resolve("src/main/java/com/example/package-info.java");
-        assertThat(pkgInfo).exists();
-        assertThat(Files.readString(pkgInfo)).contains("package com.example;");
+        // A library gets the sample Calc + its test, but no Main.
+        var calc = tempDir.resolve("src/main/java/com/example/Calc.java");
+        var test = tempDir.resolve("src/test/java/com/example/CalcTest.java");
+        assertThat(calc).exists();
+        assertThat(Files.readString(calc)).contains("package com.example;");
+        assertThat(test).exists();
+        assertThat(Files.readString(test)).contains("class CalcTest");
+        assertThat(tempDir.resolve("src/main/java/com/example/Main.java")).doesNotExist();
     }
 
     @Test
@@ -38,7 +43,8 @@ class NewScaffolderTest {
         assertThat(body).doesNotContain("public final class");
         assertThat(body).doesNotContain("public static void main");
         assertThat(body).contains("void main()");
-        assertThat(body).contains("IO.println(\"Hello, world!\")");
+        assertThat(body).contains("IO.println(");
+        assertThat(body).contains("new Calc()");   // Main references the sample Calc
     }
 
     @Test
@@ -53,8 +59,12 @@ class NewScaffolderTest {
         assertThat(body).contains("package com.example;");
         assertThat(body).contains("class Main");
         assertThat(body).contains("void main()");
-        assertThat(body).contains("IO.println(\"Hello, world!\")");
+        assertThat(body).contains("IO.println(");
+        assertThat(body).contains("new Calc()");
         assertThat(tempDir.resolve("src/main/java")).doesNotExist();
+        // Sibling sample files share the package dir; the test lands under ./test/.
+        assertThat(tempDir.resolve("src/com/example/Calc.java")).exists();
+        assertThat(tempDir.resolve("test/com/example/CalcTest.java")).exists();
     }
 
     @Test
@@ -67,7 +77,8 @@ class NewScaffolderTest {
         assertThat(body).contains("class Main");
         assertThat(body).doesNotContain("public final class");
         assertThat(body).contains("public static void main(String... args)");
-        assertThat(body).contains("System.out.println(\"Hello, world!\")");
+        assertThat(body).contains("System.out.println(");
+        assertThat(body).contains("new Calc()");
         assertThat(body).doesNotContain("IO.println");
     }
 
@@ -97,12 +108,15 @@ class NewScaffolderTest {
     }
 
     @Test
-    void library_kotlin_writes_kt_package_marker(@TempDir Path tempDir) throws IOException {
+    void library_kotlin_writes_calc_and_test(@TempDir Path tempDir) throws IOException {
         NewScaffolder.write(library(tempDir, NewInputs.Language.KOTLIN, true, 25));
 
-        var marker = tempDir.resolve("src/main/kotlin/com/example/PackageInfo.kt");
-        assertThat(marker).exists();
-        assertThat(Files.readString(marker)).isEqualTo("package com.example\n");
+        var calc = tempDir.resolve("src/main/kotlin/com/example/Calc.kt");
+        var test = tempDir.resolve("src/test/kotlin/com/example/CalcTest.kt");
+        assertThat(calc).exists();
+        assertThat(Files.readString(calc)).contains("package com.example");
+        assertThat(test).exists();
+        assertThat(tempDir.resolve("src/main/kotlin/com/example/Main.kt")).doesNotExist();
     }
 
     @Test
