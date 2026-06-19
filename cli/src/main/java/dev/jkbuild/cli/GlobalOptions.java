@@ -20,7 +20,10 @@ public final class GlobalOptions {
     public boolean verbose;
     public String color;
     public boolean offline;
-    public boolean noCache;
+    /** {@code --rerun}: re-run build outputs (compile/test/package), honoring cached deps. */
+    public boolean rerun;
+    /** {@code --refresh}: re-validate deps against their remotes (re-download if changed). */
+    public boolean refresh;
     public boolean noProgress;
 
     /** {@code --jdk <spec>} / {@code --graal <spec>}: the top JDK / GraalVM resolution tier. */
@@ -92,7 +95,8 @@ public final class GlobalOptions {
         g.verbose = in.isSet("verbose");
         g.color = in.value("color").orElse(null);
         g.offline = in.isSet("offline");
-        g.noCache = in.isSet("no-cache");
+        g.rerun = in.isSet("rerun");
+        g.refresh = in.isSet("refresh");
         g.noProgress = in.isSet("no-progress");
         g.output = in.value("output").orElse(null);
         g.configFile = in.value("config-file").map(Path::of).orElse(null);
@@ -138,7 +142,8 @@ public final class GlobalOptions {
                 Opt.flag("Print additional diagnostic output", "-v", "--verbose"),
                 Opt.value("<WHEN>", "When to colorize output: auto, always, never", "--color"),
                 Opt.flag("Disable network access for this run", "--offline"),
-                Opt.flag("Bypass build caches for this run", "--no-cache"),
+                Opt.flag("Re-run compile/test/package, reusing cached dependencies", "--rerun"),
+                Opt.flag("Re-validate dependencies against their remotes (re-download if changed)", "--refresh"),
                 Opt.flag("Disable all progress bars and spinners", "--no-progress"),
                 Opt.value("<FORMAT>", "Output format: text (default) or json", "--output"),
                 Opt.value("<FILE>", "Use this jk.toml for configuration", "--config-file"),

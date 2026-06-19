@@ -138,7 +138,7 @@ public final class ImageCommand implements CliCommand {
                     dev.jkbuild.task.ActionCache ac =
                             new dev.jkbuild.task.ActionCache(new Cas(cache), cache.resolve("actions"));
                     boolean useCache = tarballPath != null
-                            && !dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                            && !dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
                     String imgTask = null, imgKey = null;
                     if (tarballPath != null) {
                         List<String> tokens = List.of(

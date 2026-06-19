@@ -63,7 +63,7 @@ public final class UsageGroups {
      * name-set check is the most portable way.
      */
     public static final Set<String> GLOBAL_OPTION_LONG_NAMES = Set.of(
-            "--quiet", "--verbose", "--color", "--offline", "--no-cache", "--no-progress",
+            "--quiet", "--verbose", "--color", "--offline", "--rerun", "--refresh", "--no-progress",
             "--output", "--config-file", "--no-config", "--directory",
             "--help", "--version");
 }

@@ -304,14 +304,14 @@ public final class JdkUpdateCommand implements CliCommand {
     }
 
     private JdkCatalog fetchCatalog() throws IOException, InterruptedException {
-        boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+        boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
         JdkCatalogClient client = (feedUrl != null
                 ? new JdkCatalogClient(new Http(), feedUrl,
                         cacheFile != null ? cacheFile : ephemeralCachePath(),
                         Duration.ZERO)
                 : new JdkCatalogClient())
                 .onWarning(System.err::println);
-        return client.fetch(noCache);
+        return client.fetch(refresh);
     }
 
     private static Path ephemeralCachePath() throws IOException {

@@ -40,7 +40,7 @@ public final class KotlinCompile {
     }
 
     /**
-     * @param useCache when false ({@code --no-cache}), skip the lookup and always
+     * @param useCache when false ({@code --rerun}), skip the lookup and always
      *                 run the worker; the result is still recorded.
      */
     public static Result run(String taskId, KotlincRequest request, String jkVersion,

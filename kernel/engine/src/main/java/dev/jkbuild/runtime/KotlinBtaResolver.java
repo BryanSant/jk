@@ -33,7 +33,7 @@ import java.util.List;
  * <p>The resolved closure is cached as a list of CAS content hashes under
  * {@code <cache>/tools/kotlin-bta/<version>/closure.shas}, so a warm build skips
  * resolution and network entirely. The cache self-invalidates if any blob has
- * been evicted from the CAS, or when {@code --no-cache} is in effect.
+ * been evicted from the CAS, or when {@code --refresh} is in effect.
  */
 public final class KotlinBtaResolver {
 
@@ -56,8 +56,8 @@ public final class KotlinBtaResolver {
             throws IOException, InterruptedException {
         requireSupportedVersion(kotlinVersion);
         Path cacheFile = cacheFile(cas, kotlinVersion);
-        boolean noCache = ActiveConfig.get().noCacheOr(false);
-        if (!noCache) {
+        boolean refresh = ActiveConfig.get().refreshOr(false);
+        if (!refresh) {
             List<Path> cached = readCachedClosure(cacheFile, cas);
             if (cached != null) return cached;
         }

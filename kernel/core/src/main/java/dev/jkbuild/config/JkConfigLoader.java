@@ -43,7 +43,8 @@ public final class JkConfigLoader {
     /** Env var → JkConfig setter. */
     private static final String ENV_COLOR = "JK_COLOR";
     private static final String ENV_OFFLINE = "JK_OFFLINE";
-    private static final String ENV_NO_CACHE = "JK_NO_CACHE";
+    private static final String ENV_RERUN = "JK_RERUN";
+    private static final String ENV_REFRESH = "JK_REFRESH";
     private static final String ENV_NO_PROGRESS = "JK_NO_PROGRESS";
     private static final String ENV_QUIET = "JK_QUIET";
     private static final String ENV_VERBOSE = "JK_VERBOSE";
@@ -114,7 +115,8 @@ public final class JkConfigLoader {
         return new JkConfig(
                 stringFrom(config, "color").flatMap(JkConfig.ColorChoice::parse),
                 booleanFrom(config, "offline"),
-                booleanFrom(config, "no-cache"),
+                booleanFrom(config, "rerun"),
+                booleanFrom(config, "refresh"),
                 booleanFrom(config, "no-progress"),
                 booleanFrom(config, "quiet"),
                 booleanFrom(config, "verbose"),
@@ -135,7 +137,8 @@ public final class JkConfigLoader {
         return new JkConfig(
                 color,
                 booleanEnv(env, ENV_OFFLINE),
-                booleanEnv(env, ENV_NO_CACHE),
+                booleanEnv(env, ENV_RERUN),
+                booleanEnv(env, ENV_REFRESH),
                 booleanEnv(env, ENV_NO_PROGRESS),
                 booleanEnv(env, ENV_QUIET),
                 booleanEnv(env, ENV_VERBOSE),

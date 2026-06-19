@@ -38,11 +38,11 @@ import java.util.Optional;
  * status output accordingly.
  *
  * <p><b>Note:</b> JDK lifecycle is deliberately decoupled from
- * {@code --no-cache}. Build caches (deps, action cache, git checkouts, tool
+ * {@code --refresh}. Build caches (deps, action cache, git checkouts, tool
  * downloads) get cleared when the user passes the flag; JDK installs do
  * not. JDKs are large (~200 MB), discovered by probes that often share
  * with IntelliJ, and have a dedicated lifecycle under {@code jk jdk
- * install/uninstall}. This file must not accept a {@code noCache}
+ * install/uninstall}. This file must not accept a {@code refresh}
  * parameter — anything that wants to re-resolve a JDK should remove the
  * install explicitly (e.g. {@code jk jdk uninstall}).
  */

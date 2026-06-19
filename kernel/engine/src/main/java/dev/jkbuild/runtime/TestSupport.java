@@ -151,7 +151,7 @@ public final class TestSupport {
                 .javaHome(javaHome)
                 .build();
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
-        boolean useCache = !ActiveConfig.get().noCacheOr(false);
+        boolean useCache = !ActiveConfig.get().rerunOr(false);
         java.nio.file.Path stateDir = cacheRoot.resolve("actions")
                 .resolve("incremental-java").resolve(cacheTaskId);
 

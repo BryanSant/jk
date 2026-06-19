@@ -167,9 +167,9 @@ public final class CompileToolchain {
             dist = new ToolDistribution(BuildTool.KOTLIN, versionOverride, uri, "zip");
         }
         try {
-            boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+            boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
             ToolProvisioning.Result result = ToolProvisioning.provision(
-                    dist, registry, new Http(), /*noDiscover=*/ false, noCache);
+                    dist, registry, new Http(), /*noDiscover=*/ false, refresh);
             switch (result.source()) {
                 case LINKED -> notice.accept("Linked Kotlin " + dist.version()
                         + " from " + result.detail());

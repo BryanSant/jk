@@ -123,7 +123,7 @@ public final class JdkInstallCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("fetch JetBrains JDK feed");
-                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
                     JdkCatalogClient client = (feedUrl != null
                             ? new JdkCatalogClient(new Http(), feedUrl,
                                     cacheFile != null ? cacheFile : ephemeralCachePath(),
@@ -131,7 +131,7 @@ public final class JdkInstallCommand implements CliCommand {
                             : new JdkCatalogClient())
                             .onWarning(ctx::output);
                     try {
-                        ctx.put(CATALOG, client.fetch(noCache));
+                        ctx.put(CATALOG, client.fetch(refresh));
                     } catch (Exception e) {
                         ctx.error("catalog", e.getMessage());
                         throw new RuntimeException(e);
@@ -193,8 +193,8 @@ public final class JdkInstallCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     JdkCatalog.Entry entry = ctx.require(ENTRY);
-                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-                    InstalledJdk already = noCache ? null : installer.alreadyInstalled(entry);
+                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    InstalledJdk already = refresh ? null : installer.alreadyInstalled(entry);
                     if (already != null) {
                         String label = entry.vendor() + " " + entry.product()
                                 + " " + entry.majorVersion();

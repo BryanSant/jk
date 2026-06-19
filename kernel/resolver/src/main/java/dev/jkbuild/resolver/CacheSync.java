@@ -67,11 +67,11 @@ public final class CacheSync {
      * Goal-style progress bar where the numerator climbs one tick per
      * package processed.
      *
-     * <p>When {@code noCache} is true the CAS presence check is skipped
+     * <p>When {@code refresh} is true the CAS presence check is skipped
      * and every artifact is re-downloaded from its source, regardless of
      * whether a local copy already exists.
      */
-    public Report sync(Lockfile lock, ProgressObserver observer, boolean noCache)
+    public Report sync(Lockfile lock, ProgressObserver observer, boolean refresh)
             throws IOException, InterruptedException {
         int upToDate = 0;
         int skipped = 0;
@@ -90,7 +90,7 @@ public final class CacheSync {
                     ? pkg.checksum().substring("sha256:".length())
                     : pkg.checksum();
 
-            if (!noCache && cas.contains(hex)) {
+            if (!refresh && cas.contains(hex)) {
                 upToDate++;
                 observer.upToDate(pkg);
                 continue;

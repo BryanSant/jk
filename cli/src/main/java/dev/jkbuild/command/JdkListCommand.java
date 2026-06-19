@@ -506,7 +506,7 @@ public final class JdkListCommand implements CliCommand {
     private JdkCatalog fetchCatalogOrNull() {
         if (!HostPlatform.supported()) return null;
         try {
-            boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+            boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
             JdkCatalogClient client = (feedUrl != null
                     ? new JdkCatalogClient(new Http(), feedUrl,
                             cacheFile != null ? cacheFile : ephemeralCachePath(),
@@ -515,7 +515,7 @@ public final class JdkListCommand implements CliCommand {
                     .onWarning(System.err::println);
             // --all is the "show me everything" view: every vendor/product at
             // every major >= 17, not just jk's curated LTS-or-latest set.
-            return client.fetch(noCache, /* firstClassOnly = */ false);
+            return client.fetch(refresh, /* firstClassOnly = */ false);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
             System.err.println("jk jdk list: JetBrains feed unreachable ("

@@ -149,7 +149,8 @@ public final class Jk {
     private static void applyCliOverrides(String[] args) {
         java.util.Optional<JkConfig.ColorChoice> color = java.util.Optional.empty();
         java.util.Optional<Boolean> offline = java.util.Optional.empty();
-        java.util.Optional<Boolean> noCache = java.util.Optional.empty();
+        java.util.Optional<Boolean> rerun = java.util.Optional.empty();
+        java.util.Optional<Boolean> refresh = java.util.Optional.empty();
         java.util.Optional<Boolean> noProgress = java.util.Optional.empty();
         java.util.Optional<Boolean> quiet = java.util.Optional.empty();
         java.util.Optional<Boolean> verbose = java.util.Optional.empty();
@@ -160,7 +161,8 @@ public final class Jk {
                 case "-q", "--quiet" -> quiet = java.util.Optional.of(true);
                 case "-v", "--verbose" -> verbose = java.util.Optional.of(true);
                 case "--offline" -> offline = java.util.Optional.of(true);
-                case "--no-cache" -> noCache = java.util.Optional.of(true);
+                case "--rerun" -> rerun = java.util.Optional.of(true);
+                case "--refresh" -> refresh = java.util.Optional.of(true);
                 case "--no-progress" -> noProgress = java.util.Optional.of(true);
                 case "--color" -> {
                     if (i + 1 < args.length) color = JkConfig.ColorChoice.parse(args[++i]);
@@ -177,7 +179,7 @@ public final class Jk {
                 }
             }
         }
-        JkConfig cli = new JkConfig(color, offline, noCache, noProgress, quiet, verbose, directory);
+        JkConfig cli = new JkConfig(color, offline, rerun, refresh, noProgress, quiet, verbose, directory);
         ActiveConfig.install(ActiveConfig.get().mergedWith(cli));
     }
 

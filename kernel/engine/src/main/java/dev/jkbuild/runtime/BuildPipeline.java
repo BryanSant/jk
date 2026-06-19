@@ -379,8 +379,8 @@ public final class BuildPipeline {
                             ctx.progress(1);
                         }
                     };
-                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-                    var report = new CacheSync(cas, new Http()).sync(lock, observer, noCache);
+                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    var report = new CacheSync(cas, new Http()).sync(lock, observer, refresh);
                     if (report.hasErrors()) throw new RuntimeException("dep sync had errors");
                 })
                 .build();
@@ -443,7 +443,7 @@ public final class BuildPipeline {
                     }
                     @SuppressWarnings("unchecked")
                     List<Path> processorCp = (List<Path>) ctx.require(PROCESSOR_CP);
-                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
                     // Fold the processor path into the freshness inputs so a processor
                     // bump busts the stamp (it isn't on the compile classpath).
                     List<Path> stampInputs = classpath;
@@ -451,7 +451,7 @@ public final class BuildPipeline {
                         stampInputs = new ArrayList<>(classpath);
                         stampInputs.addAll(processorCp);
                     }
-                    if (!noCache && dev.jkbuild.task.FreshnessStamp.isFresh(
+                    if (!rerun && dev.jkbuild.task.FreshnessStamp.isFresh(
                             javaOut, dev.jkbuild.task.FreshnessStamp.JAVA_STAMP, sources, stampInputs)) {
                         ctx.label("up to date");
                         ctx.put(BUILD_OUTCOME, "up-to-date");
@@ -497,7 +497,7 @@ public final class BuildPipeline {
                     dev.jkbuild.task.JavaIncrementalCompile.Result r =
                             dev.jkbuild.task.JavaIncrementalCompile.run(
                                     taskId, request, dev.jkbuild.util.JkVersion.VERSION,
-                                    !noCache, cas, actionCache, javaStateDir, ap);
+                                    !rerun, cas, actionCache, javaStateDir, ap);
                     ctx.put(ACTION_KEY, r.actionKey());
                     // Forward every javac diagnostic to the terminal, by severity:
                     // errors fail the build, warnings/notes (e.g. deprecation) are
@@ -550,8 +550,8 @@ public final class BuildPipeline {
                     // rewrites, and copy-resources churns it).
                     List<Path> freshInputs = new ArrayList<>(ktSources);
                     if (mixedWithJava) freshInputs.addAll(javaSources(ctx));
-                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-                    if (!noCache && dev.jkbuild.task.FreshnessStamp.isFresh(
+                    boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
+                    if (!rerun && dev.jkbuild.task.FreshnessStamp.isFresh(
                             classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP, freshInputs, classpath)) {
                         ctx.label("up to date");
                         ctx.put(KOTLIN_OUTCOME, "up-to-date");
@@ -710,12 +710,12 @@ public final class BuildPipeline {
                     String stampKey = dev.jkbuild.task.TestStamp.computeKey(
                             testSrcs, ctx.require(MAIN_CLASSES), in.lockFile(), testRtCp,
                             testStampExtras(workerJars));
-                    // --no-cache forces a real test run, matching the compile/package
-                    // freshness checks above (which all guard on !noCache). Without
+                    // --rerun forces a real test run, matching the compile/package
+                    // freshness checks above (which all guard on !rerun). Without
                     // this guard the incremental stamp would skip the runner even
                     // when the user explicitly asked to bypass build caches.
-                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-                    if (!noCache && dev.jkbuild.task.TestStamp.isFresh(testClassesForStamp, stampKey)) {
+                    boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
+                    if (!rerun && dev.jkbuild.task.TestStamp.isFresh(testClassesForStamp, stampKey)) {
                         ctx.label("tests up-to-date");
                         return; // skip — nothing changed since last green run
                     }
@@ -1386,9 +1386,9 @@ public final class BuildPipeline {
                 .snapshotDir(in.cache().resolve("kotlin-cp-snapshots"))
                 .extraArgs(ktArgs)
                 .build();
-        boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+        boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
         return dev.jkbuild.task.KotlinCompile.run(
-                taskId, req, dev.jkbuild.util.JkVersion.VERSION, !noCache, cas, actionCache);
+                taskId, req, dev.jkbuild.util.JkVersion.VERSION, !rerun, cas, actionCache);
     }
 
     /**
@@ -1470,10 +1470,10 @@ public final class BuildPipeline {
      * Packaging cache (mirrors the compile {@link ActionCache} path, for artifacts).
      * Returns {@code true} when a cached artifact for {@code key} was hard-linked
      * back into {@code baseDir} — the caller then skips the (re)packaging work.
-     * Honors {@code --no-cache}.
+     * Honors {@code --rerun}.
      */
     private static boolean restorePackaged(Path cacheRoot, String key, Path baseDir) throws IOException {
-        if (dev.jkbuild.config.ActiveConfig.get().noCacheOr(false)) return false;
+        if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return false;
         ActionCache ac = new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"));
         var hit = ac.lookup(key);
         return hit.isPresent() && ac.restoreArtifacts(hit.get(), baseDir);
@@ -1482,7 +1482,7 @@ public final class BuildPipeline {
     /** Record a freshly-produced packaging artifact so a later build can skip it. */
     private static void storePackaged(Path cacheRoot, String taskId, String key, List<String> tokens,
                                       Path baseDir, List<Path> artifacts) throws IOException {
-        if (dev.jkbuild.config.ActiveConfig.get().noCacheOr(false)) return;
+        if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return;
         new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"))
                 .storeArtifacts(taskId, key, Map.of("inputs", String.join(";", tokens)), baseDir, artifacts);
     }

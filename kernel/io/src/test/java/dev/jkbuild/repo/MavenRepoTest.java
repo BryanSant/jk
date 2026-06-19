@@ -44,7 +44,7 @@ class MavenRepoTest {
 
     private static void goOffline() {
         ActiveConfig.install(new JkConfig(
-                Optional.empty(), Optional.of(true), Optional.empty(),
+                Optional.empty(), Optional.of(true), Optional.empty(), Optional.empty(),
                 Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()));
     }
 

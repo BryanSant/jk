@@ -204,8 +204,8 @@ public final class SyncCommand implements CliCommand {
                             ctx.progress(1);
                         }
                     };
-                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
-                    var report = new CacheSync(cas, http).sync(lock, observer, noCache);
+                    boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
+                    var report = new CacheSync(cas, http).sync(lock, observer, refresh);
                     ctx.put(CAS_REPORT, report);
                     if (report.hasErrors()) {
                         throw new RuntimeException("dep fetch had errors");
@@ -400,7 +400,7 @@ public final class SyncCommand implements CliCommand {
 
         Cas cas = new Cas(cache);
         Http http = new Http();
-        boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+        boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
         for (Map.Entry<Path, JkBuild> entry : members.entrySet()) {
             Path memberDir = entry.getKey();
             Path memberLock = memberDir.resolve("jk.lock");
@@ -414,7 +414,7 @@ public final class SyncCommand implements CliCommand {
             try {
                 Lockfile lock = LockfileReader.read(memberLock);
                 var report = new dev.jkbuild.resolver.CacheSync(cas, http)
-                        .sync(lock, dev.jkbuild.resolver.CacheSync.ProgressObserver.NOOP, noCache);
+                        .sync(lock, dev.jkbuild.resolver.CacheSync.ProgressObserver.NOOP, refresh);
                 if (!global.outputIsJson() && (report.fetched() > 0 || report.upToDate() > 0)) {
                     System.out.println(dir.relativize(memberDir) + ": "
                             + report.fetched() + " fetched, "
