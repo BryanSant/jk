@@ -82,6 +82,14 @@ public final class TestCommand implements CliCommand {
 
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         int workerCount = workers != null && workers > 0 ? workers : 1;
+        // Size the test-runner JVMs' heaps (and cap how many fork at once) to the
+        // host's free memory before launching them.
+        dev.jkbuild.worker.HeapPlan.Plan heapPlan = dev.jkbuild.worker.JvmOptions.planAndApply(
+                dev.jkbuild.worker.HeapPlan.requestedJvms(
+                        1, workerCount, false, Runtime.getRuntime().availableProcessors()));
+        if (heapPlan != null && heapPlan.warning() != null && !global.outputIsJson()) {
+            System.err.println("jk test: " + heapPlan.warning());
+        }
         // Up-front lexical estimate (Java + Kotlin test sources) so the bar's
         // denominator is set once; the static plan gates the numerator and
         // phase-end auto-fill closes any residual gap.

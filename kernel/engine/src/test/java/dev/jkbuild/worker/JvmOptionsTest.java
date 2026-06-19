@@ -54,6 +54,39 @@ class JvmOptionsTest {
     }
 
     @Test
+    void absolute_flags_emit_xms_softmax_xmx_and_zgc_uncommit() {
+        HeapPlan.Plan plan = new HeapPlan.Plan(
+                4, 64L << 20, 512L << 20, 800L << 20, null);
+        assertThat(JvmOptions.absoluteFlags(plan, Settings.NONE))
+                .containsExactly("-Xms64m", "-Xmx800m", "-XX:SoftMaxHeapSize=512m",
+                        "-XX:+UseZGC", "-XX:+ZUncommit", "-XX:ZUncommitDelay=30",
+                        "-XX:+UseStringDeduplication");
+    }
+
+    @Test
+    void absolute_flags_skip_softmax_for_serial_gc() {
+        HeapPlan.Plan plan = new HeapPlan.Plan(1, 64L << 20, 256L << 20, 256L << 20, null);
+        Settings serial = new Settings(null, "none", false, java.util.List.of());
+        assertThat(JvmOptions.absoluteFlags(plan, serial))
+                .containsExactly("-Xms64m", "-Xmx256m");   // no SoftMaxHeapSize, no collector
+    }
+
+    @Test
+    void auto_heap_disabled_when_user_pins_a_heap_flag() {
+        try {
+            JvmOptions.setProcessSettings(new Settings(null, null, null,
+                    java.util.List.of("-Xmx2g")));
+            assertThat(JvmOptions.autoHeapEnabled()).isFalse();
+            JvmOptions.setProcessSettings(new Settings(50.0, null, null, java.util.List.of()));
+            assertThat(JvmOptions.autoHeapEnabled()).isFalse();
+            JvmOptions.setProcessSettings(Settings.NONE);
+            assertThat(JvmOptions.autoHeapEnabled()).isTrue();
+        } finally {
+            JvmOptions.setProcessSettings(null);
+        }
+    }
+
+    @Test
     void reads_jvm_table_from_toml(@TempDir Path dir) throws Exception {
         Path toml = dir.resolve("jk.toml");
         Files.writeString(toml, """

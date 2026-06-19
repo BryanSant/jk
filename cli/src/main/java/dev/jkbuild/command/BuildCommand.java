@@ -82,6 +82,7 @@ public final class BuildCommand implements CliCommand {
     dev.jkbuild.cli.BuildOptions buildOpts;
     GlobalOptions global;
     boolean noParallel;
+    boolean parallelTests;
 
     // ---- GoalKeys -------------------------------------------------------
     //
@@ -109,7 +110,8 @@ public final class BuildCommand implements CliCommand {
         this.global = GlobalOptions.from(in);
         // Opt-in: run modules' tests concurrently. Default serializes them
         // (shared ports/locks/fixtures) — see BuildPipeline's test gate.
-        BuildPipeline.setParallelTests(in.isSet("parallel-tests"));
+        this.parallelTests = in.isSet("parallel-tests");
+        BuildPipeline.setParallelTests(parallelTests);
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
@@ -145,6 +147,7 @@ public final class BuildCommand implements CliCommand {
         } catch (java.io.IOException e) {
             // Workspace discovery failed — fall through to single-project build.
         }
+        applyMemoryPlan(1);   // single project: one module, tests fork `workers` JVMs
         int dep = buildCompositeDeps(startDir, peek);
         if (dep != 0) return dep;
         return runForDir(startDir);
@@ -153,6 +156,43 @@ public final class BuildCommand implements CliCommand {
     /** Default: parallel graph build; {@code --no-parallel}: the serial rich aggregate view. */
     private int buildWorkspace(Path root, JkBuild rootBuild) throws Exception {
         return noParallel ? runWorkspaceBuild(root, rootBuild) : runGraphParallel(root, rootBuild);
+    }
+
+    /**
+     * Size worker-JVM concurrency and per-JVM heaps from the host's free memory
+     * before any fork. {@code requestedModules} is the peak number of modules
+     * that could build at once; folded with {@code --workers} and
+     * {@code --parallel-tests} into a desired JVM count, which the memory plan
+     * may shrink (down to serial). A no-op when the user pinned heap tuning.
+     */
+    private void applyMemoryPlan(int requestedModules) {
+        int w = workers != null && workers > 0 ? workers : 1;
+        int cap = Runtime.getRuntime().availableProcessors();
+        int requested = dev.jkbuild.worker.HeapPlan.requestedJvms(requestedModules, w, parallelTests, cap);
+        dev.jkbuild.worker.HeapPlan.Plan plan = dev.jkbuild.worker.JvmOptions.planAndApply(requested);
+        if (plan != null && plan.warning() != null && !global.outputIsJson()) {
+            System.err.println("jk build: " + plan.warning());
+        }
+    }
+
+    /** Peak number of units that become ready simultaneously across the topo schedule. */
+    private static int maxReadyWidth(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges) {
+        Set<Path> unitDirs = new java.util.HashSet<>();
+        for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
+        Set<Path> done = new java.util.HashSet<>();
+        List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
+        int max = 1;
+        while (!remaining.isEmpty()) {
+            List<BuildGraph.BuildUnit> ready = remaining.stream()
+                    .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
+                            .filter(unitDirs::contains).allMatch(done::contains))
+                    .toList();
+            if (ready.isEmpty()) break;   // defensive: a cycle would otherwise spin
+            max = Math.max(max, ready.size());
+            for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
+            remaining.removeAll(ready);
+        }
+        return max;
     }
 
     private static final Object OUT_LOCK = new Object();
@@ -188,6 +228,9 @@ public final class BuildCommand implements CliCommand {
             System.out.println("(workspace declares no members)");
             return 0;
         }
+        // Size worker concurrency + heaps to the graph's peak parallelism before
+        // any unit forks (caps the JVM slot pool the scheduler draws from).
+        applyMemoryPlan(Math.min(maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
         // --output json / --verbose keep the buffered, non-live path (NDJSON streams
         // / full per-phase logs); AUTO/QUIET get the live aggregate view (a single
         // spinner header + bar + a tree of the members building right now).
@@ -270,6 +313,9 @@ public final class BuildCommand implements CliCommand {
         Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
         List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
         java.util.concurrent.atomic.AtomicInteger completed = new java.util.concurrent.atomic.AtomicInteger();
+        // Units' process output is buffered here and flushed below the live region
+        // once the build settles, so concurrent logs never interleave with the view.
+        List<String> deferredOutput = java.util.Collections.synchronizedList(new ArrayList<>());
         while (!remaining.isEmpty()) {
             List<BuildGraph.BuildUnit> ready = remaining.stream()
                     .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
@@ -279,7 +325,7 @@ public final class BuildCommand implements CliCommand {
             for (BuildGraph.BuildUnit u : ready) {
                 PreparedMember pm = prepared.get(u.dir());
                 futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
-                        () -> buildUnitLive(u, pm, agg, view, completed, total), JkThreads.io()));
+                        () -> buildUnitLive(u, pm, agg, view, completed, total, deferredOutput), JkThreads.io()));
             }
             UnitOutcome failure = null;
             for (java.util.concurrent.CompletableFuture<UnitOutcome> f : futures) {
@@ -288,6 +334,7 @@ public final class BuildCommand implements CliCommand {
             }
             if (failure != null) {
                 view.finishFailure(buildFailedAt(failure.coord(), start));
+                flushDeferred(deferredOutput);
                 for (GoalResult.Diagnostic d : agg.lastErrors()) {
                     if ("test-failure".equals(d.code())) continue;  // already printed by run-tests
                     System.err.println(ConsoleSpec.renderError(d));
@@ -299,17 +346,21 @@ public final class BuildCommand implements CliCommand {
         }
         view.finishSuccess("built " + total + " module" + (total == 1 ? "" : "s")
                 + " " + elapsedSince(start));
+        flushDeferred(deferredOutput);
         return 0;
     }
 
     /**
-     * Build one unit feeding the shared live {@code view}; buffer its output and,
-     * on completion, flush the block + a colored ✓/✗ {@code [k/N]} line above the
-     * region (one atomic {@code writeAbove} so a unit's lines never split).
+     * Build one unit feeding the shared live {@code view}; buffer its output. On
+     * completion: when animating, the colored ✓/✗ {@code [k/N]} line joins the
+     * region's completed tail and the unit's process output is appended to
+     * {@code deferredOutput} (flushed below the region once the build settles, so
+     * concurrent logs never interleave with the live view); otherwise (pipes /
+     * {@code --quiet}) the buffered block + line print append-only, atomically.
      */
     private UnitOutcome buildUnitLive(BuildGraph.BuildUnit unit, PreparedMember pm, AggregateContext agg,
                                       CommandManager view, java.util.concurrent.atomic.AtomicInteger completed,
-                                      int total) {
+                                      int total, List<String> deferredOutput) {
         List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
         long t0 = System.nanoTime();
         boolean ok;
@@ -326,11 +377,26 @@ public final class BuildCommand implements CliCommand {
         }
         long ms = (System.nanoTime() - t0) / 1_000_000;
         int k = completed.incrementAndGet();
-        StringBuilder block = new StringBuilder();
-        synchronized (buf) { for (String l : buf) block.append(l).append('\n'); }
-        block.append(completionLine(ok, k, total, unit.coord(), ms));
-        view.writeAbove(block.toString());
+        String completion = completionLine(ok, k, total, unit.coord(), ms);
+        if (view.animating()) {
+            view.addCompletion(completion);
+            synchronized (buf) {
+                if (!buf.isEmpty()) deferredOutput.addAll(buf);
+            }
+        } else {
+            StringBuilder block = new StringBuilder();
+            synchronized (buf) { for (String l : buf) block.append(l).append('\n'); }
+            block.append(completion);
+            view.writeAbove(block.toString());
+        }
         return new UnitOutcome(unit.coord(), ok, exit, ms, List.of());
+    }
+
+    /** Print buffered unit output below the (settled) live region, in completion order. */
+    private static void flushDeferred(List<String> deferred) {
+        synchronized (deferred) {
+            for (String line : deferred) System.out.println(line);
+        }
     }
 
     /** Build one graph unit (dependency units compile-only) with output buffered. */
@@ -422,6 +488,7 @@ public final class BuildCommand implements CliCommand {
             System.out.println("(workspace declares no members)");
             return 0;
         }
+        applyMemoryPlan(1);   // --no-parallel: modules build serially (peak = 1 module)
         // Build any composite (path / branch-git) dependency units the workspace
         // (or its members) declare, before the members that consume them.
         int dep = buildCompositeDeps(workspaceRoot, root);

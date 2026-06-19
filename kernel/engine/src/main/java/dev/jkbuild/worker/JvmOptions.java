@@ -155,9 +155,98 @@ public final class JvmOptions {
      * Worker-fork JVM flags for {@code concurrency} simultaneously-launched JVMs,
      * built from the resolved {@linkplain #processSettings() process tuning} — so a
      * {@code --max-ram-percent} flag or a {@code [jvm]} table reaches the worker.
+     *
+     * <p>When a {@linkplain #processHeapPlan() heap plan} is in effect (the
+     * default — no explicit heap tuning), absolute {@code -Xms}/{@code -Xmx}/
+     * {@code -XX:SoftMaxHeapSize} from the plan replace the relative
+     * {@code MaxRAMPercentage}; the plan already accounts for how many JVMs run
+     * at once, so {@code concurrency} is ignored in that case.
      */
     public static List<String> workerFlags(int concurrency) {
+        HeapPlan.Plan plan = processHeapPlan();
+        if (plan != null && autoHeapEnabled()) return absoluteFlags(plan, processSettings());
         return flags(processSettings(), concurrency);
+    }
+
+    /** Resolved heap budget for this invocation, or {@code null} when unset / explicitly overridden. */
+    private static volatile HeapPlan.Plan heapPlan;
+
+    /**
+     * Probe memory, compute the heap budget for {@code requestedJvms} desired
+     * forks, and apply it process-wide: stash it for {@link #workerFlags} and
+     * size {@link WorkerSlots} so no more than the plan's parallelism run at
+     * once. A no-op (returns {@code null}, opens the worker gate) when the user
+     * supplied explicit heap tuning — their settings then drive sizing as before.
+     */
+    public static HeapPlan.Plan planAndApply(int requestedJvms) {
+        if (!autoHeapEnabled()) {
+            WorkerSlots.configure(0);   // unbounded: honour the user's relative/explicit sizing
+            heapPlan = null;
+            return null;
+        }
+        HeapPlan.Plan plan = HeapPlan.compute(MemoryProbe.probe().availableBytes(), requestedJvms);
+        heapPlan = plan;
+        WorkerSlots.configure(plan.parallelism());
+        return plan;
+    }
+
+    /** The applied heap budget, or {@code null} if none (explicit tuning / not yet planned). */
+    public static HeapPlan.Plan processHeapPlan() {
+        return heapPlan;
+    }
+
+    /**
+     * True when jk should auto-size worker heaps: the user pinned neither a
+     * {@code --max-ram-percent} / {@code [jvm] max-ram-percent} nor an explicit
+     * heap flag ({@code -Xmx}/{@code -Xms}/{@code -XX:MaxHeapSize}/
+     * {@code -XX:MaxRAMPercentage}) via {@code --jvm-arg} / {@code [jvm] args}.
+     */
+    public static boolean autoHeapEnabled() {
+        Settings s = processSettings();
+        if (s.maxRamPercent() != null) return false;
+        for (String a : s.extraArgs()) {
+            if (a.startsWith("-Xmx") || a.startsWith("-Xms")
+                    || a.startsWith("-XX:MaxHeapSize") || a.startsWith("-XX:MinHeapSize")
+                    || a.startsWith("-XX:MaxRAMPercentage") || a.startsWith("-XX:SoftMaxHeapSize")) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Absolute-heap worker flags from {@code plan}: small {@code -Xms}, a
+     * {@code SoftMaxHeapSize} good-neighbour target, an {@code -Xmx} burst cap,
+     * and the collector (default generational ZGC with {@code ZUncommit} so idle
+     * heap is returned to the OS). {@code SoftMaxHeapSize} is only emitted for
+     * collectors that honour it (ZGC / G1).
+     */
+    static List<String> absoluteFlags(HeapPlan.Plan plan, Settings s) {
+        String gc = (s.gc() != null ? s.gc() : DEFAULT_GC).toLowerCase(Locale.ROOT);
+        boolean dedup = s.stringDedup() == null || s.stringDedup();
+        boolean softMaxAware = gc.equals("zgc") || gc.equals("g1");
+
+        List<String> out = new ArrayList<>();
+        out.add("-Xms" + HeapPlan.mib(plan.xmsBytes()) + "m");
+        out.add("-Xmx" + HeapPlan.mib(plan.xmxBytes()) + "m");
+        if (softMaxAware) out.add("-XX:SoftMaxHeapSize=" + HeapPlan.mib(plan.softMaxBytes()) + "m");
+        switch (gc) {
+            case "zgc" -> {
+                out.add("-XX:+UseZGC");
+                out.add("-XX:+ZUncommit");
+                out.add("-XX:ZUncommitDelay=30");
+            }
+            case "g1" -> out.add("-XX:+UseG1GC");
+            case "none", "default", "" -> { /* JVM default collector */ }
+            default -> {
+                out.add("-XX:+UseZGC");
+                out.add("-XX:+ZUncommit");
+                out.add("-XX:ZUncommitDelay=30");
+            }
+        }
+        if (dedup && (gc.equals("zgc") || gc.equals("g1"))) out.add("-XX:+UseStringDeduplication");
+        out.addAll(s.extraArgs());
+        return out;
     }
 
     /**

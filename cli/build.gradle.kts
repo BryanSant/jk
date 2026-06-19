@@ -134,6 +134,13 @@ graalvmNative {
         buildArgs.add("-march=$march")
         buildArgs.add("--gc=serial")
         buildArgs.add("-R:MaxHeapSize=268435456")
+        // -R:MinHeapSize=268435456
+        //           Pin the minimum heap to the same 256 MiB (the -Xms half of
+        //           the user's "-Xms/-Xmx 256 MiB" ask). The serial GC won't
+        //           collect below this, so a short verb that stays under 256 MiB
+        //           ideally never runs a GC cycle; pages aren't pre-touched, so
+        //           a trivial command's RSS stays small.
+        buildArgs.add("-R:MinHeapSize=268435456")
         // JLine 4 FFM's signal handler uses Arena.ofShared(), gated behind this
         // flag in GraalVM 25. Without it the wizard crashes on Signal.INT setup.
         buildArgs.add("-H:+SharedArenaSupport")

@@ -92,6 +92,17 @@ public final class WorkerProcess {
             throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
         if (extraEnv != null && !extraEnv.isEmpty()) pb.environment().putAll(extraEnv);
+        // Hold a worker slot for the child's whole lifetime so no more than the
+        // memory plan's parallelism run at once (open gate when unconfigured).
+        try (WorkerSlots.Lease lease = WorkerSlots.acquire()) {
+            return converse(pb, prefix, onProtocol, onPassthrough);
+        }
+    }
+
+    private static int converse(ProcessBuilder pb, String prefix,
+                                BiConsumer<String, Conversation> onProtocol,
+                                Consumer<String> onPassthrough)
+            throws IOException, InterruptedException {
         Process process = pb.start();
         try (BufferedReader reader = new BufferedReader(
                      new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
