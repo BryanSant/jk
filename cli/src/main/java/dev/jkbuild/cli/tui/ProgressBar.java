@@ -32,7 +32,8 @@ public final class ProgressBar {
     static final char EMPTY_CHAR = '▱';
 
     private final AttributedStyle[] fillColors;
-    private final AttributedStyle emptyStyle = Theme.active().dim();
+    /** Empty glyphs take the gradient's left-most (darkest) color, not a neutral dim. */
+    private final AttributedStyle emptyStyle;
 
     /** Bar in the default green → bright-green progress gradient. */
     public ProgressBar() {
@@ -42,6 +43,7 @@ public final class ProgressBar {
     /** Bar in an explicit gradient (e.g. the failure gradient for a stopped run). */
     public ProgressBar(Gradient gradient) {
         this.fillColors = buildGradient(SEGMENTS, gradient);
+        this.emptyStyle = fillColors[0];
     }
 
     /** Clamp {@code numerator / denominator} to {@code [0.0, 1.0]}. */

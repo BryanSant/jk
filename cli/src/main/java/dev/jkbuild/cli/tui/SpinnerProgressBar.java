@@ -67,7 +67,8 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
     private final PrintStream out;
     private final AttributedStyle[] segmentColors;
     private final AttributedStyle[] failColors;
-    private final AttributedStyle emptyStyle = Theme.active().dim();
+    /** Empty glyphs take the gradient's left-most (darkest) color, not a neutral dim. */
+    private final AttributedStyle emptyStyle;
     private final boolean silent;
 
     private int lastFilled = 0;
@@ -82,6 +83,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
         // The fill runs green → bright-green (bright-green pinned at the frontier).
         this.segmentColors = buildGradient(SEGMENTS, Theme.active().progressGradient());
         this.failColors = buildGradient(SEGMENTS, Theme.active().failureGradient());
+        this.emptyStyle = segmentColors[0];
     }
 
     /**
