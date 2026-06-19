@@ -792,7 +792,7 @@ public final class BuildCommand implements CliCommand {
         String rel = goal.get(LAYOUT)
                 .map(layout -> relativeOrName(layout.memberRoot(), jar))
                 .orElseGet(() -> jar.getFileName().toString());
-        return Theme.colorize(rel, Theme.active().highlight());
+        return Theme.colorize(rel, Theme.active().path());
     }
 
     /** {@code base}-relative path with forward slashes, or the bare filename on failure. */

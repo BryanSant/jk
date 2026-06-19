@@ -67,7 +67,7 @@ public final class CompilerDiagnostic {
         Theme th = Theme.active();
         String rel = PathDisplay.of(Path.of(h.group("file")));
         StringBuilder sb = new StringBuilder()
-                .append(Theme.colorize(rel, th.highlight()))
+                .append(Theme.colorize(rel, th.path()))
                 .append(':').append(Theme.colorize(h.group("line"), th.cyan()));
         if (h.group("col") != null) {
             sb.append(':').append(Theme.colorize(h.group("col"), th.cyan()));

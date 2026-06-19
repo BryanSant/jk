@@ -249,7 +249,7 @@ public final class IdeaCommand implements CliCommand {
         String wsName = wsRoot.getFileName().toString();
         System.out.println(Theme.colorize("✓", t.success())
                 + " Generated " + files + " project file" + (files == 1 ? "" : "s")
-                + " in " + Theme.colorize(wsName + "/.idea", t.warning()));
+                + " in " + Theme.colorize(wsName + "/.idea", t.path()));
         if (!touchedTables.isEmpty()) {
             System.out.println("  Registered " + Theme.colorize(defaultSdk.sdkName(), t.cyan())
                     + " in " + touchedTables.size() + " IDE config"

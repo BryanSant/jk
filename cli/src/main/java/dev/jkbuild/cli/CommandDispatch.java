@@ -226,7 +226,7 @@ public final class CommandDispatch {
         String label = HelpRenderer.paint("‼ Error:", t.errorLabel(), ansi);
         String jar   = HelpRenderer.paint(e.artifactId() + ".jar", t.warning(), ansi);
         String sha   = HelpRenderer.paint(e.sha(), t.cyan(), ansi);
-        String path  = HelpRenderer.paint(e.path().toString(), t.warning(), ansi);
+        String path  = HelpRenderer.paint(e.path().toString(), t.path(), ansi);
         String jk    = ansi ? Ansi.sgr(t.helpHint()) + "jk" + Ansi.RESET : "jk";
         System.err.println(label + " " + jar + " is not in the CAS.");
         System.err.println("  Expected sha256: " + sha);

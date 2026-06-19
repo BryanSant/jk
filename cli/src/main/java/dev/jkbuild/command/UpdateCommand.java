@@ -243,7 +243,7 @@ public final class UpdateCommand implements CliCommand {
             var th = Theme.active();
             int n = lock.artifacts().size();
             System.out.println(Theme.colorize(Glyphs.CHECK, th.success())
-                    + " Updated: " + Theme.colorize(PathDisplay.of(lockFile, global.workingDir()), th.highlight())
+                    + " Updated: " + Theme.colorize(PathDisplay.of(lockFile, global.workingDir()), th.path())
                     + " " + Theme.colorize("›", th.darkGray())
                     + " " + Theme.colorize(String.valueOf(n), th.cyan())
                     + " package" + (n == 1 ? "" : "s"));

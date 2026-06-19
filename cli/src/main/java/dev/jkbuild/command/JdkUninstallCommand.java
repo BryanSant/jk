@@ -318,7 +318,7 @@ public final class JdkUninstallCommand implements CliCommand {
         // matching the cyan target shown in the confirmation prompt.
         String label = hit.source() + "/" + identifier;
         try (var sp = Spinner.show(System.out,
-                "Deleting " + Theme.colorize(JdkInstallCommand.tildeCollapse(installDir), Theme.active().warning())
+                "Deleting " + Theme.colorize(JdkInstallCommand.tildeCollapse(installDir), Theme.active().path())
                         + "...")) {
             // Try the owning tool first so its manifest stays consistent
             // (sdkman, mise, jbang, jenv, asdf, brew). Anything left on disk

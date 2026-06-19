@@ -184,7 +184,7 @@ public final class RunCommand implements CliCommand {
             // Native binary — "native binary: target/myapp"
             Path bin = Path.of(command.get(0));
             exec = "native binary: "
-                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.warning());
+                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.path());
         } else {
             // JVM — derive jdk leaf, resolving symlinks so "current" shows the real spec.
             Path javaExe = Path.of(command.get(0));
@@ -194,20 +194,21 @@ public final class RunCommand implements CliCommand {
                     ? jdkHome.getFileName().toString() : "java";
 
             String flag = command.get(1);   // "-jar" or "-cp"
+            // Only the path is path-colored; the literal "java -jar/-cp …" stays plain.
             String javaCmd;
             if ("-jar".equals(flag)) {
                 // Shadow jar — full relative path, no classpath noise.
                 Path jar = Path.of(command.get(2));
-                javaCmd = "java -jar " + PathDisplay.of(jar, projectDir);
+                javaCmd = "java -jar " + Theme.colorize(PathDisplay.of(jar, projectDir), t.path());
             } else {
                 // Plain jar + classpath — elide the full cp, show project jar.
                 String cpArg = command.size() >= 3 ? command.get(2) : "";
                 String pathSep = System.getProperty("path.separator");
                 String first = cpArg.contains(pathSep)
                         ? cpArg.substring(0, cpArg.indexOf(pathSep)) : cpArg;
-                javaCmd = "java -cp … " + PathDisplay.of(Path.of(first), projectDir);
+                javaCmd = "java -cp … " + Theme.colorize(PathDisplay.of(Path.of(first), projectDir), t.path());
             }
-            exec = "(" + jdkLeaf + "): " + Theme.colorize(javaCmd, t.warning());
+            exec = "(" + jdkLeaf + "): " + javaCmd;
         }
         System.err.println("→ Executing " + exec);
         System.err.println();

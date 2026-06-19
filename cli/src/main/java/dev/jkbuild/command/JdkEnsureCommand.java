@@ -261,7 +261,7 @@ public final class JdkEnsureCommand implements CliCommand {
                 Theme.colorize("✓", Theme.active().completedStep())
                         + " " + Theme.colorize(identifier, Theme.active().cyan())
                         + Theme.colorize(" is available at ", Theme.active().normalGray())
-                        + Theme.colorize(JdkInstallCommand.tildeCollapse(home), Theme.active().warning()));
+                        + Theme.colorize(JdkInstallCommand.tildeCollapse(home), Theme.active().path()));
     }
 
     /** {@code true} when {@code version >= floor} per {@link JdkSelector#versionKey} ordering. */

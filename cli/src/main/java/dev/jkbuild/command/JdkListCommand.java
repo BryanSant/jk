@@ -417,7 +417,7 @@ public final class JdkListCommand implements CliCommand {
             // AVAILABLE rows render the source ("download") in the same dark-gray
             // as their status, so the entire catalog-only row reads as de-emphasised
             // relative to actually-installed JDKs.
-            AttributedStyle locStyle = status == Status.AVAILABLE ? Theme.active().darkGray() : Theme.active().warning();
+            AttributedStyle locStyle = status == Status.AVAILABLE ? Theme.active().darkGray() : Theme.active().path();
             locStyled = Theme.colorize(location, locStyle) + " ".repeat(widths[4] - location.length());
         }
         // The active JDK gets its vendor + spec bolded so the one in effect stands out.

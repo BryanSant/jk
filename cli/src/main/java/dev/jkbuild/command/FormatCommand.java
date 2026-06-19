@@ -182,7 +182,7 @@ public final class FormatCommand implements CliCommand {
                     counts[0]++;
                     if (!global.outputIsJson()) {
                         String mark = Theme.colorize("✓", Theme.active().success());
-                        String rel  = Theme.colorize(PathDisplay.of(Path.of(path), projectDir), Theme.active().highlight());
+                        String rel  = Theme.colorize(PathDisplay.of(Path.of(path), projectDir), Theme.active().path());
                         System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
                     }
                 } else if ("error".equals(status)) {

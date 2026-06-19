@@ -47,6 +47,9 @@ public final class JkDarkTheme implements Theme {
     public static final Rgb NORMAL_CYAN    = Rgb.hex(0x00BCD4); // Cyan 500
     public static final Rgb NORMAL_WHITE   = Rgb.hex(0xCFD8DC); // Blue Grey 100
 
+    /** Filesystem paths shown to the user. */
+    public static final Rgb PATH           = Rgb.hex(0x969DD4); // periwinkle
+
     // Bright (the 8 bright ANSI colors).
     public static final Rgb BRIGHT_BLACK   = Rgb.hex(0x546E7A); // Blue Grey 600
     public static final Rgb BRIGHT_RED     = Rgb.hex(0xFF4081); // Pink A200
@@ -214,6 +217,11 @@ public final class JkDarkTheme implements Theme {
     @Override
     public AttributedStyle highlight() {
         return withColor(AttributedStyle.DEFAULT, NORMAL_YELLOW);
+    }
+
+    @Override
+    public AttributedStyle path() {
+        return withColor(AttributedStyle.DEFAULT, PATH);
     }
 
     @Override

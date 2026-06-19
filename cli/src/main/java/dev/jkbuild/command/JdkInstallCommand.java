@@ -391,7 +391,7 @@ public final class JdkInstallCommand implements CliCommand {
         return Theme.colorize("✓", Theme.active().completedStep())
                 + " " + Theme.colorize(label, Theme.active().focused())
                 + " " + emphasizeInstalled(verb)
-                + " " + Theme.colorize(tildeCollapse(home), Theme.active().warning());
+                + " " + Theme.colorize(tildeCollapse(home), Theme.active().path());
     }
 
     /** Render {@code verb} in normal-gray with the word "installed" promoted to bold-white. */

@@ -117,6 +117,9 @@ public interface Theme {
     /** Inline highlight in help output — yellow. */
     AttributedStyle highlight();
 
+    /** Filesystem paths (relative or absolute) shown to the user — periwinkle. */
+    AttributedStyle path();
+
     /** Error label/prefix — bold red. */
     AttributedStyle errorLabel();
 
