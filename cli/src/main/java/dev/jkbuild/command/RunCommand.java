@@ -7,6 +7,7 @@ import dev.jkbuild.runtime.CompositeLocator;
 
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.PathDisplay;
+import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.ConsoleSpec;
@@ -210,6 +211,12 @@ public final class RunCommand implements CliCommand {
         }
         System.err.println("→ Executing " + exec);
         System.err.println();
+        // Reset any lingering SGR state so the program's own output starts from
+        // the terminal's default colors (only when we're emitting color at all).
+        if (Theme.colorEnabled()) {
+            System.err.print(Ansi.RESET);
+            System.err.flush();
+        }
     }
 
 
