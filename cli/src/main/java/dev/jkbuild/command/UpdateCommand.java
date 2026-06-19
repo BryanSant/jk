@@ -10,9 +10,12 @@ import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.cli.Jk;
 
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.PathDisplay;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.git.GitFetcher;
@@ -237,8 +240,13 @@ public final class UpdateCommand implements CliCommand {
 
         Lockfile lock = goal.get(LOCKFILE).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println("Updated " + lockFile + " (" + lock.artifacts().size() + " package"
-                    + (lock.artifacts().size() == 1 ? "" : "s") + ")");
+            var th = Theme.active();
+            int n = lock.artifacts().size();
+            System.out.println(Theme.colorize(Glyphs.CHECK, th.success())
+                    + " Updated: " + Theme.colorize(PathDisplay.of(lockFile, global.workingDir()), th.highlight())
+                    + " " + Theme.colorize("›", th.darkGray())
+                    + " " + Theme.colorize(String.valueOf(n), th.cyan())
+                    + " package" + (n == 1 ? "" : "s"));
         }
         return 0;
     }
