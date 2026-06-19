@@ -62,8 +62,7 @@ public final class RunCommand implements CliCommand {
     @Override public List<Opt> options() {
         return List.of(
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Skip compiling and running tests.", "--skip-tests"));
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
     }
     @Override public List<Param> parameters() {
         return List.of(Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to the project's main method."));
@@ -81,7 +80,8 @@ public final class RunCommand implements CliCommand {
         this.cacheDirOverride = in.value("cache-dir").map(Path::of).orElse(null);
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
-        this.buildOpts.skipTests = in.isSet("skip-tests");
+        // `jk run` builds and runs the artifact; it never runs the test phase.
+        this.buildOpts.skipTests = true;
         this.global = GlobalOptions.from(in);
 
         Path projectDir = global.workingDir();

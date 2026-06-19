@@ -77,10 +77,8 @@ public final class TestCommand implements CliCommand {
             System.err.println("jk test: no jk.toml in " + dir);
             return 2;
         }
-        if (!Files.exists(lockFile)) {
-            System.err.println("jk test: no jk.lock in " + dir + " (run `jk lock` first)");
-            return 2;
-        }
+        // No jk.lock guard: the pipeline's parse-build phase resolves the lock on
+        // first run and re-locks when jk.toml changed — same as `jk build`/`run`.
 
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         int workerCount = workers != null && workers > 0 ? workers : 1;

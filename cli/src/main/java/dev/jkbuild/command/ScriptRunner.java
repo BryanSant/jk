@@ -335,7 +335,7 @@ final class ScriptRunner {
                             .sources(List.of(script.toAbsolutePath()))
                             .classpath(compileCp)
                             .outputDir(classesDir)
-                            .jvmTarget(CompileCommand.kotlinJvmTarget(jvmTarget))
+                            .jvmTarget(dev.jkbuild.runtime.CompileSupport.kotlinJvmTarget(jvmTarget))
                             .workerClasspath(workerCp)
                             .javaHome(CompileToolchain.resolveJavaHome(
                                     script.toAbsolutePath().getParent()))

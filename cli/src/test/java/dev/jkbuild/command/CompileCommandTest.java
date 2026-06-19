@@ -71,15 +71,9 @@ class CompileCommandTest {
         assertThat(exit).isEqualTo(0);
     }
 
-    @Test
-    void check_without_lockfile_errors(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("jk.toml"),
-                "[project]\ngroup = \"com.example\"\nname = \"x\"\nversion = \"0.1\"\n");
-        // No jk.lock.
-        int exit = run("check", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
-        assertThat(exit).isEqualTo(2);
-    }
+    // (Removed check_without_lockfile_errors: `jk compile`/`check` no longer
+    // requires a pre-existing jk.lock — it runs the shared pipeline in
+    // compile-only mode, which auto-locks like `jk build`/`run`.)
 
     // --- helpers -----------------------------------------------------------
 

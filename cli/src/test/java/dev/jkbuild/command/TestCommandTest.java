@@ -54,14 +54,9 @@ class TestCommandTest {
         assertThat(exit).isEqualTo(0);
     }
 
-    @Test
-    void test_without_lockfile_errors(@TempDir Path tempDir) throws Exception {
-        Files.writeString(tempDir.resolve("jk.toml"),
-                "[project]\ngroup = \"com.example\"\nname = \"x\"\nversion = \"0.1\"\n");
-        int exit = run("test", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
-        assertThat(exit).isEqualTo(2);
-    }
+    // (Removed test_without_lockfile_errors: `jk test` no longer requires a
+    // pre-existing jk.lock — the pipeline auto-locks like `jk build`/`run`.
+    // That auto-lock path is covered by the build/run integration tests.)
 
     // A genuinely test-source-free project: bare manifest, no sources. (`jk new`
     // now scaffolds a sample CalcTest, so it can't stand in for "no tests".)

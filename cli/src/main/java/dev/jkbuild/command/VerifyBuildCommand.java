@@ -139,7 +139,7 @@ public final class VerifyBuildCommand implements CliCommand {
                            Path classesOut, Path jarOut, Path cache) throws IOException {
         Path srcMain = projectDir.resolve("src/main/java");
         Path resMain = projectDir.resolve("src/main/resources");
-        List<Path> sources = CompileCommand.collectJavaSources(srcMain);
+        List<Path> sources = dev.jkbuild.runtime.CompileSupport.collectJavaSources(srcMain);
         Cas cas = new Cas(cache);
         List<Path> classpath = new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
         int release = project.project().javaRelease();

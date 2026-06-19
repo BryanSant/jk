@@ -118,14 +118,23 @@ public final class BuildPipeline {
             Path jdksDir,
             boolean skipTests,
             boolean verbose,
-            boolean testOnly) {
+            boolean testOnly,
+            boolean compileOnly) {
 
-        /** Back-compat: a full build (not test-only). */
+        /** Back-compat: a full build (not test-only, not compile-only). */
         public Inputs(Path dir, Path cache, Path buildFile, Path lockFile, Path lockDir,
                       int workerCount, int estimatedTestCount, String profileName, Path jdksDir,
                       boolean skipTests, boolean verbose) {
             this(dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount,
-                    profileName, jdksDir, skipTests, verbose, false);
+                    profileName, jdksDir, skipTests, verbose, false, false);
+        }
+
+        /** A test-only or full build (not compile-only). */
+        public Inputs(Path dir, Path cache, Path buildFile, Path lockFile, Path lockDir,
+                      int workerCount, int estimatedTestCount, String profileName, Path jdksDir,
+                      boolean skipTests, boolean verbose, boolean testOnly) {
+            this(dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount,
+                    profileName, jdksDir, skipTests, verbose, testOnly, false);
         }
     }
 
@@ -959,6 +968,17 @@ public final class BuildPipeline {
         }
         if (mixed) {
             b.addPhase(assembleClasses);
+        }
+        // `jk compile` stops here: lock → sync → compile (+ freshness stamps),
+        // no resources/test/package. Everything later depends on these phases.
+        if (in.compileOnly()) {
+            if (useJava) {
+                b.addPhase(writeStamp);
+            }
+            if (useKotlin) {
+                b.addPhase(writeStampKotlin);
+            }
+            return b;
         }
         b.addPhase(copyResources);
         b.addPhase(embedSha);
