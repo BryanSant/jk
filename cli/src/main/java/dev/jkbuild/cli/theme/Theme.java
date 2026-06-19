@@ -120,6 +120,33 @@ public interface Theme {
     /** Filesystem paths (relative or absolute) shown to the user — periwinkle. */
     AttributedStyle path();
 
+    // --- syntax-highlight styles (compiler-diagnostic source snippets) ----
+    // GitHub dark-theme palette, so highlighted snippets read like github.com.
+
+    /** Language keyword (public, class, fun, return, …) — GitHub red {@code #ff7b72}. */
+    AttributedStyle synKeyword();
+
+    /** Type / class name (Capitalized identifier) — GitHub orange {@code #ffa657}. */
+    AttributedStyle synType();
+
+    /** Function / method name (identifier before {@code (}) — GitHub purple {@code #d2a8ff}. */
+    AttributedStyle synFunction();
+
+    /** Named constant (ALL_CAPS identifier) — GitHub blue {@code #79c0ff}. */
+    AttributedStyle synConstant();
+
+    /** String / char / text-block literal — GitHub light-blue {@code #a5d6ff}. */
+    AttributedStyle synString();
+
+    /** Numeric literal — GitHub blue {@code #79c0ff}. */
+    AttributedStyle synNumber();
+
+    /** Line/block comment — GitHub gray {@code #8b949e}. */
+    AttributedStyle synComment();
+
+    /** Annotation use ({@code @Test}, {@code @Override}, …) — GitHub purple {@code #d2a8ff}. */
+    AttributedStyle synAnnotation();
+
     /** Error label/prefix — bold red. */
     AttributedStyle errorLabel();
 

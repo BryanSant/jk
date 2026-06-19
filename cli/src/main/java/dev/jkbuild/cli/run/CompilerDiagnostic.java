@@ -4,8 +4,6 @@ package dev.jkbuild.cli.run;
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.theme.Theme;
 
-import org.jline.utils.AttributedStyle;
-
 import java.nio.file.Path;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -19,8 +17,9 @@ import java.util.regex.Pattern;
  * for agents and greppable for humans.
  *
  * <p>Color map: path {@link Theme#highlight() yellow}, line/column
- * {@link Theme#cyan() cyan}, the offending character above a {@code ^} caret
- * bright-white + underlined, and {@code key: value} trailer values cyan.
+ * {@link Theme#cyan() cyan}, {@code key: value} trailer values cyan, and the
+ * source line above a {@code ^} caret syntax-highlighted (see
+ * {@link SyntaxHighlight}) with the caret's character additionally underlined.
  */
 public final class CompilerDiagnostic {
 
@@ -75,13 +74,12 @@ public final class CompilerDiagnostic {
         return sb.append(':').append(h.group("rest")).toString();
     }
 
-    /** Bright-white-underline the single character the caret points at in the source line above it. */
+    /**
+     * Syntax-highlight the source line and underline the single character the
+     * caret points at. A misaligned caret (out of range) still highlights the
+     * line, just without an underline — {@link SyntaxHighlight} handles both.
+     */
     private static String sourceWithCaret(String src, String caretLine) {
-        int col = caretLine.indexOf('^');
-        if (col < 0 || col >= src.length()) return src;   // defensive: misaligned caret
-        AttributedStyle underline = Theme.active().brightWhite().underline();
-        return src.substring(0, col)
-                + Theme.colorize(String.valueOf(src.charAt(col)), underline)
-                + src.substring(col + 1);
+        return SyntaxHighlight.highlight(src, caretLine.indexOf('^'));
     }
 }

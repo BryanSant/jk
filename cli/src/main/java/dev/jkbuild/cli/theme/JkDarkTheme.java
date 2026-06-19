@@ -50,6 +50,15 @@ public final class JkDarkTheme implements Theme {
     /** Filesystem paths shown to the user. */
     public static final Rgb PATH           = Rgb.hex(0x969DD4); // periwinkle
 
+    // Syntax-highlight palette — GitHub's dark default theme, so compiler
+    // snippets read like a github.com code block rather than jk's own hues.
+    public static final Rgb GH_KEYWORD    = Rgb.hex(0xFF7B72); // red
+    public static final Rgb GH_TYPE       = Rgb.hex(0xFFA657); // orange
+    public static final Rgb GH_FUNCTION   = Rgb.hex(0xD2A8FF); // purple
+    public static final Rgb GH_CONSTANT   = Rgb.hex(0x79C0FF); // blue (also numbers)
+    public static final Rgb GH_STRING     = Rgb.hex(0xA5D6FF); // light blue
+    public static final Rgb GH_COMMENT    = Rgb.hex(0x8B949E); // gray
+
     // Bright (the 8 bright ANSI colors).
     public static final Rgb BRIGHT_BLACK   = Rgb.hex(0x546E7A); // Blue Grey 600
     public static final Rgb BRIGHT_RED     = Rgb.hex(0xFF4081); // Pink A200
@@ -222,6 +231,48 @@ public final class JkDarkTheme implements Theme {
     @Override
     public AttributedStyle path() {
         return withColor(AttributedStyle.DEFAULT, PATH);
+    }
+
+    // --- syntax-highlight styles -----------------------------------------
+
+    @Override
+    public AttributedStyle synKeyword() {
+        return withColor(AttributedStyle.DEFAULT, GH_KEYWORD);
+    }
+
+    @Override
+    public AttributedStyle synType() {
+        return withColor(AttributedStyle.DEFAULT, GH_TYPE);
+    }
+
+    @Override
+    public AttributedStyle synFunction() {
+        return withColor(AttributedStyle.DEFAULT, GH_FUNCTION);
+    }
+
+    @Override
+    public AttributedStyle synConstant() {
+        return withColor(AttributedStyle.DEFAULT, GH_CONSTANT);
+    }
+
+    @Override
+    public AttributedStyle synString() {
+        return withColor(AttributedStyle.DEFAULT, GH_STRING);
+    }
+
+    @Override
+    public AttributedStyle synNumber() {
+        return withColor(AttributedStyle.DEFAULT, GH_CONSTANT);
+    }
+
+    @Override
+    public AttributedStyle synComment() {
+        return withColor(AttributedStyle.DEFAULT, GH_COMMENT);
+    }
+
+    @Override
+    public AttributedStyle synAnnotation() {
+        return withColor(AttributedStyle.DEFAULT, GH_FUNCTION);
     }
 
     @Override
