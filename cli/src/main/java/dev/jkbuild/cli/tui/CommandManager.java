@@ -52,6 +52,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private static final int DEFAULT_HEIGHT = 24;
     /** Max phase rows shown before completed rows collapse into a "+N" line. */
     static final int MAX_ROWS = 8;
+    /** Max completed lines shown below the active tree before a "… plus N more …" footer. */
+    static final int MAX_COMPLETIONS = 5;
 
     private final PrintStream out;
     private final boolean animate;
@@ -85,6 +87,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private long denominator;
     private long finishSeq;
     private final Map<String, Row> rows = new LinkedHashMap<>();
+    /** Pre-formatted completion lines, oldest→newest; bounded to {@link #MAX_COMPLETIONS}. */
+    private final List<String> recentCompletions = new ArrayList<>();
+    private int completedCount;
 
     private Thread animator;
 
@@ -207,6 +212,27 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             this.numerator = numerator;
             this.denominator = denominator;
         }
+    }
+
+    /**
+     * Record a finished unit's pre-formatted completion line in the live
+     * completed-tail rendered below the active rows (newest first, capped to
+     * {@link #MAX_COMPLETIONS}; the rest collapse into a "… plus N more …"
+     * footer). Callers that aren't animating should print append-only instead
+     * (see {@link #animating()}) — this only feeds the live region.
+     */
+    public void addCompletion(String line) {
+        synchronized (lock) {
+            if (done) return;
+            completedCount++;
+            recentCompletions.add(line);
+            if (recentCompletions.size() > MAX_COMPLETIONS) recentCompletions.remove(0);
+        }
+    }
+
+    /** True when the region animates live (interactive tty); false under pipes / {@code --quiet}. */
+    public boolean animating() {
+        return animate;
     }
 
     // --- completion -------------------------------------------------------
@@ -403,9 +429,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * Build the goal region's lines (header, bar, phase list). Pure — no cursor
-     * control, no output. Package-private for tests; the {@code frame} field
-     * and {@code elapsedMillis} are passed/read so tests are deterministic.
+     * Build the goal region's lines (header-with-bar, active phase tree, completed
+     * tail). Pure — no cursor control, no output. Package-private for tests; the
+     * {@code frame} field and {@code elapsedMillis} are passed/read so tests are
+     * deterministic.
      */
     public List<String> renderGoalLines(int cols, long elapsedMillis) {
         AttributedStyle dim = Theme.active().darkGray();
@@ -424,23 +451,43 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                         ELLIPSIS + fmtElapsed(elapsedMillis) + ELLIPSIS, dim.italic()));
         lines.add(header.toString());
 
-        // 2. Phase list: only the currently-running phase(s). Pending and
-        // completed rows are intentionally not shown — most phases finish in
-        // well under a second, so the tree of boxes/checkmarks (and the per-frame
-        // diff of it) was render cost without telling the user anything they'd
-        // act on. The aggregate bar already conveys overall progress; the rows
-        // map still tracks every phase's state, only the live view is trimmed.
+        // 2. Active phase tree: only the currently-running phase(s). Pending and
+        // per-phase completed rows aren't shown — most phases finish in well under
+        // a second, so the tree of boxes/checkmarks was render cost without telling
+        // the user anything they'd act on. Unit-level completions are summarized in
+        // the completed tail below; the aggregate bar conveys overall progress.
         List<Row> active = new ArrayList<>();
         for (Row r : rows.values()) {
             if (r.state == RowState.ACTIVE) active.add(r);
         }
-        // Cap to the viewport (header-with-bar + rows + a line of headroom) so the
-        // region never scrolls past where cursor-relative repaint can reach.
-        int shown = Math.min(active.size(), Math.max(1, Math.min(MAX_ROWS, height - 2)));
+        // Budget the region to the viewport: header (1) + active rows + the
+        // completed tail (+ an optional footer), within height-1 so a line of
+        // headroom keeps the region where cursor-relative repaint can reach it.
+        int budget = Math.max(1, height - 2);   // lines available below the header
+        int shown = Math.min(active.size(), Math.min(MAX_ROWS, budget));
         for (int i = 0; i < shown; i++) {
             // Tree branches: ├─ for every active row but the last, ╰─ to close.
             String prefix = Theme.colorize(i == shown - 1 ? "╰─ " : "├─ ", dim);
             lines.add(prefix + renderActiveRow(active.get(i), sep));
+        }
+        budget -= shown;
+
+        // 3. Completed tail: recently-finished units below the active tree, newest
+        // first, indented three spaces (aligning under the ╰─ branch content). When
+        // more have completed than fit, a bright-black italic "… plus N more …"
+        // footer (indented further) collapses the overflow.
+        if (completedCount > 0 && budget > 0) {
+            boolean overflow = completedCount > Math.min(MAX_COMPLETIONS, budget);
+            int cap = Math.max(0, Math.min(MAX_COMPLETIONS, overflow ? budget - 1 : budget));
+            int compShown = Math.min(recentCompletions.size(), cap);
+            int have = recentCompletions.size();
+            for (int i = 0; i < compShown; i++) {
+                lines.add("   " + recentCompletions.get(have - 1 - i));
+            }
+            int more = completedCount - compShown;
+            if (more > 0) {
+                lines.add(Theme.colorize("     … plus " + more + " more …", dim.italic()));
+            }
         }
         return lines;
     }

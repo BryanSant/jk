@@ -160,6 +160,34 @@ class CommandManagerTest {
     }
 
     @Test
+    void completed_lines_render_below_the_active_tree_newest_first() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
+        cm.phaseRunning("m", "compile");
+        cm.addCompletion("✓ [13 of 17] g:a13 took 1s");
+        cm.addCompletion("✓ [14 of 17] g:a14 took 1s");
+
+        var lines = cm.renderGoalLines(120, 0);
+        // header, the active row (╰─ closes the tree), then the completions —
+        // newest first, each indented three spaces under the branch content.
+        assertThat(stripAnsi(lines.get(1))).startsWith("╰─ m › Compile");
+        assertThat(stripAnsi(lines.get(2))).isEqualTo("   ✓ [14 of 17] g:a14 took 1s");
+        assertThat(stripAnsi(lines.get(3))).isEqualTo("   ✓ [13 of 17] g:a13 took 1s");
+    }
+
+    @Test
+    void completed_tail_caps_and_collapses_overflow_into_a_footer() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
+        cm.phaseRunning("m", "compile");
+        for (int i = 1; i <= 8; i++) cm.addCompletion("✓ [0" + i + " of 17] g:a" + i + " took 1s");
+
+        var all = String.join("\n", stripAll(cm.renderGoalLines(120, 0)));
+        // Only MAX_COMPLETIONS (5) show; the newest is first; 3 collapse into the footer.
+        assertThat(all).contains("   ✓ [08 of 17]").contains("   ✓ [04 of 17]");
+        assertThat(all).doesNotContain("[03 of 17]");
+        assertThat(all).contains("     … plus 3 more …");
+    }
+
+    @Test
     void write_above_prints_the_line_then_repaints_the_region_below() {
         var buf = new ByteArrayOutputStream();
         var cm = new CommandManager(stream(buf), true, true, 80);
