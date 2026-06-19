@@ -16,7 +16,7 @@ import java.util.function.Function;
  * <p>The {@code onSuccess} / {@code onFailure} mappers run after the goal
  * settles, so they may close over the command's goal/state to build a rich
  * message (e.g. {@code "Resolved 13 dependencies"}). The framework always
- * appends a dim {@code "took Xms"} suffix so individual commands do not need
+ * appends a dim italic {@code "took Xms"} suffix so individual commands do not need
  * to format duration themselves.
  */
 public record ConsoleSpec(
@@ -24,9 +24,9 @@ public record ConsoleSpec(
         Function<GoalResult, String> onSuccess,
         Function<GoalResult, String> onFailure) {
 
-    /** Dim {@code "took Xms"} duration suffix — appended by the framework to every result line. */
+    /** Dim italic {@code "took Xms"} duration suffix — appended by the framework to every result line. */
     public static String took(Duration d) {
-        return Theme.colorize("took " + fmtDuration(d), Theme.active().darkGray());
+        return Theme.colorize("took " + fmtDuration(d), Theme.active().darkGray().italic());
     }
 
     /**

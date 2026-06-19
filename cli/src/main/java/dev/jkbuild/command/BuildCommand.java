@@ -815,7 +815,7 @@ public final class BuildCommand implements CliCommand {
         return Theme.colorize("Build failed", err);
     }
 
-    /** Dim {@code "took Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */
+    /** Dim italic {@code "took Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */
     static String elapsedSince(long startNanos) {
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
         return dev.jkbuild.cli.run.ConsoleSpec.took(java.time.Duration.ofMillis(ms));
