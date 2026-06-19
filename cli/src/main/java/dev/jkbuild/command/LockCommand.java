@@ -112,7 +112,7 @@ public final class LockCommand implements CliCommand {
 
         Path dir = global.workingDir();
         if (!Files.exists(dir.resolve("jk.toml"))) {
-            System.err.println("jk lock: no jk.toml in " + dir);
+            System.err.println("jk lock: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return 2;
         }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();

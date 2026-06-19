@@ -441,7 +441,7 @@ public final class SyncCommand implements CliCommand {
         goal.get(LOCKFILE).ifPresent(lock -> {
             if (created) {
                 int n = lock.artifacts().size();
-                System.out.println("Created " + lockFile + " (" + n
+                System.out.println("Created " + dev.jkbuild.cli.PathDisplay.styledRaw(lockFile) + " (" + n
                         + " package" + (n == 1 ? "" : "s") + ")");
             }
         });

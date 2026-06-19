@@ -43,11 +43,11 @@ public final class TreeCommand implements CliCommand {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk tree: no jk.toml in " + dir);
+            System.err.println("jk tree: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return 2;
         }
         if (!Files.exists(lockFile)) {
-            System.err.println("jk tree: no jk.lock in " + dir + " (run `jk lock` first)");
+            System.err.println("jk tree: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir) + " (run `jk lock` first)");
             return 2;
         }
 

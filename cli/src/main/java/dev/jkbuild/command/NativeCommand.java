@@ -84,7 +84,7 @@ public final class NativeCommand implements CliCommand {
         Path cache = cacheDirOverride != null ? cacheDirOverride : JkDirs.cache();
 
         if (!Files.exists(buildFile)) {
-            System.err.println("jk native: " + buildFile + " not found.");
+            System.err.println("jk native: " + dev.jkbuild.cli.PathDisplay.styledRaw(buildFile) + " not found.");
             return 66;
         }
 

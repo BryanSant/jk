@@ -144,7 +144,8 @@ class ReadSideIntegrationTest {
                 "--repo-url", base.toString()));
 
         assertThat(lockFile).exists();
-        assertThat(out).contains("Created " + lockFile);
+        // The lock path is path-colored; strip ANSI before matching the plain path.
+        assertThat(out.replaceAll("\\u001B\\[[;0-9]*m", "")).contains("Created " + lockFile);
         // The package we added should show up in the freshly written lock.
         assertThat(Files.readString(lockFile)).contains("com.foo:leaf");
     }

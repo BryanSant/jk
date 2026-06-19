@@ -74,7 +74,7 @@ public final class TestCommand implements CliCommand {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk test: no jk.toml in " + dir);
+            System.err.println("jk test: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return 2;
         }
         // No jk.lock guard: the pipeline's parse-build phase resolves the lock on

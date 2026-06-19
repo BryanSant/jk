@@ -62,7 +62,7 @@ public final class ExplainCommand implements CliCommand {
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk explain: no jk.toml in " + startDir);
+            System.err.println("jk explain: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
             return 2;
         }
         JkBuild entry = JkBuildParser.parse(buildFile);

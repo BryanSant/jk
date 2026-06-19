@@ -2,6 +2,7 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.cli.theme.Theme;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -22,6 +23,25 @@ import java.nio.file.Path;
 public final class PathDisplay {
 
     private PathDisplay() {}
+
+    /** {@link #of(Path, Path)} relativized and painted in the theme's {@code path} color. */
+    public static String styled(Path target, Path workingDir) {
+        return Theme.colorize(of(target, workingDir), Theme.active().path());
+    }
+
+    /** {@link #of(Path)} relativized and painted in the theme's {@code path} color. */
+    public static String styled(Path target) {
+        return Theme.colorize(of(target), Theme.active().path());
+    }
+
+    /**
+     * Paint an already-rendered path string in the theme's {@code path} color,
+     * <em>without</em> relativizing — for error/context messages whose path is
+     * the working directory itself (relativizing it to "." would be useless).
+     */
+    public static String styledRaw(Object pathLike) {
+        return Theme.colorize(String.valueOf(pathLike), Theme.active().path());
+    }
 
     /**
      * Display {@code target} relative to the closest of {the working dir,

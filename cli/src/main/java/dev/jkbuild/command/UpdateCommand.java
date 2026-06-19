@@ -105,7 +105,7 @@ public final class UpdateCommand implements CliCommand {
 
         Path dir = global.workingDir();
         if (!Files.exists(dir.resolve("jk.toml"))) {
-            System.err.println("jk update: no jk.toml in " + dir);
+            System.err.println("jk update: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return 2;
         }
         if (precise != null && !precise.isBlank()) {

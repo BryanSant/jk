@@ -83,7 +83,7 @@ public final class FormatCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path buildFile = projectDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk format: no jk.toml in " + projectDir);
+            System.err.println("jk format: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir));
             return 2;
         }
         JkBuild build = JkBuildParser.parse(buildFile);

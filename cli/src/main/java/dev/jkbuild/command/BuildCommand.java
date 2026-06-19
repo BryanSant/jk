@@ -113,7 +113,7 @@ public final class BuildCommand implements CliCommand {
         Path startDir = global.workingDir();
         Path buildFile = startDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk build: no jk.toml in " + startDir);
+            System.err.println("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
             return 2;
         }
         // Peek at the manifest before committing to a per-dir build. A
@@ -337,7 +337,7 @@ public final class BuildCommand implements CliCommand {
     private UnitOutcome buildUnit(BuildGraph.BuildUnit unit) {
         PreparedMember pm = prepareMember(unit.dir(), unit.isDependency() || buildOpts.skipTests);
         if (pm == null) {
-            return new UnitOutcome(unit.coord(), false, 2, 0, List.of("no jk.toml in " + unit.dir()));
+            return new UnitOutcome(unit.coord(), false, 2, 0, List.of("no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(unit.dir())));
         }
         long t0 = System.nanoTime();
         try {
@@ -367,13 +367,14 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * A finished unit's scroll-back line: {@code ✓ [01/16] group:artifact took 16ms}.
+     * A finished unit's scroll-back line: {@code ✓ [01 of 16] group:artifact took 16ms}.
      * No leading indent (it's complete, not active); the numerator is zero-padded
      * to the denominator's width; the duration is normalized like every other jk
-     * duration ({@link ConsoleSpec#took}). The only color is the green check at
-     * the start and the bright-black {@code took …} at the end — the {@code [k/N]}
-     * count is plain and the {@code group:artifact} is plain with a strikethrough
-     * to mark it done. A failed unit keeps the red cross and {@code — failed}.
+     * duration ({@link ConsoleSpec#took}). Colors: green check, bright-black
+     * {@code [ ]} brackets around a plain {@code NN of MM} count, the
+     * {@code group:artifact} plain with a strikethrough to mark it done, and the
+     * bright-black italic {@code took …} suffix. A failed unit keeps the red cross
+     * and {@code — failed}.
      */
     private static String completionLine(boolean ok, int index, int total, String coord, long millis) {
         var th = Theme.active();
@@ -381,7 +382,9 @@ public final class BuildCommand implements CliCommand {
         String num = String.format("%0" + Integer.toString(total).length() + "d", index);
         StringBuilder sb = new StringBuilder();
         sb.append(mark).append(' ')
-                .append('[').append(num).append('/').append(total).append(']')
+                .append(Theme.colorize("[", th.darkGray()))
+                .append(num).append(" of ").append(total)
+                .append(Theme.colorize("]", th.darkGray()))
                 .append(' ');
         if (ok) {
             sb.append(Theme.colorize(coord, th.plainWhite().crossedOut()))
@@ -674,7 +677,7 @@ public final class BuildCommand implements CliCommand {
     private int runForDir(Path dir, AggregateContext agg) throws Exception {
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk build: no jk.toml in " + dir);
+            System.err.println("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return 2;
         }
         return runPrepared(prepareMember(dir), agg);

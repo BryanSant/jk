@@ -46,7 +46,7 @@ public final class CompileCommand implements CliCommand {
         Path dir = global.workingDir();
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk compile: no jk.toml in " + dir);
+            System.err.println("jk compile: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return 2;
         }
         Path lockFile = dir.resolve("jk.lock");

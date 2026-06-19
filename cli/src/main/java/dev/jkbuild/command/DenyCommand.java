@@ -44,7 +44,7 @@ public final class DenyCommand implements CliCommand {
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(jkBuild)) { System.err.println("jk deny: " + jkBuild + " not found."); return 66; }
         if (!Files.exists(lockPath)) {
-            System.err.println("jk deny: no jk.lock in " + projectDir + " (run `jk lock` first)."); return 2;
+            System.err.println("jk deny: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir) + " (run `jk lock` first)."); return 2;
         }
         Path cache = JkDirs.cache();
 

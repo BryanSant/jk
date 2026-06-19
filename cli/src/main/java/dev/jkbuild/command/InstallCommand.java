@@ -176,7 +176,7 @@ public final class InstallCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
-            System.err.println("jk install: no jk.toml in " + projectDir);
+            System.err.println("jk install: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir));
             return 64;
         }
         return runProjectInstallGoal(projectDir, "install");
@@ -194,7 +194,7 @@ public final class InstallCommand implements CliCommand {
      */
     private int installFromFile(Path filePath) throws IOException {
         if (!Files.exists(filePath)) {
-            System.err.println("jk install: " + PathDisplay.of(filePath) + ": no such file");
+            System.err.println("jk install: " + PathDisplay.styled(filePath) + ": no such file");
             return 2;
         }
 
@@ -410,7 +410,7 @@ public final class InstallCommand implements CliCommand {
         JkBuild proj = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         var pj = proj.project();
         if (pj.isApplication() && pj.nativeMode() == JkBuild.NativeMode.DISABLED && pj.main() == null) {
-            System.err.println("jk install: application project at " + projectDir
+            System.err.println("jk install: application project at " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " has no `main` class set in [project]");
             return 64;
         }

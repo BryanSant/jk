@@ -109,7 +109,7 @@ public final class IdeaCommand implements CliCommand {
         try {
             Path buildFile = startDir.resolve("jk.toml");
             if (!Files.exists(buildFile)) {
-                System.err.println("jk idea: no jk.toml in " + startDir);
+                System.err.println("jk idea: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(startDir));
                 return 2;
             }
             rootBuild = JkBuildParser.parse(buildFile);

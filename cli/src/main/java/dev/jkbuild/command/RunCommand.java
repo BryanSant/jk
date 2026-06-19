@@ -88,7 +88,7 @@ public final class RunCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path manifest = projectDir.resolve("jk.toml");
         if (!Files.exists(manifest)) {
-            System.err.println("jk run: no jk.toml in " + projectDir
+            System.err.println("jk run: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " — run from a project directory, or use `jk tool run` to run a file or tool.");
             return 64; // EX_USAGE
         }

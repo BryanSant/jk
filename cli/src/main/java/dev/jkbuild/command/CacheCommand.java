@@ -98,7 +98,7 @@ public final class CacheCommand implements CliCommand {
         }
         @Override public int run(Invocation in) throws IOException {
             Path root = resolveCacheRoot(in.value("cache-dir").map(Path::of).orElse(null));
-            System.out.println("Cache directory: " + root);
+            System.out.println("Cache directory: " + dev.jkbuild.cli.PathDisplay.styledRaw(root));
             if (!Files.isDirectory(root)) { System.out.println("  (not yet created)"); return 0; }
             Stats sha = statsOf(root.resolve("sha256"));
             Stats actions = statsOf(root.resolve("actions"));

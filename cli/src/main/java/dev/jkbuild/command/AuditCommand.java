@@ -65,7 +65,7 @@ public final class AuditCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path lockPath = projectDir.resolve("jk.lock");
         if (!Files.exists(lockPath)) {
-            System.err.println("jk audit: no jk.lock in " + projectDir
+            System.err.println("jk audit: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
                     + " (run `jk lock` first).");
             return 2;
         }

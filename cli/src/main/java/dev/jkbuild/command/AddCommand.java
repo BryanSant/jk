@@ -243,7 +243,7 @@ public final class AddCommand implements CliCommand {
         Path target = cwd.resolve(raw).normalize();
         Path targetToml = target.resolve("jk.toml");
         if (!Files.exists(targetToml)) {
-            System.err.println("jk add: no jk.toml in " + target);
+            System.err.println("jk add: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(target));
             return 2;
         }
         JkBuild member;
@@ -289,7 +289,7 @@ public final class AddCommand implements CliCommand {
                 String newRoot = JkBuildEditor.addWorkspaceMember(rootContent, rel);
                 if (!newRoot.equals(rootContent)) {
                     Files.writeString(rootToml, newRoot, StandardCharsets.UTF_8);
-                    System.out.println("Registered member '" + rel + "' in workspace " + root);
+                    System.out.println("Registered member '" + rel + "' in workspace " + dev.jkbuild.cli.PathDisplay.styledRaw(root));
                 }
             }
         } catch (RuntimeException e) {

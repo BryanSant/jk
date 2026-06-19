@@ -57,7 +57,7 @@ public final class ShellCommand implements CliCommand {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         var target = new JkEnv(registry, origPath).resolve(dir);
         if (!target.isActive()) {
-            System.err.println("jk shell: no pinned JDK for " + dir
+            System.err.println("jk shell: no pinned JDK for " + dev.jkbuild.cli.PathDisplay.styledRaw(dir)
                     + " (run `jk new` to scaffold, or stamp `jdk = \"<id>\"` in jk.lock)");
             return 2;
         }
