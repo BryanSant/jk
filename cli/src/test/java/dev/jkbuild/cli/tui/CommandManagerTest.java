@@ -106,15 +106,15 @@ class CommandManagerTest {
 
         var raw = cm.renderGoalLines(120, 112_000);
         String all = String.join("\n", stripAll(raw));
-        // Header: {name} … (elapsed) — bright-white name, member NOT in the header.
-        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("(1m 52s)")
+        // Header: {name} {bar} …elapsed… — bright-white name, bar inlined, member NOT in the header.
+        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("…1m 52s…")
                 .doesNotContain("acme:api");
         assertThat(raw.get(0)).contains(Theme.colorize("Building", Theme.active().focused()));
-        // Bar with percent + count.
+        // Bar with percent + count, inlined into the header line.
         assertThat(all).contains("45%").contains("[45 of 100]");
-        // Active row only: colored member, phase, message, trailing ellipsis.
-        assertThat(all).contains("acme:api › Compile java › javac 12 sources…");
-        assertThat(raw.get(2)).contains(Theme.colorize("acme", Theme.active().cyan()))
+        // Active row only: colored member, phase, message, no trailing ellipsis.
+        assertThat(all).contains("acme:api › Compile java › javac 12 sources");
+        assertThat(raw.get(1)).contains(Theme.colorize("acme", Theme.active().cyan()))
                 .contains(Theme.colorize("api", Theme.active().brightCyan()));
         // Completed phases are not listed, and no status glyphs are drawn.
         assertThat(all).doesNotContain("Parse build");
@@ -146,7 +146,7 @@ class CommandManagerTest {
         for (int i = 0; i < 20; i++) cm.phaseRunning("m", "p" + i);  // 20 concurrently active
 
         var lines = cm.renderGoalLines(120, 0);
-        // header + bar + active rows, all within height (with a line of headroom).
+        // header (bar inlined) + active rows, all within height (with a line of headroom).
         assertThat(lines.size()).isLessThanOrEqualTo(6 - 1);
     }
 
@@ -155,8 +155,8 @@ class CommandManagerTest {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
         cm.phaseRunning("m", "compile");
         var lines = cm.renderGoalLines(120, 0);
-        // lines[0]=header, lines[1]=bar, lines[2]=the running phase row (no glyph).
-        assertThat(stripAnsi(lines.get(2))).startsWith("╰─ m › Compile");
+        // lines[0]=header (bar inlined), lines[1]=the running phase row (no glyph).
+        assertThat(stripAnsi(lines.get(1))).startsWith("╰─ m › Compile");
     }
 
     @Test

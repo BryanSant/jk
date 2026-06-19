@@ -121,7 +121,7 @@ class AggregateProgressTest {
     /** Pull the bar's "{numerator} of {denominator}" text out of the rendered region. */
     private static String barCount(CommandManager cm) {
         List<String> lines = cm.renderGoalLines(80, 0);
-        Matcher m = COUNT.matcher(lines.get(1)); // line 0 = header, line 1 = bar
+        Matcher m = COUNT.matcher(lines.get(0)); // bar is inlined into the header line
         assertThat(m.find()).as("bar line should carry an N-of-M count").isTrue();
         return m.group(1) + " of " + m.group(2);
     }

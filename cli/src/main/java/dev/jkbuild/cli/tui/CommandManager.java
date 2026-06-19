@@ -412,19 +412,19 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         String sep = Theme.colorize("›", dim);
         List<String> lines = new ArrayList<>();
 
-        // 1. Header: {spinner} {name} … (elapsed). The member moved to the active
-        // row, so the header is just the goal name (bright-white) + elapsed.
+        // 1. Header: {spinner} {name} {bar} …elapsed…. The aggregate bar is inlined
+        // after the goal name; the elapsed trails the bar in bright-black italic
+        // (…52s… rather than a parenthesised suffix). The member moved to the
+        // active row, so the header carries no phase detail.
         StringBuilder header = new StringBuilder();
         header.append(Theme.colorize(FRAMES[frame], frameColors[frame])).append(' ')
                 .append(Theme.colorize(name, Theme.active().focused()))
-                .append(' ').append(ELLIPSIS).append(' ')
-                .append(Theme.colorize("(" + fmtElapsed(elapsedMillis) + ")", dim));
+                .append(' ').append(bar.render(numerator, denominator))
+                .append(' ').append(Theme.colorize(
+                        ELLIPSIS + fmtElapsed(elapsedMillis) + ELLIPSIS, dim.italic()));
         lines.add(header.toString());
 
-        // 2. Aggregate bar.
-        lines.add(bar.render(numerator, denominator));
-
-        // 3. Phase list: only the currently-running phase(s). Pending and
+        // 2. Phase list: only the currently-running phase(s). Pending and
         // completed rows are intentionally not shown — most phases finish in
         // well under a second, so the tree of boxes/checkmarks (and the per-frame
         // diff of it) was render cost without telling the user anything they'd
@@ -434,9 +434,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         for (Row r : rows.values()) {
             if (r.state == RowState.ACTIVE) active.add(r);
         }
-        // Cap to the viewport (header + bar + rows + a line of headroom) so the
+        // Cap to the viewport (header-with-bar + rows + a line of headroom) so the
         // region never scrolls past where cursor-relative repaint can reach.
-        int shown = Math.min(active.size(), Math.max(1, Math.min(MAX_ROWS, height - 3)));
+        int shown = Math.min(active.size(), Math.max(1, Math.min(MAX_ROWS, height - 2)));
         for (int i = 0; i < shown; i++) {
             // Tree branches: ├─ for every active row but the last, ╰─ to close.
             String prefix = Theme.colorize(i == shown - 1 ? "╰─ " : "├─ ", dim);
@@ -446,9 +446,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /**
-     * A running phase row: {@code <group>:<artifact> › <Phase>[ › <message>]…} —
+     * A running phase row: {@code <group>:<artifact> › <Phase>[ › <message>]} —
      * no status glyph, member coordinate colored (cyan group, bright-cyan
-     * artifact), trailing ellipsis marking it in progress.
+     * artifact). No trailing ellipsis.
      */
     private static String renderActiveRow(Row r, String sep) {
         StringBuilder sb = new StringBuilder();
@@ -459,7 +459,6 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             sb.append(' ').append(sep).append(' ')
                     .append(Theme.colorize(r.message, Theme.active().settled()));
         }
-        sb.append(ELLIPSIS);
         return sb.toString();
     }
 
