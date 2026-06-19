@@ -710,7 +710,12 @@ public final class BuildPipeline {
                     String stampKey = dev.jkbuild.task.TestStamp.computeKey(
                             testSrcs, ctx.require(MAIN_CLASSES), in.lockFile(), testRtCp,
                             testStampExtras(workerJars));
-                    if (dev.jkbuild.task.TestStamp.isFresh(testClassesForStamp, stampKey)) {
+                    // --no-cache forces a real test run, matching the compile/package
+                    // freshness checks above (which all guard on !noCache). Without
+                    // this guard the incremental stamp would skip the runner even
+                    // when the user explicitly asked to bypass build caches.
+                    boolean noCache = dev.jkbuild.config.ActiveConfig.get().noCacheOr(false);
+                    if (!noCache && dev.jkbuild.task.TestStamp.isFresh(testClassesForStamp, stampKey)) {
                         ctx.label("tests up-to-date");
                         return; // skip — nothing changed since last green run
                     }
