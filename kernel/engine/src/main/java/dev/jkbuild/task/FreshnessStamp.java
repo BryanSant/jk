@@ -106,6 +106,28 @@ public final class FreshnessStamp {
     }
 
     /**
+     * Cheap, classpath-free freshness probe for progress-weight prediction:
+     * {@code true} when a stamp exists and no source has been touched since it
+     * was written. Unlike {@link #isFresh} it doesn't compare the
+     * source/classpath <em>sets</em> (the predictor has no resolved classpath),
+     * so a dependency-set change can slip through — acceptable for sizing the
+     * bar, where any misprediction is closed by phase-end auto-fill.
+     */
+    public static boolean looksFresh(Path outputDir, String stampName, List<Path> sources) {
+        try {
+            Optional<Stamp> read = read(outputDir, stampName);
+            if (read.isEmpty()) return false;
+            long stampMillis = read.get().stampMillis();
+            for (Path src : sources) {
+                if (newerThan(src, stampMillis)) return false;
+            }
+            return true;
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    /**
      * Write a stamp into {@code outputDir} recording the action that
      * produced its current contents. Called after a successful compile
      * (either fresh or cache-restored) so the next build can short-circuit.

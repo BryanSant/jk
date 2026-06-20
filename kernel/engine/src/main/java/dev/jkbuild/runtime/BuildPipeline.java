@@ -159,8 +159,8 @@ public final class BuildPipeline {
     static final int W_RUN_TESTS    = 30;
     static final int W_PACKAGE      = 5;
     static final int W_STAMP        = 1;
-    static final int W_SHADOW       = 8;
-    static final int W_NATIVE       = 50;
+    static final int W_SHADOW       = 10;   // fat/shadow jar (vs 5 for a plain jar)
+    static final int W_NATIVE       = 90;   // native-image build ≈ 9 steps × 10
 
     /**
      * Assemble the goal builder with the core build phases (parse → sync → jdk →
@@ -204,6 +204,22 @@ public final class BuildPipeline {
         final boolean kotlinModule = useKotlin;   // effectively-final copy for lambdas
         String mainCompile = mixed ? "assemble-classes"
                 : (useKotlin ? "compile-kotlin" : "compile-java");
+
+        // Predict each phase's bar weight from the work it will actually do this
+        // run (skipped/cached phases collapse to ~1; real work dominates). Computed
+        // once, lazily, when the first weight supplier fires during goal-start
+        // estimation — so the prediction (stamps/lock/CAS) is read off disk once.
+        final java.util.concurrent.atomic.AtomicReference<EffortWeights.Plan> planRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.function.Supplier<EffortWeights.Plan> plan = () -> {
+            EffortWeights.Plan p = planRef.get();
+            if (p == null) {
+                planRef.compareAndSet(null,
+                        EffortWeights.predict(in, cas, compact, mixedWithJava, kotlinModule));
+                p = planRef.get();
+            }
+            return p;
+        };
 
         // ---- parse-build ------------------------------------------------
         Phase parseBuild = Phase.builder("parse-build")
@@ -358,7 +374,7 @@ public final class BuildPipeline {
                 .label("Syncing")
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
-                .weight(W_SYNC)
+                .weight(() -> plan.get().sync())
                 .scope(() -> {
                     try { return LockfileReader.read(in.lockFile()).artifacts().size(); }
                     catch (Exception ignored) { return 10; }
@@ -390,7 +406,7 @@ public final class BuildPipeline {
                 .label("JDK")
                 .kind(PhaseKind.IO)
                 .requires("parse-build")
-                .weight(W_JDK)
+                .weight(() -> EffortWeights.jdkWeight(in.dir(), in.jdksDir()))
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("resolve JDK");
@@ -418,7 +434,7 @@ public final class BuildPipeline {
                 // Scope counts sources (granularity); weight is the bar share. javac
                 // is opaque — one progress(sources.size()) on completion — so ease the
                 // slice forward over time while it runs instead of sitting flat.
-                .weight(W_COMPILE)
+                .weight(() -> plan.get().compileJava())
                 .interpolated()
                 .scope(() -> estimateJavaSources(in, compact))
                 .execute(ctx -> {
@@ -525,7 +541,7 @@ public final class BuildPipeline {
                 .requires("parse-build", "sync-deps", "ensure-jdk")
                 // Scope counts Kotlin sources (granularity); weight is the bar share
                 // (see compile-java). kotlinc is opaque too, so ease it over time.
-                .weight(W_COMPILE_KT)
+                .weight(() -> plan.get().compileKotlin())
                 .interpolated()
                 .scope(() -> estimateKotlinSources(in, compact))
                 .execute(ctx -> {
@@ -607,7 +623,7 @@ public final class BuildPipeline {
                 .label("Test compile")
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile, "sync-deps")
-                .weight(W_COMPILE_TEST)
+                .weight(() -> plan.get().compileTest())
                 .interpolated()   // opaque javac/kotlinc call — ease it over time
                 .scope(1)
                 .execute(ctx -> {
@@ -684,7 +700,7 @@ public final class BuildPipeline {
                 .label("Testing")
                 .kind(PhaseKind.IO)
                 .requires("compile-test", "copy-resources", "embed-sha")
-                .weight(W_RUN_TESTS)
+                .weight(() -> plan.get().runTests())
                 .scope(in.estimatedTestCount())
                 .execute(ctx -> {
                     if (ctx.get(NO_TEST_SOURCES).orElse(false)) {
@@ -770,7 +786,7 @@ public final class BuildPipeline {
                 .requires(in.skipTests()
                         ? new String[]{"copy-resources", "embed-sha"}
                         : new String[]{"copy-resources", "embed-sha", "run-tests"})
-                .weight(W_PACKAGE)
+                .weight(() -> plan.get().pkg())
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
@@ -1033,7 +1049,7 @@ public final class BuildPipeline {
                 .label("Shadow")
                 .kind(PhaseKind.CPU)
                 .requires("package-jar")
-                .weight(W_SHADOW)
+                .weight(() -> EffortWeights.shadowWeight(lockFile.getParent()))
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
@@ -1110,7 +1126,7 @@ public final class BuildPipeline {
                 .label("Native")
                 .kind(PhaseKind.IO)
                 .requires("package-jar")
-                .weight(W_NATIVE)
+                .weight(() -> EffortWeights.nativeWeight(dir))
                 .scope(10)  // preamble(1) + 8 native-image stages + done(1)
                 .execute(ctx -> {
                     // Fail-fast: verify native-image is available before compilation

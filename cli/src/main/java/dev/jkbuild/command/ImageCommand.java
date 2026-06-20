@@ -120,6 +120,7 @@ public final class ImageCommand implements CliCommand {
         Phase writeImage = Phase.builder("write-image")
                 .kind(PhaseKind.IO)
                 .requires("image-plan")
+                .weight(() -> dev.jkbuild.runtime.EffortWeights.ociWeight(projectDir))
                 .scope(1)
                 .execute(ctx -> {
                     JkBuild project = ctx.require(BuildPipeline.PROJECT);
