@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Ansi;
-
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.ActiveJavac;
@@ -16,7 +14,6 @@ import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
 import dev.jkbuild.resolver.Versions;
-import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
@@ -151,7 +148,8 @@ public final class JdkListCommand implements CliCommand {
             return 0;
         }
 
-        for (String line : renderTable(rows, os, arch)) {
+        String title = all ? "All Java Development Kits" : "Installed Java Development Kits";
+        for (String line : renderTable(rows, title)) {
             System.out.println(line);
         }
         return 0;
@@ -308,11 +306,9 @@ public final class JdkListCommand implements CliCommand {
     private static final String[] HEADERS = {"Version", "Vendor", "Spec", "Status", "Source"};
 
     /** Render the table as a sequence of ANSI-styled lines, ready to println. */
-    static List<String> renderTable(List<Row> rows, String os, String arch) {
+    static List<String> renderTable(List<Row> rows, String title) {
         int[] widths = computeWidths(rows);
         int inner = innerWidth(widths);
-        String title = "Jk - Available JDKs for "
-                + HostPlatform.displayOs(os) + " " + HostPlatform.displayArch(arch);
 
         List<String> out = new ArrayList<>();
         out.add(border("╭", "─", "╮", inner));                       // ╭───╮
@@ -383,13 +379,14 @@ public final class JdkListCommand implements CliCommand {
     }
 
     private static String titleLine(String title, int inner) {
-        AttributedString gradient = Theme.active().gradientHeader(title);
-        int total = Math.max(0, inner - gradient.length());
+        // Center the title and color it with the accent (matching the `jk tree`
+        // header), bracketed by the dark-gray box rails.
+        int total = Math.max(0, inner - title.length());
         int left = total / 2;
         int right = total - left;
         return Theme.colorize("│", Theme.active().darkGray())
                 + " ".repeat(left)
-                + perCharAnsi(gradient)
+                + Theme.colorize(title, Theme.active().activeStep())
                 + " ".repeat(right)
                 + Theme.colorize("│", Theme.active().darkGray());
     }
@@ -461,24 +458,6 @@ public final class JdkListCommand implements CliCommand {
             case "available" -> Theme.active().darkGray();
             default -> Theme.active().completedStep();   // "installed"
         };
-    }
-
-    /**
-     * Walk an AttributedString and emit per-codepoint SGR escapes inline.
-     * Used for the gradient title: each character carries its own color,
-     * so we re-issue the SGR prefix on every step. The unicode characters
-     * pass through untouched (no JLine ACS translation).
-     */
-    private static String perCharAnsi(AttributedString attr) {
-        var sb = new StringBuilder();
-        int n = attr.length();
-        for (int i = 0; i < n; i++) {
-            String sgr = attr.styleAt(i).toAnsi();
-            if (!sgr.isEmpty()) sb.append(Ansi.CSI).append(sgr).append("m");
-            sb.append(attr.charAt(i));
-        }
-        if (n > 0) sb.append(Ansi.RESET);
-        return sb.toString();
     }
 
     private static String pad(String s, int width, boolean center) {
