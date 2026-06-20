@@ -110,21 +110,94 @@ public final class DependencyTree {
      * (its {@code jk.toml} + {@code jk.lock}) is recursed into. Branch git deps
      * are annotated but not recursed (resolving them needs a clone). Immutable
      * (tag/rev) git deps are materialized into the lock and render normally.
+     *
+     * <p>When {@code project} is a <em>workspace root</em>, every member is walked:
+     * each member's coordinate is printed as a child of the root and its own
+     * resolved tree (its {@code jk.toml} + {@code jk.lock}) is recursed into.
+     * Workspace-sibling deps (a member's {@code <name>.workspace = true} entries,
+     * which point at another member) are shown as a collapsed {@code [workspace]}
+     * reference rather than re-expanded — each sibling already appears at the top
+     * level.
      */
     public static String render(JkBuild project, Lockfile lock, Path projectDir,
                                 int maxDepth, Styling styling) {
         StringBuilder out = new StringBuilder();
         out.append(formatCoord(project.project().group(), project.project().name(),
                 project.project().version(), styling)).append('\n');
-        renderComposite(project, lock, projectDir, 0, maxDepth, "", styling,
-                new HashSet<>(), new HashSet<>(), out);
+        Set<String> seenModules = new HashSet<>();
+        Set<String> seenDirs = new HashSet<>();
+        if (project.isWorkspaceRoot()) {
+            List<String> members = project.workspace().members();
+            Map<String, String> byName = workspaceMembersByName(members, projectDir);
+            for (int i = 0; i < members.size(); i++) {
+                renderWorkspaceMember(members.get(i), projectDir, 0, maxDepth,
+                        i == members.size() - 1, "", styling, byName,
+                        seenModules, seenDirs, out);
+            }
+        } else {
+            renderComposite(project, lock, projectDir, 0, maxDepth, "", styling,
+                    Map.of(), seenModules, seenDirs, out);
+        }
         return out.toString();
+    }
+
+    /**
+     * Map of each workspace member's short name → its full {@code group:artifact}
+     * coord, used to resolve a sibling's {@code workspace:<name>} dep reference back
+     * to a readable coordinate when collapsing it in a member's subtree.
+     */
+    private static Map<String, String> workspaceMembersByName(List<String> members, Path rootDir) {
+        Map<String, String> byName = new HashMap<>();
+        if (rootDir == null) return byName;
+        for (String m : members) {
+            try {
+                JkBuild b = JkBuildParser.parse(rootDir.resolve(m).normalize().resolve("jk.toml"));
+                byName.put(b.project().name(), b.project().group() + ":" + b.project().name());
+            } catch (Exception ignored) {
+                // unreadable member jk.toml — sibling refs to it fall back to the raw module
+            }
+        }
+        return byName;
+    }
+
+    /** A workspace member node, recursing into the member's own tree (its jk.toml + jk.lock). */
+    private static void renderWorkspaceMember(
+            String memberRel, Path rootDir, int depth, int maxDepth, boolean isLast,
+            String prefix, Styling styling, Map<String, String> members,
+            Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+
+        String connector = isLast ? "╰── " : "├── ";
+        Path memberDir = rootDir == null ? null : rootDir.resolve(memberRel).normalize();
+        Path tomlPath = memberDir == null ? null : memberDir.resolve("jk.toml");
+        Path lockPath = memberDir == null ? null : memberDir.resolve("jk.lock");
+
+        JkBuild member = null;
+        Lockfile memberLock = null;
+        try {
+            if (tomlPath != null && Files.isRegularFile(tomlPath)) member = JkBuildParser.parse(tomlPath);
+            if (lockPath != null && Files.isRegularFile(lockPath)) memberLock = LockfileReader.read(lockPath);
+        } catch (Exception ignored) {
+            // unreadable member — fall through to the tag below
+        }
+
+        String label = member != null
+                ? formatCoord(member.project().group(), member.project().name(),
+                        member.project().version(), styling)
+                : styling.artifact().apply(memberRel);
+        String tag = member == null ? " [unreadable]" : (memberLock == null ? " [not locked]" : "");
+        out.append(prefix).append(styling.rail().apply(connector))
+                .append(label).append(styling.rail().apply(tag)).append('\n');
+
+        if (member == null || memberLock == null || depth >= maxDepth) return;
+        String childPrefix = prefix + styling.rail().apply(isLast ? "    " : "│   ");
+        renderComposite(member, memberLock, memberDir, depth + 1, maxDepth, childPrefix,
+                styling, members, seenModules, seenDirs, out);
     }
 
     private static void renderComposite(
             JkBuild project, Lockfile lock, Path dir, int depth, int maxDepth,
-            String prefix, Styling styling, Set<String> seenModules, Set<String> seenDirs,
-            StringBuilder out) {
+            String prefix, Styling styling, Map<String, String> members,
+            Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
 
         Map<String, Lockfile.Artifact> byModule = indexByModule(lock);
         Map<String, Dependency> composite = new HashMap<>();
@@ -139,12 +212,24 @@ public final class DependencyTree {
         for (int i = 0; i < roots.size(); i++) {
             String module = roots.get(i);
             boolean isLast = i == roots.size() - 1;
+            if (module.startsWith("workspace:")) {
+                // Workspace sibling (a `<name>.workspace = true` dep) — already shown
+                // at the top level, and its external deps aren't in this member's lock.
+                // Resolve the synthetic "workspace:<name>" back to a real coord and
+                // reference it (no recursion).
+                String name = module.substring("workspace:".length());
+                String coord = members.getOrDefault(name, module);
+                out.append(prefix).append(styling.rail().apply(isLast ? "╰── " : "├── "))
+                        .append(coordLabel(coord, styling))
+                        .append(styling.rail().apply(" [workspace]")).append('\n');
+                continue;
+            }
             Dependency comp = composite.get(module);
             if (comp == null) {
                 renderNode(byModule, module, depth, maxDepth, isLast, prefix, styling, seenModules, out);
             } else if (comp.isPath()) {
                 renderPathNode(comp, module, dir, depth, maxDepth, isLast, prefix, styling,
-                        seenModules, seenDirs, out);
+                        members, seenModules, seenDirs, out);
             } else {
                 // branch git dep — annotate (no recursion; needs a clone).
                 String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
@@ -158,7 +243,7 @@ public final class DependencyTree {
     /** A path dep node, recursing into the target's own tree (its jk.toml + jk.lock). */
     private static void renderPathNode(
             Dependency dep, String module, Path consumerDir, int depth, int maxDepth,
-            boolean isLast, String prefix, Styling styling,
+            boolean isLast, String prefix, Styling styling, Map<String, String> members,
             Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
 
         String connector = isLast ? "╰── " : "├── ";
@@ -184,7 +269,7 @@ public final class DependencyTree {
         }
         String childPrefix = prefix + styling.rail().apply(isLast ? "    " : "│   ");
         renderComposite(target, targetLock, targetDir, depth + 1, maxDepth, childPrefix,
-                styling, seenModules, seenDirs, out);
+                styling, members, seenModules, seenDirs, out);
     }
 
     /** {@code group:artifact} styled (no version — composite deps carry none here). */

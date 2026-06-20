@@ -87,7 +87,61 @@ class DependencyTreeTest {
         assertThat(rendered).doesNotContain("(missing)");   // composite deps aren't "missing"
     }
 
+    @Test
+    void workspace_root_walks_members_and_collapses_sibling_deps(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path root) throws Exception {
+        // A workspace root with two members; member b depends on a via `workspace = true`.
+        java.nio.file.Files.writeString(root.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                name = "ws"
+                version = "9.9.9"
+
+                [workspace]
+                members = ["a", "b"]
+                """);
+        java.nio.file.Path a = java.nio.file.Files.createDirectories(root.resolve("a"));
+        java.nio.file.Files.writeString(a.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                name = "a"
+                version = "9.9.9"
+                """);
+        java.nio.file.Files.writeString(a.resolve("jk.lock"), EMPTY_LOCK);
+        java.nio.file.Path b = java.nio.file.Files.createDirectories(root.resolve("b"));
+        java.nio.file.Files.writeString(b.resolve("jk.toml"), """
+                [project]
+                group = "com.acme"
+                name = "b"
+                version = "9.9.9"
+
+                [dependencies.main]
+                a = { workspace = true }
+                """);
+        java.nio.file.Files.writeString(b.resolve("jk.lock"), EMPTY_LOCK);
+
+        JkBuild rootProject = dev.jkbuild.config.JkBuildParser.parse(root.resolve("jk.toml"));
+        String rendered = DependencyTree.render(rootProject, lockOf(), root,
+                Integer.MAX_VALUE, DependencyTree.Styling.plain());
+
+        assertThat(rendered).contains("com.acme:ws:9.9.9");   // root
+        assertThat(rendered).contains("com.acme:a:9.9.9");    // member a walked
+        assertThat(rendered).contains("com.acme:b:9.9.9");    // member b walked
+        // b's `workspace = true` dep on a: collapsed reference, resolved to a's real
+        // coord (not the synthetic "workspace:a") and not flagged "(missing)".
+        assertThat(rendered).contains("com.acme:a [workspace]");
+        assertThat(rendered).doesNotContain("workspace:a");
+        assertThat(rendered).doesNotContain("(missing)");
+    }
+
     // --- helpers -----------------------------------------------------------
+
+    private static final String EMPTY_LOCK = """
+            version = 1
+            generated-by = "jk test"
+            resolution-algorithm = "pubgrub-v1"
+            """;
+
 
     private static JkBuild projectWithMainDeps(String... modules) {
         var deps = new ArrayList<Dependency>();
