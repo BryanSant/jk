@@ -86,6 +86,8 @@ public final class JdkInstallCommand implements CliCommand {
             GoalKey.of("archive", JdkInstaller.DownloadedArchive.class);
     private static final GoalKey<InstalledJdk> INSTALLED = GoalKey.of("installed", InstalledJdk.class);
     private static final GoalKey<Boolean> WANT_DEFAULT = GoalKey.of("want-default", Boolean.class);
+    /** True when the interactive wizard ran — it already settled the default decision. */
+    private static final GoalKey<Boolean> WIZARD_RAN = GoalKey.of("wizard-ran", Boolean.class);
 
     @Override
     public int run(Invocation in) throws Exception {
@@ -161,6 +163,7 @@ public final class JdkInstallCommand implements CliCommand {
                         }
                         entry = chosen.entry();
                         wantDefault = wantDefault || chosen.makeDefault();
+                        ctx.put(WIZARD_RAN, true);
                     } else {
                         ctx.label("select " + effective);
                         // selectPreferred applies the Temurin bias for
@@ -316,7 +319,15 @@ public final class JdkInstallCommand implements CliCommand {
         // Runs AFTER the goal console closes, so the prompt never lands inside a
         // captured-output region. Skipped on a non-TTY (and when --make-default
         // already set the java default).
-        if (Confirm.isInteractiveTerminal()) {
+        //
+        // Skipped entirely when the wizard ran: it already asked "Make this the
+        // default JDK?", so re-asking here would be a duplicate prompt — and the
+        // wizard's own terminal has been closed (taking System.in with it), so a
+        // fresh Confirm would fail with "Stream Closed". The post-goal offer is
+        // for the non-interactive spec path (e.g. `jk jdk install 25`), which
+        // never opened a terminal and never asked about the default.
+        boolean wizardRan = Boolean.TRUE.equals(goal.get(WIZARD_RAN).orElse(false));
+        if (!wizardRan && Confirm.isInteractiveTerminal()) {
             boolean wantedDefault = Boolean.TRUE.equals(goal.get(WANT_DEFAULT).orElse(false));
             goal.get(INSTALLED).ifPresent(jdk -> offerDefaults(jdk, wantedDefault));
         }
