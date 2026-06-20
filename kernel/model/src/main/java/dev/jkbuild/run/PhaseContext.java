@@ -36,6 +36,18 @@ public interface PhaseContext {
     void updateScope(int additionalScope);
 
     /**
+     * Replace this phase's bar weight (its share of the goal denominator) once
+     * the real work is known — e.g. a compile that, with its resolved classpath
+     * in hand, discovers it will hard-link a cached result rather than run a full
+     * javac. The goal denominator is adjusted by the delta, re-normalising the
+     * bar. Call this <em>early</em> in the phase body, before reporting progress,
+     * so the slice is resized before it starts filling (a late shrink below
+     * already-emitted ticks pulls the bar back slightly). A no-op for unweighted
+     * phases and for implementations that don't size dynamically.
+     */
+    default void reweight(int newWeight) { /* dynamic-weight phases override via DefaultPhaseContext */ }
+
+    /**
      * Set the phase's current sub-task label — what's happening right
      * now. The TUI uses this for the "Compiling Foo.java" annotation
      * beside the bar; logging listeners may write it as a status line.

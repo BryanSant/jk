@@ -469,6 +469,7 @@ public final class BuildPipeline {
                     }
                     if (!rerun && dev.jkbuild.task.FreshnessStamp.isFresh(
                             javaOut, dev.jkbuild.task.FreshnessStamp.JAVA_STAMP, sources, stampInputs)) {
+                        ctx.reweight(EffortWeights.SKIP);   // nothing to compile this run
                         ctx.label("up to date");
                         ctx.put(BUILD_OUTCOME, "up-to-date");
                         ctx.progress(sources.size());
@@ -485,6 +486,20 @@ public final class BuildPipeline {
                     String taskId = ActionKey.qualifiedTaskId("compile-main", javaOut);
                     Path javaStateDir = in.cache().resolve("actions")
                             .resolve("incremental-java").resolve(taskId);
+                    // Reweight the bar slice now that the real request is known: a CAS
+                    // action-cache hit means a cheap hard-link restore (3), not a full
+                    // javac (ceil(sources × 0.1)). Uses the exact key
+                    // JavaIncrementalCompile will look up, so the estimate matches what
+                    // actually happens — no goal-start reconstruction divergence.
+                    if (!rerun) {
+                        try {
+                            boolean restores = actionCache.lookup(
+                                    ActionKey.forJavac(taskId, request, dev.jkbuild.util.JkVersion.VERSION))
+                                    .isPresent();
+                            ctx.reweight(restores ? EffortWeights.RESTORE
+                                    : EffortWeights.compileWeight(sources.size()));
+                        } catch (Exception ignored) { /* keep the up-front estimate */ }
+                    }
                     // With processors declared, hand the incremental compiler an AP setup:
                     // a *lazy* worker-jar resolver + a stable generated-sources dir. The
                     // engine routes through the worker only once it has detected
@@ -569,6 +584,7 @@ public final class BuildPipeline {
                     boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
                     if (!rerun && dev.jkbuild.task.FreshnessStamp.isFresh(
                             classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP, freshInputs, classpath)) {
+                        ctx.reweight(EffortWeights.SKIP);   // nothing to compile this run
                         ctx.label("up to date");
                         ctx.put(KOTLIN_OUTCOME, "up-to-date");
                         ctx.progress(ktSources.size());
@@ -726,12 +742,20 @@ public final class BuildPipeline {
                     String stampKey = dev.jkbuild.task.TestStamp.computeKey(
                             testSrcs, ctx.require(MAIN_CLASSES), in.lockFile(), testRtCp,
                             testStampExtras(workerJars));
+                    String testTaskId = ActionKey.qualifiedTaskId("run-tests", testClassesForStamp);
                     // --rerun forces a real test run, matching the compile/package
                     // freshness checks above (which all guard on !rerun). Without
-                    // this guard the incremental stamp would skip the runner even
-                    // when the user explicitly asked to bypass build caches.
+                    // this guard the action record would skip the runner even when
+                    // the user explicitly asked to bypass build caches.
                     boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
-                    if (!rerun && dev.jkbuild.task.TestStamp.isFresh(testClassesForStamp, stampKey)) {
+                    // The "tests passed for this input" marker lives in the CAS (keyed by
+                    // the content key), NOT in target/ — so it survives `jk clean`: a later
+                    // build that restores byte-identical classes recomputes the same key and
+                    // skips the runner, mirroring how the compile cache survives clean.
+                    // stampKey is null only when computeKey failed open (unreadable
+                    // input) — treat that as "not cached" and run the tests.
+                    if (!rerun && stampKey != null && actionCache.lookup(stampKey).isPresent()) {
+                        ctx.reweight(EffortWeights.SKIP);
                         ctx.label("tests up-to-date");
                         return; // skip — nothing changed since last green run
                     }
@@ -766,16 +790,24 @@ public final class BuildPipeline {
                     }
                     ctx.put(TEST_RESULT, result);
                     if (!result.allPassed()) {
-                        // Wipe any stale stamp so the next run doesn't skip.
-                        dev.jkbuild.task.TestStamp.write(testClassesForStamp, null);
+                        // No marker on failure — the next build re-runs (the absence
+                        // of a record for this key is the "not yet green" signal).
                         // Surface each failure (name + stack trace) above the bar —
                         // not just the count — like Maven/Gradle.
                         for (String line : TestSupport.renderFailures(result)) ctx.output(line);
                         throw new RuntimeException(result.failed() + " test failure"
                                 + (result.failed() == 1 ? "" : "s"));
                     }
-                    // All tests passed — write stamp so subsequent builds can skip.
-                    dev.jkbuild.task.TestStamp.write(testClassesForStamp, stampKey);
+                    // All tests passed — record a CAS marker keyed by the content key so a
+                    // later build skips the runner when inputs are unchanged. It lives in the
+                    // CAS (not target/), so it survives `jk clean`: after clean+build the
+                    // compile cache restores byte-identical classes, the key recomputes the
+                    // same, and the marker is found. Output-less — the key's presence is the
+                    // result. (Skip if the key failed open — nothing to key the marker on.)
+                    if (stampKey != null) {
+                        actionCache.storeWithOutputs(testTaskId, stampKey,
+                                java.util.Map.of(), java.util.Map.of());
+                    }
                 })
                 .build();
 
@@ -1403,6 +1435,15 @@ public final class BuildPipeline {
                 .extraArgs(ktArgs)
                 .build();
         boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
+        // Reweight from the real request: a CAS hit is a cheap restore (3), else a
+        // full kotlinc. Same forKotlinc key KotlinCompile.run looks up.
+        if (!rerun) {
+            try {
+                boolean restores = actionCache.lookup(
+                        ActionKey.forKotlinc(taskId, req, dev.jkbuild.util.JkVersion.VERSION)).isPresent();
+                ctx.reweight(restores ? EffortWeights.RESTORE : EffortWeights.compileWeight(sources.size()));
+            } catch (Exception ignored) { /* keep the up-front estimate */ }
+        }
         return dev.jkbuild.task.KotlinCompile.run(
                 taskId, req, dev.jkbuild.util.JkVersion.VERSION, !rerun, cas, actionCache);
     }

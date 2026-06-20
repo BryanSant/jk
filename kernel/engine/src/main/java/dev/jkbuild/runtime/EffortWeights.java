@@ -9,7 +9,6 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.task.FreshnessStamp;
-import dev.jkbuild.task.TestStamp;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -43,6 +42,7 @@ public final class EffortWeights {
     private EffortWeights() {}
 
     static final int SKIP           = 1;
+    static final int RESTORE        = 3;   // compile output hard-linked back from the CAS (set live by the phase)
     static final int TEST_METHOD    = 8;   // per @Test (and ParameterizedTest/&c.)
     static final int ARTIFACT_FETCH = 8;   // per dependency artifact downloaded
     static final int PACKAGE_JAR    = 5;
@@ -90,15 +90,15 @@ public final class EffortWeights {
             }
             boolean compileRun = javaRun || ktRun;
 
-            // Tests + packaging consume the compiled output: if compile ran, they
-            // run. Otherwise fall back to their own freshness (test stamp, jar).
+            // Tests + packaging consume the compiled output: if a compile ran (or
+            // --rerun), they run. The precise test skip is decided at run-tests via
+            // the CAS marker (which survives `jk clean`); that phase reweights down
+            // to SKIP there, so a fully-cached run lands right with no up-front guess.
             List<Path> testSrc = new ArrayList<>();
             testSrc.addAll(CompileSupport.collectJavaSources(
                     compact ? in.dir().resolve("test") : in.dir().resolve("src/test/java")));
             testSrc.addAll(CompileSupport.collectKotlinTestSources(in.dir(), compact));
-            Path testStamp = layout.testClassesDir().resolve(TestStamp.FILE);
-            boolean testWillRun = !testSrc.isEmpty()
-                    && (rerun || compileRun || !testStampFresh(testStamp, testSrc));
+            boolean testWillRun = !testSrc.isEmpty() && (rerun || compileRun);
             compileTest = testWillRun ? compileWeight(testSrc.size()) : SKIP;
 
             int methods = in.estimatedTestCount();
@@ -201,17 +201,4 @@ public final class EffortWeights {
         }
     }
 
-    /** Test stamp present and no test source touched since it was written. */
-    private static boolean testStampFresh(Path testStamp, List<Path> testSrc) {
-        try {
-            if (!Files.isRegularFile(testStamp)) return false;
-            long stampMs = Files.getLastModifiedTime(testStamp).toMillis();
-            for (Path s : testSrc) {
-                if (Files.getLastModifiedTime(s).toMillis() > stampMs) return false;
-            }
-            return true;
-        } catch (IOException e) {
-            return false;
-        }
-    }
 }

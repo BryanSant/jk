@@ -155,6 +155,15 @@ public final class TestSupport {
         java.nio.file.Path stateDir = cacheRoot.resolve("actions")
                 .resolve("incremental-java").resolve(cacheTaskId);
 
+        // Reweight the bar slice from the real request: a CAS hit is a cheap
+        // restore (3), else a full compile. Same key JavaIncrementalCompile uses.
+        if (useCache) {
+            try {
+                boolean restores = actionCache.lookup(
+                        ActionKey.forJavac(cacheTaskId, request, JkVersion.VERSION)).isPresent();
+                ctx.reweight(restores ? EffortWeights.RESTORE : EffortWeights.compileWeight(sources.size()));
+            } catch (Exception ignored) { /* keep the up-front estimate */ }
+        }
         ctx.label(taskId + ": " + sources.size() + " sources");
         dev.jkbuild.task.JavaIncrementalCompile.Result r = dev.jkbuild.task.JavaIncrementalCompile.run(
                 cacheTaskId, request, JkVersion.VERSION, useCache, cas, actionCache, stateDir);

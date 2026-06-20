@@ -104,6 +104,29 @@ class AggregateProgressTest {
         assertThat(barCount(cm)).isEqualTo("40 of 100");
     }
 
+    @Test
+    void member_reweight_resizes_its_slice_and_the_aggregate_total() {
+        CommandManager cm = newView();
+        AggregateContext agg = new AggregateContext(cm);
+        agg.calibrate(100);   // A slice 40, B slice 60
+
+        AggregateMemberListener a = new AggregateMemberListener(agg, "mod-a", List.of(), 40);
+        a.goalStart(view(0, 40));              // initial denominator == reserved slice
+        assertThat(agg.total()).isEqualTo(100);
+
+        // A's compile turns out to be a cheap restore: its goal denominator drops
+        // 40 → 3, which must shrink both its slice and the aggregate total.
+        a.progress("compile", 3, view(3, 3));
+        assertThat(agg.total()).isEqualTo(63);             // 100 − 37
+        a.goalFinish(success());
+        assertThat(barCount(cm)).isEqualTo("3 of 63");     // base advanced by the shrunk slice
+
+        AggregateMemberListener b = new AggregateMemberListener(agg, "mod-b", List.of(), 60);
+        b.goalStart(view(0, 60));
+        b.progress("x", 60, view(60, 60));
+        assertThat(barCount(cm)).isEqualTo("63 of 63");    // 3 + 60, bar reaches 100%
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static CommandManager newView() {

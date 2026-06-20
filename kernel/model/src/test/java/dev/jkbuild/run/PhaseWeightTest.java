@@ -99,6 +99,24 @@ class PhaseWeightTest {
     }
 
     @Test
+    void reweight_resizes_the_slice_and_the_denominator_mid_run() {
+        // 'a' is estimated at 40 up front but discovers early it's a cheap restore (3).
+        Goal goal = Goal.builder("g")
+                .addPhase(Phase.builder("a").weight(40).scope(1)
+                        .execute(ctx -> { ctx.reweight(3); ctx.progress(1); })
+                        .build())
+                .addPhase(Phase.builder("b").weight(10).scope(1)
+                        .execute(ctx -> ctx.progress(1)).build())
+                .build();
+
+        assertThat(goal.estimatedTotalWeight()).isEqualTo(50);   // 40 + 10, before running
+        goal.run();
+        // 'a' shrank 40 → 3, so the denominator drops to 3 + 10; both fill fully.
+        assertThat(goal.snapshot().denominator()).isEqualTo(13);
+        assertThat(goal.snapshot().numerator()).isEqualTo(13);
+    }
+
+    @Test
     void interpolation_eases_toward_the_weight_and_caps() {
         // A weighted, interpolated phase with expected duration 1ms and weight 100.
         // Driving tick() with controlled timestamps eases the slice toward

@@ -56,9 +56,20 @@ public final class AggregateContext {
         cm.progress(0, total);
     }
 
-    /** The fixed aggregate denominator, or 0 when {@link #calibrate} wasn't called. */
+    /** The aggregate denominator, or 0 when {@link #calibrate} wasn't called. */
     public synchronized long total() {
         return total;
+    }
+
+    /**
+     * Adjust the aggregate denominator by {@code delta} when a running member
+     * reweights a phase mid-run (e.g. a full compile turns out to be a cheap
+     * restore). The member grows/shrinks its own slice by the same delta, so
+     * {@code Σ slices} stays equal to {@code total}. The repaint happens on the
+     * member's next {@link #memberProgress}, so this only moves the denominator.
+     */
+    public synchronized void growTotal(long delta) {
+        total += delta;
     }
 
     /** Scope of all members finished so far. */

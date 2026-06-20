@@ -35,14 +35,14 @@ final class DefaultPhaseContext implements PhaseContext {
     private static final double INTERP_CAP = 0.9;
 
     private final boolean weighted;
-    private final long weight;
+    private volatile long weight;                  // mutable: reweight() resizes the slice mid-run
     private final AtomicLong internalScope;        // fraction denominator (weighted)
     private final AtomicLong internalDone = new AtomicLong(0);
     private final AtomicLong emitted = new AtomicLong(0);   // weight-ticks added so far (weighted)
     private final AtomicInteger scopeGrowth = new AtomicInteger(0); // legacy denominator growth
 
     /** Wall-clock interpolation: 0 = off; else the phase's expected duration. */
-    private final long expectedNanos;
+    private volatile long expectedNanos;           // scaled with the weight on reweight()
     private final long startNanos;
 
     DefaultPhaseContext(String phase, Goal goal, int internalScope, int weight,
@@ -111,6 +111,27 @@ final class DefaultPhaseContext implements PhaseContext {
     /** The phase's full bar budget — what auto-fill tops the numerator up to. */
     long phaseBudget() {
         return weighted ? weight : internalScope.get() + scopeGrowth.get();
+    }
+
+    @Override
+    public synchronized void reweight(int newWeight) {
+        if (!weighted || newWeight < 0) return;
+        long old = weight;
+        if (newWeight == old) return;
+        goal.denominatorRef().add(newWeight - old);
+        // Keep the per-weight interpolation duration constant as the slice resizes.
+        if (old > 0 && expectedNanos > 0) {
+            expectedNanos = expectedNanos * newWeight / old;
+        }
+        weight = newWeight;
+        // If we shrank below what was already emitted (reweight called late), pull
+        // the numerator back so the phase never exceeds its new budget. Meant to be
+        // called early (emitted == 0), so this is normally a no-op.
+        long over = emitted.get() - newWeight;
+        if (over > 0) {
+            emitted.addAndGet(-over);
+            goal.numeratorRef().add(-over);
+        }
     }
 
     @Override

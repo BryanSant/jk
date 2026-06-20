@@ -33,7 +33,16 @@ public final class AggregateMemberListener implements GoalListener {
      * advances by exactly this much on completion (no boundary drift). Ignored on
      * the uncalibrated path ({@code total == 0}), which falls back to live ticks.
      */
-    private final long slice;
+    /**
+     * Mutable: starts at the member's pre-scan estimate, but tracks its goal
+     * denominator as phases {@link dev.jkbuild.run.PhaseContext#reweight reweight}
+     * mid-run (e.g. a compile that turns out to be a cheap restore). Each change
+     * is propagated to the aggregate total via {@link AggregateContext#growTotal}
+     * so the member's share of the bar reflects the work it actually does.
+     */
+    private long slice;
+    /** The goal denominator we've already folded into {@link #slice} / the total. */
+    private long knownDenominator;
 
     private long lastDenominator;
 
@@ -60,6 +69,7 @@ public final class AggregateMemberListener implements GoalListener {
         this.member = member;
         this.phases = phases;
         this.slice = slice;
+        this.knownDenominator = slice;   // the goal's initial denominator == its pre-scan estimate
     }
 
     @Override
@@ -143,6 +153,15 @@ public final class AggregateMemberListener implements GoalListener {
         long base = agg.completedBase();
         long total = agg.total();
         if (total > 0) {
+            // A phase reweighted: fold the denominator delta into this member's
+            // slice and the aggregate total, so a restore/skip shrinks (and a
+            // surprise full grows) the member's share of the whole-workspace bar.
+            if (view.denominator() != knownDenominator) {
+                agg.growTotal(view.denominator() - knownDenominator);
+                slice += view.denominator() - knownDenominator;
+                knownDenominator = view.denominator();
+                total = agg.total();
+            }
             // Calibrated: scale this member's own 0→100% into its fixed slice and
             // report it through the aggregate, which sums every running member's
             // contribution onto completedBase. Monotonic within the member and

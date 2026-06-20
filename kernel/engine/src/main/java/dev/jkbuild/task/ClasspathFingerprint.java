@@ -127,7 +127,7 @@ public final class ClasspathFingerprint {
     private static boolean isBuildMetadata(String name) {
         return name.equals(FreshnessStamp.JAVA_STAMP)
                 || name.equals(FreshnessStamp.KOTLIN_STAMP)
-                || name.equals(TestStamp.FILE);
+                || name.equals(".test-stamp"); // legacy: pre-CAS test marker, still excluded if any linger
     }
 
     private static String baseName(String entryName) {

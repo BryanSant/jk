@@ -15,16 +15,17 @@ import java.util.HexFormat;
 import java.util.List;
 
 /**
- * Incremental test-skipping via a content-addressed stamp file.
- *
- * <p>After a clean test run, {@link #write} records a hash of all test
- * inputs. Before the next run, {@link #isFresh} recomputes the hash and
- * compares — if unchanged, the test runner is skipped entirely.
+ * Content key for incremental test-skipping. {@link #computeKey} hashes every
+ * input that affects the test outcome; the build stores a CAS action-cache
+ * marker under that key on a green run and skips the runner when a later build
+ * recomputes the same key. The "tests passed" signal therefore lives in the CAS
+ * — surviving {@code jk clean} (which only wipes {@code target/}) the same way
+ * the compile cache does — rather than in a file under {@code target/}.
  *
  * <h3>Inputs to the key</h3>
  * <ul>
  *   <li><b>Test sources</b> — path + content hash.  Editing or adding a
- *       test file busts the stamp.</li>
+ *       test file busts the key.</li>
  *   <li><b>Own main output</b> — content of the module's {@code MAIN_CLASSES}
  *       tree.  The tests exercise this code, so a main-only change must retest
  *       even when no test source changed.</li>
@@ -34,7 +35,7 @@ import java.util.List;
  *       outputs (sibling members) by their bytes.  Content (not mtime) is what
  *       makes a sibling member's change ripple into every dependent's key, and
  *       what stops a byte-identical rebuild — jk re-jars every build with a new
- *       file mtime but stable bytes — from needlessly busting the stamp.</li>
+ *       file mtime but stable bytes — from needlessly busting the key.</li>
  *   <li><b>Toolchain / runner / forked-worker identity</b> — caller-supplied
  *       tokens (jk version, {@code jk-test-runner} sha, the content of any worker
  *       jars handed to the test JVM) so a tool or worker change retests.</li>
@@ -42,59 +43,15 @@ import java.util.List;
  *
  * <h3>Safety invariant</h3>
  * Any exception (unreadable source, missing lock, I/O error) causes
- * {@link #computeKey} to return {@code null}, which makes {@link #isFresh}
- * return {@code false} — the test runner always runs when the key cannot be
- * verified.
+ * {@link #computeKey} to return {@code null}; callers treat {@code null} as
+ * "not cached" and run the tests.
  */
 public final class TestStamp {
 
-    /** Name of the stamp file written into the test-classes directory. */
-    public static final String FILE = ".test-stamp";
-
-    /** Prefix embedded in every stamp so future format changes can be detected. */
+    /** Prefix embedded in the key so a future format change invalidates it. */
     private static final String FORMAT_VERSION = "test-stamp-v2";
 
     private TestStamp() {}
-
-    // -----------------------------------------------------------------------
-    // Public API
-
-    /**
-     * Return {@code true} when the tests produced by a previous run are still
-     * valid for the current inputs — i.e. none of the test sources, the lock
-     * file, or any runtime-classpath entry have changed since the stamp was
-     * written.
-     *
-     * <p>Returns {@code false} conservatively whenever the stamp is missing,
-     * unreadable, or the key cannot be computed.
-     */
-    public static boolean isFresh(Path testClassesDir, String currentKey) {
-        if (currentKey == null) return false;
-        Path stamp = testClassesDir.resolve(FILE);
-        if (!Files.isRegularFile(stamp)) return false;
-        try {
-            return currentKey.equals(Files.readString(stamp, StandardCharsets.UTF_8).trim());
-        } catch (IOException e) {
-            return false;
-        }
-    }
-
-    /**
-     * Write the stamp for a successful test run.  Silently does nothing on
-     * I/O failure — the worst outcome is that the next build re-runs the tests.
-     */
-    public static void write(Path testClassesDir, String key) {
-        if (key == null) return;
-        try {
-            Files.createDirectories(testClassesDir);
-            Path stamp = testClassesDir.resolve(FILE);
-            // Delete first so we never truncate-in-place a file that an earlier
-            // build may have hard-linked into the CAS — truncating would mutate
-            // the shared blob. A fresh write always gets its own inode.
-            Files.deleteIfExists(stamp);
-            Files.writeString(stamp, key + "\n", StandardCharsets.UTF_8);
-        } catch (IOException ignored) {}
-    }
 
     /**
      * Compute the combined key for all test inputs.  Returns {@code null} if

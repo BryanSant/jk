@@ -99,20 +99,4 @@ class TestStampTest {
                 .as("a toolchain/runner identity change retests")
                 .isNotEqualTo(base);
     }
-
-    @Test
-    void isFresh_round_trips_and_detects_change(@TempDir Path dir) throws IOException {
-        Path testClasses = Files.createDirectories(dir.resolve("classes/test"));
-        Path testSrc = write(dir.resolve("FooTest.java"), "class FooTest {}");
-        Path mainClasses = Files.createDirectories(dir.resolve("classes/main"));
-        write(mainClasses.resolve("Foo.class"), "AAAA");
-        Path lock = write(dir.resolve("jk.lock"), "v=1");
-
-        String key = TestStamp.computeKey(List.of(testSrc), mainClasses, lock, List.of(), List.of());
-        assertThat(TestStamp.isFresh(testClasses, key)).isFalse();   // no stamp yet → retest
-        TestStamp.write(testClasses, key);
-        assertThat(TestStamp.isFresh(testClasses, key)).isTrue();    // unchanged → skip
-        assertThat(TestStamp.isFresh(testClasses, key + "x")).isFalse(); // changed → retest
-        assertThat(TestStamp.isFresh(testClasses, null)).isFalse();  // null key → retest
-    }
 }
