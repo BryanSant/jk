@@ -18,4 +18,7 @@ public final class Glyphs {
 
     /** Pending / active phase-row marker — white medium square. */
     public static final String PENDING = "◻";
+
+    /** Run/exec marker — right-pointing triangle. Paint with {@code Theme.brightGreen()}. */
+    public static final String PLAY = "▶";
 }

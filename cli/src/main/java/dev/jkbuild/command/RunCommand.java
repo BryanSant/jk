@@ -170,21 +170,25 @@ public final class RunCommand implements CliCommand {
     }
 
     /**
-     * Prints the "→ Executing ..." line (to stderr, above the program's output)
+     * Prints the "▶ Executing ..." line (to stderr, above the program's output)
      * followed by a blank line, so the program's stdout starts on a clean line.
+     * The {@code ▶} play glyph is bright-green and the whole executed command —
+     * literal {@code java …} <em>and</em> the artifact path — is yellow. (This is
+     * the one place a path is deliberately covered by yellow rather than the usual
+     * {@link Theme#path()} color: it reads as a single command line.)
      *
-     * <p>Native:  {@code → Executing native binary: [yellow]target/myapp[/]}
-     * <p>Shadow:  {@code → Executing [dim italic]{jdk}[/]:[yellow]java -jar target/app-all.jar[/]}
-     * <p>Plain:   {@code → Executing [dim italic]{jdk}[/]:[yellow]java -cp … target/app.jar[/]}
+     * <p>Native:  {@code ▶ Executing native binary: [yellow]target/myapp[/]}
+     * <p>Shadow:  {@code ▶ Executing ({jdk}): [yellow]java -jar target/app-all.jar[/]}
+     * <p>Plain:   {@code ▶ Executing ({jdk}): [yellow]java -cp … target/app.jar[/]}
      */
     private static void printExecBanner(Path projectDir, List<String> command) {
         Theme t = Theme.active();
         String exec;
         if (command.size() == 1) {
-            // Native binary — "native binary: target/myapp"
+            // Native binary — "native binary: target/myapp" (path covered by yellow).
             Path bin = Path.of(command.get(0));
             exec = "native binary: "
-                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.path());
+                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.highlight());
         } else {
             // JVM — derive jdk leaf, resolving symlinks so "current" shows the real spec.
             Path javaExe = Path.of(command.get(0));
@@ -194,23 +198,24 @@ public final class RunCommand implements CliCommand {
                     ? jdkHome.getFileName().toString() : "java";
 
             String flag = command.get(1);   // "-jar" or "-cp"
-            // Only the path is path-colored; the literal "java -jar/-cp …" stays plain.
+            // The whole command — literal "java -jar/-cp …" and the path — is yellow.
             String javaCmd;
             if ("-jar".equals(flag)) {
                 // Shadow jar — full relative path, no classpath noise.
                 Path jar = Path.of(command.get(2));
-                javaCmd = "java -jar " + Theme.colorize(PathDisplay.of(jar, projectDir), t.path());
+                javaCmd = "java -jar " + PathDisplay.of(jar, projectDir);
             } else {
                 // Plain jar + classpath — elide the full cp, show project jar.
                 String cpArg = command.size() >= 3 ? command.get(2) : "";
                 String pathSep = System.getProperty("path.separator");
                 String first = cpArg.contains(pathSep)
                         ? cpArg.substring(0, cpArg.indexOf(pathSep)) : cpArg;
-                javaCmd = "java -cp … " + Theme.colorize(PathDisplay.of(Path.of(first), projectDir), t.path());
+                javaCmd = "java -cp … " + PathDisplay.of(Path.of(first), projectDir);
             }
-            exec = "(" + jdkLeaf + "): " + javaCmd;
+            exec = "(" + jdkLeaf + "): " + Theme.colorize(javaCmd, t.highlight());
         }
-        System.err.println("→ Executing " + exec);
+        System.err.println(Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen())
+                + " Executing " + exec);
         System.err.println();
         // Reset any lingering SGR state so the program's own output starts from
         // the terminal's default colors (only when we're emitting color at all).
