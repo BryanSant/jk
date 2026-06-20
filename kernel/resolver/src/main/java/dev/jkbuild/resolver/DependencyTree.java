@@ -244,7 +244,9 @@ public final class DependencyTree {
             // Scope header: ├──/╰── then the badge (no trailing space — badge abuts).
             out.append(prefix).append(styling.rail().apply(lastScope ? "╰──" : "├──"))
                     .append(styling.scopeBadge().apply(scopeLabel(s))).append('\n');
-            String scopePrefix = prefix + styling.rail().apply(lastScope ? "   " : "│  ");
+            // 4-wide continuation (matching a standard tree node) so the deps nest a
+            // space further in than the 3-char scope connector — aligning under the badge.
+            String scopePrefix = prefix + styling.rail().apply(lastScope ? "    " : "│   ");
             List<String> mods = bySectionScope.get(s);
             for (int di = 0; di < mods.size(); di++) {
                 renderDep(mods.get(di), composite, byModule, dir, depth, maxDepth,
