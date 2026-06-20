@@ -406,6 +406,21 @@ public final class JdkListCommand implements CliCommand {
     private static String dataRow(String version, Row r, int[] widths) {
         var bar = Theme.colorize("│", Theme.active().darkGray());
         Status status = r.status();
+        // Row-level emphasis: the active JDK is italic, the default JDK is bold; a
+        // JDK that's both gets bold + italic. Derived from the composite status
+        // label since one JDK can hold several roles at once (e.g. "active/default").
+        String label = r.statusLabel();
+        boolean italic = label.contains("active");
+        boolean bold = label.contains("default");
+
+        String versionCell = Theme.colorize(center(version, widths[0]),
+                deco(AttributedStyle.DEFAULT, italic, bold));
+        String vendor = r.vendor() == null ? "" : r.vendor();
+        String vendorCell = Theme.colorize(padRight(vendor, widths[1]),
+                deco(AttributedStyle.DEFAULT, italic, bold));
+        String specCell = Theme.colorize(padRight(r.spec(), widths[2]),
+                deco(Theme.active().settled(), italic, bold));
+
         String location = r.location();
         String locStyled;
         if (location == null || location.isEmpty()) {
@@ -415,35 +430,36 @@ public final class JdkListCommand implements CliCommand {
             // as their status, so the entire catalog-only row reads as de-emphasised
             // relative to actually-installed JDKs.
             AttributedStyle locStyle = status == Status.AVAILABLE ? Theme.active().darkGray() : Theme.active().path();
-            locStyled = Theme.colorize(location, locStyle) + " ".repeat(widths[4] - location.length());
+            locStyled = Theme.colorize(location, deco(locStyle, italic, bold))
+                    + " ".repeat(widths[4] - location.length());
         }
-        // The active JDK gets its vendor + spec bolded so the one in effect stands out.
-        boolean active = status == Status.ACTIVE;
-        String vendor = r.vendor() == null ? "" : r.vendor();
-        String vendorCell = active
-                ? Theme.colorize(padRight(vendor, widths[1]), AttributedStyle.DEFAULT.bold())
-                : padRight(vendor, widths[1]);
-        AttributedStyle specStyle = active ? Theme.active().settled().bold() : Theme.active().settled();
-        String specCell = Theme.colorize(padRight(r.spec(), widths[2]), specStyle);
         return bar
-                + " " + center(version, widths[0]) + " " + bar
+                + " " + versionCell + " " + bar
                 + " " + vendorCell + " " + bar
                 + " " + specCell + " " + bar
-                + " " + statusCell(r.statusLabel(), widths[3]) + " " + bar
+                + " " + statusCell(label, widths[3], italic, bold) + " " + bar
                 + " " + locStyled + " " + bar;
+    }
+
+    /** Layer the row-level italic (active) / bold (default) attributes onto a cell style. */
+    private static AttributedStyle deco(AttributedStyle base, boolean italic, boolean bold) {
+        if (italic) base = base.italic();
+        if (bold) base = base.bold();
+        return base;
     }
 
     /**
      * Render the (possibly composite) status label with a distinct color per
      * role — active = bright-cyan+bold, default = bright-yellow, native =
-     * bright-green — joined by a dim slash, then padded to the column width.
+     * bright-green — joined by a dim slash, then padded to the column width. The
+     * row's italic/bold emphasis is layered on so the whole line reads uniformly.
      */
-    private static String statusCell(String label, int width) {
+    private static String statusCell(String label, int width, boolean italic, boolean bold) {
         String[] parts = label.split("/");
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < parts.length; i++) {
             if (i > 0) sb.append(Theme.colorize("/", Theme.active().darkGray()));
-            sb.append(Theme.colorize(parts[i], segmentStyle(parts[i])));
+            sb.append(Theme.colorize(parts[i], deco(segmentStyle(parts[i]), italic, bold)));
         }
         int pad = width - label.length();
         if (pad > 0) sb.append(" ".repeat(pad));
