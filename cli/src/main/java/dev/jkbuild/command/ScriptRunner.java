@@ -463,7 +463,7 @@ final class ScriptRunner {
                         try {
                             var imported = PomImporter.importFromBytes(p.pomXml());
                             var byScope = imported.jkBuild().dependencies().byScope();
-                            for (Scope scope : EnumSet.of(Scope.MAIN, Scope.RUNTIME)) {
+                            for (Scope scope : EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.RUNTIME)) {
                                 List<Dependency> scoped = byScope.get(scope);
                                 if (scoped != null) declaredDeps.addAll(scoped);
                             }

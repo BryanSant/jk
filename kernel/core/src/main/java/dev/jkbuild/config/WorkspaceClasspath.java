@@ -106,7 +106,10 @@ public final class WorkspaceClasspath {
             JkBuild sibBuild;
             try { sibBuild = JkBuildParser.parse(sibToml); }
             catch (RuntimeException ignored) { continue; }
-            for (Scope scope : Set.of(Scope.MAIN)) { // only MAIN propagates transitively
+            // MAIN and EXPORT propagate transitively: a sibling's exported deps
+            // (api semantics) ride along to anything that depends on it, and MAIN
+            // deps stay visible down the workspace chain (io→core→model).
+            for (Scope scope : Set.of(Scope.EXPORT, Scope.MAIN)) {
                 for (Dependency dep : sibBuild.dependencies().of(scope)) {
                     String depModule = resolveWorkspaceRef(dep.module(), siblingCoordByName);
                     if (siblingJarByModule.containsKey(depModule) && visited.add(depModule)) {

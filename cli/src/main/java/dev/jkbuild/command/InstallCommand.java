@@ -27,7 +27,6 @@ import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.RepositorySpec;
-import dev.jkbuild.model.Scope;
 import dev.jkbuild.publish.PublishablePom;
 import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
@@ -604,7 +603,7 @@ public final class InstallCommand implements CliCommand {
             Lockfile lock = LockfileReader.read(lockFile);
             for (Lockfile.Artifact pkg : lock.artifacts()) {
                 if (pkg.checksum() == null) continue;
-                if (!(pkg.scopes().contains(Scope.MAIN) || pkg.scopes().contains(Scope.RUNTIME))) continue;
+                if (!pkg.inAnyScope(ClasspathResolver.RUNTIME)) continue;   // EXPORT + MAIN + RUNTIME
                 String hex = pkg.checksum().startsWith("sha256:")
                         ? pkg.checksum().substring("sha256:".length()) : pkg.checksum();
                 Path blob = cas.pathFor(hex);
@@ -617,7 +616,7 @@ public final class InstallCommand implements CliCommand {
         }
         // Workspace sibling jars (built locally) also belong on the classpath.
         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project,
-                EnumSet.of(Scope.MAIN, Scope.RUNTIME));
+                ClasspathResolver.RUNTIME);
         for (Path sib : siblings.jars()) {
             Path dest = libexecDir.resolve(sib.getFileName().toString());
             Linking.linkOrCopy(sib, dest);
@@ -627,7 +626,7 @@ public final class InstallCommand implements CliCommand {
         // runtime external deps into libexec so the installed app is self-contained.
         try {
             CompositeLocator.Located composite = CompositeLocator.locate(
-                    projectDir, project, EnumSet.of(Scope.MAIN, Scope.RUNTIME),
+                    projectDir, project, ClasspathResolver.RUNTIME,
                     ClasspathResolver.RUNTIME, new Cas(cacheDir), cacheDir.resolve("git"));
             List<Path> compositeJars = new ArrayList<>(composite.jars());
             compositeJars.addAll(composite.externalDepJars());

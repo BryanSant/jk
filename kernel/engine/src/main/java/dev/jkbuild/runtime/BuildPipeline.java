@@ -281,7 +281,7 @@ public final class BuildPipeline {
                     List<Path> mainCp = new ArrayList<>(
                             resolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
                     WorkspaceClasspath.Result mainSiblings =
-                            WorkspaceClasspath.resolve(in.dir(), project, Set.of(Scope.MAIN));
+                            WorkspaceClasspath.resolve(in.dir(), project, Set.of(Scope.EXPORT, Scope.MAIN));
                     mainCp.addAll(mainSiblings.jars());
                     if (!mainSiblings.missingSiblingJars().isEmpty()) {
                         for (String missing : mainSiblings.missingSiblingJars())
@@ -304,7 +304,7 @@ public final class BuildPipeline {
                     // Composite source deps (`path` + branch-git): build from source
                     // and inject onto the main compile classpath (jk's includeBuild).
                     List<String> mainComposite = addCompositeDeps(in.dir(), project, cas, in.cache(),
-                            Set.of(Scope.MAIN), ClasspathResolver.COMPILE_MAIN, mainCp);
+                            Set.of(Scope.EXPORT, Scope.MAIN), ClasspathResolver.COMPILE_MAIN, mainCp);
                     if (!mainComposite.isEmpty()) {
                         for (String e : mainComposite) ctx.error("composite", e);
                         throw new RuntimeException("composite dependency build failed");
@@ -326,7 +326,7 @@ public final class BuildPipeline {
                             new ArrayList<>(resolver.classpathFor(lock, Set.of(Scope.PROCESSOR))));
 
                     WorkspaceClasspath.Result testSiblings =
-                            WorkspaceClasspath.resolve(in.dir(), project, Set.of(Scope.MAIN, Scope.TEST));
+                            WorkspaceClasspath.resolve(in.dir(), project, Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST));
                     List<Path> compileTestCp = new ArrayList<>(
                             resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
                     compileTestCp.addAll(testSiblings.jars());
@@ -349,9 +349,9 @@ public final class BuildPipeline {
                     }
                     // Composite deps on the test classpaths too (compile + runtime scopes).
                     List<String> testComposite = addCompositeDeps(in.dir(), project, cas, in.cache(),
-                            Set.of(Scope.MAIN, Scope.TEST), ClasspathResolver.COMPILE_TEST, compileTestCp);
+                            Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST), ClasspathResolver.COMPILE_TEST, compileTestCp);
                     addCompositeDeps(in.dir(), project, cas, in.cache(),
-                            Set.of(Scope.MAIN, Scope.TEST), ClasspathResolver.RUNTIME, testRuntimeCp);
+                            Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST), ClasspathResolver.RUNTIME, testRuntimeCp);
                     if (!testComposite.isEmpty()) {
                         for (String e : testComposite) ctx.error("composite", e);
                         throw new RuntimeException("composite dependency build failed");
@@ -1098,7 +1098,7 @@ public final class BuildPipeline {
                         // own transitive external deps) or it can't run standalone —
                         // e.g. a worker jar would be missing PluginWorkerMain.
                         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(
-                                layout.memberRoot(), project, Set.of(Scope.MAIN));
+                                layout.memberRoot(), project, Set.of(Scope.EXPORT, Scope.MAIN));
                         for (Path j : siblings.jars()) {
                             if (!depJars.contains(j)) depJars.add(j);
                         }
@@ -1112,7 +1112,7 @@ public final class BuildPipeline {
                         }
                         // Composite (path + branch-git) deps must be bundled into the fat jar too.
                         addCompositeDeps(layout.memberRoot(), project, new Cas(cache), cache,
-                                Set.of(Scope.MAIN), ClasspathResolver.RUNTIME, depJars);
+                                Set.of(Scope.EXPORT, Scope.MAIN), ClasspathResolver.RUNTIME, depJars);
                     }
                     // Packaging cache: the fat jar is a pure function of the main
                     // classes, the bundled dependency jars' content, the main-class,
@@ -1219,7 +1219,7 @@ public final class BuildPipeline {
                     try {
                         dev.jkbuild.config.WorkspaceClasspath.Result siblings =
                                 dev.jkbuild.config.WorkspaceClasspath.resolve(
-                                        dir, project, Set.of(Scope.MAIN));
+                                        dir, project, Set.of(Scope.EXPORT, Scope.MAIN));
                         for (java.nio.file.Path sj : siblings.jars()) {
                             if (!classpath.contains(sj)) classpath.add(sj);
                         }
@@ -1234,7 +1234,7 @@ public final class BuildPipeline {
                         }
                         // Composite (path + branch-git) deps: native-image must see their classes.
                         addCompositeDeps(dir, project, new Cas(cache), cache,
-                                Set.of(Scope.MAIN), ClasspathResolver.RUNTIME, classpath);
+                                Set.of(Scope.EXPORT, Scope.MAIN), ClasspathResolver.RUNTIME, classpath);
                     } catch (Exception ignored) {}
 
                     // Packaging cache (executable only): the binary is a pure function of

@@ -478,7 +478,7 @@ public final class IdeaCommand implements CliCommand {
             throws IOException {
         List<ModuleRef> result = new ArrayList<>();
         WorkspaceClasspath.Result mainCp =
-                WorkspaceClasspath.resolve(memberDir, member, EnumSet.of(Scope.MAIN));
+                WorkspaceClasspath.resolve(memberDir, member, EnumSet.of(Scope.EXPORT, Scope.MAIN));
         WorkspaceClasspath.Result testCp =
                 WorkspaceClasspath.resolve(memberDir, member, EnumSet.of(Scope.TEST));
 

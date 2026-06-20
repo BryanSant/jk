@@ -20,7 +20,6 @@ import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Scope;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.util.JkDirs;
@@ -34,7 +33,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 
@@ -245,17 +243,17 @@ public final class RunCommand implements CliCommand {
         if (Files.exists(lockFile)) {
             Lockfile lock = LockfileReader.read(lockFile);
             classpath.addAll(new ClasspathResolver(cas).classpathFor(lock,
-                    EnumSet.of(Scope.MAIN, Scope.RUNTIME)));
+                    ClasspathResolver.RUNTIME));
         }
         WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project,
-                EnumSet.of(Scope.MAIN, Scope.RUNTIME));
+                ClasspathResolver.RUNTIME);
         classpath.addAll(siblings.jars());
 
         // Composite (path + branch-git) source deps: locate their jars + runtime
         // external deps (already built upfront by CompositeBuild) for the run classpath.
         try {
             CompositeLocator.Located composite = CompositeLocator.locate(
-                    projectDir, project, EnumSet.of(Scope.MAIN, Scope.RUNTIME),
+                    projectDir, project, ClasspathResolver.RUNTIME,
                     ClasspathResolver.RUNTIME, cas, cacheDir().resolve("git"));
             for (Path j : composite.jars())            if (!classpath.contains(j)) classpath.add(j);
             for (Path j : composite.externalDepJars()) if (!classpath.contains(j)) classpath.add(j);
