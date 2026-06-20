@@ -149,8 +149,7 @@ public final class GlobalOptions {
                 Opt.value("<FILE>", "Use this jk.toml for configuration", "--config-file"),
                 Opt.flag("Skip jk.toml discovery; use built-in defaults only", "--no-config"),
                 Opt.value("<DIR>", "Change to this directory before running the command", "-C", "--directory"),
-                Opt.value("<PCT>", "Max heap as a percentage of RAM for jk's worker JVMs "
-                        + "(divided across parallel test workers). Default 50.", "--max-ram-percent"),
+                Opt.value("<PCT>", "Max heap as a percentage of RAM for jk's worker JVMs", "--max-ram-percent"),
                 Opt.value("<ARG>", "Extra JVM flag for jk's worker JVMs (repeatable)", "--jvm-arg").repeat(),
                 Opt.value("<spec>", "JDK for this run (e.g. 25, temurin-25, >=21); overrides project pins.", "--jdk"),
                 Opt.value("<spec>", "GraalVM for jk native / GRAALVM_HOME (e.g. graalvm-25, native).", "--graal"),
