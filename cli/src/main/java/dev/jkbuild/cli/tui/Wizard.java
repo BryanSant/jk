@@ -86,6 +86,23 @@ public final class Wizard {
         return terminal;
     }
 
+    /**
+     * Restore {@code terminal} to cooked input from {@code saved}, forcing ECHO
+     * and ICANON back on, and flush. {@link #openTerminal} suppresses ECHO before
+     * {@code build()} to hide JLine's probe-response flicker, so {@code saved}
+     * typically captured "echo off"; callers that read {@code System.in} after the
+     * prompt (e.g. {@code jk jdk uninstall}'s {@code [Y/n]}) need echo on. Shared
+     * by {@link #run} (its {@code finally} and crash-safety shutdown hook) and
+     * {@link Confirm}, so the one ECHO+ICANON restore lives in a single place.
+     */
+    public static void restoreCooked(Terminal terminal, Attributes saved) {
+        var cooked = new Attributes(saved);
+        cooked.setLocalFlag(Attributes.LocalFlag.ECHO, true);
+        cooked.setLocalFlag(Attributes.LocalFlag.ICANON, true);
+        terminal.setAttributes(cooked);
+        terminal.flush();
+    }
+
     public List<WizardStep> steps() {
         return steps;
     }
@@ -127,11 +144,7 @@ public final class Wizard {
             writer.print(SHOW_CURSOR);
             writer.print(RESET_SGR);
             writer.flush();
-            var cooked = new Attributes(saved);
-            cooked.setLocalFlag(Attributes.LocalFlag.ECHO, true);
-            cooked.setLocalFlag(Attributes.LocalFlag.ICANON, true);
-            terminal.setAttributes(cooked);
-            terminal.flush();
+            restoreCooked(terminal, saved);
         });
         Runtime.getRuntime().addShutdownHook(restoreHook);
         try {
@@ -150,15 +163,7 @@ public final class Wizard {
             writer.print(SHOW_CURSOR);
             writer.flush();
             terminal.handle(Terminal.Signal.INT, prevHandler);
-            // Restore the pre-raw attrs, but force ECHO+ICANON back on:
-            // openTerminal suppresses ECHO before build() to hide JLine's
-            // probe-response flicker, so `saved` here captures "echo off".
-            // Callers (jk jdk uninstall's [Y/n]) read System.in after the
-            // wizard returns and need cooked mode with echo on.
-            var cooked = new Attributes(saved);
-            cooked.setLocalFlag(Attributes.LocalFlag.ECHO, true);
-            cooked.setLocalFlag(Attributes.LocalFlag.ICANON, true);
-            terminal.setAttributes(cooked);
+            restoreCooked(terminal, saved);
             writer.print("\r\n");
             writer.flush();
             terminal.flush();

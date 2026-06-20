@@ -92,11 +92,7 @@ public final class Confirm {
                 }
             }
         } finally {
-            Attributes cooked = new Attributes(saved);
-            cooked.setLocalFlag(Attributes.LocalFlag.ECHO, true);
-            cooked.setLocalFlag(Attributes.LocalFlag.ICANON, true);
-            terminal.setAttributes(cooked);
-            terminal.flush();
+            Wizard.restoreCooked(terminal, saved);
         }
     }
 

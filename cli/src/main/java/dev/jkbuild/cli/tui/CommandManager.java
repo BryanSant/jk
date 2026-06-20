@@ -616,6 +616,13 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * copying escape sequences without counting them and appending a reset if
      * the text was cut. Treats every visible codepoint as one column (good
      * enough for our ASCII + single-width glyphs).
+     *
+     * <p>JLine can do this width-aware ({@code AttributedString.fromAnsi} /
+     * {@code WCWidth}), but measured at +187–312 KB on the native image — its
+     * ANSI parser / width tables aren't otherwise reachable — to gain East-Asian
+     * wide-glyph handling that jk's ASCII coordinates and single-width
+     * box/spinner glyphs never need. Not worth the binary growth, so this stays
+     * hand-rolled by design.
      */
     static String truncateVisible(String s, int maxCols) {
         if (maxCols <= 0) return "";

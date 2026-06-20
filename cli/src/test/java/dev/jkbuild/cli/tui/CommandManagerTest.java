@@ -274,6 +274,14 @@ class CommandManagerTest {
         assertThat(cut).endsWith("\033[0m"); // reset appended on truncation
     }
 
+    @Test
+    void truncate_visible_returns_verbatim_when_it_fits() {
+        String colored = Theme.colorize("abcdef", Theme.active().success());
+        // Fits in 6 columns → original bytes preserved exactly (jk's SGR byte order).
+        assertThat(CommandManager.truncateVisible(colored, 6)).isEqualTo(colored);
+        assertThat(CommandManager.truncateVisible("plain", 10)).isEqualTo("plain");
+    }
+
     private static java.util.List<String> stripAll(java.util.List<String> lines) {
         return lines.stream().map(CommandManagerTest::stripAnsi).toList();
     }
