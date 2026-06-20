@@ -11,6 +11,7 @@ import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -48,6 +49,29 @@ class ExplainCommandTest {
             System.setOut(orig);
         }
         return buf.toString(StandardCharsets.UTF_8);
+    }
+
+    @Test
+    void elideDeps_fits_width_with_remaining_count_marker() {
+        List<String> units = List.of(":engine", ":core", ":io", ":plugin-api", ":resolver", ":git-client");
+        String full = String.join(", ", units);
+
+        // Wide budget (and the non-TTY MAX_VALUE) → the full list, no marker.
+        assertThat(ExplainCommand.elideDeps(units, 500)).isEqualTo(full);
+        assertThat(ExplainCommand.elideDeps(units, Integer.MAX_VALUE)).isEqualTo(full);
+
+        // Narrow budget → leading units that fit, then a "…N…" remaining-count marker.
+        String elided = ExplainCommand.elideDeps(units, 40);
+        assertThat(elided).startsWith(":engine");
+        assertThat(elided).matches(".*…\\d+…$");      // ends with …<count>…
+        assertThat(elided.length()).isLessThan(full.length());
+        // Count = units that didn't fit (the leading ones shown are excluded).
+        int shown = (int) java.util.Arrays.stream(elided.split(", "))
+                .filter(s -> s.startsWith(":")).count();
+        assertThat(elided).contains("…" + (units.size() - shown) + "…");
+
+        // A single prereq is never elided.
+        assertThat(ExplainCommand.elideDeps(List.of(":only"), 1)).isEqualTo(":only");
     }
 
     @Test

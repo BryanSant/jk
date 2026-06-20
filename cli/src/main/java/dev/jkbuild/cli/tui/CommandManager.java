@@ -661,6 +661,11 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * {@code $LINES}/{@code $COLUMNS} env, then conservative defaults. Only
      * called when animating (interactive tty).
      */
+    /** Terminal width in columns ({@code stty size} → {@code $COLUMNS} → {@value #DEFAULT_WIDTH}). */
+    public static int detectColumns() {
+        return detectSize()[1];
+    }
+
     private static int[] detectSize() {
         try {
             Process p = new ProcessBuilder("stty", "size")

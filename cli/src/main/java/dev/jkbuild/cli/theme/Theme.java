@@ -107,10 +107,7 @@ public interface Theme {
     /** Coordinate version segment — bright blue (Jk Dark bright blue {@code #536DFE}). */
     AttributedStyle coordVersion();
 
-    /** Unit-index badge (e.g. {@code jk explain}'s {@code 01}) — white on a bright-black background. */
-    AttributedStyle unitBadge();
-
-    /** Scope-section badge (e.g. {@code jk tree}'s {@code  main }) — black on a bright-black background. */
+    /** Chip / pill badge (jk tree scope sections, jk explain unit indices) — black on a bright-black background. */
     AttributedStyle scopeBadge();
 
     /** Bright yellow — used for the {@code default} JDK status. */

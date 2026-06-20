@@ -83,15 +83,9 @@ public final class TreeCommand implements CliCommand {
      * color is off.
      */
     private static DependencyTree.Styling styling(boolean nerdfont) {
-        // Scope section badge: a black-on-bright-black chip. With a Nerd Font it's
-        // rounded into a pill — powerline half-circle caps (drawn in the chip's
-        // bright-black color) flank the bare label, so no padding is needed.
-        // Without one, the label is space-padded (" main ") to give the chip width.
-        UnaryOperator<String> scopeBadge = nerdfont
-                ? s -> Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().darkGray())
-                        + Theme.colorize(s, Theme.active().scopeBadge())
-                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().darkGray())
-                : s -> Theme.colorize(" " + s + " ", Theme.active().scopeBadge());
+        // Scope section badge: a black-on-bright-black chip (a rounded pill with a
+        // Nerd Font, a space-padded chip without) — shared with jk explain's index.
+        UnaryOperator<String> scopeBadge = s -> dev.jkbuild.cli.tui.Badge.pill(s, nerdfont);
         return new DependencyTree.Styling(
                 s -> Theme.colorize(s, Theme.active().darkGray()),
                 s -> Theme.colorize(s, Coords.groupStyle()),

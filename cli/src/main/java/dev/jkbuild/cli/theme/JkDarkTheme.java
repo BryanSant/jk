@@ -212,11 +212,6 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
-    public AttributedStyle unitBadge() {
-        return withBg(withColor(AttributedStyle.DEFAULT, BRIGHT_WHITE), BRIGHT_BLACK);
-    }
-
-    @Override
     public AttributedStyle scopeBadge() {
         // Near-black text (not pure #000000) on the bright-black chip.
         return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), BRIGHT_BLACK);

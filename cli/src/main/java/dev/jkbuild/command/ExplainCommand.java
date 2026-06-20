@@ -78,6 +78,11 @@ public final class ExplainCommand implements CliCommand {
         }
 
         Theme t = Theme.active();
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        // On a TTY, elide long dependency edges to the terminal width; piped output
+        // gets the full list (MAX_VALUE → never truncates).
+        int width = dev.jkbuild.cli.run.GoalConsole.isInteractiveTerminal()
+                ? dev.jkbuild.cli.tui.CommandManager.detectColumns() : Integer.MAX_VALUE;
         Map<Path, String> coordByDir = new LinkedHashMap<>();
         for (BuildGraph.BuildUnit u : graph.topoOrder()) coordByDir.put(u.dir(), u.coord());
 
@@ -101,9 +106,10 @@ public final class ExplainCommand implements CliCommand {
                 case PATH -> "path dep";
                 case BRANCH_GIT -> "branch git dep";
             };
+            String idx = String.format("%02d", i + 1);
             StringBuilder line = new StringBuilder()
                     .append(Theme.colorize((last ? "╰" : "├") + "─", t.darkGray()))
-                    .append(Theme.colorize(String.format("%02d", i + 1), t.unitBadge()))
+                    .append(dev.jkbuild.cli.tui.Badge.pill(idx, nerdfont))
                     .append(' ').append(coloredCoord(u.coord(), t))
                     .append(' ').append(Theme.colorize("[" + origin + "]", t.darkGray()));
             List<String> prereqs = new ArrayList<>();
@@ -116,7 +122,12 @@ public final class ExplainCommand implements CliCommand {
                 // ":name" (same-group) so the list stays readable.
                 List<String> shown = prereqs.size() == 1 ? prereqs
                         : prereqs.stream().map(c -> abbreviate(c, u.coord())).toList();
-                line.append(' ').append(Theme.colorize("← " + String.join(", ", shown), t.darkGray()));
+                // Visible width before " ← " — connector(2) + badge(idx + 2 caps/pads)
+                // + space + coord + space + "[origin]". Caps/pads are width-1.
+                int prefixCols = 2 + (idx.length() + 2) + 1 + u.coord().length()
+                        + 1 + (origin.length() + 2);
+                line.append(' ').append(Theme.colorize(
+                        "← " + elideDeps(shown, width - prefixCols - 3), t.darkGray()));
             }
             System.out.println(line);
             explainCompile(u.dir(), u.manifest(), cas, actionCache, spine, t);
@@ -143,6 +154,26 @@ public final class ExplainCommand implements CliCommand {
     }
 
     /**
+     * Join {@code units} with {@code ", "} to fit {@code available} visible columns.
+     * When the full list is too wide, show as many leading units as fit followed by a
+     * {@code …N…} marker, where {@code N} is the count of remaining units that didn't
+     * fit. {@code available} is effectively unbounded on a non-TTY, so the full list
+     * is shown there.
+     */
+    static String elideDeps(List<String> units, int available) {
+        String full = String.join(", ", units);
+        if (available <= 0 || units.size() <= 1 || full.length() <= available) return full;
+        String best = "…" + units.size() + "…"; // marker-only, if even one unit won't fit
+        for (int k = 1; k < units.size(); k++) {
+            String candidate = String.join(", ", units.subList(0, k))
+                    + ", …" + (units.size() - k) + "…";
+            if (candidate.length() > available) break; // front grows monotonically
+            best = candidate;
+        }
+        return best;
+    }
+
+    /**
      * The {@code compile-main} phase node + its cache-status lines for a unit,
      * mirroring the build's javac action key, rendered under {@code spine} (the
      * unit's vertical rail). Two status lines: a cache hit/miss marker with the
@@ -151,9 +182,9 @@ public final class ExplainCommand implements CliCommand {
      */
     private static void explainCompile(Path dir, JkBuild project, Cas cas, ActionCache actionCache,
                                        String spine, Theme t) throws IOException {
-        String phaseLine = spine + "    " + Theme.colorize("╰─ ", t.darkGray())
+        String phaseLine = spine + "  " + Theme.colorize("╰─ ", t.darkGray())
                 + Theme.colorize("compile-main", t.brightWhite());
-        String statusPrefix = spine + "       ";
+        String statusPrefix = spine + "     ";
         System.out.println(phaseLine);
 
         Path lockFile = dir.resolve("jk.lock");
@@ -170,15 +201,23 @@ public final class ExplainCommand implements CliCommand {
         }
 
         Lockfile lock = LockfileReader.read(lockFile);
-        List<Path> classpath = new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.COMPILE_MAIN);
+        ClasspathResolver resolver = new ClasspathResolver(cas);
+        // Mirror the build's compile-main inputs EXACTLY (via the shared helper) or the
+        // action key won't match what `jk build` cached — explain would report a false
+        // MISS. The classpath must include workspace sibling jars + their transitive
+        // lockfile deps, not just this module's own lockfile; the processor path and
+        // javac args (default lint, no --profile) round out the request.
+        dev.jkbuild.config.WorkspaceClasspath.Result siblings =
+                dev.jkbuild.config.WorkspaceClasspath.resolve(dir, project, Set.of(
+                        dev.jkbuild.model.Scope.EXPORT, dev.jkbuild.model.Scope.MAIN));
+        List<Path> classpath = dev.jkbuild.runtime.BuildPipeline.mainCompileClasspath(lock, resolver, siblings);
+        List<Path> processorCp = resolver.classpathFor(lock, Set.of(dev.jkbuild.model.Scope.PROCESSOR));
         int release = project.project().javaRelease();
         Path outputDir = BuildLayout.of(dir, project).classesDir();
-        // Must mirror the build's javac args (incl. the default lint flags) or the
-        // action key won't match what `jk build` cached — explain would always
-        // report MISS. (No --profile here, so just the lint default + nothing.)
         CompileRequest request = CompileRequest.builder()
                 .sources(sources).classpath(classpath).outputDir(outputDir).release(release)
                 .extraOptions(dev.jkbuild.compile.JavacLint.effectiveArgs(project.build().lint(), List.of()))
+                .processorPath(processorCp)
                 .build();
         String key = ActionKey.forJavac(ActionKey.qualifiedTaskId("compile-main", outputDir), request, Jk.VERSION);
         boolean hit = actionCache.lookup(key).isPresent();
@@ -190,12 +229,12 @@ public final class ExplainCommand implements CliCommand {
                        : Theme.colorize("✗", t.darkGray()) + " cache miss: ")
                 + Theme.colorize(shortKey, t.path()));
 
-        // Line 2: the work as a checkbox — filled + struck when cached (it won't
-        // run), empty + plain when it will compile this build.
+        // Line 2: the work as a checkbox — a closed box + struck text when cached
+        // (it won't run), an open box + plain text when it will compile this build.
         String desc = sources.size() + " source" + (sources.size() == 1 ? "" : "s")
                 + " (javac --release " + release + ")";
         System.out.println(statusPrefix + (hit
-                ? "▰ " + Theme.colorize(desc, AttributedStyle.DEFAULT.crossedOut())
-                : "▱ " + desc));
+                ? "■ " + Theme.colorize(desc, AttributedStyle.DEFAULT.crossedOut())
+                : "□ " + desc));
     }
 }

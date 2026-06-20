@@ -278,28 +278,16 @@ public final class BuildPipeline {
                     ctx.label("resolve classpath");
                     ClasspathResolver resolver = new ClasspathResolver(cas);
 
-                    List<Path> mainCp = new ArrayList<>(
-                            resolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
                     WorkspaceClasspath.Result mainSiblings =
                             WorkspaceClasspath.resolve(in.dir(), project, Set.of(Scope.EXPORT, Scope.MAIN));
-                    mainCp.addAll(mainSiblings.jars());
                     if (!mainSiblings.missingSiblingJars().isEmpty()) {
                         for (String missing : mainSiblings.missingSiblingJars())
                             ctx.error("workspace", "sibling not built — " + missing);
                         throw new RuntimeException("missing workspace siblings");
                     }
-                    // Add external deps from transitive workspace siblings' lockfiles so
-                    // that e.g. tomlj declared in jk-core is available when compiling jk-io.
-                    for (java.nio.file.Path sibLock : mainSiblings.siblingLockfiles()) {
-                        try {
-                            dev.jkbuild.lock.Lockfile sibLockfile =
-                                    dev.jkbuild.lock.LockfileReader.read(sibLock);
-                            for (Path p : resolver.classpathFor(sibLockfile,
-                                    ClasspathResolver.COMPILE_MAIN)) {
-                                if (!mainCp.contains(p)) mainCp.add(p);
-                            }
-                        } catch (Exception ignored) { /* best-effort */ }
-                    }
+                    // Lockfile + sibling jars + siblings' transitive lockfile deps — the
+                    // exact classpath `jk explain` re-derives, so the action keys match.
+                    List<Path> mainCp = mainCompileClasspath(lock, resolver, mainSiblings);
 
                     // Composite source deps (`path` + branch-git): build from source
                     // and inject onto the main compile classpath (jk's includeBuild).
@@ -1371,6 +1359,34 @@ public final class BuildPipeline {
         } catch (Exception ignored) {
             // Diagnostic only — never fail a build over conflict detection.
         }
+    }
+
+    /**
+     * The main-compile classpath contributed by the lockfile and workspace siblings:
+     * {@code COMPILE_MAIN} lockfile deps + each depended sibling's built jar + those
+     * siblings' own {@code COMPILE_MAIN} lockfile deps (so e.g. tomlj declared in
+     * jk-core is visible when compiling jk-io). Shared by the {@code compile-main}
+     * phase and {@code jk explain} so their javac action keys agree. Does NOT include
+     * composite (path / branch-git) deps — the build appends those after building them.
+     */
+    public static List<Path> mainCompileClasspath(
+            Lockfile lock, ClasspathResolver resolver, WorkspaceClasspath.Result siblings) throws IOException {
+        List<Path> cp = new ArrayList<>(resolver.classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
+        // The declared closure (deterministic jar paths) — not just the built ones —
+        // so the action key is stable whether or not target/ is currently populated.
+        // In a valid build the siblings are all built (the missing-sibling check
+        // upstream guarantees it), so these are the same paths javac compiles against;
+        // after `jk clean` they still let `jk explain` reproduce the build's key.
+        cp.addAll(siblings.siblingClosureJars());
+        for (Path sibLock : siblings.siblingLockfiles()) {
+            try {
+                Lockfile sl = LockfileReader.read(sibLock);
+                for (Path p : resolver.classpathFor(sl, ClasspathResolver.COMPILE_MAIN)) {
+                    if (!cp.contains(p)) cp.add(p);
+                }
+            } catch (Exception ignored) { /* best-effort: a sibling's lock may be absent */ }
+        }
+        return cp;
     }
 
     private static List<String> addCompositeDeps(Path consumerDir, JkBuild project, Cas cas, Path cache,
