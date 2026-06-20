@@ -76,6 +76,15 @@ public final class CacheCommand implements CliCommand {
         return String.format("%.1f %s", v, units[unit]);
     }
 
+    /** Compact size for tight table cells: {@code 545.3M}, {@code 30.8M}, {@code 1.2G} (1024-based). */
+    static String fmtSize(long bytes) {
+        if (bytes < 1024) return bytes + "B";
+        String units = "KMGT";
+        double v = bytes; int u = -1;
+        do { v /= 1024.0; u++; } while (v >= 1024.0 && u < units.length() - 1);
+        return String.format("%.1f%s", v, units.charAt(u));
+    }
+
     // --- subcommands defined here to access private helpers ----------------------
 
     public static final class CacheDirCommand implements CliCommand {
@@ -96,17 +105,126 @@ public final class CacheCommand implements CliCommand {
         @Override public List<Opt> options() {
             return List.of(Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide());
         }
+
+        private static final String[] HEADERS = {"Metric", "File Count", "Storage Size"};
+
         @Override public int run(Invocation in) throws IOException {
             Path root = resolveCacheRoot(in.value("cache-dir").map(Path::of).orElse(null));
-            System.out.println("Cache directory: " + dev.jkbuild.cli.PathDisplay.styledRaw(root));
-            if (!Files.isDirectory(root)) { System.out.println("  (not yet created)"); return 0; }
+            if (!Files.isDirectory(root)) {
+                System.out.println("Cache directory: " + dev.jkbuild.cli.PathDisplay.styledRaw(root) + " (not yet created)");
+                return 0;
+            }
             Stats sha = statsOf(root.resolve("sha256"));
             Stats actions = statsOf(root.resolve("actions"));
-            System.out.println();
-            System.out.printf("  CAS blobs:     %s files, %s%n", fmtCount(sha.files), fmtBytes(sha.bytes));
-            System.out.printf("  Action cache:  %s files, %s%n", fmtCount(actions.files), fmtBytes(actions.bytes));
-            System.out.printf("  Total:         %s files, %s%n", fmtCount(sha.files + actions.files), fmtBytes(sha.bytes + actions.bytes));
+            long totalFiles = sha.files + actions.files;
+            long totalBytes = sha.bytes + actions.bytes;
+
+            // Utilization denominator: the configured LRU ceiling ([cache]
+            // max-size-gb in ~/.jk/config.toml), or the documented 20 GiB default
+            // when unset, so the bar is always meaningful.
+            long maxBytes;
+            try {
+                var cfg = dev.jkbuild.config.JkCacheConfig.fromToml(dev.jkbuild.util.JkDirs.userConfigFile());
+                maxBytes = (long) cfg.maxSizeGb().orElse(20) * 1024L * 1024L * 1024L;
+            } catch (IOException e) {
+                maxBytes = 20L * 1024L * 1024L * 1024L;
+            }
+
+            for (String line : renderInfoTable(sha, actions, totalFiles, totalBytes, maxBytes)) {
+                System.out.println(line);
+            }
             return 0;
+        }
+
+        private static List<String> renderInfoTable(
+                Stats sha, Stats actions, long totalFiles, long totalBytes, long maxBytes) {
+            String[][] rows = {
+                {"CAS Blobs", fmtCount(sha.files), fmtSize(sha.bytes)},
+                {"Action Cache", fmtCount(actions.files), fmtSize(actions.bytes)},
+            };
+            String[] total = {"Total", fmtCount(totalFiles), fmtSize(totalBytes)};
+
+            int[] w = new int[3];
+            for (int i = 0; i < 3; i++) w[i] = HEADERS[i].length();
+            for (String[] r : rows) for (int i = 0; i < 3; i++) w[i] = Math.max(w[i], r[i].length());
+            for (int i = 0; i < 3; i++) w[i] = Math.max(w[i], total[i].length());
+            int inner = (w[0] + 2) + (w[1] + 2) + (w[2] + 2) + 2;
+
+            List<String> out = new ArrayList<>();
+            out.add(border("╭", "╮", inner));
+            out.add(titleRow("Cache Directory Information", inner));
+            out.add(divider("├", "┬", "┤", w));
+            out.add(headerRow(w));
+            out.add(divider("├", "┼", "┤", w));
+            for (String[] r : rows) out.add(metricRow(r, w));
+            out.add(divider("├", "┼", "┤", w));
+            out.add(metricRow(total, w));
+            out.add(divider("├", "┴", "┤", w));        // ┴ closes the columns; utilization spans full width
+            out.add(utilizationRow(totalBytes, maxBytes, inner));
+            out.add(border("╰", "╯", inner));
+            return out;
+        }
+
+        private static String border(String left, String right, int inner) {
+            return Theme.colorize(left + "─".repeat(inner) + right, Theme.active().darkGray());
+        }
+
+        private static String divider(String left, String junction, String right, int[] w) {
+            StringBuilder sb = new StringBuilder(left);
+            for (int i = 0; i < w.length; i++) {
+                sb.append("─".repeat(w[i] + 2));
+                sb.append(i == w.length - 1 ? right : junction);
+            }
+            return Theme.colorize(sb.toString(), Theme.active().darkGray());
+        }
+
+        /** Full-width centered title in the accent color. */
+        private static String titleRow(String title, int inner) {
+            int pad = Math.max(0, inner - title.length());
+            int left = pad / 2, right = pad - left;
+            String bar = Theme.colorize("│", Theme.active().darkGray());
+            return bar + " ".repeat(left)
+                    + Theme.colorize(title, Theme.active().activeStep())
+                    + " ".repeat(right) + bar;
+        }
+
+        /** Column headers, left-justified, in white. */
+        private static String headerRow(int[] w) {
+            String bar = Theme.colorize("│", Theme.active().darkGray());
+            StringBuilder sb = new StringBuilder(bar);
+            for (int i = 0; i < HEADERS.length; i++) {
+                sb.append(" ").append(Theme.colorize(padRight(HEADERS[i], w[i]), Theme.active().brightWhite()))
+                        .append(" ").append(bar);
+            }
+            return sb.toString();
+        }
+
+        /** A metric row: first column right-justified + white, the rest plain + left-justified. */
+        private static String metricRow(String[] r, int[] w) {
+            String bar = Theme.colorize("│", Theme.active().darkGray());
+            return bar
+                    + " " + Theme.colorize(padLeft(r[0], w[0]), Theme.active().brightWhite()) + " " + bar
+                    + " " + padRight(r[1], w[1]) + " " + bar
+                    + " " + padRight(r[2], w[2]) + " " + bar;
+        }
+
+        /** Full-width "Utilization <bar> NN%" row. */
+        private static String utilizationRow(long used, long max, int inner) {
+            int pct = (int) Math.round(dev.jkbuild.cli.tui.ProgressBar.fraction(used, max) * 100);
+            String prefix = " Utilization  ";
+            String suffix = "  " + pct + "% ";
+            int barWidth = Math.max(0, inner - prefix.length() - suffix.length());
+            String bar = new dev.jkbuild.cli.tui.ProgressBar().renderBar(used, max, barWidth);
+            String rail = Theme.colorize("│", Theme.active().darkGray());
+            return rail + prefix + bar + suffix + rail;
+        }
+
+        private static String padRight(String s, int w) {
+            return s.length() >= w ? s : s + " ".repeat(w - s.length());
+        }
+
+        private static String padLeft(String s, int w) {
+            return s.length() >= w ? s : " ".repeat(w - s.length()) + s;
         }
     }
 

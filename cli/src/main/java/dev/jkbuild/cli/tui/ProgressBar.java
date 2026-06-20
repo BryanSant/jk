@@ -31,6 +31,7 @@ public final class ProgressBar {
     static final char FILLED_CHAR = '▰';
     static final char EMPTY_CHAR = '▱';
 
+    private final Gradient gradient;
     private final AttributedStyle[] fillColors;
     /** Empty glyphs take the gradient's left-most (darkest) color, not a neutral dim. */
     private final AttributedStyle emptyStyle;
@@ -42,6 +43,7 @@ public final class ProgressBar {
 
     /** Bar in an explicit gradient (e.g. the failure gradient for a stopped run). */
     public ProgressBar(Gradient gradient) {
+        this.gradient = gradient;
         this.fillColors = buildGradient(SEGMENTS, gradient);
         this.emptyStyle = fillColors[0];
     }
@@ -84,6 +86,26 @@ public final class ProgressBar {
                 .append(Theme.colorize("[", bracket))
                 .append(Theme.colorize(numerator + " of " + denominator, Theme.active().settled()))
                 .append(Theme.colorize("]", bracket));
+        return sb.toString();
+    }
+
+    /**
+     * Just the colored segment bar at an explicit width — no percent and no
+     * {@code [n of d]} suffix. For embedding a fixed-width bar inside another
+     * widget (e.g. a boxed table's utilization row). The gradient is rebuilt at
+     * the requested width so the moving-fill look is preserved at any size.
+     */
+    public String renderBar(long numerator, long denominator, int segments) {
+        if (segments <= 0) return "";
+        AttributedStyle[] colors = segments == SEGMENTS ? fillColors : buildGradient(segments, gradient);
+        int fill = (int) Math.round(fraction(numerator, denominator) * segments);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < segments; i++) {
+            boolean isFilled = i < fill;
+            char c = isFilled ? FILLED_CHAR : EMPTY_CHAR;
+            AttributedStyle style = isFilled ? colors[segments - fill + i] : colors[0];
+            sb.append(Theme.colorize(String.valueOf(c), style));
+        }
         return sb.toString();
     }
 

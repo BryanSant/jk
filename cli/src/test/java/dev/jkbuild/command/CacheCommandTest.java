@@ -41,9 +41,13 @@ class CacheCommandTest {
         writeBlob(cache.resolve("actions/keys/some-task"), new byte[2048]);
 
         String stdout = capture(() -> run("cache", "info", "--cache-dir", cache.toString()));
-        assertThat(stdout).contains("CAS blobs:     1 files, 5 B");
-        assertThat(stdout).contains("Action cache:  1 files, 2.0 KiB");
-        assertThat(stdout).contains("Total:         2 files,");
+        // Boxed table: title, the two metric rows with compact sizes, a total, and
+        // the utilization bar. (Sizes are compact: 5 bytes → "5B", 2048 → "2.0K".)
+        assertThat(stdout).contains("Cache Directory Information");
+        assertThat(stdout).contains("CAS Blobs").contains("5B");
+        assertThat(stdout).contains("Action Cache").contains("2.0K");
+        assertThat(stdout).contains("Total");
+        assertThat(stdout).contains("Utilization");
     }
 
     @Test
