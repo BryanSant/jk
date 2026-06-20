@@ -1587,6 +1587,15 @@ public final class BuildPipeline {
      * resolved JDK and dependency set are already covered by jk.lock's content,
      * and a {@code --release} change recompiles main (caught via its output).
      */
+    /**
+     * The run-tests stamp's identity tokens for {@code project} at {@code dir} —
+     * the same set the build folds into its {@code TestStamp} key, exposed so
+     * {@code jk explain}'s forecast predicts test-skip without drifting.
+     */
+    public static List<String> testStampExtras(Path dir, JkBuild project) throws IOException {
+        return testStampExtras(workerJarProps(dir, project.build().testWorkerJars()));
+    }
+
     private static List<String> testStampExtras(Map<String, String> workerJars) {
         List<String> extras = new ArrayList<>();
         extras.add("jk:" + dev.jkbuild.util.JkVersion.VERSION);

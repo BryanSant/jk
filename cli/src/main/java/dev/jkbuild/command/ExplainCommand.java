@@ -3,26 +3,17 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.compile.ClasspathResolver;
-import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.runtime.BuildGraph;
-import dev.jkbuild.runtime.CompileSupport;
 import dev.jkbuild.task.ActionCache;
-import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.util.JkDirs;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -32,11 +23,14 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * {@code jk explain} — print the unified build plan (the same {@link BuildGraph}
- * the build driver uses): every build unit (workspace root + members + transitive
- * {@code path} / branch-git deps) in dependency order, its origin, what it
- * depends on, and each unit's compile cache status. {@code --run} executes the
- * same plan ({@code jk build}). Per PRD §25.1.
+ * {@code jk explain} — forecast the build (the same {@link BuildGraph} the build
+ * driver uses): every module (workspace root + members + transitive {@code path} /
+ * branch-git deps) in dependency order, its origin and edges, and — via
+ * {@link BuildPlanForecast} — what each of its phases (compile → test → package)
+ * would do when {@code jk build} runs: restore from cache or do real work.
+ * Fully-cached modules collapse to a summary line; modules that will rebuild expand
+ * to their phase sub-tree ({@code --verbose} expands all). {@code --run} executes
+ * the plan ({@code jk build}). Per PRD §25.1.
  */
 public final class ExplainCommand implements CliCommand {
 
@@ -47,6 +41,7 @@ public final class ExplainCommand implements CliCommand {
     public List<Opt> options() {
         return List.of(
                 Opt.flag("Build the plan instead of just printing it (same as `jk build`).", "--run"),
+                Opt.flag("Expand every module's phases, including fully-cached ones.", "--verbose", "-v"),
                 Opt.value("<dir>",
                         "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                         "--cache-dir").hide());
@@ -85,57 +80,148 @@ public final class ExplainCommand implements CliCommand {
         Map<Path, String> coordByDir = new LinkedHashMap<>();
         for (BuildGraph.BuildUnit u : graph.topoOrder()) coordByDir.put(u.dir(), u.coord());
 
-        List<BuildGraph.BuildUnit> order = graph.topoOrder();
-        int units = order.size();
+        // Forecast every module's full phase pipeline (compile → test → package),
+        // truthfully — see BuildPlanForecast.
+        List<BuildPlanForecast.Module> modules = BuildPlanForecast.of(graph, cas, actionCache, cache);
+        boolean all = in.isSet("verbose");
+        int total = modules.size();
+        long rebuild = modules.stream().filter(BuildPlanForecast.Module::dirty).count();
+
         // Header: a leading blank line, then a left-flush cyan powerline segment —
         // " Build Plan for <coord> " on the cyan chip, capped on the right by a ▶ segment
-        // arrow (painted in the chip color over the default background). A white phase count
-        // follows, then a trunk rail.
+        // arrow. A module/rebuild summary follows, then a trunk rail.
         String title = " Build Plan for " + entry.project().group() + ":" + entry.project().name() + " ";
         String header = nerdfont
                 ? Theme.colorize(title, t.cyanBadge())
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.cyan())
                 : Theme.colorize(title, t.cyanBadge());
+        String summary = Theme.colorize(total + (total == 1 ? " module" : " modules"), t.brightWhite())
+                + Theme.colorize(" · ", t.darkGray())
+                + (rebuild == 0
+                        ? Theme.colorize("all cached", t.success())
+                        : Theme.colorize(rebuild + " will rebuild", t.brightWhite()));
         System.out.println();
-        System.out.println(header
-                + " " + Theme.colorize(units + " total phases", t.brightWhite()));
+        System.out.println(header + " " + summary);
         System.out.println(Theme.colorize("│", t.darkGray()));
 
-        for (int i = 0; i < order.size(); i++) {
-            BuildGraph.BuildUnit u = order.get(i);
-            boolean last = i == order.size() - 1;
-            // The vertical spine under this unit: a rail for non-last units, blank
-            // for the last one (the tree closes).
-            String spine = last ? " " : Theme.colorize("│", t.darkGray());
-
-            String origin = switch (u.origin()) {
-                case ROOT -> "root";
-                case MEMBER -> "member";
-                case PATH -> "path dep";
-                case BRANCH_GIT -> "branch git dep";
-            };
-            String idx = String.format("%02d", i + 1);
-            StringBuilder line = new StringBuilder()
-                    .append(Theme.colorize((last ? "╰" : "├") + "─", t.darkGray()))
-                    .append(dev.jkbuild.cli.tui.Badge.pill(idx, nerdfont))
-                    .append(' ').append(coloredCoord(u.coord(), t))
-                    .append(' ').append(Theme.colorize(origin, t.darkGray()));
-            List<String> prereqs = new ArrayList<>();
-            for (Path p : graph.edges().getOrDefault(u.dir(), Set.of())) {
-                String c = coordByDir.get(p);
-                if (c != null) prereqs.add(abbreviate(c, u.coord())); // same-group → :name
-            }
-            if (!prereqs.isEmpty()) {
-                // Visible width before " ← " — connector(2) + index pill (idx + 2 caps/pads)
-                // + space + coord + space + origin. Caps/pads are width-1.
-                int prefixCols = 2 + (idx.length() + 2) + 1 + u.coord().length()
-                        + 1 + origin.length();
-                line.append(' ').append(renderDeps(elideDeps(prereqs, width - prefixCols - 3), t));
-            }
-            System.out.println(line);
-            explainCompile(u.dir(), u.manifest(), cas, actionCache, cache, spine, t);
+        // Group into display rows: dirty modules render individually (with a phase
+        // sub-tree); a contiguous run of more than COLLAPSE fully-cached modules
+        // collapses to one summary line (--verbose expands everything).
+        List<int[]> rows = new ArrayList<>();   // {startIndex, count}; count>1 ⇒ collapsed cached run
+        for (int i = 0; i < modules.size(); ) {
+            if (all || modules.get(i).dirty()) { rows.add(new int[]{i, 1}); i++; continue; }
+            int j = i;
+            while (j < modules.size() && !modules.get(j).dirty()) j++;
+            int run = j - i;
+            if (run > COLLAPSE) rows.add(new int[]{i, run});
+            else for (int k = i; k < j; k++) rows.add(new int[]{k, 1});
+            i = j;
         }
+        for (int r = 0; r < rows.size(); r++) {
+            boolean last = r == rows.size() - 1;
+            int[] row = rows.get(r);
+            if (row[1] > 1) renderCollapsed(modules, row[0], row[1], last, width, t);
+            else renderModule(modules.get(row[0]), row[0] + 1, graph, coordByDir, last, width, nerdfont, t);
+        }
+        System.out.println();
+        System.out.println(Theme.colorize((total - rebuild) + " cached · " + rebuild + " rebuild", t.darkGray()));
         return 0;
+    }
+
+    /** Longest phase-name column (e.g. {@code package-shadow}, {@code compile-kotlin}). */
+    private static final int PHASE_COL = 14;
+    /** Contiguous fully-cached runs longer than this collapse to one summary line. */
+    private static final int COLLAPSE = 3;
+
+    /** Render one module: a header line + (when dirty) its phase sub-tree. */
+    private static void renderModule(BuildPlanForecast.Module m, int idx, BuildGraph.Result graph,
+                                     Map<Path, String> coordByDir, boolean last, int width,
+                                     boolean nerdfont, Theme t) {
+        BuildGraph.BuildUnit u = m.unit();
+        String origin = switch (u.origin()) {
+            case ROOT -> "root";
+            case MEMBER -> "member";
+            case PATH -> "path dep";
+            case BRANCH_GIT -> "branch git dep";
+        };
+        String idxStr = String.format("%02d", idx);
+        // Visible (uncolored) width as we go, so the verdict can be column-aligned.
+        int plain = 2 + (idxStr.length() + 2) + 1 + u.coord().length() + 1 + origin.length();
+        StringBuilder line = new StringBuilder()
+                .append(Theme.colorize((last ? "╰" : "├") + "─", t.darkGray()))
+                .append(dev.jkbuild.cli.tui.Badge.pill(idxStr, nerdfont))
+                .append(' ').append(coloredCoord(u.coord(), t))
+                .append(' ').append(Theme.colorize(origin, t.darkGray()));
+        List<String> prereqs = new ArrayList<>();
+        for (Path p : graph.edges().getOrDefault(u.dir(), Set.of())) {
+            String c = coordByDir.get(p);
+            if (c != null) prereqs.add(abbreviate(c, u.coord())); // same-group → :name
+        }
+        if (!prereqs.isEmpty()) {
+            String elided = elideDeps(prereqs, Math.max(8, width - plain - VERDICT_COL - 3));
+            line.append(' ').append(renderDeps(elided, t));
+            plain += 1 + 2 + elided.length();   // " " + "← " + edges
+        }
+        String verdict = m.dirty()
+                ? Theme.colorize("□ rebuild", t.brightWhite())
+                : Theme.colorize("✓ fully cached", t.success());
+        int pad = Math.max(2, VERDICT_COL - plain);
+        line.append(" ".repeat(pad)).append(verdict);
+        System.out.println(line);
+
+        if (m.dirty()) {
+            String spine = last ? " " : Theme.colorize("│", t.darkGray());
+            List<BuildPlanForecast.Phase> ph = m.phases();
+            for (int k = 0; k < ph.size(); k++) {
+                boolean lp = k == ph.size() - 1;
+                System.out.println(spine + "  " + Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
+                        + Theme.colorize(padRight(ph.get(k).name(), PHASE_COL), t.brightWhite())
+                        + "  " + renderStatus(ph.get(k), t));
+            }
+        }
+    }
+
+    /** Column the per-module verdict ("✓ fully cached" / "□ rebuild") aligns to. */
+    private static final int VERDICT_COL = 44;
+
+    /** Render a collapsed run of fully-cached modules as one summary line. */
+    private static void renderCollapsed(List<BuildPlanForecast.Module> modules, int start, int count,
+                                        boolean last, int width, Theme t) {
+        List<String> names = new ArrayList<>();
+        for (int k = start; k < start + count; k++) {
+            String coord = modules.get(k).unit().coord();
+            int c = coord.indexOf(':');
+            names.add(c < 0 ? coord : coord.substring(c + 1));
+        }
+        String label = count + " modules fully cached";
+        String elided = elideDeps(names, Math.max(10, width - label.length() - 8));
+        StringBuilder sb = new StringBuilder(Theme.colorize((last ? "╰" : "├") + "─ ", t.darkGray()))
+                .append(Theme.colorize("✓ ", t.success()))
+                .append(Theme.colorize(label + ": ", t.darkGray()));
+        String[] pieces = elided.split(", ");
+        for (int i = 0; i < pieces.length; i++) {
+            if (i > 0) sb.append(Theme.colorize(", ", t.darkGray()));
+            sb.append(pieces[i].matches("…\\+\\d+ more…")
+                    ? Theme.colorize(pieces[i], t.darkGray())
+                    : Theme.colorize(pieces[i], t.coordName()));
+        }
+        System.out.println(sb);
+    }
+
+    /** A phase's status: {@code ✓ cached <key> · detail} (green) or {@code □ detail} (white). */
+    private static String renderStatus(BuildPlanForecast.Phase p, Theme t) {
+        if (p.cached()) {
+            StringBuilder s = new StringBuilder(Theme.colorize("✓ cached", t.success()));
+            if (p.key() != null) s.append(' ').append(Theme.colorize(p.key(), t.path()));
+            if (p.text() != null && !p.text().isEmpty())
+                s.append(' ').append(Theme.colorize(p.text(), t.darkGray()));
+            return s.toString();
+        }
+        return Theme.colorize("□ " + p.text(), t.brightWhite());
+    }
+
+    private static String padRight(String s, int width) {
+        return s.length() >= width ? s : s + " ".repeat(width - s.length());
     }
 
     /** {@code group:name} with the group and name in their coordinate colors. */
@@ -199,64 +285,4 @@ public final class ExplainCommand implements CliCommand {
         return sb.toString();
     }
 
-    /**
-     * The {@code compile-main} phase node + a single status line for a unit,
-     * rendered under {@code spine} (the unit's vertical rail). The status predicts
-     * — via {@link dev.jkbuild.task.JavaIncrementalCompile#predict} on the same
-     * inputs the build uses — whether the build would restore from cache, or do a
-     * full or partial (incremental) compile, and over how many sources.
-     */
-    private static void explainCompile(Path dir, JkBuild project, Cas cas, ActionCache actionCache,
-                                       Path cache, String spine, Theme t) throws IOException {
-        System.out.println(spine + "  " + Theme.colorize("╰─ ", t.darkGray())
-                + Theme.colorize("compile-main", t.focused()));   // bold + white
-        String statusPrefix = spine + "     ";
-
-        Path lockFile = dir.resolve("jk.lock");
-        if (!Files.isRegularFile(lockFile)) {
-            System.out.println(statusPrefix + Theme.colorize("not locked yet (run `jk build`)", t.darkGray()));
-            return;
-        }
-        boolean simple = CompileSupport.isSimpleLayout(project.project(), dir);
-        Path srcDir = simple ? dir.resolve("src") : dir.resolve("src/main/java");
-        List<Path> sources = CompileSupport.collectJavaSources(srcDir);
-        if (sources.isEmpty()) {
-            System.out.println(statusPrefix + Theme.colorize("no Java sources", t.darkGray()));
-            return;
-        }
-
-        Lockfile lock = LockfileReader.read(lockFile);
-        ClasspathResolver resolver = new ClasspathResolver(cas);
-        // Mirror the build's compile-main inputs EXACTLY (via the shared helper) or the
-        // action key won't match what `jk build` cached — explain would report a false
-        // MISS. The classpath must include workspace sibling jars + their transitive
-        // lockfile deps, not just this module's own lockfile; the processor path and
-        // javac args (default lint, no --profile) round out the request.
-        dev.jkbuild.config.WorkspaceClasspath.Result siblings =
-                dev.jkbuild.config.WorkspaceClasspath.resolve(dir, project, Set.of(
-                        dev.jkbuild.model.Scope.EXPORT, dev.jkbuild.model.Scope.MAIN));
-        List<Path> classpath = dev.jkbuild.runtime.BuildPipeline.mainCompileClasspath(lock, resolver, siblings);
-        List<Path> processorCp = resolver.classpathFor(lock, Set.of(dev.jkbuild.model.Scope.PROCESSOR));
-        Path outputDir = BuildLayout.of(dir, project).classesDir();
-        CompileRequest request = CompileRequest.builder()
-                .sources(sources).classpath(classpath).outputDir(outputDir).release(project.project().javaRelease())
-                .extraOptions(dev.jkbuild.compile.JavacLint.effectiveArgs(project.build().lint(), List.of()))
-                .processorPath(processorCp)
-                .build();
-        String taskId = ActionKey.qualifiedTaskId("compile-main", outputDir);
-        Path stateDir = cache.resolve("actions").resolve("incremental-java").resolve(taskId);
-        var pred = dev.jkbuild.task.JavaIncrementalCompile.predict(taskId, request, Jk.VERSION, actionCache, stateDir);
-        int n = pred.sourceCount();
-        String sourceLabel = n + " source" + (n == 1 ? "" : "s");
-        String line = switch (pred.outcome()) {
-            case CACHE_HIT -> Theme.colorize("✓ Skip", t.success())
-                    + ": cache found for " + Theme.colorize(pred.actionKey().substring(0, 8), t.path())
-                    + ", no compile necessary";
-            case INCREMENTAL -> Theme.colorize("□ Partial compile", t.brightWhite())
-                    + " for " + sourceLabel + " required";
-            case FULL -> Theme.colorize("□ Full compile", t.brightWhite())
-                    + " for " + sourceLabel + " required";
-        };
-        System.out.println(statusPrefix + line);
-    }
 }

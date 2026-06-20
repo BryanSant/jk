@@ -83,7 +83,7 @@ class ExplainCommandTest {
         // ANSI color is active (coords / labels / edges are each one colorize call).
         String out = runExplainCapturingStdout(tmp.resolve("app"));
 
-        assertThat(out).contains("2 total phases");
+        assertThat(out).contains("2 modules");
         assertThat(out).contains("com.example:app").contains("root");
         assertThat(out).contains("path dep");
         assertThat(out).contains("←").contains("lib");          // app's edge to lib (abbreviated)
