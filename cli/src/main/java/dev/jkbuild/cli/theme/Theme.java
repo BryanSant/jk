@@ -95,6 +95,21 @@ public interface Theme {
     /** Bright cyan — used for artifact short-names in coordinate output. */
     AttributedStyle brightCyan();
 
+    // --- coordinate-segment styles ---------------------------------------
+    // The three roles of a printed group:artifact:version coordinate.
+
+    /** Coordinate group segment — cyan (Jk Dark cyan {@code #00BCD4}). */
+    AttributedStyle coordGroup();
+
+    /** Coordinate artifact/name segment — bright cyan (Jk Dark bright cyan {@code #18FFFF}). */
+    AttributedStyle coordName();
+
+    /** Coordinate version segment — bright blue (Jk Dark bright blue {@code #536DFE}). */
+    AttributedStyle coordVersion();
+
+    /** Unit-index badge (e.g. {@code jk explain}'s {@code 01}) — white on a bright-black background. */
+    AttributedStyle unitBadge();
+
     /** Bright yellow — used for the {@code default} JDK status. */
     AttributedStyle brightYellow();
 

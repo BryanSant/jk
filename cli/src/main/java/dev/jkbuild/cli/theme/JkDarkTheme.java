@@ -96,6 +96,11 @@ public final class JkDarkTheme implements Theme {
         return withColor(base, c.r(), c.g(), c.b());
     }
 
+    /** Apply a background color unless {@code --color} disables it. */
+    private static AttributedStyle withBg(AttributedStyle base, Rgb c) {
+        return Theme.colorEnabled() ? base.background(c.r(), c.g(), c.b()) : base;
+    }
+
     @Override
     public AttributedStyle dim() {
         return AttributedStyle.DEFAULT.faint();
@@ -189,6 +194,26 @@ public final class JkDarkTheme implements Theme {
     @Override
     public AttributedStyle brightCyan() {
         return withColor(AttributedStyle.DEFAULT, BRIGHT_CYAN);
+    }
+
+    @Override
+    public AttributedStyle coordGroup() {
+        return withColor(AttributedStyle.DEFAULT, NORMAL_CYAN);     // cyan
+    }
+
+    @Override
+    public AttributedStyle coordName() {
+        return withColor(AttributedStyle.DEFAULT, BRIGHT_CYAN);     // bright-cyan
+    }
+
+    @Override
+    public AttributedStyle coordVersion() {
+        return withColor(AttributedStyle.DEFAULT, BRIGHT_BLUE);     // bright-blue
+    }
+
+    @Override
+    public AttributedStyle unitBadge() {
+        return withBg(withColor(AttributedStyle.DEFAULT, BRIGHT_WHITE), BRIGHT_BLACK);
     }
 
     @Override

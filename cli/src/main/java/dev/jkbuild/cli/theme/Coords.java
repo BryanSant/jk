@@ -31,19 +31,19 @@ public final class Coords {
 
     private Coords() {}
 
-    /** group segment — blue. */
+    /** group segment — the theme's coordinate-group color. */
     public static AttributedStyle groupStyle() {
-        return Theme.active().primary();
+        return Theme.active().coordGroup();
     }
 
-    /** artifact segment — cyan. */
+    /** artifact/name segment — the theme's coordinate-name color. */
     public static AttributedStyle artifactStyle() {
-        return Theme.active().cyan();
+        return Theme.active().coordName();
     }
 
-    /** version segment — bright-blue. */
+    /** version segment — the theme's coordinate-version color. */
     public static AttributedStyle versionStyle() {
-        return Theme.active().blue();
+        return Theme.active().coordVersion();
     }
 
     /** artifact short-name (dependency library) — bright-cyan. */

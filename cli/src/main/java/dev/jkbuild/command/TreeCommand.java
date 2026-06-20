@@ -55,9 +55,12 @@ public final class TreeCommand implements CliCommand {
         Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
-        // Header: a leading blank line, then underlined "Project Tree" in the accent color.
+        // Header: a leading blank line, then underlined "Project Tree for `<group>:<name>`"
+        // in the accent color (the coordinate backticked, monospace-style).
+        String title = "Project Tree for `"
+                + project.project().group() + ":" + project.project().name() + "`";
         System.out.println();
-        System.out.println(Theme.colorize("Project Tree", Theme.active().activeStep().underline()));
+        System.out.println(Theme.colorize(title, Theme.active().activeStep().underline()));
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
         String rendered = DependencyTree.render(project, lock, dir, max, styling());
         System.out.print(rendered);
