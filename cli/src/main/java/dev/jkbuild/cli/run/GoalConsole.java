@@ -123,9 +123,9 @@ public final class GoalConsole {
         GoalListener console = switch (mode) {
             case JSON -> new NdjsonListener(System.out);
             case VERBOSE -> new VerboseListener(System.out, System.err);
-            case AUTO -> new CommandManagerListener(System.out, System.err, spec, member,
+            case AUTO -> new CommandManagerListener(System.out, spec, member,
                     goal.phases(), isInteractiveTerminal());
-            case QUIET -> new CommandManagerListener(System.out, System.err, spec, member,
+            case QUIET -> new CommandManagerListener(System.out, spec, member,
                     goal.phases(), false);
         };
         goal.addListener(console);

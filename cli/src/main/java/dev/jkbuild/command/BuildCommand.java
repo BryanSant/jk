@@ -333,11 +333,16 @@ public final class BuildCommand implements CliCommand {
                 if (!o.success() && failure == null) failure = o;
             }
             if (failure != null) {
-                view.finishFailure(buildFailedAt(failure.coord(), start), snapshot(deferredOutput));
+                // Everything the build emitted prints ABOVE the result line, exactly
+                // like the success route: buffered sub-process output first, then the
+                // error diagnostics just above the "‼ Build failed" line — which stays
+                // last so the user sees the outcome without scrolling.
+                List<String> above = snapshot(deferredOutput);
                 for (GoalResult.Diagnostic d : agg.lastErrors()) {
                     if ("test-failure".equals(d.code())) continue;  // already printed by run-tests
-                    System.err.println(ConsoleSpec.renderError(d));
+                    above.add(ConsoleSpec.renderError(d));
                 }
+                view.finishFailure(buildFailedAt(failure.coord(), start), above);
                 return failure.exitCode();
             }
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
@@ -558,14 +563,17 @@ public final class BuildCommand implements CliCommand {
                     throw e;
                 }
                 if (exit != 0) {
-                    view.finishFailure(buildFailedAt(member, buildStart));
+                    // Error diagnostics print above the result line (which stays last),
+                    // mirroring the success route.
+                    List<String> above = new ArrayList<>();
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
                         // Per-test failures (code "test-failure") were already printed
                         // in full by the run-tests phase; keep them for --output json
                         // but don't echo them again here.
                         if ("test-failure".equals(d.code())) continue;
-                        System.err.println(ConsoleSpec.renderError(d));
+                        above.add(ConsoleSpec.renderError(d));
                     }
+                    view.finishFailure(buildFailedAt(member, buildStart), above);
                     return exit;
                 }
                 built++;

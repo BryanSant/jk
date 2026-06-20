@@ -43,21 +43,22 @@ class CompileCommandTest {
         Files.createDirectories(src.getParent());
         Files.writeString(src, "package example; public class Broken { void f(   // missing\n");
 
-        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
-        PrintStream originalErr = System.err;
-        System.setErr(new PrintStream(stderr));
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        PrintStream originalOut = System.out;
+        System.setOut(new PrintStream(stdout, true, StandardCharsets.UTF_8));
         int exit;
         try {
             exit = run("check", "-C", tempDir.toString(),
                     "--cache-dir", tempDir.resolve("cache").toString());
         } finally {
-            System.setErr(originalErr);
+            System.setOut(originalOut);
         }
 
         assertThat(exit).isEqualTo(1);
         // The compiler diagnostic is surfaced through jk's error channel (with its
-        // file:line + javac message), not dumped as raw compiler text.
-        assertThat(stderr.toString(StandardCharsets.UTF_8))
+        // file:line + javac message), not dumped as raw compiler text. It prints
+        // above the result line (same stream), so the "✗ ... failed" line is last.
+        assertThat(stdout.toString(StandardCharsets.UTF_8))
                 .contains("Broken.java")
                 .contains("reached end of file");
     }

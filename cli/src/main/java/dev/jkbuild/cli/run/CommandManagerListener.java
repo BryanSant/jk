@@ -27,7 +27,6 @@ import java.util.List;
 public final class CommandManagerListener implements GoalListener {
 
     private final PrintStream out;
-    private final PrintStream err;
     private final ConsoleSpec spec;
     private final String member;
     private final List<Phase> phases;
@@ -36,10 +35,9 @@ public final class CommandManagerListener implements GoalListener {
     private CommandManager cm;
     private CommandManager.OutputScope capture;
 
-    public CommandManagerListener(PrintStream out, PrintStream err, ConsoleSpec spec,
+    public CommandManagerListener(PrintStream out, ConsoleSpec spec,
                                   String member, List<Phase> phases, boolean animate) {
         this.out = out;
-        this.err = err;
         this.spec = spec;
         this.member = member;
         this.phases = phases;
@@ -90,21 +88,25 @@ public final class CommandManagerListener implements GoalListener {
 
     @Override
     public void goalFinish(GoalResult result) {
-        // Restore the real streams before settling so the result line and
-        // diagnostics aren't themselves routed back above the (closing) region.
+        // Restore the real streams before settling so the result line isn't
+        // itself routed back above the (closing) region.
         if (capture != null) capture.close();
         if (cm == null) cm = CommandManager.goal(out, spec.verb(), animate);
         String suffix = " " + ConsoleSpec.took(result.duration());
-        if (result.success()) {
-            cm.finishSuccess(spec.onSuccess().apply(result) + suffix);
-        } else {
-            cm.finishFailure(spec.onFailure().apply(result) + suffix);
+        // All diagnostics print ABOVE the result line (which stays last) — warnings
+        // first, then errors nearest the line — so the failure route reads just like
+        // the success route and the outcome is the last thing on screen.
+        List<String> above = new java.util.ArrayList<>();
+        for (GoalResult.Diagnostic d : result.warnings()) {
+            above.add(ConsoleSpec.renderWarning(d));
         }
         for (GoalResult.Diagnostic d : result.errors()) {
-            err.println(ConsoleSpec.renderError(d));
+            above.add(ConsoleSpec.renderError(d));
         }
-        for (GoalResult.Diagnostic d : result.warnings()) {
-            err.println(ConsoleSpec.renderWarning(d));
+        if (result.success()) {
+            cm.finishSuccess(spec.onSuccess().apply(result) + suffix, above);
+        } else {
+            cm.finishFailure(spec.onFailure().apply(result) + suffix, above);
         }
     }
 
