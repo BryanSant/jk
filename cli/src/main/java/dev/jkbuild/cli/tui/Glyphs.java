@@ -30,4 +30,6 @@ public final class Glyphs {
     public static final String PILL_LEFT_NERD = "";
     /** Nerd Font powerline right solid half-circle (U+E0B4). */
     public static final String PILL_RIGHT_NERD = "";
+    /** Nerd Font powerline right-pointing segment terminator / arrow (U+E0B0). */
+    public static final String SEGMENT_END_NERD = "";
 }

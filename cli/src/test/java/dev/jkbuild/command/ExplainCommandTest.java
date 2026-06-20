@@ -60,15 +60,15 @@ class ExplainCommandTest {
         assertThat(ExplainCommand.elideDeps(units, 500)).isEqualTo(full);
         assertThat(ExplainCommand.elideDeps(units, Integer.MAX_VALUE)).isEqualTo(full);
 
-        // Narrow budget → leading units that fit, then a "…N…" remaining-count marker.
+        // Narrow budget → leading units that fit, then a "…+N more…" remaining-count marker.
         String elided = ExplainCommand.elideDeps(units, 40);
         assertThat(elided).startsWith(":engine");
-        assertThat(elided).matches(".*…\\d+…$");      // ends with …<count>…
+        assertThat(elided).matches(".*…\\+\\d+ more…$");      // ends with …+<count> more…
         assertThat(elided.length()).isLessThan(full.length());
         // Count = units that didn't fit (the leading ones shown are excluded).
         int shown = (int) java.util.Arrays.stream(elided.split(", "))
                 .filter(s -> s.startsWith(":")).count();
-        assertThat(elided).contains("…" + (units.size() - shown) + "…");
+        assertThat(elided).contains("…+" + (units.size() - shown) + " more…");
 
         // A single prereq is never elided.
         assertThat(ExplainCommand.elideDeps(List.of(":only"), 1)).isEqualTo(":only");
@@ -83,11 +83,11 @@ class ExplainCommandTest {
         // ANSI color is active (coords / labels / edges are each one colorize call).
         String out = runExplainCapturingStdout(tmp.resolve("app"));
 
-        assertThat(out).contains("2 units, dependency order");
-        assertThat(out).contains("com.example:app").contains("[root]");
-        assertThat(out).contains("[path dep]");
-        assertThat(out).contains("← com.example:lib");          // app's edge to lib (single dep → full)
+        assertThat(out).contains("2 total phases");
+        assertThat(out).contains("com.example:app").contains("root");
+        assertThat(out).contains("path dep");
+        assertThat(out).contains("←").contains("lib");          // app's edge to lib (abbreviated)
         // lib (the path dep) is printed before app (the root) — dependency-first order.
-        assertThat(out.indexOf("[path dep]")).isLessThan(out.indexOf("[root]"));
+        assertThat(out.indexOf("path dep")).isLessThan(out.indexOf("root"));
     }
 }

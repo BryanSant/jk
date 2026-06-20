@@ -218,6 +218,13 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle cyanBadge() {
+        // Near-black text on the cyan chip (the ▶ arrow is painted in NORMAL_CYAN — the
+        // chip background — by the caller).
+        return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), NORMAL_CYAN);
+    }
+
+    @Override
     public AttributedStyle brightYellow() {
         return withColor(AttributedStyle.DEFAULT, BRIGHT_YELLOW);
     }

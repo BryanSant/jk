@@ -2,6 +2,7 @@
 package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.theme.Theme;
+import org.jline.utils.AttributedStyle;
 
 /**
  * A small "chip" / "pill" label — black text on a bright-black background, used
@@ -17,13 +18,23 @@ public final class Badge {
 
     private Badge() {}
 
+    /** The bright-black scope/index chip. */
     public static String pill(String label, boolean nerdfont) {
         Theme t = Theme.active();
+        return pill(label, nerdfont, t.scopeBadge(), t.darkGray());
+    }
+
+    /**
+     * A chip styled with {@code body} (its background defines the chip color); the
+     * Nerd Font pill caps are painted with {@code caps} — pass a style whose
+     * <em>foreground</em> matches the chip's background so they read as rounded edges.
+     */
+    public static String pill(String label, boolean nerdfont, AttributedStyle body, AttributedStyle caps) {
         if (nerdfont) {
-            return Theme.colorize(Glyphs.PILL_LEFT_NERD, t.darkGray())
-                    + Theme.colorize(label, t.scopeBadge())
-                    + Theme.colorize(Glyphs.PILL_RIGHT_NERD, t.darkGray());
+            return Theme.colorize(Glyphs.PILL_LEFT_NERD, caps)
+                    + Theme.colorize(label, body)
+                    + Theme.colorize(Glyphs.PILL_RIGHT_NERD, caps);
         }
-        return Theme.colorize(" " + label + " ", t.scopeBadge());
+        return Theme.colorize(" " + label + " ", body);
     }
 }

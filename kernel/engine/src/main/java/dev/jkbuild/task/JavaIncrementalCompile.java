@@ -74,6 +74,16 @@ public final class JavaIncrementalCompile {
         }
     }
 
+    /** What {@link #run} would do for a set of inputs, without compiling. */
+    public enum Outcome { CACHE_HIT, INCREMENTAL, FULL }
+
+    /**
+     * A dry-run prediction ({@code jk explain}): {@code sourceCount} is the total
+     * source count for a {@link Outcome#CACHE_HIT} or {@link Outcome#FULL}, and the
+     * changed-source count for an {@link Outcome#INCREMENTAL} (partial) compile.
+     */
+    public record Prediction(Outcome outcome, String actionKey, int sourceCount) {}
+
     /**
      * Persisted per-class facts (key = internal class name, e.g. {@code a/Foo$Bar}).
      * {@code constants} records whether the class defines an inlinable compile-time
@@ -164,6 +174,29 @@ public final class JavaIncrementalCompile {
                     prior.get(), abi, compiler, flags);
         }
         return full(taskId, request, key, cas, actionCache, stateDir, out, compiler, flags);
+    }
+
+    /**
+     * Predict, without compiling, what {@link #run} would do for {@code request} —
+     * for {@code jk explain}. Uses the same gates as {@code run}: an action-cache
+     * hit on the javac key → {@link Outcome#CACHE_HIT}; else a usable prior record +
+     * state (and a non-aggregating processor setup) → {@link Outcome#INCREMENTAL}
+     * with the changed-source count; else {@link Outcome#FULL}.
+     */
+    public static Prediction predict(String taskId, CompileRequest request, String jkVersion,
+                                     ActionCache actionCache, Path stateDir) throws IOException {
+        String key = ActionKey.forJavac(taskId, request, jkVersion);
+        if (request.sources().isEmpty() || actionCache.lookup(key).isPresent()) {
+            return new Prediction(Outcome.CACHE_HIT, key, request.sources().size());
+        }
+        Optional<ActionCache.ActionRecord> prior = actionCache.lastFor(taskId);
+        Map<String, ClassFacts> abi = loadState(stateDir);
+        ApFlags flags = loadApFlags(stateDir);
+        boolean canInc = canIncrement(request, prior, abi) && (!flags.sourceGenAps() || flags.isolating());
+        if (canInc) {
+            return new Prediction(Outcome.INCREMENTAL, key, changedSources(request, prior.get().inputs()).size());
+        }
+        return new Prediction(Outcome.FULL, key, request.sources().size());
     }
 
     // ---- decide -----------------------------------------------------------

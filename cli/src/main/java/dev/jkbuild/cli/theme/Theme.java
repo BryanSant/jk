@@ -110,6 +110,9 @@ public interface Theme {
     /** Chip / pill badge (jk tree scope sections, jk explain unit indices) — black on a bright-black background. */
     AttributedStyle scopeBadge();
 
+    /** Header segment (jk explain's "Build Plan for …") — near-black on a cyan background. */
+    AttributedStyle cyanBadge();
+
     /** Bright yellow — used for the {@code default} JDK status. */
     AttributedStyle brightYellow();
 

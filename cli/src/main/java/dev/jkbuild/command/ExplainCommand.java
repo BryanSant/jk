@@ -21,7 +21,6 @@ import dev.jkbuild.runtime.CompileSupport;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.util.JkDirs;
-import org.jline.utils.AttributedStyle;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -88,10 +87,19 @@ public final class ExplainCommand implements CliCommand {
 
         List<BuildGraph.BuildUnit> order = graph.topoOrder();
         int units = order.size();
-        System.out.println(Theme.colorize(
-                "Build Plan for " + entry.project().group() + ":" + entry.project().name(),
-                t.activeStep().underline())
-                + " (" + units + " unit" + (units == 1 ? "" : "s") + ", dependency order):");
+        // Header: a leading blank line, then a left-flush cyan powerline segment —
+        // " Build Plan for <coord> " on the cyan chip, capped on the right by a ▶ segment
+        // arrow (painted in the chip color over the default background). A white phase count
+        // follows, then a trunk rail.
+        String title = " Build Plan for " + entry.project().group() + ":" + entry.project().name() + " ";
+        String header = nerdfont
+                ? Theme.colorize(title, t.cyanBadge())
+                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.cyan())
+                : Theme.colorize(title, t.cyanBadge());
+        System.out.println();
+        System.out.println(header
+                + " " + Theme.colorize(units + " total phases", t.brightWhite()));
+        System.out.println(Theme.colorize("│", t.darkGray()));
 
         for (int i = 0; i < order.size(); i++) {
             BuildGraph.BuildUnit u = order.get(i);
@@ -111,26 +119,21 @@ public final class ExplainCommand implements CliCommand {
                     .append(Theme.colorize((last ? "╰" : "├") + "─", t.darkGray()))
                     .append(dev.jkbuild.cli.tui.Badge.pill(idx, nerdfont))
                     .append(' ').append(coloredCoord(u.coord(), t))
-                    .append(' ').append(Theme.colorize("[" + origin + "]", t.darkGray()));
+                    .append(' ').append(Theme.colorize(origin, t.darkGray()));
             List<String> prereqs = new ArrayList<>();
             for (Path p : graph.edges().getOrDefault(u.dir(), Set.of())) {
                 String c = coordByDir.get(p);
-                if (c != null) prereqs.add(c);
+                if (c != null) prereqs.add(abbreviate(c, u.coord())); // same-group → :name
             }
             if (!prereqs.isEmpty()) {
-                // A single prereq is shown in full; multiple are abbreviated to
-                // ":name" (same-group) so the list stays readable.
-                List<String> shown = prereqs.size() == 1 ? prereqs
-                        : prereqs.stream().map(c -> abbreviate(c, u.coord())).toList();
-                // Visible width before " ← " — connector(2) + badge(idx + 2 caps/pads)
-                // + space + coord + space + "[origin]". Caps/pads are width-1.
+                // Visible width before " ← " — connector(2) + index pill (idx + 2 caps/pads)
+                // + space + coord + space + origin. Caps/pads are width-1.
                 int prefixCols = 2 + (idx.length() + 2) + 1 + u.coord().length()
-                        + 1 + (origin.length() + 2);
-                line.append(' ').append(Theme.colorize(
-                        "← " + elideDeps(shown, width - prefixCols - 3), t.darkGray()));
+                        + 1 + origin.length();
+                line.append(' ').append(renderDeps(elideDeps(prereqs, width - prefixCols - 3), t));
             }
             System.out.println(line);
-            explainCompile(u.dir(), u.manifest(), cas, actionCache, spine, t);
+            explainCompile(u.dir(), u.manifest(), cas, actionCache, cache, spine, t);
         }
         return 0;
     }
@@ -156,17 +159,17 @@ public final class ExplainCommand implements CliCommand {
     /**
      * Join {@code units} with {@code ", "} to fit {@code available} visible columns.
      * When the full list is too wide, show as many leading units as fit followed by a
-     * {@code …N…} marker, where {@code N} is the count of remaining units that didn't
-     * fit. {@code available} is effectively unbounded on a non-TTY, so the full list
-     * is shown there.
+     * {@code …+N more…} marker, where {@code N} is the count of remaining units that
+     * didn't fit. {@code available} is effectively unbounded on a non-TTY, so the full
+     * list is shown there.
      */
     static String elideDeps(List<String> units, int available) {
         String full = String.join(", ", units);
         if (available <= 0 || units.size() <= 1 || full.length() <= available) return full;
-        String best = "…" + units.size() + "…"; // marker-only, if even one unit won't fit
+        String best = "…+" + units.size() + " more…"; // marker-only, if even one unit won't fit
         for (int k = 1; k < units.size(); k++) {
             String candidate = String.join(", ", units.subList(0, k))
-                    + ", …" + (units.size() - k) + "…";
+                    + ", …+" + (units.size() - k) + " more…";
             if (candidate.length() > available) break; // front grows monotonically
             best = candidate;
         }
@@ -174,18 +177,40 @@ public final class ExplainCommand implements CliCommand {
     }
 
     /**
-     * The {@code compile-main} phase node + its cache-status lines for a unit,
-     * mirroring the build's javac action key, rendered under {@code spine} (the
-     * unit's vertical rail). Two status lines: a cache hit/miss marker with the
-     * action key, and a checkbox for the work — filled + struck when cached
-     * (won't run), empty when it will run.
+     * Color an elided dep list: {@code ← } and separators dim, each dep's name in the
+     * coordinate-name color (the {@code :} dim for same-group {@code :name} refs), and
+     * a {@code …+N more…} remaining-count marker dim.
+     */
+    private static String renderDeps(String elided, Theme t) {
+        StringBuilder sb = new StringBuilder(Theme.colorize("← ", t.darkGray()));
+        String[] pieces = elided.split(", ");
+        for (int i = 0; i < pieces.length; i++) {
+            if (i > 0) sb.append(Theme.colorize(", ", t.darkGray()));
+            String p = pieces[i];
+            if (p.matches("…\\+\\d+ more…")) {
+                sb.append(Theme.colorize(p, t.darkGray()));            // remaining-count marker
+            } else if (p.startsWith(":")) {
+                sb.append(Theme.colorize(":", t.darkGray()))
+                        .append(Theme.colorize(p.substring(1), t.coordName()));
+            } else {
+                sb.append(coloredCoord(p, t));                         // full group:name
+            }
+        }
+        return sb.toString();
+    }
+
+    /**
+     * The {@code compile-main} phase node + a single status line for a unit,
+     * rendered under {@code spine} (the unit's vertical rail). The status predicts
+     * — via {@link dev.jkbuild.task.JavaIncrementalCompile#predict} on the same
+     * inputs the build uses — whether the build would restore from cache, or do a
+     * full or partial (incremental) compile, and over how many sources.
      */
     private static void explainCompile(Path dir, JkBuild project, Cas cas, ActionCache actionCache,
-                                       String spine, Theme t) throws IOException {
-        String phaseLine = spine + "  " + Theme.colorize("╰─ ", t.darkGray())
-                + Theme.colorize("compile-main", t.brightWhite());
+                                       Path cache, String spine, Theme t) throws IOException {
+        System.out.println(spine + "  " + Theme.colorize("╰─ ", t.darkGray())
+                + Theme.colorize("compile-main", t.focused()));   // bold + white
         String statusPrefix = spine + "     ";
-        System.out.println(phaseLine);
 
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.isRegularFile(lockFile)) {
@@ -212,29 +237,26 @@ public final class ExplainCommand implements CliCommand {
                         dev.jkbuild.model.Scope.EXPORT, dev.jkbuild.model.Scope.MAIN));
         List<Path> classpath = dev.jkbuild.runtime.BuildPipeline.mainCompileClasspath(lock, resolver, siblings);
         List<Path> processorCp = resolver.classpathFor(lock, Set.of(dev.jkbuild.model.Scope.PROCESSOR));
-        int release = project.project().javaRelease();
         Path outputDir = BuildLayout.of(dir, project).classesDir();
         CompileRequest request = CompileRequest.builder()
-                .sources(sources).classpath(classpath).outputDir(outputDir).release(release)
+                .sources(sources).classpath(classpath).outputDir(outputDir).release(project.project().javaRelease())
                 .extraOptions(dev.jkbuild.compile.JavacLint.effectiveArgs(project.build().lint(), List.of()))
                 .processorPath(processorCp)
                 .build();
-        String key = ActionKey.forJavac(ActionKey.qualifiedTaskId("compile-main", outputDir), request, Jk.VERSION);
-        boolean hit = actionCache.lookup(key).isPresent();
-        String shortKey = key.substring(0, 8);
-
-        // Line 1: cache hit (green ✓) / miss (dim ✗), then the action key.
-        System.out.println(statusPrefix
-                + (hit ? Theme.colorize("✓", t.success()) + " cache hit: "
-                       : Theme.colorize("✗", t.darkGray()) + " cache miss: ")
-                + Theme.colorize(shortKey, t.path()));
-
-        // Line 2: the work as a checkbox — a closed box + struck text when cached
-        // (it won't run), an open box + plain text when it will compile this build.
-        String desc = sources.size() + " source" + (sources.size() == 1 ? "" : "s")
-                + " (javac --release " + release + ")";
-        System.out.println(statusPrefix + (hit
-                ? "■ " + Theme.colorize(desc, AttributedStyle.DEFAULT.crossedOut())
-                : "□ " + desc));
+        String taskId = ActionKey.qualifiedTaskId("compile-main", outputDir);
+        Path stateDir = cache.resolve("actions").resolve("incremental-java").resolve(taskId);
+        var pred = dev.jkbuild.task.JavaIncrementalCompile.predict(taskId, request, Jk.VERSION, actionCache, stateDir);
+        int n = pred.sourceCount();
+        String sourceLabel = n + " source" + (n == 1 ? "" : "s");
+        String line = switch (pred.outcome()) {
+            case CACHE_HIT -> Theme.colorize("✓ Skip", t.success())
+                    + ": cache found for " + Theme.colorize(pred.actionKey().substring(0, 8), t.path())
+                    + ", no compile necessary";
+            case INCREMENTAL -> Theme.colorize("□ Partial compile", t.brightWhite())
+                    + " for " + sourceLabel + " required";
+            case FULL -> Theme.colorize("□ Full compile", t.brightWhite())
+                    + " for " + sourceLabel + " required";
+        };
+        System.out.println(statusPrefix + line);
     }
 }
