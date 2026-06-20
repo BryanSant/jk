@@ -64,11 +64,17 @@ public final class FreshnessStamp {
 
     /**
      * True when {@code fileName} is one of our stamp sentinels. Used by
-     * {@link ActionCache} to exclude stamps when snapshotting outputs —
-     * a stamp is build metadata, not an action output.
+     * {@link ActionCache} (and the incremental compile/prewrite snapshots) to
+     * exclude stamps when capturing outputs — a stamp is build metadata, not an
+     * action output. Includes {@link TestStamp#FILE the test stamp}, which a
+     * later phase (run-tests) writes into the same classes tree: capturing it
+     * would hard-link it into the CAS, so a later in-place rewrite would mutate
+     * the shared CAS blob, and a restore could revert the stamp to a stale one.
      */
     public static boolean isStampFile(String fileName) {
-        return JAVA_STAMP.equals(fileName) || KOTLIN_STAMP.equals(fileName);
+        return JAVA_STAMP.equals(fileName)
+                || KOTLIN_STAMP.equals(fileName)
+                || TestStamp.FILE.equals(fileName);
     }
 
     /**

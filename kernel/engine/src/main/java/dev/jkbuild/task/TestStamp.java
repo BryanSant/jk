@@ -87,8 +87,12 @@ public final class TestStamp {
         if (key == null) return;
         try {
             Files.createDirectories(testClassesDir);
-            Files.writeString(testClassesDir.resolve(FILE),
-                    key + "\n", StandardCharsets.UTF_8);
+            Path stamp = testClassesDir.resolve(FILE);
+            // Delete first so we never truncate-in-place a file that an earlier
+            // build may have hard-linked into the CAS — truncating would mutate
+            // the shared blob. A fresh write always gets its own inode.
+            Files.deleteIfExists(stamp);
+            Files.writeString(stamp, key + "\n", StandardCharsets.UTF_8);
         } catch (IOException ignored) {}
     }
 
