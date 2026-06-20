@@ -49,6 +49,31 @@ class DependencyTreeTest {
     }
 
     @Test
+    void back_reference_rows_are_styled_as_a_whole_unit() {
+        // root -> a -> leaf ; root -> b -> leaf  (leaf revisited under b)
+        JkBuild project = projectWithMainDeps("com.foo:root");
+        Lockfile lock = lockOf(
+                pkg("com.foo:root", "1.0", List.of("com.foo:a@1.0", "com.foo:b@1.0")),
+                pkg("com.foo:a", "1.0", List.of("com.foo:leaf@1.0")),
+                pkg("com.foo:b", "1.0", List.of("com.foo:leaf@1.0")),
+                pkg("com.foo:leaf", "1.0", List.of()));
+        var styling = new DependencyTree.Styling(
+                java.util.function.UnaryOperator.identity(),
+                java.util.function.UnaryOperator.identity(),
+                java.util.function.UnaryOperator.identity(),
+                java.util.function.UnaryOperator.identity(),
+                s -> "<dim>" + s + "</dim>");   // reference styler
+
+        String rendered = DependencyTree.render(project, lock, Integer.MAX_VALUE, styling);
+
+        // The revisited leaf is a back-reference: connector + coord + ⎋ wrapped as ONE unit.
+        assertThat(rendered).contains("com.foo:leaf:1.0 ⎋</dim>");
+        assertThat(rendered).contains("<dim>");
+        // The first leaf occurrence is a real node — not wrapped by the reference styler.
+        assertThat(rendered).contains("── com.foo:leaf:1.0\n");
+    }
+
+    @Test
     void depth_zero_shows_only_roots() {
         JkBuild project = projectWithMainDeps("com.foo:root");
         Lockfile lock = lockOf(

@@ -46,15 +46,22 @@ public final class DependencyTree {
      * <pre>
      *   {rail}└── {/rail}{group}{group}{/group}:{artifact}{artifact}{/artifact}:{version}{version}{/version}
      * </pre>
+     *
+     * <p>{@code reference} styles a whole already-shown row (the {@code ⎋}
+     * back-reference lines): the connector, coordinate, and marker are dimmed as
+     * one unit so the reader sees at a glance it's a pointer to an earlier
+     * expansion, not a fresh node.
      */
     public record Styling(
             UnaryOperator<String> rail,
             UnaryOperator<String> group,
             UnaryOperator<String> artifact,
-            UnaryOperator<String> version) {
+            UnaryOperator<String> version,
+            UnaryOperator<String> reference) {
         public static Styling plain() {
             return new Styling(UnaryOperator.identity(), UnaryOperator.identity(),
-                    UnaryOperator.identity(), UnaryOperator.identity());
+                    UnaryOperator.identity(), UnaryOperator.identity(),
+                    UnaryOperator.identity());
         }
     }
 
@@ -73,7 +80,8 @@ public final class DependencyTree {
                                 UnaryOperator<String> railStyler) {
         return render(project, lock, maxDepth, new Styling(
                 railStyler, UnaryOperator.identity(),
-                UnaryOperator.identity(), UnaryOperator.identity()));
+                UnaryOperator.identity(), UnaryOperator.identity(),
+                UnaryOperator.identity()));
     }
 
     /**
@@ -253,12 +261,17 @@ public final class DependencyTree {
         boolean built = lockPath != null && Files.isRegularFile(lockPath);
         String tag = !built ? " [path, not built]" : " [path]";
 
+        if (cycle) {
+            // Back-reference to a path dir already expanded — dim the whole row.
+            out.append(prefix).append(styling.reference().apply(connector + module + tag + " ⎋")).append('\n');
+            return;
+        }
+
         out.append(prefix).append(styling.rail().apply(connector))
                 .append(coordLabel(module, styling))
-                .append(styling.rail().apply(tag))
-                .append(cycle ? " ⎋" : "").append('\n');
+                .append(styling.rail().apply(tag)).append('\n');
 
-        if (cycle || targetDir == null || !built || depth >= maxDepth) return;
+        if (targetDir == null || !built || depth >= maxDepth) return;
         JkBuild target;
         Lockfile targetLock;
         try {
@@ -297,25 +310,30 @@ public final class DependencyTree {
         String groupId = colon > 0 ? module.substring(0, colon) : module;
         String artifactId = colon > 0 ? module.substring(colon + 1) : "";
 
-        String label;
-        if (pkg != null) {
-            label = formatCoord(groupId, artifactId, pkg.version(), styling);
-        } else {
-            // No version available — emit "group:artifact (missing)" so the
-            // (missing) marker is unmistakable and stays unstyled.
-            label = styling.group().apply(groupId) + ":"
-                    + styling.artifact().apply(artifactId) + MISSING_SUFFIX;
-        }
-        boolean alreadyShown = !seen.add(module);
-        String marker = alreadyShown ? " ⎋" : "";
         // ╰── for the last child (rounded arc); ├── for the rest.
         // Standard "rounded tree" convention used by eza, tre, etc.
         String connector = isLast ? "╰── " : "├── ";
+        String coord = pkg != null
+                ? groupId + ":" + artifactId + ":" + pkg.version()
+                : groupId + ":" + artifactId + MISSING_SUFFIX;
+
+        if (!seen.add(module)) {
+            // Already shown higher up — dim the WHOLE row (connector + coord + ⎋)
+            // so it reads as a back-reference, not a fresh expansion.
+            out.append(prefix).append(styling.reference().apply(connector + coord + " ⎋")).append('\n');
+            return;
+        }
+
+        String label = pkg != null
+                ? formatCoord(groupId, artifactId, pkg.version(), styling)
+                // No version available — "group:artifact (missing)", marker unstyled.
+                : styling.group().apply(groupId) + ":"
+                        + styling.artifact().apply(artifactId) + MISSING_SUFFIX;
 
         out.append(prefix).append(styling.rail().apply(connector))
-                .append(label).append(marker).append('\n');
+                .append(label).append('\n');
 
-        if (alreadyShown || pkg == null || depth >= maxDepth) return;
+        if (pkg == null || depth >= maxDepth) return;
 
         String childPrefix = prefix + styling.rail().apply(isLast ? "    " : "│   ");
         List<String> children = pkg.deps().stream()
