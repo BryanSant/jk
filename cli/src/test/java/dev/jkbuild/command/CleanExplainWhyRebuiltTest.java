@@ -76,11 +76,11 @@ class CleanExplainWhyRebuiltTest {
         String stdout = captureStdout(() ->
                 run("explain", "-C", tempDir.toString(),
                         "--cache-dir", tempDir.resolve("cache").toString()));
-        // New unified-plan format: "build plan for <group>:widget (N units, …)".
-        assertThat(stdout).contains("build plan for").contains("widget");
+        // Unified-plan format: "Build Plan for <group>:widget (N units, …)".
+        assertThat(stdout).contains("Build Plan for").contains("widget");
         assertThat(stdout).contains("unit");
-        assertThat(stdout).contains("compile-main:");
-        assertThat(stdout).contains("[MISS");
+        assertThat(stdout).contains("compile-main");
+        assertThat(stdout).contains("cache miss");
     }
 
     @Test
@@ -96,7 +96,7 @@ class CleanExplainWhyRebuiltTest {
 
         String stdout = captureStdout(() ->
                 run("explain", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
-        assertThat(stdout).contains("[HIT");
+        assertThat(stdout).contains("cache hit");
     }
 
     // --- helpers -----------------------------------------------------------

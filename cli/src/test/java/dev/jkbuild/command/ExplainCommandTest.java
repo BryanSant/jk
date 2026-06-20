@@ -61,9 +61,9 @@ class ExplainCommandTest {
 
         assertThat(out).contains("2 units, dependency order");
         assertThat(out).contains("com.example:app").contains("[root]");
-        assertThat(out).contains("com.example:lib").contains("[path dep]");
-        assertThat(out).contains("← com.example:lib");          // app's edge to lib
-        // lib (the unit) is printed before app (the root) — dependency-first order.
-        assertThat(out.indexOf("com.example:lib")).isLessThan(out.indexOf("[root]"));
+        assertThat(out).contains("[path dep]");
+        assertThat(out).contains("← com.example:lib");          // app's edge to lib (single dep → full)
+        // lib (the path dep) is printed before app (the root) — dependency-first order.
+        assertThat(out.indexOf("[path dep]")).isLessThan(out.indexOf("[root]"));
     }
 }
