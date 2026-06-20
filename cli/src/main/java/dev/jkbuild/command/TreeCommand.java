@@ -56,15 +56,21 @@ public final class TreeCommand implements CliCommand {
         Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
-        // Header: a leading blank line, then underlined "Dependencies Tree for `<group>:<name>`"
-        // in the accent color (the coordinate backticked, monospace-style).
-        String title = "Dependencies Tree for `"
-                + project.project().group() + ":" + project.project().name() + "`";
+        // Header: a leading blank line, then a left-flush cyan powerline segment
+        // " Dependencies Tree for `<group>:<name>` " (near-black on cyan, capped by a ▶
+        // segment arrow when nerdfont) — matching jk explain's build-plan header.
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        Theme t = Theme.active();
+        String title = " Dependencies Tree for `"
+                + project.project().group() + ":" + project.project().name() + "` ";
+        String header = nerdfont
+                ? Theme.colorize(title, t.cyanBadge())
+                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.cyan())
+                : Theme.colorize(title, t.cyanBadge());
         System.out.println();
-        System.out.println(Theme.colorize(title, Theme.active().activeStep().underline()));
+        System.out.println(header);
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
-        String rendered = DependencyTree.render(project, lock, dir, max,
-                styling(dev.jkbuild.config.GlobalConfig.nerdfont()));
+        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont));
         System.out.print(rendered);
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();
