@@ -239,13 +239,29 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     /** Settle with {@code ✔ <goal> Successful: <message>} (the head in green). */
     public void finishSuccess(String message) {
+        finishSuccess(message, List.of());
+    }
+
+    /**
+     * Like {@link #finishSuccess(String)}, but first prints {@code above} —
+     * buffered subprocess output (compiler warnings, &c.) — as scrollback above
+     * the result line, so the {@code ✔ Successful} summary is the last thing the
+     * user sees. The lines land after the live region is wiped, under one lock,
+     * so they never interleave with the bar.
+     */
+    public void finishSuccess(String message, List<String> above) {
         String head = Glyphs.CHECK + (goalName().isEmpty() ? "" : " " + goalName()) + " Successful";
-        settle(Theme.colorize(head, Theme.active().success()) + ": " + message);
+        settle(Theme.colorize(head, Theme.active().success()) + ": " + message, above);
     }
 
     /** Settle with a red cross and a failure message. */
     public void finishFailure(String message) {
-        settle(Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + message);
+        finishFailure(message, List.of());
+    }
+
+    /** Like {@link #finishFailure(String)}, with buffered output printed above the result line. */
+    public void finishFailure(String message, List<String> above) {
+        settle(Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " " + message, above);
     }
 
     /** The goal/verb name shown in the header ("Building", "Locking", …). */
@@ -255,6 +271,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     private void settle(String line) {
+        settle(line, List.of());
+    }
+
+    private void settle(String line, List<String> above) {
         restoreStreams();   // flush any captured output above the region first
         stopAnimator();
         synchronized (lock) {
@@ -268,6 +288,13 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                 else freezeSpinnerLine();
                 out.print(Ansi.TASKBAR_CLEAR);
                 out.print(Ansi.SHOW_CURSOR);
+            }
+            // Deferred subprocess output (e.g. compiler warnings) prints as
+            // scrollback above the result line, with a blank separator, so the
+            // settle line stays the last thing on screen.
+            if (above != null && !above.isEmpty()) {
+                for (String s : above) out.println(s);
+                out.println();
             }
             out.println(line);
             out.flush();

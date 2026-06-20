@@ -40,6 +40,42 @@ class CommandManagerTest {
     }
 
     @Test
+    void finish_success_prints_deferred_output_above_the_summary_line() {
+        var buf = new ByteArrayOutputStream();
+        var cm = new CommandManager(stream(buf), false); // pipe / --quiet
+        cm.label("Build");
+        cm.finishSuccess("built 17 modules", java.util.List.of(
+                "‼ Warning [compile-test]:", "  deprecation in Foo.java"));
+
+        String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
+        int warn = visible.indexOf("‼ Warning [compile-test]:");
+        int summary = visible.indexOf("✓ Build Successful: built 17 modules");
+        // Subprocess output prints first; the success summary is the last thing shown.
+        assertThat(warn).isGreaterThanOrEqualTo(0);
+        assertThat(summary).isGreaterThan(warn);
+        assertThat(visible.indexOf("deprecation in Foo.java")).isBetween(warn, summary);
+    }
+
+    @Test
+    void animated_goal_settle_wipes_region_then_prints_deferred_above_summary() {
+        var buf = new ByteArrayOutputStream();
+        var cm = new CommandManager(stream(buf), true, true, 80); // animate + goal mode
+        cm.progress(2, 4);
+        cm.phaseRunning("m", "compile");
+        cm.tick();          // paint the live region
+        buf.reset();
+
+        cm.finishSuccess("built 17 modules", java.util.List.of("‼ Warning [compile-test]:"));
+
+        String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
+        int warn = visible.indexOf("‼ Warning [compile-test]:");
+        int summary = visible.indexOf("Successful: built 17 modules");
+        // Region is wiped, then the deferred warning, then the summary line last.
+        assertThat(warn).isGreaterThanOrEqualTo(0);
+        assertThat(summary).isGreaterThan(warn);
+    }
+
+    @Test
     void finish_failure_prints_red_failure_marker_line() {
         var buf = new ByteArrayOutputStream();
         var cm = new CommandManager(stream(buf), true);

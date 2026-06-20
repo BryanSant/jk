@@ -333,8 +333,7 @@ public final class BuildCommand implements CliCommand {
                 if (!o.success() && failure == null) failure = o;
             }
             if (failure != null) {
-                view.finishFailure(buildFailedAt(failure.coord(), start));
-                flushDeferred(deferredOutput);
+                view.finishFailure(buildFailedAt(failure.coord(), start), snapshot(deferredOutput));
                 for (GoalResult.Diagnostic d : agg.lastErrors()) {
                     if ("test-failure".equals(d.code())) continue;  // already printed by run-tests
                     System.err.println(ConsoleSpec.renderError(d));
@@ -345,8 +344,7 @@ public final class BuildCommand implements CliCommand {
             remaining.removeAll(ready);
         }
         view.finishSuccess("built " + total + " module" + (total == 1 ? "" : "s")
-                + " " + elapsedSince(start));
-        flushDeferred(deferredOutput);
+                + " " + elapsedSince(start), snapshot(deferredOutput));
         return 0;
     }
 
@@ -393,9 +391,10 @@ public final class BuildCommand implements CliCommand {
     }
 
     /** Print buffered unit output below the (settled) live region, in completion order. */
-    private static void flushDeferred(List<String> deferred) {
+    /** Stable copy of the concurrently-appended deferred-output buffer. */
+    private static List<String> snapshot(List<String> deferred) {
         synchronized (deferred) {
-            for (String line : deferred) System.out.println(line);
+            return new ArrayList<>(deferred);
         }
     }
 
