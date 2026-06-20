@@ -32,7 +32,7 @@ public final class WhyCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Explain why a module is in the dependency graph";
+        return "Explain why an item is in the dependency graph";
     }
 
     @Override
