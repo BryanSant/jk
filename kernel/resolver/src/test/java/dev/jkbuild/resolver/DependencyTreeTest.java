@@ -62,7 +62,8 @@ class DependencyTreeTest {
                 java.util.function.UnaryOperator.identity(),
                 java.util.function.UnaryOperator.identity(),
                 java.util.function.UnaryOperator.identity(),
-                s -> "<dim>" + s + "</dim>");   // reference styler
+                s -> "<dim>" + s + "</dim>",    // reference styler
+                java.util.function.UnaryOperator.identity());  // scope badge
 
         String rendered = DependencyTree.render(project, lock, Integer.MAX_VALUE, styling);
 
@@ -110,6 +111,30 @@ class DependencyTreeTest {
         assertThat(rendered).contains("com.foo:lib [path, not built]");
         assertThat(rendered).contains("com.foo:forked [git: main]");
         assertThat(rendered).doesNotContain("(missing)");   // composite deps aren't "missing"
+    }
+
+    @Test
+    void direct_deps_are_grouped_into_scope_sections(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) {
+        JkBuild project = new JkBuild(
+                new JkBuild.Project("com.example", "widget", "0.1.0", 0),
+                new JkBuild.Dependencies(Map.of(
+                        Scope.MAIN, List.of(new Dependency("com.foo:lib", new VersionSelector.Exact("=1.0", "1.0"))),
+                        Scope.TEST, List.of(new Dependency("org.junit:junit", new VersionSelector.Exact("=5.0", "5.0"))))));
+        Lockfile lock = lockOf(
+                pkg("com.foo:lib", "1.0", List.of()),
+                pkg("org.junit:junit", "5.0", List.of()));
+
+        String rendered = DependencyTree.render(project, lock, tmp,
+                Integer.MAX_VALUE, DependencyTree.Styling.plain());
+
+        // main + test sections present; empty scopes (provided, runtime, …) omitted.
+        // (Plain styling emits the bare scope label; padding/caps are the styler's job.)
+        assertThat(rendered).contains("main").contains("test");
+        assertThat(rendered).doesNotContain("provided").doesNotContain("runtime");
+        // Each dep lands under its own scope; main before test.
+        assertThat(rendered.indexOf("main")).isLessThan(rendered.indexOf("com.foo:lib"));
+        assertThat(rendered.indexOf("com.foo:lib")).isLessThan(rendered.indexOf("test"));
+        assertThat(rendered.indexOf("test")).isLessThan(rendered.indexOf("org.junit:junit"));
     }
 
     @Test

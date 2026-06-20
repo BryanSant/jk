@@ -50,18 +50,21 @@ public final class DependencyTree {
      * <p>{@code reference} styles a whole already-shown row (the {@code ⎋}
      * back-reference lines): the connector, coordinate, and marker are dimmed as
      * one unit so the reader sees at a glance it's a pointer to an earlier
-     * expansion, not a fresh node.
+     * expansion, not a fresh node. {@code scopeBadge} styles a scope section
+     * header (the {@code Main} / {@code Test} / … badges grouping a project's
+     * direct dependencies).
      */
     public record Styling(
             UnaryOperator<String> rail,
             UnaryOperator<String> group,
             UnaryOperator<String> artifact,
             UnaryOperator<String> version,
-            UnaryOperator<String> reference) {
+            UnaryOperator<String> reference,
+            UnaryOperator<String> scopeBadge) {
         public static Styling plain() {
             return new Styling(UnaryOperator.identity(), UnaryOperator.identity(),
                     UnaryOperator.identity(), UnaryOperator.identity(),
-                    UnaryOperator.identity());
+                    UnaryOperator.identity(), UnaryOperator.identity());
         }
     }
 
@@ -81,7 +84,7 @@ public final class DependencyTree {
         return render(project, lock, maxDepth, new Styling(
                 railStyler, UnaryOperator.identity(),
                 UnaryOperator.identity(), UnaryOperator.identity(),
-                UnaryOperator.identity()));
+                UnaryOperator.identity(), UnaryOperator.identity()));
     }
 
     /**
@@ -202,6 +205,12 @@ public final class DependencyTree {
                 styling, members, seenModules, seenDirs, out);
     }
 
+    /** Scopes shown as sections, in display order; only non-empty ones render. */
+    private static final Scope[] SCOPE_SECTIONS = {
+        Scope.MAIN, Scope.TEST, Scope.PROVIDED, Scope.RUNTIME,
+        Scope.EXPORT, Scope.PROCESSOR, Scope.PLATFORM,
+    };
+
     private static void renderComposite(
             JkBuild project, Lockfile lock, Path dir, int depth, int maxDepth,
             String prefix, Styling styling, Map<String, String> members,
@@ -216,36 +225,71 @@ public final class DependencyTree {
                 }
             }
         }
-        List<String> roots = collectRoots(project);
-        for (int i = 0; i < roots.size(); i++) {
-            String module = roots.get(i);
-            boolean isLast = i == roots.size() - 1;
-            if (module.startsWith("workspace:")) {
-                // Workspace sibling (a `<name>.workspace = true` dep) — already shown
-                // at the top level, and its external deps aren't in this member's lock.
-                // Resolve the synthetic "workspace:<name>" back to a real coord and
-                // reference it (no recursion).
-                String name = module.substring("workspace:".length());
-                String coord = members.getOrDefault(name, module);
-                out.append(prefix).append(styling.rail().apply(isLast ? "╰── " : "├── "))
-                        .append(coordLabel(coord, styling))
-                        .append(styling.rail().apply(" [workspace]")).append('\n');
-                continue;
-            }
-            Dependency comp = composite.get(module);
-            if (comp == null) {
-                renderNode(byModule, module, depth, maxDepth, isLast, prefix, styling, seenModules, out);
-            } else if (comp.isPath()) {
-                renderPathNode(comp, module, dir, depth, maxDepth, isLast, prefix, styling,
-                        members, seenModules, seenDirs, out);
-            } else {
-                // branch git dep — annotate (no recursion; needs a clone).
-                String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
-                out.append(prefix).append(styling.rail().apply(isLast ? "╰── " : "├── "))
-                        .append(coordLabel(module, styling))
-                        .append(styling.rail().apply(" [git: " + ref + "]")).append('\n');
+
+        // Split direct deps into scope sections (Main, Test, …); a scope section
+        // only appears when it has at least one dependency.
+        List<Scope> sections = new ArrayList<>();
+        Map<Scope, List<String>> bySectionScope = new java.util.EnumMap<>(Scope.class);
+        for (Scope s : SCOPE_SECTIONS) {
+            List<String> mods = project.dependencies().of(s).stream()
+                    .map(Dependency::module).distinct().sorted().toList();
+            if (!mods.isEmpty()) {
+                sections.add(s);
+                bySectionScope.put(s, mods);
             }
         }
+        for (int si = 0; si < sections.size(); si++) {
+            Scope s = sections.get(si);
+            boolean lastScope = si == sections.size() - 1;
+            // Scope header: ├──/╰── then the badge (no trailing space — badge abuts).
+            out.append(prefix).append(styling.rail().apply(lastScope ? "╰──" : "├──"))
+                    .append(styling.scopeBadge().apply(scopeLabel(s))).append('\n');
+            String scopePrefix = prefix + styling.rail().apply(lastScope ? "   " : "│  ");
+            List<String> mods = bySectionScope.get(s);
+            for (int di = 0; di < mods.size(); di++) {
+                renderDep(mods.get(di), composite, byModule, dir, depth, maxDepth,
+                        di == mods.size() - 1, scopePrefix, styling, members, seenModules, seenDirs, out);
+            }
+        }
+    }
+
+    /** Render one direct dependency, dispatching on its kind (maven / workspace / path / branch-git). */
+    private static void renderDep(
+            String module, Map<String, Dependency> composite, Map<String, Lockfile.Artifact> byModule,
+            Path dir, int depth, int maxDepth, boolean isLast, String prefix, Styling styling,
+            Map<String, String> members, Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+
+        if (module.startsWith("workspace:")) {
+            // Workspace sibling (a `<name>.workspace = true` dep) — already shown
+            // at the top level, and its external deps aren't in this member's lock.
+            // Resolve the synthetic "workspace:<name>" back to a real coord and
+            // reference it (no recursion).
+            String name = module.substring("workspace:".length());
+            String coord = members.getOrDefault(name, module);
+            out.append(prefix).append(styling.rail().apply(isLast ? "╰── " : "├── "))
+                    .append(coordLabel(coord, styling))
+                    .append(styling.rail().apply(" [workspace]")).append('\n');
+            return;
+        }
+        Dependency comp = composite.get(module);
+        if (comp == null) {
+            renderNode(byModule, module, depth, maxDepth, isLast, prefix, styling, seenModules, out);
+        } else if (comp.isPath()) {
+            renderPathNode(comp, module, dir, depth, maxDepth, isLast, prefix, styling,
+                    members, seenModules, seenDirs, out);
+        } else {
+            // branch git dep — annotate (no recursion; needs a clone).
+            String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
+            out.append(prefix).append(styling.rail().apply(isLast ? "╰── " : "├── "))
+                    .append(coordLabel(module, styling))
+                    .append(styling.rail().apply(" [git: " + ref + "]")).append('\n');
+        }
+    }
+
+    /** The bare lowercase scope name for a section badge: {@code MAIN} → {@code "main"}.
+     *  The {@link Styling#scopeBadge} styler decides padding vs. pill caps. */
+    private static String scopeLabel(Scope s) {
+        return s.name().toLowerCase(java.util.Locale.ROOT);
     }
 
     /** A path dep node, recursing into the target's own tree (its jk.toml + jk.lock). */

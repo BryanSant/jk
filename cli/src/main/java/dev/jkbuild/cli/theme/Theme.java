@@ -110,6 +110,9 @@ public interface Theme {
     /** Unit-index badge (e.g. {@code jk explain}'s {@code 01}) — white on a bright-black background. */
     AttributedStyle unitBadge();
 
+    /** Scope-section badge (e.g. {@code jk tree}'s {@code  main }) — black on a bright-black background. */
+    AttributedStyle scopeBadge();
+
     /** Bright yellow — used for the {@code default} JDK status. */
     AttributedStyle brightYellow();
 

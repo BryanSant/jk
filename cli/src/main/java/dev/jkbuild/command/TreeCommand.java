@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.function.UnaryOperator;
 
 /** {@code jk tree} — print the resolved dependency tree. */
 public final class TreeCommand implements CliCommand {
@@ -55,14 +56,15 @@ public final class TreeCommand implements CliCommand {
         Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
-        // Header: a leading blank line, then underlined "Project Tree for `<group>:<name>`"
+        // Header: a leading blank line, then underlined "Dependencies Tree for `<group>:<name>`"
         // in the accent color (the coordinate backticked, monospace-style).
-        String title = "Project Tree for `"
+        String title = "Dependencies Tree for `"
                 + project.project().group() + ":" + project.project().name() + "`";
         System.out.println();
         System.out.println(Theme.colorize(title, Theme.active().activeStep().underline()));
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
-        String rendered = DependencyTree.render(project, lock, dir, max, styling());
+        String rendered = DependencyTree.render(project, lock, dir, max,
+                styling(dev.jkbuild.config.GlobalConfig.nerdfont()));
         System.out.print(rendered);
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();
@@ -80,13 +82,23 @@ public final class TreeCommand implements CliCommand {
      * {@code NO_COLOR} / dumb terminals, so escapes are dropped cleanly when
      * color is off.
      */
-    private static DependencyTree.Styling styling() {
+    private static DependencyTree.Styling styling(boolean nerdfont) {
+        // Scope section badge: a black-on-bright-black chip. With a Nerd Font it's
+        // rounded into a pill — powerline half-circle caps (drawn in the chip's
+        // bright-black color) flank the bare label, so no padding is needed.
+        // Without one, the label is space-padded (" main ") to give the chip width.
+        UnaryOperator<String> scopeBadge = nerdfont
+                ? s -> Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_LEFT_NERD, Theme.active().darkGray())
+                        + Theme.colorize(s, Theme.active().scopeBadge())
+                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PILL_RIGHT_NERD, Theme.active().darkGray())
+                : s -> Theme.colorize(" " + s + " ", Theme.active().scopeBadge());
         return new DependencyTree.Styling(
                 s -> Theme.colorize(s, Theme.active().darkGray()),
                 s -> Theme.colorize(s, Coords.groupStyle()),
                 s -> Theme.colorize(s, Coords.artifactStyle()),
                 s -> Theme.colorize(s, Coords.versionStyle()),
                 // ⎋ back-reference rows: the whole entry in bright-black (= darkGray).
-                s -> Theme.colorize(s, Theme.active().darkGray()));
+                s -> Theme.colorize(s, Theme.active().darkGray()),
+                scopeBadge);
     }
 }

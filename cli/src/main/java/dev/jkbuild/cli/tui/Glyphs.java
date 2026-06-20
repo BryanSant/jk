@@ -21,4 +21,13 @@ public final class Glyphs {
 
     /** Run/exec marker — right-pointing triangle. Paint with {@code Theme.brightGreen()}. */
     public static final String PLAY = "▶";
+
+    // Nerd Font powerline pill caps for badges (gated on [global].nerdfont).
+    // Paint the cap in the badge's *background* color (as foreground) so it reads
+    // as the chip's rounded edge. Without a Nerd Font there's no good half-circle,
+    // so badges fall back to a plain padded chip (no caps).
+    /** Nerd Font powerline left solid half-circle (U+E0B6). */
+    public static final String PILL_LEFT_NERD = "";
+    /** Nerd Font powerline right solid half-circle (U+E0B4). */
+    public static final String PILL_RIGHT_NERD = "";
 }
