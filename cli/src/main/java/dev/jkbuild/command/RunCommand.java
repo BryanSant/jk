@@ -178,8 +178,8 @@ public final class RunCommand implements CliCommand {
      * {@link Theme#path()} color: it reads as a single command line.)
      *
      * <p>Native:  {@code ▶ Executing native binary: [yellow]target/myapp[/]}
-     * <p>Shadow:  {@code ▶ Executing ({jdk}): [yellow]java -jar target/app-all.jar[/]}
-     * <p>Plain:   {@code ▶ Executing ({jdk}): [yellow]java -cp … target/app.jar[/]}
+     * <p>Shadow:  {@code ▶ Executing with [cyan]{jdk}[/]: [yellow]java -jar target/app-all.jar[/]}
+     * <p>Plain:   {@code ▶ Executing with [cyan]{jdk}[/]: [yellow]java -cp … target/app.jar[/]}
      */
     private static void printExecBanner(Path projectDir, List<String> command) {
         Theme t = Theme.active();
@@ -212,7 +212,9 @@ public final class RunCommand implements CliCommand {
                         ? cpArg.substring(0, cpArg.indexOf(pathSep)) : cpArg;
                 javaCmd = "java -cp … " + PathDisplay.of(Path.of(first), projectDir);
             }
-            exec = "(" + jdkLeaf + "): " + Theme.colorize(javaCmd, t.highlight());
+            // "with <cyan jdk>: <yellow command>".
+            exec = "with " + Theme.colorize(jdkLeaf, t.cyan())
+                    + ": " + Theme.colorize(javaCmd, t.highlight());
         }
         System.err.println(Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen())
                 + " Executing " + exec);
