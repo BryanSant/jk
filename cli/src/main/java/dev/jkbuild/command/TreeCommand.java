@@ -55,8 +55,8 @@ public final class TreeCommand implements CliCommand {
         Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
-        // Header line matching the wizard's gradient title.
-        System.out.println(Theme.active().gradientHeaderAnsi("Jk - Project Tree"));
+        // Header: underlined "Project Tree" in the accent color.
+        System.out.println(Theme.colorize("Project Tree", Theme.active().activeStep().underline()));
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
         String rendered = DependencyTree.render(project, lock, dir, max, styling());
         System.out.print(rendered);
