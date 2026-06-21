@@ -89,6 +89,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private long startNanos;
     private long numerator;
     private long denominator;
+    private double peakFraction;   // monotonic-display floor: the bar never renders below this
     private long finishSeq;
     private final Map<String, Row> rows = new LinkedHashMap<>();
     /** Pre-formatted completion lines, oldest→newest; bounded to {@link #MAX_COMPLETIONS}. */
@@ -219,6 +220,21 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     /** Set the aggregate progress numerator/denominator for the bar. */
     public void progress(long numerator, long denominator) {
         synchronized (lock) {
+            // Monotonic display guard: at a STABLE total, never let the rendered
+            // fraction slide backward — a residual reweight that drops num/den holds
+            // at the peak until real progress passes it. But when the total GROWS
+            // (the uncalibrated path discovering more members, or genuine new work)
+            // the fraction legitimately rebases, so reset the peak instead of pinning
+            // at 100%. The calibrated workspace build fixes its total up front
+            // (Phase 1.5), so there the total is stable and the guard is always live.
+            double f = denominator > 0 ? (double) numerator / denominator : 0.0;
+            if (denominator > this.denominator) {
+                peakFraction = f;                       // total grew → rebase
+            } else if (denominator > 0 && f < peakFraction) {
+                numerator = Math.round(peakFraction * denominator);   // hold the peak
+            } else {
+                peakFraction = f;
+            }
             this.numerator = numerator;
             this.denominator = denominator;
         }
@@ -577,8 +593,22 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                     .append(' ').append(barStr);
         }
         h.append(' ').append(Theme.colorize(
-                ELLIPSIS + fmtElapsed(elapsedMillis) + ELLIPSIS, dim.italic()));
+                ELLIPSIS + fmtElapsed(elapsedMillis) + etaSuffix(elapsedMillis) + ELLIPSIS, dim.italic()));
         return h.toString();
+    }
+
+    /**
+     * A {@code  · ~Ns left} estimate once there's enough signal to extrapolate —
+     * remaining ≈ {@code elapsed × (1 − fraction) / fraction}. Self-correcting to the
+     * machine's actual pace (so it doesn't depend on the weights being perfectly
+     * time-calibrated). Suppressed before ~5% / 1s (too noisy) and past ~97% (≈0).
+     * Uses the monotonic-clamped fraction, so the ETA never ticks back up.
+     */
+    private String etaSuffix(long elapsedMillis) {
+        double f = denominator > 0 ? (double) numerator / denominator : 0.0;
+        if (elapsedMillis < 1000 || f < 0.05 || f >= 0.97) return "";
+        long remainingMs = Math.round(elapsedMillis * (1.0 - f) / f);
+        return " · ~" + fmtElapsed(remainingMs) + " left";
     }
 
     /**

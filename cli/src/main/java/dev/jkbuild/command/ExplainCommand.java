@@ -87,6 +87,27 @@ public final class ExplainCommand implements CliCommand {
         int total = modules.size();
         long rebuild = modules.stream().filter(BuildPlanForecast.Module::dirty).count();
 
+        // Predicted wall-clock for the rebuild work: sum each module's bar weight
+        // (the SAME estimate the live bar calibrates to — weights ≈150 ms each, with
+        // the cascade reserved via forceRebuild), × MS_PER_WEIGHT. Best-effort and
+        // only shown when something rebuilds (an all-cached run is ~instant).
+        long etaMillis = 0;
+        if (rebuild > 0) {
+            try {
+                for (BuildPlanForecast.Module m : modules) {
+                    Path mdir = m.unit().dir();
+                    var inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
+                            mdir, cache, mdir.resolve("jk.toml"), mdir.resolve("jk.lock"), mdir, 1,
+                            TestCommand.estimateTestCount(mdir.resolve("src/test/java")),
+                            null, JkDirs.jdks(), false, false);
+                    etaMillis += (long) dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty())
+                            .build().estimatedTotalWeight() * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
+                }
+            } catch (RuntimeException e) {
+                etaMillis = 0;   // never fail explain over the estimate
+            }
+        }
+
         // Header: a leading blank line, then a left-flush cyan powerline segment —
         // " Build Plan for <coord> " on the cyan chip, capped on the right by a ▶ segment
         // arrow. A module/rebuild summary follows, then a trunk rail.
@@ -99,7 +120,10 @@ public final class ExplainCommand implements CliCommand {
                 + Theme.colorize(" · ", t.darkGray())
                 + (rebuild == 0
                         ? Theme.colorize("all cached", t.success())
-                        : Theme.colorize(rebuild + " will rebuild", t.brightWhite()));
+                        : Theme.colorize(rebuild + " will rebuild", t.brightWhite()))
+                + (etaMillis > 0
+                        ? Theme.colorize(" · ~" + fmtDuration(etaMillis), t.darkGray())
+                        : "");
         System.out.println();
         System.out.println(header + " " + summary);
         System.out.println(Theme.colorize("│", t.darkGray()));
@@ -126,6 +150,12 @@ public final class ExplainCommand implements CliCommand {
         System.out.println();
         System.out.println(Theme.colorize((total - rebuild) + " cached · " + rebuild + " rebuild", t.darkGray()));
         return 0;
+    }
+
+    /** "1m 20s" / "8s" — coarse predicted-duration formatting for the plan summary. */
+    private static String fmtDuration(long millis) {
+        long s = Math.max(0, millis) / 1000;
+        return s >= 60 ? (s / 60) + "m " + (s % 60) + "s" : s + "s";
     }
 
     /** Longest phase-name column (e.g. {@code package-shadow}, {@code compile-kotlin}). */

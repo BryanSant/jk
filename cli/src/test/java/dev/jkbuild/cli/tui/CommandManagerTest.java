@@ -134,6 +134,34 @@ class CommandManagerTest {
     // --- goal-oriented mode ----------------------------------------------
 
     @Test
+    void progress_is_monotonic_and_never_slides_backward() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
+        cm.progress(50, 100);
+        assertThat(cm.numerator()).isEqualTo(50);
+        // A later denominator growth drops the raw fraction (30/100 < 50/100); the
+        // bar must hold at the peak, so the numerator is clamped up to 50/100.
+        cm.progress(30, 100);
+        assertThat(cm.numerator()).isEqualTo(50);
+        // Real forward progress past the peak is honoured.
+        cm.progress(70, 100);
+        assertThat(cm.numerator()).isEqualTo(70);
+    }
+
+    @Test
+    void header_shows_an_eta_once_there_is_signal_and_hides_it_when_too_early() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
+        cm.nerdfont = false;
+
+        cm.progress(50, 100);
+        assertThat(stripAnsi(cm.renderGoalLines(120, 60_000).get(0))).contains("left"); // 50% in 60s → ~1m left
+        assertThat(stripAnsi(cm.renderGoalLines(120, 0).get(0))).doesNotContain("left"); // no elapsed yet
+
+        var early = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
+        early.progress(1, 100);   // 1% — too little signal to extrapolate
+        assertThat(stripAnsi(early.renderGoalLines(120, 60_000).get(0))).doesNotContain("left");
+    }
+
+    @Test
     void goal_header_bar_and_rows() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
         cm.nerdfont = false;   // plain (non-pill) header
@@ -145,9 +173,10 @@ class CommandManagerTest {
 
         var raw = cm.renderGoalLines(120, 112_000);
         String all = String.join("\n", stripAll(raw));
-        // Header: {name} {bar} …elapsed… — bright-white name, bar inlined, member NOT in the header.
-        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("…1m 52s…")
-                .doesNotContain("acme:api");
+        // Header: {name} {bar} …elapsed · ~ETA left… — bright-white name, bar inlined,
+        // member NOT in the header. At 45% after 1m52s the ETA extrapolates ~2m left.
+        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("1m 52s")
+                .contains("left").doesNotContain("acme:api");
         assertThat(raw.get(0)).contains(Theme.colorize("Building", Theme.active().focused()));
         // Bar with percent, inlined into the header line — the N-of-M count is gone.
         assertThat(all).contains("45%");
