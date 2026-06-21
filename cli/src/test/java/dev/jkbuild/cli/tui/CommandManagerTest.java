@@ -148,17 +148,21 @@ class CommandManagerTest {
     }
 
     @Test
-    void header_shows_an_eta_once_there_is_signal_and_hides_it_when_too_early() {
+    void header_shows_an_eta_countdown_only_when_timings_are_available() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
         cm.nerdfont = false;
+        cm.progress(50, 100);   // 50 weights remaining → 50 × 150ms = 7.5s
 
-        cm.progress(50, 100);
-        assertThat(stripAnsi(cm.renderGoalLines(120, 60_000).get(0))).contains("left"); // 50% in 60s → ~1m left
-        assertThat(stripAnsi(cm.renderGoalLines(120, 0).get(0))).doesNotContain("left"); // no elapsed yet
+        // Cold (no learned timings): no countdown clock.
+        assertThat(stripAnsi(cm.renderGoalLines(120, 4_000).get(0))).doesNotContain("[");
 
-        var early = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
-        early.progress(1, 100);   // 1% — too little signal to extrapolate
-        assertThat(stripAnsi(early.renderGoalLines(120, 60_000).get(0))).doesNotContain("left");
+        // Warm: a [hh:mm:ss] countdown of the remaining weight.
+        cm.enableEta(true);
+        String header = cm.renderGoalLines(120, 4_000).get(0);
+        assertThat(stripAnsi(header)).contains("[00:00:07]");
+        // Brackets/colons bright-black; digits gray.
+        assertThat(header).contains(Theme.colorize("[", Theme.active().darkGray()));
+        assertThat(header).contains(Theme.colorize("07", Theme.active().normalGray()));
     }
 
     @Test
@@ -173,10 +177,10 @@ class CommandManagerTest {
 
         var raw = cm.renderGoalLines(120, 112_000);
         String all = String.join("\n", stripAll(raw));
-        // Header: {name} {bar} …elapsed · ~ETA left… — bright-white name, bar inlined,
-        // member NOT in the header. At 45% after 1m52s the ETA extrapolates ~2m left.
-        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("1m 52s")
-                .contains("left").doesNotContain("acme:api");
+        // Header: {name} {bar} …elapsed… — bright-white name, bar inlined, member NOT
+        // in the header. No ETA clock here (timings not enabled on this view).
+        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("…1m 52s…")
+                .doesNotContain("[").doesNotContain("acme:api");
         assertThat(raw.get(0)).contains(Theme.colorize("Building", Theme.active().focused()));
         // Bar with percent, inlined into the header line — the N-of-M count is gone.
         assertThat(all).contains("45%");

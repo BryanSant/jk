@@ -66,6 +66,11 @@ public final class PhaseTimings {
         return MEMO.computeIfAbsent(cache, PhaseTimings::read);
     }
 
+    /** True when nothing has been learned yet (cold) — the caller can't show a trustworthy ETA. */
+    public boolean isEmpty() {
+        return entries.isEmpty();
+    }
+
     /** The learned per-unit weight for a module's phase, or empty when unseen (cold → caller's fallback). */
     public OptionalDouble perUnit(String dir, String phase) {
         Entry e = entries.get(key(dir, phase));

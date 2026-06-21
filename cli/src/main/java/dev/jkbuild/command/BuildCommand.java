@@ -317,6 +317,9 @@ public final class BuildCommand implements CliCommand {
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         CommandManager view = CommandManager.goal(System.out, "Build", animate);
+        // Show the ETA countdown only once we've learned timings — cold, the weight
+        // total is a static guess and a remaining-time estimate would mislead.
+        view.enableEta(!dev.jkbuild.runtime.PhaseTimings.load(cache).isEmpty());
         AggregateContext agg = new AggregateContext(view);
         long start = System.nanoTime();
         int total = units.size();
@@ -561,6 +564,8 @@ public final class BuildCommand implements CliCommand {
         // single bar + merged phase list). Settle it once after the last member.
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         CommandManager view = CommandManager.goal(System.out, "Build", animate);
+        view.enableEta(!dev.jkbuild.runtime.PhaseTimings.load(
+                cacheDir != null ? cacheDir : JkDirs.cache()).isEmpty());
         AggregateContext agg = new AggregateContext(view);
         int built = 0;
         long buildStart = System.nanoTime();

@@ -90,7 +90,11 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private long numerator;
     private long denominator;
     private double peakFraction;   // monotonic-display floor: the bar never renders below this
+    private boolean etaEnabled;    // show the [hh:mm:ss] countdown — only when learned timings exist
     private long finishSeq;
+
+    /** A weight unit is ≈150 ms (the weight model / interpolation constant); the bridge from bar weight to remaining ms. */
+    private static final long MS_PER_WEIGHT = 150L;
     private final Map<String, Row> rows = new LinkedHashMap<>();
     /** Pre-formatted completion lines, oldest→newest; bounded to {@link #MAX_COMPLETIONS}. */
     private final List<String> recentCompletions = new ArrayList<>();
@@ -214,6 +218,17 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             r.state = ok ? RowState.DONE : RowState.FAILED;
             r.message = "";
             r.seq = ++finishSeq;
+        }
+    }
+
+    /**
+     * Enable the {@code [hh:mm:ss]} countdown in the header. The caller turns this on
+     * only when learned timings exist for the build — without them the weight total
+     * is a static guess and a remaining-time estimate would mislead.
+     */
+    public void enableEta(boolean enabled) {
+        synchronized (lock) {
+            this.etaEnabled = enabled;
         }
     }
 
@@ -592,23 +607,30 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                     .append(Theme.colorize(name, Theme.active().focused()))
                     .append(' ').append(barStr);
         }
+        // ETA countdown between the percent and the elapsed: `{bar} 7% [00:01:02] …4s…`.
+        // Only when learned timings exist (etaEnabled) — the weight total is then a
+        // calibrated remaining-time estimate; remaining = (denominator − numerator)
+        // weights × ≈150 ms. The numerator is monotonic, so the clock counts down.
+        if (etaEnabled && denominator > 0 && numerator < denominator) {
+            h.append(' ').append(clock((denominator - numerator) * MS_PER_WEIGHT));
+        }
         h.append(' ').append(Theme.colorize(
-                ELLIPSIS + fmtElapsed(elapsedMillis) + etaSuffix(elapsedMillis) + ELLIPSIS, dim.italic()));
+                ELLIPSIS + fmtElapsed(elapsedMillis) + ELLIPSIS, dim.italic()));
         return h.toString();
     }
 
-    /**
-     * A {@code  · ~Ns left} estimate once there's enough signal to extrapolate —
-     * remaining ≈ {@code elapsed × (1 − fraction) / fraction}. Self-correcting to the
-     * machine's actual pace (so it doesn't depend on the weights being perfectly
-     * time-calibrated). Suppressed before ~5% / 1s (too noisy) and past ~97% (≈0).
-     * Uses the monotonic-clamped fraction, so the ETA never ticks back up.
-     */
-    private String etaSuffix(long elapsedMillis) {
-        double f = denominator > 0 ? (double) numerator / denominator : 0.0;
-        if (elapsedMillis < 1000 || f < 0.05 || f >= 0.97) return "";
-        long remainingMs = Math.round(elapsedMillis * (1.0 - f) / f);
-        return " · ~" + fmtElapsed(remainingMs) + " left";
+    /** {@code [hh:mm:ss]} remaining — bright-black brackets/colons, gray digits. */
+    private static String clock(long remainingMs) {
+        long s = Math.max(0, remainingMs) / 1000;
+        AttributedStyle bracket = Theme.active().darkGray();   // [ : ]
+        AttributedStyle digit = Theme.active().normalGray();   // the numbers
+        return Theme.colorize("[", bracket)
+                + Theme.colorize(String.format("%02d", s / 3600), digit)
+                + Theme.colorize(":", bracket)
+                + Theme.colorize(String.format("%02d", (s % 3600) / 60), digit)
+                + Theme.colorize(":", bracket)
+                + Theme.colorize(String.format("%02d", s % 60), digit)
+                + Theme.colorize("]", bracket);
     }
 
     /**
