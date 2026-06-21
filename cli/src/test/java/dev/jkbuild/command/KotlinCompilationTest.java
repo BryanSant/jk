@@ -34,7 +34,7 @@ class KotlinCompilationTest {
 
         int exit = run("check",
                 "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+                "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
     }
 
@@ -51,7 +51,7 @@ class KotlinCompilationTest {
 
         int exit = run("build",
                 "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+                "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
 
         Path jar = tempDir.resolve("target/widget-0.1.0.jar");
@@ -127,7 +127,7 @@ class KotlinCompilationTest {
 
         int exit = run("check",
                 "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+                "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(1);
     }
 
@@ -156,7 +156,7 @@ class KotlinCompilationTest {
 
         int exit = run("build",
                 "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+                "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
 
         try (JarFile jf = new JarFile(tempDir.resolve("target/mixed-0.1.0.jar").toFile())) {
@@ -191,7 +191,7 @@ class KotlinCompilationTest {
 
         int exit = run("build",
                 "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+                "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
 
         try (JarFile jf = new JarFile(tempDir.resolve("target/mixed-0.1.0.jar").toFile())) {
@@ -226,7 +226,7 @@ class KotlinCompilationTest {
 
         int exit = run("check",
                 "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+                "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
     }
 

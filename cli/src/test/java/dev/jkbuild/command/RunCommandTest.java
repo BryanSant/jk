@@ -41,13 +41,13 @@ class RunCommandTest {
 
         // No jar yet — `jk run` should auto-build then exec.
         int exit = run("run", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("home/cache").toString());
+                "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
         assertThat(tempDir.resolve("target/widget-0.1.0.jar")).exists();
 
         // Args after `--` reach the main method.
         int withArgs = run("run", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("home/cache").toString(),
+                "--cache-dir", SharedTestCache.arg(),
                 "--", "a", "b", "c");
         assertThat(withArgs).isEqualTo(3);
     }

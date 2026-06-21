@@ -73,6 +73,12 @@ dependencies {
 tasks.withType<Test>().configureEach {
     dependsOn(kotlinWorkerJar, testRunnerJar, auditorWorkerJar, publisherWorkerJar,
               imageBuilderWorkerJar, compatBridgeWorkerJar, gitClientWorkerJar)
+    // A cache the end-to-end tests share (SharedTestCache) so the real deps they
+    // resolve — Kotlin compiler, JUnit, … — are fetched from Maven Central once
+    // and reused across tests and runs, instead of hammering it from a fresh
+    // @TempDir cache per test. Persisted under build/ (cleared by `gradle clean`).
+    systemProperty("jk.test.cache.dir",
+            layout.buildDirectory.dir("test-shared-cache").get().asFile.absolutePath)
     doFirst {
         systemProperty("jk.kotlin.worker.jar",       kotlinWorkerJar.singleFile.absolutePath)
         systemProperty("jk.test.runner.jar",         testRunnerJar.singleFile.absolutePath)
