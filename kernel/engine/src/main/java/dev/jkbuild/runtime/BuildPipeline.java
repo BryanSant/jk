@@ -683,9 +683,30 @@ public final class BuildPipeline {
                         }
                         @SuppressWarnings("unchecked")
                         List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
+                        // Run the same declared annotation processors over test sources:
+                        // modern javac only honors processors named by -processorpath, so
+                        // without this a Lombok-using test wouldn't see its generated members.
+                        @SuppressWarnings("unchecked")
+                        List<Path> processorCp = (List<Path>) ctx.require(PROCESSOR_CP);
+                        dev.jkbuild.task.JavaIncrementalCompile.ApSetup ap = null;
+                        if (!processorCp.isEmpty()) {
+                            Path genDir = ctx.require(LAYOUT).generatedSourcesDir("annotations", "test");
+                            Files.createDirectories(genDir);
+                            ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(() -> {
+                                try {
+                                    return WorkerJar.JAVA_COMPILER.locate(cas);
+                                } catch (RuntimeException e) {
+                                    ctx.warn("javac", "java-compiler worker unavailable ("
+                                            + e.getMessage() + "); compiling tests with plain javac"
+                                            + " (no incremental annotation-processing provenance)");
+                                    return null;
+                                }
+                            }, genDir);
+                        }
                         boolean ok = TestSupport.compileWithCache(
                                 ctx, "compile-test", javaTestSrc, javaTestOut, javaCp,
-                                ctx.require(RELEASE), javacArgs, ctx.require(JAVA_HOME), cas, in.cache());
+                                processorCp, ctx.require(RELEASE), javacArgs, ctx.require(JAVA_HOME),
+                                ap, cas, in.cache());
                         if (!ok) throw new RuntimeException("test compile failed");
                     }
 

@@ -117,9 +117,13 @@ public final class TestSupport {
     }
 
     /**
-     * Compile sources with action-cache lookup. Shared by the compile-main and
-     * compile-test phases — each calls it with its own task ID, source dir,
-     * classpath, and output dir.
+     * Compile test sources with action-cache lookup. Mirrors the compile-main
+     * phase: same task ID / classpath / output-dir shape, and — crucially — the
+     * same {@code processorPath} + {@link dev.jkbuild.task.JavaIncrementalCompile.ApSetup}
+     * wiring, so annotation processors (Lombok, Immutables, …) run over test
+     * sources too. Modern javac only runs processors named by {@code -processorpath};
+     * without it, a test class using {@code @Getter} would fail to find its
+     * generated members even though main compilation handled the same annotation.
      */
     public static boolean compileWithCache(
             PhaseContext ctx,
@@ -127,9 +131,11 @@ public final class TestSupport {
             Path srcDir,
             Path outputDir,
             List<Path> classpath,
+            List<Path> processorPath,
             int release,
             List<String> javacArgs,
             Path javaHome,
+            dev.jkbuild.task.JavaIncrementalCompile.ApSetup ap,
             Cas cas,
             Path cacheRoot) throws IOException {
 
@@ -149,6 +155,7 @@ public final class TestSupport {
                 .release(release)
                 .extraOptions(javacArgs)
                 .javaHome(javaHome)
+                .processorPath(processorPath)
                 .build();
         ActionCache actionCache = new ActionCache(cas, cacheRoot.resolve("actions"));
         boolean useCache = !ActiveConfig.get().rerunOr(false);
@@ -166,7 +173,7 @@ public final class TestSupport {
         }
         ctx.label(taskId + ": " + sources.size() + " sources");
         dev.jkbuild.task.JavaIncrementalCompile.Result r = dev.jkbuild.task.JavaIncrementalCompile.run(
-                cacheTaskId, request, JkVersion.VERSION, useCache, cas, actionCache, stateDir);
+                cacheTaskId, request, JkVersion.VERSION, useCache, cas, actionCache, stateDir, ap);
         // Surface javac diagnostics by severity — errors fail, warnings (e.g.
         // deprecation/unchecked) are shown but don't. Mirrors the main-compile
         // phase so test sources report warnings the same way.

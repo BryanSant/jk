@@ -636,8 +636,14 @@ public final class IdeaCommand implements CliCommand {
                 BuildLayout layout = BuildLayout.of(me.getKey(), me.getValue());
                 String genRel = me.getKey().relativize(layout.generatedSourcesDir("annotations"))
                         .toString().replace('\\', '/');
+                // jk runs the same processors over test sources (into the "test"
+                // generated dir), so give IntelliJ a matching test output dir —
+                // otherwise the IDE flags generated members in test code as unresolved.
+                String genTestRel = me.getKey().relativize(layout.generatedSourcesDir("annotations", "test"))
+                        .toString().replace('\\', '/');
                 sb.append("      <profile name=\"jk-").append(esc(mod)).append("\" enabled=\"true\">\n");
                 sb.append("        <sourceOutputDir name=\"").append(esc(genRel)).append("\" />\n");
+                sb.append("        <sourceTestOutputDir name=\"").append(esc(genTestRel)).append("\" />\n");
                 sb.append("        <outputRelativeToContentRoot value=\"true\" />\n");
                 sb.append("        <module name=\"").append(esc(mod)).append("\" />\n");
                 sb.append("        <processorPath useClasspath=\"false\">\n");
@@ -733,6 +739,12 @@ public final class IdeaCommand implements CliCommand {
             String genRel = memberDir.relativize(gen).toString().replace('\\', '/');
             sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/").append(genRel)
               .append("\" isTestSource=\"false\" generated=\"true\" />\n");
+            // Test-source processor output — its own test-flagged generated root so
+            // generated members referenced from test code resolve in the editor.
+            Path genTest = layout.generatedSourcesDir("annotations", "test");
+            String genTestRel = memberDir.relativize(genTest).toString().replace('\\', '/');
+            sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/").append(genTestRel)
+              .append("\" isTestSource=\"true\" generated=\"true\" />\n");
         }
 
         // exclude build outputs

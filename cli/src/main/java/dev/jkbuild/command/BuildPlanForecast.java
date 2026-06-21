@@ -165,6 +165,11 @@ final class BuildPlanForecast {
                     baseCp.add(layout.classesDir());
                     baseCp.addAll(testCompileClasspath(dir, project, lock, resolver));
                     Path testOut = layout.testClassesDir();
+                    // Mirror TestSupport.compileWithCache EXACTLY, including the
+                    // processor path it now passes — the build runs declared
+                    // annotation processors over test sources, so the action key
+                    // hashes the same `pp:` lines. Omitting it here would compute a
+                    // different key, miss the cache, and falsely forecast a rebuild.
                     CompileRequest req = CompileRequest.builder()
                             .sources(javaTest).classpath(baseCp).outputDir(testOut).release(release)
                             .extraOptions(javacArgs).processorPath(processorCp).build();

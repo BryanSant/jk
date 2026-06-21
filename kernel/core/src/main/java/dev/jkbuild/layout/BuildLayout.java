@@ -133,9 +133,19 @@ public final class BuildLayout {
 
     /** {@code target/build/generated/sources/<processor>/main/} — annotation-processor output. */
     public Path generatedSourcesDir(String processor) {
+        return generatedSourcesDir(processor, "main");
+    }
+
+    /**
+     * {@code target/build/generated/sources/<processor>/<sourceSet>/} — annotation-processor
+     * output for a given source set ({@code main} or {@code test}). Test processing must
+     * not share a directory with main, or the two would clobber each other's generated files.
+     */
+    public Path generatedSourcesDir(String processor, String sourceSet) {
         Objects.requireNonNull(processor, "processor");
+        Objects.requireNonNull(sourceSet, "sourceSet");
         return buildDir().resolve("generated").resolve("sources")
-                .resolve(processor).resolve("main");
+                .resolve(processor).resolve(sourceSet);
     }
 
     /** {@code target/build/tmp/} — scratch space safe to delete between runs. */
