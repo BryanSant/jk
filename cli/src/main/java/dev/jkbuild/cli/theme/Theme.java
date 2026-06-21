@@ -113,6 +113,21 @@ public interface Theme {
     /** Header segment (jk explain's "Build Plan for …") — near-black on a cyan background. */
     AttributedStyle cyanBadge();
 
+    /**
+     * Layer the scope-chip background (bright-black) onto {@code fg}, keeping its
+     * foreground. Used for the animated spinner inside the goal-header pill, which
+     * stays its gradient color but sits on the chip background.
+     */
+    AttributedStyle onScopeBadge(AttributedStyle fg);
+
+    /**
+     * The powerline cap (U+E0B0) that joins the goal-header chip to the progress
+     * bar: a bright-black foreground (matching the chip body) on a background equal
+     * to {@code barLead} — the bar's first-cell color — so the cap reads as the
+     * chip tapering into the bar. The caller adds the underline that the bar carries.
+     */
+    AttributedStyle scopeBadgeCap(Rgb barLead);
+
     /** Bright yellow — used for the {@code default} JDK status. */
     AttributedStyle brightYellow();
 

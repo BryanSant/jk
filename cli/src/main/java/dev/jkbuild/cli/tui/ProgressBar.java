@@ -2,6 +2,7 @@
 package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.theme.Gradient;
+import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedStyle;
 
@@ -11,7 +12,7 @@ import org.jline.utils.AttributedStyle;
  * {@code (numerator, denominator)} it returns one line of colored text:
  *
  * <pre>
- *   ▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▰▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱▱ 45% [42 of 93]
+ *   ████████▍                                19%
  * </pre>
  *
  * <p>The caller (the goal-oriented {@code CommandManager} view) places this line
@@ -19,22 +20,28 @@ import org.jline.utils.AttributedStyle;
  * deliberately does <em>not</em> manage screen state. The single-line, cursor-
  * owning widget lives in {@link SpinnerProgressBar}.
  *
- * <p>Filled segments use the same <em>moving</em> gradient as
- * {@link SpinnerProgressBar}: the right-most filled glyph is pinned to the
+ * <p>The fill is drawn with block glyphs — solid full blocks ({@code █}) with one
+ * fractional eighth-block ({@code ▏▎▍▌▋▊▉}) at the frontier, so the bar models the
+ * percentage to a fraction of a cell. Unreached cells are <em>spaces</em> rather
+ * than a dim glyph; every cell — filled, fractional, and empty alike — is
+ * underlined, so the unreached run reads as an underscored track in the gradient's
+ * brightest (right-most) color. Filled cells use the same <em>moving</em> gradient
+ * as {@link SpinnerProgressBar}: the right-most filled glyph is pinned to the
  * gradient end and the band trails back toward the start, so the color looks
- * pushed rightward as the bar fills. Brackets around the {@code N of D} count
- * are bright-black; the count and percent are plain.
+ * pushed rightward as the bar fills. The percent trails the bar, plain.
  */
 public final class ProgressBar {
 
     public static final int SEGMENTS = 40;
+    /** Solid cell for the filled run. */
+    static final char FULL_BLOCK = '█';
+    // Legacy medium-square glyphs, kept for the suffix-less {@link #renderBar} used
+    // by static utilization tables (e.g. {@code jk cache}).
     static final char FILLED_CHAR = '▰';
     static final char EMPTY_CHAR = '▱';
 
     private final Gradient gradient;
     private final AttributedStyle[] fillColors;
-    /** Empty glyphs take the gradient's left-most (darkest) color, not a neutral dim. */
-    private final AttributedStyle emptyStyle;
 
     /** Bar in the default green → bright-green progress gradient. */
     public ProgressBar() {
@@ -45,7 +52,6 @@ public final class ProgressBar {
     public ProgressBar(Gradient gradient) {
         this.gradient = gradient;
         this.fillColors = buildGradient(SEGMENTS, gradient);
-        this.emptyStyle = fillColors[0];
     }
 
     /** Clamp {@code numerator / denominator} to {@code [0.0, 1.0]}. */
@@ -66,27 +72,72 @@ public final class ProgressBar {
     }
 
     /**
-     * Render one bar line for {@code (numerator, denominator)} — colored text,
-     * no trailing newline and no cursor control.
+     * Render one bar line for {@code (numerator, denominator)} — the underlined
+     * block bar followed by a trailing {@code  NN%}. Colored text, no trailing
+     * newline and no cursor control.
      */
     public String render(long numerator, long denominator) {
-        int fill = filled(numerator, denominator);
-        int pct = percent(numerator, denominator);
-        AttributedStyle bracket = Theme.active().darkGray();
-
         StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < SEGMENTS; i++) {
-            boolean isFilled = i < fill;
-            char c = isFilled ? FILLED_CHAR : EMPTY_CHAR;
-            AttributedStyle style = isFilled ? filledColor(i, fill) : emptyStyle;
-            sb.append(Theme.colorize(String.valueOf(c), style));
-        }
-        sb.append(' ').append(Theme.colorize(pct + "%", Theme.active().settled()));
-        sb.append(' ')
-                .append(Theme.colorize("[", bracket))
-                .append(Theme.colorize(numerator + " of " + denominator, Theme.active().settled()))
-                .append(Theme.colorize("]", bracket));
+        appendBar(sb, numerator, denominator);
+        sb.append(' ').append(Theme.colorize(percent(numerator, denominator) + "%",
+                Theme.active().settled()));
         return sb.toString();
+    }
+
+    /**
+     * Append the {@link #SEGMENTS}-wide underlined bar: solid blocks for the whole
+     * cells, one eighth-block at the fractional frontier, and brightest-color
+     * underlined spaces for the unreached cells. Every cell is underlined.
+     */
+    private void appendBar(StringBuilder sb, long numerator, long denominator) {
+        int[] cells = cells(numerator, denominator);
+        int full = cells[0], eighths = cells[1], fill = cells[2];
+        AttributedStyle brightest = fillColors[SEGMENTS - 1];
+        for (int i = 0; i < SEGMENTS; i++) {
+            char c;
+            AttributedStyle color;
+            if (i < full) {                              // whole cell
+                c = FULL_BLOCK;
+                color = fillColors[SEGMENTS - fill + i];
+            } else if (i == full && eighths > 0) {       // fractional frontier
+                c = (char) (0x2590 - eighths);           // ▏ (1/8) … ▉ (7/8)
+                color = fillColors[SEGMENTS - fill + i]; // == brightest (the frontier)
+            } else {                                     // unreached
+                c = ' ';
+                color = brightest;
+            }
+            sb.append(Theme.colorize(String.valueOf(c), color.underline()));
+        }
+    }
+
+    /**
+     * The bar's first-cell color — the lead color the goal-header's powerline cap
+     * blends into. Mirrors {@link #appendBar}'s coloring for cell 0.
+     */
+    public Rgb leadColor(long numerator, long denominator) {
+        int fill = cells(numerator, denominator)[2];
+        int idx = fill > 0 ? SEGMENTS - fill : SEGMENTS - 1;   // cell 0's gradient index
+        double t = SEGMENTS <= 1 ? 0.0 : (double) idx / (SEGMENTS - 1);
+        return gradient.at(t);
+    }
+
+    /**
+     * Decompose a ratio into {@code {full, eighths, fill}}: whole filled cells, the
+     * fractional frontier in eighths (0–7), and the count of non-empty cells.
+     */
+    private static int[] cells(long numerator, long denominator) {
+        double exact = fraction(numerator, denominator) * SEGMENTS;
+        int full = (int) Math.floor(exact);
+        int eighths = (int) Math.round((exact - full) * 8);
+        if (eighths == 8) {        // rounded up to a whole cell
+            full++;
+            eighths = 0;
+        }
+        if (full >= SEGMENTS) {    // clamp at 100%
+            full = SEGMENTS;
+            eighths = 0;
+        }
+        return new int[]{full, eighths, full + (eighths > 0 ? 1 : 0)};
     }
 
     /**
@@ -107,15 +158,6 @@ public final class ProgressBar {
             sb.append(Theme.colorize(String.valueOf(c), style));
         }
         return sb.toString();
-    }
-
-    /**
-     * Color for the filled glyph at zero-based {@code i} when {@code fill}
-     * glyphs are lit: the frontier maps to the gradient end and each glyph to
-     * its left steps one entry back toward the start.
-     */
-    private AttributedStyle filledColor(int i, int fill) {
-        return fillColors[SEGMENTS - fill + i];
     }
 
     private static AttributedStyle[] buildGradient(int n, Gradient gradient) {

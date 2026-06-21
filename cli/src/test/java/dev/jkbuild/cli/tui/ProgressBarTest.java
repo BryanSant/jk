@@ -3,35 +3,49 @@ package dev.jkbuild.cli.tui;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.regex.Pattern;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** The pure segmented-bar string renderer (no cursor/threads). */
 class ProgressBarTest {
 
     @Test
-    void renders_segments_percent_and_count() {
-        String line = new ProgressBar().render(45, 100);
-        String visible = stripAnsi(line);
-        // 45% → round(0.45 * 40) = 18 filled, 22 empty.
-        assertThat(visible).startsWith("▰".repeat(18) + "▱".repeat(22));
+    void renders_blocks_then_spaces_then_percent_without_a_count() {
+        String visible = stripAnsi(new ProgressBar().render(45, 100));
+        // 45% → 0.45 * 40 = 18.0 whole cells, no fraction, 22 unreached spaces.
+        assertThat(visible).startsWith("█".repeat(18) + " ".repeat(22));
         assertThat(visible).contains("45%");
-        assertThat(visible).contains("[45 of 100]");
+        // The N-of-M count is gone.
+        assertThat(visible).doesNotContain("[").doesNotContain(" of ");
     }
 
     @Test
-    void zero_is_all_empty_and_full_is_all_filled() {
+    void fractional_frontier_uses_an_eighth_block() {
+        // 2% → 0.8 of a cell → round(0.8*8)=6 eighths → ▊ (¾ block) as the first cell.
+        String visible = stripAnsi(new ProgressBar().render(2, 100));
+        assertThat(visible).startsWith("▊");
+        assertThat(visible).doesNotContain("█");   // no whole cell yet
+        assertThat(visible).contains("2%");
+    }
+
+    @Test
+    void zero_is_all_spaces_and_full_is_all_blocks() {
         assertThat(stripAnsi(new ProgressBar().render(0, 100)))
-                .startsWith("▱".repeat(40)).contains("0%").contains("[0 of 100]");
+                .startsWith(" ".repeat(40)).contains("0%").doesNotContain("█");
         assertThat(stripAnsi(new ProgressBar().render(100, 100)))
-                .startsWith("▰".repeat(40)).contains("100%").contains("[100 of 100]");
+                .startsWith("█".repeat(40)).contains("100%");
     }
 
     @Test
-    void brackets_are_bright_black() {
-        // darkGray = Jk Dark BRIGHT_BLACK #546E7A = 84;110;122.
-        String line = new ProgressBar().render(1, 4);
-        assertThat(line).contains("\033[38;2;84;110;122m[");
-        assertThat(line).contains("\033[38;2;84;110;122m]");
+    void every_cell_is_underlined_including_the_unreached_spaces() {
+        // 0% → 40 underlined spaces in the gradient's brightest (right-most) color.
+        String line = new ProgressBar().render(0, 100);
+        // attribute-leading SGR: underline (4) before the truecolor group; bright end
+        // of the Jk Dark green gradient is #4CAF50 × 1.5 → 114;255;120 (green clamped).
+        assertThat(line).contains("\033[4;38;2;114;255;120m ");
     }
 
     @Test
@@ -44,23 +58,22 @@ class ProgressBarTest {
     }
 
     @Test
-    void frontier_glyph_is_the_gradient_end() {
-        // Jk Dark green #4CAF50 spanning −50% → +50%; the right-most filled glyph
-        // is pinned to the bright end (#4CAF50 × 1.50, green clamped) at every fill.
-        assertThat(frontierColor(new ProgressBar().render(2, 100)))   // 1 filled
-                .isEqualTo("38;2;114;255;120");
-        assertThat(frontierColor(new ProgressBar().render(100, 100))) // 40 filled
-                .isEqualTo("38;2;114;255;120");
+    void moving_gradient_pins_the_frontier_to_the_bright_end() {
+        // The right-most filled block is pinned to the gradient end at every fill,
+        // and at 100% the left-most block sits at the gradient start.
+        assertThat(blockColors(new ProgressBar().render(50, 100)).getLast())
+                .isEqualTo("38;2;114;255;120");                 // bright end
+        List<String> full = blockColors(new ProgressBar().render(100, 100));
+        assertThat(full.getLast()).isEqualTo("38;2;114;255;120");  // bright end on the right
+        assertThat(full.getFirst()).isEqualTo("38;2;38;88;40");    // dark start on the left
     }
 
-    /** SGR of the right-most filled (▰) glyph in {@code raw}, or null. */
-    private static String frontierColor(String raw) {
-        var m = java.util.regex.Pattern
-                .compile("\033\\[(38;2;\\d+;\\d+;\\d+)m▰")
-                .matcher(raw);
-        String last = null;
-        while (m.find()) last = m.group(1);
-        return last;
+    /** In-order truecolor SGRs of each whole-cell (█) glyph in {@code raw}. */
+    private static List<String> blockColors(String raw) {
+        var m = Pattern.compile("(38;2;\\d+;\\d+;\\d+)m█").matcher(raw);
+        var out = new ArrayList<String>();
+        while (m.find()) out.add(m.group(1));
+        return out;
     }
 
     private static String stripAnsi(String s) {

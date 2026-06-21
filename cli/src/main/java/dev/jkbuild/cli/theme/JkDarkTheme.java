@@ -225,6 +225,19 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle onScopeBadge(AttributedStyle fg) {
+        // Same chip background as scopeBadge(), but the caller's foreground is kept.
+        return withBg(fg, BRIGHT_BLACK);
+    }
+
+    @Override
+    public AttributedStyle scopeBadgeCap(Rgb barLead) {
+        // Bright-black foreground (the chip body color) on the bar's lead color, so
+        // the U+E0B0 cap blends the pill into the first bar cell.
+        return withBg(withColor(AttributedStyle.DEFAULT, BRIGHT_BLACK), barLead);
+    }
+
+    @Override
     public AttributedStyle brightYellow() {
         return withColor(AttributedStyle.DEFAULT, BRIGHT_YELLOW);
     }
