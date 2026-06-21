@@ -88,9 +88,19 @@ public final class MavenRepo {
         this.cas = Objects.requireNonNull(cas, "cas");
         this.localRepo = Objects.requireNonNull(localRepo, "localRepo");
         this.credential = Objects.requireNonNull(credential, "credential");
-        this.metadataCache = httpOrNull == null ? null
-                : new MavenMetadataCache(httpOrNull, cas.root().resolve("metadata"),
-                        MavenMetadataCache.DEFAULT_TTL);
+        // The metadata cache speaks HTTP directly (conditional GET), so it only
+        // applies to http(s) repos — a file:// (or other) baseUrl can be paired
+        // with an Http client but must keep enumerating via the transport.
+        this.metadataCache = (httpOrNull != null && isHttp(this.baseUrl))
+                ? new MavenMetadataCache(httpOrNull, cas.root().resolve("metadata"),
+                        MavenMetadataCache.DEFAULT_TTL)
+                : null;
+    }
+
+    private static boolean isHttp(URI uri) {
+        String scheme = uri.getScheme();
+        return scheme != null
+                && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"));
     }
 
     public String name() {

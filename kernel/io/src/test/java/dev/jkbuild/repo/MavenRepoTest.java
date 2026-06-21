@@ -163,6 +163,27 @@ class MavenRepoTest {
                 .containsExactlyInAnyOrder("1.0", "2.0");
     }
 
+    @Test
+    void file_repo_enumerates_versions_via_transport_not_the_http_cache(@TempDir Path tempDir) throws Exception {
+        // Regression: a non-HTTP (file://) repo may be paired with an Http client,
+        // but version enumeration must go through the transport. The HTTP metadata
+        // cache speaks java.net.http directly and throws "invalid URI scheme file"
+        // on a file:// URI, so it must not be engaged for such repos.
+        Path repoDir = tempDir.resolve("repo");
+        Path metaFile = repoDir.resolve(
+                MavenLayout.metadataPath(Coordinate.of("com.example", "widget", "0")));
+        Files.createDirectories(metaFile.getParent());
+        Files.writeString(metaFile, """
+                <metadata><groupId>com.example</groupId><artifactId>widget</artifactId>
+                <versioning><versions><version>1.0</version><version>2.0</version></versions></versioning>
+                </metadata>
+                """);
+
+        MavenRepo repo = new MavenRepo("local", repoDir.toUri(), new Http(), new Cas(tempDir.resolve("cas")));
+        assertThat(repo.availableVersions(Coordinate.of("com.example", "widget", "0")))
+                .containsExactlyInAnyOrder("1.0", "2.0");
+    }
+
     private void serve(String path, int status, byte[] body) {
         server.createContext(path, exchange -> {
             exchange.sendResponseHeaders(status, body.length);
