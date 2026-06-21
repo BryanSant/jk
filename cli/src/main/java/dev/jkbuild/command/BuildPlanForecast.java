@@ -87,9 +87,19 @@ final class BuildPlanForecast {
                 if (dirty.contains(dep)) { depDirty = true; break; }
             }
             Module m = forecastModule(u, depDirty, cas, actionCache, cache);
-            // A module's main output changes if its compile does real work (or a dep did).
-            if (m.phases().stream().anyMatch(p ->
-                    (p.name().startsWith("compile-main") || p.name().startsWith("compile-kotlin")) && !p.cached())
+            // A module's consumed output changes — and so seeds downstream dirtiness —
+            // when its compile does real work (classes change) OR its jar will be
+            // (re)packaged, or a dependency already changed. Package matters on its own:
+            // a consumer's run-tests/compile classpath hashes the *content* of sibling
+            // JARs, so an upstream whose compile is cached but whose jar is stale
+            // repackages to a new jar and silently invalidates the consumer — which a
+            // per-module lookup against the current (stale) jar would miss, falsely
+            // reporting "cached". The build then reruns those phases and the live bar,
+            // having reserved nothing for them, backslides. Seeding on package too keeps
+            // the forecast pessimistic (safe) for the consumer.
+            if (m.phases().stream().anyMatch(p -> !p.cached() && (
+                    p.name().startsWith("compile-main") || p.name().startsWith("compile-kotlin")
+                            || p.name().startsWith("package-jar")))
                     || depDirty) {
                 dirty.add(u.dir());
             }
