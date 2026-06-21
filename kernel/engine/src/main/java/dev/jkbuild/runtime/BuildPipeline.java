@@ -169,6 +169,17 @@ public final class BuildPipeline {
      * target-specific phases before {@code build()}.
      */
     public static Goal.Builder coreBuilder(Inputs in) {
+        return coreBuilder(in, false);
+    }
+
+    /**
+     * As {@link #coreBuilder(Inputs)} but with a {@code forceRebuild} hint passed to
+     * the effort-weight prediction: the workspace pre-scan sets it when the module
+     * will rebuild because of an upstream sibling, so the progress bar reserves its
+     * real slice up front instead of discovering it mid-build (see
+     * {@link EffortWeights#predict(Inputs, Cas, boolean, boolean, boolean, boolean)}).
+     */
+    public static Goal.Builder coreBuilder(Inputs in, boolean forceRebuild) {
         Cas cas = new Cas(in.cache());
         ActionCache actionCache = new ActionCache(cas, in.cache().resolve("actions"));
 
@@ -215,7 +226,7 @@ public final class BuildPipeline {
             EffortWeights.Plan p = planRef.get();
             if (p == null) {
                 planRef.compareAndSet(null,
-                        EffortWeights.predict(in, cas, compact, mixedWithJava, kotlinModule));
+                        EffortWeights.predict(in, cas, compact, mixedWithJava, kotlinModule, forceRebuild));
                 p = planRef.get();
             }
             return p;

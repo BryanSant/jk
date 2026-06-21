@@ -82,7 +82,24 @@ public final class EffortWeights {
     /** Predict the weights for {@code in}; never throws (degrades to skip-ish). */
     public static Plan predict(BuildPipeline.Inputs in, Cas cas,
                                boolean compact, boolean useJava, boolean useKotlin) {
-        boolean rerun = ActiveConfig.get().rerunOr(false);
+        return predict(in, cas, compact, useJava, useKotlin, false);
+    }
+
+    /**
+     * As {@link #predict(BuildPipeline.Inputs, Cas, boolean, boolean, boolean)} but
+     * with a {@code forceRebuild} hint: when set, the module is treated as
+     * definitely rebuilding (compile/test/package reserved at running weights),
+     * even if its own on-disk stamps look fresh. The workspace pre-scan sets this
+     * from {@code BuildPlanForecast}'s dependency-ordered dirty set, so a module
+     * that will rebuild only because an upstream sibling changed reserves its real
+     * slice up front — the bar's true total is known from the start instead of
+     * growing mid-build (which slid the bar backward). A misprediction here can only
+     * over-reserve: the phase's own runtime cache check reweights it back down (the
+     * bar jumps forward), never up.
+     */
+    public static Plan predict(BuildPipeline.Inputs in, Cas cas, boolean compact,
+                               boolean useJava, boolean useKotlin, boolean forceRebuild) {
+        boolean rerun = ActiveConfig.get().rerunOr(false) || forceRebuild;
         boolean refresh = ActiveConfig.get().refreshOr(false);
 
         int sync = predictSync(in, cas, refresh);
