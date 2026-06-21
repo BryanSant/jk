@@ -190,8 +190,16 @@ public final class EffortWeights {
                     compact ? in.dir().resolve("test") : in.dir().resolve("src/test/java")));
             testSrc.addAll(CompileSupport.collectKotlinTestSources(in.dir(), compact));
             boolean testWillRun = !testSrc.isEmpty() && (rerun || compileRun);
+            // compile-test is an opaque, batch javac/kotlinc call: the phase declares
+            // .scope(1), so the recorder learns its rate against a count of 1 — i.e. the
+            // learned value IS the whole-phase weight, not a per-file rate. Forecast it
+            // with count=1 to match (a flat per-phase cost). Multiplying it by the test
+            // file count here was the bug that ballooned the estimate (e.g. ×46 → ~40s
+            // of pure fiction for a ~1.2s compile). The static cold fallback stays a
+            // file-count guess. (compile-java is consistent: its .scope is the source
+            // count, the same count predict multiplies, so it stays per-source.)
             compileTest = testWillRun
-                    ? learned(timings, mod, "compile-test", testSrc.size(), compileWeight(testSrc.size())) : SKIP;
+                    ? learned(timings, mod, "compile-test", 1, compileWeight(testSrc.size())) : SKIP;
 
             int methods = in.estimatedTestCount();
             runTests = testWillRun
