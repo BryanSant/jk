@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
 import org.junit.jupiter.api.Test;
 
@@ -134,6 +135,7 @@ class CommandManagerTest {
     @Test
     void goal_header_bar_and_rows() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
+        cm.nerdfont = false;   // plain (non-pill) header
         cm.progress(45, 100);
         cm.addPhase("acme:api", "parse-build");
         cm.phaseDone("acme:api", "parse-build", true);
@@ -146,8 +148,9 @@ class CommandManagerTest {
         assertThat(stripAnsi(raw.get(0))).contains("Building").contains("…1m 52s…")
                 .doesNotContain("acme:api");
         assertThat(raw.get(0)).contains(Theme.colorize("Building", Theme.active().focused()));
-        // Bar with percent + count, inlined into the header line.
-        assertThat(all).contains("45%").contains("[45 of 100]");
+        // Bar with percent, inlined into the header line — the N-of-M count is gone.
+        assertThat(all).contains("45%");
+        assertThat(all).doesNotContain("[45 of 100]");
         // Active row only: colored member, phase, message, no trailing ellipsis.
         assertThat(all).contains("acme:api › Compile java › javac 12 sources");
         assertThat(raw.get(1)).contains(Theme.colorize("acme", Theme.active().cyan()))
@@ -155,6 +158,23 @@ class CommandManagerTest {
         // Completed phases are not listed, and no status glyphs are drawn.
         assertThat(all).doesNotContain("Parse build");
         assertThat(all).doesNotContain("◻").doesNotContain("✓");
+    }
+
+    @Test
+    void nerdfont_header_wraps_the_name_in_a_pill_with_a_powerline_cap() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
+        cm.nerdfont = true;
+        cm.progress(45, 100);
+
+        String header = cm.renderGoalLines(120, 0).get(0);
+        // The U+E0B0 cap sits between the "· Build " chip and the bar (frame 0 = "·").
+        assertThat(stripAnsi(header)).contains("· Build " + Glyphs.SEGMENT_END_NERD);
+        // Name is near-black on the bright-black chip (scopeBadge), not bold-white.
+        assertThat(header).contains(Theme.colorize("Build", Theme.active().scopeBadge()));
+        // The cap is underlined and its background is the bar's lead color.
+        Rgb lead = new ProgressBar().leadColor(45, 100);
+        assertThat(header).contains(Theme.colorize(Glyphs.SEGMENT_END_NERD,
+                Theme.active().scopeBadgeCap(lead).underline()));
     }
 
     @Test
@@ -237,7 +257,7 @@ class CommandManagerTest {
         String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
         // The log line appears, and the bar (region) is repainted after it.
         int log = visible.indexOf("javac: warning in Foo.java");
-        int bar = visible.indexOf("▱");
+        int bar = visible.indexOf("█");
         assertThat(log).isGreaterThanOrEqualTo(0);
         assertThat(bar).isGreaterThan(log); // region re-drawn below the log line
     }

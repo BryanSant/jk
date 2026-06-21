@@ -42,7 +42,7 @@ class AggregateMemberListenerTest {
         // Aggregate now: numerator = 10 (A) + 5 (B), denominator = 10 + 10 = 20 → 75%.
         String all = String.join("\n",
                 view.renderGoalLines(120, 0).stream().map(AggregateMemberListenerTest::strip).toList());
-        assertThat(all).contains("75%").contains("[15 of 20]");
+        assertThat(all).contains("75%");
         // The phase list renders only the active row: member B's running Test
         // shows (tagged by member); member A's finished Compile is not listed.
         assertThat(all).contains("g:web › Test");
@@ -72,7 +72,7 @@ class AggregateMemberListenerTest {
         // tree (├─ for the first active member, ╰─ to close).
         String all = String.join("\n",
                 view.renderGoalLines(120, 0).stream().map(AggregateMemberListenerTest::strip).toList());
-        assertThat(all).contains("50%").contains("[10 of 20]");
+        assertThat(all).contains("50%");
         assertThat(all).contains("g:api › Compile").contains("g:web › Test");
         assertThat(all).contains("├─").contains("╰─");
     }

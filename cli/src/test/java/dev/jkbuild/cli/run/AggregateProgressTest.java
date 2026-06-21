@@ -10,8 +10,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.time.Duration;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -21,8 +19,6 @@ import static org.assertj.core.api.Assertions.assertThat;
  * grows across the member boundary, instead of resetting per member.
  */
 class AggregateProgressTest {
-
-    private static final Pattern COUNT = Pattern.compile("(\\d+) of (\\d+)");
 
     @Test
     void calibrated_bar_keeps_a_fixed_denominator_and_advances_cumulatively() {
@@ -141,11 +137,11 @@ class AggregateProgressTest {
         return new GoalResult("member", true, Duration.ZERO, List.of(), List.of(), List.of(), false);
     }
 
-    /** Pull the bar's "{numerator} of {denominator}" text out of the rendered region. */
+    /**
+     * The aggregate numerator/denominator currently driving the bar. (The bar no
+     * longer prints an N-of-M count, so read the values the view holds directly.)
+     */
     private static String barCount(CommandManager cm) {
-        List<String> lines = cm.renderGoalLines(80, 0);
-        Matcher m = COUNT.matcher(lines.get(0)); // bar is inlined into the header line
-        assertThat(m.find()).as("bar line should carry an N-of-M count").isTrue();
-        return m.group(1) + " of " + m.group(2);
+        return cm.numerator() + " of " + cm.denominator();
     }
 }

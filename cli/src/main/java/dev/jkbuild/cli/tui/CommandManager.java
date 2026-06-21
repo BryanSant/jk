@@ -2,7 +2,9 @@
 package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.Ansi;
+import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.config.GlobalConfig;
 import org.jline.utils.AttributedStyle;
 
 import java.io.ByteArrayOutputStream;
@@ -66,6 +68,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * longer reach it (leaving stale lines, e.g. a lingering spinner on cancel).
      */
     int height = DEFAULT_HEIGHT;  // package-private: tests set it directly
+    /** [global].nerdfont — gates the powerline pill header. Package-private: tests set it directly. */
+    boolean nerdfont = GlobalConfig.nerdfont();
     private final AttributedStyle[] frameColors = Spinner.buildGradient(FRAMES.length);
     private final ProgressBar bar = new ProgressBar();
 
@@ -157,6 +161,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     /** Terminal width detected at construction (columns). */
     public int width() { return width; }
+
+    /** Aggregate progress numerator currently driving the bar (for tests/inspection). */
+    public long numerator() { return numerator; }
+
+    /** Aggregate progress denominator currently driving the bar (for tests/inspection). */
+    public long denominator() { return denominator; }
 
     /** Header member, e.g. {@code "acme:api"}. */
     public void target(String member) {
@@ -470,13 +480,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         // after the goal name; the elapsed trails the bar in bright-black italic
         // (…52s… rather than a parenthesised suffix). The member moved to the
         // active row, so the header carries no phase detail.
-        StringBuilder header = new StringBuilder();
-        header.append(Theme.colorize(FRAMES[frame], frameColors[frame])).append(' ')
-                .append(Theme.colorize(name, Theme.active().focused()))
-                .append(' ').append(bar.render(numerator, denominator))
-                .append(' ').append(Theme.colorize(
-                        ELLIPSIS + fmtElapsed(elapsedMillis) + ELLIPSIS, dim.italic()));
-        lines.add(header.toString());
+        lines.add(goalHeader(elapsedMillis));
 
         // 2. Active phase tree: only the currently-running phase(s). Pending and
         // per-phase completed rows aren't shown — most phases finish in well under
@@ -517,6 +521,40 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             }
         }
         return lines;
+    }
+
+    /**
+     * The goal header line: {@code {spinner} {name} {bar} …elapsed…}.
+     *
+     * <p>With a Nerd Font ({@code [global].nerdfont}) the spinner + name form a
+     * bright-black pill closed by a U+E0B0 powerline cap whose <em>background</em>
+     * tracks the bar's lead color, so the chip tapers into the first bar cell; the
+     * cap is underlined to sit flush with the bar's underscored track. Without a
+     * Nerd Font it's the plain animated spinner + a bright-white name, as before.
+     */
+    private String goalHeader(long elapsedMillis) {
+        AttributedStyle dim = Theme.active().darkGray();
+        String barStr = bar.render(numerator, denominator);
+        StringBuilder h = new StringBuilder();
+        if (nerdfont) {
+            AttributedStyle chip = Theme.active().scopeBadge();                      // near-black on bright-black
+            AttributedStyle chipSpin = Theme.active().onScopeBadge(frameColors[frame]); // gradient fg on the chip
+            Rgb lead = bar.leadColor(numerator, denominator);
+            h.append(Theme.colorize(FRAMES[frame], chipSpin))
+                    .append(Theme.colorize(" ", chip))
+                    .append(Theme.colorize(name, chip))
+                    .append(Theme.colorize(" ", chip))
+                    .append(Theme.colorize(Glyphs.SEGMENT_END_NERD,
+                            Theme.active().scopeBadgeCap(lead).underline()))
+                    .append(barStr);
+        } else {
+            h.append(Theme.colorize(FRAMES[frame], frameColors[frame])).append(' ')
+                    .append(Theme.colorize(name, Theme.active().focused()))
+                    .append(' ').append(barStr);
+        }
+        h.append(' ').append(Theme.colorize(
+                ELLIPSIS + fmtElapsed(elapsedMillis) + ELLIPSIS, dim.italic()));
+        return h.toString();
     }
 
     /**
