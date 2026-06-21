@@ -236,7 +236,7 @@ public final class BuildCommand implements CliCommand {
         // spinner header + bar + a tree of the members building right now).
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         return (mode == GoalConsole.Mode.AUTO || mode == GoalConsole.Mode.QUIET)
-                ? runGraphLive(units, graph.edges(), forecastDirty(graph, cache), mode)
+                ? runGraphLive(units, graph.edges(), forecastDirty(graph, cache), cache, mode)
                 : runGraphPlain(units, graph.edges());
     }
 
@@ -312,7 +312,7 @@ public final class BuildCommand implements CliCommand {
      * terminal nothing animates; the same blocks + lines print append-only.
      */
     private int runGraphLive(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges,
-                             Set<Path> dirtyDirs, GoalConsole.Mode mode) throws Exception {
+                             Set<Path> dirtyDirs, Path cache, GoalConsole.Mode mode) throws Exception {
         Set<Path> unitDirs = new java.util.HashSet<>();
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
@@ -323,6 +323,10 @@ public final class BuildCommand implements CliCommand {
 
         // Pre-scan: prepare every unit's goal and sum its estimated weight so the
         // bar calibrates to the whole-graph total and advances 0→100% across it.
+        // Each member also gets a timing recorder feeding one shared sink, folded
+        // into the learned ledger once the build succeeds.
+        List<dev.jkbuild.runtime.PhaseTimings.Sample> timingSamples =
+                java.util.Collections.synchronizedList(new ArrayList<>());
         Map<Path, PreparedMember> prepared = new LinkedHashMap<>();
         long totalWeight = 0;
         for (BuildGraph.BuildUnit u : units) {
@@ -332,6 +336,8 @@ public final class BuildCommand implements CliCommand {
                 view.finishFailure("No jk.toml in " + u.dir() + " " + elapsedSince(start));
                 return 2;
             }
+            pm.goal().addListener(
+                    new dev.jkbuild.runtime.PhaseTimingsRecorder(pm.dir().toString(), timingSamples));
             prepared.put(u.dir(), pm);
             totalWeight += pm.barWeight();
         }
@@ -375,6 +381,11 @@ public final class BuildCommand implements CliCommand {
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
             remaining.removeAll(ready);
         }
+        // Whole graph succeeded: fold this run's real phase durations into the
+        // learned ledger (EWMA) so the next build's bar is time-accurate. Failed
+        // builds don't record — their phase times are abnormal.
+        dev.jkbuild.runtime.PhaseTimings.record(
+                cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA);
         view.finishSuccess("built " + total + " module" + (total == 1 ? "" : "s")
                 + " " + elapsedSince(start), snapshot(deferredOutput));
         return 0;

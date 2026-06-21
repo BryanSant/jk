@@ -49,7 +49,11 @@ public final class EffortWeights {
     static final int RESTORE        = 3;   // compile output hard-linked back from the CAS (set live by the phase)
     static final int TEST_STARTUP   = 15;  // fork the test JVM + framework init (paid even by a tiny suite)
     static final int TEST_METHOD    = 8;   // per @Test (and ParameterizedTest/&c.)
+    static final int COMPILE_FLOOR  = 2;   // javac/kotlinc fixed startup (the learned per-source rate adds to it)
     static final int ARTIFACT_FETCH = 8;   // per dependency artifact downloaded
+
+    /** A weight unit is ≈150 ms — the {@code Goal} interpolation constant; the bridge between learned ms and bar weight. */
+    public static final int MS_PER_WEIGHT = 150;
     static final int PACKAGE_JAR    = 5;
     static final int JDK_DOWNLOAD   = 70;  // a pinned JDK not yet on disk
     static final int SHADOW_RUN     = 10;  // fat/shadow jar
@@ -79,6 +83,41 @@ public final class EffortWeights {
         return TEST_STARTUP + Math.max(0, methods) * TEST_METHOD;
     }
 
+    /** Fixed per-phase startup floor (weight units) that the learned per-unit rate adds onto. */
+    static int floor(String phase) {
+        return switch (phase) {
+            case "run-tests" -> TEST_STARTUP;
+            case "compile-java", "compile-kotlin", "compile-test" -> COMPILE_FLOOR;
+            default -> 0;
+        };
+    }
+
+    /**
+     * The learned weight for a running phase: {@code floor + perUnit × count} when
+     * history exists for this (module, phase), else the static Phase-1 estimate
+     * ({@code staticWeight}) — so a cold ledger reproduces Phase 1 exactly and warm
+     * runs rescale by the current {@code count}.
+     */
+    static int learned(PhaseTimings timings, String dir, String phase, int count, int staticWeight) {
+        var perUnit = timings.perUnit(dir, phase);
+        if (perUnit.isEmpty()) return staticWeight;
+        return Math.max(1, (int) Math.round(floor(phase) + perUnit.getAsDouble() * Math.max(0, count)));
+    }
+
+    /**
+     * The per-unit weight one phase run teaches the ledger: its measured duration
+     * (converted to weight units) minus the fixed {@link #floor}, spread over the
+     * unit count. Returns a negative sentinel when the phase plainly did no per-unit
+     * work (cache hit / skip: it finished at or under its floor) so the recorder can
+     * drop it instead of teaching a ~0 rate.
+     */
+    public static double observedPerUnit(String phase, long durationMs, int count) {
+        double actualWeight = durationMs / (double) MS_PER_WEIGHT;
+        double residual = actualWeight - floor(phase);
+        if (residual <= 0) return -1;
+        return residual / Math.max(1, count);
+    }
+
     /** Predict the weights for {@code in}; never throws (degrades to skip-ish). */
     public static Plan predict(BuildPipeline.Inputs in, Cas cas,
                                boolean compact, boolean useJava, boolean useKotlin) {
@@ -103,6 +142,10 @@ public final class EffortWeights {
         boolean refresh = ActiveConfig.get().refreshOr(false);
 
         int sync = predictSync(in, cas, refresh);
+        // Learned per-unit rates (cold ⇒ empty ⇒ static Phase-1 weights). Keyed by
+        // module dir, the same key the recorder writes at build end.
+        PhaseTimings timings = PhaseTimings.load(in.cache());
+        String mod = in.dir().toString();
         int compileJava = SKIP, compileKotlin = SKIP, compileTest = SKIP, runTests = SKIP, pkg = SKIP;
         try {
             JkBuild project = JkBuildParser.parse(in.buildFile());
@@ -114,14 +157,16 @@ public final class EffortWeights {
                         compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java"));
                 javaRun = rerun || !FreshnessStamp.looksFresh(
                         layout.classesDir(), FreshnessStamp.JAVA_STAMP, src);
-                compileJava = javaRun ? compileWeight(src.size()) : SKIP;
+                compileJava = javaRun
+                        ? learned(timings, mod, "compile-java", src.size(), compileWeight(src.size())) : SKIP;
             }
             boolean ktRun = false;
             if (useKotlin) {
                 List<Path> src = CompileSupport.collectKotlinSources(in.dir(), compact);
                 ktRun = rerun || !FreshnessStamp.looksFresh(
                         layout.kotlinClassesDir(), FreshnessStamp.KOTLIN_STAMP, src);
-                compileKotlin = ktRun ? compileWeight(src.size()) : SKIP;
+                compileKotlin = ktRun
+                        ? learned(timings, mod, "compile-kotlin", src.size(), compileWeight(src.size())) : SKIP;
             }
             boolean compileRun = javaRun || ktRun;
 
@@ -134,10 +179,12 @@ public final class EffortWeights {
                     compact ? in.dir().resolve("test") : in.dir().resolve("src/test/java")));
             testSrc.addAll(CompileSupport.collectKotlinTestSources(in.dir(), compact));
             boolean testWillRun = !testSrc.isEmpty() && (rerun || compileRun);
-            compileTest = testWillRun ? compileWeight(testSrc.size()) : SKIP;
+            compileTest = testWillRun
+                    ? learned(timings, mod, "compile-test", testSrc.size(), compileWeight(testSrc.size())) : SKIP;
 
             int methods = in.estimatedTestCount();
-            runTests = testWillRun ? runTestsWeight(methods) : SKIP;
+            runTests = testWillRun
+                    ? learned(timings, mod, "run-tests", methods, runTestsWeight(methods)) : SKIP;
 
             boolean jarFresh = !rerun && !compileRun && Files.isRegularFile(layout.mainJar());
             pkg = jarFresh ? SKIP : PACKAGE_JAR;
