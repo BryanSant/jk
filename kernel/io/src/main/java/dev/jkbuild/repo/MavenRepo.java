@@ -41,6 +41,8 @@ public final class MavenRepo {
     private final Cas cas;
     private final JkMavenLocalRepo localRepo;
     private final RepoCredential credential;
+    /** TTL + conditional-GET cache for maven-metadata.xml; null for non-HTTP transports. */
+    private final MavenMetadataCache metadataCache;
 
     /** Without a local repo — offline resolve is unavailable through this repo. */
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas) {
@@ -60,21 +62,35 @@ public final class MavenRepo {
     public MavenRepo(String name, URI baseUrl, Http http, Cas cas, JkMavenLocalRepo localRepo,
                      RepoCredential credential) {
         this(name, baseUrl, RepoTransports.forUrl(baseUrl, Objects.requireNonNull(http, "http")),
-                cas, localRepo, credential);
+                cas, localRepo, credential, http);
     }
 
     /**
      * General constructor over any {@link RepoTransport} — the entry point for
-     * non-HTTP backends (s3://, file://, …) selected by the caller.
+     * non-HTTP backends (s3://, file://, …) selected by the caller. These don't
+     * get the HTTP metadata cache (it has no status/headers to revalidate against).
      */
     public MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas,
                      JkMavenLocalRepo localRepo, RepoCredential credential) {
+        this(name, baseUrl, transport, cas, localRepo, credential, null);
+    }
+
+    /**
+     * Field-setting constructor. {@code httpOrNull} is the HTTP client when the
+     * repo is http(s) (enabling the metadata cache), or {@code null} for a
+     * non-HTTP transport.
+     */
+    private MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas,
+                      JkMavenLocalRepo localRepo, RepoCredential credential, Http httpOrNull) {
         this.name = Objects.requireNonNull(name, "name");
         this.baseUrl = normalize(Objects.requireNonNull(baseUrl, "baseUrl"));
         this.transport = Objects.requireNonNull(transport, "transport");
         this.cas = Objects.requireNonNull(cas, "cas");
         this.localRepo = Objects.requireNonNull(localRepo, "localRepo");
         this.credential = Objects.requireNonNull(credential, "credential");
+        this.metadataCache = httpOrNull == null ? null
+                : new MavenMetadataCache(httpOrNull, cas.root().resolve("metadata"),
+                        MavenMetadataCache.DEFAULT_TTL);
     }
 
     public String name() {
@@ -101,17 +117,21 @@ public final class MavenRepo {
 
     /**
      * Versions of this coordinate's {@code group:artifact} available here.
-     * Online: parses {@code maven-metadata.xml}. Offline: lists what the local
-     * repo holds. A missing artifact yields an empty list rather than an error
-     * so {@link RepoGroup} can union across repos.
+     * Online: parses {@code maven-metadata.xml}, served through the
+     * {@link MavenMetadataCache} (TTL + conditional GET) for HTTP repos so
+     * back-to-back resolves don't re-download the index. Offline: lists what the
+     * local repo holds. A missing artifact yields an empty list rather than an
+     * error so {@link RepoGroup} can union across repos.
      */
     public List<String> availableVersions(Coordinate coord) throws IOException, InterruptedException {
         if (ActiveConfig.get().offlineOr(false)) {
             return localRepo.versions(coord.group(), coord.artifact());
         }
         try {
-            Fetched f = fetchMetadata(coord);
-            return MavenMetadata.parse(Files.readAllBytes(f.cachePath())).versions();
+            byte[] xml = metadataCache != null
+                    ? metadataCache.fetch(baseUrl.resolve(MavenLayout.metadataPath(coord)), credential)
+                    : Files.readAllBytes(fetchMetadata(coord).cachePath());
+            return MavenMetadata.parse(xml).versions();
         } catch (ArtifactNotFoundException notFound) {
             return List.of();
         }
