@@ -60,6 +60,24 @@ class PhaseTimingsTest {
     }
 
     @Test
+    void median_per_unit_is_empty_when_no_module_has_recorded_the_phase(@TempDir Path cache) {
+        record(cache, NOW, new PhaseTimings.Sample("/m/a", "compile-java", 7.0));
+        assertThat(PhaseTimings.load(cache).medianPerUnit("run-tests")).isEmpty();
+    }
+
+    @Test
+    void median_per_unit_takes_the_middle_rate_across_modules(@TempDir Path cache) {
+        record(cache, NOW, new PhaseTimings.Sample("/m/a", "run-tests", 1.0));
+        record(cache, NOW, new PhaseTimings.Sample("/m/b", "run-tests", 9.0));
+        record(cache, NOW, new PhaseTimings.Sample("/m/c", "run-tests", 2.0));
+        // odd count → middle value (1, 2, 9 → 2); compile-java entries are ignored.
+        record(cache, NOW, new PhaseTimings.Sample("/m/a", "compile-java", 100.0));
+        var v = PhaseTimings.load(cache).medianPerUnit("run-tests");
+        assertThat(v).isPresent();
+        assertThat(v.getAsDouble()).isCloseTo(2.0, within(1e-9));
+    }
+
+    @Test
     void prune_evicts_entries_older_than_the_max_age(@TempDir Path cache) {
         record(cache, NOW - 3 * 365 * DAY, new PhaseTimings.Sample("/m/stale", "run-tests", 10.0)); // 3y old
         record(cache, NOW - 10 * DAY, new PhaseTimings.Sample("/m/fresh", "run-tests", 20.0));       // 10d old

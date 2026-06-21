@@ -166,6 +166,23 @@ class CommandManagerTest {
     }
 
     @Test
+    void eta_countdown_eases_a_denominator_spike_instead_of_teleporting() {
+        var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
+        cm.nerdfont = false;
+        cm.enableEta(true);
+        cm.progress(50, 100);                                  // 50 weights remaining → 7.5s
+        assertThat(stripAnsi(cm.renderGoalLines(120, 4_000).get(0))).contains("[00:00:07]");
+
+        // The total balloons mid-build (e.g. run-tests reweights up): raw remaining
+        // jumps to (1000-50)×150ms ≈ 2m22s. The damped clock must NOT teleport there —
+        // it eases: 0.15×142.5s + 0.85×7.5s ≈ 27s.
+        cm.progress(50, 1000);
+        String header = stripAnsi(cm.renderGoalLines(120, 4_000).get(0));
+        assertThat(header).contains("[00:00:27]");             // eased, not the raw 02:22
+        assertThat(header).doesNotContain("02:");
+    }
+
+    @Test
     void goal_header_bar_and_rows() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
         cm.nerdfont = false;   // plain (non-pill) header

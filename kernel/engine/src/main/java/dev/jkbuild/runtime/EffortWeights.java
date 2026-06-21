@@ -93,15 +93,26 @@ public final class EffortWeights {
     }
 
     /**
-     * The learned weight for a running phase: {@code floor + perUnit × count} when
-     * history exists for this (module, phase), else the static Phase-1 estimate
-     * ({@code staticWeight}) — so a cold ledger reproduces Phase 1 exactly and warm
-     * runs rescale by the current {@code count}.
+     * The learned weight for a running phase: {@code floor + rate × count}, where the
+     * per-unit {@code rate} is, in order of preference, (1) this exact (module, phase)
+     * if seen before, (2) the median rate this machine has measured for the phase
+     * across <em>any</em> module, so a never-built module borrows a realistic rate
+     * instead of the static constant, or (3) the static Phase-1 estimate
+     * ({@code staticWeight}) when nothing for the phase has ever been recorded — so a
+     * fully cold ledger still reproduces Phase 1 exactly, and warm runs rescale by the
+     * current {@code count}.
      */
     static int learned(PhaseTimings timings, String dir, String phase, int count, int staticWeight) {
         var perUnit = timings.perUnit(dir, phase);
-        if (perUnit.isEmpty()) return staticWeight;
-        return Math.max(1, (int) Math.round(floor(phase) + perUnit.getAsDouble() * Math.max(0, count)));
+        double rate;
+        if (perUnit.isPresent()) {
+            rate = perUnit.getAsDouble();
+        } else {
+            var crossModule = timings.medianPerUnit(phase);
+            if (crossModule.isEmpty()) return staticWeight;   // never seen this phase → Phase-1 static
+            rate = crossModule.getAsDouble();
+        }
+        return Math.max(1, (int) Math.round(floor(phase) + rate * Math.max(0, count)));
     }
 
     /**

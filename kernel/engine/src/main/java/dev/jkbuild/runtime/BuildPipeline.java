@@ -779,13 +779,22 @@ public final class BuildPipeline {
                         ctx.label("tests up-to-date");
                         return; // skip — nothing changed since last green run
                     }
-                    // Tests are actually running: claim the real test slice (JVM
-                    // startup floor + per-method), symmetric to how compile reweights
-                    // itself up. Without this a phase the forecast under-sized stays
-                    // pinned at a near-zero weight while the slow, serialized run
-                    // executes — the "stuck near 100% during tests" bug. A no-op when
-                    // the forecast already sized it right (reweight to the same value).
-                    ctx.reweight(EffortWeights.runTestsWeight(in.estimatedTestCount()));
+                    // Tests are actually running: claim the real test slice, symmetric
+                    // to how compile reweights itself up. Without this a phase the
+                    // forecast under-sized (predicted SKIP, but the CAS marker was
+                    // missing so we run) stays pinned near-zero while the slow,
+                    // serialized run executes — the "stuck near 100% during tests" bug.
+                    // Reweight through the SAME learned ledger predict() used, NOT the
+                    // raw static per-method floor: the static constant is ~10× hot for a
+                    // fast suite, so reweighting to it ballooned the denominator (574
+                    // tests × 8 → ~11 min) the instant testing began, then collapsed as
+                    // the quick tests flew by — the wildly-jumping ETA. Learned == the
+                    // up-front estimate, so a correctly-forecast phase reweights to the
+                    // same value (a no-op) and the countdown stays steady.
+                    ctx.reweight(EffortWeights.learned(
+                            PhaseTimings.load(in.cache()), in.dir().toString(),
+                            "run-tests", in.estimatedTestCount(),
+                            EffortWeights.runTestsWeight(in.estimatedTestCount())));
                     List<Path> runtimeCp = new ArrayList<>();
                     runtimeCp.add(ctx.require(MAIN_CLASSES));
                     runtimeCp.addAll(testRtCp);

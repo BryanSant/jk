@@ -91,10 +91,13 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private long denominator;
     private double peakFraction;   // monotonic-display floor: the bar never renders below this
     private boolean etaEnabled;    // show the [hh:mm:ss] countdown — only when learned timings exist
+    private double smoothedRemainingMs = -1;   // EWMA-damped countdown so a denominator shift glides, not teleports
     private long finishSeq;
 
     /** A weight unit is ≈150 ms (the weight model / interpolation constant); the bridge from bar weight to remaining ms. */
     private static final long MS_PER_WEIGHT = 150L;
+    /** EWMA weight for the displayed countdown: low enough that a runtime denominator shift eases in over ~seconds. */
+    private static final double ETA_SMOOTH_ALPHA = 0.15;
     private final Map<String, Row> rows = new LinkedHashMap<>();
     /** Pre-formatted completion lines, oldest→newest; bounded to {@link #MAX_COMPLETIONS}. */
     private final List<String> recentCompletions = new ArrayList<>();
@@ -611,8 +614,15 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         // Only when learned timings exist (etaEnabled) — the weight total is then a
         // calibrated remaining-time estimate; remaining = (denominator − numerator)
         // weights × ≈150 ms. The numerator is monotonic, so the clock counts down.
+        // The raw value is EWMA-damped across renders so the residual denominator
+        // shifts at runtime (cache decisions resolving, aggregate members registering)
+        // ease in over a second or two instead of teleporting the clock.
         if (etaEnabled && denominator > 0 && numerator < denominator) {
-            h.append(' ').append(clock((denominator - numerator) * MS_PER_WEIGHT));
+            long raw = (denominator - numerator) * MS_PER_WEIGHT;
+            smoothedRemainingMs = smoothedRemainingMs < 0
+                    ? raw
+                    : ETA_SMOOTH_ALPHA * raw + (1 - ETA_SMOOTH_ALPHA) * smoothedRemainingMs;
+            h.append(' ').append(clock(Math.round(smoothedRemainingMs)));
         }
         h.append(' ').append(Theme.colorize(
                 ELLIPSIS + fmtElapsed(elapsedMillis) + ELLIPSIS, dim.italic()));

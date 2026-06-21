@@ -77,6 +77,29 @@ public final class PhaseTimings {
         return e == null ? OptionalDouble.empty() : OptionalDouble.of(e.perUnit());
     }
 
+    /**
+     * The median learned per-unit rate across <em>all</em> modules for {@code phase}
+     * — a cross-module fallback so a module never seen before borrows this machine's
+     * typical rate for that phase (e.g. ~per-test wall-clock) instead of the static
+     * Phase-1 constant, which is calibrated for the worst case and runs ~10× hot for
+     * fast unit suites. Empty only when no module has ever recorded this phase, in
+     * which case the caller falls back to the static estimate. Median (not mean) so
+     * one pathological module can't skew it.
+     */
+    public OptionalDouble medianPerUnit(String phase) {
+        String suffix = ' ' + phase;
+        double[] rates = entries.entrySet().stream()
+                .filter(e -> e.getKey().endsWith(suffix))
+                .mapToDouble(e -> e.getValue().perUnit())
+                .sorted()
+                .toArray();
+        if (rates.length == 0) return OptionalDouble.empty();
+        int n = rates.length;
+        return OptionalDouble.of(n % 2 == 1
+                ? rates[n / 2]
+                : (rates[n / 2 - 1] + rates[n / 2]) / 2.0);
+    }
+
     /** A measured per-unit rate for one phase of one module, to fold into the ledger. */
     public record Sample(String dir, String phase, double observedPerUnit) {}
 
