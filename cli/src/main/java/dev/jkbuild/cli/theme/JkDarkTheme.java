@@ -76,11 +76,10 @@ public final class JkDarkTheme implements Theme {
     /** Gradient for {@code jk init}/wizard titles — Jk Dark bright-blue → accent. */
     private static final Gradient TITLE_GRADIENT = new Gradient(BRIGHT_BLUE, ACCENT);
     /**
-     * Gradient for the progress-bar fill — the Jk Dark green spanning 50% darker
-     * → 50% brighter, so the fill is a single hue deepening as it grows.
+     * Gradient for the progress-bar fill — Jk Dark bright-blue → accent (the same
+     * stops as {@link #TITLE_GRADIENT}), so the fill sweeps blue → pink as it grows.
      */
-    private static final Gradient PROGRESS_GRADIENT =
-            new Gradient(NORMAL_GREEN.darker(0.50), NORMAL_GREEN.brighter(0.50));
+    private static final Gradient PROGRESS_GRADIENT = new Gradient(BRIGHT_BLUE, ACCENT);
     /** Gradient for the spinner frames — Jk Dark primary → accent. */
     private static final Gradient SPINNER_GRADIENT = new Gradient(PRIMARY, ACCENT);
     /** Gradient a failed progress bar repaints in: dark red #7f1d1d → bright red #ef4444. */
@@ -225,16 +224,8 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
-    public AttributedStyle onScopeBadge(AttributedStyle fg) {
-        // Same chip background as scopeBadge(), but the caller's foreground is kept.
-        return withBg(fg, BRIGHT_BLACK);
-    }
-
-    @Override
-    public AttributedStyle scopeBadgeCap(Rgb barLead) {
-        // Bright-black foreground (the chip body color) on the bar's lead color, so
-        // the U+E0B0 cap blends the pill into the first bar cell.
-        return withBg(withColor(AttributedStyle.DEFAULT, BRIGHT_BLACK), barLead);
+    public AttributedStyle withBackground(AttributedStyle base, Rgb bg) {
+        return withBg(base, bg);
     }
 
     @Override

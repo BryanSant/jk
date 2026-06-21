@@ -59,10 +59,10 @@ class GradientTest {
     }
 
     @Test
-    void progress_runs_green_50pct_darker_to_50pct_brighter() {
-        // #4CAF50 (76,175,80) × 0.50 → (38,88,40); × 1.50 → (114,255,120) (G clamps).
+    void progress_runs_bright_blue_to_accent() {
+        // Shares the title gradient's stops: bright-blue #536DFE → accent #FF4081.
         assertThat(Theme.active().progressGradient())
-                .isEqualTo(new Gradient(new Rgb(38, 88, 40), new Rgb(114, 255, 120)));
+                .isEqualTo(new Gradient(JkDarkTheme.BRIGHT_BLUE, JkDarkTheme.ACCENT));
     }
 
     @Test

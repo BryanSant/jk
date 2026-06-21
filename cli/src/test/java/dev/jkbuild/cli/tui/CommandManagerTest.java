@@ -3,6 +3,7 @@ package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
+import org.jline.utils.AttributedStyle;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -167,14 +168,40 @@ class CommandManagerTest {
         cm.progress(45, 100);
 
         String header = cm.renderGoalLines(120, 0).get(0);
-        // The U+E0B0 cap sits between the "· Build " chip and the bar (frame 0 = "·").
-        assertThat(stripAnsi(header)).contains("· Build " + Glyphs.SEGMENT_END_NERD);
-        // Name is near-black on the bright-black chip (scopeBadge), not bold-white.
-        assertThat(header).contains(Theme.colorize("Build", Theme.active().scopeBadge()));
-        // The cap is underlined and its background is the bar's lead color.
+        // The region is indented one column; the pill spans " · Build " then the cap.
+        assertThat(stripAnsi(header)).contains(" · Build " + Glyphs.SEGMENT_END_NERD);
+        // Pill background = a deep-indigo (darkened gradient start); name bright-white on it.
+        Rgb chipBg = Theme.active().progressGradient().start().darker(0.60);
+        AttributedStyle chip = Theme.active().withBackground(Theme.active().brightWhite(), chipBg);
+        // The leading indent space is part of the pill (same chip background).
+        assertThat(header).startsWith(Theme.colorize(" ", chip));
+        assertThat(header).contains(Theme.colorize("Build", chip));
+        // Spinner (frame 0 = "·") cycles glyphs only — same near-black chip style as the
+        // name, not a gradient color.
+        assertThat(header).contains(Theme.colorize("·", chip));
+        // Cap: foreground = the pill color, background = the bar's lead color, underlined.
         Rgb lead = new ProgressBar().leadColor(45, 100);
         assertThat(header).contains(Theme.colorize(Glyphs.SEGMENT_END_NERD,
-                Theme.active().scopeBadgeCap(lead).underline()));
+                Theme.active().withBackground(Theme.active().bright(chipBg), lead).underline()));
+    }
+
+    @Test
+    void canceling_a_goal_region_returns_to_column_zero_before_erasing() {
+        var buf = new ByteArrayOutputStream();
+        var cm = new CommandManager(stream(buf), true, true, 80); // animate + goal mode
+        cm.progress(2, 4);
+        cm.phaseRunning("m", "compile");
+        cm.tick();          // paint the live region
+        buf.reset();
+
+        cm.renderCanceled();
+
+        // On Ctrl-C the tty echoes "^C" at the cursor (two columns in); cursorUp keeps
+        // the column, so the wipe must emit a carriage return before
+        // ERASE_DISPLAY_TO_END — otherwise the first two columns (the spinner glyph)
+        // of the top line survive.
+        String raw = buf.toString(StandardCharsets.UTF_8);
+        assertThat(raw).contains("\r" + dev.jkbuild.cli.Ansi.ERASE_DISPLAY_TO_END);
     }
 
     @Test
@@ -212,7 +239,8 @@ class CommandManagerTest {
         cm.phaseRunning("m", "compile");
         var lines = cm.renderGoalLines(120, 0);
         // lines[0]=header (bar inlined), lines[1]=the running phase row (no glyph).
-        assertThat(stripAnsi(lines.get(1))).startsWith("╰─ m › Compile");
+        // The region is indented one column, so the connector starts after a space.
+        assertThat(stripAnsi(lines.get(1))).startsWith(" ╰─ m › Compile");
     }
 
     @Test
@@ -224,10 +252,11 @@ class CommandManagerTest {
 
         var lines = cm.renderGoalLines(120, 0);
         // header, the active row (╰─ closes the tree), then the completions —
-        // newest first, each indented three spaces under the branch content.
-        assertThat(stripAnsi(lines.get(1))).startsWith("╰─ m › Compile");
-        assertThat(stripAnsi(lines.get(2))).isEqualTo("   ✓ [14 of 17] g:a14 took 1s");
-        assertThat(stripAnsi(lines.get(3))).isEqualTo("   ✓ [13 of 17] g:a13 took 1s");
+        // newest first, each indented four spaces under the branch content (the
+        // region's one-column indent + the three under the branch).
+        assertThat(stripAnsi(lines.get(1))).startsWith(" ╰─ m › Compile");
+        assertThat(stripAnsi(lines.get(2))).isEqualTo("    ✓ [14 of 17] g:a14 took 1s");
+        assertThat(stripAnsi(lines.get(3))).isEqualTo("    ✓ [13 of 17] g:a13 took 1s");
     }
 
     @Test
@@ -238,9 +267,9 @@ class CommandManagerTest {
 
         var all = String.join("\n", stripAll(cm.renderGoalLines(120, 0)));
         // Only MAX_COMPLETIONS (5) show; the newest is first; 3 collapse into the footer.
-        assertThat(all).contains("   ✓ [08 of 17]").contains("   ✓ [04 of 17]");
+        assertThat(all).contains("    ✓ [08 of 17]").contains("    ✓ [04 of 17]");
         assertThat(all).doesNotContain("[03 of 17]");
-        assertThat(all).contains("     … plus 3 more …");
+        assertThat(all).contains("      … plus 3 more …");
     }
 
     @Test

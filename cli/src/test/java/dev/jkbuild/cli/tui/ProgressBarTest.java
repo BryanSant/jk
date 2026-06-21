@@ -43,9 +43,9 @@ class ProgressBarTest {
     void every_cell_is_underlined_including_the_unreached_spaces() {
         // 0% → 40 underlined spaces in the gradient's brightest (right-most) color.
         String line = new ProgressBar().render(0, 100);
-        // attribute-leading SGR: underline (4) before the truecolor group; bright end
-        // of the Jk Dark green gradient is #4CAF50 × 1.5 → 114;255;120 (green clamped).
-        assertThat(line).contains("\033[4;38;2;114;255;120m ");
+        // attribute-leading SGR: underline (4) before the truecolor group; the bright
+        // end of the progress gradient is the accent #FF4081 → 255;64;129.
+        assertThat(line).contains("\033[4;38;2;255;64;129m ");
     }
 
     @Test
@@ -62,10 +62,10 @@ class ProgressBarTest {
         // The right-most filled block is pinned to the gradient end at every fill,
         // and at 100% the left-most block sits at the gradient start.
         assertThat(blockColors(new ProgressBar().render(50, 100)).getLast())
-                .isEqualTo("38;2;114;255;120");                 // bright end
+                .isEqualTo("38;2;255;64;129");                 // accent end
         List<String> full = blockColors(new ProgressBar().render(100, 100));
-        assertThat(full.getLast()).isEqualTo("38;2;114;255;120");  // bright end on the right
-        assertThat(full.getFirst()).isEqualTo("38;2;38;88;40");    // dark start on the left
+        assertThat(full.getLast()).isEqualTo("38;2;255;64;129");    // accent end on the right
+        assertThat(full.getFirst()).isEqualTo("38;2;83;109;254");   // bright-blue start on the left
     }
 
     /** In-order truecolor SGRs of each whole-cell (█) glyph in {@code raw}. */

@@ -367,6 +367,11 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private void wipeRegion() {
         if (goalMode) {
             if (linesDrawn > 0) out.print(Ansi.cursorUp(linesDrawn));
+            // Return to column 0 first: cursorUp preserves the column, and on a
+            // Ctrl-C the tty has just echoed "^C" at the cursor (two columns in),
+            // so a bare ERASE_DISPLAY_TO_END would leave the first two columns of
+            // the top line — the spinner glyph — on screen.
+            out.print('\r');
             out.print(Ansi.ERASE_DISPLAY_TO_END);
             linesDrawn = 0;
             lastLines = List.of();
@@ -498,26 +503,29 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         int shown = Math.min(active.size(), Math.min(MAX_ROWS, budget));
         for (int i = 0; i < shown; i++) {
             // Tree branches: ├─ for every active row but the last, ╰─ to close.
-            String prefix = Theme.colorize(i == shown - 1 ? "╰─ " : "├─ ", dim);
+            // A leading space indents the whole region by one column (the header's
+            // matching indent is part of its colored pill).
+            String prefix = Theme.colorize(i == shown - 1 ? " ╰─ " : " ├─ ", dim);
             lines.add(prefix + renderActiveRow(active.get(i), sep));
         }
         budget -= shown;
 
         // 3. Completed tail: recently-finished units below the active tree, newest
-        // first, indented three spaces (aligning under the ╰─ branch content). When
-        // more have completed than fit, a bright-black italic "… plus N more …"
-        // footer (indented further) collapses the overflow.
+        // first, indented four spaces (aligning under the ╰─ branch content with the
+        // region's one-column indent). When more have completed than fit, a
+        // bright-black italic "… plus N more …" footer (indented further) collapses
+        // the overflow.
         if (completedCount > 0 && budget > 0) {
             boolean overflow = completedCount > Math.min(MAX_COMPLETIONS, budget);
             int cap = Math.max(0, Math.min(MAX_COMPLETIONS, overflow ? budget - 1 : budget));
             int compShown = Math.min(recentCompletions.size(), cap);
             int have = recentCompletions.size();
             for (int i = 0; i < compShown; i++) {
-                lines.add("   " + recentCompletions.get(have - 1 - i));
+                lines.add("    " + recentCompletions.get(have - 1 - i));
             }
             int more = completedCount - compShown;
             if (more > 0) {
-                lines.add(Theme.colorize("     … plus " + more + " more …", dim.italic()));
+                lines.add(Theme.colorize("      … plus " + more + " more …", dim.italic()));
             }
         }
         return lines;
@@ -526,29 +534,47 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     /**
      * The goal header line: {@code {spinner} {name} {bar} …elapsed…}.
      *
-     * <p>With a Nerd Font ({@code [global].nerdfont}) the spinner + name form a
-     * bright-black pill closed by a U+E0B0 powerline cap whose <em>background</em>
-     * tracks the bar's lead color, so the chip tapers into the first bar cell; the
-     * cap is underlined to sit flush with the bar's underscored track. Without a
-     * Nerd Font it's the plain animated spinner + a bright-white name, as before.
+     * <p>With a Nerd Font ({@code [global].nerdfont}) the spinner (glyph-cycling
+     * only — same bright-white foreground as the name, no color animation) + name form
+     * a pill filled with a deep-indigo (a darkened shade of the bar gradient's
+     * left-most color), closed by a U+E0B0 powerline cap whose <em>foreground</em> is
+     * that same pill color (so its body
+     * blends with the chip) and whose <em>background</em> tracks the bar's lead
+     * color, tapering the chip into the first bar cell; the cap is underlined to sit
+     * flush with the bar's underscored track. Without a Nerd Font it's the plain
+     * animated spinner + a bright-white name, as before. Either way a leading space
+     * gives the whole region its one-column indent — on the pill background in Nerd
+     * Font mode, so the chip reaches the left edge.
      */
     private String goalHeader(long elapsedMillis) {
         AttributedStyle dim = Theme.active().darkGray();
         String barStr = bar.render(numerator, denominator);
         StringBuilder h = new StringBuilder();
         if (nerdfont) {
-            AttributedStyle chip = Theme.active().scopeBadge();                      // near-black on bright-black
-            AttributedStyle chipSpin = Theme.active().onScopeBadge(frameColors[frame]); // gradient fg on the chip
+            // Pill background = the bar gradient's extreme left-most color, deepened
+            // to a dark indigo so the bright-white text reads against it.
+            Rgb chipBg = Theme.active().progressGradient().start().darker(0.60);
+            AttributedStyle chip = Theme.active().withBackground(Theme.active().brightWhite(), chipBg); // bright-white on deep indigo
             Rgb lead = bar.leadColor(numerator, denominator);
-            h.append(Theme.colorize(FRAMES[frame], chipSpin))
+            // Cap foreground = the pill color (so its body blends with the chip);
+            // background = the bar's lead color, tapering the pill into the bar.
+            AttributedStyle cap = Theme.active()
+                    .withBackground(Theme.active().bright(chipBg), lead).underline();
+            // The spinner shares the chip style: only its glyph cycles, in the same
+            // bright-white as the name — no color animation inside the pill. A leading
+            // space (also on the pill background) gives the region its one-column
+            // indent while extending the pill to the left edge.
+            h.append(Theme.colorize(" ", chip))
+                    .append(Theme.colorize(FRAMES[frame], chip))
                     .append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(name, chip))
                     .append(Theme.colorize(" ", chip))
-                    .append(Theme.colorize(Glyphs.SEGMENT_END_NERD,
-                            Theme.active().scopeBadgeCap(lead).underline()))
+                    .append(Theme.colorize(Glyphs.SEGMENT_END_NERD, cap))
                     .append(barStr);
         } else {
-            h.append(Theme.colorize(FRAMES[frame], frameColors[frame])).append(' ')
+            // Plain leading space to match the region's one-column indent.
+            h.append(' ')
+                    .append(Theme.colorize(FRAMES[frame], frameColors[frame])).append(' ')
                     .append(Theme.colorize(name, Theme.active().focused()))
                     .append(' ').append(barStr);
         }
