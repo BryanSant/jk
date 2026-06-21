@@ -87,25 +87,25 @@ public final class ExplainCommand implements CliCommand {
         int total = modules.size();
         long rebuild = modules.stream().filter(BuildPlanForecast.Module::dirty).count();
 
-        // Predicted wall-clock for the rebuild work: sum each module's bar weight
-        // (the SAME estimate the live bar calibrates to — weights ≈150 ms each, with
-        // the cascade reserved via forceRebuild), × MS_PER_WEIGHT. Best-effort and
-        // only shown when something rebuilds (an all-cached run is ~instant).
+        // Predicted wall-clock for the build: sum each module's bar weight (the SAME
+        // estimate the live bar calibrates to — weights ≈150 ms each, with the cascade
+        // reserved via forceRebuild), × MS_PER_WEIGHT. Computed even for an all-cached
+        // plan: re-parsing every build file and re-checking stamps/CAS across the
+        // workspace is a real couple of seconds (measured ~2.3 s on jk.jk's 17 modules),
+        // not instant — so explain always quantifies how long the next build will take.
         long etaMillis = 0;
-        if (rebuild > 0) {
-            try {
-                for (BuildPlanForecast.Module m : modules) {
-                    Path mdir = m.unit().dir();
-                    var inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
-                            mdir, cache, mdir.resolve("jk.toml"), mdir.resolve("jk.lock"), mdir, 1,
-                            TestCommand.estimateTestCount(mdir.resolve("src/test/java")),
-                            null, JkDirs.jdks(), false, false);
-                    etaMillis += (long) dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty())
-                            .build().estimatedTotalWeight() * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
-                }
-            } catch (RuntimeException e) {
-                etaMillis = 0;   // never fail explain over the estimate
+        try {
+            for (BuildPlanForecast.Module m : modules) {
+                Path mdir = m.unit().dir();
+                var inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
+                        mdir, cache, mdir.resolve("jk.toml"), mdir.resolve("jk.lock"), mdir, 1,
+                        TestCommand.estimateTestCount(mdir.resolve("src/test/java")),
+                        null, JkDirs.jdks(), false, false);
+                etaMillis += (long) dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty())
+                        .build().estimatedTotalWeight() * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
             }
+        } catch (RuntimeException e) {
+            etaMillis = 0;   // never fail explain over the estimate
         }
 
         // Header: a leading blank line, then a left-flush cyan powerline segment —
@@ -152,9 +152,11 @@ public final class ExplainCommand implements CliCommand {
         return 0;
     }
 
-    /** "1m 20s" / "8s" — coarse predicted-duration formatting for the plan summary. */
+    /** "1m 20s" / "8s" / "<1s" — coarse predicted-duration formatting for the plan summary. */
     private static String fmtDuration(long millis) {
-        long s = Math.max(0, millis) / 1000;
+        if (millis <= 0) return "0s";
+        long s = millis / 1000;                       // floor: don't over-state
+        if (s == 0) return "<1s";                     // a sub-second cache-verify pass
         return s >= 60 ? (s / 60) + "m " + (s % 60) + "s" : s + "s";
     }
 
