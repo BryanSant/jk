@@ -23,6 +23,18 @@ class EffortWeightsTest {
         assertThat(EffortWeights.TEST_METHOD).isEqualTo(8);
         assertThat(EffortWeights.ARTIFACT_FETCH).isEqualTo(8);
         assertThat(EffortWeights.PACKAGE_JAR).isEqualTo(5);
-        assertThat(EffortWeights.SKIP).isEqualTo(1);
+        // A skipped phase is a true no-op — off the bar entirely, not a stray tick.
+        assertThat(EffortWeights.SKIP).isEqualTo(0);
+    }
+
+    @Test
+    void running_tests_carry_a_startup_floor_plus_per_method() {
+        // The JVM-startup floor is paid even by a zero-method suite, so a small,
+        // serialized test run still reserves real bar space instead of ~nothing.
+        assertThat(EffortWeights.runTestsWeight(0)).isEqualTo(EffortWeights.TEST_STARTUP);
+        assertThat(EffortWeights.runTestsWeight(10))
+                .isEqualTo(EffortWeights.TEST_STARTUP + 10 * EffortWeights.TEST_METHOD);
+        // Dominates the trivial always-run phases (parse/assemble/stamps ≈ 1–4).
+        assertThat(EffortWeights.runTestsWeight(0)).isGreaterThan(EffortWeights.PACKAGE_JAR);
     }
 }

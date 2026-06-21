@@ -31,18 +31,23 @@ import java.util.List;
  * output are predicted to run too — so the common "edited a source" case sizes
  * correctly rather than trusting a now-stale stamp.
  *
- * <p>Weights (absolute; the bar normalises Σ weights to 100%): a skipped phase
- * is {@value #SKIP}; a real compile is {@code ceil(sources × 0.1)}; a fetch is
- * {@value #ARTIFACT_FETCH} per artifact; a test run is {@value #TEST_METHOD} per
- * test method; a jar package is {@value #PACKAGE_JAR}. (JDK download, shadow
- * jar, native image and OCI weights are tracked in their own command goals.)
+ * <p>Weights are time-proportional shares (the bar normalises Σ weights to 100%).
+ * A skipped phase is {@value #SKIP} — a true no-op so cached/up-to-date work never
+ * occupies the bar. A real compile is {@code ceil(sources × 0.1)}; a fetch is
+ * {@value #ARTIFACT_FETCH} per artifact; a jar package is {@value #PACKAGE_JAR}.
+ * A test run is a fixed {@value #TEST_STARTUP} JVM-startup floor (forking the test
+ * JVM + framework init dominates a short suite, and {@code run-tests} is serialized
+ * across the workspace) plus {@value #TEST_METHOD} per discovered test method. (JDK
+ * download, shadow jar, native image and OCI weights are tracked in their own
+ * command goals.)
  */
 public final class EffortWeights {
 
     private EffortWeights() {}
 
-    static final int SKIP           = 1;
+    static final int SKIP           = 0;   // a phase that does no work this run — off the bar entirely
     static final int RESTORE        = 3;   // compile output hard-linked back from the CAS (set live by the phase)
+    static final int TEST_STARTUP   = 15;  // fork the test JVM + framework init (paid even by a tiny suite)
     static final int TEST_METHOD    = 8;   // per @Test (and ParameterizedTest/&c.)
     static final int ARTIFACT_FETCH = 8;   // per dependency artifact downloaded
     static final int PACKAGE_JAR    = 5;
@@ -59,6 +64,19 @@ public final class EffortWeights {
     /** {@code ceil(sources × 0.1)}, floored at 1 once the phase runs at all. */
     static int compileWeight(int sources) {
         return Math.max(1, (sources + 9) / 10);
+    }
+
+    /**
+     * Weight of an actually-running test phase: a fixed JVM-startup floor plus a
+     * per-method term. The floor matters because {@code run-tests} forks a JVM and
+     * is serialized across the workspace, so even a small suite is a real,
+     * sequential chunk of wall-clock — without it the bar races through the fast,
+     * parallel compile work and then stalls on the slow serial test tail. Shared by
+     * {@link #predict} (up-front reservation) and the {@code run-tests} phase's
+     * runtime reweight so they agree.
+     */
+    public static int runTestsWeight(int methods) {
+        return TEST_STARTUP + Math.max(0, methods) * TEST_METHOD;
     }
 
     /** Predict the weights for {@code in}; never throws (degrades to skip-ish). */
@@ -102,7 +120,7 @@ public final class EffortWeights {
             compileTest = testWillRun ? compileWeight(testSrc.size()) : SKIP;
 
             int methods = in.estimatedTestCount();
-            runTests = (methods > 0 && testWillRun) ? methods * TEST_METHOD : SKIP;
+            runTests = testWillRun ? runTestsWeight(methods) : SKIP;
 
             boolean jarFresh = !rerun && !compileRun && Files.isRegularFile(layout.mainJar());
             pkg = jarFresh ? SKIP : PACKAGE_JAR;

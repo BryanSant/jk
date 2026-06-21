@@ -768,6 +768,13 @@ public final class BuildPipeline {
                         ctx.label("tests up-to-date");
                         return; // skip — nothing changed since last green run
                     }
+                    // Tests are actually running: claim the real test slice (JVM
+                    // startup floor + per-method), symmetric to how compile reweights
+                    // itself up. Without this a phase the forecast under-sized stays
+                    // pinned at a near-zero weight while the slow, serialized run
+                    // executes — the "stuck near 100% during tests" bug. A no-op when
+                    // the forecast already sized it right (reweight to the same value).
+                    ctx.reweight(EffortWeights.runTestsWeight(in.estimatedTestCount()));
                     List<Path> runtimeCp = new ArrayList<>();
                     runtimeCp.add(ctx.require(MAIN_CLASSES));
                     runtimeCp.addAll(testRtCp);
