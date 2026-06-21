@@ -385,7 +385,8 @@ public final class BuildCommand implements CliCommand {
         // learned ledger (EWMA) so the next build's bar is time-accurate. Failed
         // builds don't record — their phase times are abnormal.
         dev.jkbuild.runtime.PhaseTimings.record(
-                cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA);
+                cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA,
+                System.currentTimeMillis());
         view.finishSuccess("built " + total + " module" + (total == 1 ? "" : "s")
                 + " " + elapsedSince(start), snapshot(deferredOutput));
         return 0;

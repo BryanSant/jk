@@ -324,6 +324,10 @@ public final class CacheCommand implements CliCommand {
                 Path actionsDir = root.resolve("actions");
                 if (Files.isDirectory(actionsDir)) { for (Path file : olderThan(actionsDir, cutoffMillis)) { long sz = Files.size(file); if (!dryRun) Files.deleteIfExists(file); recordsExpired++; recordsBytes += sz; } }
                 var runLogReport = dev.jkbuild.task.RunLogGc.sweep(root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
+                var timingsReport = dev.jkbuild.runtime.PhaseTimings.prune(root,
+                        dev.jkbuild.runtime.PhaseTimings.Limits.resolve(
+                                dev.jkbuild.util.JkDirs.userConfigFile(), System::getenv),
+                        System.currentTimeMillis(), dryRun);
                 var tmpReport = cacheDir == null ? dev.jkbuild.task.TmpGc.sweep(dev.jkbuild.util.JkDirs.tmp(), dev.jkbuild.task.TmpGc.DEFAULT_TTL, dryRun) : new dev.jkbuild.task.TmpGc.Report(0, 0L);
                 boolean doSweep = sweep || maxSize != null;
                 long budgetBytes = maxSize != null ? dev.jkbuild.task.LruEvictor.parseSize(maxSize) : -1L;
@@ -344,6 +348,10 @@ public final class CacheCommand implements CliCommand {
                 String verb = dryRun ? "Would prune" : "Pruned";
                 System.out.printf("%s: records expired %s (%s), temps %s (%s), run-logs %s (%s)", verb, fmtCount(recordsExpired), fmtBytes(recordsBytes), fmtCount(tempsCleared), fmtBytes(tempsBytes), fmtCount(runLogReport.deleted()), fmtBytes(runLogReport.freedBytes()));
                 if (cacheDir == null) System.out.printf(", tmp %s (%s)", fmtCount(tmpReport.deleted()), fmtBytes(tmpReport.freedBytes()));
+                if (timingsReport.evictedByAge() + timingsReport.evictedBySize() > 0)
+                    System.out.printf(", timings %s (age %s, size %s)",
+                            fmtCount(timingsReport.evictedByAge() + timingsReport.evictedBySize()),
+                            fmtCount(timingsReport.evictedByAge()), fmtCount(timingsReport.evictedBySize()));
                 if (doSweep) System.out.printf(", swept %s (%s); kept %s", fmtCount(sweptCount), fmtBytes(sweptBytes), fmtCount(sweptKept));
                 if (budgetBytes > 0) System.out.printf("; evicted %s (%s) to fit %s", fmtCount(evictedCount), fmtBytes(evictedBytes), fmtBytes(budgetBytes));
                 System.out.println();
