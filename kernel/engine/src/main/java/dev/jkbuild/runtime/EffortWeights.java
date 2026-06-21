@@ -61,9 +61,16 @@ public final class EffortWeights {
     static final int OCI_RUN        = 40;  // OCI image build
     static final int OCI_SKIP       = 2;   // OCI image up-to-date
 
-    /** Per-phase predicted weights for one module's build. */
+    /**
+     * Per-phase predicted weights for one module's build. {@code fullyCached} is set
+     * when every work phase (sync/compile/test/package) collapsed to {@link #SKIP} —
+     * the module is a no-op this run, so its always-run phases (parse, resources,
+     * stamps, assemble) should also shrink to a token "touch" instead of carrying
+     * their full static weight, which would otherwise reserve ~1.5 s of phantom time
+     * per cached module in the workspace estimate for ~30 ms of real work.
+     */
     public record Plan(int sync, int compileJava, int compileKotlin,
-                       int compileTest, int runTests, int pkg) {}
+                       int compileTest, int runTests, int pkg, boolean fullyCached) {}
 
     /** {@code ceil(sources × 0.1)}, floored at 1 once the phase runs at all. */
     static int compileWeight(int sources) {
@@ -211,7 +218,12 @@ public final class EffortWeights {
             // Unparseable project / layout — parse-build will surface the real
             // error; skip-ish weights + auto-fill keep the bar honest meanwhile.
         }
-        return new Plan(sync, compileJava, compileKotlin, compileTest, runTests, pkg);
+        // A module whose every work phase skipped is fully cached: its always-run
+        // phases will do trivial work (re-parse the build file, re-check stamps), so
+        // the pipeline shrinks them to a token touch rather than full static weight.
+        boolean fullyCached = sync == SKIP && compileJava == SKIP && compileKotlin == SKIP
+                && compileTest == SKIP && runTests == SKIP && pkg == SKIP;
+        return new Plan(sync, compileJava, compileKotlin, compileTest, runTests, pkg, fullyCached);
     }
 
     /**

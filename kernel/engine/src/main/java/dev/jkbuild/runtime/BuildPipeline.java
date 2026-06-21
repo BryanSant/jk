@@ -160,6 +160,11 @@ public final class BuildPipeline {
     static final int W_PACKAGE      = 5;
     static final int W_STAMP        = 1;
     static final int W_SHADOW       = 10;   // fat/shadow jar (vs 5 for a plain jar)
+    // A fully-cached module's whole always-run tail (parse + resources + stamps +
+    // assemble) collapses to this single touch: it only re-parses the build file and
+    // re-checks stamps (~30 ms), so reserving the full static tail (~10 weight ≈ 1.5 s)
+    // per cached module piled up phantom wall-clock in the workspace estimate.
+    static final int W_CACHED_TOUCH = 1;
     static final int W_NATIVE       = 90;   // native-image build ≈ 9 steps × 10
 
     /**
@@ -235,7 +240,7 @@ public final class BuildPipeline {
         // ---- parse-build ------------------------------------------------
         Phase parseBuild = Phase.builder("parse-build")
                 .label("Parsing")
-                .weight(W_PARSE)
+                .weight(() -> plan.get().fullyCached() ? W_CACHED_TOUCH : W_PARSE)
                 .scope(() -> {
                     if (Files.exists(in.lockFile())) {
                         try { return LockfileReader.read(in.lockFile()).artifacts().size() + 5; }
@@ -621,7 +626,7 @@ public final class BuildPipeline {
                 .label("Resources")
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile)
-                .weight(W_RESOURCES)
+                .weight(() -> plan.get().fullyCached() ? 0 : W_RESOURCES)
                 .scope(1)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
@@ -894,7 +899,7 @@ public final class BuildPipeline {
         // ---- write-stamp ------------------------------------------------
         Phase writeStamp = Phase.builder("write-stamp")
                 .requires("compile-java")
-                .weight(W_STAMP)
+                .weight(() -> plan.get().fullyCached() ? 0 : W_STAMP)
                 .scope(1)
                 .execute(ctx -> {
                     String outcome = ctx.get(BUILD_OUTCOME).orElse("");
@@ -929,7 +934,7 @@ public final class BuildPipeline {
         // path leaves it empty until incremental Kotlin lands.
         Phase writeStampKotlin = Phase.builder("write-stamp-kotlin")
                 .requires("compile-kotlin")
-                .weight(W_STAMP)
+                .weight(() -> plan.get().fullyCached() ? 0 : W_STAMP)
                 .scope(1)
                 .execute(ctx -> {
                     String outcome = ctx.get(KOTLIN_OUTCOME).orElse("");
@@ -958,7 +963,7 @@ public final class BuildPipeline {
                 .label("Assembling")
                 .kind(PhaseKind.CPU)
                 .requires("compile-java", "compile-kotlin")
-                .weight(W_ASSEMBLE)
+                .weight(() -> plan.get().fullyCached() ? 0 : W_ASSEMBLE)
                 .scope(1)
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
@@ -997,7 +1002,7 @@ public final class BuildPipeline {
                 .label("Embedding SHAs")
                 .kind(PhaseKind.CPU)
                 .requires("copy-resources")
-                .weight(W_RESOURCES)
+                .weight(() -> plan.get().fullyCached() ? 0 : W_RESOURCES)
                 .scope(1)
                 .execute(ctx -> {
                     Map<String, String> embed = ctx.require(PROJECT).build().embedSha();
