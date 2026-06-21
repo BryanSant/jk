@@ -170,8 +170,8 @@ class CommandManagerTest {
         String header = cm.renderGoalLines(120, 0).get(0);
         // The region is indented one column; the pill spans " · Build " then the cap.
         assertThat(stripAnsi(header)).contains(" · Build " + Glyphs.SEGMENT_END_NERD);
-        // Pill background = a deep-indigo (darkened gradient start); name bright-white on it.
-        Rgb chipBg = Theme.active().progressGradient().start().darker(0.60);
+        // Pill background = the accent (gradient bright end); name bright-white on it.
+        Rgb chipBg = Theme.active().progressGradient().end();
         AttributedStyle chip = Theme.active().withBackground(Theme.active().brightWhite(), chipBg);
         // The leading indent space is part of the pill (same chip background).
         assertThat(header).startsWith(Theme.colorize(" ", chip));

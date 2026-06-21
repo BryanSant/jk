@@ -536,10 +536,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      *
      * <p>With a Nerd Font ({@code [global].nerdfont}) the spinner (glyph-cycling
      * only — same bright-white foreground as the name, no color animation) + name form
-     * a pill filled with a deep-indigo (a darkened shade of the bar gradient's
-     * left-most color), closed by a U+E0B0 powerline cap whose <em>foreground</em> is
-     * that same pill color (so its body
-     * blends with the chip) and whose <em>background</em> tracks the bar's lead
+     * a pill filled with the accent (the bar gradient's bright end), closed by a
+     * U+E0B0 powerline cap whose <em>foreground</em> is that same pill color (so its
+     * body blends with the chip) and whose <em>background</em> tracks the bar's lead
      * color, tapering the chip into the first bar cell; the cap is underlined to sit
      * flush with the bar's underscored track. Without a Nerd Font it's the plain
      * animated spinner + a bright-white name, as before. Either way a leading space
@@ -551,10 +550,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         String barStr = bar.render(numerator, denominator);
         StringBuilder h = new StringBuilder();
         if (nerdfont) {
-            // Pill background = the bar gradient's extreme left-most color, deepened
-            // to a dark indigo so the bright-white text reads against it.
-            Rgb chipBg = Theme.active().progressGradient().start().darker(0.60);
-            AttributedStyle chip = Theme.active().withBackground(Theme.active().brightWhite(), chipBg); // bright-white on deep indigo
+            // Pill background = the accent (the bar gradient's bright end).
+            Rgb chipBg = Theme.active().progressGradient().end();
+            AttributedStyle chip = Theme.active().withBackground(Theme.active().brightWhite(), chipBg); // bright-white on accent
             Rgb lead = bar.leadColor(numerator, denominator);
             // Cap foreground = the pill color (so its body blends with the chip);
             // background = the bar's lead color, tapering the pill into the bar.
