@@ -26,8 +26,8 @@ class DependencyTreeTest {
         String rendered = DependencyTree.render(project, lock);
         assertThat(rendered).isEqualToIgnoringWhitespace("""
                 com.example:widget:0.1.0
-                ╰── com.foo:root:1.0
-                    ╰── com.foo:leaf:1.0
+                ╰─ com.foo:root:1.0
+                    ╰─ com.foo:leaf:1.0
                 """);
     }
 
@@ -71,7 +71,7 @@ class DependencyTreeTest {
         assertThat(rendered).contains("com.foo:leaf:1.0 ⎋</dim>");
         assertThat(rendered).contains("<dim>");
         // The first leaf occurrence is a real node — not wrapped by the reference styler.
-        assertThat(rendered).contains("── com.foo:leaf:1.0\n");
+        assertThat(rendered).contains("─ com.foo:leaf:1.0\n");
     }
 
     @Test

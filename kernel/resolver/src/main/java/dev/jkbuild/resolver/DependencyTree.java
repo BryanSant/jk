@@ -44,7 +44,7 @@ public final class DependencyTree {
      *
      * <p>The fields map directly to the rendered shape:
      * <pre>
-     *   {rail}└── {/rail}{group}{group}{/group}:{artifact}{artifact}{/artifact}:{version}{version}{/version}
+     *   {rail}└─ {/rail}{group}{group}{/group}:{artifact}{artifact}{/artifact}:{version}{version}{/version}
      * </pre>
      *
      * <p>{@code reference} styles a whole already-shown row (the {@code ⎋}
@@ -91,7 +91,7 @@ public final class DependencyTree {
      * Render with full styling. Labels are emitted in {@code group:artifact:version}
      * shape (the Maven coordinate convention Java developers expect), with each
      * segment passed through its corresponding {@link Styling} operator. Rail
-     * connectors ({@code ├── }, {@code └── }, {@code │   }, {@code "    "}) are
+     * connectors ({@code ├─ }, {@code └─ }, {@code │  }, {@code "   "}) are
      * passed through {@link Styling#rail}.
      */
     public static String render(JkBuild project, Lockfile lock, int maxDepth,
@@ -179,7 +179,7 @@ public final class DependencyTree {
             String prefix, Styling styling, Map<String, String> modules,
             Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
 
-        String connector = isLast ? "╰── " : "├── ";
+        String connector = isLast ? "╰─ " : "├─ ";
         Path moduleDir = rootDir == null ? null : rootDir.resolve(moduleRel).normalize();
         Path tomlPath = moduleDir == null ? null : moduleDir.resolve("jk.toml");
         Path lockPath = moduleDir == null ? null : moduleDir.resolve("jk.lock");
@@ -202,7 +202,7 @@ public final class DependencyTree {
                 .append(label).append(styling.rail().apply(tag)).append('\n');
 
         if (module == null || moduleLock == null || depth >= maxDepth) return;
-        String childPrefix = prefix + styling.rail().apply(isLast ? "    " : "│   ");
+        String childPrefix = prefix + styling.rail().apply(isLast ? "   " : "│  ");
         renderComposite(module, moduleLock, moduleDir, depth + 1, maxDepth, childPrefix,
                 styling, modules, seenModules, seenDirs, out);
     }
@@ -243,12 +243,12 @@ public final class DependencyTree {
         for (int si = 0; si < sections.size(); si++) {
             Scope s = sections.get(si);
             boolean lastScope = si == sections.size() - 1;
-            // Scope header: ├──/╰── then the badge (no trailing space — badge abuts).
-            out.append(prefix).append(styling.rail().apply(lastScope ? "╰──" : "├──"))
+            // Scope header: ├─/╰─ then the badge (no trailing space — badge abuts).
+            out.append(prefix).append(styling.rail().apply(lastScope ? "╰─" : "├─"))
                     .append(styling.scopeBadge().apply(scopeLabel(s))).append('\n');
             // 4-wide continuation (matching a standard tree node) so the deps nest a
             // space further in than the 3-char scope connector — aligning under the badge.
-            String scopePrefix = prefix + styling.rail().apply(lastScope ? "    " : "│   ");
+            String scopePrefix = prefix + styling.rail().apply(lastScope ? "   " : "│  ");
             List<String> mods = bySectionScope.get(s);
             for (int di = 0; di < mods.size(); di++) {
                 renderDep(mods.get(di), composite, byModule, dir, depth, maxDepth,
@@ -270,7 +270,7 @@ public final class DependencyTree {
             // reference it (no recursion).
             String name = module.substring("workspace:".length());
             String coord = modules.getOrDefault(name, module);
-            out.append(prefix).append(styling.rail().apply(isLast ? "╰── " : "├── "))
+            out.append(prefix).append(styling.rail().apply(isLast ? "╰─ " : "├─ "))
                     .append(coordLabel(coord, styling))
                     .append(styling.rail().apply(" [workspace]")).append('\n');
             return;
@@ -284,7 +284,7 @@ public final class DependencyTree {
         } else {
             // branch git dep — annotate (no recursion; needs a clone).
             String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
-            out.append(prefix).append(styling.rail().apply(isLast ? "╰── " : "├── "))
+            out.append(prefix).append(styling.rail().apply(isLast ? "╰─ " : "├─ "))
                     .append(coordLabel(module, styling))
                     .append(styling.rail().apply(" [git: " + ref + "]")).append('\n');
         }
@@ -302,7 +302,7 @@ public final class DependencyTree {
             boolean isLast, String prefix, Styling styling, Map<String, String> modules,
             Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
 
-        String connector = isLast ? "╰── " : "├── ";
+        String connector = isLast ? "╰─ " : "├─ ";
         Path targetDir = consumerDir == null ? null : consumerDir.resolve(dep.pathSource()).normalize();
         boolean cycle = targetDir != null && !seenDirs.add(targetDir.toString());
         Path lockPath = targetDir == null ? null : targetDir.resolve("jk.lock");
@@ -328,7 +328,7 @@ public final class DependencyTree {
         } catch (Exception e) {
             return; // unreadable target — stop descending
         }
-        String childPrefix = prefix + styling.rail().apply(isLast ? "    " : "│   ");
+        String childPrefix = prefix + styling.rail().apply(isLast ? "   " : "│  ");
         renderComposite(target, targetLock, targetDir, depth + 1, maxDepth, childPrefix,
                 styling, modules, seenModules, seenDirs, out);
     }
@@ -358,9 +358,9 @@ public final class DependencyTree {
         String groupId = colon > 0 ? module.substring(0, colon) : module;
         String artifactId = colon > 0 ? module.substring(colon + 1) : "";
 
-        // ╰── for the last child (rounded arc); ├── for the rest.
+        // ╰─ for the last child (rounded arc); ├─ for the rest.
         // Standard "rounded tree" convention used by eza, tre, etc.
-        String connector = isLast ? "╰── " : "├── ";
+        String connector = isLast ? "╰─ " : "├─ ";
         String coord = pkg != null
                 ? groupId + ":" + artifactId + ":" + pkg.version()
                 : groupId + ":" + artifactId + MISSING_SUFFIX;
@@ -383,7 +383,7 @@ public final class DependencyTree {
 
         if (pkg == null || depth >= maxDepth) return;
 
-        String childPrefix = prefix + styling.rail().apply(isLast ? "    " : "│   ");
+        String childPrefix = prefix + styling.rail().apply(isLast ? "   " : "│  ");
         List<String> children = pkg.deps().stream()
                 .map(DependencyTree::stripVersion)
                 .sorted()
