@@ -72,13 +72,29 @@ public final class TreeCommand implements CliCommand {
         System.out.println(header);
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
         String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont));
-        System.out.print(rendered);
+        System.out.print(indentBody(rendered));
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();
             System.out.println("Some dependencies are missing from your local cache. Run "
                     + Theme.colorize("jk lock", Theme.active().warning()));
         }
         return 0;
+    }
+
+    /**
+     * Indents every line below the root node by one space, so the tree body sits
+     * one column in from the {@code ●} root bullet. The first line (the root coord)
+     * and any blank lines are left untouched.
+     */
+    private static String indentBody(String rendered) {
+        String[] lines = rendered.split("\n", -1);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < lines.length; i++) {
+            if (i > 0) sb.append('\n');
+            if (i > 0 && !lines[i].isEmpty()) sb.append(' ');
+            sb.append(lines[i]);
+        }
+        return sb.toString();
     }
 
     /**
