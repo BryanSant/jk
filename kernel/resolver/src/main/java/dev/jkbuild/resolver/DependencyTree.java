@@ -240,8 +240,8 @@ public final class DependencyTree {
 
     /** Scopes shown as sections, in display order; only non-empty ones render. */
     private static final Scope[] SCOPE_SECTIONS = {
-        Scope.MAIN, Scope.TEST, Scope.PROVIDED, Scope.RUNTIME,
-        Scope.EXPORT, Scope.PROCESSOR, Scope.PLATFORM,
+        Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED,
+        Scope.PROCESSOR, Scope.PLATFORM, Scope.TEST,
     };
 
     /**
