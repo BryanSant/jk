@@ -4,6 +4,9 @@ package dev.jkbuild.command;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.GoalChrome;
+import dev.jkbuild.cli.tui.Glyphs;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -31,6 +34,7 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.util.JkDirs;
+import org.jline.utils.AttributedStyle;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -246,19 +250,30 @@ public final class IdeaCommand implements CliCommand {
         }
 
         Theme t = Theme.active();
-        String wsName = wsRoot.getFileName().toString();
-        System.out.println(Theme.colorize("✓", t.success())
-                + " Generated " + files + " project file" + (files == 1 ? "" : "s")
-                + " in " + Theme.colorize(wsName + "/.idea", t.path()));
+        String check = Theme.colorize("✓", t.success());
+
+        // Header chip: " ✓ IDEA ▶ The <project> project is ready".
+        System.out.println(GoalChrome.chipLine(Glyphs.CHECK, "IDEA", GlobalConfig.nerdfont(),
+                "The " + Theme.colorize(rootBuild.project().name(), t.focused()) + " project is ready"));
+
+        // A tree of what was done: JDK registration (when any) then the generated files.
+        List<String> items = new java.util.ArrayList<>();
         if (!touchedTables.isEmpty()) {
-            System.out.println("  Registered " + Theme.colorize(defaultSdk.sdkName(), t.cyan())
-                    + " in " + touchedTables.size() + " IDE config"
-                    + (touchedTables.size() == 1 ? "" : "s")
-                    + ". Re-run the IDE if it doesn't appear.");
+            items.add(check + " Registered the "
+                    + Theme.colorize(defaultSdk.sdkName(), t.cyan()) + " JDK");
         }
-        System.out.println(Theme.colorize("➜", t.brightGreen())
-                + " The " + Theme.colorize(rootBuild.project().name(), t.brightCyan())
-                + " project is ready to be opened in IntelliJ IDEA.");
+        items.add(check + " Generated " + files + " project file" + (files == 1 ? "" : "s")
+                + " in " + Theme.colorize(".idea", t.path()));
+        for (int i = 0; i < items.size(); i++) {
+            String connector = i == items.size() - 1 ? "╰─ " : "├─ ";
+            System.out.println(" " + Theme.colorize(connector, t.darkGray()) + items.get(i));
+        }
+
+        System.out.println();
+        System.out.println(" " + Theme.colorize(Glyphs.CROSS + " Note", t.warning())
+                + ": You may need to "
+                + Theme.colorize("restart your IDE", AttributedStyle.DEFAULT.italic())
+                + " for changes to take effect");
         return 0;
     }
 
