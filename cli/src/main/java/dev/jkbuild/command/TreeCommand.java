@@ -56,17 +56,18 @@ public final class TreeCommand implements CliCommand {
         Lockfile lock = LockfileReader.read(lockFile);
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
-        // Header: a leading blank line, then a left-flush cyan powerline segment
-        // " Dependencies Tree for `<group>:<name>` " (near-black on cyan, capped by a ▶
-        // segment arrow when nerdfont) — matching jk explain's build-plan header.
+        // Header: a leading blank line, then a left-flush green powerline chip
+        // " - Dependencies Tree " (black on green, capped by a green ▶ segment arrow
+        // when nerdfont) — the same chip family as jk build/idea. The project coord
+        // moves to the root node line below.
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         Theme t = Theme.active();
-        String title = " Dependencies Tree for `"
-                + project.project().group() + ":" + project.project().name() + "` ";
+        String title = " - Dependencies Tree ";
         String header = nerdfont
-                ? Theme.colorize(title, t.cyanBadge())
-                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.cyan())
-                : Theme.colorize(title, t.cyanBadge());
+                ? Theme.colorize(title, t.goalSuccessChip())
+                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
+                                t.bright(t.goalChipColor()))
+                : Theme.colorize(title, t.goalSuccessChip());
         System.out.println();
         System.out.println(header);
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).

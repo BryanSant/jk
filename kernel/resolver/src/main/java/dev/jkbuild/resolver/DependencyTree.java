@@ -133,8 +133,10 @@ public final class DependencyTree {
     public static String render(JkBuild project, Lockfile lock, Path projectDir,
                                 int maxDepth, Styling styling) {
         StringBuilder out = new StringBuilder();
-        out.append(formatCoord(project.project().group(), project.project().name(),
-                project.project().version(), styling)).append('\n');
+        // Root node: a bright-black ● bullet, then the project's group:artifact:version.
+        out.append(' ').append(styling.rail().apply("●")).append(' ')
+                .append(formatCoord(project.project().group(), project.project().name(),
+                        project.project().version(), styling)).append('\n');
         Set<String> seenModules = new HashSet<>();
         Set<String> seenDirs = new HashSet<>();
         if (project.isWorkspaceRoot()) {
