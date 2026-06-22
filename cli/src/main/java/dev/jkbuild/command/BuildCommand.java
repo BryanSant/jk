@@ -964,14 +964,14 @@ public final class BuildCommand implements CliCommand {
                 + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
     }
 
-    /** Failure tail {@code at group:name took T} — coord colored, {@code took T} bright-black. */
+    /** Failure tail {@code group:name took T} — coord colored, {@code took T} bright-black. */
     private static String failureTail(String coord, long start) {
         int i = coord.indexOf(':');
         String styled = i < 0
                 ? Theme.colorize(coord, Theme.active().coordGroup())
                 : Theme.colorize(coord.substring(0, i), Theme.active().coordGroup())
                         + ":" + Theme.colorize(coord.substring(i + 1), Theme.active().coordName());
-        return "at " + styled + " " + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
+        return styled + " " + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
     }
 
     /** Failure tail for a member missing its {@code jk.toml}. */

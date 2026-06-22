@@ -5,6 +5,8 @@ import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedStyle;
 
+import java.util.Locale;
+
 /**
  * Shared chrome for the build goal line and its settled result lines, so the live
  * header ({@link CommandManager#goalHeader}) and the buffered plain-scheduler
@@ -48,15 +50,20 @@ public final class GoalChrome {
         return Theme.colorize(head, t.success()) + " " + tail;
     }
 
-    /** Settled failure: {@code  ‼ Build ▶ Failure <tail>} (tail pre-styled by the caller). */
+    /**
+     * Settled failure: {@code  ‼ Build ▶ Failed to build <tail>} — "Failed" in red, then
+     * "to &lt;goal&gt;" (the goal name lower-cased: build, test, …) in the default color;
+     * tail pre-styled by the caller.
+     */
     public static String failureLine(String name, boolean nerdfont, String tail) {
         Theme t = Theme.active();
-        String verb = Theme.colorize("Failure", t.error());
+        String verb = Theme.colorize("Failed", t.error())
+                + (name.isEmpty() ? "" : " to " + name.toLowerCase(Locale.ROOT));
         if (nerdfont) {
             return chip(Glyphs.CROSS, name, t.goalFailureChip())
                     + cap(t.goalFailColor(), true) + " " + verb + " " + tail;
         }
-        String head = Glyphs.CROSS + (name.isEmpty() ? "" : " " + name) + " Failure";
-        return Theme.colorize(head, t.error()) + " " + tail;
+        String head = Theme.colorize(Glyphs.CROSS + (name.isEmpty() ? "" : " " + name), t.error());
+        return head + " " + verb + " " + tail;
     }
 }
