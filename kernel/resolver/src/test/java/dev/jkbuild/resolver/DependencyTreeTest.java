@@ -214,6 +214,26 @@ class DependencyTreeTest {
         assertThat(rendered.indexOf("com.foo:leaf:1.0", first + 1)).isEqualTo(-1);
     }
 
+    @Test
+    void explicit_scope_order_filters_and_reorders_sections(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+        var main = List.of(new Dependency("com.foo:m", new VersionSelector.Exact("=1.0", "1.0")));
+        var test = List.of(new Dependency("com.foo:t", new VersionSelector.Exact("=1.0", "1.0")));
+        JkBuild project = new JkBuild(
+                new JkBuild.Project("com.example", "widget", "0.1.0", 0),
+                new JkBuild.Dependencies(Map.of(Scope.MAIN, main, Scope.TEST, test)));
+        Lockfile lock = lockOf(
+                pkg("com.foo:m", "1.0", List.of()), pkg("com.foo:t", "1.0", List.of()));
+
+        String rendered = DependencyTree.render(project, lock, dir, Integer.MAX_VALUE,
+                DependencyTree.Styling.plain(), false, List.of(Scope.TEST, Scope.MAIN));
+
+        // Both requested sections render, in the given order (test before main),
+        // overriding the default ordering; unrequested scopes are omitted.
+        assertThat(rendered).contains("test").contains("main").doesNotContain("provided");
+        assertThat(rendered.indexOf("test")).isLessThan(rendered.indexOf("main"));
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static final String EMPTY_LOCK = """

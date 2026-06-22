@@ -8,6 +8,7 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
@@ -16,8 +17,14 @@ import dev.jkbuild.resolver.DependencyTree;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.function.UnaryOperator;
+import java.util.stream.Collectors;
 
 /** {@code jk tree} — print the resolved dependency tree. */
 public final class TreeCommand implements CliCommand {
@@ -37,13 +44,40 @@ public final class TreeCommand implements CliCommand {
         return List.of(
                 Opt.value("<depth>", "Maximum tree depth. Default: unlimited.", "--depth"),
                 Opt.flag("Flatten each scope to a deduplicated, sorted list of all "
-                        + "(transitive) dependencies, dropping the nesting.", "--flatten"));
+                        + "(transitive) dependencies, dropping the nesting.", "--flatten"),
+                Opt.value("<scopes>", "Comma-separated scopes to show, in the given order "
+                        + "(e.g. main,export,test). Default: all non-empty scopes.", "--scopes"),
+                Opt.value("<scopes>", "", "--scope").hide());
     }
 
     @Override
     public int run(Invocation in) throws IOException {
         Integer depth = in.value("depth").map(Integer::parseInt).orElse(null);
         boolean flatten = in.isSet("flatten");
+
+        // --scopes / --scope: an explicit, ordered subset of scopes to display.
+        List<Scope> scopes = null;
+        var scopesArg = in.value("scopes").or(() -> in.value("scope"));
+        if (scopesArg.isPresent()) {
+            List<String> tokens = Arrays.stream(scopesArg.get().split(","))
+                    .map(String::trim).filter(s -> !s.isEmpty()).toList();
+            if (tokens.isEmpty()) {
+                System.err.println("jk tree: --scopes requires at least one scope (valid: "
+                        + validScopes() + ")");
+                return 2;
+            }
+            Set<Scope> ordered = new LinkedHashSet<>();
+            for (String token : tokens) {
+                Scope scope = coerceScope(token);
+                if (scope == null) {
+                    System.err.println("jk tree: invalid scope '" + token + "' (valid: "
+                            + validScopes() + ")");
+                    return 2;
+                }
+                ordered.add(scope);
+            }
+            scopes = new ArrayList<>(ordered);
+        }
         Path dir = new GlobalOptions().workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
@@ -75,7 +109,7 @@ public final class TreeCommand implements CliCommand {
         System.out.println();
         System.out.println(header);
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
-        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont), flatten);
+        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont), flatten, scopes);
         System.out.print(indentBody(rendered));
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();
@@ -83,6 +117,22 @@ public final class TreeCommand implements CliCommand {
                     + Theme.colorize("jk lock", Theme.active().warning()));
         }
         return 0;
+    }
+
+    /** Coerce a user-supplied scope token (case-insensitive) to a {@link Scope}, or null if invalid. */
+    private static Scope coerceScope(String token) {
+        try {
+            return Scope.valueOf(token.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** Comma-separated list of valid scope names (lowercased) for error messages. */
+    private static String validScopes() {
+        return Arrays.stream(Scope.values())
+                .map(s -> s.name().toLowerCase(Locale.ROOT))
+                .collect(Collectors.joining(", "));
     }
 
     /**

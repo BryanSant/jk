@@ -136,16 +136,23 @@ public final class DependencyTree {
         return render(project, lock, projectDir, maxDepth, styling, false);
     }
 
-    /**
-     * Composite-aware render with an optional {@code flatten} mode. When
-     * {@code flatten} is set, each scope section lists the deduplicated, sorted
-     * set of all (transitive) dependencies it pulls in as a flat list rather than
-     * a nested tree — useful for "what's the full {@code main}/{@code test}/…
-     * classpath?". {@code maxDepth} is ignored when flattening (the closure is
-     * always walked in full).
-     */
     public static String render(JkBuild project, Lockfile lock, Path projectDir,
                                 int maxDepth, Styling styling, boolean flatten) {
+        return render(project, lock, projectDir, maxDepth, styling, flatten, null);
+    }
+
+    /**
+     * Composite-aware render with optional {@code flatten} mode and an explicit
+     * {@code scopeOrder}. When {@code flatten} is set, each scope section lists the
+     * deduplicated, sorted set of all (transitive) dependencies it pulls in as a
+     * flat list rather than a nested tree — useful for "what's the full
+     * {@code main}/{@code test}/… classpath?"; {@code maxDepth} is ignored when
+     * flattening. When {@code scopeOrder} is non-null, only those scopes are shown,
+     * in exactly that order, instead of the default {@link #SCOPE_SECTIONS} set.
+     */
+    public static String render(JkBuild project, Lockfile lock, Path projectDir,
+                                int maxDepth, Styling styling, boolean flatten,
+                                List<Scope> scopeOrder) {
         StringBuilder out = new StringBuilder();
         // Root node: a bright-black ● bullet, then the project's group:artifact:version.
         out.append(' ').append(styling.rail().apply("●")).append(' ')
@@ -155,18 +162,23 @@ public final class DependencyTree {
         Set<String> seenDirs = new HashSet<>();
         if (project.isWorkspaceRoot()) {
             if (flatten) {
-                renderFlatWorkspaceScopes(project, projectDir, styling, out);
+                renderFlatWorkspaceScopes(project, projectDir, styling, scopeOrder, out);
             } else {
-                renderWorkspaceScopes(project, projectDir, maxDepth, styling,
+                renderWorkspaceScopes(project, projectDir, maxDepth, styling, scopeOrder,
                         seenModules, seenDirs, out);
             }
         } else if (flatten) {
-            renderFlatScopes(project, lock, projectDir, styling, out);
+            renderFlatScopes(project, lock, projectDir, styling, scopeOrder, out);
         } else {
             renderScopeSections(project, lock, projectDir, 0, maxDepth, "", styling,
-                    Map.of(), seenModules, seenDirs, out);
+                    Map.of(), scopeOrder, seenModules, seenDirs, out);
         }
         return out.toString();
+    }
+
+    /** The scope sections to consider, in display order: an explicit override or the default set. */
+    private static List<Scope> sectionOrder(List<Scope> override) {
+        return override != null ? override : List.of(SCOPE_SECTIONS);
     }
 
     /**
@@ -199,7 +211,7 @@ public final class DependencyTree {
      * a {@code [workspace]} reference.
      */
     private static void renderWorkspaceScopes(
-            JkBuild root, Path rootDir, int maxDepth, Styling styling,
+            JkBuild root, Path rootDir, int maxDepth, Styling styling, List<Scope> scopeOrder,
             Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
 
         List<String> moduleRels = root.workspace().modules();
@@ -208,7 +220,7 @@ public final class DependencyTree {
 
         // Scope sections present anywhere in the workspace, in display order.
         List<Scope> sections = new ArrayList<>();
-        for (Scope s : SCOPE_SECTIONS) {
+        for (Scope s : sectionOrder(scopeOrder)) {
             if (modules.stream().anyMatch(m -> !m.build().dependencies().of(s).isEmpty())) {
                 sections.add(s);
             }
@@ -250,11 +262,11 @@ public final class DependencyTree {
      */
     private static void renderScopeSections(
             JkBuild project, Lockfile lock, Path dir, int depth, int maxDepth,
-            String prefix, Styling styling, Map<String, String> modules,
+            String prefix, Styling styling, Map<String, String> modules, List<Scope> scopeOrder,
             Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
 
         List<Scope> sections = new ArrayList<>();
-        for (Scope s : SCOPE_SECTIONS) {
+        for (Scope s : sectionOrder(scopeOrder)) {
             if (!project.dependencies().of(s).isEmpty()) sections.add(s);
         }
         for (int si = 0; si < sections.size(); si++) {
@@ -332,12 +344,13 @@ public final class DependencyTree {
 
     /** Single-project flatten: each scope lists its full transitive dep closure, flat + sorted. */
     private static void renderFlatScopes(
-            JkBuild project, Lockfile lock, Path dir, Styling styling, StringBuilder out) {
+            JkBuild project, Lockfile lock, Path dir, Styling styling,
+            List<Scope> scopeOrder, StringBuilder out) {
 
         Map<String, Lockfile.Artifact> byModule = lock == null ? Map.of() : indexByModule(lock);
         Map<String, Dependency> composite = compositeDeps(project);
         List<Scope> sections = new ArrayList<>();
-        for (Scope s : SCOPE_SECTIONS) {
+        for (Scope s : sectionOrder(scopeOrder)) {
             if (!project.dependencies().of(s).isEmpty()) sections.add(s);
         }
         for (int si = 0; si < sections.size(); si++) {
@@ -353,13 +366,13 @@ public final class DependencyTree {
 
     /** Workspace-root flatten: each scope is the union of every module's closure for that scope. */
     private static void renderFlatWorkspaceScopes(
-            JkBuild root, Path rootDir, Styling styling, StringBuilder out) {
+            JkBuild root, Path rootDir, Styling styling, List<Scope> scopeOrder, StringBuilder out) {
 
         Map<String, String> byName = workspaceModulesByName(root.workspace().modules(), rootDir);
         List<LoadedModule> modules = loadModules(root.workspace().modules(), rootDir);
 
         List<Scope> sections = new ArrayList<>();
-        for (Scope s : SCOPE_SECTIONS) {
+        for (Scope s : sectionOrder(scopeOrder)) {
             if (modules.stream().anyMatch(m -> !m.build().dependencies().of(s).isEmpty())) {
                 sections.add(s);
             }
@@ -528,7 +541,7 @@ public final class DependencyTree {
         }
         String childPrefix = prefix + styling.rail().apply(isLast ? "   " : "│  ");
         renderScopeSections(target, targetLock, targetDir, depth + 1, maxDepth, childPrefix,
-                styling, modules, seenModules, seenDirs, out);
+                styling, modules, null, seenModules, seenDirs, out);
     }
 
     /** {@code group:artifact} styled (no version — composite deps carry none here). */
