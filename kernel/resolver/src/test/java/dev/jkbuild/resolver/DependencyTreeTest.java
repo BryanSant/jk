@@ -234,6 +234,29 @@ class DependencyTreeTest {
         assertThat(rendered.indexOf("test")).isLessThan(rendered.indexOf("main"));
     }
 
+    @Test
+    void stack_blends_all_scopes_under_one_badge_row(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+        var main = List.of(new Dependency("com.foo:m", new VersionSelector.Exact("=1.0", "1.0")));
+        var test = List.of(new Dependency("com.foo:t", new VersionSelector.Exact("=1.0", "1.0")));
+        JkBuild project = new JkBuild(
+                new JkBuild.Project("com.example", "widget", "0.1.0", 0),
+                new JkBuild.Dependencies(Map.of(Scope.MAIN, main, Scope.TEST, test)));
+        Lockfile lock = lockOf(
+                pkg("com.foo:m", "1.0", List.of()), pkg("com.foo:t", "1.0", List.of()));
+
+        String rendered = DependencyTree.render(project, lock, dir, Integer.MAX_VALUE,
+                DependencyTree.Styling.plain(), false, null, true);
+
+        // A single header line carries every scope badge; deps from all scopes are
+        // blended into the one tree beneath it.
+        List<String> headers = java.util.Arrays.stream(rendered.split("\n"))
+                .filter(l -> l.contains("main")).toList();
+        assertThat(headers).hasSize(1);
+        assertThat(headers.get(0)).contains("main").contains("test");
+        assertThat(rendered).contains("com.foo:m:1.0").contains("com.foo:t:1.0");
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static final String EMPTY_LOCK = """

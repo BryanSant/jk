@@ -47,9 +47,11 @@ public final class TreeCommand implements CliCommand {
                 Opt.flag("Flatten each scope to a deduplicated, sorted list of all "
                         + "(transitive) dependencies, dropping the nesting.", "--flatten"),
                 Opt.flag("", "--flat").hide(),
+                Opt.flag("Put every scope badge on one line and blend all dependencies, "
+                        + "regardless of scope, into a single tree.", "--stack"),
                 Opt.value("<scopes>", "Comma-separated scopes to show, in the given order "
-                        + "(e.g. main,export,test). Use 'exec' (or 'run') for the run "
-                        + "classpath (export+main+runtime). Default: all non-empty scopes.", "--scopes"),
+                        + "(e.g. main,export,test). Meta-scopes: 'exec'/'run' (run classpath = "
+                        + "export+main+runtime), 'all' (every scope). Default: all non-empty scopes.", "--scopes"),
                 Opt.value("<scopes>", "", "--scope").hide());
     }
 
@@ -57,6 +59,7 @@ public final class TreeCommand implements CliCommand {
     public int run(Invocation in) throws IOException {
         Integer depth = in.value("depth").map(Integer::parseInt).orElse(null);
         boolean flatten = in.isSet("flatten") || in.isSet("flat");
+        boolean stack = in.isSet("stack");
 
         // --scopes / --scope: an explicit, ordered subset of scopes to display.
         List<Scope> scopes = null;
@@ -112,7 +115,7 @@ public final class TreeCommand implements CliCommand {
         System.out.println();
         System.out.println(header);
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
-        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont), flatten, scopes);
+        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont), flatten, scopes, stack);
         System.out.print(indentBody(rendered));
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();
@@ -137,6 +140,7 @@ public final class TreeCommand implements CliCommand {
      */
     private static List<Scope> resolveScopeToken(String token) {
         String t = token.toLowerCase(Locale.ROOT);
+        if (t.equals("all")) return DependencyTree.defaultScopeOrder();
         if (t.equals("exec") || t.equals("run")) return EXEC_SCOPES;
         Scope scope = coerceScope(t);
         return scope == null ? null : List.of(scope);
@@ -151,11 +155,11 @@ public final class TreeCommand implements CliCommand {
         }
     }
 
-    /** Comma-separated list of valid scope names (incl. the {@code exec}/{@code run} meta-scope). */
+    /** Comma-separated list of valid scope names (incl. the {@code exec}/{@code run}/{@code all} meta-scopes). */
     private static String validScopes() {
         return Arrays.stream(Scope.values())
                 .map(s -> s.name().toLowerCase(Locale.ROOT))
-                .collect(Collectors.joining(", ")) + ", exec/run";
+                .collect(Collectors.joining(", ")) + ", exec/run, all";
     }
 
     /**
