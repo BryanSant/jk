@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.UnaryOperator;
 import java.util.stream.Stream;
 
@@ -132,6 +133,19 @@ public final class DependencyTree {
      */
     public static String render(JkBuild project, Lockfile lock, Path projectDir,
                                 int maxDepth, Styling styling) {
+        return render(project, lock, projectDir, maxDepth, styling, false);
+    }
+
+    /**
+     * Composite-aware render with an optional {@code flatten} mode. When
+     * {@code flatten} is set, each scope section lists the deduplicated, sorted
+     * set of all (transitive) dependencies it pulls in as a flat list rather than
+     * a nested tree — useful for "what's the full {@code main}/{@code test}/…
+     * classpath?". {@code maxDepth} is ignored when flattening (the closure is
+     * always walked in full).
+     */
+    public static String render(JkBuild project, Lockfile lock, Path projectDir,
+                                int maxDepth, Styling styling, boolean flatten) {
         StringBuilder out = new StringBuilder();
         // Root node: a bright-black ● bullet, then the project's group:artifact:version.
         out.append(' ').append(styling.rail().apply("●")).append(' ')
@@ -140,8 +154,14 @@ public final class DependencyTree {
         Set<String> seenModules = new HashSet<>();
         Set<String> seenDirs = new HashSet<>();
         if (project.isWorkspaceRoot()) {
-            renderWorkspaceScopes(project, projectDir, maxDepth, styling,
-                    seenModules, seenDirs, out);
+            if (flatten) {
+                renderFlatWorkspaceScopes(project, projectDir, styling, out);
+            } else {
+                renderWorkspaceScopes(project, projectDir, maxDepth, styling,
+                        seenModules, seenDirs, out);
+            }
+        } else if (flatten) {
+            renderFlatScopes(project, lock, projectDir, styling, out);
         } else {
             renderScopeSections(project, lock, projectDir, 0, maxDepth, "", styling,
                     Map.of(), seenModules, seenDirs, out);
@@ -184,24 +204,7 @@ public final class DependencyTree {
 
         List<String> moduleRels = root.workspace().modules();
         Map<String, String> byName = workspaceModulesByName(moduleRels, rootDir);
-
-        // Load every module once, in declaration order. A module whose jk.toml can't
-        // be parsed is dropped — we can't place a module whose scopes we can't read.
-        List<LoadedModule> modules = new ArrayList<>();
-        for (String rel : moduleRels) {
-            Path dir = rootDir == null ? null : rootDir.resolve(rel).normalize();
-            JkBuild build = null;
-            Lockfile lock = null;
-            try {
-                Path toml = dir == null ? null : dir.resolve("jk.toml");
-                Path lf = dir == null ? null : dir.resolve("jk.lock");
-                if (toml != null && Files.isRegularFile(toml)) build = JkBuildParser.parse(toml);
-                if (lf != null && Files.isRegularFile(lf)) lock = LockfileReader.read(lf);
-            } catch (Exception ignored) {
-                // unreadable module — skipped below when build is null
-            }
-            if (build != null) modules.add(new LoadedModule(build, lock, dir));
-        }
+        List<LoadedModule> modules = loadModules(moduleRels, rootDir);
 
         // Scope sections present anywhere in the workspace, in display order.
         List<Scope> sections = new ArrayList<>();
@@ -300,6 +303,156 @@ public final class DependencyTree {
             }
         }
         return composite;
+    }
+
+    /** Load each workspace module (declaration order); a module whose jk.toml can't be parsed is dropped. */
+    private static List<LoadedModule> loadModules(List<String> moduleRels, Path rootDir) {
+        List<LoadedModule> modules = new ArrayList<>();
+        for (String rel : moduleRels) {
+            Path dir = rootDir == null ? null : rootDir.resolve(rel).normalize();
+            JkBuild build = null;
+            Lockfile lock = null;
+            try {
+                Path toml = dir == null ? null : dir.resolve("jk.toml");
+                Path lf = dir == null ? null : dir.resolve("jk.lock");
+                if (toml != null && Files.isRegularFile(toml)) build = JkBuildParser.parse(toml);
+                if (lf != null && Files.isRegularFile(lf)) lock = LockfileReader.read(lf);
+            } catch (Exception ignored) {
+                // unreadable module — dropped (can't read its scopes)
+            }
+            if (build != null) modules.add(new LoadedModule(build, lock, dir));
+        }
+        return modules;
+    }
+
+    // --- flatten mode --------------------------------------------------------
+
+    /** One flattened dependency: {@code group:artifact}, optional resolved version, and a tag. */
+    private record FlatDep(String module, String version, String tag) {}
+
+    /** Single-project flatten: each scope lists its full transitive dep closure, flat + sorted. */
+    private static void renderFlatScopes(
+            JkBuild project, Lockfile lock, Path dir, Styling styling, StringBuilder out) {
+
+        Map<String, Lockfile.Artifact> byModule = lock == null ? Map.of() : indexByModule(lock);
+        Map<String, Dependency> composite = compositeDeps(project);
+        List<Scope> sections = new ArrayList<>();
+        for (Scope s : SCOPE_SECTIONS) {
+            if (!project.dependencies().of(s).isEmpty()) sections.add(s);
+        }
+        for (int si = 0; si < sections.size(); si++) {
+            Scope s = sections.get(si);
+            Map<String, FlatDep> collected = new TreeMap<>();
+            Set<String> visited = new HashSet<>();
+            for (String m : directModules(project, s)) {
+                collectFlat(m, composite, byModule, Map.of(), visited, collected);
+            }
+            renderFlatSection(s, si == sections.size() - 1, collected, "", styling, out);
+        }
+    }
+
+    /** Workspace-root flatten: each scope is the union of every module's closure for that scope. */
+    private static void renderFlatWorkspaceScopes(
+            JkBuild root, Path rootDir, Styling styling, StringBuilder out) {
+
+        Map<String, String> byName = workspaceModulesByName(root.workspace().modules(), rootDir);
+        List<LoadedModule> modules = loadModules(root.workspace().modules(), rootDir);
+
+        List<Scope> sections = new ArrayList<>();
+        for (Scope s : SCOPE_SECTIONS) {
+            if (modules.stream().anyMatch(m -> !m.build().dependencies().of(s).isEmpty())) {
+                sections.add(s);
+            }
+        }
+        for (int si = 0; si < sections.size(); si++) {
+            Scope s = sections.get(si);
+            Map<String, FlatDep> collected = new TreeMap<>();
+            Set<String> visited = new HashSet<>();
+            for (LoadedModule m : modules) {
+                if (m.build().dependencies().of(s).isEmpty()) continue;
+                Map<String, Lockfile.Artifact> byModule =
+                        m.lock() == null ? Map.of() : indexByModule(m.lock());
+                Map<String, Dependency> composite = compositeDeps(m.build());
+                for (String dep : directModules(m.build(), s)) {
+                    collectFlat(dep, composite, byModule, byName, visited, collected);
+                }
+            }
+            renderFlatSection(s, si == sections.size() - 1, collected, "", styling, out);
+        }
+    }
+
+    /** Emit a scope header followed by its flattened, sorted dependency list. */
+    private static void renderFlatSection(
+            Scope scope, boolean lastScope, Map<String, FlatDep> collected,
+            String prefix, Styling styling, StringBuilder out) {
+
+        out.append(prefix).append(styling.rail().apply(lastScope ? "╰─" : "├─"))
+                .append(styling.scopeBadge().apply(scopeLabel(scope))).append('\n');
+        String scopePrefix = prefix + styling.rail().apply(lastScope ? "   " : "│  ");
+        List<FlatDep> deps = new ArrayList<>(collected.values());
+        for (int i = 0; i < deps.size(); i++) {
+            FlatDep d = deps.get(i);
+            out.append(scopePrefix).append(styling.rail().apply(i == deps.size() - 1 ? "╰─ " : "├─ "))
+                    .append(coordVersioned(d.module(), d.version(), styling))
+                    .append(styling.rail().apply(d.tag())).append('\n');
+        }
+    }
+
+    /** Walk a dependency and its transitive closure, accumulating distinct coords into {@code out}. */
+    private static void collectFlat(
+            String module, Map<String, Dependency> composite,
+            Map<String, Lockfile.Artifact> byModule, Map<String, String> byName,
+            Set<String> visited, Map<String, FlatDep> out) {
+
+        if (module.startsWith("workspace:")) {
+            String name = module.substring("workspace:".length());
+            putFlat(out, new FlatDep(byName.getOrDefault(name, module), null, " [workspace]"));
+            return;
+        }
+        Dependency comp = composite.get(module);
+        if (comp != null && comp.isPath()) {
+            putFlat(out, new FlatDep(module, null, " [path]"));
+            return;
+        }
+        if (comp != null && comp.isGit()) {
+            String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
+            putFlat(out, new FlatDep(module, null, " [git: " + ref + "]"));
+            return;
+        }
+        if (!visited.add(module)) return;
+        Lockfile.Artifact pkg = byModule.get(module);
+        if (pkg == null) {
+            putFlat(out, new FlatDep(module, null, MISSING_SUFFIX));
+            return;
+        }
+        putFlat(out, new FlatDep(module, pkg.version(), ""));
+        for (String child : pkg.deps()) {
+            collectFlat(stripVersion(child), composite, byModule, byName, visited, out);
+        }
+    }
+
+    /** Dedup by {@code group:artifact}, preferring an entry that carries a resolved version. */
+    private static void putFlat(Map<String, FlatDep> out, FlatDep dep) {
+        FlatDep existing = out.get(dep.module());
+        if (existing == null || (existing.version() == null && dep.version() != null)) {
+            out.put(dep.module(), dep);
+        }
+    }
+
+    /** A project's direct dep modules in one scope, distinct + sorted. */
+    private static List<String> directModules(JkBuild project, Scope scope) {
+        return project.dependencies().of(scope).stream()
+                .map(Dependency::module).distinct().sorted().toList();
+    }
+
+    /** {@code group:artifact:version} when a version is known, else {@code group:artifact}. */
+    private static String coordVersioned(String module, String version, Styling styling) {
+        int colon = module.indexOf(':');
+        String groupId = colon > 0 ? module.substring(0, colon) : module;
+        String artifactId = colon > 0 ? module.substring(colon + 1) : "";
+        return version == null
+                ? styling.group().apply(groupId) + ":" + styling.artifact().apply(artifactId)
+                : formatCoord(groupId, artifactId, version, styling);
     }
 
     /** Render one direct dependency, dispatching on its kind (maven / workspace / path / branch-git). */

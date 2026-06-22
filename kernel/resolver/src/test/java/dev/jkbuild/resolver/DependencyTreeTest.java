@@ -190,6 +190,30 @@ class DependencyTreeTest {
                 .isLessThan(rendered.indexOf("com.acme:a [workspace]"));
     }
 
+    @Test
+    void flatten_lists_each_scope_dep_once_without_nesting(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+        // Diamond: root -> a -> leaf ; root -> b -> leaf.
+        JkBuild project = projectWithMainDeps("com.foo:root");
+        Lockfile lock = lockOf(
+                pkg("com.foo:root", "1.0", List.of("com.foo:a@1.0", "com.foo:b@1.0")),
+                pkg("com.foo:a", "1.0", List.of("com.foo:leaf@1.0")),
+                pkg("com.foo:b", "1.0", List.of("com.foo:leaf@1.0")),
+                pkg("com.foo:leaf", "1.0", List.of()));
+
+        String rendered = DependencyTree.render(project, lock, dir, Integer.MAX_VALUE,
+                DependencyTree.Styling.plain(), true);
+
+        // Whole closure present, flat, with no back-reference markers.
+        assertThat(rendered).contains("com.foo:root:1.0")
+                .contains("com.foo:a:1.0").contains("com.foo:b:1.0")
+                .contains("com.foo:leaf:1.0");
+        assertThat(rendered).doesNotContain("⎋");
+        // leaf is deduped to a single line despite two paths to it.
+        int first = rendered.indexOf("com.foo:leaf:1.0");
+        assertThat(rendered.indexOf("com.foo:leaf:1.0", first + 1)).isEqualTo(-1);
+    }
+
     // --- helpers -----------------------------------------------------------
 
     private static final String EMPTY_LOCK = """

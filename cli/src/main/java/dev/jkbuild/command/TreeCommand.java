@@ -34,12 +34,16 @@ public final class TreeCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.value("<depth>", "Maximum tree depth. Default: unlimited.", "--depth"));
+        return List.of(
+                Opt.value("<depth>", "Maximum tree depth. Default: unlimited.", "--depth"),
+                Opt.flag("Flatten each scope to a deduplicated, sorted list of all "
+                        + "(transitive) dependencies, dropping the nesting.", "--flatten"));
     }
 
     @Override
     public int run(Invocation in) throws IOException {
         Integer depth = in.value("depth").map(Integer::parseInt).orElse(null);
+        boolean flatten = in.isSet("flatten");
         Path dir = new GlobalOptions().workingDir();
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
@@ -71,7 +75,7 @@ public final class TreeCommand implements CliCommand {
         System.out.println();
         System.out.println(header);
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).
-        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont));
+        String rendered = DependencyTree.render(project, lock, dir, max, styling(nerdfont), flatten);
         System.out.print(indentBody(rendered));
         if (rendered.contains(DependencyTree.MISSING_SUFFIX)) {
             System.out.println();
