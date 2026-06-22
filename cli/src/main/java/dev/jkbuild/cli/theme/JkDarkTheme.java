@@ -223,8 +223,8 @@ public final class JkDarkTheme implements Theme {
         return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), NORMAL_CYAN);
     }
 
-    /** The shared near-black (#080808) text color for every goal chip. */
-    private static final Rgb GOAL_CHIP_TEXT = Rgb.hex(0x080808);
+    /** The shared black (#000000) text color for every goal chip. */
+    private static final Rgb GOAL_CHIP_TEXT = Rgb.hex(0x000000);
 
     @Override
     public AttributedStyle goalChip() {
