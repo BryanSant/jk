@@ -66,22 +66,22 @@ class SpinnerProgressBarTest {
 
     @Test
     void rightmost_filled_glyph_is_always_the_gradient_end() {
-        // The frontier glyph is pinned to the gradient end (dark-blue)
-        // at every fill level; the band trails leftward toward the bright-cyan start.
-        assertThat(frontierColor(5)).isEqualTo("38;2;13;71;161");
-        assertThat(frontierColor(50)).isEqualTo("38;2;13;71;161");
-        assertThat(frontierColor(100)).isEqualTo("38;2;13;71;161");
+        // The frontier glyph is pinned to the gradient end (bright-magenta)
+        // at every fill level; the band trails leftward toward the indigo start.
+        assertThat(frontierColor(5)).isEqualTo("38;2;224;64;251");
+        assertThat(frontierColor(50)).isEqualTo("38;2;224;64;251");
+        assertThat(frontierColor(100)).isEqualTo("38;2;224;64;251");
     }
 
     @Test
     void single_filled_glyph_uses_only_the_gradient_end() {
-        // 2.5% → 1 filled glyph: it must be the dark-blue end, not the bright-cyan start.
+        // 2.5% → 1 filled glyph: it must be the bright-magenta end, not the indigo start.
         var buf = new ByteArrayOutputStream();
         try (var pb = SpinnerProgressBar.show(stream(buf))) {
             pb.update(2, "x");   // round(2 * 40 / 100) = 1 filled
         }
         var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));
-        assertThat(colors).containsExactly("38;2;13;71;161");
+        assertThat(colors).containsExactly("38;2;224;64;251");
     }
 
     @Test
@@ -172,14 +172,14 @@ class SpinnerProgressBarTest {
     }
 
     @Test
-    void gradient_runs_from_bright_cyan_to_dark_blue() {
+    void gradient_runs_from_indigo_to_bright_magenta() {
         var colors = SpinnerProgressBar.buildGradient(20);
         assertThat(colors).hasSize(20);
-        // Jk Dark bright-cyan #18FFFF → dark-blue #0D47A1.
+        // Jk Dark indigo #3F51B5 → bright-magenta #E040FB.
         String first = colors[0].toAnsi();
         String last = colors[19].toAnsi();
-        assertThat(first).isEqualTo("38;2;24;255;255");     // bright-cyan start
-        assertThat(last).isEqualTo("38;2;13;71;161");       // dark-blue end
+        assertThat(first).isEqualTo("38;2;63;81;181");      // indigo start
+        assertThat(last).isEqualTo("38;2;224;64;251");      // bright-magenta end
     }
 
     private static PrintStream stream(ByteArrayOutputStream buf) {
