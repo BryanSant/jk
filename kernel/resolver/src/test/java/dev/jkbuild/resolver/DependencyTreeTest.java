@@ -138,7 +138,7 @@ class DependencyTreeTest {
     }
 
     @Test
-    void workspace_root_walks_modules_and_collapses_sibling_deps(
+    void workspace_root_groups_modules_under_scope_sections(
             @org.junit.jupiter.api.io.TempDir java.nio.file.Path root) throws Exception {
         // A workspace root with two modules; module b depends on a via `workspace = true`.
         java.nio.file.Files.writeString(root.resolve("jk.toml"), """
@@ -175,13 +175,19 @@ class DependencyTreeTest {
                 Integer.MAX_VALUE, DependencyTree.Styling.plain());
 
         assertThat(rendered).contains("com.acme:ws:9.9.9");   // root
-        assertThat(rendered).contains("com.acme:a:9.9.9");    // module a walked
-        assertThat(rendered).contains("com.acme:b:9.9.9");    // module b walked
+        // Scope-first: a `main` section is the top-level node, and module b (the only
+        // module that declares a main dep) is a node beneath it. Module a has no deps
+        // of its own, so it is NOT a standalone node — it appears only as b's sibling.
+        assertThat(rendered).contains("main");
+        assertThat(rendered).contains("com.acme:b:9.9.9");
         // b's `workspace = true` dep on a: collapsed reference, resolved to a's real
         // coord (not the synthetic "workspace:a") and not flagged "(missing)".
         assertThat(rendered).contains("com.acme:a [workspace]");
         assertThat(rendered).doesNotContain("workspace:a");
         assertThat(rendered).doesNotContain("(missing)");
+        // b is the group node; a appears only as b's collapsed sibling nested under it.
+        assertThat(rendered.indexOf("com.acme:b:9.9.9"))
+                .isLessThan(rendered.indexOf("com.acme:a [workspace]"));
     }
 
     // --- helpers -----------------------------------------------------------
