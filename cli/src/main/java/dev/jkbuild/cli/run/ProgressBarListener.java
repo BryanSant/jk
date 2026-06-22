@@ -145,7 +145,7 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void output(String phase, String line) {
-        writeAboveInternal(line);
+        writeAboveInternal(StackTraceHighlight.line(line));
     }
 
     @Override

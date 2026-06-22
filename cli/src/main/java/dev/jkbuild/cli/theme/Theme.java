@@ -189,6 +189,16 @@ public interface Theme {
     /** Annotation use ({@code @Test}, {@code @Override}, …) — GitHub purple {@code #d2a8ff}. */
     AttributedStyle synAnnotation();
 
+    /**
+     * Namespace / package qualifier (the {@code java.util} in {@code java.util.List},
+     * the package segments of a stack-frame class) — GitHub gray {@code #8b949e}, so
+     * the qualifier recedes behind the simple type name.
+     */
+    AttributedStyle synNamespace();
+
+    /** Punctuation ({@code ; . , : ( ) [ ] { }}) — GitHub gray {@code #8b949e}. */
+    AttributedStyle synPunctuation();
+
     /** Error label/prefix — bold red. */
     AttributedStyle errorLabel();
 

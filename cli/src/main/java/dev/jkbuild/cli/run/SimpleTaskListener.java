@@ -43,8 +43,9 @@ public final class SimpleTaskListener implements GoalListener {
     @Override
     public void output(String phase, String line) {
         // Above the pinned spinner when one exists; otherwise straight to stdout.
-        if (cm != null) cm.writeAbove(line);
-        else out.println(line);
+        String painted = StackTraceHighlight.line(line);
+        if (cm != null) cm.writeAbove(painted);
+        else out.println(painted);
     }
 
     @Override

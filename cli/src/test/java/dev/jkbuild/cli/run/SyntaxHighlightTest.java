@@ -85,4 +85,23 @@ class SyntaxHighlightTest {
         assertThat(out).isEqualTo(SyntaxHighlight.highlight(src, -1)); // identical to no-caret render
         assertThat(plain(out)).isEqualTo(src);
     }
+
+    @Test
+    void kotlin_keywords_are_colored() {
+        String src = "fun greet(name: String) = name";
+        String fun = Theme.colorize("fun", Theme.active().synKeyword());
+        String out = SyntaxHighlight.highlight(src, -1, SyntaxHighlight.Language.KOTLIN);
+        assertThat(out).contains(fun);
+        assertThat(plain(out)).isEqualTo(src);   // text still round-trips
+    }
+
+    @Test
+    void kotlin_does_not_color_types_per_prism_grammar() {
+        // Prism's Kotlin grammar deletes clike's `class-name`, so a Capitalized
+        // identifier is NOT painted as a type (unlike Java).
+        String src = "val x: String";
+        String typed = Theme.colorize("String", Theme.active().synType());
+        assertThat(SyntaxHighlight.highlight(src, -1, SyntaxHighlight.Language.KOTLIN))
+                .doesNotContain(typed);
+    }
 }

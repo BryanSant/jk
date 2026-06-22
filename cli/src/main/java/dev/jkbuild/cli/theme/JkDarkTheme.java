@@ -344,6 +344,16 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle synNamespace() {
+        return withColor(AttributedStyle.DEFAULT, GH_COMMENT);
+    }
+
+    @Override
+    public AttributedStyle synPunctuation() {
+        return withColor(AttributedStyle.DEFAULT, GH_COMMENT);
+    }
+
+    @Override
     public AttributedStyle errorLabel() {
         return withColor(AttributedStyle.DEFAULT.bold(), NORMAL_RED);
     }

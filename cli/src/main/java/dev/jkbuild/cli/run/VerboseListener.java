@@ -49,7 +49,7 @@ public final class VerboseListener implements GoalListener {
 
     @Override
     public void output(String phase, String line) {
-        out.println(line);
+        out.println(StackTraceHighlight.line(line));
     }
 
     @Override

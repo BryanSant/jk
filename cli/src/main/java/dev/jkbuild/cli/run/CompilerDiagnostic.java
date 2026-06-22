@@ -39,16 +39,21 @@ public final class CompilerDiagnostic {
     public static String render(String rawBlock) {
         String[] lines = rawBlock.split("\n", -1);
         StringBuilder out = new StringBuilder();
+        // The language of the source snippets, tracked from the most recent header's
+        // file extension (.kt/.kts → Kotlin, else Java). kotlinc batches several
+        // diagnostics in one block, so re-read it per header rather than once.
+        SyntaxHighlight.Language lang = SyntaxHighlight.Language.JAVA;
         for (int i = 0; i < lines.length; i++) {
             if (i > 0) out.append('\n');
             String line = lines[i];
             Matcher header = HEADER.matcher(line);
             if (header.matches()) {
+                lang = languageOf(header.group("file"));
                 out.append(header(header));
             } else if (CARET.matcher(line).matches()) {
                 out.append(line);   // the highlighted char was emitted on the line above
             } else if (i + 1 < lines.length && CARET.matcher(lines[i + 1]).matches()) {
-                out.append(sourceWithCaret(line, lines[i + 1]));
+                out.append(sourceWithCaret(line, lines[i + 1], lang));
             } else {
                 Matcher kv = KEY_VALUE.matcher(line);
                 if (kv.matches()) {
@@ -79,7 +84,14 @@ public final class CompilerDiagnostic {
      * caret points at. A misaligned caret (out of range) still highlights the
      * line, just without an underline — {@link SyntaxHighlight} handles both.
      */
-    private static String sourceWithCaret(String src, String caretLine) {
-        return SyntaxHighlight.highlight(src, caretLine.indexOf('^'));
+    private static String sourceWithCaret(String src, String caretLine, SyntaxHighlight.Language lang) {
+        return SyntaxHighlight.highlight(src, caretLine.indexOf('^'), lang);
+    }
+
+    /** Java unless the header's file ends in {@code .kt}/{@code .kts}. */
+    private static SyntaxHighlight.Language languageOf(String file) {
+        return file.endsWith(".kt") || file.endsWith(".kts")
+                ? SyntaxHighlight.Language.KOTLIN
+                : SyntaxHighlight.Language.JAVA;
     }
 }
