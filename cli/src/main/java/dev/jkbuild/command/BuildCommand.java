@@ -318,9 +318,6 @@ public final class BuildCommand implements CliCommand {
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         CommandManager view = CommandManager.goal(System.out, "Build", animate);
-        // Show the ETA countdown only once we've learned timings — cold, the weight
-        // total is a static guess and a remaining-time estimate would mislead.
-        view.enableEta(!dev.jkbuild.runtime.PhaseTimings.load(cache).isEmpty());
         AggregateContext agg = new AggregateContext(view);
         long start = System.nanoTime();
         int total = units.size();
@@ -346,6 +343,9 @@ public final class BuildCommand implements CliCommand {
             totalWeight += pm.barWeight();
         }
         agg.calibrate(totalWeight);
+        // Seed the countdown with the predicted total (= the jk explain figure):
+        // bar weight × ≈150 ms. It then ticks down purely by wall-clock.
+        view.setEtaEstimate((long) totalWeight * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT);
 
         Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
         List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
@@ -564,8 +564,6 @@ public final class BuildCommand implements CliCommand {
         // single bar + merged phase list). Settle it once after the last member.
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         CommandManager view = CommandManager.goal(System.out, "Build", animate);
-        view.enableEta(!dev.jkbuild.runtime.PhaseTimings.load(
-                cacheDir != null ? cacheDir : JkDirs.cache()).isEmpty());
         AggregateContext agg = new AggregateContext(view);
         int built = 0;
         long buildStart = System.nanoTime();
@@ -595,6 +593,8 @@ public final class BuildCommand implements CliCommand {
                 prepared.put(memberDir, pm);
             }
             agg.calibrate(total);
+            // Seed the wall-clock countdown with the predicted total (the jk explain figure).
+            view.setEtaEstimate((long) total * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT);
 
             for (Path memberDir : sorted) {
                 String member = workspaceRoot.relativize(memberDir).toString();

@@ -148,38 +148,31 @@ class CommandManagerTest {
     }
 
     @Test
-    void header_shows_an_eta_countdown_only_when_timings_are_available() {
+    void header_shows_a_wallclock_countdown_from_the_estimate() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
         cm.nerdfont = false;
-        cm.progress(50, 100);   // 50 weights remaining → 50 × 150ms = 7.5s
+        cm.progress(50, 100);
 
-        // Cold (no learned timings): no countdown clock.
+        // No estimate set → no countdown clock.
         assertThat(stripAnsi(cm.renderGoalLines(120, 4_000).get(0))).doesNotContain("[");
 
-        // Warm: a [hh:mm:ss] countdown of the remaining weight.
-        cm.enableEta(true);
+        // Seeded with a 60s estimate, the clock counts down by pure wall-clock: at 4s
+        // elapsed, 56s remain — independent of the bar's numerator/denominator.
+        cm.setEtaEstimate(60_000);
         String header = cm.renderGoalLines(120, 4_000).get(0);
-        assertThat(stripAnsi(header)).contains("[00:00:07]");
+        assertThat(stripAnsi(header)).contains("[00:00:56]");
         // Brackets/colons bright-black; digits gray.
         assertThat(header).contains(Theme.colorize("[", Theme.active().darkGray()));
-        assertThat(header).contains(Theme.colorize("07", Theme.active().normalGray()));
+        assertThat(header).contains(Theme.colorize("56", Theme.active().normalGray()));
     }
 
     @Test
-    void eta_countdown_eases_a_denominator_spike_instead_of_teleporting() {
+    void eta_countdown_holds_at_zero_when_the_build_overruns_the_estimate() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
         cm.nerdfont = false;
-        cm.enableEta(true);
-        cm.progress(50, 100);                                  // 50 weights remaining → 7.5s
-        assertThat(stripAnsi(cm.renderGoalLines(120, 4_000).get(0))).contains("[00:00:07]");
-
-        // The total balloons mid-build (e.g. run-tests reweights up): raw remaining
-        // jumps to (1000-50)×150ms ≈ 2m22s. The damped clock must NOT teleport there —
-        // it eases: 0.15×142.5s + 0.85×7.5s ≈ 27s.
-        cm.progress(50, 1000);
-        String header = stripAnsi(cm.renderGoalLines(120, 4_000).get(0));
-        assertThat(header).contains("[00:00:27]");             // eased, not the raw 02:22
-        assertThat(header).doesNotContain("02:");
+        cm.setEtaEstimate(10_000);   // 10s estimate
+        // 15s elapsed → past the estimate → clamped to zero, never negative.
+        assertThat(stripAnsi(cm.renderGoalLines(120, 15_000).get(0))).contains("[00:00:00]");
     }
 
     @Test

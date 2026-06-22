@@ -59,10 +59,10 @@ class GradientTest {
     }
 
     @Test
-    void progress_runs_dark_blue_to_bright_cyan() {
-        // The build/progress fill: dark-blue #0D47A1 → bright-cyan #18FFFF.
+    void progress_runs_bright_cyan_to_dark_blue() {
+        // The build/progress fill: bright-cyan #18FFFF → dark-blue #0D47A1.
         assertThat(Theme.active().progressGradient())
-                .isEqualTo(new Gradient(JkDarkTheme.DARK_BLUE, JkDarkTheme.BRIGHT_CYAN));
+                .isEqualTo(new Gradient(JkDarkTheme.BRIGHT_CYAN, JkDarkTheme.DARK_BLUE));
     }
 
     @Test
