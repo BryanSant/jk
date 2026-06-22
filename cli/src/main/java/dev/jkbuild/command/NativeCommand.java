@@ -261,10 +261,10 @@ public final class NativeCommand implements CliCommand {
         if (agg != null) {
             result = GoalConsole.runGoalInto(pm.goal(), pm.cache(), pm.target(), agg, pm.barWeight());
         } else {
-            String ok = Theme.colorize(pm.eligible() ? "Native build successful" : "Build successful",
-                    Theme.active().success()) + ", project built";
+            String verb = pm.eligible() ? "Native build successful" : "Build successful";
             ConsoleSpec spec = new ConsoleSpec("Build",
-                    r -> ok, r -> GoalChrome.coord(pm.target()), true);
+                    r -> Theme.colorize(verb, Theme.active().success()) + BuildCommand.builtArtifact(pm.goal()),
+                    r -> GoalChrome.coord(pm.target()), true);
             result = GoalConsole.runGoal(pm.goal(), GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
         return result.success() ? 0 : 1;
@@ -313,7 +313,8 @@ public final class NativeCommand implements CliCommand {
 
         String coord = BuildCommand.buildTarget(buildFile, projectDir);
         ConsoleSpec spec = new ConsoleSpec("Build",
-                r -> Theme.colorize("Native build successful", Theme.active().success()) + ", project built",
+                r -> Theme.colorize("Native build successful", Theme.active().success())
+                        + BuildCommand.builtArtifact(goal),
                 r -> GoalChrome.coord(coord),
                 true);
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, coord);

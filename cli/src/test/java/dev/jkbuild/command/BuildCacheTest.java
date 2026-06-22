@@ -70,7 +70,7 @@ class BuildCacheTest {
 
         String stdout = captureStdout(() ->
                 run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
-        assertThat(stdout).contains("project built");
+        assertThat(stdout).contains("Built");
     }
 
     private static void deleteRecursively(Path root) throws IOException {
@@ -110,7 +110,7 @@ class BuildCacheTest {
         String stdout = captureStdout(() ->
                 run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
         assertThat(stdout).doesNotContain("Cache hit");
-        assertThat(stdout).contains("project built");
+        assertThat(stdout).contains("Built");
     }
 
     // --- helpers -----------------------------------------------------------

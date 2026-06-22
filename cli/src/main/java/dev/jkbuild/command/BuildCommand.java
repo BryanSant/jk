@@ -872,10 +872,46 @@ public final class BuildCommand implements CliCommand {
         return buildOk() + ", " + scope + " up to date " + elapsedSince(start);
     }
 
-    /** Single-project success tail {@code Build successful, project up to date / built} (no duration; the framework appends it). */
+    /**
+     * Single-project success tail: {@code Build successful, project up to date} when
+     * nothing was rebuilt, else {@code Build successful. Built <artifact>} naming the
+     * headline output. No duration — the framework appends it.
+     */
     private static String projectTail(Goal goal) {
-        return buildOk() + ("up-to-date".equals(goal.get(BUILD_OUTCOME).orElse(""))
-                ? ", project up to date" : ", project built");
+        if ("up-to-date".equals(goal.get(BUILD_OUTCOME).orElse(""))) {
+            return buildOk() + ", project up to date";
+        }
+        String art = builtArtifact(goal);
+        return buildOk() + (art.isEmpty() ? ", project built" : art);
+    }
+
+    /**
+     * The headline artifact this build produced, as {@code ". Built <relpath>"} in the
+     * path color — the native binary/library if present, else the shadow (fat) jar,
+     * else the plain jar. Empty when none exists. Shared with {@code jk native}.
+     */
+    static String builtArtifact(Goal goal) {
+        BuildLayout layout = goal.get(LAYOUT).orElse(null);
+        if (layout == null) return "";
+        Path art = firstExisting(layout.nativeBinary(), layout.nativeLibrary(),
+                layout.shadowJar(), layout.mainJar());
+        return art == null ? "" : ". Built " + Theme.colorize(
+                relForDisplay(layout.memberRoot(), art), Theme.active().path());
+    }
+
+    private static Path firstExisting(Path... paths) {
+        for (Path p : paths) {
+            if (p != null && Files.isRegularFile(p)) return p;
+        }
+        return null;
+    }
+
+    private static String relForDisplay(Path base, Path p) {
+        try {
+            return base.relativize(p).toString().replace(java.io.File.separatorChar, '/');
+        } catch (RuntimeException e) {
+            return p.getFileName().toString();
+        }
     }
 
     /** Failure tail {@code group:name took T} — coord colored, {@code took T} bright-black. */
