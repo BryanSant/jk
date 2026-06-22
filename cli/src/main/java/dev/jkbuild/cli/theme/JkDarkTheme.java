@@ -212,36 +212,36 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle scopeBadge() {
-        // Near-black text (not pure #000000) on the bright-black chip.
-        return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), BRIGHT_BLACK);
+        // Pure-black text on the bright-black chip.
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), BRIGHT_BLACK);
     }
 
     @Override
     public AttributedStyle cyanBadge() {
-        // Near-black text on the cyan chip (the ▶ arrow is painted in NORMAL_CYAN — the
+        // Pure-black text on the cyan chip (the ▶ arrow is painted in NORMAL_CYAN — the
         // chip background — by the caller).
-        return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), NORMAL_CYAN);
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_CYAN);
     }
 
-    /** The shared black (#000000) text color for every goal chip. */
-    private static final Rgb GOAL_CHIP_TEXT = Rgb.hex(0x000000);
+    /** Pure black (#000000) — the text color for every chip/badge that sets a background. */
+    private static final Rgb CHIP_TEXT = Rgb.hex(0x000000);
 
     @Override
     public AttributedStyle goalChip() {
-        // Near-black text on the goal green (the live build spinner + verb chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, GOAL_CHIP_TEXT), NORMAL_GREEN);
+        // Pure-black text on the goal green (the live build spinner + verb chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_GREEN);
     }
 
     @Override
     public AttributedStyle goalSuccessChip() {
-        // Near-black text on the goal green (the settled "✓ Build" chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, GOAL_CHIP_TEXT), NORMAL_GREEN);
+        // Pure-black text on the goal green (the settled "✓ Build" chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_GREEN);
     }
 
     @Override
     public AttributedStyle goalFailureChip() {
-        // Near-black text on the failure red (the settled "‼ Build" chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, GOAL_CHIP_TEXT), NORMAL_RED);
+        // Pure-black text on the failure red (the settled "‼ Build" chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_RED);
     }
 
     @Override
