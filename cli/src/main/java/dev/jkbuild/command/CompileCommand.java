@@ -34,7 +34,7 @@ public final class CompileCommand implements CliCommand {
     @Override public String description() { return "Compile this project's source code"; }
     @Override public List<Opt> options() {
         return List.of(
-                Opt.value("<name>", "Build profile to apply. Default: auto (ci if CI=true, else none).", "--profile"),
+                Opt.value("<name>", "Apply a build profile. Default: auto (ci on CI).", "--profile"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide());
     }
 

@@ -46,7 +46,7 @@ public final class TestCommand implements CliCommand {
     @Override public List<Opt> options() {
         return List.of(
                 Opt.value("<name>", "Build profile to apply.", "--profile"),
-                Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
+                Opt.value("<N>", "Test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
     }

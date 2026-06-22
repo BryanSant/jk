@@ -86,31 +86,30 @@ public final class AddCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<handle>", "Library handle used as the manifest key. Defaults to the name.",
+                Opt.value("<handle>", "Manifest key; defaults to the dependency name.",
                         "--library"),
                 Opt.value("<group>",
-                        "Maven groupId. Required when the positional argument is a bare short name.",
+                        "Maven groupId. Required for a bare short name.",
                         "--group"),
-                Opt.value("<name>", "Dependency name (Maven artifactId). Defaults to the library handle.",
+                Opt.value("<name>", "Maven artifactId; defaults to the library handle.",
                         "--name"),
                 // --version collides with the global --version, so jk uses --ver.
                 Opt.value("<ver>",
-                        "Version selector (e.g. \"3.4.0\", \"=3.4.0\", \"~3.4\"). "
-                                + "Required when the positional argument is a bare short name.",
+                        "Version selector, e.g. \"3.4.0\", \"~3.4\", \"=3.4.0\".",
                         "--ver"),
                 Opt.flag("Test scope", "--test"),
                 Opt.flag("Runtime scope", "--runtime"),
                 Opt.flag("Provided scope", "--provided"),
                 Opt.flag("Annotation processor scope", "--processor"),
-                Opt.flag("Check whether the dependency is reachable in configured repos without adding it.",
+                Opt.flag("Check the dep is reachable without adding it.",
                         "--ping"));
     }
 
     @Override
     public List<Param> parameters() {
         return List.of(Param.of("dep|path", Arity.ONE,
-                "A dependency by its short-name, group:artifact@version, or group:artifact:version\n"
-                        + "...or a local workspace module (:name or a relative path like ./foo/bar)."));
+                "A dep: short-name, group:artifact[:version], or @version\n"
+                        + "...or a local module (:name or a path like ./foo/bar)."));
     }
 
     @Override

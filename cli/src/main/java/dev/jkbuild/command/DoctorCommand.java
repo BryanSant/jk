@@ -33,7 +33,7 @@ public final class DoctorCommand implements CliCommand {
         return List.of(
                 Opt.value("<dir>", "Override the tools install root. Default: $JK_CACHE_DIR/tools.",
                         "--tools-dir").hide(),
-                Opt.flag("SHA-256 every file under each linked install; record a fingerprint.",
+                Opt.flag("Fingerprint each linked install (SHA-256 every file)",
                         "--verify-linked"));
     }
 

@@ -25,7 +25,7 @@ public final class LibraryListCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<layer>", "Filter to a single source layer (project, local, global, bundled).", "--layer"),
+                Opt.value("<layer>", "Filter to one layer (project|local|global|bundled)", "--layer"),
                 Opt.flag("Append the source layer to each row.", "--show-layer"),
                 Opt.flag("Group libraries under a heading per source layer.", "--group-by-layer"));
     }

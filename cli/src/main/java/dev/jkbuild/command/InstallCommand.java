@@ -100,7 +100,7 @@ public final class InstallCommand implements CliCommand {
                 Opt.value("<group>", "Maven groupId for a local file install.", "--group"),
                 Opt.value("<name>", "Maven artifactId for a local file install.", "--name"),
                 Opt.value("<ver>", "Version for a local file install.", "--ver"),
-                Opt.value("<name>", "Launcher name under $JK_BIN_DIR. Default: the artifact id.", "--bin"),
+                Opt.value("<name>", "Launcher name in $JK_BIN_DIR. Default: artifact id.", "--bin"),
                 Opt.value("<class>", "Override the Main-Class to exec.", "--main"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the tool state directory.", "--state-dir").hide(),
@@ -112,7 +112,7 @@ public final class InstallCommand implements CliCommand {
     }
     @Override public List<Param> parameters() {
         return List.of(Param.of("source", Arity.ZERO_OR_ONE,
-                "Maven coord, a git URL, or a path to a local file. Omit to install the current jk.toml project."));
+                "Maven coord, git URL, or local file path. Omit to\ninstall the current jk.toml project."));
     }
 
     String source;

@@ -50,8 +50,8 @@ public final class RemoveCommand implements CliCommand {
     @Override
     public List<Param> parameters() {
         return List.of(Param.of("name", Arity.ONE,
-                "Short name of the dependency to remove (the manifest key). "
-                        + "A group:artifact[:version] coord is also accepted; the artifactId is used as the name."));
+                "Short name (manifest key) of the dependency to remove.\n"
+                        + "A group:artifact[:version] coord works too (uses artifactId)."));
     }
 
     @Override

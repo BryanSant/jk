@@ -63,8 +63,8 @@ public final class CleanCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.flag("Only delete build/ intermediates; keep target/ artifacts.", "--keep-artifacts"),
-                Opt.flag("Also GC the shared cache: purge unreferenced blobs idle 90+ days.", "--cache"));
+                Opt.flag("Delete only build/ intermediates; keep artifacts.", "--keep-artifacts"),
+                Opt.flag("GC the shared cache: purge blobs idle 90+ days.", "--cache"));
     }
 
     @Override

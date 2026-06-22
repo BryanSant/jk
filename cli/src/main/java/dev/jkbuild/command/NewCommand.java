@@ -66,22 +66,21 @@ public final class NewCommand implements CliCommand {
     @Override public List<String> aliases() { return List.of("create"); }
     @Override public List<Opt> options() {
         return List.of(
-                Opt.value("<name>", "Project name — the target directory leaf and [project].name.", "--name"),
-                Opt.value("<group>", "Maven groupId. Default: inferred from ~/.gitconfig, else 'com.example'.", "--group"),
-                Opt.value("<spec>", "JDK spec: <major> (e.g. 25), <vendor>-<major> "
-                        + "(e.g. corretto-25), or lts|stable|latest. Default: the latest LTS.", "--jdk"),
-                Opt.value("<lang>", "Source language: java | kotlin. Default: java.", "--lang"),
-                Opt.flag("Generate an executable project (default is library).", "--executable").negate(),
-                Opt.flag("Bundle as a shadow (fat) jar. Implies --executable.", "--shadow"),
+                Opt.value("<name>", "Project name and target directory leaf.", "--name"),
+                Opt.value("<group>", "Maven groupId (default: from git config).", "--group"),
+                Opt.value("<spec>", "JDK: 25, corretto-25, or lts|stable|latest.", "--jdk"),
+                Opt.value("<lang>", "Language: java | kotlin. Default: java.", "--lang"),
+                Opt.flag("Executable project (default is a library).", "--executable").negate(),
+                Opt.flag("Shadow (fat) jar. Implies --executable.", "--shadow"),
                 Opt.flag("Wire a GraalVM native-image build.", "--native"),
-                Opt.value("<deps>", "Comma-separated curated deps: lombok, jspecify, kotest, commons-lang, commons-io, guava.", "--deps"),
-                Opt.value("<layout>", "Project layout: simple | traditional | auto. Default: simple.", "--layout"),
-                Opt.value("<module>", "Kotlin module name; emitted as project.module in jk.toml.", "--kotlin-module"),
-                Opt.flag("Create a standalone project even inside an existing project/workspace.", "--no-module"),
+                Opt.value("<deps>", "Curated deps, comma-separated.", "--deps"),
+                Opt.value("<layout>", "Layout: simple | traditional.", "--layout"),
+                Opt.value("<module>", "Kotlin module name (-> project.module).", "--kotlin-module"),
+                Opt.flag("Force a standalone project (not a module).", "--no-module"),
                 Opt.flag("", "--no-member").hide());   // undocumented synonym for --no-module
     }
     @Override public List<Param> parameters() {
-        return List.of(Param.of("directory", Arity.ZERO_OR_ONE, "Target directory. Default: current directory or --name subdir."));
+        return List.of(Param.of("directory", Arity.ZERO_OR_ONE, "Target directory. Default: cwd or a ./<name> subdir."));
     }
 
     String name;

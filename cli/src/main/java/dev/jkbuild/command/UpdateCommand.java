@@ -81,11 +81,11 @@ public final class UpdateCommand implements CliCommand {
     public List<Opt> options() {
         return List.of(
                 Opt.value("<coord>@<ver>",
-                        "Pin a single coord to a version for this update (not yet implemented).", "--precise"),
-                Opt.value("<a,b,...>", "Activate the listed features in addition to defaults.", "--features")
+                        "Pin one coord@ver (not yet implemented).", "--precise"),
+                Opt.value("<a,b,...>", "Activate listed features beyond defaults.", "--features")
                         .splitOn(","),
-                Opt.flag("Don't activate the project's default features.", "--no-default-features"),
-                Opt.flag("Re-fetch branch git dependencies' tips now (ignore the freshness window).", "--git"),
+                Opt.flag("Don't activate the project's defaults.", "--no-default-features"),
+                Opt.flag("Re-fetch branch git dep tips now.", "--git"),
                 Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
                 Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                         "--cache-dir").hide());

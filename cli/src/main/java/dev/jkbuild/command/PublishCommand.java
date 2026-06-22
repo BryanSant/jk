@@ -52,20 +52,20 @@ public final class PublishCommand implements CliCommand {
     @Override public List<Opt> options() {
         return List.of(
                 Opt.value("<url>", "Target Maven repository base URL.", "--repo-url").require(),
-                Opt.value("<user>", "HTTP Basic auth username (or via PUBLISH_USER env).", "--user"),
-                Opt.value("<pass>", "HTTP Basic auth password (or via PUBLISH_PASSWORD env).", "--password"),
-                Opt.value("<REGION>", "Object-store region for s3:// / gs:// targets.", "--region"),
-                Opt.value("<URL>", "Object-store endpoint override for s3:// (MinIO/S3-compatible).", "--endpoint"),
-                Opt.value("<file>", "Override the main jar path. Default: target/<artifact>-<version>.jar.", "--jar"),
+                Opt.value("<user>", "HTTP Basic username (PUBLISH_USER env).", "--user"),
+                Opt.value("<pass>", "HTTP Basic password (PUBLISH_PASSWORD env).", "--password"),
+                Opt.value("<REGION>", "Object-store region for s3:// / gs://.", "--region"),
+                Opt.value("<URL>", "Object-store endpoint override for s3://.", "--endpoint"),
+                Opt.value("<file>", "Override the main jar path.", "--jar"),
                 Opt.flag("Skip the sources jar.", "--no-sources"),
-                Opt.flag("Permit publishing -SNAPSHOT versions (refused by default per PRD §21.4).", "--allow-snapshot"),
-                Opt.flag("Assemble and print the upload plan without making HTTP requests.", "--dry-run"),
-                Opt.flag("Emit a detached .asc GPG signature for every artifact.", "--sign"),
-                Opt.value("<file>", "Path to the GPG secret key (armored or binary). Required with --sign.", "--key-file"),
-                Opt.value("<pass>", "Passphrase for the secret key, or via JK_GPG_PASSPHRASE env.", "--key-passphrase"),
-                Opt.flag("Sign each artifact with Sigstore keyless OIDC (.sigstore file).", "--sigstore"),
-                Opt.flag("Emit a SLSA v1 in-toto provenance statement (.intoto.json) for the main jar.", "--slsa"),
-                Opt.flag("Emit CycloneDX 1.6 (-cyclonedx.json) and SPDX 2.3 (-spdx.json) SBOMs.", "--sbom"));
+                Opt.flag("Permit publishing -SNAPSHOT versions.", "--allow-snapshot"),
+                Opt.flag("Print the upload plan; no HTTP requests.", "--dry-run"),
+                Opt.flag("Detached .asc GPG signature per artifact.", "--sign"),
+                Opt.value("<file>", "GPG secret key path. Required with --sign.", "--key-file"),
+                Opt.value("<pass>", "Key passphrase (JK_GPG_PASSPHRASE env).", "--key-passphrase"),
+                Opt.flag("Sign with Sigstore keyless OIDC (.sigstore).", "--sigstore"),
+                Opt.flag("Emit a SLSA v1 in-toto provenance statement.", "--slsa"),
+                Opt.flag("Emit CycloneDX 1.6 and SPDX 2.3 SBOMs.", "--sbom"));
     }
 
     URI repoUrl;

@@ -40,8 +40,8 @@ public final class ExplainCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.flag("Build the plan instead of just printing it (same as `jk build`).", "--run"),
-                Opt.flag("Expand every module's phases, including fully-cached ones.", "--verbose", "-v"),
+                Opt.flag("Build the plan instead of printing it (`jk build`).", "--run"),
+                Opt.flag("Expand every module's phases, even cached ones.", "--verbose", "-v"),
                 Opt.value("<dir>",
                         "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                         "--cache-dir").hide());

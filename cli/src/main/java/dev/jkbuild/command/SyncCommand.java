@@ -81,7 +81,7 @@ public final class SyncCommand implements CliCommand {
                 Opt.value("<url>", "Override declared repos with a single URL (for tests).",
                         "--repo-url").hide(),
                 Opt.flag("Prepare for an offline build.", "--offline-prepare"),
-                Opt.flag("Also download sources JARs for packages that have them.", "--sources"));
+                Opt.flag("Also download sources JARs when available.", "--sources"));
     }
 
     /** Cross-phase keys. Lifted out so each phase reads/writes through the same handle. */

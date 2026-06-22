@@ -51,7 +51,7 @@ import java.util.regex.Pattern;
 public final class JdkListCommand implements CliCommand {
 
     @Override public String name() { return "list"; }
-    @Override public String description() { return "List installed JDKs (use --all to also show available ones)"; }
+    @Override public String description() { return "List installed JDKs (--all adds available ones)"; }
     @Override public List<Opt> options() {
         return List.of(
                 Opt.flag("Also list JDKs available for download from the JetBrains feed.", "--all"),

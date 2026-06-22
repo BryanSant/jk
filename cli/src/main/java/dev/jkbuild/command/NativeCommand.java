@@ -48,16 +48,16 @@ public final class NativeCommand implements CliCommand {
     @Override public String description() { return "Build a native binary with GraalVM"; }
     @Override public List<Opt> options() {
         return List.of(
-                Opt.value("<class>", "Main class to compile. Default: read from jk.toml's image.main-class.", "--main"),
+                Opt.value("<class>", "Main class. Default: jk.toml image.main-class.", "--main"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
-                Opt.flag("Install Oracle GraalVM without prompting if native-image is missing.", "--yes", "-y"),
+                Opt.flag("Install Oracle GraalVM if native-image is missing.", "--yes", "-y"),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"));
     }
     @Override public List<dev.jkbuild.model.command.Param> parameters() {
         return List.of(dev.jkbuild.model.command.Param.of("native-image-args",
                 dev.jkbuild.model.command.Arity.ZERO_OR_MORE,
-                "Extra arguments forwarded to native-image (after --)"));
+                "Extra arguments forwarded to\nnative-image (after --)."));
     }
 
     String mainClass;

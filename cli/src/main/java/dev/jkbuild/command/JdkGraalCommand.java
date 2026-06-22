@@ -29,7 +29,7 @@ import java.util.Optional;
 public final class JdkGraalCommand implements CliCommand {
 
     @Override public String name() { return "graal"; }
-    @Override public String description() { return "Set the default GraalVM JDK (for jk native / GRAALVM_HOME)"; }
+    @Override public String description() { return "Set the default GraalVM JDK (jk native / GRAALVM_HOME)"; }
 
     @Override public List<Opt> options() {
         return List.of(Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());

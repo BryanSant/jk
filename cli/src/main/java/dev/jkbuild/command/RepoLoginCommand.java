@@ -39,8 +39,7 @@ public final class RepoLoginCommand implements CliCommand {
     public List<Opt> options() {
         return List.of(
                 Opt.value("<USER>",
-                        "Use HTTP Basic auth with this username; read the password from stdin. "
-                                + "Without it, the stdin value is stored as a bearer token.",
+                        "HTTP Basic username (else stdin = bearer token)",
                         "--username"),
                 Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/repo-credentials.",
                         "--credentials-dir").hide());

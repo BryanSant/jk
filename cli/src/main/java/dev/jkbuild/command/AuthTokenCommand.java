@@ -25,14 +25,14 @@ public final class AuthTokenCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<HOST>", "Forge host. Defaults per provider; required for Gitea/Forgejo.", "--host"),
+                Opt.value("<HOST>", "Forge host (required for Gitea/Forgejo)", "--host"),
                 Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/credentials.", "--credentials-dir").hide());
     }
 
     @Override
     public List<Param> parameters() {
         return List.of(Param.of("provider", Arity.ZERO_OR_ONE,
-                "github | gitlab | gitea (forgejo/codeberg) | bitbucket. Omit to auto-detect."));
+                "github | gitlab | gitea (forgejo/codeberg) | bitbucket.\nOmit to auto-detect."));
     }
 
     @Override

@@ -23,7 +23,7 @@ public final class AuthLogoutCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<HOST>", "Forge host. Defaults per provider; required for Gitea/Forgejo.", "--host"),
+                Opt.value("<HOST>", "Forge host (required for Gitea/Forgejo)", "--host"),
                 Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/credentials.", "--credentials-dir").hide());
     }
 

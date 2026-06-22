@@ -20,7 +20,7 @@ import java.util.List;
 public final class AuthCommand implements CliCommand {
 
     @Override public String name() { return "auth"; }
-    @Override public String description() { return "Authenticate with a git forge (GitHub, GitLab, Bitbucket, etc.)"; }
+    @Override public String description() { return "Authenticate with a git forge (GitHub, GitLab, etc.)"; }
 
     @Override
     public List<CliCommand> subcommands() {

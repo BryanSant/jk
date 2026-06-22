@@ -46,7 +46,7 @@ public final class AuditCommand implements CliCommand {
     @Override public String description() { return "Check the locked dependencies for known vulnerabilities"; }
     @Override public java.util.List<Opt> options() {
         return java.util.List.of(
-                Opt.value("<level>", "Fail when any finding is at least this severe. One of CRITICAL, HIGH, MEDIUM, LOW. Default: LOW.", "--severity"),
+                Opt.value("<level>", "Severity: CRITICAL|HIGH|MEDIUM|LOW. Default: LOW.", "--severity"),
                 Opt.value("<url>", "Override the OSV batch query URL (for tests).", "--osv-batch-url").hide(),
                 Opt.value("<url>", "Override the OSV vulnerability lookup URL (for tests).", "--osv-vulns-url").hide());
     }

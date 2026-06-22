@@ -69,10 +69,10 @@ public final class FormatCommand implements CliCommand {
 
     @Override public List<Opt> options() {
         return List.of(
-                Opt.flag("Check formatting without writing; non-zero exit if any file is unformatted.", "--check"),
+                Opt.flag("Check formatting; fail if unformatted.", "--check"),
                 Opt.value("<style>", "Java style: palantir | google | aosp.", "--java-style"),
                 Opt.value("<style>", "Kotlin style: kotlinlang | google | meta.", "--kotlin-style"),
-                Opt.value("<preset>", "Cross-language preset applied to both: standard.", "--style"));
+                Opt.value("<preset>", "Cross-language preset for both: standard.", "--style"));
     }
 
     @Override

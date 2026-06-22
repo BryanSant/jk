@@ -22,7 +22,7 @@ public final class DeactivateCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Tear down the shell integration installed by `jk activate`";
+        return "Tear down jk's shell integration";
     }
 
     @Override

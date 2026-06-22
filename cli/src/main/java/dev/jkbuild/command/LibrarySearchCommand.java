@@ -28,7 +28,7 @@ public final class LibrarySearchCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<N>", "Cap the number of results displayed (default: no cap).", "--limit"),
+                Opt.value("<N>", "Cap results shown (default: no cap)", "--limit"),
                 Opt.flag("Append the source layer to each row.", "--show-layer"),
                 Opt.flag("Group results under a heading per source layer.", "--group-by-layer"),
                 Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.", "--cache-dir").hide());
@@ -36,7 +36,8 @@ public final class LibrarySearchCommand implements CliCommand {
 
     @Override
     public List<Param> parameters() {
-        return List.of(Param.of("term", Arity.ONE_OR_MORE, "One or more substrings. All must match (in name, group, or artifact)."));
+        return List.of(Param.of("term", Arity.ONE_OR_MORE,
+                "One or more substrings; all must match.\nMatched against name, group, or artifact."));
     }
 
     private boolean showLayer, groupByLayer;

@@ -89,10 +89,10 @@ public final class LockCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<a,b,...>", "Activate the listed features in addition to defaults.", "--features")
+                Opt.value("<a,b,...>", "Activate listed features beyond the defaults.", "--features")
                         .splitOn(","),
                 Opt.flag("Don't activate the project's default features.", "--no-default-features"),
-                Opt.flag("Also resolve and pin sources JARs for all Maven dependencies.", "--sources"),
+                Opt.flag("Pin sources JARs for all Maven deps too.", "--sources"),
                 Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
                 Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                         "--cache-dir").hide());

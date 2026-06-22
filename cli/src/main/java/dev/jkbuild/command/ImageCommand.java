@@ -50,7 +50,7 @@ public final class ImageCommand implements CliCommand {
                 Opt.value("<class>", "Main class to set as the image entrypoint.", "--main"),
                 Opt.value("<registry>", "Override image.registry from jk.toml.", "--registry"),
                 Opt.value("<tag>", "Override image.tag from jk.toml.", "--tag"),
-                Opt.value("<path>", "Write an OCI tarball instead of pushing. Optional path.", "--tarball").withFallback(""),
+                Opt.value("<path>", "Write an OCI tarball instead of pushing.", "--tarball").withFallback(""),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"));

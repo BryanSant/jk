@@ -25,11 +25,12 @@ import java.util.Optional;
 public final class ActivateCommand implements CliCommand {
 
     @Override public String name() { return "activate"; }
-    @Override public String description() { return "Print shell integration script (bash | zsh | fish | pwsh)"; }
+    @Override public String description() { return "Print shell integration (bash, zsh, fish, pwsh)"; }
 
     @Override public List<Param> parameters() {
         return List.of(Param.of("shell", Arity.ZERO_OR_ONE,
-                "Target shell: bash, zsh, fish, pwsh. Omit to launch the interactive installer."));
+                "Target shell: bash, zsh, fish, pwsh.\n"
+                        + "Omit to launch the interactive installer."));
     }
 
     @Override

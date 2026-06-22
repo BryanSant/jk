@@ -35,16 +35,16 @@ public final class AuthLoginCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<HOST>", "Forge host. Defaults per provider; required for Gitea/Forgejo.", "--host"),
-                Opt.flag("Read a token (PAT / app password) from stdin instead of the device flow.", "--with-token"),
-                Opt.value("<SCOPE>", "OAuth scope to request (device flow only). Defaults per provider.", "--scope"),
+                Opt.value("<HOST>", "Forge host (required for Gitea/Forgejo)", "--host"),
+                Opt.flag("Read a PAT/app password from stdin (no device flow)", "--with-token"),
+                Opt.value("<SCOPE>", "OAuth scope; device flow only (per-provider default)", "--scope"),
                 Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/credentials.", "--credentials-dir").hide());
     }
 
     @Override
     public List<Param> parameters() {
         return List.of(Param.of("provider", Arity.ZERO_OR_ONE,
-                "github | gitlab | gitea (forgejo/codeberg) | bitbucket. Omit to auto-detect from this repo's git remote."));
+                "github | gitlab | gitea (forgejo/codeberg) | bitbucket.\nOmit to auto-detect from this repo's git remote."));
     }
 
     private String scope;

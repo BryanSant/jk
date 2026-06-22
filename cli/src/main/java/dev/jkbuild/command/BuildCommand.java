@@ -68,13 +68,13 @@ public final class BuildCommand implements CliCommand {
     @Override public String description() { return "Compile, test, and package the project"; }
     @Override public List<Opt> options() {
         return List.of(
-                Opt.value("<name>", "Build profile to apply. Default: auto (ci if CI=true, else none).", "--profile"),
-                Opt.value("<N>", "Number of test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
+                Opt.value("<name>", "Apply a build profile. Default: auto (ci on CI).", "--profile"),
+                Opt.value("<N>", "Test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"),
-                Opt.flag("Build workspace modules one at a time (the rich serial view).", "--no-parallel"),
-                Opt.flag("Run modules' tests concurrently too (default: tests serialized).", "--parallel-tests"));
+                Opt.flag("Build modules one at a time (rich serial view).", "--no-parallel"),
+                Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests"));
     }
 
     String profileName;

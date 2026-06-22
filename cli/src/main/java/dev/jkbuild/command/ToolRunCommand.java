@@ -47,7 +47,7 @@ import java.util.List;
 public final class ToolRunCommand implements CliCommand {
 
     @Override public String name() { return "run"; }
-    @Override public String description() { return "Ephemerally run a tool from a Maven coord, or a .java/.kt/.kts/.jar file"; }
+    @Override public String description() { return "Run a tool from a Maven coord or .java/.kt/.kts/.jar file"; }
     @Override public List<Opt> options() {
         return List.of(
                 Opt.value("<class>", "Override the Main-Class to exec (coordinate targets only).", "--main"),
