@@ -104,8 +104,10 @@ public final class CommandManagerListener implements GoalListener {
             above.add(ConsoleSpec.renderError(d));
         }
         if (result.success()) {
-            if (spec.chip()) cm.finishGoalSuccess(spec.onSuccess().apply(result) + suffix, above);
-            else cm.finishSuccess(spec.onSuccess().apply(result) + suffix, above);
+            String tail = spec.onSuccess().apply(result) + suffix;
+            if (spec.chip() && spec.exec()) cm.finishGoalExec(tail, above);
+            else if (spec.chip())            cm.finishGoalSuccess(tail, above);
+            else                             cm.finishSuccess(tail, above);
         } else {
             if (spec.chip()) cm.finishGoalFailure(spec.onFailure().apply(result) + suffix, above);
             else cm.finishFailure(spec.onFailure().apply(result) + suffix, above);

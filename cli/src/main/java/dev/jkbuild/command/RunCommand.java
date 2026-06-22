@@ -122,17 +122,19 @@ public final class RunCommand implements CliCommand {
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
 
-        // Build-if-needed, settling with the same chip line as `jk build`: the goal is
-        // cache-aware (the same freshness/action-cache checks jk explain's forecast
-        // mirrors), so a clean tree skips every phase and reports "project up to date",
-        // while real work reports "Built <artifact>".
         String coord = BuildCommand.buildTarget(projectDir.resolve("jk.toml"), projectDir);
-        // Chip verb is "Run" (the invoked goal); the message is still the build result.
-        ConsoleSpec spec = new ConsoleSpec("Run",
-                r -> BuildCommand.projectTail(goal),
+        GoalConsole.Mode mode = GoalConsole.modeFor(global);
+        // In chip modes (AUTO/QUIET) the goal settles with the ▶ Exec chip line showing
+        // the exec command directly — no second banner line. In VERBOSE/JSON no chip is
+        // printed, so printExecBanner runs after the goal as before.
+        ConsoleSpec spec = new ConsoleSpec("Exec",
+                r -> {
+                    try { return execTail(projectDir, execCommand(projectDir, project, layout)); }
+                    catch (IOException e) { return "Executing"; }
+                },
                 r -> GoalChrome.coord(coord),
-                true);
-        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, coord);
+                true, true);
+        GoalResult result = GoalConsole.runGoal(goal, mode, cache, spec, coord);
         if (!result.success()) {
             var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
             if (testResult != null && !testResult.allPassed()) return 4;
@@ -141,7 +143,14 @@ public final class RunCommand implements CliCommand {
 
         // Exec the most self-contained artifact: native > shadow > plain jar.
         List<String> command = execCommand(projectDir, project, layout);
-        printExecBanner(projectDir, command);
+        if (mode == GoalConsole.Mode.VERBOSE || mode == GoalConsole.Mode.JSON) {
+            // No chip was printed in these modes — show the banner line as before.
+            printExecBanner(projectDir, command);
+        } else {
+            // Chip already settled with exec info; emit the blank separator + color reset.
+            System.err.println();
+            if (Theme.colorEnabled()) { System.err.print(Ansi.RESET); System.err.flush(); }
+        }
         command.addAll(appArgs);
         return new ProcessBuilder(command).inheritIO().start().waitFor();
     }
@@ -175,44 +184,46 @@ public final class RunCommand implements CliCommand {
     }
 
     /**
-     * Prints the {@code ▶ Executing …} line (to stderr, above the program's output)
-     * followed by a blank line, so the program's stdout starts on a clean line. The
-     * bright-green play glyph leads (not indented); the JDK is cyan and the executed
-     * command — literal {@code java …} <em>and</em> the artifact path — is yellow, so it
-     * reads as a single command line.
-     *
-     * <p>Native:  {@code ▶ Executing the native binary: [yellow]target/app[/]}
-     * <p>Shadow:  {@code ▶ Executing, with [cyan]{jdk}[/]: [yellow]java -jar target/app-all.jar[/]}
-     * <p>Plain:   {@code ▶ Executing, with [cyan]{jdk}[/]: [yellow]java -cp … target/app.jar[/]}
+     * The styled text that follows "Executing" in the exec chip line or banner:
+     * {@code ", with [cyan]{jdk}[/]: [yellow]java …[/]"} for JVM,
+     * {@code " the native binary: [yellow]target/app[/]"} for native.
+     * Shared between the chip-mode tail (returned to the {@link ConsoleSpec} lambda)
+     * and the banner printed in verbose/JSON modes.
      */
-    private static void printExecBanner(Path projectDir, List<String> command) {
+    private static String execTail(Path projectDir, List<String> command) {
         Theme t = Theme.active();
-        String exec;
         if (command.size() == 1) {
             // Native binary — exec'd directly, no JVM.
             Path bin = Path.of(command.get(0));
-            exec = " the native binary: "
+            return "Executing the native binary: "
                     + Theme.colorize(PathDisplay.of(bin, projectDir), t.highlight());
-        } else {
-            // JVM — derive the jdk leaf, resolving symlinks so "current" shows the real spec.
-            Path javaExe = Path.of(command.get(0));
-            try { javaExe = javaExe.toRealPath(); } catch (IOException ignored) {}
-            Path jdkHome = javaExe.getParent() != null ? javaExe.getParent().getParent() : null;
-            String jdkLeaf = jdkHome != null && jdkHome.getFileName() != null
-                    ? jdkHome.getFileName().toString() : "java";
-            String javaCmd;
-            if ("-jar".equals(command.get(1))) {
-                // Shadow jar — full relative path, no classpath noise.
-                javaCmd = "java -jar " + PathDisplay.of(Path.of(command.get(2)), projectDir);
-            } else {
-                // Plain jar + classpath — elide the full cp, show the project jar.
-                javaCmd = "java -cp … " + PathDisplay.of(firstClasspathEntry(command), projectDir);
-            }
-            exec = ", with " + Theme.colorize(jdkLeaf, t.cyan())
-                    + ": " + Theme.colorize(javaCmd, t.highlight());
         }
+        // JVM — derive the jdk leaf, resolving symlinks so "current" shows the real spec.
+        Path javaExe = Path.of(command.get(0));
+        try { javaExe = javaExe.toRealPath(); } catch (IOException ignored) {}
+        Path jdkHome = javaExe.getParent() != null ? javaExe.getParent().getParent() : null;
+        String jdkLeaf = jdkHome != null && jdkHome.getFileName() != null
+                ? jdkHome.getFileName().toString() : "java";
+        String javaCmd;
+        if ("-jar".equals(command.get(1))) {
+            // Shadow jar — full relative path, no classpath noise.
+            javaCmd = "java -jar " + PathDisplay.of(Path.of(command.get(2)), projectDir);
+        } else {
+            // Plain jar + classpath — elide the full cp, show the project jar.
+            javaCmd = "java -cp … " + PathDisplay.of(firstClasspathEntry(command), projectDir);
+        }
+        return "Executing, with " + Theme.colorize(jdkLeaf, t.cyan())
+                + ": " + Theme.colorize(javaCmd, t.highlight());
+    }
+
+    /**
+     * Prints the {@code ▶ Executing …} line to stderr (verbose/JSON modes, where no
+     * chip is rendered). Delegates styling to {@link #execTail}.
+     */
+    private static void printExecBanner(Path projectDir, List<String> command) {
+        Theme t = Theme.active();
         System.err.println(Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen())
-                + " Executing" + exec);
+                + " " + execTail(projectDir, command));
         System.err.println();
         // Reset any lingering SGR state so the program's own output starts from
         // the terminal's default colors (only when we're emitting color at all).

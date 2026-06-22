@@ -308,6 +308,19 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         finishGoalSuccess(tail, List.of());
     }
 
+    /**
+     * Settle with the play chip: {@code  ▶ Exec ▶ Executing …} — for commands that
+     * hand off to a subprocess after the goal settles (e.g. {@code jk run}).
+     */
+    public void finishGoalExec(String tail, List<String> above) {
+        settle(GoalChrome.chipLine(Glyphs.PLAY, goalName(), nerdfont, tail), above);
+    }
+
+    /** {@link #finishGoalExec(String, List)} with no buffered output above. */
+    public void finishGoalExec(String tail) {
+        finishGoalExec(tail, List.of());
+    }
+
     /** Settle the build goal with the red chip: {@code  ‼ Build ▶ Failure <tail>}. */
     public void finishGoalFailure(String tail, List<String> above) {
         settle(GoalChrome.failureLine(goalName(), nerdfont, tail), above);

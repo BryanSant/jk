@@ -23,18 +23,29 @@ public record ConsoleSpec(
         String verb,
         Function<GoalResult, String> onSuccess,
         Function<GoalResult, String> onFailure,
-        boolean chip) {
+        boolean chip,
+        boolean exec) {
 
     /**
      * Default presentation — the generic {@code ✓ <Verb> Successful: <msg>} finish.
      * Set {@code chip = true} (the 4-arg form) to settle through the goal-chip
      * renderer instead ({@code  ✓ Build ▶ <onSuccess>}); {@code onSuccess}/{@code
      * onFailure} then return the tail that follows the chip's verb.
+     * Set both {@code chip = true} and {@code exec = true} (the 5-arg form) to
+     * settle with {@code Glyphs.PLAY} instead of {@code Glyphs.CHECK} — for
+     * commands that hand off to a subprocess after the goal (e.g. {@code jk run}).
      */
     public ConsoleSpec(String verb,
                        Function<GoalResult, String> onSuccess,
                        Function<GoalResult, String> onFailure) {
-        this(verb, onSuccess, onFailure, false);
+        this(verb, onSuccess, onFailure, false, false);
+    }
+
+    public ConsoleSpec(String verb,
+                       Function<GoalResult, String> onSuccess,
+                       Function<GoalResult, String> onFailure,
+                       boolean chip) {
+        this(verb, onSuccess, onFailure, chip, false);
     }
 
     /** Dim italic {@code "took Xms"} duration suffix — appended by the framework to every result line. */
