@@ -299,7 +299,7 @@ public final class BuildCommand implements CliCommand {
             remaining.removeAll(ready);
         }
         System.out.println(GoalChrome.successLine("Build", GlobalConfig.nerdfont(),
-                builtModulesTail(total, start)));
+                modulesTail(total, start)));
         return 0;
     }
 
@@ -391,7 +391,7 @@ public final class BuildCommand implements CliCommand {
         dev.jkbuild.runtime.PhaseTimings.record(
                 cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA,
                 System.currentTimeMillis());
-        view.finishGoalSuccess(builtModulesTail(total, start), snapshot(deferredOutput));
+        view.finishGoalSuccess(modulesTail(total, start), snapshot(deferredOutput));
         return 0;
     }
 
@@ -957,9 +957,9 @@ public final class BuildCommand implements CliCommand {
      * in cyan, dim duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s}
      * (the {@code ‼} + red is added by {@code finishFailure}).
      */
-    /** Success tail {@code built N modules took T} — N bold-white, {@code took T} bright-black. */
-    private static String builtModulesTail(int total, long start) {
-        return "built " + Theme.colorize(String.valueOf(total), Theme.active().focused())
+    /** Success tail {@code for N modules took T} — N bold-white, {@code took T} bright-black. */
+    private static String modulesTail(int total, long start) {
+        return "for " + Theme.colorize(String.valueOf(total), Theme.active().focused())
                 + " module" + (total == 1 ? "" : "s") + " "
                 + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
     }

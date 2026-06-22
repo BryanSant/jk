@@ -38,16 +38,19 @@ public final class GoalChrome {
         return nerdfont ? Theme.colorize(Glyphs.SEGMENT_END_NERD, Theme.active().bright(chipColor)) : "";
     }
 
-    /** Settled success: {@code  ✓ Build ▶ Successfully <tail>} (tail pre-styled by the caller). */
+    /**
+     * Settled success: {@code  ✓ Build ▶ Build successful for N modules took T} — the
+     * "{goal} successful" phrase in green, tail pre-styled by the caller.
+     */
     public static String successLine(String name, boolean nerdfont, String tail) {
         Theme t = Theme.active();
-        String verb = Theme.colorize("Successfully", t.success());
+        String goal = name.isEmpty() ? "Build" : name;
+        String verb = Theme.colorize(goal + " successful", t.success());
         if (nerdfont) {
             return chip(Glyphs.CHECK, name, t.goalSuccessChip())
                     + cap(t.goalChipColor(), true) + " " + verb + " " + tail;
         }
-        String head = Glyphs.CHECK + (name.isEmpty() ? "" : " " + name) + " Successfully";
-        return Theme.colorize(head, t.success()) + " " + tail;
+        return Theme.colorize(Glyphs.CHECK, t.success()) + " " + verb + " " + tail;
     }
 
     /**
