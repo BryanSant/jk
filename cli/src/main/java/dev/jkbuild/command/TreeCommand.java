@@ -4,6 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
@@ -47,7 +48,8 @@ public final class TreeCommand implements CliCommand {
                         + "(transitive) dependencies, dropping the nesting.", "--flatten"),
                 Opt.flag("", "--flat").hide(),
                 Opt.value("<scopes>", "Comma-separated scopes to show, in the given order "
-                        + "(e.g. main,export,test). Default: all non-empty scopes.", "--scopes"),
+                        + "(e.g. main,export,test). Use 'exec' (or 'run') for the run "
+                        + "classpath (export+main+runtime). Default: all non-empty scopes.", "--scopes"),
                 Opt.value("<scopes>", "", "--scope").hide());
     }
 
@@ -69,13 +71,13 @@ public final class TreeCommand implements CliCommand {
             }
             Set<Scope> ordered = new LinkedHashSet<>();
             for (String token : tokens) {
-                Scope scope = coerceScope(token);
-                if (scope == null) {
+                List<Scope> expanded = resolveScopeToken(token);
+                if (expanded == null) {
                     System.err.println("jk tree: invalid scope '" + token + "' (valid: "
                             + validScopes() + ")");
                     return 2;
                 }
-                ordered.add(scope);
+                ordered.addAll(expanded);
             }
             scopes = new ArrayList<>(ordered);
         }
@@ -120,6 +122,26 @@ public final class TreeCommand implements CliCommand {
         return 0;
     }
 
+    /**
+     * The {@code exec}/{@code run} meta-scope: the scopes that form the classpath
+     * needed to run the project, in display order. Sourced from
+     * {@link ClasspathResolver#RUNTIME} so it stays in sync with the real run classpath.
+     */
+    private static final List<Scope> EXEC_SCOPES = Arrays.stream(Scope.values())
+            .filter(ClasspathResolver.RUNTIME::contains).toList();
+
+    /**
+     * Resolve a user-supplied scope token (case-insensitive) to one or more scopes:
+     * {@code exec}/{@code run} expand to the run classpath; any other token is a single
+     * scope. Returns null if the token is not a valid scope or meta-scope.
+     */
+    private static List<Scope> resolveScopeToken(String token) {
+        String t = token.toLowerCase(Locale.ROOT);
+        if (t.equals("exec") || t.equals("run")) return EXEC_SCOPES;
+        Scope scope = coerceScope(t);
+        return scope == null ? null : List.of(scope);
+    }
+
     /** Coerce a user-supplied scope token (case-insensitive) to a {@link Scope}, or null if invalid. */
     private static Scope coerceScope(String token) {
         try {
@@ -129,11 +151,11 @@ public final class TreeCommand implements CliCommand {
         }
     }
 
-    /** Comma-separated list of valid scope names (lowercased) for error messages. */
+    /** Comma-separated list of valid scope names (incl. the {@code exec}/{@code run} meta-scope). */
     private static String validScopes() {
         return Arrays.stream(Scope.values())
                 .map(s -> s.name().toLowerCase(Locale.ROOT))
-                .collect(Collectors.joining(", "));
+                .collect(Collectors.joining(", ")) + ", exec/run";
     }
 
     /**
