@@ -4,7 +4,10 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.GoalChrome;
+import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.Spinner;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.model.JkBuild;
@@ -90,17 +93,17 @@ public final class CleanCommand implements CliCommand {
 
         long elapsedMs = System.currentTimeMillis() - startMs;
 
+        boolean nerdfont = GlobalConfig.nerdfont();
         if (stats[0] == 0) {
-            System.out.println(Theme.colorize("✓", Theme.active().success())
-                    + " Nothing to remove");
+            System.out.println(GoalChrome.chipLine(Glyphs.CHECK, "Clean", nerdfont, "Nothing to remove"));
         } else {
-            String check   = Theme.colorize("✓", Theme.active().success());
             String removed = Theme.colorize("Removed", Theme.active().focused());
             String stats_  = String.format("%,d file%s, %s total",
                     stats[0], stats[0] == 1 ? "" : "s",
                     CacheCommand.fmtBytes(stats[1]));
             String inTime  = ConsoleSpec.took(Duration.ofMillis(elapsedMs));
-            System.out.println(check + " " + removed + " " + stats_ + " " + inTime);
+            System.out.println(GoalChrome.chipLine(Glyphs.CHECK, "Clean", nerdfont,
+                    removed + " " + stats_ + " " + inTime));
         }
 
         if (gcCache) {

@@ -39,6 +39,21 @@ public final class GoalChrome {
     }
 
     /**
+     * A generic settled chip line: {@code  ✓ Clean ▶ <message>}. The {@code glyph} +
+     * {@code verb} form the green chip (closed by the powerline cap); {@code message}
+     * is caller-styled and follows the cap. For commands whose result reads as its own
+     * sentence (e.g. {@code jk clean}'s "Removed N files") rather than the "{goal}
+     * successful" phrasing of {@link #successLine}.
+     */
+    public static String chipLine(String glyph, String verb, boolean nerdfont, String message) {
+        Theme t = Theme.active();
+        if (nerdfont) {
+            return chip(glyph, verb, t.goalSuccessChip()) + cap(t.goalChipColor(), true) + " " + message;
+        }
+        return Theme.colorize(glyph + " " + verb, t.success()) + " " + message;
+    }
+
+    /**
      * Settled success: {@code  ✓ Build ▶ Build successful for N modules took T} — the
      * "{goal} successful" phrase in green. The {@code tail} is pre-styled by the caller
      * and carries its own leading separator (a {@code " for …"} or a {@code ", …"}), so
