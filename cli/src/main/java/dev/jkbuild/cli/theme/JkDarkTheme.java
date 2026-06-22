@@ -223,22 +223,25 @@ public final class JkDarkTheme implements Theme {
         return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), NORMAL_CYAN);
     }
 
+    /** The shared near-black (#080808) text color for every goal chip. */
+    private static final Rgb GOAL_CHIP_TEXT = Rgb.hex(0x080808);
+
     @Override
     public AttributedStyle goalChip() {
         // Near-black text on the goal green (the live build spinner + verb chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), NORMAL_GREEN);
+        return withBg(withColor(AttributedStyle.DEFAULT, GOAL_CHIP_TEXT), NORMAL_GREEN);
     }
 
     @Override
     public AttributedStyle goalSuccessChip() {
-        // Bright-black text on the goal green (the settled "✓ Build" chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, BRIGHT_BLACK), NORMAL_GREEN);
+        // Near-black text on the goal green (the settled "✓ Build" chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, GOAL_CHIP_TEXT), NORMAL_GREEN);
     }
 
     @Override
     public AttributedStyle goalFailureChip() {
-        // Bright-black text on the failure red (the settled "‼ Build" chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, BRIGHT_BLACK), NORMAL_RED);
+        // Near-black text on the failure red (the settled "‼ Build" chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, GOAL_CHIP_TEXT), NORMAL_RED);
     }
 
     @Override
