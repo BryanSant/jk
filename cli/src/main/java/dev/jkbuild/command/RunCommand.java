@@ -127,7 +127,8 @@ public final class RunCommand implements CliCommand {
         // mirrors), so a clean tree skips every phase and reports "project up to date",
         // while real work reports "Built <artifact>".
         String coord = BuildCommand.buildTarget(projectDir.resolve("jk.toml"), projectDir);
-        ConsoleSpec spec = new ConsoleSpec("Build",
+        // Chip verb is "Run" (the invoked goal); the message is still the build result.
+        ConsoleSpec spec = new ConsoleSpec("Run",
                 r -> BuildCommand.projectTail(goal),
                 r -> GoalChrome.coord(coord),
                 true);
@@ -174,14 +175,15 @@ public final class RunCommand implements CliCommand {
     }
 
     /**
-     * Prints the {@code  ▶ Executing …} line (to stderr, above the program's output)
+     * Prints the {@code ▶ Executing …} line (to stderr, above the program's output)
      * followed by a blank line, so the program's stdout starts on a clean line. The
-     * artifact is shown in the {@link Theme#path()} color and the JDK in cyan; the play
-     * glyph is bright-green. A leading space matches the build chip's one-column indent.
+     * bright-green play glyph leads (not indented); the JDK is cyan and the executed
+     * command — literal {@code java …} <em>and</em> the artifact path — is yellow, so it
+     * reads as a single command line.
      *
-     * <p>Native:  {@code  ▶ Executing the native binary [path]target/app[/]}
-     * <p>Shadow:  {@code  ▶ Executing [path]target/app-all.jar[/] with [cyan]{jdk}[/]}
-     * <p>Plain:   {@code  ▶ Executing [path]target/app.jar[/] with [cyan]{jdk}[/]}
+     * <p>Native:  {@code ▶ Executing the native binary: [yellow]target/app[/]}
+     * <p>Shadow:  {@code ▶ Executing, with [cyan]{jdk}[/]: [yellow]java -jar target/app-all.jar[/]}
+     * <p>Plain:   {@code ▶ Executing, with [cyan]{jdk}[/]: [yellow]java -cp … target/app.jar[/]}
      */
     private static void printExecBanner(Path projectDir, List<String> command) {
         Theme t = Theme.active();
@@ -189,8 +191,8 @@ public final class RunCommand implements CliCommand {
         if (command.size() == 1) {
             // Native binary — exec'd directly, no JVM.
             Path bin = Path.of(command.get(0));
-            exec = "the native binary "
-                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.path());
+            exec = " the native binary: "
+                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.highlight());
         } else {
             // JVM — derive the jdk leaf, resolving symlinks so "current" shows the real spec.
             Path javaExe = Path.of(command.get(0));
@@ -198,14 +200,19 @@ public final class RunCommand implements CliCommand {
             Path jdkHome = javaExe.getParent() != null ? javaExe.getParent().getParent() : null;
             String jdkLeaf = jdkHome != null && jdkHome.getFileName() != null
                     ? jdkHome.getFileName().toString() : "java";
-            // The artifact: the shadow jar (-jar) or the project's main jar (first -cp entry).
-            Path artifact = "-jar".equals(command.get(1))
-                    ? Path.of(command.get(2)) : firstClasspathEntry(command);
-            exec = Theme.colorize(PathDisplay.of(artifact, projectDir), t.path())
-                    + " with " + Theme.colorize(jdkLeaf, t.cyan());
+            String javaCmd;
+            if ("-jar".equals(command.get(1))) {
+                // Shadow jar — full relative path, no classpath noise.
+                javaCmd = "java -jar " + PathDisplay.of(Path.of(command.get(2)), projectDir);
+            } else {
+                // Plain jar + classpath — elide the full cp, show the project jar.
+                javaCmd = "java -cp … " + PathDisplay.of(firstClasspathEntry(command), projectDir);
+            }
+            exec = ", with " + Theme.colorize(jdkLeaf, t.cyan())
+                    + ": " + Theme.colorize(javaCmd, t.highlight());
         }
-        System.err.println(" " + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen())
-                + " Executing " + exec);
+        System.err.println(Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen())
+                + " Executing" + exec);
         System.err.println();
         // Reset any lingering SGR state so the program's own output starts from
         // the terminal's default colors (only when we're emitting color at all).
