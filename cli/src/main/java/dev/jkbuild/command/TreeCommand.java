@@ -44,14 +44,10 @@ public final class TreeCommand implements CliCommand {
     public List<Opt> options() {
         return List.of(
                 Opt.value("<depth>", "Maximum tree depth. Default: unlimited.", "--depth"),
-                Opt.flag("Flatten each scope to a deduplicated, sorted list of all "
-                        + "(transitive) dependencies, dropping the nesting.", "--flatten"),
+                Opt.flag("Flatten each scope to a sorted, deduped list.", "--flatten"),
                 Opt.flag("", "--flat").hide(),
-                Opt.flag("Put every scope badge on one line and blend all dependencies, "
-                        + "regardless of scope, into a single tree.", "--stack"),
-                Opt.value("<scopes>", "Comma-separated scopes to show, in the given order "
-                        + "(e.g. main,export,test). Meta-scopes: 'exec'/'run' (run classpath = "
-                        + "export+main+runtime), 'all' (every scope). Default: all non-empty scopes.", "--scopes"),
+                Opt.flag("Blend all scopes into one tree, one badge row.", "--stack"),
+                Opt.value("<scopes>", "Scopes to show, in order; meta: exec/run/all.", "--scopes"),
                 Opt.value("<scopes>", "", "--scope").hide());
     }
 
