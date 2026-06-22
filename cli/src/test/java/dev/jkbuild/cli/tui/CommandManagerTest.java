@@ -220,19 +220,17 @@ class CommandManagerTest {
         String header = cm.renderGoalLines(120, 0).get(0);
         // The region is indented one column; the pill spans " · Build " then the cap.
         assertThat(stripAnsi(header)).contains(" · Build " + Glyphs.SEGMENT_END_NERD);
-        // Pill background = the accent (gradient bright end); name bright-white on it.
-        Rgb chipBg = Theme.active().progressGradient().end();
-        AttributedStyle chip = Theme.active().withBackground(Theme.active().brightWhite(), chipBg);
+        // Pill = the goal chip: near-black text on the goal green.
+        AttributedStyle chip = Theme.active().goalChip();
         // The leading indent space is part of the pill (same chip background).
         assertThat(header).startsWith(Theme.colorize(" ", chip));
         assertThat(header).contains(Theme.colorize("Build", chip));
         // Spinner (frame 0 = "·") cycles glyphs only — same near-black chip style as the
         // name, not a gradient color.
         assertThat(header).contains(Theme.colorize("·", chip));
-        // Cap: foreground = the pill color, background = the bar's lead color, underlined.
-        Rgb lead = new ProgressBar().leadColor(45, 100);
+        // Cap: foreground = the chip green, background unset (it tapers into the bar).
         assertThat(header).contains(Theme.colorize(Glyphs.SEGMENT_END_NERD,
-                Theme.active().withBackground(Theme.active().bright(chipBg), lead).underline()));
+                Theme.active().bright(Theme.active().goalChipColor())));
     }
 
     @Test

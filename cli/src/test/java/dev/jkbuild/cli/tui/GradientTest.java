@@ -59,10 +59,10 @@ class GradientTest {
     }
 
     @Test
-    void progress_runs_bright_blue_to_accent() {
-        // Shares the title gradient's stops: bright-blue #536DFE → accent #FF4081.
+    void progress_runs_green_to_bright_green() {
+        // The build/progress fill: green #4CAF50 → bright-green #69F0AE.
         assertThat(Theme.active().progressGradient())
-                .isEqualTo(new Gradient(JkDarkTheme.BRIGHT_BLUE, JkDarkTheme.ACCENT));
+                .isEqualTo(new Gradient(JkDarkTheme.NORMAL_GREEN, JkDarkTheme.BRIGHT_GREEN));
     }
 
     @Test

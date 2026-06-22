@@ -76,10 +76,10 @@ public final class JkDarkTheme implements Theme {
     /** Gradient for {@code jk init}/wizard titles — Jk Dark bright-blue → accent. */
     private static final Gradient TITLE_GRADIENT = new Gradient(BRIGHT_BLUE, ACCENT);
     /**
-     * Gradient for the progress-bar fill — Jk Dark bright-blue → accent (the same
-     * stops as {@link #TITLE_GRADIENT}), so the fill sweeps blue → pink as it grows.
+     * Gradient for the progress-bar fill — Jk Dark green → bright-green, so the fill
+     * sweeps a deepening green as it grows and the empty track reads bright-green.
      */
-    private static final Gradient PROGRESS_GRADIENT = new Gradient(BRIGHT_BLUE, ACCENT);
+    private static final Gradient PROGRESS_GRADIENT = new Gradient(NORMAL_GREEN, BRIGHT_GREEN);
     /** Gradient for the spinner frames — Jk Dark primary → accent. */
     private static final Gradient SPINNER_GRADIENT = new Gradient(PRIMARY, ACCENT);
     /** Gradient a failed progress bar repaints in: dark red #7f1d1d → bright red #ef4444. */
@@ -221,6 +221,34 @@ public final class JkDarkTheme implements Theme {
         // Near-black text on the cyan chip (the ▶ arrow is painted in NORMAL_CYAN — the
         // chip background — by the caller).
         return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), NORMAL_CYAN);
+    }
+
+    @Override
+    public AttributedStyle goalChip() {
+        // Near-black text on the goal green (the live build spinner + verb chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, NORMAL_BLACK.darker(0.85)), NORMAL_GREEN);
+    }
+
+    @Override
+    public AttributedStyle goalSuccessChip() {
+        // Bright-black text on the goal green (the settled "✓ Build" chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, BRIGHT_BLACK), NORMAL_GREEN);
+    }
+
+    @Override
+    public AttributedStyle goalFailureChip() {
+        // Bright-black text on the failure red (the settled "‼ Build" chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, BRIGHT_BLACK), NORMAL_RED);
+    }
+
+    @Override
+    public Rgb goalChipColor() {
+        return NORMAL_GREEN;
+    }
+
+    @Override
+    public Rgb goalFailColor() {
+        return NORMAL_RED;
     }
 
     @Override

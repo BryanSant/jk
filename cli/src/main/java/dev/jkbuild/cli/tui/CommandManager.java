@@ -298,6 +298,25 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         settle(Theme.colorize(head, Theme.active().success()) + ": " + message, above);
     }
 
+    /**
+     * Settle the build goal with the green chip: {@code  ✓ Build ▶ Successfully
+     * <tail>}. The {@code tail} (e.g. "built 17 modules took 1.4s") is pre-styled by
+     * the caller; this owns only the chip + cap + verb. See {@link GoalChrome}.
+     */
+    public void finishGoalSuccess(String tail, List<String> above) {
+        settle(GoalChrome.successLine(goalName(), nerdfont, tail), above);
+    }
+
+    /** Settle the build goal with the red chip: {@code  ‼ Build ▶ Failure <tail>}. */
+    public void finishGoalFailure(String tail, List<String> above) {
+        settle(GoalChrome.failureLine(goalName(), nerdfont, tail), above);
+    }
+
+    /** {@link #finishGoalFailure(String, List)} with no buffered output above. */
+    public void finishGoalFailure(String tail) {
+        finishGoalFailure(tail, List.of());
+    }
+
     /** Settle with a red cross and a failure message. */
     public void finishFailure(String message) {
         finishFailure(message, List.of());
@@ -584,24 +603,20 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         String barStr = bar.render(numerator, denominator);
         StringBuilder h = new StringBuilder();
         if (nerdfont) {
-            // Pill background = the accent (the bar gradient's bright end).
-            Rgb chipBg = Theme.active().progressGradient().end();
-            AttributedStyle chip = Theme.active().withBackground(Theme.active().brightWhite(), chipBg); // bright-white on accent
-            Rgb lead = bar.leadColor(numerator, denominator);
-            // Cap foreground = the pill color (so its body blends with the chip);
-            // background = the bar's lead color, tapering the pill into the bar.
-            AttributedStyle cap = Theme.active()
-                    .withBackground(Theme.active().bright(chipBg), lead).underline();
-            // The spinner shares the chip style: only its glyph cycles, in the same
-            // bright-white as the name — no color animation inside the pill. A leading
-            // space (also on the pill background) gives the region its one-column
-            // indent while extending the pill to the left edge.
+            // The spinner + name share the goal chip: near-black text on the goal
+            // green. The chip is closed by a U+E0B0 cap whose foreground is that same
+            // green (so its solid body continues the chip) on the default background,
+            // tapering the chip into the bar's first cell (which is also on the default
+            // background). Only the spinner glyph cycles — no color animation in the
+            // pill. A leading space (on the pill background) gives the region its
+            // one-column indent while extending the pill to the left edge.
+            AttributedStyle chip = Theme.active().goalChip();
             h.append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(FRAMES[frame], chip))
                     .append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(name, chip))
                     .append(Theme.colorize(" ", chip))
-                    .append(Theme.colorize(Glyphs.SEGMENT_END_NERD, cap))
+                    .append(GoalChrome.cap(Theme.active().goalChipColor(), true))
                     .append(barStr);
         } else {
             // Plain leading space to match the region's one-column indent.

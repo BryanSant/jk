@@ -113,6 +113,21 @@ public interface Theme {
     /** Header segment (jk explain's "Build Plan for …") — near-black on a cyan background. */
     AttributedStyle cyanBadge();
 
+    /** The live build goal chip (spinner + verb) — near-black on the goal green. */
+    AttributedStyle goalChip();
+
+    /** The settled success chip ({@code ✓ Build}) — bright-black on the goal green. */
+    AttributedStyle goalSuccessChip();
+
+    /** The settled failure chip ({@code ‼ Build}) — bright-black on the failure red. */
+    AttributedStyle goalFailureChip();
+
+    /** The goal chip's green — the foreground of the powerline cap that closes the green chip. */
+    Rgb goalChipColor();
+
+    /** The failure chip's red — the foreground of the powerline cap that closes the red chip. */
+    Rgb goalFailColor();
+
     /**
      * Layer {@code bg} as the background of {@code base}, keeping its foreground and
      * attributes (unless {@code --color} disables color). Used to build the

@@ -10,7 +10,9 @@ import dev.jkbuild.cli.run.AggregateContext;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.tui.CommandManager;
+import dev.jkbuild.cli.tui.GoalChrome;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
@@ -296,9 +298,8 @@ public final class BuildCommand implements CliCommand {
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
             remaining.removeAll(ready);
         }
-        System.out.println(Theme.colorize("✓", Theme.active().success())
-                + " Build Successful: built " + total + " module" + (total == 1 ? "" : "s")
-                + " " + elapsedSince(start));
+        System.out.println(GoalChrome.successLine("Build", GlobalConfig.nerdfont(),
+                builtModulesTail(total, start)));
         return 0;
     }
 
@@ -336,7 +337,7 @@ public final class BuildCommand implements CliCommand {
             PreparedMember pm = prepareMember(u.dir(), u.isDependency() || buildOpts.skipTests,
                     dirtyDirs.contains(u.dir()));
             if (pm == null) {
-                view.finishFailure("No jk.toml in " + u.dir() + " " + elapsedSince(start));
+                view.finishGoalFailure(noTomlTail(u.dir().toString(), start));
                 return 2;
             }
             pm.goal().addListener(
@@ -378,7 +379,7 @@ public final class BuildCommand implements CliCommand {
                     if ("test-failure".equals(d.code())) continue;  // already printed by run-tests
                     above.add(ConsoleSpec.renderError(d));
                 }
-                view.finishFailure(buildFailedAt(failure.coord(), start), above);
+                view.finishGoalFailure(failureTail(failure.coord(), start), above);
                 return failure.exitCode();
             }
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
@@ -390,8 +391,7 @@ public final class BuildCommand implements CliCommand {
         dev.jkbuild.runtime.PhaseTimings.record(
                 cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA,
                 System.currentTimeMillis());
-        view.finishSuccess("built " + total + " module" + (total == 1 ? "" : "s")
-                + " " + elapsedSince(start), snapshot(deferredOutput));
+        view.finishGoalSuccess(builtModulesTail(total, start), snapshot(deferredOutput));
         return 0;
     }
 
@@ -957,6 +957,29 @@ public final class BuildCommand implements CliCommand {
      * in cyan, dim duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s}
      * (the {@code ‼} + red is added by {@code finishFailure}).
      */
+    /** Success tail {@code built N modules took T} — N bold-white, {@code took T} bright-black. */
+    private static String builtModulesTail(int total, long start) {
+        return "built " + Theme.colorize(String.valueOf(total), Theme.active().focused())
+                + " module" + (total == 1 ? "" : "s") + " "
+                + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
+    }
+
+    /** Failure tail {@code at group:name took T} — coord colored, {@code took T} bright-black. */
+    private static String failureTail(String coord, long start) {
+        int i = coord.indexOf(':');
+        String styled = i < 0
+                ? Theme.colorize(coord, Theme.active().coordGroup())
+                : Theme.colorize(coord.substring(0, i), Theme.active().coordGroup())
+                        + ":" + Theme.colorize(coord.substring(i + 1), Theme.active().coordName());
+        return "at " + styled + " " + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
+    }
+
+    /** Failure tail for a member missing its {@code jk.toml}. */
+    private static String noTomlTail(String where, long start) {
+        return "— no jk.toml in " + where + " "
+                + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
+    }
+
     private static String buildFailedAt(String member, long buildStart) {
         return Theme.colorize("Build failed", Theme.active().error())
                 + ": Failure at " + Theme.colorize(member, Theme.active().cyan())

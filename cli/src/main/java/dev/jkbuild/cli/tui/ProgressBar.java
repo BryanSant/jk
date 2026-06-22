@@ -80,7 +80,7 @@ public final class ProgressBar {
         StringBuilder sb = new StringBuilder();
         appendBar(sb, numerator, denominator);
         sb.append(' ').append(Theme.colorize(percent(numerator, denominator) + "%",
-                Theme.active().settled()));
+                Theme.active().brightWhite()));
         return sb.toString();
     }
 
