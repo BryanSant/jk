@@ -45,6 +45,7 @@ public final class TreeCommand implements CliCommand {
                 Opt.value("<depth>", "Maximum tree depth. Default: unlimited.", "--depth"),
                 Opt.flag("Flatten each scope to a deduplicated, sorted list of all "
                         + "(transitive) dependencies, dropping the nesting.", "--flatten"),
+                Opt.flag("", "--flat").hide(),
                 Opt.value("<scopes>", "Comma-separated scopes to show, in the given order "
                         + "(e.g. main,export,test). Default: all non-empty scopes.", "--scopes"),
                 Opt.value("<scopes>", "", "--scope").hide());
@@ -53,7 +54,7 @@ public final class TreeCommand implements CliCommand {
     @Override
     public int run(Invocation in) throws IOException {
         Integer depth = in.value("depth").map(Integer::parseInt).orElse(null);
-        boolean flatten = in.isSet("flatten");
+        boolean flatten = in.isSet("flatten") || in.isSet("flat");
 
         // --scopes / --scope: an explicit, ordered subset of scopes to display.
         List<Scope> scopes = null;
