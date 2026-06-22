@@ -603,20 +603,24 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         String barStr = bar.render(numerator, denominator);
         StringBuilder h = new StringBuilder();
         if (nerdfont) {
-            // The spinner + name share the goal chip: near-black text on the goal
-            // green. The chip is closed by a U+E0B0 cap whose foreground is that same
-            // green (so its solid body continues the chip) on the default background,
-            // tapering the chip into the bar's first cell (which is also on the default
-            // background). Only the spinner glyph cycles — no color animation in the
-            // pill. A leading space (on the pill background) gives the region its
-            // one-column indent while extending the pill to the left edge.
+            // The spinner + name share the goal chip: black text on the goal green.
+            // The chip is closed by a U+E0B0 cap whose foreground is the chip green (so
+            // its solid body continues the chip) and whose background tracks the bar's
+            // first cell color — so the chip tapers into whatever block sits immediately
+            // to its right and re-tints live as the bar fills. Only the spinner glyph
+            // cycles — no color animation in the pill. A leading space (on the pill
+            // background) gives the region its one-column indent while extending the
+            // pill to the left edge.
             AttributedStyle chip = Theme.active().goalChip();
+            AttributedStyle cap = Theme.active().withBackground(
+                    Theme.active().bright(Theme.active().goalChipColor()),
+                    bar.leadColor(numerator, denominator));
             h.append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(FRAMES[frame], chip))
                     .append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(name, chip))
                     .append(Theme.colorize(" ", chip))
-                    .append(GoalChrome.cap(Theme.active().goalChipColor(), true))
+                    .append(Theme.colorize(Glyphs.SEGMENT_END_NERD, cap))
                     .append(barStr);
         } else {
             // Plain leading space to match the region's one-column indent.

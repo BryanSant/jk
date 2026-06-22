@@ -228,9 +228,11 @@ class CommandManagerTest {
         // Spinner (frame 0 = "·") cycles glyphs only — same near-black chip style as the
         // name, not a gradient color.
         assertThat(header).contains(Theme.colorize("·", chip));
-        // Cap: foreground = the chip green, background unset (it tapers into the bar).
+        // Cap: foreground = the chip green; background = the bar's first cell color,
+        // so the chip tapers into the block immediately to its right.
+        Rgb lead = new ProgressBar().leadColor(45, 100);
         assertThat(header).contains(Theme.colorize(Glyphs.SEGMENT_END_NERD,
-                Theme.active().bright(Theme.active().goalChipColor())));
+                Theme.active().withBackground(Theme.active().bright(Theme.active().goalChipColor()), lead)));
     }
 
     @Test
