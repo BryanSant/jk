@@ -877,7 +877,7 @@ public final class BuildCommand implements CliCommand {
      * nothing was rebuilt, else {@code Build successful. Built <artifact>} naming the
      * headline output. No duration — the framework appends it.
      */
-    private static String projectTail(Goal goal) {
+    static String projectTail(Goal goal) {
         if ("up-to-date".equals(goal.get(BUILD_OUTCOME).orElse(""))) {
             return buildOk() + ", project up to date";
         }

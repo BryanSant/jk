@@ -12,6 +12,7 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.tui.GoalChrome;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
@@ -121,11 +122,16 @@ public final class RunCommand implements CliCommand {
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
 
+        // Build-if-needed, settling with the same chip line as `jk build`: the goal is
+        // cache-aware (the same freshness/action-cache checks jk explain's forecast
+        // mirrors), so a clean tree skips every phase and reports "project up to date",
+        // while real work reports "Built <artifact>".
+        String coord = BuildCommand.buildTarget(projectDir.resolve("jk.toml"), projectDir);
         ConsoleSpec spec = new ConsoleSpec("Build",
-                r -> "Built",
-                r -> "Build failed");
-        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
-                BuildCommand.buildTarget(projectDir.resolve("jk.toml"), projectDir));
+                r -> BuildCommand.projectTail(goal),
+                r -> GoalChrome.coord(coord),
+                true);
+        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, coord);
         if (!result.success()) {
             var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
             if (testResult != null && !testResult.allPassed()) return 4;
@@ -168,53 +174,37 @@ public final class RunCommand implements CliCommand {
     }
 
     /**
-     * Prints the "▶ Executing ..." line (to stderr, above the program's output)
-     * followed by a blank line, so the program's stdout starts on a clean line.
-     * The {@code ▶} play glyph is bright-green and the whole executed command —
-     * literal {@code java …} <em>and</em> the artifact path — is yellow. (This is
-     * the one place a path is deliberately covered by yellow rather than the usual
-     * {@link Theme#path()} color: it reads as a single command line.)
+     * Prints the {@code  ▶ Executing …} line (to stderr, above the program's output)
+     * followed by a blank line, so the program's stdout starts on a clean line. The
+     * artifact is shown in the {@link Theme#path()} color and the JDK in cyan; the play
+     * glyph is bright-green. A leading space matches the build chip's one-column indent.
      *
-     * <p>Native:  {@code ▶ Executing native binary: [yellow]target/myapp[/]}
-     * <p>Shadow:  {@code ▶ Executing with [cyan]{jdk}[/]: [yellow]java -jar target/app-all.jar[/]}
-     * <p>Plain:   {@code ▶ Executing with [cyan]{jdk}[/]: [yellow]java -cp … target/app.jar[/]}
+     * <p>Native:  {@code  ▶ Executing the native binary [path]target/app[/]}
+     * <p>Shadow:  {@code  ▶ Executing [path]target/app-all.jar[/] with [cyan]{jdk}[/]}
+     * <p>Plain:   {@code  ▶ Executing [path]target/app.jar[/] with [cyan]{jdk}[/]}
      */
     private static void printExecBanner(Path projectDir, List<String> command) {
         Theme t = Theme.active();
         String exec;
         if (command.size() == 1) {
-            // Native binary — "native binary: target/myapp" (path covered by yellow).
+            // Native binary — exec'd directly, no JVM.
             Path bin = Path.of(command.get(0));
-            exec = "native binary: "
-                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.highlight());
+            exec = "the native binary "
+                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.path());
         } else {
-            // JVM — derive jdk leaf, resolving symlinks so "current" shows the real spec.
+            // JVM — derive the jdk leaf, resolving symlinks so "current" shows the real spec.
             Path javaExe = Path.of(command.get(0));
             try { javaExe = javaExe.toRealPath(); } catch (IOException ignored) {}
             Path jdkHome = javaExe.getParent() != null ? javaExe.getParent().getParent() : null;
             String jdkLeaf = jdkHome != null && jdkHome.getFileName() != null
                     ? jdkHome.getFileName().toString() : "java";
-
-            String flag = command.get(1);   // "-jar" or "-cp"
-            // The whole command — literal "java -jar/-cp …" and the path — is yellow.
-            String javaCmd;
-            if ("-jar".equals(flag)) {
-                // Shadow jar — full relative path, no classpath noise.
-                Path jar = Path.of(command.get(2));
-                javaCmd = "java -jar " + PathDisplay.of(jar, projectDir);
-            } else {
-                // Plain jar + classpath — elide the full cp, show project jar.
-                String cpArg = command.size() >= 3 ? command.get(2) : "";
-                String pathSep = System.getProperty("path.separator");
-                String first = cpArg.contains(pathSep)
-                        ? cpArg.substring(0, cpArg.indexOf(pathSep)) : cpArg;
-                javaCmd = "java -cp … " + PathDisplay.of(Path.of(first), projectDir);
-            }
-            // "with <cyan jdk>: <yellow command>".
-            exec = "with " + Theme.colorize(jdkLeaf, t.cyan())
-                    + ": " + Theme.colorize(javaCmd, t.highlight());
+            // The artifact: the shadow jar (-jar) or the project's main jar (first -cp entry).
+            Path artifact = "-jar".equals(command.get(1))
+                    ? Path.of(command.get(2)) : firstClasspathEntry(command);
+            exec = Theme.colorize(PathDisplay.of(artifact, projectDir), t.path())
+                    + " with " + Theme.colorize(jdkLeaf, t.cyan());
         }
-        System.err.println(Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen())
+        System.err.println(" " + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen())
                 + " Executing " + exec);
         System.err.println();
         // Reset any lingering SGR state so the program's own output starts from
@@ -223,6 +213,13 @@ public final class RunCommand implements CliCommand {
             System.err.print(Ansi.RESET);
             System.err.flush();
         }
+    }
+
+    /** The first {@code -cp} entry (the project's main jar) from a {@code java -cp … main} command. */
+    private static Path firstClasspathEntry(List<String> command) {
+        String cp = command.size() >= 3 ? command.get(2) : "";
+        String sep = System.getProperty("path.separator");
+        return Path.of(cp.contains(sep) ? cp.substring(0, cp.indexOf(sep)) : cp);
     }
 
 
