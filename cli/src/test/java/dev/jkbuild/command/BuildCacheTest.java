@@ -44,7 +44,7 @@ class BuildCacheTest {
         // even hashing source content for an action-key lookup.
         String stdout = captureStdout(() ->
                 run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
-        assertThat(stdout).contains("Up to date");
+        assertThat(stdout).contains("project up to date");
     }
 
     @Test
@@ -70,7 +70,7 @@ class BuildCacheTest {
 
         String stdout = captureStdout(() ->
                 run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
-        assertThat(stdout).contains("Built");
+        assertThat(stdout).contains("project built");
     }
 
     private static void deleteRecursively(Path root) throws IOException {
@@ -110,7 +110,7 @@ class BuildCacheTest {
         String stdout = captureStdout(() ->
                 run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
         assertThat(stdout).doesNotContain("Cache hit");
-        assertThat(stdout).contains("Built");
+        assertThat(stdout).contains("project built");
     }
 
     // --- helpers -----------------------------------------------------------

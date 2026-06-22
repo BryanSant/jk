@@ -6,7 +6,9 @@ import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.CommandManager;
+import dev.jkbuild.cli.tui.GoalChrome;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -164,7 +166,7 @@ public final class NativeCommand implements CliCommand {
 
         // AUTO / QUIET: one shared aggregate view.
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
-        CommandManager view = CommandManager.goal(System.out, "Native Build", animate);
+        CommandManager view = CommandManager.goal(System.out, "Build", animate);
         dev.jkbuild.cli.run.AggregateContext agg = new dev.jkbuild.cli.run.AggregateContext(view);
         int built = 0;
 
@@ -192,12 +194,12 @@ public final class NativeCommand implements CliCommand {
                 try {
                     exit = runPreparedNative(pm, agg);
                 } catch (Exception e) {
-                    view.finishFailure("Native build failed in " + memberName
+                    view.finishGoalFailure(GoalChrome.coord(memberName)
                             + " " + BuildCommand.elapsedSince(buildStart));
                     throw e;
                 }
                 if (exit != 0) {
-                    view.finishFailure("Native build failed in " + memberName
+                    view.finishGoalFailure(GoalChrome.coord(memberName)
                             + " " + BuildCommand.elapsedSince(buildStart));
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
                         System.err.println(ConsoleSpec.renderError(d));
@@ -216,7 +218,8 @@ public final class NativeCommand implements CliCommand {
         String summary = built + " member" + (built == 1 ? "" : "s") + " built"
                 + (nativeCount > 0 ? ", " + nativeCount + " native artifact"
                         + (nativeCount == 1 ? "" : "s") : "");
-        view.finishSuccess(summary + elapsed);
+        view.finishGoalSuccess(Theme.colorize("Native build successful", Theme.active().success())
+                + ", " + summary + elapsed);
         return 0;
     }
 
@@ -258,9 +261,10 @@ public final class NativeCommand implements CliCommand {
         if (agg != null) {
             result = GoalConsole.runGoalInto(pm.goal(), pm.cache(), pm.target(), agg, pm.barWeight());
         } else {
-            ConsoleSpec spec = pm.eligible()
-                    ? new ConsoleSpec(pm.target(), r -> "Built native artifact", r -> "Native build failed")
-                    : new ConsoleSpec(pm.target(), r -> "Build successful",      r -> "Build failed");
+            String ok = Theme.colorize(pm.eligible() ? "Native build successful" : "Build successful",
+                    Theme.active().success()) + ", project built";
+            ConsoleSpec spec = new ConsoleSpec("Build",
+                    r -> ok, r -> GoalChrome.coord(pm.target()), true);
             result = GoalConsole.runGoal(pm.goal(), GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
         return result.success() ? 0 : 1;
@@ -307,20 +311,12 @@ public final class NativeCommand implements CliCommand {
                 projectDir, cache, lockFile, jdksDir, graalHome.get(), resolvedMain, extra));
         Goal goal = builder.build();
 
-        // Executable when a main class resolves (CLI/[native]/[project]), else a
-        // shared library — mirror the phase's decision for the result line.
-        String effectiveMain = (resolvedMain != null && !resolvedMain.isBlank())
-                ? resolvedMain : build.project().main();
-        boolean library = effectiveMain == null || effectiveMain.isBlank();
-        ConsoleSpec spec = new ConsoleSpec("Native Build",
-                r -> goal.get(BuildPipeline.LAYOUT)
-                        .map(l -> library
-                                ? "Built native library " + l.nativeLibrary().getFileName()
-                                : "Built native binary " + l.nativeBinary().getFileName())
-                        .orElse("Built native artifact"),
-                r -> "Native build failed");
-        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
-                BuildCommand.buildTarget(buildFile, projectDir));
+        String coord = BuildCommand.buildTarget(buildFile, projectDir);
+        ConsoleSpec spec = new ConsoleSpec("Build",
+                r -> Theme.colorize("Native build successful", Theme.active().success()) + ", project built",
+                r -> GoalChrome.coord(coord),
+                true);
+        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, coord);
 
         if (result.success()) return 0;
         for (GoalResult.Diagnostic d : result.errors()) {

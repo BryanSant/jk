@@ -300,7 +300,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * the caller; this owns only the chip + cap + verb. See {@link GoalChrome}.
      */
     public void finishGoalSuccess(String tail, List<String> above) {
-        settle(GoalChrome.successLine(goalName(), nerdfont, tail), above);
+        settle(GoalChrome.chipLine(Glyphs.CHECK, goalName(), nerdfont, tail), above);
     }
 
     /** {@link #finishGoalSuccess(String, List)} with no buffered output above. */

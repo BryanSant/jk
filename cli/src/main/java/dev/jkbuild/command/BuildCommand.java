@@ -298,8 +298,8 @@ public final class BuildCommand implements CliCommand {
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
             remaining.removeAll(ready);
         }
-        System.out.println(GoalChrome.successLine("Build", GlobalConfig.nerdfont(),
-                modulesTail(total, start)));
+        System.out.println(GoalChrome.chipLine(dev.jkbuild.cli.tui.Glyphs.CHECK, "Build",
+                GlobalConfig.nerdfont(), modulesTail(total, start)));
         return 0;
     }
 
@@ -807,7 +807,7 @@ public final class BuildCommand implements CliCommand {
             // matching the workspace path. onSuccess/onFailure return the tail after the verb.
             ConsoleSpec spec = new ConsoleSpec("Build",
                     r -> projectTail(goal),
-                    r -> styledCoord(pm.target()),
+                    r -> GoalChrome.coord(pm.target()),
                     true);
             result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
@@ -856,35 +856,31 @@ public final class BuildCommand implements CliCommand {
      * in cyan, dim duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s}
      * (the {@code ‼} + red is added by {@code finishFailure}).
      */
-    /** Success tail {@code  for N modules took T} (work done) — leading space, N bold-white. */
+    /** The green {@code Build successful} lead that opens every build success message. */
+    private static String buildOk() {
+        return Theme.colorize("Build successful", Theme.active().success());
+    }
+
+    /** Success tail {@code Build successful for N modules took T} (work done) — N bold-white. */
     private static String modulesTail(int total, long start) {
-        return " for " + Theme.colorize(String.valueOf(total), Theme.active().focused())
+        return buildOk() + " for " + Theme.colorize(String.valueOf(total), Theme.active().focused())
                 + " module" + (total == 1 ? "" : "s") + " " + elapsedSince(start);
     }
 
-    /** Success tail {@code , <scope> up to date took T} — when nothing was rebuilt. */
+    /** Success tail {@code Build successful, <scope> up to date took T} — when nothing was rebuilt. */
     private static String upToDateTail(String scope, long start) {
-        return ", " + scope + " up to date " + elapsedSince(start);
+        return buildOk() + ", " + scope + " up to date " + elapsedSince(start);
     }
 
-    /** Single-project success tail: {@code , project up to date} / {@code , project built} (no duration; the framework appends it). */
+    /** Single-project success tail {@code Build successful, project up to date / built} (no duration; the framework appends it). */
     private static String projectTail(Goal goal) {
-        return "up-to-date".equals(goal.get(BUILD_OUTCOME).orElse(""))
-                ? ", project up to date" : ", project built";
-    }
-
-    /** {@code group:name} with the group cyan and the name bright-cyan. */
-    private static String styledCoord(String coord) {
-        int i = coord.indexOf(':');
-        return i < 0
-                ? Theme.colorize(coord, Theme.active().coordGroup())
-                : Theme.colorize(coord.substring(0, i), Theme.active().coordGroup())
-                        + ":" + Theme.colorize(coord.substring(i + 1), Theme.active().coordName());
+        return buildOk() + ("up-to-date".equals(goal.get(BUILD_OUTCOME).orElse(""))
+                ? ", project up to date" : ", project built");
     }
 
     /** Failure tail {@code group:name took T} — coord colored, {@code took T} bright-black. */
     private static String failureTail(String coord, long start) {
-        return styledCoord(coord) + " " + elapsedSince(start);
+        return GoalChrome.coord(coord) + " " + elapsedSince(start);
     }
 
     /** Failure tail for a member missing its {@code jk.toml}. */
