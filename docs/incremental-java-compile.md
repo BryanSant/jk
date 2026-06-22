@@ -179,7 +179,7 @@ Compile-time **annotation processors** split into two cases:
 Lombok generates getters/builders/etc. **into the bytecode via AST mutation — no
 separate `.java` files.** Consequences:
 
-- The generated members live in `Foo.class` → ASM **sees** them → they're in
+- The generated modules live in `Foo.class` → ASM **sees** them → they're in
   `Foo`'s ABI hash.
 - Dependents calling `foo.getName()` carry an `invokevirtual Foo.getName` →
   ASM captures the edge.
@@ -320,7 +320,7 @@ in-tree example of a processor whose handling we must get right.
 ## 10. Open questions
 
 - ABI-hash granularity: class-level (simple, slightly over-recompiles) vs
-  member-level (precise, more state). Start class-level.
+  module-level (precise, more state). Start class-level.
 - Worker lifecycle: one-shot per compile vs a persistent daemon (warm javac across
   builds). Start one-shot; daemon is a later perf lever (shared with the Kotlin
   worker's deferred daemon question).

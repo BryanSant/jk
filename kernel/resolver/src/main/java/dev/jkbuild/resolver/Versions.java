@@ -6,7 +6,7 @@ import org.apache.maven.artifact.versioning.ComparableVersion;
 /**
  * Maven-canonical version comparator. Delegates to
  * {@link ComparableVersion} from {@code org.apache.maven:maven-artifact}, so
- * jk's resolver, lockfile dedup, and range-membership checks all agree with
+ * jk's resolver, lockfile dedup, and range-moduleship checks all agree with
  * the JVM ecosystem's de-facto ordering.
  *
  * <p>ComparableVersion's semantics in brief:
@@ -24,7 +24,7 @@ import org.apache.maven.artifact.versioning.ComparableVersion;
  *
  * <p>We use this everywhere version strings need to be ordered — see
  * {@link MavenPackageSource#versions}, {@code NaiveResolver}, and the
- * PubGrub {@code VersionSet.Range} range membership checks.
+ * PubGrub {@code VersionSet.Range} range moduleship checks.
  */
 public final class Versions {
 

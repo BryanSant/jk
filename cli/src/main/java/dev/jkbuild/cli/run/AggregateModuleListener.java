@@ -12,33 +12,33 @@ import java.time.Duration;
 import java.util.List;
 
 /**
- * Feeds one workspace member's goal/phase events into the shared
+ * Feeds one workspace module's goal/phase events into the shared
  * {@link AggregateContext}'s {@link CommandManager}, tagging every phase row
- * with the member so interleaved members stay distinct. Does <em>not</em>
+ * with the module so interleaved modules stay distinct. Does <em>not</em>
  * finalize the shared view — {@code BuildCommand} settles it once after the
- * last member.
+ * last module.
  */
-public final class AggregateMemberListener implements GoalListener {
+public final class AggregateModuleListener implements GoalListener {
 
     private final AggregateContext agg;
     private final CommandManager cm;
-    private final String member;
+    private final String module;
     private final List<Phase> phases;
 
     /**
-     * This member's reserved slice of the calibrated {@code total} — the same
+     * This module's reserved slice of the calibrated {@code total} — the same
      * pre-scan {@link dev.jkbuild.run.Goal#estimatedTotalWeight()} that was summed
-     * into the aggregate denominator. The member's own 0→100% progress is scaled
+     * into the aggregate denominator. The module's own 0→100% progress is scaled
      * into this slice, so it can never consume more than its share and the base
      * advances by exactly this much on completion (no boundary drift). Ignored on
      * the uncalibrated path ({@code total == 0}), which falls back to live ticks.
      */
     /**
-     * Mutable: starts at the member's pre-scan estimate, but tracks its goal
+     * Mutable: starts at the module's pre-scan estimate, but tracks its goal
      * denominator as phases {@link dev.jkbuild.run.PhaseContext#reweight reweight}
      * mid-run (e.g. a compile that turns out to be a cheap restore). Each change
      * is propagated to the aggregate total via {@link AggregateContext#growTotal}
-     * so the member's share of the bar reflects the work it actually does.
+     * so the module's share of the bar reflects the work it actually does.
      */
     private long slice;
     /** The goal denominator we've already folded into {@link #slice} / the total. */
@@ -47,26 +47,26 @@ public final class AggregateMemberListener implements GoalListener {
     private long lastDenominator;
 
     /**
-     * When non-null, this member's process output + warnings are appended here
+     * When non-null, this module's process output + warnings are appended here
      * instead of being written above the live region as they arrive. Parallel
-     * builds set this so concurrent members' output never interleaves — the
-     * caller flushes the whole block (above the region) when the member finishes.
+     * builds set this so concurrent modules' output never interleaves — the
+     * caller flushes the whole block (above the region) when the module finishes.
      */
     private java.util.List<String> outBuffer;
 
-    /** Route this member's output into {@code buffer} (parallel build); see field doc. */
+    /** Route this module's output into {@code buffer} (parallel build); see field doc. */
     public void bufferOutputInto(java.util.List<String> buffer) {
         this.outBuffer = buffer;
     }
 
-    public AggregateMemberListener(AggregateContext agg, String member, List<Phase> phases) {
-        this(agg, member, phases, 0);
+    public AggregateModuleListener(AggregateContext agg, String module, List<Phase> phases) {
+        this(agg, module, phases, 0);
     }
 
-    public AggregateMemberListener(AggregateContext agg, String member, List<Phase> phases, long slice) {
+    public AggregateModuleListener(AggregateContext agg, String module, List<Phase> phases, long slice) {
         this.agg = agg;
         this.cm = agg.view();
-        this.member = member;
+        this.module = module;
         this.phases = phases;
         this.slice = slice;
         this.knownDenominator = slice;   // the goal's initial denominator == its pre-scan estimate
@@ -74,22 +74,22 @@ public final class AggregateMemberListener implements GoalListener {
 
     @Override
     public void goalStart(GoalView view) {
-        cm.target(member);
+        cm.target(module);
         for (Phase p : phases) {
             String display = p.label() != null && !p.label().isEmpty() ? p.label() : p.name();
-            cm.addPhaseLabeled(member, p.name(), display);
+            cm.addPhaseLabeled(module, p.name(), display);
         }
         push(view);
     }
 
     @Override
     public void phaseStart(String phase, int scope) {
-        cm.phaseRunning(member, phase);
+        cm.phaseRunning(module, phase);
     }
 
     @Override
     public void label(String phase, String label) {
-        cm.phaseMessage(member, phase, label);
+        cm.phaseMessage(module, phase, label);
     }
 
     @Override
@@ -132,7 +132,7 @@ public final class AggregateMemberListener implements GoalListener {
 
     @Override
     public void phaseFinish(String phase, PhaseStatus status, Duration duration) {
-        cm.phaseDone(member, phase, status == PhaseStatus.SUCCESS);
+        cm.phaseDone(module, phase, status == PhaseStatus.SUCCESS);
     }
 
     @Override
@@ -141,11 +141,11 @@ public final class AggregateMemberListener implements GoalListener {
             agg.notifyErrors(result.errors());
         }
         // Calibrated: advance the base by exactly the slice we reserved in `total`
-        // and drop this member's running contribution — Σ slices == total, no
+        // and drop this module's running contribution — Σ slices == total, no
         // boundary drift, no double-count. Uncalibrated: fold the live final
         // denominator (the pre-fix growing behaviour).
-        if (agg.total() > 0) agg.completeMember(member, slice);
-        else agg.completeMember(lastDenominator);
+        if (agg.total() > 0) agg.completeModule(module, slice);
+        else agg.completeModule(lastDenominator);
     }
 
     private void push(GoalView view) {
@@ -153,26 +153,26 @@ public final class AggregateMemberListener implements GoalListener {
         long base = agg.completedBase();
         long total = agg.total();
         if (total > 0) {
-            // A phase reweighted: fold the denominator delta into this member's
+            // A phase reweighted: fold the denominator delta into this module's
             // slice and the aggregate total, so a restore/skip shrinks (and a
-            // surprise full grows) the member's share of the whole-workspace bar.
+            // surprise full grows) the module's share of the whole-workspace bar.
             if (view.denominator() != knownDenominator) {
                 agg.growTotal(view.denominator() - knownDenominator);
                 slice += view.denominator() - knownDenominator;
                 knownDenominator = view.denominator();
                 total = agg.total();
             }
-            // Calibrated: scale this member's own 0→100% into its fixed slice and
-            // report it through the aggregate, which sums every running member's
-            // contribution onto completedBase. Monotonic within the member and
-            // clamped to total, so the bar neither backtracks at a member boundary
+            // Calibrated: scale this module's own 0→100% into its fixed slice and
+            // report it through the aggregate, which sums every running module's
+            // contribution onto completedBase. Monotonic within the module and
+            // clamped to total, so the bar neither backtracks at a module boundary
             // nor stretches the denominator past the up-front estimate — and
-            // concurrent members add up instead of clobbering each other.
+            // concurrent modules add up instead of clobbering each other.
             long advanced = Math.round(view.fraction() * slice);
-            agg.memberProgress(member, advanced);
+            agg.moduleProgress(module, advanced);
         } else {
             // Uncalibrated caller (slice 0): fall back to live ticks against a
-            // denominator that grows as members start.
+            // denominator that grows as modules start.
             cm.progress(base + view.numerator(), base + view.denominator());
         }
     }

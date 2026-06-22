@@ -98,7 +98,7 @@ class ExportCommandTest {
     }
 
     @Test
-    void export_maven_workspace_writes_root_and_member_poms(@TempDir Path tmp) throws IOException {
+    void export_maven_workspace_writes_root_and_module_poms(@TempDir Path tmp) throws IOException {
         Files.createDirectories(tmp);
         Files.writeString(tmp.resolve("jk.toml"), """
                 [project]
@@ -109,7 +109,7 @@ class ExportCommandTest {
                 java = 21
 
                 [workspace]
-                members = ["mod-a"]
+                modules = ["mod-a"]
                 """);
         Path modA = tmp.resolve("mod-a");
         Files.createDirectories(modA);
@@ -134,7 +134,7 @@ class ExportCommandTest {
     }
 
     @Test
-    void export_gradle_workspace_includes_members(@TempDir Path tmp) throws IOException {
+    void export_gradle_workspace_includes_modules(@TempDir Path tmp) throws IOException {
         Files.createDirectories(tmp);
         Files.writeString(tmp.resolve("jk.toml"), """
                 [project]
@@ -145,7 +145,7 @@ class ExportCommandTest {
                 java = 21
 
                 [workspace]
-                members = ["mod-a"]
+                modules = ["mod-a"]
                 """);
         Path modA = tmp.resolve("mod-a");
         Files.createDirectories(modA);

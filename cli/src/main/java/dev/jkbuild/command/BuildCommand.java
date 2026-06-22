@@ -121,8 +121,8 @@ public final class BuildCommand implements CliCommand {
             return 2;
         }
         // Peek at the manifest before committing to a per-dir build. A
-        // workspace root dispatches to runWorkspaceBuild. A workspace member
-        // also redirects — jk build from any member builds the whole workspace
+        // workspace root dispatches to runWorkspaceBuild. A workspace module
+        // also redirects — jk build from any module builds the whole workspace
         // in topological order, same as running from the root.
         JkBuild peek;
         try {
@@ -134,7 +134,7 @@ public final class BuildCommand implements CliCommand {
         if (peek.isWorkspaceRoot()) {
             return buildWorkspace(startDir, peek);
         }
-        // Member redirect: discover the enclosing workspace and build from there.
+        // Module redirect: discover the enclosing workspace and build from there.
         try {
             var rootOpt = WorkspaceLocator.findRoot(startDir);
             if (rootOpt.isPresent()) {
@@ -142,7 +142,7 @@ public final class BuildCommand implements CliCommand {
                 if (!global.outputIsJson()) {
                     System.err.println("jk build: building workspace from "
                             + root.getFileName()
-                            + " (member: " + startDir.getFileName() + ")");
+                            + " (module: " + startDir.getFileName() + ")");
                 }
                 return buildWorkspace(root, JkBuildParser.parse(root.resolve("jk.toml")));
             }
@@ -227,7 +227,7 @@ public final class BuildCommand implements CliCommand {
         }
         List<BuildGraph.BuildUnit> units = graph.topoOrder();
         if (units.isEmpty()) {
-            System.out.println("(workspace declares no members)");
+            System.out.println("(workspace declares no modules)");
             return 0;
         }
         // Size worker concurrency + heaps to the graph's peak parallelism before
@@ -235,7 +235,7 @@ public final class BuildCommand implements CliCommand {
         applyMemoryPlan(Math.min(maxReadyWidth(units, graph.edges()), JkThreads.CPU_THREADS));
         // --output json / --verbose keep the buffered, non-live path (NDJSON streams
         // / full per-phase logs); AUTO/QUIET get the live aggregate view (a single
-        // spinner header + bar + a tree of the members building right now).
+        // spinner header + bar + a tree of the modules building right now).
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         return (mode == GoalConsole.Mode.AUTO || mode == GoalConsole.Mode.QUIET)
                 ? runGraphLive(units, graph.edges(), forecastDirty(graph, cache), cache, mode)
@@ -306,7 +306,7 @@ public final class BuildCommand implements CliCommand {
     /**
      * Live aggregate scheduler: one {@link CommandManager} (goal mode) shows a
      * spinner header + a single bar calibrated to the whole graph + a tree of the
-     * members building <em>right now</em>; the tree grows to the parallelism limit
+     * modules building <em>right now</em>; the tree grows to the parallelism limit
      * and shrinks back to 0 as units drain. Each unit's process output is buffered
      * and flushed (with a ✓/✗ {@code [k/N]} line) above the region when it
      * completes — so concurrent logs never interleave. On a non-interactive
@@ -324,14 +324,14 @@ public final class BuildCommand implements CliCommand {
 
         // Pre-scan: prepare every unit's goal and sum its estimated weight so the
         // bar calibrates to the whole-graph total and advances 0→100% across it.
-        // Each member also gets a timing recorder feeding one shared sink, folded
+        // Each module also gets a timing recorder feeding one shared sink, folded
         // into the learned ledger once the build succeeds.
         List<dev.jkbuild.runtime.PhaseTimings.Sample> timingSamples =
                 java.util.Collections.synchronizedList(new ArrayList<>());
-        Map<Path, PreparedMember> prepared = new LinkedHashMap<>();
+        Map<Path, PreparedModule> prepared = new LinkedHashMap<>();
         long totalWeight = 0;
         for (BuildGraph.BuildUnit u : units) {
-            PreparedMember pm = prepareMember(u.dir(), u.isDependency() || buildOpts.skipTests,
+            PreparedModule pm = prepareModule(u.dir(), u.isDependency() || buildOpts.skipTests,
                     dirtyDirs.contains(u.dir()));
             if (pm == null) {
                 view.finishGoalFailure(noTomlTail(u.dir().toString(), start));
@@ -360,7 +360,7 @@ public final class BuildCommand implements CliCommand {
                     .toList();
             List<java.util.concurrent.CompletableFuture<UnitOutcome>> futures = new ArrayList<>();
             for (BuildGraph.BuildUnit u : ready) {
-                PreparedMember pm = prepared.get(u.dir());
+                PreparedModule pm = prepared.get(u.dir());
                 futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
                         () -> buildUnitLive(u, pm, agg, view, completed, total, deferredOutput), JkThreads.io()));
             }
@@ -405,7 +405,7 @@ public final class BuildCommand implements CliCommand {
      * concurrent logs never interleave with the live view); otherwise (pipes /
      * {@code --quiet}) the buffered block + line print append-only, atomically.
      */
-    private UnitOutcome buildUnitLive(BuildGraph.BuildUnit unit, PreparedMember pm, AggregateContext agg,
+    private UnitOutcome buildUnitLive(BuildGraph.BuildUnit unit, PreparedModule pm, AggregateContext agg,
                                       CommandManager view, java.util.concurrent.atomic.AtomicInteger completed,
                                       int total, List<String> deferredOutput) {
         List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
@@ -449,7 +449,7 @@ public final class BuildCommand implements CliCommand {
 
     /** Build one graph unit (dependency units compile-only) with output buffered. */
     private UnitOutcome buildUnit(BuildGraph.BuildUnit unit) {
-        PreparedMember pm = prepareMember(unit.dir(), unit.isDependency() || buildOpts.skipTests);
+        PreparedModule pm = prepareModule(unit.dir(), unit.isDependency() || buildOpts.skipTests);
         if (pm == null) {
             return new UnitOutcome(unit.coord(), false, 2, 0, List.of("no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(unit.dir())));
         }
@@ -504,18 +504,18 @@ public final class BuildCommand implements CliCommand {
             sb.append(Theme.colorize(coord, th.plainWhite().crossedOut()))
                     .append(' ').append(ConsoleSpec.took(java.time.Duration.ofMillis(millis)));
         } else {
-            sb.append(CommandManager.coloredMember(coord))
+            sb.append(CommandManager.coloredModule(coord))
                     .append(' ').append(Theme.colorize("— failed", th.error()));
         }
         return sb.toString();
     }
 
     /**
-     * Build every member of the workspace whose root is {@code workspaceRoot}.
-     * Members compile in topological order computed from each member's
+     * Build every module of the workspace whose root is {@code workspaceRoot}.
+     * Modules compile in topological order computed from each module's
      * inter-sibling deps (a sibling listed as a regular Maven coord whose
-     * group+artifact match another member's {@code [project]}). Each
-     * member's jar lands at {@code <workspaceRoot>/target/} per the
+     * group+artifact match another module's {@code [project]}). Each
+     * module's jar lands at {@code <workspaceRoot>/target/} per the
      * {@link BuildLayout} contract.
      *
      * <p>If the root manifest also declares its own {@code [project]} with
@@ -525,36 +525,36 @@ public final class BuildCommand implements CliCommand {
      * we've seen.)
      */
     private int runWorkspaceBuild(Path workspaceRoot, JkBuild root) throws Exception {
-        Map<Path, JkBuild> membersByDir;
+        Map<Path, JkBuild> modulesByDir;
         try {
-            membersByDir = WorkspaceLoader.loadMembers(workspaceRoot, root);
+            modulesByDir = WorkspaceLoader.loadModules(workspaceRoot, root);
         } catch (RuntimeException e) {
             System.err.println("jk build: " + e.getMessage());
             return 2;
         }
-        if (membersByDir.isEmpty()) {
-            System.out.println("(workspace declares no members)");
+        if (modulesByDir.isEmpty()) {
+            System.out.println("(workspace declares no modules)");
             return 0;
         }
         applyMemoryPlan(1);   // --no-parallel: modules build serially (peak = 1 module)
         // Build any composite (path / branch-git) dependency units the workspace
-        // (or its members) declare, before the members that consume them.
+        // (or its modules) declare, before the modules that consume them.
         int dep = buildCompositeDeps(workspaceRoot, root);
         if (dep != 0) return dep;
-        List<Path> sorted = topoSortMembers(membersByDir);
+        List<Path> sorted = topoSortModules(modulesByDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
 
-        // --output json / --verbose keep per-member rendering (NDJSON streams,
-        // verbose wants the full per-phase log). Banners separate the members.
+        // --output json / --verbose keep per-module rendering (NDJSON streams,
+        // verbose wants the full per-phase log). Banners separate the modules.
         if (mode != GoalConsole.Mode.AUTO && mode != GoalConsole.Mode.QUIET) {
             for (int i = 0; i < sorted.size(); i++) {
-                Path memberDir = sorted.get(i);
+                Path moduleDir = sorted.get(i);
                 System.out.println();
-                System.out.println("══ " + workspaceRoot.relativize(memberDir)
+                System.out.println("══ " + workspaceRoot.relativize(moduleDir)
                         + " (" + (i + 1) + "/" + sorted.size() + ") ══");
-                int exit = runForDir(memberDir);
+                int exit = runForDir(moduleDir);
                 if (exit != 0) {
-                    System.err.println("jk build: " + workspaceRoot.relativize(memberDir)
+                    System.err.println("jk build: " + workspaceRoot.relativize(moduleDir)
                             + " failed (exit " + exit + ")");
                     return exit;
                 }
@@ -562,25 +562,25 @@ public final class BuildCommand implements CliCommand {
             return 0;
         }
 
-        // AUTO / QUIET: every member feeds ONE aggregate view (spinner header +
-        // single bar + merged phase list). Settle it once after the last member.
+        // AUTO / QUIET: every module feeds ONE aggregate view (spinner header +
+        // single bar + merged phase list). Settle it once after the last module.
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
         CommandManager view = CommandManager.goal(System.out, "Build", animate);
         AggregateContext agg = new AggregateContext(view);
         int built = 0;
         long buildStart = System.nanoTime();
-        // Route every member's phase/process output above the one shared region.
+        // Route every module's phase/process output above the one shared region.
         try (var cap = view.captureOutput()) {
-            // Breadth-first pre-scan — build every member's goal and sum its
+            // Breadth-first pre-scan — build every module's goal and sum its
             // estimated ticks so the bar calibrates to the whole-workspace total
-            // and advances 0→100% without resetting per member. These are the very
-            // goals we then run in-process, one member at a time.
-            Map<Path, PreparedMember> prepared = new LinkedHashMap<>();
+            // and advances 0→100% without resetting per module. These are the very
+            // goals we then run in-process, one module at a time.
+            Map<Path, PreparedModule> prepared = new LinkedHashMap<>();
             long total = 0;
-            for (Path memberDir : sorted) {
-                PreparedMember pm;
+            for (Path moduleDir : sorted) {
+                PreparedModule pm;
                 try {
-                    pm = prepareMember(memberDir);
+                    pm = prepareModule(moduleDir);
                 } catch (Exception e) {
                     view.finishFailure(Theme.colorize("Build failed", Theme.active().error())
                             + " " + elapsedSince(buildStart));
@@ -588,24 +588,24 @@ public final class BuildCommand implements CliCommand {
                 }
                 if (pm == null) {
                     view.finishFailure("No jk.toml in "
-                            + workspaceRoot.relativize(memberDir) + " " + elapsedSince(buildStart));
+                            + workspaceRoot.relativize(moduleDir) + " " + elapsedSince(buildStart));
                     return 2;
                 }
                 total += pm.barWeight();
-                prepared.put(memberDir, pm);
+                prepared.put(moduleDir, pm);
             }
             agg.calibrate(total);
             // Seed the wall-clock countdown with the predicted total (the jk explain figure).
             view.setEtaEstimate((long) total * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT);
 
-            for (Path memberDir : sorted) {
-                String member = workspaceRoot.relativize(memberDir).toString();
-                PreparedMember pm = prepared.get(memberDir);
+            for (Path moduleDir : sorted) {
+                String module = workspaceRoot.relativize(moduleDir).toString();
+                PreparedModule pm = prepared.get(moduleDir);
                 int exit;
                 try {
                     exit = runPrepared(pm, agg);
                 } catch (Exception e) {
-                    view.finishFailure(buildFailedAt(member, buildStart));
+                    view.finishFailure(buildFailedAt(module, buildStart));
                     throw e;
                 }
                 if (exit != 0) {
@@ -619,7 +619,7 @@ public final class BuildCommand implements CliCommand {
                         if ("test-failure".equals(d.code())) continue;
                         above.add(ConsoleSpec.renderError(d));
                     }
-                    view.finishFailure(buildFailedAt(member, buildStart), above);
+                    view.finishFailure(buildFailedAt(module, buildStart), above);
                     return exit;
                 }
                 built++;
@@ -630,9 +630,9 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Order workspace members so each builds after its sibling deps.
+     * Order workspace modules so each builds after its sibling deps.
      * Kahn's algorithm against the in-workspace dep graph. Sibling
-     * matches are by full Maven coord ({@code group:artifact}) — members
+     * matches are by full Maven coord ({@code group:artifact}) — modules
      * declare sibling deps explicitly with inline coords, no
      * {@code .workspace = true} shorthand needed.
      *
@@ -643,20 +643,20 @@ public final class BuildCommand implements CliCommand {
      *
      * <p>Cycles (which the workspace's
      * {@link dev.jkbuild.config.WorkspaceLoader} doesn't currently
-     * detect) result in any unsorted members being appended in
+     * detect) result in any unsorted modules being appended in
      * declaration order so the build still attempts to make progress.
      */
-    static List<Path> topoSortMembers(Map<Path, JkBuild> membersByDir) {
+    static List<Path> topoSortModules(Map<Path, JkBuild> modulesByDir) {
         Map<String, Path> dirByCoord = new HashMap<>();
         Map<String, Path> dirByName  = new HashMap<>(); // for workspace: references
-        for (var e : membersByDir.entrySet()) {
+        for (var e : modulesByDir.entrySet()) {
             String coord = e.getValue().project().group()
                     + ":" + e.getValue().project().name();
             dirByCoord.put(coord, e.getKey());
             dirByName.put(e.getValue().project().name(), e.getKey());
         }
         Map<Path, Set<Path>> requires = new LinkedHashMap<>();
-        for (var e : membersByDir.entrySet()) {
+        for (var e : modulesByDir.entrySet()) {
             Set<Path> prereqs = new LinkedHashSet<>();
             for (Scope scope : Scope.values()) {
                 for (Dependency d : e.getValue().dependencies().of(scope)) {
@@ -702,10 +702,10 @@ public final class BuildCommand implements CliCommand {
                 }
             }
         }
-        if (sorted.size() != membersByDir.size()) {
+        if (sorted.size() != modulesByDir.size()) {
             // Cycle. Fall back to declaration order for the stragglers
             // so the build still tries to make progress.
-            for (Path p : membersByDir.keySet()) {
+            for (Path p : modulesByDir.keySet()) {
                 if (!sorted.contains(p)) sorted.add(p);
             }
         }
@@ -715,8 +715,8 @@ public final class BuildCommand implements CliCommand {
     /**
      * Build the entry's transitive composite ({@code path} / branch-git) dependency
      * units from source — compile-only, in dependency order — via the SAME real
-     * pipeline as any project ({@code prepareMember} → {@code coreBuilder}). jk's
-     * {@code includeBuild} analog. The consumer/members then locate these jars on
+     * pipeline as any project ({@code prepareModule} → {@code coreBuilder}). jk's
+     * {@code includeBuild} analog. The consumer/modules then locate these jars on
      * their classpath ({@code CompositeLocator}). No-op when none are declared.
      * Returns 0 on success, else an exit code (errors already printed).
      */
@@ -731,8 +731,8 @@ public final class BuildCommand implements CliCommand {
 
     /**
      * Build one project directory. When {@code agg} is non-null this is a
-     * workspace member whose events feed the shared aggregate view rather than
-     * a per-member progress display.
+     * workspace module whose events feed the shared aggregate view rather than
+     * a per-module progress display.
      */
     private int runForDir(Path dir, AggregateContext agg) throws Exception {
         Path buildFile = dir.resolve("jk.toml");
@@ -740,36 +740,36 @@ public final class BuildCommand implements CliCommand {
             System.err.println("jk build: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir));
             return 2;
         }
-        return runPrepared(prepareMember(dir), agg);
+        return runPrepared(prepareModule(dir), agg);
     }
 
     /**
-     * Construct (but do not run) a member's build goal: inputs → core phases →
+     * Construct (but do not run) a module's build goal: inputs → core phases →
      * declared tails. Returns {@code null} when {@code dir} has no {@code jk.toml}.
      * Split out of {@link #runForDir} so the workspace path can build every
-     * member's goal up front and sum {@link Goal#estimatedTotalWeight()} to
-     * calibrate the shared progress bar before any member runs.
+     * module's goal up front and sum {@link Goal#estimatedTotalWeight()} to
+     * calibrate the shared progress bar before any module runs.
      */
-    private PreparedMember prepareMember(Path dir) {
-        return prepareMember(dir, buildOpts.skipTests);
+    private PreparedModule prepareModule(Path dir) {
+        return prepareModule(dir, buildOpts.skipTests);
     }
 
     /**
-     * As {@link #prepareMember(Path)} but with an explicit {@code skipTests} — used
+     * As {@link #prepareModule(Path)} but with an explicit {@code skipTests} — used
      * to build composite dependency units compile-only (a dependency's tests aren't
      * run when it's consumed as a source dependency).
      */
-    private PreparedMember prepareMember(Path dir, boolean skipTests) {
-        return prepareMember(dir, skipTests, false);
+    private PreparedModule prepareModule(Path dir, boolean skipTests) {
+        return prepareModule(dir, skipTests, false);
     }
 
     /**
-     * As {@link #prepareMember(Path, boolean)} but with a {@code forceRebuild} hint
+     * As {@link #prepareModule(Path, boolean)} but with a {@code forceRebuild} hint
      * (this module will rebuild because an upstream sibling changed) so its
      * compile/test slice is reserved in the calibrated total up front — keeping the
      * aggregate bar honest from the start. Set from {@link #forecastDirty}.
      */
-    private PreparedMember prepareMember(Path dir, boolean skipTests, boolean forceRebuild) {
+    private PreparedModule prepareModule(Path dir, boolean skipTests, boolean forceRebuild) {
         try { dir = dir.toRealPath(); } catch (java.io.IOException ignored) {}
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Path buildFile = dir.resolve("jk.toml");
@@ -786,21 +786,21 @@ public final class BuildCommand implements CliCommand {
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs, forceRebuild);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
-        // Estimate the member's bar weight once, here — the workspace pre-scan sums
-        // these into the calibrated total, and the same value is the member's slice
-        // of the aggregate bar (see AggregateMemberListener). Computing it once
+        // Estimate the module's bar weight once, here — the workspace pre-scan sums
+        // these into the calibrated total, and the same value is the module's slice
+        // of the aggregate bar (see AggregateModuleListener). Computing it once
         // keeps the slice byte-for-byte equal to what was summed into `total`.
-        return new PreparedMember(dir, buildTarget(buildFile, dir), cache, goal,
+        return new PreparedModule(dir, buildTarget(buildFile, dir), cache, goal,
                 goal.estimatedTotalWeight());
     }
 
-    /** Run an already-built member goal and map its result to an exit code. */
-    private int runPrepared(PreparedMember pm, AggregateContext agg) {
+    /** Run an already-built module goal and map its result to an exit code. */
+    private int runPrepared(PreparedModule pm, AggregateContext agg) {
         Goal goal = pm.goal();
         GoalResult result;
         if (agg != null) {
-            // Workspace member: feed the one shared aggregate view, scaling this
-            // member's progress into its reserved slice of the calibrated total.
+            // Workspace module: feed the one shared aggregate view, scaling this
+            // module's progress into its reserved slice of the calibrated total.
             result = GoalConsole.runGoalInto(goal, pm.cache(), pm.target(), agg, pm.barWeight());
         } else {
             // chip = true → settle through the goal chip (" ✓ Build ▶ Build successful …"),
@@ -827,15 +827,15 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * A workspace member's goal, built and ready to run, paired with its pre-scan
-     * bar weight — the member's slice of the calibrated aggregate total.
+     * A workspace module's goal, built and ready to run, paired with its pre-scan
+     * bar weight — the module's slice of the calibrated aggregate total.
      */
-    private record PreparedMember(Path dir, String target, Path cache, Goal goal,
+    private record PreparedModule(Path dir, String target, Path cache, Goal goal,
                                   long barWeight) {}
 
     // ---- success summary -----------------------------------------------
 
-    /** Header member label for the goal view: the project's {@code group:artifact}. */
+    /** Header module label for the goal view: the project's {@code group:artifact}. */
     static String buildTarget(Path buildFile, Path dir) {
         try {
             var p = JkBuildParser.parse(buildFile).project();
@@ -852,7 +852,7 @@ public final class BuildCommand implements CliCommand {
     }
 
     /**
-     * Workspace build-failure result line: red "Build failed", the failing member
+     * Workspace build-failure result line: red "Build failed", the failing module
      * in cyan, dim duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s}
      * (the {@code ‼} + red is added by {@code finishFailure}).
      */
@@ -896,7 +896,7 @@ public final class BuildCommand implements CliCommand {
         Path art = firstExisting(layout.nativeBinary(), layout.nativeLibrary(),
                 layout.shadowJar(), layout.mainJar());
         return art == null ? "" : ". Built " + Theme.colorize(
-                relForDisplay(layout.memberRoot(), art), Theme.active().path());
+                relForDisplay(layout.moduleRoot(), art), Theme.active().path());
     }
 
     private static Path firstExisting(Path... paths) {
@@ -919,15 +919,15 @@ public final class BuildCommand implements CliCommand {
         return GoalChrome.coord(coord) + " " + elapsedSince(start);
     }
 
-    /** Failure tail for a member missing its {@code jk.toml}. */
+    /** Failure tail for a module missing its {@code jk.toml}. */
     private static String noTomlTail(String where, long start) {
         return "— no jk.toml in " + where + " "
                 + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
     }
 
-    private static String buildFailedAt(String member, long buildStart) {
+    private static String buildFailedAt(String module, long buildStart) {
         return Theme.colorize("Build failed", Theme.active().error())
-                + ": Failure at " + Theme.colorize(member, Theme.active().cyan())
+                + ": Failure at " + Theme.colorize(module, Theme.active().cyan())
                 + " " + elapsedSince(buildStart);
     }
 

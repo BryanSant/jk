@@ -35,7 +35,7 @@ public final class RemoveCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Remove a dependency, or workspace member, from jk.toml";
+        return "Remove a dependency, or workspace module, from jk.toml";
     }
 
     @Override

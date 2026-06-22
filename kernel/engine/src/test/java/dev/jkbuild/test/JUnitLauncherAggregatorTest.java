@@ -84,7 +84,7 @@ class JUnitLauncherAggregatorTest {
 
     @Test
     void dynamic_registered_events_mark_subsequent_finished_as_non_static() {
-        // The aggregator must remember every id it saw via dynamic_registered
+        // The aggregator must remodule every id it saw via dynamic_registered
         // (TEST type) and stamp wasStatic=false on the matching finished
         // event. Plain @Test methods are not preceded by dynamic_registered
         // and should arrive as wasStatic=true.

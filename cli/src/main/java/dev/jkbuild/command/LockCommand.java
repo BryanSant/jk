@@ -60,10 +60,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * disables the default list entirely. Cargo semantics.
  *
  * <p>For workspace roots, locking cascades: after the root's own
- * {@code jk.lock} is written, each declared member is locked in
+ * {@code jk.lock} is written, each declared module is locked in
  * declaration order using its own {@code jk.lock} alongside its
  * {@code jk.toml}. {@code workspace:} placeholder deps are resolved to
- * real Maven coords before each member's solve; sibling-internal deps
+ * real Maven coords before each module's solve; sibling-internal deps
  * are filtered out (they're injected at build time via
  * {@link dev.jkbuild.config.WorkspaceClasspath}).
  */
@@ -126,48 +126,48 @@ public final class LockCommand implements CliCommand {
             return 2;
         }
 
-        // When locking a workspace member directly, apply workspace context:
+        // When locking a workspace module directly, apply workspace context:
         // resolve workspace: placeholders and filter sibling-internal deps so
         // the solver only sees external Maven coords.
-        JkBuild effectiveRoot = applyWorkspaceContextIfMember(dir, root);
+        JkBuild effectiveRoot = applyWorkspaceContextIfModule(dir, root);
 
         // Lock the current directory (root or standalone project).
         int result = lockSingleProject(dir, effectiveRoot, cache, "Dependency Lock");
         if (result != 0) return result;
 
-        // Cascade: lock each declared workspace member in declaration order.
+        // Cascade: lock each declared workspace module in declaration order.
         if (effectiveRoot.isWorkspaceRoot()) {
-            Map<Path, JkBuild> members;
+            Map<Path, JkBuild> modules;
             try {
-                members = WorkspaceLoader.loadMembers(dir, effectiveRoot);
+                modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
             } catch (RuntimeException e) {
                 System.err.println("jk lock: " + e.getMessage());
                 return 2;
             }
-            for (Map.Entry<Path, JkBuild> entry : members.entrySet()) {
-                Path memberDir = entry.getKey();
-                JkBuild rawMember = entry.getValue();
+            for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
+                Path moduleDir = entry.getKey();
+                JkBuild rawModule = entry.getValue();
                 // Resolve workspace:* placeholders and filter sibling-internal deps
-                // so the member's lock only contains resolvable external coords.
-                JkBuild effectiveMember = WorkspaceMerge.applyToMember(
-                        effectiveRoot, rawMember, members.values());
-                String memberLabel = dir.getFileName() + "/"
-                        + dir.relativize(memberDir);
-                int memberResult = lockSingleProject(memberDir, effectiveMember, cache, memberLabel);
-                if (memberResult != 0) return memberResult;
+                // so the module's lock only contains resolvable external coords.
+                JkBuild effectiveModule = WorkspaceMerge.applyToModule(
+                        effectiveRoot, rawModule, modules.values());
+                String moduleLabel = dir.getFileName() + "/"
+                        + dir.relativize(moduleDir);
+                int moduleResult = lockSingleProject(moduleDir, effectiveModule, cache, moduleLabel);
+                if (moduleResult != 0) return moduleResult;
             }
         }
         return 0;
     }
 
     /**
-     * When invoked from a workspace member (not the root), discover the
-     * enclosing workspace and apply member context: resolve {@code workspace:}
+     * When invoked from a workspace module (not the root), discover the
+     * enclosing workspace and apply module context: resolve {@code workspace:}
      * placeholders and filter out sibling-internal dep coords so the solver
      * only sees external Maven coordinates. Returns {@code project} unchanged
      * if it is a workspace root or no enclosing workspace is found.
      */
-    private static JkBuild applyWorkspaceContextIfMember(Path dir, JkBuild project) {
+    private static JkBuild applyWorkspaceContextIfModule(Path dir, JkBuild project) {
         if (project.isWorkspaceRoot()) return project;
         try {
             var rootOpt = WorkspaceLocator.findRoot(dir);
@@ -175,8 +175,8 @@ public final class LockCommand implements CliCommand {
             Path wsRoot = rootOpt.get();
             JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
             if (!wsRootBuild.isWorkspaceRoot()) return project;
-            var siblings = WorkspaceLoader.loadMembers(wsRoot, wsRootBuild);
-            return WorkspaceMerge.applyToMember(wsRootBuild, project, siblings.values());
+            var siblings = WorkspaceLoader.loadModules(wsRoot, wsRootBuild);
+            return WorkspaceMerge.applyToModule(wsRootBuild, project, siblings.values());
         } catch (Exception ignored) {
             // Workspace discovery is best-effort; fall through to a direct lock.
             return project;

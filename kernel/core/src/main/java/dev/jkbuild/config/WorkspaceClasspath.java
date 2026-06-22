@@ -19,14 +19,14 @@ import java.util.Queue;
 import java.util.Set;
 
 /**
- * Resolve workspace-internal dependency jars for a single member's build
+ * Resolve workspace-internal dependency jars for a single module's build
  * (PRD §13.3 composite-build semantics).
  *
  * <p>External deps come from {@code jk.lock} via {@code ClasspathResolver}.
  * Workspace-internal coords are filtered out of the lockfile by
  * {@code WorkspaceMerge}, so they must be re-injected here: for each
- * sibling member whose project coord matches an entry in the current
- * member's {@code dependencies.<scope>}, add the sibling's main jar
+ * sibling module whose project coord matches an entry in the current
+ * module's {@code dependencies.<scope>}, add the sibling's main jar
  * (under the workspace's shared {@code target/} per {@link BuildLayout})
  * to the classpath.
  */
@@ -35,21 +35,21 @@ public final class WorkspaceClasspath {
     private WorkspaceClasspath() {}
 
     /**
-     * @param memberDir the member being built
-     * @param member the parsed manifest of {@code memberDir}
+     * @param moduleDir the module being built
+     * @param module the parsed manifest of {@code moduleDir}
      * @param scopes the scopes whose deps should contribute (typically
      *     {@code MAIN} for compile, {@code MAIN}+{@code TEST} for tests)
      */
     public static Result resolve(Path projectDir, JkBuild project, Set<Scope> scopes)
             throws IOException {
-        // Case 1: project IS the workspace root — add all member jars implicitly.
-        // Members' compiled outputs are always applicable to the root's classpath;
+        // Case 1: project IS the workspace root — add all module jars implicitly.
+        // Modules' compiled outputs are always applicable to the root's classpath;
         // no explicit dependency declaration is needed.
         if (project.isWorkspaceRoot()) {
             return resolveForRoot(projectDir, project);
         }
 
-        // Case 2: project is a workspace member — add declared sibling deps.
+        // Case 2: project is a workspace module — add declared sibling deps.
         var rootOpt = WorkspaceLocator.findRoot(projectDir);
         if (rootOpt.isEmpty()) {
             return new Result(List.of(), List.of());
@@ -65,8 +65,8 @@ public final class WorkspaceClasspath {
         Map<String, Path>   siblingJarByModule  = new HashMap<>();
         Map<String, Path>   siblingJarByName    = new HashMap<>();
         Map<String, String> siblingCoordByName  = new HashMap<>(); // name → full coord
-        for (String memberName : rootManifest.workspace().members()) {
-            Path siblingDir = root.resolve(memberName);
+        for (String moduleName : rootManifest.workspace().modules()) {
+            Path siblingDir = root.resolve(moduleName);
             Path siblingManifest = siblingDir.resolve("jk.toml");
             if (!Files.exists(siblingManifest)) continue;
             JkBuild sibling;
@@ -86,7 +86,7 @@ public final class WorkspaceClasspath {
         // Collect the full transitive workspace closure via BFS.  Direct deps
         // seed the queue; each discovered sibling's own workspace deps are then
         // enqueued so that e.g. io→core→model are all on the classpath even
-        // though the member's jk.toml only declares the direct dep (core).
+        // though the module's jk.toml only declares the direct dep (core).
         LinkedHashSet<String> visited = new LinkedHashSet<>();
         Queue<String> queue = new ArrayDeque<>();
         for (Scope scope : scopes) {
@@ -156,7 +156,7 @@ public final class WorkspaceClasspath {
     }
 
     /**
-     * When the workspace root itself has source code, all member jars are
+     * When the workspace root itself has source code, all module jars are
      * automatically on its classpath — no explicit dep declaration needed.
      */
     private static Result resolveForRoot(Path root, JkBuild rootManifest)
@@ -164,8 +164,8 @@ public final class WorkspaceClasspath {
         List<Path> jars = new ArrayList<>();
         List<Path> closureJars = new ArrayList<>();
         List<String> missing = new ArrayList<>();
-        for (String memberName : rootManifest.workspace().members()) {
-            Path siblingDir = root.resolve(memberName);
+        for (String moduleName : rootManifest.workspace().modules()) {
+            Path siblingDir = root.resolve(moduleName);
             Path siblingManifest = siblingDir.resolve("jk.toml");
             if (!Files.exists(siblingManifest)) continue;
             JkBuild sibling;

@@ -126,7 +126,7 @@ class BuildGraphTest {
     }
 
     @Test
-    void workspace_members_become_units_in_dependency_order(@TempDir Path tmp) throws Exception {
+    void workspace_modules_become_units_in_dependency_order(@TempDir Path tmp) throws Exception {
         Files.createDirectories(tmp);
         Files.writeString(tmp.resolve("jk.toml"), """
                 [project]
@@ -137,7 +137,7 @@ class BuildGraphTest {
                 java = 21
 
                 [workspace]
-                members = ["core", "app"]
+                modules = ["core", "app"]
                 """);
         // app depends on core (sibling), so core builds first.
         project(tmp.resolve("core"), "core");

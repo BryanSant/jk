@@ -14,13 +14,13 @@ import java.util.Objects;
  * <p>Everything lives under {@code target/}:
  * <ul>
  *   <li><b>Final artifacts</b> directly under {@code <workspaceRoot>/target/}
- *       — jars, native binaries, OCI tarballs. Shared across workspace members.</li>
- *   <li><b>Build intermediates</b> under {@code <memberRoot>/target/build/}
- *       — compiler outputs, generated sources, test reports. Per-member.</li>
+ *       — jars, native binaries, OCI tarballs. Shared across workspace modules.</li>
+ *   <li><b>Build intermediates</b> under {@code <moduleRoot>/target/build/}
+ *       — compiler outputs, generated sources, test reports. Per-module.</li>
  * </ul>
  *
  * <p>For a single-project (no {@code [workspace]} block), workspace root and
- * member root are the same directory, so everything sits under one {@code target/}.
+ * module root are the same directory, so everything sits under one {@code target/}.
  *
  * <p>Compiler output is split by toolchain to prevent the Kotlin incremental
  * compiler from pruning Java-compiled classes (it owns and prunes its directory):
@@ -36,14 +36,14 @@ import java.util.Objects;
 public final class BuildLayout {
 
     private final Path workspaceRoot;
-    private final Path memberRoot;
+    private final Path moduleRoot;
     private final String artifact;
     private final String version;
 
-    private BuildLayout(Path workspaceRoot, Path memberRoot,
+    private BuildLayout(Path workspaceRoot, Path moduleRoot,
                         String artifact, String version) {
         this.workspaceRoot = Objects.requireNonNull(workspaceRoot, "workspaceRoot");
-        this.memberRoot    = Objects.requireNonNull(memberRoot, "memberRoot");
+        this.moduleRoot    = Objects.requireNonNull(moduleRoot, "moduleRoot");
         this.artifact      = Objects.requireNonNull(artifact, "artifact");
         this.version       = Objects.requireNonNull(version, "version");
     }
@@ -61,29 +61,29 @@ public final class BuildLayout {
                 project.project().name(), project.project().version());
     }
 
-    public static BuildLayout of(Path workspaceRoot, Path memberRoot, JkBuild project) {
+    public static BuildLayout of(Path workspaceRoot, Path moduleRoot, JkBuild project) {
         Objects.requireNonNull(project, "project");
-        return new BuildLayout(workspaceRoot, memberRoot,
+        return new BuildLayout(workspaceRoot, moduleRoot,
                 project.project().name(), project.project().version());
     }
 
     // ---- Roots --------------------------------------------------------
 
     public Path workspaceRoot() { return workspaceRoot; }
-    public Path memberRoot()    { return memberRoot; }
+    public Path moduleRoot()    { return moduleRoot; }
     public String artifact()    { return artifact; }
     public String version()     { return version; }
 
-    // ---- Per-member build intermediates (under memberRoot/target/build/) ----
+    // ---- Per-module build intermediates (under moduleRoot/target/build/) ----
 
-    /** {@code <memberRoot>/target/} — root of this member's output tree. */
-    public Path memberTargetDir() {
-        return memberRoot.resolve("target");
+    /** {@code <moduleRoot>/target/} — root of this module's output tree. */
+    public Path moduleTargetDir() {
+        return moduleRoot.resolve("target");
     }
 
-    /** {@code <memberRoot>/target/build/} — root of all per-member build intermediates. */
+    /** {@code <moduleRoot>/target/build/} — root of all per-module build intermediates. */
     public Path buildDir() {
-        return memberTargetDir().resolve("build");
+        return moduleTargetDir().resolve("build");
     }
 
     /**
@@ -158,10 +158,10 @@ public final class BuildLayout {
         return buildDir().resolve("reports");
     }
 
-    /** {@code target/build/reports/<member>/} — JUnit reports for a workspace member. */
-    public Path testReportsDir(String member) {
-        Objects.requireNonNull(member, "member");
-        return reportsDir().resolve(member);
+    /** {@code target/build/reports/<module>/} — JUnit reports for a workspace module. */
+    public Path testReportsDir(String module) {
+        Objects.requireNonNull(module, "module");
+        return reportsDir().resolve(module);
     }
 
     /** {@code target/build/test-results/} — JUnit XML test results. */
@@ -172,7 +172,7 @@ public final class BuildLayout {
     // ---- Shared workspace artifacts (under workspaceRoot/target/) -----------
 
     /**
-     * {@code <memberRoot>/target/} — this member's final artifacts.
+     * {@code <moduleRoot>/target/} — this module's final artifacts.
      *
      * <p>Each project owns its own {@code target/} directory. The workspace root
      * only gets a {@code target/} if it has its own source code to build.
@@ -180,7 +180,7 @@ public final class BuildLayout {
      * own build directory.
      */
     public Path targetDir() {
-        return memberRoot.resolve("target");
+        return moduleRoot.resolve("target");
     }
 
     /** {@code target/<artifact>-<version>.jar} — the main jar. */

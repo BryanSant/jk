@@ -319,7 +319,7 @@ class JkBuildEditorTest {
         assertThat(result).contains("tomlj = \"1.1.1\"");
     }
 
-    // --- workspace members -------------------------------------------------
+    // --- workspace modules -------------------------------------------------
 
     private static final String WS = """
             [project]
@@ -328,25 +328,25 @@ class JkBuildEditorTest {
             version  = "0.1.0"
 
             [workspace]
-            members = ["core", "io"]
+            modules = ["core", "io"]
             """;
 
     @Test
-    void add_member_appends_to_inline_array() {
-        String result = JkBuildEditor.addWorkspaceMember(WS, "cli");
-        assertThat(result).contains("members = [\"core\", \"io\", \"cli\"]");
-        assertThat(JkBuildParser.parse(result).workspace().members())
+    void add_module_appends_to_inline_array() {
+        String result = JkBuildEditor.addWorkspaceModule(WS, "cli");
+        assertThat(result).contains("modules = [\"core\", \"io\", \"cli\"]");
+        assertThat(JkBuildParser.parse(result).workspace().modules())
                 .containsExactly("core", "io", "cli");
     }
 
     @Test
-    void add_member_is_idempotent() {
-        String result = JkBuildEditor.addWorkspaceMember(WS, "io");
+    void add_module_is_idempotent() {
+        String result = JkBuildEditor.addWorkspaceModule(WS, "io");
         assertThat(result).isEqualTo(WS);
     }
 
     @Test
-    void add_member_to_empty_inline_array() {
+    void add_module_to_empty_inline_array() {
         String start = """
                 [project]
                 group    = "dev.jkbuild"
@@ -354,15 +354,15 @@ class JkBuildEditorTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = []
+                modules = []
                 """;
-        String result = JkBuildEditor.addWorkspaceMember(start, "core");
-        assertThat(result).contains("members = [\"core\"]");
-        assertThat(JkBuildParser.parse(result).workspace().members()).containsExactly("core");
+        String result = JkBuildEditor.addWorkspaceModule(start, "core");
+        assertThat(result).contains("modules = [\"core\"]");
+        assertThat(JkBuildParser.parse(result).workspace().modules()).containsExactly("core");
     }
 
     @Test
-    void add_member_to_multiline_array_preserves_shape_and_comments() {
+    void add_module_to_multiline_array_preserves_shape_and_comments() {
         String start = """
                 [project]
                 group    = "dev.jkbuild"
@@ -371,20 +371,20 @@ class JkBuildEditorTest {
 
                 # the workspace
                 [workspace]
-                members = [
+                modules = [
                     "core",
                     "io",
                 ]
                 """;
-        String result = JkBuildEditor.addWorkspaceMember(start, "cli");
+        String result = JkBuildEditor.addWorkspaceModule(start, "cli");
         assertThat(result).contains("# the workspace");
         assertThat(result).contains("    \"cli\",");
-        assertThat(JkBuildParser.parse(result).workspace().members())
+        assertThat(JkBuildParser.parse(result).workspace().modules())
                 .containsExactly("core", "io", "cli");
     }
 
     @Test
-    void add_member_to_multiline_array_without_trailing_comma() {
+    void add_module_to_multiline_array_without_trailing_comma() {
         String start = """
                 [project]
                 group    = "dev.jkbuild"
@@ -392,18 +392,18 @@ class JkBuildEditorTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = [
+                modules = [
                     "core",
                     "io"
                 ]
                 """;
-        String result = JkBuildEditor.addWorkspaceMember(start, "cli");
-        assertThat(JkBuildParser.parse(result).workspace().members())
+        String result = JkBuildEditor.addWorkspaceModule(start, "cli");
+        assertThat(JkBuildParser.parse(result).workspace().modules())
                 .containsExactly("core", "io", "cli");
     }
 
     @Test
-    void add_member_when_no_members_key_creates_one() {
+    void add_module_when_no_modules_key_creates_one() {
         String start = """
                 [project]
                 group    = "dev.jkbuild"
@@ -412,37 +412,37 @@ class JkBuildEditorTest {
 
                 [workspace]
                 """;
-        String result = JkBuildEditor.addWorkspaceMember(start, "core");
-        assertThat(result).contains("members = [\"core\"]");
-        assertThat(JkBuildParser.parse(result).workspace().members()).containsExactly("core");
+        String result = JkBuildEditor.addWorkspaceModule(start, "core");
+        assertThat(result).contains("modules = [\"core\"]");
+        assertThat(JkBuildParser.parse(result).workspace().modules()).containsExactly("core");
     }
 
     @Test
-    void add_member_without_workspace_table_throws() {
-        assertThatThrownBy(() -> JkBuildEditor.addWorkspaceMember(BASE, "core"))
+    void add_module_without_workspace_table_throws() {
+        assertThatThrownBy(() -> JkBuildEditor.addWorkspaceModule(BASE, "core"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("no [workspace] table");
     }
 
     @Test
-    void register_member_creates_the_workspace_table_for_a_plain_project() {
-        String result = JkBuildEditor.registerWorkspaceMember(BASE, "core");
+    void register_module_creates_the_workspace_table_for_a_plain_project() {
+        String result = JkBuildEditor.registerWorkspaceModule(BASE, "core");
         assertThat(result).contains("[workspace]");
-        assertThat(result).contains("members = [\"core\"]");
+        assertThat(result).contains("modules = [\"core\"]");
         // The original [project] block is preserved.
         assertThat(result).contains("name     = \"widget\"");
         JkBuild parsed = JkBuildParser.parse(result);
         assertThat(parsed.isWorkspaceRoot()).isTrue();
-        assertThat(parsed.workspace().members()).containsExactly("core");
+        assertThat(parsed.workspace().modules()).containsExactly("core");
     }
 
     @Test
-    void register_member_appends_to_an_existing_workspace_table() {
-        String once = JkBuildEditor.registerWorkspaceMember(BASE, "core");
-        String twice = JkBuildEditor.registerWorkspaceMember(once, "cli");
-        assertThat(JkBuildParser.parse(twice).workspace().members()).containsExactly("core", "cli");
-        // Idempotent — re-registering an existing member is a no-op.
-        assertThat(JkBuildEditor.registerWorkspaceMember(twice, "core")).isEqualTo(twice);
+    void register_module_appends_to_an_existing_workspace_table() {
+        String once = JkBuildEditor.registerWorkspaceModule(BASE, "core");
+        String twice = JkBuildEditor.registerWorkspaceModule(once, "cli");
+        assertThat(JkBuildParser.parse(twice).workspace().modules()).containsExactly("core", "cli");
+        // Idempotent — re-registering an existing module is a no-op.
+        assertThat(JkBuildEditor.registerWorkspaceModule(twice, "core")).isEqualTo(twice);
     }
 
     @Test

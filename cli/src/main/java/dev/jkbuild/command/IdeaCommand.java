@@ -64,9 +64,9 @@ import java.util.Set;
  *       processing profiles</li>
  *   <li>{@code .idea/libraries/*.xml} — one per external dependency;
  *       sources JARs attached when {@code sources-checksum} is in the lock</li>
- *   <li>{@code .idea/runConfigurations/*.xml} — for members with a
+ *   <li>{@code .idea/runConfigurations/*.xml} — for modules with a
  *       {@code [project] main} class</li>
- *   <li>{@code <member>/<module>.iml} — per module: source roots, deps,
+ *   <li>{@code <module>/<module>.iml} — per module: source roots, deps,
  *       scope; workspace siblings become module references</li>
  * </ul>
  *
@@ -134,23 +134,23 @@ public final class IdeaCommand implements CliCommand {
         // /var/folders → /private/var/folders).
         try { wsRoot = wsRoot.toRealPath(); } catch (java.io.IOException ignored) {}
 
-        Map<Path, JkBuild> members = rootBuild.isWorkspaceRoot()
-                ? WorkspaceLoader.loadMembers(wsRoot, rootBuild)
+        Map<Path, JkBuild> modules = rootBuild.isWorkspaceRoot()
+                ? WorkspaceLoader.loadModules(wsRoot, rootBuild)
                 : Map.of();
 
-        // Unified module set: workspace members (or the single root) PLUS composite
+        // Unified module set: workspace modules (or the single root) PLUS composite
         // (path / branch-git) dependency targets — each becomes an IDEA module so the
         // IDE resolves cross-project sources, not just compiled jars.
         Map<Path, JkBuild> allModules = new LinkedHashMap<>();
-        if (members.isEmpty()) allModules.put(wsRoot, rootBuild);
-        else allModules.putAll(members);
+        if (modules.isEmpty()) allModules.put(wsRoot, rootBuild);
+        else allModules.putAll(modules);
         allModules.putAll(resolveCompositeModules(wsRoot, rootBuild, cache));
 
         // Collect all library definitions across every module
         // (name → LibDef). LinkedHashMap preserves stable ordering.
         Map<String, LibDef> allLibs = new LinkedHashMap<>();
         for (Map.Entry<Path, JkBuild> me : allModules.entrySet()) {
-            collectLibDefs(me.getKey(), me.getValue(), members, cas, allLibs);
+            collectLibDefs(me.getKey(), me.getValue(), modules, cas, allLibs);
         }
 
         // ---- generate .idea/ -----------------------------------------------
@@ -182,7 +182,7 @@ public final class IdeaCommand implements CliCommand {
             sdkRefs.put(me.getKey(),
                     sdkRefFor(me.getKey(), me.getValue(), jdkRegistry, pointer, sdkEntries, seenSdk));
         }
-        SdkRef defaultSdk = defaultSdkRef(wsRoot, rootBuild, members, sdkRefs,
+        SdkRef defaultSdk = defaultSdkRef(wsRoot, rootBuild, modules, sdkRefs,
                 jdkRegistry, pointer, sdkEntries, seenSdk);
 
         // Register the SDKs into every IntelliJ/Android Studio jdk.table.xml
@@ -199,7 +199,7 @@ public final class IdeaCommand implements CliCommand {
         Map<Path, List<Path>> processorJars = new LinkedHashMap<>();
         for (Map.Entry<Path, JkBuild> me : targets) {
             processorJars.put(me.getKey(),
-                    processorLibFiles(me.getKey(), me.getValue(), members, allLibs));
+                    processorLibFiles(me.getKey(), me.getValue(), modules, allLibs));
         }
 
         int files = 0;
@@ -215,7 +215,7 @@ public final class IdeaCommand implements CliCommand {
         }
 
         Path runDir = ideaDir.resolve("runConfigurations");
-        for (Map.Entry<Path, JkBuild> me : members.entrySet()) {
+        for (Map.Entry<Path, JkBuild> me : modules.entrySet()) {
             String main = me.getValue().project().main();
             if (main != null && !main.isBlank()) {
                 Files.createDirectories(runDir);
@@ -226,7 +226,7 @@ public final class IdeaCommand implements CliCommand {
             }
         }
         // Single-project run config
-        if (members.isEmpty() && rootBuild.project().main() != null
+        if (modules.isEmpty() && rootBuild.project().main() != null
                 && !rootBuild.project().main().isBlank()) {
             Files.createDirectories(runDir);
             String modName = moduleName(rootBuild);
@@ -235,17 +235,17 @@ public final class IdeaCommand implements CliCommand {
             files++;
         }
 
-        // ---- generate *.iml for each member --------------------------------
+        // ---- generate *.iml for each module --------------------------------
         for (Map.Entry<Path, JkBuild> me : targets) {
-            Path memberDir = me.getKey();
-            JkBuild member = me.getValue();
-            List<ModuleRef> modRefs = new ArrayList<>(siblingModuleRefs(memberDir, member, members));
-            modRefs.addAll(compositeModuleRefs(memberDir, member, cache));
-            List<LibRef>    libRefs = libRefs(memberDir, member, members, cas, allLibs);
-            write(memberDir.resolve(moduleName(member) + ".iml"),
-                    imlXml(memberDir, member, modRefs, libRefs,
-                            sdkRefs.get(memberDir), defaultSdk,
-                            processorJars.getOrDefault(memberDir, List.of())));
+            Path moduleDir = me.getKey();
+            JkBuild module = me.getValue();
+            List<ModuleRef> modRefs = new ArrayList<>(siblingModuleRefs(moduleDir, module, modules));
+            modRefs.addAll(compositeModuleRefs(moduleDir, module, cache));
+            List<LibRef>    libRefs = libRefs(moduleDir, module, modules, cas, allLibs);
+            write(moduleDir.resolve(moduleName(module) + ".iml"),
+                    imlXml(moduleDir, module, modRefs, libRefs,
+                            sdkRefs.get(moduleDir), defaultSdk,
+                            processorJars.getOrDefault(moduleDir, List.of())));
             files++;
         }
 
@@ -289,13 +289,13 @@ public final class IdeaCommand implements CliCommand {
      * {@link StableJdkPointer} and queues an {@link IntellijSdkRegistrar.SdkEntry}
      * (once per distinct SDK).
      */
-    private static SdkRef sdkRefFor(Path memberDir, JkBuild member,
+    private static SdkRef sdkRefFor(Path moduleDir, JkBuild module,
                                     JdkRegistry registry, StableJdkPointer pointer,
                                     List<IntellijSdkRegistrar.SdkEntry> sdkEntries,
                                     Set<String> seen) throws IOException {
-        int level = member.project().jdkMajor() > 0
-                ? member.project().jdkMajor() : member.project().javaRelease();
-        String lockJdk = readLockJdk(memberDir);
+        int level = module.project().jdkMajor() > 0
+                ? module.project().jdkMajor() : module.project().javaRelease();
+        String lockJdk = readLockJdk(moduleDir);
         JdkSelector.FlexibleQuery q =
                 JdkSelector.parseFlexible(lockJdk == null ? "" : lockJdk);
         if (q.major().isPresent()) level = q.major().get();
@@ -325,30 +325,30 @@ public final class IdeaCommand implements CliCommand {
                     sdkName, pointer.javaHome(stableName),
                     version != null ? version : String.valueOf(level)));
         }
-        return new SdkRef(stableName, sdkName, member.project().javaRelease() > 0
-                ? member.project().javaRelease() : level);
+        return new SdkRef(stableName, sdkName, module.project().javaRelease() > 0
+                ? module.project().javaRelease() : level);
     }
 
     /**
      * The project-default SDK: mirrors the legacy rule (root {@code project.jdk},
-     * else the highest member level). Reuses a member's resolved {@link SdkRef}
+     * else the highest module level). Reuses a module's resolved {@link SdkRef}
      * when one matches that level; otherwise resolves the root build itself.
      */
-    private static SdkRef defaultSdkRef(Path wsRoot, JkBuild root, Map<Path, JkBuild> members,
+    private static SdkRef defaultSdkRef(Path wsRoot, JkBuild root, Map<Path, JkBuild> modules,
                                         Map<Path, SdkRef> sdkRefs, JdkRegistry registry,
                                         StableJdkPointer pointer,
                                         List<IntellijSdkRegistrar.SdkEntry> sdkEntries,
                                         Set<String> seen) throws IOException {
         if (sdkRefs.containsKey(wsRoot)) return sdkRefs.get(wsRoot);
         int level = root.project().jdkMajor();
-        if (level == 0) for (JkBuild m : members.values()) level = Math.max(level, m.project().jdkMajor());
+        if (level == 0) for (JkBuild m : modules.values()) level = Math.max(level, m.project().jdkMajor());
         for (SdkRef r : sdkRefs.values()) if (r.languageLevel() == level) return r;
         return sdkRefFor(wsRoot, root, registry, pointer, sdkEntries, seen);
     }
 
-    /** The resolved JDK identifier stamped in a member's {@code jk.lock}, or null. */
-    private static String readLockJdk(Path memberDir) {
-        Path lf = memberDir.resolve("jk.lock");
+    /** The resolved JDK identifier stamped in a module's {@code jk.lock}, or null. */
+    private static String readLockJdk(Path moduleDir) {
+        Path lf = moduleDir.resolve("jk.lock");
         if (!Files.exists(lf)) return null;
         try {
             return LockfileReader.read(lf).jdk();
@@ -361,11 +361,11 @@ public final class IdeaCommand implements CliCommand {
     // Library collection
     // =========================================================================
 
-    /** Collect all external (non-workspace) dep library definitions for one member. */
-    private static void collectLibDefs(Path memberDir, JkBuild member,
-                                        Map<Path, JkBuild> members, Cas cas,
+    /** Collect all external (non-workspace) dep library definitions for one module. */
+    private static void collectLibDefs(Path moduleDir, JkBuild module,
+                                        Map<Path, JkBuild> modules, Cas cas,
                                         Map<String, LibDef> allLibs) throws IOException {
-        Path lockFile = memberDir.resolve("jk.lock");
+        Path lockFile = moduleDir.resolve("jk.lock");
         if (!Files.exists(lockFile)) return;
         Lockfile lock = LockfileReader.read(lockFile);
 
@@ -378,7 +378,7 @@ public final class IdeaCommand implements CliCommand {
         } catch (Exception ignored) { /* best-effort; missing JARs are skipped below */ }
 
         // Build a set of workspace-sibling coordinates so we can skip them.
-        Set<String> siblingCoords = siblingCoordinates(member, members);
+        Set<String> siblingCoords = siblingCoordinates(module, modules);
         JkMavenLocalRepo repo = new JkMavenLocalRepo(cas.root());
 
         for (Lockfile.Artifact pkg : lock.artifacts()) {
@@ -488,18 +488,18 @@ public final class IdeaCommand implements CliCommand {
     // =========================================================================
 
     /** Workspace siblings this module directly depends on (MAIN + TEST scopes). */
-    private static List<ModuleRef> siblingModuleRefs(Path memberDir, JkBuild member,
-                                                      Map<Path, JkBuild> members)
+    private static List<ModuleRef> siblingModuleRefs(Path moduleDir, JkBuild module,
+                                                      Map<Path, JkBuild> modules)
             throws IOException {
         List<ModuleRef> result = new ArrayList<>();
         WorkspaceClasspath.Result mainCp =
-                WorkspaceClasspath.resolve(memberDir, member, EnumSet.of(Scope.EXPORT, Scope.MAIN));
+                WorkspaceClasspath.resolve(moduleDir, module, EnumSet.of(Scope.EXPORT, Scope.MAIN));
         WorkspaceClasspath.Result testCp =
-                WorkspaceClasspath.resolve(memberDir, member, EnumSet.of(Scope.TEST));
+                WorkspaceClasspath.resolve(moduleDir, module, EnumSet.of(Scope.TEST));
 
         // Map jar → module name for all workspace siblings
         Map<Path, String> jarToModule = new LinkedHashMap<>();
-        for (Map.Entry<Path, JkBuild> me : members.entrySet()) {
+        for (Map.Entry<Path, JkBuild> me : modules.entrySet()) {
             BuildLayout layout = BuildLayout.of(me.getKey(), me.getValue());
             jarToModule.put(layout.mainJar(), moduleName(me.getValue()));
         }
@@ -524,13 +524,13 @@ public final class IdeaCommand implements CliCommand {
     }
 
     /** External library references (scope-tagged) for one module. */
-    private static List<LibRef> libRefs(Path memberDir, JkBuild member,
-                                         Map<Path, JkBuild> allMembers, Cas cas,
+    private static List<LibRef> libRefs(Path moduleDir, JkBuild module,
+                                         Map<Path, JkBuild> allModules, Cas cas,
                                          Map<String, LibDef> allLibs) throws IOException {
-        Path lockFile = memberDir.resolve("jk.lock");
+        Path lockFile = moduleDir.resolve("jk.lock");
         if (!Files.exists(lockFile)) return List.of();
         Lockfile lock = LockfileReader.read(lockFile);
-        Set<String> siblingCoords = siblingCoordinates(member, allMembers);
+        Set<String> siblingCoords = siblingCoordinates(module, allModules);
 
         List<LibRef> result = new ArrayList<>();
         for (Lockfile.Artifact pkg : lock.artifacts()) {
@@ -547,17 +547,17 @@ public final class IdeaCommand implements CliCommand {
     }
 
     /**
-     * The {@code .idea/.libs} file names (no extension) of a member's
+     * The {@code .idea/.libs} file names (no extension) of a module's
      * processor-scoped deps — fed into the module's annotation-processing
      * profile. The JARs are already linked by {@link #collectLibDefs}.
      */
-    private static List<Path> processorLibFiles(Path memberDir, JkBuild member,
-                                                 Map<Path, JkBuild> members,
+    private static List<Path> processorLibFiles(Path moduleDir, JkBuild module,
+                                                 Map<Path, JkBuild> modules,
                                                  Map<String, LibDef> allLibs) throws IOException {
-        Path lockFile = memberDir.resolve("jk.lock");
+        Path lockFile = moduleDir.resolve("jk.lock");
         if (!Files.exists(lockFile)) return List.of();
         Lockfile lock = LockfileReader.read(lockFile);
-        Set<String> siblingCoords = siblingCoordinates(member, members);
+        Set<String> siblingCoords = siblingCoordinates(module, modules);
         List<Path> out = new ArrayList<>();
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             if (pkg.checksum() == null) continue;
@@ -653,7 +653,7 @@ public final class IdeaCommand implements CliCommand {
                         .toString().replace('\\', '/');
                 // jk runs the same processors over test sources (into the "test"
                 // generated dir), so give IntelliJ a matching test output dir —
-                // otherwise the IDE flags generated members in test code as unresolved.
+                // otherwise the IDE flags generated modules in test code as unresolved.
                 String genTestRel = me.getKey().relativize(layout.generatedSourcesDir("annotations", "test"))
                         .toString().replace('\\', '/');
                 sb.append("      <profile name=\"jk-").append(esc(mod)).append("\" enabled=\"true\">\n");
@@ -693,30 +693,30 @@ public final class IdeaCommand implements CliCommand {
         return sb.toString();
     }
 
-    private static String imlXml(Path memberDir, JkBuild member,
+    private static String imlXml(Path moduleDir, JkBuild module,
                                    List<ModuleRef> modRefs, List<LibRef> libRefs,
-                                   SdkRef memberSdk, SdkRef defaultSdk,
+                                   SdkRef moduleSdk, SdkRef defaultSdk,
                                    List<Path> processorFiles) {
-        boolean ownJdk = memberSdk != null && defaultSdk != null
-                && !memberSdk.sdkName().equals(defaultSdk.sdkName());
-        int langLevel = memberSdk != null ? memberSdk.languageLevel() : 0;
+        boolean ownJdk = moduleSdk != null && defaultSdk != null
+                && !moduleSdk.sdkName().equals(defaultSdk.sdkName());
+        int langLevel = moduleSdk != null ? moduleSdk.languageLevel() : 0;
 
         StringBuilder sb = xmlHeader();
         sb.append("<module type=\"JAVA_MODULE\" version=\"4\">\n");
         sb.append("  <component name=\"NewModuleRootManager\" inherit-compiler-output=\"false\"");
         // Per-module source language level when this module differs from the
-        // project default (e.g. a jdk=21 member under a jdk=25 root).
+        // project default (e.g. a jdk=21 module under a jdk=25 root).
         if (ownJdk && langLevel > 0) {
             sb.append(" LANGUAGE_LEVEL=\"JDK_").append(langLevel).append("\"");
         }
         sb.append(">\n");
 
-        BuildLayout layout = BuildLayout.of(memberDir, member);
+        BuildLayout layout = BuildLayout.of(moduleDir, module);
         sb.append("    <output url=\"file://$MODULE_DIR$/")
-          .append(memberDir.relativize(layout.classesDir()).toString().replace('\\', '/'))
+          .append(moduleDir.relativize(layout.classesDir()).toString().replace('\\', '/'))
           .append("\" />\n");
         sb.append("    <output-test url=\"file://$MODULE_DIR$/")
-          .append(memberDir.relativize(layout.testClassesDir()).toString().replace('\\', '/'))
+          .append(moduleDir.relativize(layout.testClassesDir()).toString().replace('\\', '/'))
           .append("\" />\n");
         sb.append("    <exclude-output />\n");
 
@@ -725,23 +725,23 @@ public final class IdeaCommand implements CliCommand {
         // only add "src" / "test" if no traditional source dirs exist.
         sb.append("    <content url=\"file://$MODULE_DIR$\">\n");
         boolean hasTraditional =
-                Files.isDirectory(memberDir.resolve("src/main/java")) ||
-                Files.isDirectory(memberDir.resolve("src/main/kotlin")) ||
-                Files.isDirectory(memberDir.resolve("src/test/java"))  ||
-                Files.isDirectory(memberDir.resolve("src/test/kotlin"));
+                Files.isDirectory(moduleDir.resolve("src/main/java")) ||
+                Files.isDirectory(moduleDir.resolve("src/main/kotlin")) ||
+                Files.isDirectory(moduleDir.resolve("src/test/java"))  ||
+                Files.isDirectory(moduleDir.resolve("src/test/kotlin"));
         if (hasTraditional) {
-            addSourceFolder(sb, memberDir, "src/main/java",      false);
-            addSourceFolder(sb, memberDir, "src/main/kotlin",    false);
-            addResourceFolder(sb, memberDir, "src/main/resources", false);
-            addSourceFolder(sb, memberDir, "src/test/java",      true);
-            addSourceFolder(sb, memberDir, "src/test/kotlin",    true);
-            addResourceFolder(sb, memberDir, "src/test/resources", true);
+            addSourceFolder(sb, moduleDir, "src/main/java",      false);
+            addSourceFolder(sb, moduleDir, "src/main/kotlin",    false);
+            addResourceFolder(sb, moduleDir, "src/main/resources", false);
+            addSourceFolder(sb, moduleDir, "src/test/java",      true);
+            addSourceFolder(sb, moduleDir, "src/test/kotlin",    true);
+            addResourceFolder(sb, moduleDir, "src/test/resources", true);
         } else {
             // simple layout
-            addSourceFolder(sb, memberDir, "src",            false);
-            addResourceFolder(sb, memberDir, "resources",      false);
-            addSourceFolder(sb, memberDir, "test",           true);
-            addResourceFolder(sb, memberDir, "test-resources", true);
+            addSourceFolder(sb, moduleDir, "src",            false);
+            addResourceFolder(sb, moduleDir, "resources",      false);
+            addSourceFolder(sb, moduleDir, "test",           true);
+            addResourceFolder(sb, moduleDir, "test-resources", true);
         }
 
         // Annotation-processor output → a generated source root. Declared even
@@ -751,13 +751,13 @@ public final class IdeaCommand implements CliCommand {
         // importers rely on the same precedence.
         Path gen = layout.generatedSourcesDir("annotations");
         if (!processorFiles.isEmpty() || Files.isDirectory(gen)) {
-            String genRel = memberDir.relativize(gen).toString().replace('\\', '/');
+            String genRel = moduleDir.relativize(gen).toString().replace('\\', '/');
             sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/").append(genRel)
               .append("\" isTestSource=\"false\" generated=\"true\" />\n");
             // Test-source processor output — its own test-flagged generated root so
-            // generated members referenced from test code resolve in the editor.
+            // generated modules referenced from test code resolve in the editor.
             Path genTest = layout.generatedSourcesDir("annotations", "test");
-            String genTestRel = memberDir.relativize(genTest).toString().replace('\\', '/');
+            String genTestRel = moduleDir.relativize(genTest).toString().replace('\\', '/');
             sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/").append(genTestRel)
               .append("\" isTestSource=\"true\" generated=\"true\" />\n");
         }
@@ -769,7 +769,7 @@ public final class IdeaCommand implements CliCommand {
         // JDK: a dedicated SDK when this module's level differs from the project
         // default; otherwise inherit the project SDK.
         if (ownJdk) {
-            sb.append("    <orderEntry type=\"jdk\" jdkName=\"").append(esc(memberSdk.sdkName()))
+            sb.append("    <orderEntry type=\"jdk\" jdkName=\"").append(esc(moduleSdk.sdkName()))
               .append("\" jdkType=\"JavaSDK\" />\n");
         } else {
             sb.append("    <orderEntry type=\"inheritedJdk\" />\n");
@@ -816,27 +816,27 @@ public final class IdeaCommand implements CliCommand {
     // Helpers
     // =========================================================================
 
-    private static void addSourceFolder(StringBuilder sb, Path memberDir,
+    private static void addSourceFolder(StringBuilder sb, Path moduleDir,
                                          String relative, boolean test) {
-        Path dir = memberDir.resolve(relative);
+        Path dir = moduleDir.resolve(relative);
         if (!Files.isDirectory(dir)) return;
         sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/")
           .append(relative).append("\" isTestSource=\"").append(test).append("\" />\n");
     }
 
     /** A resource root ({@code java-resource} / {@code java-test-resource}), only when present. */
-    private static void addResourceFolder(StringBuilder sb, Path memberDir,
+    private static void addResourceFolder(StringBuilder sb, Path moduleDir,
                                           String relative, boolean test) {
-        Path dir = memberDir.resolve(relative);
+        Path dir = moduleDir.resolve(relative);
         if (!Files.isDirectory(dir)) return;
         sb.append("      <sourceFolder url=\"file://$MODULE_DIR$/")
           .append(relative).append("\" type=\"")
           .append(test ? "java-test-resource" : "java-resource").append("\" />\n");
     }
 
-    /** The IntelliJ module name for a workspace member. */
-    private static String moduleName(JkBuild member) {
-        return member.project().name();
+    /** The IntelliJ module name for a workspace module. */
+    private static String moduleName(JkBuild module) {
+        return module.project().name();
     }
 
     /** Sanitize a string to a valid filename component. */
@@ -884,12 +884,12 @@ public final class IdeaCommand implements CliCommand {
         return "COMPILE";
     }
 
-    /** Coordinates of all workspace siblings that this member could declare as deps. */
-    private static Set<String> siblingCoordinates(JkBuild member,
-                                                    Map<Path, JkBuild> allMembers) {
+    /** Coordinates of all workspace siblings that this module could declare as deps. */
+    private static Set<String> siblingCoordinates(JkBuild module,
+                                                    Map<Path, JkBuild> allModules) {
         Set<String> coords = new LinkedHashSet<>();
-        for (JkBuild sib : allMembers.values()) {
-            if (sib != member) {
+        for (JkBuild sib : allModules.values()) {
+            if (sib != module) {
                 coords.add(sib.project().group() + ":" + sib.project().name());
             }
         }

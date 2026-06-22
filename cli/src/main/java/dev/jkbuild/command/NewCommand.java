@@ -45,24 +45,24 @@ import java.util.Optional;
  * flags with sane defaults. Both paths converge on {@link NewInputs} +
  * {@link NewScaffolder#write(NewInputs)}.
  *
- * <p><b>Project vs. member.</b> We walk up from where the project will live
+ * <p><b>Project vs. module.</b> We walk up from where the project will live
  * looking for an enclosing {@code jk.toml}: the first one found is the parent
- * and the new directory is registered as its <em>member</em>. The search stops
+ * and the new directory is registered as its <em>module</em>. The search stops
  * — meaning "standalone project" — when it exits a git repo (a {@code .git}
- * reached before any {@code jk.toml}) or reaches {@code $HOME}. {@code --no-member}
+ * reached before any {@code jk.toml}) or reaches {@code $HOME}. {@code --no-module}
  * forces a standalone project.
  *
- * <p>For a member the wizard changes shape (titled "Create a New Member for
- * &lt;project&gt;", asking for a member name) and inherits the parent's group,
+ * <p>For a module the wizard changes shape (titled "Create a New Module for
+ * &lt;project&gt;", asking for a module name) and inherits the parent's group,
  * JDK, and language as defaults; its path is appended to the root
- * {@code [workspace].members} (promoting a plain project into a workspace on its
- * first member), and no per-member {@code jk.lock} is written (the root lock
+ * {@code [workspace].modules} (promoting a plain project into a workspace on its
+ * first module), and no per-module {@code jk.lock} is written (the root lock
  * owns resolution). Mirrors {@code cargo new} / {@code uv init}.
  */
 public final class NewCommand implements CliCommand {
 
     @Override public String name() { return "new"; }
-    @Override public String description() { return "Create a new jk project (or workspace member)"; }
+    @Override public String description() { return "Create a new jk project (or workspace module)"; }
     @Override public List<String> aliases() { return List.of("create"); }
     @Override public List<Opt> options() {
         return List.of(
@@ -77,7 +77,8 @@ public final class NewCommand implements CliCommand {
                 Opt.value("<deps>", "Comma-separated curated deps: lombok, jspecify, kotest, commons-lang, commons-io, guava.", "--deps"),
                 Opt.value("<layout>", "Project layout: simple | traditional | auto. Default: simple.", "--layout"),
                 Opt.value("<module>", "Kotlin module name; emitted as project.module in jk.toml.", "--kotlin-module"),
-                Opt.flag("Create a standalone project even inside an existing project/workspace.", "--no-member"));
+                Opt.flag("Create a standalone project even inside an existing project/workspace.", "--no-module"),
+                Opt.flag("", "--no-member").hide());   // undocumented synonym for --no-module
     }
     @Override public List<Param> parameters() {
         return List.of(Param.of("directory", Arity.ZERO_OR_ONE, "Target directory. Default: current directory or --name subdir."));
@@ -93,7 +94,7 @@ public final class NewCommand implements CliCommand {
     String depsCsv;
     String layoutFlag;
     String kotlinModule;
-    boolean noMember;
+    boolean noModule;
     Path directory;
     GlobalOptions global;
 
@@ -104,12 +105,12 @@ public final class NewCommand implements CliCommand {
     private static final GoalKey<NewJdkCandidate> PICKED = GoalKey.of("picked", NewJdkCandidate.class);
     private static final GoalKey<NewInputs> INPUTS = GoalKey.of("inputs", NewInputs.class);
 
-    /** Set during scaffold when the new project was registered as a workspace member. */
-    private record Member(Path root, String rel) {}
-    private volatile Member registered;
+    /** Set during scaffold when the new project was registered as a workspace module. */
+    private record Module(Path root, String rel) {}
+    private volatile Module registered;
 
     /**
-     * The enclosing project/workspace this invocation will add a member to, or
+     * The enclosing project/workspace this invocation will add a module to, or
      * {@code null} when we're creating a standalone project. Resolved once in
      * {@link #call()} and consumed by the wizard (UX + inherited defaults),
      * the flag path, and scaffolding.
@@ -137,14 +138,14 @@ public final class NewCommand implements CliCommand {
     }
 
     /**
-     * Decide whether we're adding a member to an existing project/workspace.
+     * Decide whether we're adding a module to an existing project/workspace.
      * Walk up from {@code startDir}: the first directory with a {@code jk.toml}
      * is the parent. Stop (— standalone project —) on exiting a git repo (a
      * {@code .git} dir reached before any jk.toml) or hitting {@code $HOME}.
-     * {@code --no-member} short-circuits to standalone.
+     * {@code --no-module} short-circuits to standalone.
      */
-    static Optional<Path> detectParentDir(Path startDir, Path home, boolean noMember) {
-        if (noMember) return Optional.empty();
+    static Optional<Path> detectParentDir(Path startDir, Path home, boolean noModule) {
+        if (noModule) return Optional.empty();
         Path normHome = home == null ? null : home.toAbsolutePath().normalize();
         for (Path dir = startDir.toAbsolutePath().normalize(); dir != null; dir = dir.getParent()) {
             if (Files.exists(dir.resolve("jk.toml"))) return Optional.of(dir);
@@ -158,7 +159,7 @@ public final class NewCommand implements CliCommand {
      * Where to begin the parent search — the directory the project will live
      * <em>in</em> (its target's parent). For {@code jk new foo} that's the cwd;
      * for {@code jk new /abs/foo} it's {@code /abs}; for {@code .} / no arg it's
-     * the cwd (the member is the cwd itself, or cwd/&lt;name&gt;).
+     * the cwd (the module is the cwd itself, or cwd/&lt;name&gt;).
      */
     private Path detectionStartDir(Path cwd) {
         if (directory == null || isCurrentDirArg(directory)) return cwd;
@@ -169,7 +170,7 @@ public final class NewCommand implements CliCommand {
     /** Resolve {@link #parent} by parsing the detected parent's manifest (null if none / unparseable). */
     private ParentInfo resolveParent(Path startDir) {
         Path home = Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null);
-        Optional<Path> root = detectParentDir(startDir, home, noMember);
+        Optional<Path> root = detectParentDir(startDir, home, noModule);
         if (root.isEmpty()) return null;
         try {
             var project = JkBuildParser.parse(root.get().resolve("jk.toml")).project();
@@ -191,7 +192,7 @@ public final class NewCommand implements CliCommand {
         this.depsCsv = in.value("deps").orElse(null);
         this.layoutFlag = in.value("layout").orElse(null);
         this.kotlinModule = in.value("kotlin-module").orElse(null);
-        this.noMember = in.isSet("no-member");
+        this.noModule = in.isSet("no-module") || in.isSet("no-member");
         this.directory = in.positionals().isEmpty() ? null : Path.of(in.positionals().get(0));
         this.global = GlobalOptions.from(in);
         return callBody();
@@ -213,7 +214,7 @@ public final class NewCommand implements CliCommand {
             return 2; // EX_CONFIG
         }
 
-        // Are we adding a member to an existing project/workspace, or creating
+        // Are we adding a module to an existing project/workspace, or creating
         // a standalone project? Search up from where the project will live (the
         // target's parent). Drives the wizard UX and inherited defaults.
         this.parent = resolveParent(detectionStartDir(cwd));
@@ -305,7 +306,7 @@ public final class NewCommand implements CliCommand {
                         // shutdown hooks — JLine's cleanup hook would block
                         // on the NonBlockingReader.
                         Wizard.printCancellation(terminal,
-                                parent != null ? "𝘅 Member creation canceled"
+                                parent != null ? "𝘅 Module creation canceled"
                                         : "𝘅 Project creation canceled");
                         Runtime.getRuntime().halt(130);
                     }
@@ -483,22 +484,22 @@ public final class NewCommand implements CliCommand {
 
     /**
      * Scaffold the project, then — if it lands inside an existing workspace —
-     * skip the per-member {@code jk.lock} and register the new member in the
-     * root {@code [workspace].members} (Cargo/uv: {@code cargo new} /
+     * skip the per-module {@code jk.lock} and register the new module in the
+     * root {@code [workspace].modules} (Cargo/uv: {@code cargo new} /
      * {@code uv init} edit the workspace manifest). Records the registration
      * for the success message.
      */
     private void scaffoldAndRegister(NewInputs inputs) throws IOException {
-        NewScaffolder.write(inputs, parent == null);   // members skip the gitignore (root owns it)
+        NewScaffolder.write(inputs, parent == null);   // modules skip the gitignore (root owns it)
         if (parent != null) {
             Path root = parent.root();
             String rel = root.relativize(inputs.directory()).toString().replace('\\', '/');
             Path rootToml = root.resolve("jk.toml");
-            // Registers the member, promoting a plain project into a workspace
-            // root (creating the [workspace] table) when this is its first member.
+            // Registers the module, promoting a plain project into a workspace
+            // root (creating the [workspace] table) when this is its first module.
             Files.writeString(rootToml,
-                    JkBuildEditor.registerWorkspaceMember(Files.readString(rootToml), rel));
-            registered = new Member(root, rel);
+                    JkBuildEditor.registerWorkspaceModule(Files.readString(rootToml), rel));
+            registered = new Module(root, rel);
         }
     }
 
@@ -515,7 +516,7 @@ public final class NewCommand implements CliCommand {
                         Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null));
         // Resolve the JDK pin written to jk.toml: an explicit --jdk wins (keeping
         // a vendor only when the user typed one); else inherit the parent's major
-        // (member); else adopt the global default JDK's major; else the latest
+        // (module); else adopt the global default JDK's major; else the latest
         // LTS. Every non-explicit path writes a bare major — the vendor stays out
         // of jk.toml unless the user asked for it.
         NewJdkPlan.Spec jdkSpec;
@@ -603,9 +604,9 @@ public final class NewCommand implements CliCommand {
     }
 
     private static void emitProjectExistsError(
-            String name, boolean isMember, boolean isInit, Terminal terminal) {
+            String name, boolean isModule, boolean isInit, Terminal terminal) {
         var verb = isInit ? "initialize" : "create";
-        var noun = isMember ? "member" : "project";
+        var noun = isModule ? "module" : "project";
         var body = Theme.active().normalGray();
         if (terminal != null) {
             var writer = terminal.writer();
@@ -735,7 +736,7 @@ public final class NewCommand implements CliCommand {
                     .orElseGet(() -> candidates.getFirst());
         }
         // Step was skipped — resolve silently: inherit the parent's major
-        // (member), adopt the global default's major, else auto-pick by the
+        // (module), adopt the global default's major, else auto-pick by the
         // chosen Java level (sole eligible install, or lts to install).
         int preferred = parent != null
                 ? (parent.jdkMajor() > 0 ? parent.jdkMajor() : parent.javaRelease())
@@ -809,21 +810,21 @@ public final class NewCommand implements CliCommand {
 
     private static Wizard buildWizard(List<NewJdkCandidate> candidates, String groupGuess,
                                       ParentInfo parent, boolean hasDefaultJdk) {
-        boolean member = parent != null;
-        // Members inherit the parent's group, JDK, and language as defaults; a
+        boolean module = parent != null;
+        // Modules inherit the parent's group, JDK, and language as defaults; a
         // standalone project guesses the group and defaults to the latest LTS.
-        String effectiveGroup = member ? parent.group() : groupGuess;
-        String langDefault = (member && parent.kotlin()) ? "kotlin" : "java";
+        String effectiveGroup = module ? parent.group() : groupGuess;
+        String langDefault = (module && parent.kotlin()) ? "kotlin" : "java";
 
         // The wizard opens with the "native" toggle off, so the initial radio
         // list is whatever filter() produces for the non-native case — which
         // promotes Temurin LTS to the top. Take the default selection from
         // there so the preselected row matches what the user sees. For a
-        // member, prefer the candidate matching the parent's JDK major.
+        // module, prefer the candidate matching the parent's JDK major.
         var initial = NewJdkCandidate.filter(candidates, false, LATEST_LTS_MAJOR);
         if (initial.isEmpty()) initial = candidates;
         var defaultJdkId = initial.getFirst().id();
-        if (member) {
+        if (module) {
             defaultJdkId = candidates.stream()
                     .filter(c -> c.major() == parent.jdkMajor())
                     .map(NewJdkCandidate::id)
@@ -869,7 +870,7 @@ public final class NewCommand implements CliCommand {
 
         // Java projects pick their language version (the `java = N` target)
         // before choosing a JDK — it shapes the JDK list (you can't target a
-        // release newer than the toolchain). Members inherit the parent's
+        // release newer than the toolchain). Modules inherit the parent's
         // release, and when a global default JDK is set we adopt its major, so
         // both skip this question. Kotlin projects skip it too.
         // LTS versions from the latest down to 17, then the latest stable if it's
@@ -881,7 +882,7 @@ public final class NewCommand implements CliCommand {
         int latestStable = dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_STABLE;
         if (latestStable > LATEST_LTS_MAJOR) jvb = jvb.choice(String.valueOf(latestStable), String.valueOf(latestStable));
         var javaVersion = jvb.defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
-                .when(a -> "java".equals(a.get("lang")) && !member && !hasDefaultJdk)
+                .when(a -> "java".equals(a.get("lang")) && !module && !hasDefaultJdk)
                 .build();
 
         // Dynamic choices: the JDKs that can compile the chosen Java release
@@ -896,7 +897,7 @@ public final class NewCommand implements CliCommand {
         //
         // Only shown when there's a real choice to make: a standalone project,
         // no global default JDK, and more than one eligible installed JDK for
-        // the chosen Java level. Members inherit the parent; a default JDK is
+        // the chosen Java level. Modules inherit the parent; a default JDK is
         // adopted silently; 0/1 eligible resolves without asking (see
         // pickCandidate / NewJdkPlan).
         var jdkStep = WizardStep.RadioStep.vertical("jdk", "Select a JDK:")
@@ -912,18 +913,18 @@ public final class NewCommand implements CliCommand {
                             .map(c -> new dev.jkbuild.cli.tui.Choice(c.id(), c.label(), c.hint()))
                             .toList();
                 })
-                .when(a -> NewJdkPlan.shouldPrompt(member, hasDefaultJdk, candidates, jdkFloor(a, parent)))
+                .when(a -> NewJdkPlan.shouldPrompt(module, hasDefaultJdk, candidates, jdkFloor(a, parent)))
                 .defaultChoice(defaultJdkId);
 
         return Wizard.builder()
-                .title(member
-                        ? "Jk - Create a New Member for " + parent.displayName()
+                .title(module
+                        ? "Jk - Create a New Module for " + parent.displayName()
                         : "Jk - Create a New Project")
-                .step(WizardStep.InputStep.of("name", member ? "Member name:" : "Project name:")
+                .step(WizardStep.InputStep.of("name", module ? "Module name:" : "Project name:")
                         .placeholder("untitled")
                         .defaultValue("untitled")
                         .build())
-                .step(WizardStep.InputStep.of("group", member ? "Member group:" : "Project group:")
+                .step(WizardStep.InputStep.of("group", module ? "Module group:" : "Project group:")
                         .placeholder(effectiveGroup)
                         .defaultValue(effectiveGroup)
                         .build())
@@ -951,7 +952,7 @@ public final class NewCommand implements CliCommand {
 
     /**
      * Lowest JDK feature-release the "Select a JDK" step may offer: a JDK can't
-     * compile a release newer than itself. A member inherits the parent's
+     * compile a release newer than itself. A module inherits the parent's
      * {@code java} target; a standalone Java project uses the chosen Java
      * Language Version; Kotlin (no Java target) imposes no floor.
      */
@@ -974,7 +975,7 @@ public final class NewCommand implements CliCommand {
                 ? answers.get("group")
                 : parent != null ? parent.group() : "com.example";
 
-        // Resolve the JDK: a member inherits the parent's major; a global
+        // Resolve the JDK: a module inherits the parent's major; a global
         // default JDK is adopted; otherwise it's the candidate the user picked
         // (or the one auto-resolved when the "Select a JDK" step was skipped).
         // The pin written to jk.toml is always the bare major — the wizard never
@@ -983,7 +984,7 @@ public final class NewCommand implements CliCommand {
         Optional<String> resolvedJdkIdentifier;
         if (parent != null) {
             resolvedJdkMajor = parent.jdkMajor() > 0 ? parent.jdkMajor() : parent.javaRelease();
-            resolvedJdkIdentifier = Optional.empty();   // members write no lock
+            resolvedJdkIdentifier = Optional.empty();   // modules write no lock
         } else if (defaultJdk.isPresent()) {
             resolvedJdkMajor = dev.jkbuild.model.JkBuild.Project.majorOf(defaultJdk.get());
             resolvedJdkIdentifier = defaultJdk;
@@ -992,7 +993,7 @@ public final class NewCommand implements CliCommand {
             resolvedJdkIdentifier = Optional.of(pickedOpt.id());
         }
         var resolvedJdk = Integer.toString(resolvedJdkMajor);
-        // Compile target: a member inherits the parent's; a standalone Java
+        // Compile target: a module inherits the parent's; a standalone Java
         // project uses the Java Language Version it was asked for; otherwise
         // (Kotlin, or a default-JDK project that skipped the version step) it
         // falls back to the chosen JDK's major.
@@ -1045,18 +1046,18 @@ public final class NewCommand implements CliCommand {
                 deps, true, target);
     }
 
-    private static void emitSuccessOnTerminal(NewInputs inputs, Terminal terminal, Member member, boolean isInit) {
+    private static void emitSuccessOnTerminal(NewInputs inputs, Terminal terminal, Module module, boolean isInit) {
         var writer = terminal.writer();
-        if (member != null) {
+        if (module != null) {
             writer.println(new AttributedStringBuilder()
-                    .append("Registered member ", Theme.active().dim())
-                    .append("'" + member.rel() + "'", Theme.active().success())
-                    .append(" in workspace " + member.root(), Theme.active().dim())
+                    .append("Registered module ", Theme.active().dim())
+                    .append("'" + module.rel() + "'", Theme.active().success())
+                    .append(" in workspace " + module.root(), Theme.active().dim())
                     .toAttributedString()
                     .toAnsi(terminal));
         }
         var verb = isInit ? "Initialized" : "Created";
-        var noun = member != null ? "member" : "project";
+        var noun = module != null ? "module" : "project";
         writer.println();
         writer.println(new AttributedStringBuilder()
                 .append(dev.jkbuild.cli.tui.Glyphs.CHECK + " " + verb + " new " + noun + " ", Theme.active().success())
@@ -1078,13 +1079,13 @@ public final class NewCommand implements CliCommand {
         writer.flush();
     }
 
-    private static void emitSuccessPlain(NewInputs inputs, Member member, boolean isInit) {
-        if (member != null) {
-            System.out.println("Registered member '" + member.rel()
-                    + "' in workspace " + member.root());
+    private static void emitSuccessPlain(NewInputs inputs, Module module, boolean isInit) {
+        if (module != null) {
+            System.out.println("Registered module '" + module.rel()
+                    + "' in workspace " + module.root());
         }
         var verb = isInit ? "Initialized" : "Created";
-        var noun = member != null ? "member" : "project";
+        var noun = module != null ? "module" : "project";
         System.out.println();
         System.out.println(dev.jkbuild.cli.tui.Glyphs.CHECK + " " + verb + " new " + noun + " " + inputs.name() + ".");
         System.out.println();

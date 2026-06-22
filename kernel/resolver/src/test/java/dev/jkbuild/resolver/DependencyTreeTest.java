@@ -138,9 +138,9 @@ class DependencyTreeTest {
     }
 
     @Test
-    void workspace_root_walks_members_and_collapses_sibling_deps(
+    void workspace_root_walks_modules_and_collapses_sibling_deps(
             @org.junit.jupiter.api.io.TempDir java.nio.file.Path root) throws Exception {
-        // A workspace root with two members; member b depends on a via `workspace = true`.
+        // A workspace root with two modules; module b depends on a via `workspace = true`.
         java.nio.file.Files.writeString(root.resolve("jk.toml"), """
                 [project]
                 group = "com.acme"
@@ -148,7 +148,7 @@ class DependencyTreeTest {
                 version = "9.9.9"
 
                 [workspace]
-                members = ["a", "b"]
+                modules = ["a", "b"]
                 """);
         java.nio.file.Path a = java.nio.file.Files.createDirectories(root.resolve("a"));
         java.nio.file.Files.writeString(a.resolve("jk.toml"), """
@@ -175,8 +175,8 @@ class DependencyTreeTest {
                 Integer.MAX_VALUE, DependencyTree.Styling.plain());
 
         assertThat(rendered).contains("com.acme:ws:9.9.9");   // root
-        assertThat(rendered).contains("com.acme:a:9.9.9");    // member a walked
-        assertThat(rendered).contains("com.acme:b:9.9.9");    // member b walked
+        assertThat(rendered).contains("com.acme:a:9.9.9");    // module a walked
+        assertThat(rendered).contains("com.acme:b:9.9.9");    // module b walked
         // b's `workspace = true` dep on a: collapsed reference, resolved to a's real
         // coord (not the synthetic "workspace:a") and not flagged "(missing)".
         assertThat(rendered).contains("com.acme:a [workspace]");

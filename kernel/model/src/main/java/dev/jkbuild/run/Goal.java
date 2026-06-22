@@ -126,7 +126,7 @@ public final class Goal {
      * Sum of every phase's {@link Phase#estimateWeight} <em>without running the
      * goal</em> — the same total {@link #run()} sets as the denominator at start.
      * Used to pre-calibrate a workspace's cumulative progress bar to the aggregate
-     * tick total before any member builds, and as each member's slice of it. A
+     * tick total before any module builds, and as each module's slice of it. A
      * phase whose estimate throws contributes 0, mirroring {@code run()}.
      */
     public int estimatedTotalWeight() {

@@ -39,7 +39,7 @@ import java.util.Map;
  * and gradient are shared with {@link Spinner}.
  *
  * <p>Goal mode aggregates across callers: feed phases/progress for any number of
- * members into one instance and it renders a single bar + single list. Terminal
+ * modules into one instance and it renders a single bar + single list. Terminal
  * width is detected once at construction (a mid-run resize is tolerated — the
  * next repaint may be briefly imperfect).
  */
@@ -145,7 +145,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     /**
      * Start goal-oriented mode. {@code name} is the verb shown in the header
-     * (e.g. {@code "Building"}); set the active member with {@link #target}.
+     * (e.g. {@code "Building"}); set the active module with {@link #target}.
      */
     public static CommandManager goal(PrintStream out, String name, boolean animate) {
         int[] size = animate ? detectSize() : new int[]{DEFAULT_HEIGHT, DEFAULT_WIDTH};
@@ -171,48 +171,48 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     /** Aggregate progress denominator currently driving the bar (for tests/inspection). */
     public long denominator() { return denominator; }
 
-    /** Header member, e.g. {@code "acme:api"}. */
-    public void target(String member) {
+    /** Header module, e.g. {@code "acme:api"}. */
+    public void target(String module) {
         synchronized (lock) {
-            this.target = member == null ? "" : member;
+            this.target = module == null ? "" : module;
         }
     }
 
     /** Register a not-yet-started phase row with a humanized display name. */
-    public void addPhase(String member, String phaseKey) {
-        addPhaseLabeled(member, phaseKey, humanize(phaseKey));
+    public void addPhase(String module, String phaseKey) {
+        addPhaseLabeled(module, phaseKey, humanize(phaseKey));
     }
 
     /** Register a not-yet-started phase row with an explicit display label. */
-    public void addPhaseLabeled(String member, String phaseKey, String display) {
+    public void addPhaseLabeled(String module, String phaseKey, String display) {
         synchronized (lock) {
-            rows.computeIfAbsent(key(member, phaseKey), k -> new Row(member, display));
+            rows.computeIfAbsent(key(module, phaseKey), k -> new Row(module, display));
         }
     }
 
-    /** Mark a phase running and make it the header's active member. */
-    public void phaseRunning(String member, String phaseKey) {
+    /** Mark a phase running and make it the header's active module. */
+    public void phaseRunning(String module, String phaseKey) {
         synchronized (lock) {
-            Row r = rows.computeIfAbsent(key(member, phaseKey),
-                    k -> new Row(member, humanize(phaseKey)));
+            Row r = rows.computeIfAbsent(key(module, phaseKey),
+                    k -> new Row(module, humanize(phaseKey)));
             r.state = RowState.ACTIVE;
-            this.target = member;
+            this.target = module;
         }
     }
 
     /** Set the current sub-task message for a running phase. */
-    public void phaseMessage(String member, String phaseKey, String message) {
+    public void phaseMessage(String module, String phaseKey, String message) {
         synchronized (lock) {
-            Row r = rows.get(key(member, phaseKey));
+            Row r = rows.get(key(module, phaseKey));
             if (r != null) r.message = message == null ? "" : message;
         }
     }
 
     /** Mark a phase finished (success or failure); it sinks to the completed group. */
-    public void phaseDone(String member, String phaseKey, boolean ok) {
+    public void phaseDone(String module, String phaseKey, boolean ok) {
         synchronized (lock) {
-            Row r = rows.computeIfAbsent(key(member, phaseKey),
-                    k -> new Row(member, humanize(phaseKey)));
+            Row r = rows.computeIfAbsent(key(module, phaseKey),
+                    k -> new Row(module, humanize(phaseKey)));
             r.state = ok ? RowState.DONE : RowState.FAILED;
             r.message = "";
             r.seq = ++finishSeq;
@@ -237,7 +237,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             // Monotonic display guard: at a STABLE total, never let the rendered
             // fraction slide backward — a residual reweight that drops num/den holds
             // at the peak until real progress passes it. But when the total GROWS
-            // (the uncalibrated path discovering more members, or genuine new work)
+            // (the uncalibrated path discovering more modules, or genuine new work)
             // the fraction legitimately rebases, so reset the peak instead of pinning
             // at 100%. The calibrated workspace build fixes its total up front
             // (Phase 1.5), so there the total is stable and the guard is always live.
@@ -550,7 +550,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
         // 1. Header: {spinner} {name} {bar} …elapsed…. The aggregate bar is inlined
         // after the goal name; the elapsed trails the bar in bright-black italic
-        // (…52s… rather than a parenthesised suffix). The member moved to the
+        // (…52s… rather than a parenthesised suffix). The module moved to the
         // active row, so the header carries no phase detail.
         lines.add(goalHeader(elapsedMillis));
 
@@ -672,12 +672,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     /**
      * A running phase row: {@code <group>:<artifact> › <Phase>[ › <message>]} —
-     * no status glyph, member coordinate colored (cyan group, bright-cyan
+     * no status glyph, module coordinate colored (cyan group, bright-cyan
      * artifact). No trailing ellipsis.
      */
     private static String renderActiveRow(Row r, String sep) {
         StringBuilder sb = new StringBuilder();
-        sb.append(coloredMember(r.member))
+        sb.append(coloredModule(r.module))
                 .append(' ').append(sep).append(' ')
                 .append(Theme.colorize(r.phase, Theme.active().settled()));
         if (r.message != null && !r.message.isEmpty()) {
@@ -688,12 +688,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /** {@code group:artifact} → cyan group + bright-cyan artifact; plain if no colon. */
-    public static String coloredMember(String member) {
-        int colon = member.indexOf(':');
-        if (colon < 0) return Theme.colorize(member, Theme.active().settled());
-        return Theme.colorize(member.substring(0, colon), Theme.active().cyan())
+    public static String coloredModule(String module) {
+        int colon = module.indexOf(':');
+        if (colon < 0) return Theme.colorize(module, Theme.active().settled());
+        return Theme.colorize(module.substring(0, colon), Theme.active().cyan())
                 + ":"
-                + Theme.colorize(member.substring(colon + 1), Theme.active().brightCyan());
+                + Theme.colorize(module.substring(colon + 1), Theme.active().brightCyan());
     }
 
     private long elapsedMillis() {
@@ -743,8 +743,8 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     // --- helpers ----------------------------------------------------------
 
-    private static String key(String member, String phaseKey) {
-        return member + ' ' + phaseKey;
+    private static String key(String module, String phaseKey) {
+        return module + ' ' + phaseKey;
     }
 
     /** "compile-java" → "Compile java"; "runTests" → "RunTests" (best-effort). */
@@ -959,14 +959,14 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private enum RowState { PENDING, ACTIVE, DONE, FAILED }
 
     private static final class Row {
-        final String member;
+        final String module;
         final String phase;
         RowState state = RowState.PENDING;
         String message = "";
         long seq;
 
-        Row(String member, String phase) {
-            this.member = member;
+        Row(String module, String phase) {
+            this.module = module;
             this.phase = phase;
         }
     }

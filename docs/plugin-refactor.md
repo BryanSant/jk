@@ -95,7 +95,7 @@ threads, one JVM per workspace" goal:
                 ▼
 ┌─────────────────────────────────────────────────────────────┐
 │  Workspace Host  (JVM on the project-pinned JDK)             │
-│  ONE per workspace; runs members in parallel on threads.     │
+│  ONE per workspace; runs modules in parallel on threads.     │
 │  • owns the Goal/Phase scheduler (today's core/run)          │
 │  • owns CAS, action cache, resolver, model, I/O services     │
 │  • loads plugins via ISOLATED classloaders (in-process)      │
@@ -117,7 +117,7 @@ Why this shape:
   deps — exactly today's win, made structural.
 - **The Host is a real JVM**, so it *can* load plugin jars into isolated
   classloaders and run them on threads — satisfying "same JVM, classloader
-  isolation, one JVM per workspace." Workspace members share that JVM and the
+  isolation, one JVM per workspace." Workspace modules share that JVM and the
   warm CAS/action-cache/resolver state.
 - **`isolation = process` is the escape hatch**, not the default — used only
   when a plugin's transitive deps would poison the Host (e.g. two plugins

@@ -10,13 +10,13 @@ import java.util.Optional;
 
 /**
  * Walks the directory chain to find the enclosing workspace root for a
- * given module. Used by verbs that operate on a single member but need
+ * given module. Used by verbs that operate on a single module but need
  * the workspace's shared {@code jk.lock} (PRD §13).
  *
- * <p>Search policy: starting from {@code memberDir}, walk all the way up
+ * <p>Search policy: starting from {@code moduleDir}, walk all the way up
  * to the filesystem root ({@code /} on Linux/macOS, {@code <drive>:\} on
- * Windows) looking for a {@code jk.toml} whose {@code workspace.members}
- * contains the relative path from that ancestor down to {@code memberDir}.
+ * Windows) looking for a {@code jk.toml} whose {@code workspace.modules}
+ * contains the relative path from that ancestor down to {@code moduleDir}.
  */
 public final class WorkspaceLocator {
 
@@ -30,9 +30,9 @@ public final class WorkspaceLocator {
      * empty if there is none.
      *
      * <p>Unlike {@link #findRoot}, this does <em>not</em> require {@code dir}
-     * to already appear in {@code workspace.members} — it's used by verbs
-     * that are about to create or register a member ({@code jk new},
-     * {@code jk init}, {@code jk add <path>}), so the member may not be
+     * to already appear in {@code workspace.modules} — it's used by verbs
+     * that are about to create or register a module ({@code jk new},
+     * {@code jk init}, {@code jk add <path>}), so the module may not be
      * listed (or even exist) yet. We search strict ancestors only, so a
      * workspace root is never reported as enclosing itself.
      */
@@ -58,11 +58,11 @@ public final class WorkspaceLocator {
     }
 
     /**
-     * Return the workspace root that owns {@code memberDir}, or empty if
-     * {@code memberDir} is not inside a workspace.
+     * Return the workspace root that owns {@code moduleDir}, or empty if
+     * {@code moduleDir} is not inside a workspace.
      */
-    public static Optional<Path> findRoot(Path memberDir) throws IOException {
-        Path normalized = memberDir.toAbsolutePath().normalize();
+    public static Optional<Path> findRoot(Path moduleDir) throws IOException {
+        Path normalized = moduleDir.toAbsolutePath().normalize();
         Path candidate = normalized;
         for (int depth = 0; depth < MAX_DEPTH; depth++) {
             Path parent = candidate.getParent();
@@ -78,7 +78,7 @@ public final class WorkspaceLocator {
                 }
                 if (root.isWorkspaceRoot()) {
                     String relative = parent.relativize(normalized).toString().replace('\\', '/');
-                    if (root.workspace().members().contains(relative)) {
+                    if (root.workspace().modules().contains(relative)) {
                         return Optional.of(parent);
                     }
                 }

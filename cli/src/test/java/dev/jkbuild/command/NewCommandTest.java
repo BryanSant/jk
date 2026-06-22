@@ -47,7 +47,7 @@ class NewCommandTest {
     @Test
     void explicit_vendor_spec_is_preserved_in_jk_toml(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
-                "--jdk", "corretto-25", "--no-member", tempDir.toString());
+                "--jdk", "corretto-25", "--no-module", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
@@ -60,7 +60,7 @@ class NewCommandTest {
     @Test
     void bare_major_jdk_flag_writes_a_bare_pin(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
-                "--jdk", "21", "--no-member", tempDir.toString());
+                "--jdk", "21", "--no-module", tempDir.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(JkBuildParser.parse(tempDir.resolve("jk.toml")).project().jdk()).isEqualTo("21");
     }
@@ -71,7 +71,7 @@ class NewCommandTest {
         // bare major); the GraalVM is never chosen here — it's resolved into
         // jk.lock when project.native is set — so no `graal` lands in jk.toml.
         int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
-                "--native", "--jdk", "21", "--no-member", tempDir.toString());
+                "--native", "--jdk", "21", "--no-module", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
@@ -92,7 +92,7 @@ class NewCommandTest {
         int exit;
         try {
             exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
-                    "--jdk", "25.0.3", "--no-member", tempDir.toString());
+                    "--jdk", "25.0.3", "--no-module", tempDir.toString());
         } finally {
             System.setErr(prevErr);
         }
@@ -277,7 +277,7 @@ class NewCommandTest {
     }
 
     @Test
-    void new_inside_workspace_registers_member_and_skips_lock(@TempDir Path tempDir) throws IOException {
+    void new_inside_workspace_registers_module_and_skips_lock(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
@@ -285,25 +285,25 @@ class NewCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["core"]
+                modules = ["core"]
                 """);
         Path app = tempDir.resolve("app");
 
         int exit = Jk.execute("new", "--name", "app", app.toString());
         assertThat(exit).isEqualTo(0);
 
-        // Member project scaffolded, but with NO per-member lock (root owns it).
+        // Module project scaffolded, but with NO per-module lock (root owns it).
         assertThat(app.resolve("jk.toml")).exists();
         assertThat(app.resolve("jk.lock")).doesNotExist();
 
         // Group inherited from the workspace root.
-        JkBuild member = JkBuildParser.parse(app.resolve("jk.toml"));
-        assertThat(member.project().group()).isEqualTo("dev.jkbuild");
-        assertThat(member.project().name()).isEqualTo("app");
+        JkBuild module = JkBuildParser.parse(app.resolve("jk.toml"));
+        assertThat(module.project().group()).isEqualTo("dev.jkbuild");
+        assertThat(module.project().name()).isEqualTo("app");
 
-        // Registered in the root [workspace].members.
+        // Registered in the root [workspace].modules.
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(root.workspace().members()).containsExactly("core", "app");
+        assertThat(root.workspace().modules()).containsExactly("core", "app");
     }
 
     @Test

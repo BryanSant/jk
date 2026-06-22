@@ -83,7 +83,7 @@ public final class AutoLock {
         if (!isStale(dir, lockFile)) return null;
         try {
             JkBuild build = JkBuildParser.parse(dir.resolve("jk.toml"));
-            // Apply workspace context if this is a member (resolves workspace: deps)
+            // Apply workspace context if this is a module (resolves workspace: deps)
             JkBuild effective = applyWorkspaceContext(dir, build);
 
             Cas cas = new Cas(cache);
@@ -134,8 +134,8 @@ public final class AutoLock {
             Path wsRoot = rootOpt.get();
             JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
             if (!wsRootBuild.isWorkspaceRoot()) return build;
-            var siblings = dev.jkbuild.config.WorkspaceLoader.loadMembers(wsRoot, wsRootBuild);
-            return dev.jkbuild.model.WorkspaceMerge.applyToMember(wsRootBuild, build, siblings.values());
+            var siblings = dev.jkbuild.config.WorkspaceLoader.loadModules(wsRoot, wsRootBuild);
+            return dev.jkbuild.model.WorkspaceMerge.applyToModule(wsRootBuild, build, siblings.values());
         } catch (Exception e) {
             return build;
         }

@@ -123,7 +123,7 @@ public final class TestSupport {
      * wiring, so annotation processors (Lombok, Immutables, …) run over test
      * sources too. Modern javac only runs processors named by {@code -processorpath};
      * without it, a test class using {@code @Getter} would fail to find its
-     * generated members even though main compilation handled the same annotation.
+     * generated modules even though main compilation handled the same annotation.
      */
     public static boolean compileWithCache(
             PhaseContext ctx,

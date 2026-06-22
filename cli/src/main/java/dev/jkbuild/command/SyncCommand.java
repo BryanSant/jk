@@ -93,8 +93,8 @@ public final class SyncCommand implements CliCommand {
             GoalKey.of("cas-report", CacheSync.Report.class);
     private static final GoalKey<dev.jkbuild.runtime.JkWorkerSync.Result> WORKER_REPORT =
             GoalKey.of("worker-report", dev.jkbuild.runtime.JkWorkerSync.Result.class);
-    private static final GoalKey<Integer> WORKSPACE_MEMBERS =
-            GoalKey.of("workspace-members", Integer.class);
+    private static final GoalKey<Integer> WORKSPACE_MODULES =
+            GoalKey.of("workspace-modules", Integer.class);
     private static final GoalKey<Boolean> LOCKFILE_CREATED =
             GoalKey.of("lockfile-created", Boolean.class);
 
@@ -120,8 +120,8 @@ public final class SyncCommand implements CliCommand {
                         ctx.label("resolve deps");
                         var result = LockFlow.run(
                                 dir, cache, List.of(), false, repoUrl);
-                        if (result.workspaceMemberCount() > 0) {
-                            ctx.put(WORKSPACE_MEMBERS, result.workspaceMemberCount());
+                        if (result.workspaceModuleCount() > 0) {
+                            ctx.put(WORKSPACE_MODULES, result.workspaceModuleCount());
                         }
                         if (result.status() != 0) {
                             ctx.error("lock", result.error() != null
@@ -365,8 +365,8 @@ public final class SyncCommand implements CliCommand {
             } catch (IOException ignored) {
                 // Cache hygiene is never load-bearing.
             }
-            // Cascade: sync each member's lock file for workspace roots.
-            cascadeSyncMembers(dir, cache);
+            // Cascade: sync each module's lock file for workspace roots.
+            cascadeSyncModules(dir, cache);
             return 0;
         }
         // The progress-bar listener (or SilentListener on a pipe) has
@@ -375,11 +375,11 @@ public final class SyncCommand implements CliCommand {
     }
 
     /**
-     * For workspace roots: download any artifacts locked by each member's
-     * own {@code jk.lock} that aren't already in the CAS. Skips members
+     * For workspace roots: download any artifacts locked by each module's
+     * own {@code jk.lock} that aren't already in the CAS. Skips modules
      * whose lock file hasn't been created yet (run {@code jk lock} first).
      */
-    private void cascadeSyncMembers(Path dir, Path cache) {
+    private void cascadeSyncModules(Path dir, Path cache) {
         JkBuild root;
         try {
             root = JkBuildParser.parse(dir.resolve("jk.toml"));
@@ -388,12 +388,12 @@ public final class SyncCommand implements CliCommand {
         }
         if (!root.isWorkspaceRoot()) return;
 
-        Map<Path, JkBuild> members;
+        Map<Path, JkBuild> modules;
         try {
-            members = WorkspaceLoader.loadMembers(dir, root);
+            modules = WorkspaceLoader.loadModules(dir, root);
         } catch (Exception e) {
             if (!global.outputIsJson()) {
-                System.err.println("jk sync: skipping member sync — " + e.getMessage());
+                System.err.println("jk sync: skipping module sync — " + e.getMessage());
             }
             return;
         }
@@ -401,28 +401,28 @@ public final class SyncCommand implements CliCommand {
         Cas cas = new Cas(cache);
         Http http = new Http();
         boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
-        for (Map.Entry<Path, JkBuild> entry : members.entrySet()) {
-            Path memberDir = entry.getKey();
-            Path memberLock = memberDir.resolve("jk.lock");
-            if (!Files.exists(memberLock)) {
+        for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
+            Path moduleDir = entry.getKey();
+            Path moduleLock = moduleDir.resolve("jk.lock");
+            if (!Files.exists(moduleLock)) {
                 if (!global.outputIsJson()) {
-                    System.err.println("jk sync: " + dir.relativize(memberDir)
+                    System.err.println("jk sync: " + dir.relativize(moduleDir)
                             + "/jk.lock not found — run `jk lock` first");
                 }
                 continue;
             }
             try {
-                Lockfile lock = LockfileReader.read(memberLock);
+                Lockfile lock = LockfileReader.read(moduleLock);
                 var report = new dev.jkbuild.resolver.CacheSync(cas, http)
                         .sync(lock, dev.jkbuild.resolver.CacheSync.ProgressObserver.NOOP, refresh);
                 if (!global.outputIsJson() && (report.fetched() > 0 || report.upToDate() > 0)) {
-                    System.out.println(dir.relativize(memberDir) + ": "
+                    System.out.println(dir.relativize(moduleDir) + ": "
                             + report.fetched() + " fetched, "
                             + report.upToDate() + " up-to-date, "
                             + report.skipped() + " skipped");
                 }
             } catch (Exception e) {
-                System.err.println("jk sync: " + dir.relativize(memberDir)
+                System.err.println("jk sync: " + dir.relativize(moduleDir)
                         + ": sync failed — " + e.getMessage());
             }
         }
@@ -435,8 +435,8 @@ public final class SyncCommand implements CliCommand {
      */
     private void printSuccessSummary(Goal goal, Path lockFile) {
         if (global.outputIsJson()) return;
-        goal.get(WORKSPACE_MEMBERS).ifPresent(n ->
-                System.out.println("Workspace: " + n + " member" + (n == 1 ? "" : "s")));
+        goal.get(WORKSPACE_MODULES).ifPresent(n ->
+                System.out.println("Workspace: " + n + " module" + (n == 1 ? "" : "s")));
         boolean created = goal.get(LOCKFILE_CREATED).orElse(false);
         goal.get(LOCKFILE).ifPresent(lock -> {
             if (created) {

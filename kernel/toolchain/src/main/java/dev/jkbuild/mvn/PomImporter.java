@@ -62,13 +62,13 @@ public final class PomImporter {
 
     /**
      * Outcome of importing a multi-module POM tree: the root's {@link JkBuild}
-     * (carrying the workspace block), each member's {@link JkBuild} keyed by
+     * (carrying the workspace block), each module's {@link JkBuild} keyed by
      * the relative module path, and one aggregated {@link ImportReport}
      * spanning the root + every child.
      */
     public record WorkspaceImportResult(
             JkBuild root,
-            Map<String, JkBuild> members,
+            Map<String, JkBuild> modules,
             ImportReport report) {}
 
     private PomImporter() {}
@@ -125,7 +125,7 @@ public final class PomImporter {
 
     /**
      * Import a multi-module Maven build into a workspace-root {@code JkBuild}
-     * plus per-member {@code JkBuild}s (PRD §24.2 Tier 2 "multi-module
+     * plus per-module {@code JkBuild}s (PRD §24.2 Tier 2 "multi-module
      * &lt;modules&gt; → workspace"). When the root POM has no
      * {@code <modules>}, falls back to single-POM import.
      */
@@ -152,7 +152,7 @@ public final class PomImporter {
                 rootProject, JkBuild.Dependencies.empty(),
                 List.of(), Profiles.empty(), Features.empty(), workspace);
 
-        Map<String, JkBuild> members = new LinkedHashMap<>();
+        Map<String, JkBuild> moduleBuilds = new LinkedHashMap<>();
         Path projectDir = rootPom.toAbsolutePath().getParent();
         for (String module : modules) {
             Path childPom = projectDir.resolve(module).resolve("pom.xml");
@@ -162,7 +162,7 @@ public final class PomImporter {
             }
             byte[] childXml = Files.readAllBytes(childPom);
             Result childResult = importFromBytes(childXml, expectedParent);
-            members.put(module, childResult.jkBuild());
+            moduleBuilds.put(module, childResult.jkBuild());
             for (ImportReport.Issue issue : childResult.report().issues()) {
                 String prefixed = "[" + module + "] " + issue.message();
                 if (issue.severity() == ImportReport.Severity.ERROR) {
@@ -172,7 +172,7 @@ public final class PomImporter {
                 }
             }
         }
-        return new WorkspaceImportResult(rootJkBuild, members, report.build());
+        return new WorkspaceImportResult(rootJkBuild, moduleBuilds, report.build());
     }
 
     private static List<String> readModules(Document doc) {

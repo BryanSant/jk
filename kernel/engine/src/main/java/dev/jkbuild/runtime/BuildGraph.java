@@ -23,7 +23,7 @@ import java.util.Set;
 
 /**
  * Resolves the full <em>composite build graph</em> for an entry project: the
- * workspace root + its members + every transitive {@code path =} and
+ * workspace root + its modules + every transitive {@code path =} and
  * <em>branch</em> git dependency, as one topologically-sorted list of build
  * units. The single source of truth that both the build driver and
  * {@code jk explain} consume, so they agree on exactly what builds and in what
@@ -33,10 +33,10 @@ import java.util.Set;
  * ({@code BuildPipeline.coreBuilder}); dependency units (PATH / BRANCH_GIT) are
  * compile-only. Immutable (tag/rev) git deps are NOT units here — they stay on
  * the lock-pinned {@link GitSourceResolution} path. Edges point from a unit to
- * the units that must build before it (prereqs), unifying workspace member
+ * the units that must build before it (prereqs), unifying workspace module
  * order ({@code [build].order-after} + sibling deps) with composite edges.
  *
- * <p>Cycles (e.g. git1→git2→git1, path loops, or member cycles) and chains
+ * <p>Cycles (e.g. git1→git2→git1, path loops, or module cycles) and chains
  * deeper than {@link #MAX_DEPTH} are reported as errors before any build runs.
  */
 public final class BuildGraph {
@@ -44,14 +44,14 @@ public final class BuildGraph {
     /** Guards symlink loops {@code toRealPath} can't collapse and pathological graphs. */
     public static final int MAX_DEPTH = 512;
 
-    public enum Origin { ROOT, MEMBER, PATH, BRANCH_GIT }
+    public enum Origin { ROOT, MODULE, PATH, BRANCH_GIT }
 
     /**
      * One project to build. {@code dir} is canonical (real path) — the identity key.
      * {@code gitSource} is non-null only for {@link Origin#BRANCH_GIT}.
      */
     public record BuildUnit(Path dir, JkBuild manifest, String coord, Origin origin, GitSource gitSource) {
-        /** Dependency units are compile-only; root/members run their own tests. */
+        /** Dependency units are compile-only; root/modules run their own tests. */
         public boolean isDependency() { return origin == Origin.PATH || origin == Origin.BRANCH_GIT; }
     }
 
@@ -76,7 +76,7 @@ public final class BuildGraph {
         Builder b = new Builder(gitRoot);
         try {
             if (entry.isWorkspaceRoot()) {
-                b.addWorkspace(entryDir, entry, Origin.MEMBER);
+                b.addWorkspace(entryDir, entry, Origin.MODULE);
             } else {
                 b.addUnit(b.canonical(entryDir), entry, Origin.ROOT, null);
                 b.discoverComposites(entryDir, entry, 1);
@@ -142,29 +142,29 @@ public final class BuildGraph {
             if (!from.equals(prereq)) edges.computeIfAbsent(from, k -> new LinkedHashSet<>()).add(prereq);
         }
 
-        /** Add every member of a workspace as a unit, wire member-order edges, then descend composites. */
-        void addWorkspace(Path wsRoot, JkBuild root, Origin memberOrigin)
+        /** Add every module of a workspace as a unit, wire module-order edges, then descend composites. */
+        void addWorkspace(Path wsRoot, JkBuild root, Origin moduleOrigin)
                 throws IOException, InterruptedException {
-            Map<Path, JkBuild> members = WorkspaceLoader.loadMembers(wsRoot, root);
+            Map<Path, JkBuild> modules = WorkspaceLoader.loadModules(wsRoot, root);
             // Index by coord + bare name for sibling/order-after edge resolution.
             Map<String, Path> dirByCoord = new LinkedHashMap<>();
             Map<String, Path> dirByName = new LinkedHashMap<>();
-            for (var e : members.entrySet()) {
+            for (var e : modules.entrySet()) {
                 Path c = canonical(e.getKey());
-                addUnit(c, e.getValue(), memberOrigin, null);
+                addUnit(c, e.getValue(), moduleOrigin, null);
                 dirByCoord.put(e.getValue().project().group() + ":" + e.getValue().project().name(), c);
                 dirByName.put(e.getValue().project().name(), c);
             }
-            for (var e : members.entrySet()) {
-                Path memberDir = canonical(e.getKey());
+            for (var e : modules.entrySet()) {
+                Path moduleDir = canonical(e.getKey());
                 JkBuild m = e.getValue();
-                addMemberEdges(memberDir, m, dirByCoord, dirByName);
+                addModuleEdges(moduleDir, m, dirByCoord, dirByName);
                 discoverComposites(e.getKey(), m, 1);
             }
         }
 
-        /** Sibling-dep + {@code [build].order-after} prereq edges (lifted from BuildCommand.topoSortMembers). */
-        private void addMemberEdges(Path memberDir, JkBuild m,
+        /** Sibling-dep + {@code [build].order-after} prereq edges (lifted from BuildCommand.topoSortModules). */
+        private void addModuleEdges(Path moduleDir, JkBuild m,
                                     Map<String, Path> dirByCoord, Map<String, Path> dirByName) {
             for (Scope scope : Scope.values()) {
                 for (Dependency d : m.dependencies().of(scope)) {
@@ -173,13 +173,13 @@ public final class BuildGraph {
                     if (depDir == null && module.startsWith("workspace:")) {
                         depDir = dirByName.get(module.substring("workspace:".length()));
                     }
-                    if (depDir != null) addEdge(memberDir, depDir);
+                    if (depDir != null) addEdge(moduleDir, depDir);
                 }
             }
             for (String ref : m.build().allOrderAfter()) {
                 Path depDir = dirByCoord.get(ref);
                 if (depDir == null) depDir = dirByName.get(ref);
-                if (depDir != null) addEdge(memberDir, depDir);
+                if (depDir != null) addEdge(moduleDir, depDir);
             }
         }
 

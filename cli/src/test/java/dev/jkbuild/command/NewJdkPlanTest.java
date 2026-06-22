@@ -50,10 +50,10 @@ class NewJdkPlanTest {
     // --- shouldPrompt ---------------------------------------------------
 
     @Test
-    void members_and_default_jdk_never_prompt() {
+    void modules_and_default_jdk_never_prompt() {
         var two = List.of(installed("temurin-25", 25, JdkVendor.TEMURIN),
                 installed("corretto-25", 25, JdkVendor.CORRETTO));
-        assertThat(NewJdkPlan.shouldPrompt(true, false, two, 25)).isFalse();  // member
+        assertThat(NewJdkPlan.shouldPrompt(true, false, two, 25)).isFalse();  // module
         assertThat(NewJdkPlan.shouldPrompt(false, true, two, 25)).isFalse();  // default set
     }
 

@@ -104,7 +104,7 @@ class GradleExporterTest {
     }
 
     @Test
-    void settings_includes_foojay_and_workspace_members() {
+    void settings_includes_foojay_and_workspace_modules() {
         JkBuild root = parse("""
                 [project]
                 group = "com.example"
@@ -113,7 +113,7 @@ class GradleExporterTest {
                 java = 21
 
                 [workspace]
-                members = ["mod-a", "mod-b"]
+                modules = ["mod-a", "mod-b"]
                 """);
         JkBuild a = parse("""
                 [project]

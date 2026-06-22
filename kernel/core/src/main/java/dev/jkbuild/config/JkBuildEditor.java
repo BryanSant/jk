@@ -48,7 +48,10 @@ public final class JkBuildEditor {
     /** Header line for the {@code [workspace]} table. */
     private static final Pattern WORKSPACE_HEADER = Pattern.compile("^(\\s*)\\[workspace]\\s*$");
 
-    /** The {@code members = ...} assignment within {@code [workspace]}. */
+    /** The {@code modules = ...} assignment within {@code [workspace]}. */
+    private static final Pattern MODULES_KEY = Pattern.compile("^\\s*modules\\s*=.*$");
+
+    /** Legacy {@code members = ...} synonym — appended to if a manifest still uses it. */
     private static final Pattern MEMBERS_KEY = Pattern.compile("^\\s*members\\s*=.*$");
 
     /** A double-quoted string literal element. */
@@ -210,37 +213,37 @@ public final class JkBuildEditor {
     }
 
     /**
-     * Append {@code memberPath} to the root manifest's
-     * {@code [workspace].members} array, preserving the array's existing
+     * Append {@code modulePath} to the root manifest's
+     * {@code [workspace].modules} array, preserving the array's existing
      * shape (single-line vs multi-line) and any surrounding comments.
      *
-     * <p>Idempotent: if the path is already a member the content is
+     * <p>Idempotent: if the path is already a module the content is
      * returned unchanged. Used by {@code jk new}/{@code jk init}/
-     * {@code jk add <path>} to register a new member, the way
+     * {@code jk add <path>} to register a new module, the way
      * {@code cargo new} / {@code uv init} edit the workspace manifest.
      *
      * @throws IllegalStateException if there is no {@code [workspace]} table.
      */
-    public static String addWorkspaceMember(String content, String memberPath) {
-        return addWorkspaceMember(content, memberPath, false);
+    public static String addWorkspaceModule(String content, String modulePath) {
+        return addWorkspaceModule(content, modulePath, false);
     }
 
     /**
-     * Register a workspace member, <em>creating</em> the {@code [workspace]}
+     * Register a workspace module, <em>creating</em> the {@code [workspace]}
      * table if the manifest doesn't have one yet. This is how adding the first
-     * member promotes a plain single-project {@code jk.toml} into a workspace
+     * module promotes a plain single-project {@code jk.toml} into a workspace
      * root (Cargo/uv semantics). When a {@code [workspace]} table already
-     * exists this is identical to {@link #addWorkspaceMember(String, String)}.
+     * exists this is identical to {@link #addWorkspaceModule(String, String)}.
      */
-    public static String registerWorkspaceMember(String content, String memberPath) {
-        return addWorkspaceMember(content, memberPath, true);
+    public static String registerWorkspaceModule(String content, String modulePath) {
+        return addWorkspaceModule(content, modulePath, true);
     }
 
-    private static String addWorkspaceMember(String content, String memberPath, boolean createTable) {
-        if (memberPath == null || memberPath.isBlank()) {
-            throw new IllegalArgumentException("member path must not be blank");
+    private static String addWorkspaceModule(String content, String modulePath, boolean createTable) {
+        if (modulePath == null || modulePath.isBlank()) {
+            throw new IllegalArgumentException("module path must not be blank");
         }
-        String path = memberPath.replace('\\', '/');
+        String path = modulePath.replace('\\', '/');
 
         List<String> lines = splitPreservingTerminator(content);
         int wsHeader = -1;
@@ -258,55 +261,58 @@ public final class JkBuildEditor {
                 throw new IllegalStateException("no [workspace] table in jk.toml");
             }
             // Promote a plain project into a workspace: append a [workspace]
-            // table with this member as its first entry.
+            // table with this module as its first entry.
             StringBuilder sb = new StringBuilder(content);
             if (!content.isEmpty() && !content.endsWith("\n")) sb.append('\n');
-            sb.append("\n[workspace]\nmembers = [\"").append(escape(path)).append("\"]\n");
+            sb.append("\n[workspace]\nmodules = [\"").append(escape(path)).append("\"]\n");
             return validated(sb.toString());
         }
 
         int end = endOfTable(lines, wsHeader);
-        int membersLine = -1;
+        int modulesLine = -1;
         for (int i = wsHeader + 1; i < end; i++) {
-            if (MEMBERS_KEY.matcher(lines.get(i)).matches()) {
-                membersLine = i;
+            // Append to whichever key the manifest already uses — `modules` or the
+            // legacy `members` synonym — so existing workspaces aren't force-migrated.
+            if (MODULES_KEY.matcher(lines.get(i)).matches()
+                    || MEMBERS_KEY.matcher(lines.get(i)).matches()) {
+                modulesLine = i;
                 break;
             }
         }
-        // No members key yet — add one right under the header.
-        if (membersLine < 0) {
-            lines.add(wsHeader + 1, wsIndent + "members = [\"" + escape(path) + "\"]");
+        // No modules key yet — add one right under the header.
+        if (modulesLine < 0) {
+            lines.add(wsHeader + 1, wsIndent + "modules = [\"" + escape(path) + "\"]");
             return validated(join(lines));
         }
 
         // Find the line carrying the array's closing ']'. String elements
-        // never contain ']', so the first ']' at/after membersLine closes it.
+        // never contain ']', so the first ']' at/after modulesLine closes it.
         int closeLine = -1;
-        for (int i = membersLine; i < end; i++) {
+        for (int i = modulesLine; i < end; i++) {
             if (lines.get(i).indexOf(']') >= 0) { closeLine = i; break; }
         }
         if (closeLine < 0) {
-            throw new IllegalStateException("malformed members array in [workspace]");
+            throw new IllegalStateException("malformed modules array in [workspace]");
         }
 
         // Idempotency: collect existing elements across the array's lines.
         StringBuilder arrayText = new StringBuilder();
-        for (int i = membersLine; i <= closeLine; i++) arrayText.append(lines.get(i)).append('\n');
+        for (int i = modulesLine; i <= closeLine; i++) arrayText.append(lines.get(i)).append('\n');
         Matcher q = QUOTED.matcher(arrayText);
         while (q.find()) {
-            if (q.group(1).equals(path)) return content; // already a member
+            if (q.group(1).equals(path)) return content; // already a module
         }
 
-        if (membersLine == closeLine) {
-            insertInlineMember(lines, closeLine, path);
+        if (modulesLine == closeLine) {
+            insertInlineModule(lines, closeLine, path);
         } else {
-            insertMultilineMember(lines, membersLine, closeLine, path);
+            insertMultilineModule(lines, modulesLine, closeLine, path);
         }
         return validated(join(lines));
     }
 
-    /** Insert {@code "path"} before the {@code ]} on a single-line members array. */
-    private static void insertInlineMember(List<String> lines, int lineIdx, String path) {
+    /** Insert {@code "path"} before the {@code ]} on a single-line modules array. */
+    private static void insertInlineModule(List<String> lines, int lineIdx, String path) {
         String line = lines.get(lineIdx);
         int close = line.lastIndexOf(']');
         int j = close - 1;
@@ -321,9 +327,9 @@ public final class JkBuildEditor {
     }
 
     /** Insert a new element line just before the {@code ]} of a multi-line array. */
-    private static void insertMultilineMember(List<String> lines, int membersLine, int closeLine, String path) {
+    private static void insertMultilineModule(List<String> lines, int modulesLine, int closeLine, String path) {
         // Ensure the last element line carries a trailing comma.
-        for (int i = closeLine - 1; i > membersLine - 1; i--) {
+        for (int i = closeLine - 1; i > modulesLine - 1; i--) {
             String t = lines.get(i);
             String trimmed = t.stripTrailing();
             if (trimmed.isEmpty() || trimmed.stripLeading().startsWith("#")) continue;
@@ -334,8 +340,8 @@ public final class JkBuildEditor {
         }
         // Indent like the first element line if there is one, else 4 spaces.
         String indent = "    ";
-        if (membersLine + 1 < closeLine) {
-            String el = lines.get(membersLine + 1);
+        if (modulesLine + 1 < closeLine) {
+            String el = lines.get(modulesLine + 1);
             indent = el.substring(0, el.length() - el.stripLeading().length());
         }
         lines.add(closeLine, indent + "\"" + escape(path) + "\",");

@@ -187,7 +187,7 @@ class CommandManagerTest {
 
         var raw = cm.renderGoalLines(120, 112_000);
         String all = String.join("\n", stripAll(raw));
-        // Header: {name} {bar} …elapsed… — bright-white name, bar inlined, member NOT
+        // Header: {name} {bar} …elapsed… — bright-white name, bar inlined, module NOT
         // in the header. No ETA clock here (timings not enabled on this view).
         assertThat(stripAnsi(raw.get(0))).contains("Building").contains("…1m 52s…")
                 .doesNotContain("[").doesNotContain("acme:api");
@@ -195,7 +195,7 @@ class CommandManagerTest {
         // Bar with percent, inlined into the header line — the N-of-M count is gone.
         assertThat(all).contains("45%");
         assertThat(all).doesNotContain("[45 of 100]");
-        // Active row only: colored member, phase, message, no trailing ellipsis.
+        // Active row only: colored module, phase, message, no trailing ellipsis.
         assertThat(all).contains("acme:api › Compile java › javac 12 sources");
         assertThat(raw.get(1)).contains(Theme.colorize("acme", Theme.active().cyan()))
                 .contains(Theme.colorize("api", Theme.active().brightCyan()));

@@ -130,7 +130,7 @@ class LockCommandTest {
     }
 
     @Test
-    void lock_from_member_dir_locks_member_only(@TempDir Path tempDir) throws Exception {
+    void lock_from_module_dir_locks_module_only(@TempDir Path tempDir) throws Exception {
         // External graph served by the test repo: root -> leaf.
         registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
@@ -145,7 +145,7 @@ class LockCommandTest {
                 """));
         registerJar("com.foo", "root", "1.0", "root".getBytes(StandardCharsets.UTF_8));
 
-        // Workspace root + two members. `app` depends on its sibling `libb`
+        // Workspace root + two modules. `app` depends on its sibling `libb`
         // (must be filtered out, never fetched) and the external com.foo:root.
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
@@ -154,7 +154,7 @@ class LockCommandTest {
                 version = "0.1.0"
 
                 [workspace]
-                members = ["app", "libb"]
+                modules = ["app", "libb"]
                 """);
         Path app = Files.createDirectories(tempDir.resolve("app"));
         Files.writeString(app.resolve("jk.toml"), """
@@ -175,14 +175,14 @@ class LockCommandTest {
                 version = "0.1.0"
                 """);
 
-        // Invoke from INSIDE the member directory — locks only that member.
+        // Invoke from INSIDE the module directory — locks only that module.
         int exit = run("lock",
                 "-C", app.toString(),
                 "--repo-url", base.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
-        // Each member has its own lock file alongside its jk.toml.
+        // Each module has its own lock file alongside its jk.toml.
         Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
 
         // External coords are resolved; the workspace sibling is not locked.
@@ -196,7 +196,7 @@ class LockCommandTest {
     }
 
     @Test
-    void lock_from_workspace_root_cascades_to_members(@TempDir Path tempDir) throws Exception {
+    void lock_from_workspace_root_cascades_to_modules(@TempDir Path tempDir) throws Exception {
         registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
@@ -217,7 +217,7 @@ class LockCommandTest {
                 version = "0.1.0"
 
                 [workspace]
-                members = ["app", "libb"]
+                modules = ["app", "libb"]
                 """);
         Path app = Files.createDirectories(tempDir.resolve("app"));
         Files.writeString(app.resolve("jk.toml"), """
@@ -238,7 +238,7 @@ class LockCommandTest {
                 version = "0.1.0"
                 """);
 
-        // Invoke from the workspace root — cascades to all members.
+        // Invoke from the workspace root — cascades to all modules.
         int exit = run("lock",
                 "-C", tempDir.toString(),
                 "--repo-url", base.toString(),

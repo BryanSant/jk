@@ -24,7 +24,7 @@ import java.util.Set;
 
 /**
  * {@code jk explain} — forecast the build (the same {@link BuildGraph} the build
- * driver uses): every module (workspace root + members + transitive {@code path} /
+ * driver uses): every module (workspace root + modules + transitive {@code path} /
  * branch-git deps) in dependency order, its origin and edges, and — via
  * {@link BuildPlanForecast} — what each of its phases (compile → test → package)
  * would do when {@code jk build} runs: restore from cache or do real work.
@@ -172,7 +172,7 @@ public final class ExplainCommand implements CliCommand {
         BuildGraph.BuildUnit u = m.unit();
         String origin = switch (u.origin()) {
             case ROOT -> "root";
-            case MEMBER -> "member";
+            case MODULE -> "module";
             case PATH -> "path dep";
             case BRANCH_GIT -> "branch git dep";
         };

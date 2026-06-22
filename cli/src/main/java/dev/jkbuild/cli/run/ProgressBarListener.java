@@ -378,7 +378,7 @@ public final class ProgressBarListener implements GoalListener {
         out.flush();
     }
 
-    /** Shared with {@link AggregateMemberListener} so workspace + single-project render alike. */
+    /** Shared with {@link AggregateModuleListener} so workspace + single-project render alike. */
     static String renderDiagnostic(
             String prefix, AttributedStyle prefixStyle,
             String phase, String code, String message) {

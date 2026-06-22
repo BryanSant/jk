@@ -123,7 +123,7 @@ class BuildCommandTest {
     }
 
     @Test
-    void builds_a_workspace_with_independent_members_in_parallel(@TempDir Path tempDir) throws Exception {
+    void builds_a_workspace_with_independent_modules_in_parallel(@TempDir Path tempDir) throws Exception {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group = "com.example"
@@ -133,12 +133,12 @@ class BuildCommandTest {
                 java = 25
 
                 [workspace]
-                members = ["liba", "libb", "app"]
+                modules = ["liba", "libb", "app"]
                 """, StandardCharsets.UTF_8);
-        member(tempDir.resolve("liba"), "liba", "a", "A", "");
-        member(tempDir.resolve("libb"), "libb", "b", "B", "");
+        module(tempDir.resolve("liba"), "liba", "a", "A", "");
+        module(tempDir.resolve("libb"), "libb", "b", "B", "");
         // app depends on both independent libs → builds after them.
-        member(tempDir.resolve("app"), "app", "app", "Main", """
+        module(tempDir.resolve("app"), "app", "app", "Main", """
 
                 [dependencies.main]
                 liba = { group = "com.example", name = "liba", version = "1.0.0" }
@@ -149,7 +149,7 @@ class BuildCommandTest {
                 "--cache-dir", tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
-        // All three members produced their jars (parallel default).
+        // All three modules produced their jars (parallel default).
         assertThat(tempDir.resolve("liba/target/liba-1.0.0.jar")).exists();
         assertThat(tempDir.resolve("libb/target/libb-1.0.0.jar")).exists();
         assertThat(tempDir.resolve("app/target/app-1.0.0.jar")).exists();
@@ -160,7 +160,7 @@ class BuildCommandTest {
         assertThat(serial).isEqualTo(0);
     }
 
-    private static void member(Path dir, String name, String pkg, String cls, String extra)
+    private static void module(Path dir, String name, String pkg, String cls, String extra)
             throws IOException {
         Files.createDirectories(dir.resolve("src/main/java/" + pkg));
         Files.writeString(dir.resolve("jk.toml"), """

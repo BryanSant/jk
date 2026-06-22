@@ -35,7 +35,7 @@ import java.util.stream.Stream;
  *
  * <p>{@code taskId} is expected to be project-qualified by the caller (see
  * {@link ActionKey#qualifiedTaskId}) so the {@code tasks/} pointer for, say,
- * {@code compile-main} doesn't collide across projects / workspace members.
+ * {@code compile-main} doesn't collide across projects / workspace modules.
  */
 public final class ActionCache {
 

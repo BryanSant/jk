@@ -129,7 +129,7 @@ class UpdateCommandTest {
     }
 
     @Test
-    void update_from_member_dir_locks_member_only(@TempDir Path tempDir) throws Exception {
+    void update_from_module_dir_locks_module_only(@TempDir Path tempDir) throws Exception {
         registerMetadata("com.foo", "leaf", "1.0");
         registerPom("com.foo", "leaf", "1.0", pom("com.foo", "leaf", "1.0", ""));
         registerJar("com.foo", "leaf", "1.0", "leaf".getBytes(StandardCharsets.UTF_8));
@@ -141,7 +141,7 @@ class UpdateCommandTest {
                 version = "0.1.0"
 
                 [workspace]
-                members = ["app", "libb"]
+                modules = ["app", "libb"]
                 """);
         Path app = Files.createDirectories(tempDir.resolve("app"));
         Files.writeString(app.resolve("jk.toml"), """
@@ -162,14 +162,14 @@ class UpdateCommandTest {
                 version = "0.1.0"
                 """);
 
-        // Invoke from member — updates only that member's lock.
+        // Invoke from module — updates only that module's lock.
         int exit = run("update",
                 "-C", app.toString(),
                 "--repo-url", base.toString(),
                 "--cache-dir", tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
-        // Member owns its own lock; sibling dep filtered out.
+        // Module owns its own lock; sibling dep filtered out.
         Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
         assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .containsExactly("com.foo:leaf");

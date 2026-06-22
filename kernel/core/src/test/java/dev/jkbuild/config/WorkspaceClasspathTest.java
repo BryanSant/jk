@@ -21,7 +21,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WorkspaceClasspathTest {
 
     @Test
-    void export_sibling_is_on_the_declaring_members_own_classpath(@TempDir Path root) throws Exception {
+    void export_sibling_is_on_the_declaring_modules_own_classpath(@TempDir Path root) throws Exception {
         scaffold(root);
         JkBuild app = JkBuildParser.parse(root.resolve("app/jk.toml"));
         var result = WorkspaceClasspath.resolve(root.resolve("app"), app,
@@ -53,20 +53,20 @@ class WorkspaceClasspathTest {
                 jdk = "25"
 
                 [workspace]
-                members = ["lib", "app", "top"]
+                modules = ["lib", "app", "top"]
                 """);
-        member(root, "lib", "");
-        member(root, "app", """
+        module(root, "lib", "");
+        module(root, "app", """
                 [dependencies.export]
                 lib = { workspace = true }
                 """);
-        member(root, "top", """
+        module(root, "top", """
                 [dependencies.main]
                 app = { workspace = true }
                 """);
     }
 
-    private static void member(Path root, String name, String depsBlock) throws IOException {
+    private static void module(Path root, String name, String depsBlock) throws IOException {
         Path dir = Files.createDirectories(root.resolve(name));
         Files.writeString(dir.resolve("jk.toml"), """
                 [project]

@@ -181,7 +181,7 @@ class ImportCommandTest {
         String root = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(root).contains("name     = \"widget-parent\"");
         assertThat(root).contains("[workspace]");
-        assertThat(root).contains("members = [\"core\", \"app\"]");
+        assertThat(root).contains("modules = [\"core\", \"app\"]");
 
         assertThat(Files.readString(tempDir.resolve("core/jk.toml")))
                 .contains("name     = \"widget-core\"");

@@ -20,7 +20,7 @@ class WorkspaceLocatorTest {
             version  = "0.1.0"
 
             [workspace]
-            members = ["core"]
+            modules = ["core"]
             """;
 
     private static void write(Path file, String content) throws IOException {
@@ -29,9 +29,9 @@ class WorkspaceLocatorTest {
     }
 
     @Test
-    void finds_enclosing_workspace_for_unlisted_member(@TempDir Path tmp) throws IOException {
+    void finds_enclosing_workspace_for_unlisted_module(@TempDir Path tmp) throws IOException {
         write(tmp.resolve("jk.toml"), ROOT);
-        // `app` is NOT in members yet — findEnclosingWorkspace must still find the root.
+        // `app` is NOT in modules yet — findEnclosingWorkspace must still find the root.
         Path app = Files.createDirectories(tmp.resolve("app"));
 
         assertThat(WorkspaceLocator.findEnclosingWorkspace(app))

@@ -83,7 +83,7 @@ No changes from v0.6.
 
 ```toml
 [workspace]
-members = ["core", "io", "cli"]
+modules = ["core", "io", "cli"]
 
 # Optional: shared external deps that multiple children use.
 # Children inherit by writing `name.workspace = true`.
@@ -93,10 +93,10 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 assertj-core            = { group = "org.assertj", name = "assertj-core", version = "3.27.7" }
 ```
 
-**Workspace member resolution.** When a child writes
+**Workspace module resolution.** When a child writes
 `jk-core.workspace = true`, jk looks up the name in this order:
 
-1. **Workspace member** with matching `name` field (after the
+1. **Workspace module** with matching `name` field (after the
    conventional `jk-` prefix is stripped — see "Implicit naming" below).
 2. **`[workspace.dependencies]`** entry with that key.
 3. Error: "no workspace dependency or sibling named `jk-core`".
@@ -104,10 +104,10 @@ assertj-core            = { group = "org.assertj", name = "assertj-core", versio
 For workspace siblings, the resolved coord uses the sibling's
 `[project].group`, `[project].name`, and `[project].version`.
 
-**Registering members.** The `members` array is not hand-edited. Run inside
-a workspace, `jk new <path>` and `jk init` scaffold a member and append its
+**Registering modules.** The `modules` array is not hand-edited. Run inside
+a workspace, `jk new <path>` and `jk init` scaffold a module and append its
 root-relative path here (inheriting the root `[project].group`, and writing
-no per-member `jk.lock`). `jk add <path>` — where the argument starts with
+no per-module `jk.lock`). `jk add <path>` — where the argument starts with
 `:` or contains a path separator (`:widget`, `./widget`, `libs/widget`,
 `widget/`) — registers a local sibling **and** adds the dependency edge,
 pinned to the sibling's `[project].version`. A bare name (`jk add jackson`)
@@ -124,7 +124,7 @@ Six scopes, identical to v0.6: `main`, `provided`, `runtime`, `test`,
 # Fully structured
 picocli = { group = "info.picocli", name = "picocli", version = "4.7.7" }
 
-# Workspace sibling (auto-resolves group, artifact, version from the member)
+# Workspace sibling (auto-resolves group, artifact, version from the module)
 jk-core.workspace = true
 
 # Workspace external dep (looks up in [workspace.dependencies])
@@ -258,7 +258,7 @@ jdk         = 25
 java        = 25
 
 [workspace]
-members = ["core", "io", "resolver", "toolchain", "engine",
+modules = ["core", "io", "resolver", "toolchain", "engine",
            "supply-chain", "image", "compat", "cli"]
 
 [workspace.dependencies]
@@ -300,7 +300,7 @@ java     = 25
 main     = "dev.jkbuild.cli.Jk"
 
 [dependencies.main]
-# Workspace siblings — short-name resolves to the matching member.
+# Workspace siblings — short-name resolves to the matching module.
 jk-compat.workspace       = true
 jk-core.workspace         = true
 jk-engine.workspace       = true

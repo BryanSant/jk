@@ -36,9 +36,9 @@ import java.util.Optional;
  * <em>same</em> goal — an executable when a main class resolves, else a shared
  * library ({@code --shared}).
  *
- * <p>Native builds are opt-in: only members with {@code native = true} are
- * compiled to a native artifact. Other members are still compiled and packaged
- * (so eligible members can depend on them) but produce no native output. The
+ * <p>Native builds are opt-in: only modules with {@code native = true} are
+ * compiled to a native artifact. Other modules are still compiled and packaged
+ * (so eligible modules can depend on them) but produce no native output. The
  * GraalVM that owns {@code native-image} is chosen by {@link dev.jkbuild.cli.GraalResolver}
  * (honoring {@code project.graal}), resolved up front before the progress UI.
  */
@@ -92,19 +92,19 @@ public final class NativeCommand implements CliCommand {
 
         JkBuild peek = JkBuildParser.parse(buildFile);
 
-        // Workspace root: cascade to all eligible members.
+        // Workspace root: cascade to all eligible modules.
         if (peek.isWorkspaceRoot()) {
             return runWorkspaceNative(startDir, peek, cache);
         }
 
-        // Member redirect: if we're inside a workspace, build from the root.
+        // Module redirect: if we're inside a workspace, build from the root.
         var rootOpt = WorkspaceLocator.findRoot(startDir);
         if (rootOpt.isPresent() && !rootOpt.get().equals(startDir)) {
             Path wsRoot = rootOpt.get();
             JkBuild rootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
             if (rootBuild.isWorkspaceRoot()) {
                 System.err.println("jk native: building from workspace root "
-                        + wsRoot.getFileName() + " (member: " + startDir.getFileName() + ")");
+                        + wsRoot.getFileName() + " (module: " + startDir.getFileName() + ")");
                 return runWorkspaceNative(wsRoot, rootBuild, cache);
             }
         }
@@ -116,47 +116,47 @@ public final class NativeCommand implements CliCommand {
     // --- workspace cascade ---------------------------------------------------
 
     private int runWorkspaceNative(Path wsRoot, JkBuild root, Path cache) throws Exception {
-        Map<Path, JkBuild> membersByDir;
+        Map<Path, JkBuild> modulesByDir;
         try {
-            membersByDir = WorkspaceLoader.loadMembers(wsRoot, root);
+            modulesByDir = WorkspaceLoader.loadModules(wsRoot, root);
         } catch (RuntimeException e) {
             System.err.println("jk native: " + e.getMessage());
             return 2;
         }
-        if (membersByDir.isEmpty()) {
-            System.out.println("(workspace declares no members)");
+        if (modulesByDir.isEmpty()) {
+            System.out.println("(workspace declares no modules)");
             return 0;
         }
 
-        List<Path> sorted = BuildCommand.topoSortMembers(membersByDir);
+        List<Path> sorted = BuildCommand.topoSortModules(modulesByDir);
         GoalConsole.Mode mode = GoalConsole.modeFor(global);
         long buildStart = System.nanoTime();
 
-        // Resolve the GraalVM for every native-eligible member up front — BEFORE
+        // Resolve the GraalVM for every native-eligible module up front — BEFORE
         // any progress UI opens — so a prompt or install never lands inside the
         // captured-output region (which would corrupt the display). GraalResolver
         // memoizes by spec, so a shared graal pin fetches/installs at most once.
         Map<Path, Path> graalHomes = new java.util.HashMap<>();
-        for (Path memberDir : sorted) {
-            JkBuild member = membersByDir.get(memberDir);
-            if (!isNativeEligible(member)) continue;
-            Optional<Path> home = graal.resolve(memberDir, member.project().graal());
+        for (Path moduleDir : sorted) {
+            JkBuild module = modulesByDir.get(moduleDir);
+            if (!isNativeEligible(module)) continue;
+            Optional<Path> home = graal.resolve(moduleDir, module.project().graal());
             if (home.isEmpty()) return 2; // GraalResolver already printed why
-            graalHomes.put(memberDir, home.get());
+            graalHomes.put(moduleDir, home.get());
         }
 
-        // JSON / verbose: per-member banners.
+        // JSON / verbose: per-module banners.
         if (mode != GoalConsole.Mode.AUTO && mode != GoalConsole.Mode.QUIET) {
             for (int i = 0; i < sorted.size(); i++) {
-                Path memberDir = sorted.get(i);
-                JkBuild member = membersByDir.get(memberDir);
+                Path moduleDir = sorted.get(i);
+                JkBuild module = modulesByDir.get(moduleDir);
                 System.out.println();
-                System.out.println("══ " + wsRoot.relativize(memberDir)
+                System.out.println("══ " + wsRoot.relativize(moduleDir)
                         + " (" + (i + 1) + "/" + sorted.size() + ") ══");
                 int exit = runPreparedNative(
-                        prepareNativeMember(memberDir, member, cache, graalHomes.get(memberDir)), null);
+                        prepareNativeModule(moduleDir, module, cache, graalHomes.get(moduleDir)), null);
                 if (exit != 0) {
-                    System.err.println("jk native: " + wsRoot.relativize(memberDir)
+                    System.err.println("jk native: " + wsRoot.relativize(moduleDir)
                             + " failed (exit " + exit + ")");
                     return exit;
                 }
@@ -171,35 +171,35 @@ public final class NativeCommand implements CliCommand {
         int built = 0;
 
         try (var cap = view.captureOutput()) {
-            // Pre-scan every member's goal — the core phases plus the
-            // native-image tail for eligible members — and sum its estimated
+            // Pre-scan every module's goal — the core phases plus the
+            // native-image tail for eligible modules — and sum its estimated
             // ticks so the bar calibrates to the whole-workspace total up front
             // (the native-image build's W_NATIVE weight and its per-stage scope
-            // included) and advances 0→100% without resetting per member,
-            // instead of the denominator growing as members start. These are the
-            // very goals we then run, one member at a time.
-            List<PreparedNativeMember> prepared = new ArrayList<>(sorted.size());
+            // included) and advances 0→100% without resetting per module,
+            // instead of the denominator growing as modules start. These are the
+            // very goals we then run, one module at a time.
+            List<PreparedNativeModule> prepared = new ArrayList<>(sorted.size());
             long total = 0;
-            for (Path memberDir : sorted) {
-                PreparedNativeMember pm = prepareNativeMember(
-                        memberDir, membersByDir.get(memberDir), cache, graalHomes.get(memberDir));
+            for (Path moduleDir : sorted) {
+                PreparedNativeModule pm = prepareNativeModule(
+                        moduleDir, modulesByDir.get(moduleDir), cache, graalHomes.get(moduleDir));
                 total += pm.barWeight();
                 prepared.add(pm);
             }
             agg.calibrate(total);
 
-            for (PreparedNativeMember pm : prepared) {
-                String memberName = wsRoot.relativize(pm.dir()).toString();
+            for (PreparedNativeModule pm : prepared) {
+                String moduleName = wsRoot.relativize(pm.dir()).toString();
                 int exit;
                 try {
                     exit = runPreparedNative(pm, agg);
                 } catch (Exception e) {
-                    view.finishGoalFailure(GoalChrome.coord(memberName)
+                    view.finishGoalFailure(GoalChrome.coord(moduleName)
                             + " " + BuildCommand.elapsedSince(buildStart));
                     throw e;
                 }
                 if (exit != 0) {
-                    view.finishGoalFailure(GoalChrome.coord(memberName)
+                    view.finishGoalFailure(GoalChrome.coord(moduleName)
                             + " " + BuildCommand.elapsedSince(buildStart));
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
                         System.err.println(ConsoleSpec.renderError(d));
@@ -211,11 +211,11 @@ public final class NativeCommand implements CliCommand {
         }
 
         long nativeCount = sorted.stream()
-                .map(membersByDir::get)
+                .map(modulesByDir::get)
                 .filter(NativeCommand::isNativeEligible)
                 .count();
         String elapsed = " " + BuildCommand.elapsedSince(buildStart);
-        String summary = built + " member" + (built == 1 ? "" : "s") + " built"
+        String summary = built + " module" + (built == 1 ? "" : "s") + " built"
                 + (nativeCount > 0 ? ", " + nativeCount + " native artifact"
                         + (nativeCount == 1 ? "" : "s") : "");
         view.finishGoalSuccess(Theme.colorize("Native build successful", Theme.active().success())
@@ -224,39 +224,39 @@ public final class NativeCommand implements CliCommand {
     }
 
     /**
-     * Construct (but do not run) one member's goal: core phases plus the
-     * native-image tail when the member is native-eligible. Split out of the run
-     * step so the workspace path can build every member's goal up front and sum
+     * Construct (but do not run) one module's goal: core phases plus the
+     * native-image tail when the module is native-eligible. Split out of the run
+     * step so the workspace path can build every module's goal up front and sum
      * {@link Goal#estimatedTotalWeight()} — including the native phase's weight —
-     * to calibrate the shared progress bar before any member runs.
+     * to calibrate the shared progress bar before any module runs.
      */
-    private PreparedNativeMember prepareNativeMember(Path memberDir, JkBuild member, Path cache,
+    private PreparedNativeModule prepareNativeModule(Path moduleDir, JkBuild module, Path cache,
                                                      Path graalHome) {
-        boolean eligible = isNativeEligible(member);
-        Path buildFile = memberDir.resolve("jk.toml");
-        Path lockFile = memberDir.resolve("jk.lock");
-        int estimatedTests = TestCommand.estimateTestCount(memberDir.resolve("src/test/java"));
+        boolean eligible = isNativeEligible(module);
+        Path buildFile = moduleDir.resolve("jk.toml");
+        Path lockFile = moduleDir.resolve("jk.lock");
+        int estimatedTests = TestCommand.estimateTestCount(moduleDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                memberDir, cache, buildFile, lockFile, memberDir,
+                moduleDir, cache, buildFile, lockFile, moduleDir,
                 1, estimatedTests, null, jdksDir, buildOpts.skipTests, global.verbose);
         Goal.Builder goalBuilder = BuildPipeline.coreBuilder(inputs);
         if (eligible) {
             String resolvedMain = resolveMain(buildFile);
             goalBuilder.addPhase(BuildPipeline.nativePhase(
-                    memberDir, cache, lockFile, jdksDir, graalHome, resolvedMain, extra));
+                    moduleDir, cache, lockFile, jdksDir, graalHome, resolvedMain, extra));
         }
         Goal goal = goalBuilder.build();
-        return new PreparedNativeMember(memberDir, BuildCommand.buildTarget(buildFile, memberDir),
+        return new PreparedNativeModule(moduleDir, BuildCommand.buildTarget(buildFile, moduleDir),
                 cache, goal, goal.estimatedTotalWeight(), eligible);
     }
 
     /**
-     * Run an already-built member goal and map its result to an exit code. When
-     * {@code agg} is non-null the member feeds the one shared calibrated bar,
+     * Run an already-built module goal and map its result to an exit code. When
+     * {@code agg} is non-null the module feeds the one shared calibrated bar,
      * scaling its progress into its reserved slice; otherwise it renders on its
-     * own (the verbose/JSON per-member path).
+     * own (the verbose/JSON per-module path).
      */
-    private int runPreparedNative(PreparedNativeMember pm, dev.jkbuild.cli.run.AggregateContext agg) {
+    private int runPreparedNative(PreparedNativeModule pm, dev.jkbuild.cli.run.AggregateContext agg) {
         GoalResult result;
         if (agg != null) {
             result = GoalConsole.runGoalInto(pm.goal(), pm.cache(), pm.target(), agg, pm.barWeight());
@@ -271,11 +271,11 @@ public final class NativeCommand implements CliCommand {
     }
 
     /**
-     * A workspace member's goal, built and ready to run, paired with its pre-scan
+     * A workspace module's goal, built and ready to run, paired with its pre-scan
      * bar weight (its slice of the calibrated aggregate total) and whether it
      * carries the native-image tail.
      */
-    private record PreparedNativeMember(Path dir, String target, Path cache, Goal goal,
+    private record PreparedNativeModule(Path dir, String target, Path cache, Goal goal,
                                         long barWeight, boolean eligible) {}
 
     // --- single-project (unchanged behaviour) --------------------------------
@@ -331,7 +331,7 @@ public final class NativeCommand implements CliCommand {
     // --- helpers -------------------------------------------------------------
 
     /**
-     * A member is native-eligible only when it sets {@code native = true}
+     * A module is native-eligible only when it sets {@code native = true}
      * (NativeMode.ALWAYS). Absent {@code native} (SUPPORTED) and
      * {@code native = false} (DISABLED) are both skipped by {@code jk native}.
      * A main class is <em>not</em> required: with one we build an executable,

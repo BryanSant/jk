@@ -52,9 +52,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *       {@code <lib> = { group, name?, version | path | git | workspace }}.
  *       {@code [dependencies]} with only inline-table children is shorthand for
  *       {@code [dependencies.main]}; mixing flat and sub-scope is a parse error.</li>
- *   <li>{@code [workspace]} — optional; {@code members = [...]} plus an optional
+ *   <li>{@code [workspace]} — optional; {@code modules = [...]} plus an optional
  *       {@code [workspace.dependencies]} table of shared external deps inherited by
- *       members via {@code <name>.workspace = true}.</li>
+ *       modules via {@code <name>.workspace = true}.</li>
  *   <li>{@code [repositories]} — optional; per-name URL string or inline table.</li>
  *   <li>{@code [profiles.<name>]} — optional; per-profile {@code inherits}, {@code javac},
  *       {@code jvm-args}.</li>
@@ -72,7 +72,7 @@ public final class JkBuildParser {
      * keyed by file identity (path + size + mtime). jk is single-shot, so a
      * manifest's bytes don't change mid-invocation; workspace commands, on the
      * other hand, re-resolve the same handful of manifests over and over (e.g.
-     * {@code jk idea} runs {@code WorkspaceClasspath.resolve} twice per member,
+     * {@code jk idea} runs {@code WorkspaceClasspath.resolve} twice per module,
      * and each call re-reads the root plus every sibling {@code jk.toml}). That
      * turns an N-module workspace into O(N²) ANTLR parses; caching collapses it
      * to one parse per distinct file. Keying on size+mtime means a manifest
@@ -635,7 +635,7 @@ public final class JkBuildParser {
 
     private static Dependency resolveWorkspaceDep(
             String name, String displayPath, Workspace workspace) {
-        // The workspace lookup chain: members are resolved upstream at
+        // The workspace lookup chain: modules are resolved upstream at
         // merge time (we don't have them here at single-file parse time),
         // so first check [workspace.dependencies], then fall back to
         // emitting a placeholder coord that WorkspaceMerge can re-resolve
@@ -647,7 +647,7 @@ public final class JkBuildParser {
             }
         }
         // No [workspace.dependencies] match. The parser cannot resolve the
-        // sibling here — that requires the full member list, which only
+        // sibling here — that requires the full module list, which only
         // WorkspaceMerge / WorkspaceLoader has. Emit a placeholder dep
         // tagged with the short name; WorkspaceMerge resolves it. We
         // encode the unresolved state via a synthetic module of the form
@@ -850,9 +850,14 @@ public final class JkBuildParser {
     private static Workspace parseWorkspace(TomlTable root) {
         TomlTable workspace = root.getTable("workspace");
         if (workspace == null) return null;
+        // `modules` is the documented key; `members` is an undocumented synonym kept
+        // for back-compat. When both are present, members are appended after modules.
+        List<String> modules = optionalStringList(workspace, "modules", "workspace.modules");
         List<String> members = optionalStringList(workspace, "members", "workspace.members");
+        List<String> all = members.isEmpty() ? modules
+                : java.util.stream.Stream.concat(modules.stream(), members.stream()).toList();
         Map<String, WorkspaceDependency> wsDeps = parseWorkspaceDependencies(workspace);
-        return new Workspace(members, wsDeps);
+        return new Workspace(all, wsDeps);
     }
 
     private static Map<String, WorkspaceDependency> parseWorkspaceDependencies(TomlTable workspace) {
@@ -940,12 +945,12 @@ public final class JkBuildParser {
     /**
      * Parse the optional top-level {@code [build]} table:
      * <ul>
-     *   <li>{@code order-after} — workspace members (by project name or
+     *   <li>{@code order-after} — workspace modules (by project name or
      *       {@code group:artifact}) that must build before this one, with no
      *       classpath/lockfile edge.</li>
-     *   <li>{@code [build.embed-sha]} — a {@code <resource-basename> = <member>}
+     *   <li>{@code [build.embed-sha]} — a {@code <resource-basename> = <module>}
      *       map; the build writes {@code META-INF/<basename>-sha256.txt} = the
-     *       SHA-256 of {@code <member>}'s output jar.</li>
+     *       SHA-256 of {@code <module>}'s output jar.</li>
      * </ul>
      * Absent table/keys yield {@link JkBuild.Build#EMPTY}.
      */
@@ -967,10 +972,10 @@ public final class JkBuildParser {
         TomlTable embed = build.getTable("embed-sha");
         if (embed != null) {
             for (String key : embed.keySet()) {
-                if (!(embed.get(key) instanceof String member))
+                if (!(embed.get(key) instanceof String module))
                     throw new JkBuildParseException(
-                            "[build.embed-sha]." + key + " must be a string (the workspace member to hash)");
-                embedSha.put(key, member);
+                            "[build.embed-sha]." + key + " must be a string (the workspace module to hash)");
+                embedSha.put(key, module);
             }
         }
         List<String> testWorkerJars = new ArrayList<>();

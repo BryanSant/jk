@@ -337,7 +337,7 @@ public final class GradleImporter {
                 if (project.find()) {
                     String path = firstNonNull(project.group(1), project.group(2));
                     report.warning("Project dependency `" + path + "` on configuration `" + configuration
-                            + "` was not mapped. Convert via a jk workspace member reference once you import the sibling module.");
+                            + "` was not mapped. Convert via a jk workspace module reference once you import the sibling module.");
                     continue;
                 }
                 Matcher kotlinShortcut = Pattern.compile("kotlin\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);

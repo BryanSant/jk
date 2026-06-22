@@ -96,11 +96,11 @@ public final class JkBuildRenderer {
         if (!jkBuild.isWorkspaceRoot()) return;
         sb.append('\n');
         sb.append("[workspace]\n");
-        sb.append("members = [");
-        List<String> members = jkBuild.workspace().members();
-        for (int i = 0; i < members.size(); i++) {
+        sb.append("modules = [");
+        List<String> modules = jkBuild.workspace().modules();
+        for (int i = 0; i < modules.size(); i++) {
             if (i > 0) sb.append(", ");
-            sb.append(quote(members.get(i)));
+            sb.append(quote(modules.get(i)));
         }
         sb.append("]\n");
     }

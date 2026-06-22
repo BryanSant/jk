@@ -108,8 +108,8 @@ public final class PomExporter {
         if (!jkBuild.isWorkspaceRoot()) return;
         sb.append('\n');
         sb.append("  <modules>\n");
-        for (String member : jkBuild.workspace().members()) {
-            sb.append("    <module>").append(escape(member)).append("</module>\n");
+        for (String module : jkBuild.workspace().modules()) {
+            sb.append("    <module>").append(escape(module)).append("</module>\n");
         }
         sb.append("  </modules>\n");
     }

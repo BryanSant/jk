@@ -41,7 +41,7 @@ import java.util.function.Function;
  * <p>Stored as TOML ({@code <cache>/timings.toml}, an array of {@code [[timing]]}
  * tables) — jk bundles a TOML parser and hand-writes TOML for the lockfile, so this
  * adds no new dependency. Reads (memoized per cache root) happen at build start; the
- * single {@link #record} at build end does a load-update-write, so concurrent member
+ * single {@link #record} at build end does a load-update-write, so concurrent module
  * builds never race a write.
  */
 public final class PhaseTimings {

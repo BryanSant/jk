@@ -22,7 +22,7 @@ class AddCommandTest {
         Files.writeString(file, content, StandardCharsets.UTF_8);
     }
 
-    private static String member(String artifact, String version) {
+    private static String module(String artifact, String version) {
         return """
                 [project]
                 group    = "dev.jkbuild"
@@ -32,7 +32,7 @@ class AddCommandTest {
     }
 
     @Test
-    void add_path_adds_dep_edge_and_registers_member(@TempDir Path tmp) throws IOException {
+    void add_path_adds_dep_edge_and_registers_module(@TempDir Path tmp) throws IOException {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
@@ -40,10 +40,10 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["app"]
+                modules = ["app"]
                 """);
-        write(tmp.resolve("app/jk.toml"), member("app", "0.1.0"));
-        write(tmp.resolve("libb/jk.toml"), member("libb", "0.2.0"));
+        write(tmp.resolve("app/jk.toml"), module("app", "0.1.0"));
+        write(tmp.resolve("libb/jk.toml"), module("libb", "0.2.0"));
 
         int exit = Jk.execute("add", "../libb", "-C", tmp.resolve("app").toString());
         assertThat(exit).isEqualTo(0);
@@ -56,11 +56,11 @@ class AddCommandTest {
 
         // libb is now registered in the workspace root.
         JkBuild root = JkBuildParser.parse(tmp.resolve("jk.toml"));
-        assertThat(root.workspace().members()).containsExactly("app", "libb");
+        assertThat(root.workspace().modules()).containsExactly("app", "libb");
     }
 
     @Test
-    void add_colon_prefixed_name_is_a_local_member(@TempDir Path tmp) throws IOException {
+    void add_colon_prefixed_name_is_a_local_module(@TempDir Path tmp) throws IOException {
         // `:jackson` — explicit local marker, no path separator.
         write(tmp.resolve("jk.toml"), """
                 [project]
@@ -69,20 +69,20 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["core"]
+                modules = ["core"]
                 """);
-        write(tmp.resolve("jackson/jk.toml"), member("jackson", "1.0.0"));
+        write(tmp.resolve("jackson/jk.toml"), module("jackson", "1.0.0"));
 
         int exit = Jk.execute("add", ":jackson", "-C", tmp.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(Files.readString(tmp.resolve("jk.toml")))
                 .contains("jackson = { group = \"dev.jkbuild\", version = \"=1.0.0\" }");
-        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().members())
+        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().modules())
                 .containsExactly("core", "jackson");
     }
 
     @Test
-    void add_trailing_slash_is_a_local_member(@TempDir Path tmp) throws IOException {
+    void add_trailing_slash_is_a_local_module(@TempDir Path tmp) throws IOException {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
@@ -90,18 +90,18 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["core"]
+                modules = ["core"]
                 """);
-        write(tmp.resolve("jackson/jk.toml"), member("jackson", "2.0.0"));
+        write(tmp.resolve("jackson/jk.toml"), module("jackson", "2.0.0"));
 
         int exit = Jk.execute("add", "jackson/", "-C", tmp.toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().members())
+        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().modules())
                 .containsExactly("core", "jackson");
     }
 
     @Test
-    void add_backslash_path_within_workspace_is_a_local_member(@TempDir Path tmp) throws IOException {
+    void add_backslash_path_within_workspace_is_a_local_module(@TempDir Path tmp) throws IOException {
         write(tmp.resolve("jk.toml"), """
                 [project]
                 group    = "dev.jkbuild"
@@ -109,17 +109,17 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["app"]
+                modules = ["app"]
                 """);
-        write(tmp.resolve("app/jk.toml"), member("app", "0.1.0"));
-        write(tmp.resolve("libb/jk.toml"), member("libb", "0.2.0"));
+        write(tmp.resolve("app/jk.toml"), module("app", "0.1.0"));
+        write(tmp.resolve("libb/jk.toml"), module("libb", "0.2.0"));
 
-        // Windows-style separators, resolved relative to the member dir.
+        // Windows-style separators, resolved relative to the module dir.
         int exit = Jk.execute("add", "..\\libb", "-C", tmp.resolve("app").toString());
         assertThat(exit).isEqualTo(0);
         assertThat(Files.readString(tmp.resolve("app/jk.toml")))
                 .contains("libb = { group = \"dev.jkbuild\", version = \"=0.2.0\" }");
-        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().members())
+        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().modules())
                 .containsExactly("app", "libb");
     }
 
@@ -135,13 +135,13 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = []
+                modules = []
                 """);
-        write(tmp.resolve("jackson/jk.toml"), member("jackson", "1.0.0"));
+        write(tmp.resolve("jackson/jk.toml"), module("jackson", "1.0.0"));
 
         int exit = Jk.execute("add", "jackson", "-C", tmp.toString());
         assertThat(exit).isEqualTo(64); // EX_USAGE — library resolution, not a path
-        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().members()).isEmpty();
+        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().modules()).isEmpty();
     }
 
     @Test
@@ -156,7 +156,7 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = []
+                modules = []
                 """);
 
         int exit = Jk.execute("add", "jackson3-core", "-C", tmp.toString());
@@ -179,7 +179,7 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = []
+                modules = []
                 """);
 
         int exit = Jk.execute("add", "jackson3-core@3.1.0", "-C", tmp.toString());
@@ -198,7 +198,7 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = []
+                modules = []
                 """);
 
         int exit = Jk.execute("add", "jackson3-core@latest", "-C", tmp.toString());
@@ -216,7 +216,7 @@ class AddCommandTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["app"]
+                modules = ["app"]
                 """);
 
         int exit = Jk.execute("add", "com.foo:bar:1.2.3", "-C", tmp.toString());
@@ -224,8 +224,8 @@ class AddCommandTest {
 
         String toml = Files.readString(tmp.resolve("jk.toml"));
         assertThat(toml).contains("bar = { group = \"com.foo\", version = \"=1.2.3\" }");
-        // Coord add must not touch the members list.
+        // Coord add must not touch the modules list.
         JkBuild root = JkBuildParser.parse(tmp.resolve("jk.toml"));
-        assertThat(root.workspace().members()).containsExactly("app");
+        assertThat(root.workspace().modules()).containsExactly("app");
     }
 }

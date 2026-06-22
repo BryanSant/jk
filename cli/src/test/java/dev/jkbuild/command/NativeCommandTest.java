@@ -11,7 +11,7 @@ import java.nio.file.Path;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Native builds are opt-in: {@code jk native} only builds members that set
+ * Native builds are opt-in: {@code jk native} only builds modules that set
  * {@code native = true}. A project without it is refused up front (before any
  * build), so we can assert the guard without needing GraalVM in tests.
  */

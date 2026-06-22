@@ -180,8 +180,8 @@ public final class InProcessJavac {
         }
 
         @Override public Iterable<? extends javax.annotation.processing.Completion> getCompletions(
-                Element element, AnnotationMirror annotation, ExecutableElement member, String userText) {
-            return delegate.getCompletions(element, annotation, member, userText);
+                Element element, AnnotationMirror annotation, ExecutableElement module, String userText) {
+            return delegate.getCompletions(element, annotation, module, userText);
         }
     }
 

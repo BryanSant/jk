@@ -38,7 +38,7 @@ public final class ExportGradleCommand implements CliCommand {
         if (loaded == null) return 66;
 
         GradleExporter.Result result = GradleExporter.export(
-                loaded.root(), loaded.membersByRelPath(), loaded.layoutByRelPath(), loaded.locked());
+                loaded.root(), loaded.modulesByRelPath(), loaded.layoutByRelPath(), loaded.locked());
 
         // Pre-flight overwrite guard across every file we'd write.
         Path settings = loaded.rootDir().resolve("settings.gradle.kts");

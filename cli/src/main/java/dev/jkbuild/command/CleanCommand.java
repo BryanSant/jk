@@ -30,9 +30,9 @@ import java.util.stream.Stream;
 
 /**
  * {@code jk clean} — delete generated build outputs for the workspace root
- * and every declared member.
+ * and every declared module.
  *
- * <p>Each member owns its own {@code target/} directory (final artifacts +
+ * <p>Each module owns its own {@code target/} directory (final artifacts +
  * build intermediates). By default {@code jk clean} removes the full
  * {@code target/} tree for every project directory. With
  * {@code --keep-artifacts}, only {@code target/build/} (compiler outputs,
@@ -131,9 +131,9 @@ public final class CleanCommand implements CliCommand {
     }
 
     /**
-     * Returns the workspace root plus every declared member directory.
+     * Returns the workspace root plus every declared module directory.
      * Falls back to just {@code [workspaceRoot]} when parsing fails or
-     * there are no members (single-project).
+     * there are no modules (single-project).
      */
     private static List<Path> collectProjectDirs(Path workspaceRoot) {
         List<Path> dirs = new ArrayList<>();
@@ -143,9 +143,9 @@ public final class CleanCommand implements CliCommand {
         try {
             JkBuild root = JkBuildParser.parse(rootToml);
             if (root.isWorkspaceRoot()) {
-                for (String member : root.workspace().members()) {
-                    Path memberDir = workspaceRoot.resolve(member);
-                    if (Files.isDirectory(memberDir)) dirs.add(memberDir);
+                for (String module : root.workspace().modules()) {
+                    Path moduleDir = workspaceRoot.resolve(module);
+                    if (Files.isDirectory(moduleDir)) dirs.add(moduleDir);
                 }
             }
         } catch (IOException | RuntimeException ignored) {}

@@ -20,7 +20,7 @@ import java.util.Map;
  * {@code jk export maven} — translate {@code jk.toml} (+ {@code jk.lock}) into a
  * runnable Maven build: a {@code pom.xml} for a single project, or a
  * {@code <packaging>pom</packaging>} reactor root plus a child {@code pom.xml}
- * per workspace member. JDK toolchains map to {@code maven.compiler.release} +
+ * per workspace module. JDK toolchains map to {@code maven.compiler.release} +
  * the foojay-backed {@code toolchains-maven-plugin}.
  */
 public final class ExportMavenCommand implements CliCommand {
@@ -41,11 +41,11 @@ public final class ExportMavenCommand implements CliCommand {
         ExportSupport.Loaded loaded = ExportSupport.load(global.workingDir(), "jk export maven");
         if (loaded == null) return 66;
 
-        // Pre-flight overwrite guard: root + every member pom.
+        // Pre-flight overwrite guard: root + every module pom.
         Path rootPom = loaded.rootDir().resolve("pom.xml");
         if (!ExportSupport.canWrite(rootPom, force, "jk export maven")) return 73;
-        for (Path memberDir : loaded.members().keySet()) {
-            if (!ExportSupport.canWrite(memberDir.resolve("pom.xml"), force, "jk export maven")) return 73;
+        for (Path moduleDir : loaded.modules().keySet()) {
+            if (!ExportSupport.canWrite(moduleDir.resolve("pom.xml"), force, "jk export maven")) return 73;
         }
 
         ImportReport.Builder combined = ImportReport.builder();
@@ -56,11 +56,11 @@ public final class ExportMavenCommand implements CliCommand {
         ExportSupport.wrote(rootPom);
         merge(combined, rootResult.report());
 
-        for (Map.Entry<Path, JkBuild> e : loaded.members().entrySet()) {
-            Map<String, String> memberLocked = ExportSupport.lockedVersions(e.getKey());
+        for (Map.Entry<Path, JkBuild> e : loaded.modules().entrySet()) {
+            Map<String, String> moduleLocked = ExportSupport.lockedVersions(e.getKey());
             PomExporter.Result r = PomExporter.export(e.getValue(),
                     ExportSupport.resolveLayout(e.getKey(), e.getValue()),
-                    memberLocked.isEmpty() ? loaded.locked() : memberLocked);
+                    moduleLocked.isEmpty() ? loaded.locked() : moduleLocked);
             Path pom = e.getKey().resolve("pom.xml");
             Files.writeString(pom, r.xml(), StandardCharsets.UTF_8);
             ExportSupport.wrote(pom);

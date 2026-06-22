@@ -110,7 +110,7 @@ class JkBuildParserTest {
                 """);
         assertThat(parsed.build().testWorkerJars())
                 .containsExactly("publisher", "compat-bridge");
-        // test-worker-jars members must build first → they're order-after prerequisites
+        // test-worker-jars modules must build first → they're order-after prerequisites
         assertThat(parsed.build().allOrderAfter())
                 .contains("publisher", "compat-bridge");
     }
@@ -573,7 +573,7 @@ class JkBuildParserTest {
     void parses_workspace_dependencies_block() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [workspace]
-                members = ["a", "b"]
+                modules = ["a", "b"]
 
                 [workspace.dependencies]
                 junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version = "6.1.0" }
@@ -591,7 +591,7 @@ class JkBuildParserTest {
     void workspace_dependencies_artifact_defaults_to_key() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [workspace]
-                members = ["a"]
+                modules = ["a"]
 
                 [workspace.dependencies]
                 picocli = { group = "info.picocli", version = "4.7.7" }
@@ -606,7 +606,7 @@ class JkBuildParserTest {
         // entry materializes that entry's coord directly during parse.
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [workspace]
-                members = []
+                modules = []
 
                 [workspace.dependencies]
                 junit-jupiter = { group = "org.junit.jupiter", name = "junit-jupiter", version = "6.1.0" }
@@ -771,10 +771,10 @@ class JkBuildParserTest {
     void parses_workspace_block() {
         JkBuild parsed = JkBuildParser.parse(PROJECT + """
                 [workspace]
-                members = ["core", "io"]
+                modules = ["core", "io"]
                 """);
         assertThat(parsed.isWorkspaceRoot()).isTrue();
-        assertThat(parsed.workspace().members()).containsExactly("core", "io");
+        assertThat(parsed.workspace().modules()).containsExactly("core", "io");
         assertThat(parsed.workspace().dependencies()).isEmpty();
     }
 

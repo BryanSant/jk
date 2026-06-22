@@ -60,8 +60,8 @@ public final class NewScaffolder {
 
     /**
      * Scaffold the project tree. {@code standalone} is false for a workspace
-     * member, whose {@code .gitignore} is owned by the workspace root and so is
-     * skipped here (Cargo/uv: members never carry their own gitignore).
+     * module, whose {@code .gitignore} is owned by the workspace root and so is
+     * skipped here (Cargo/uv: modules never carry their own gitignore).
      *
      * <p>No {@code jk.lock} is written — it's generated on the first build or
      * run, so a freshly-scaffolded project carries only its manifest + sources.
@@ -74,7 +74,7 @@ public final class NewScaffolder {
         Files.writeString(buildFile, NewJkBuildRenderer.render(inputs), StandardCharsets.UTF_8);
 
         if (standalone) {
-            writeGitignore(dir);   // members inherit the workspace root's .gitignore
+            writeGitignore(dir);   // modules inherit the workspace root's .gitignore
         }
 
         createSourceTree(inputs);

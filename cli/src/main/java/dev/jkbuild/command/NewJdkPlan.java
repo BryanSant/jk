@@ -71,13 +71,13 @@ final class NewJdkPlan {
 
     /**
      * Whether the wizard must prompt for a JDK. We only ask when the user hasn't
-     * pinned one another way ({@code member} inherits the parent; {@code
+     * pinned one another way ({@code module} inherits the parent; {@code
      * hasDefault} uses the global default) <em>and</em> there's a real choice —
      * more than one eligible installed JDK for the chosen Java level.
      */
-    static boolean shouldPrompt(boolean member, boolean hasDefault,
+    static boolean shouldPrompt(boolean module, boolean hasDefault,
                                 List<NewJdkCandidate> candidates, int floor) {
-        if (member || hasDefault) return false;
+        if (module || hasDefault) return false;
         return eligibleInstalled(candidates, floor).size() > 1;
     }
 

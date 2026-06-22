@@ -21,7 +21,7 @@ class SelfHostingTomlTest {
     /**
      * Walk up from the test class's own location until we find a
      * {@code jk.toml} whose {@code [workspace]} table claims this
-     * directory as a member. That root is the repo. This is more robust
+     * directory as a module. That root is the repo. This is more robust
      * than relying on the JVM's cwd, which differs between the Gradle
      * test launcher (per-module cwd) and a forked test JVM under
      * {@code jk test} (typically inherits the parent process's cwd).
@@ -61,18 +61,18 @@ class SelfHostingTomlTest {
         assertThat(root.project().group()).isEqualTo("dev.jkbuild");
         assertThat(root.project().name()).isEqualTo("jk");
         assertThat(root.isWorkspaceRoot()).isTrue();
-        assertThat(root.workspace().members()).containsExactly(
+        assertThat(root.workspace().modules()).containsExactly(
                 "kernel/model", "plugin-api", "kernel/core", "kernel/io",
                 "kernel/resolver", "kernel/toolchain", "kernel/engine", "cli");
     }
 
     @Test
-    void every_workspace_member_has_a_parseable_jk_toml() throws Exception {
+    void every_workspace_module_has_a_parseable_jk_toml() throws Exception {
         JkBuild root = JkBuildParser.parse(REPO.resolve("jk.toml"));
-        for (String member : root.workspace().members()) {
-            Path memberManifest = REPO.resolve(member).resolve("jk.toml");
-            assertThat(memberManifest).as("missing " + memberManifest).exists();
-            JkBuild parsed = JkBuildParser.parse(memberManifest);
+        for (String module : root.workspace().modules()) {
+            Path moduleManifest = REPO.resolve(module).resolve("jk.toml");
+            assertThat(moduleManifest).as("missing " + moduleManifest).exists();
+            JkBuild parsed = JkBuildParser.parse(moduleManifest);
             assertThat(parsed.project().group()).isEqualTo("dev.jkbuild");
             assertThat(parsed.project().name()).startsWith("jk-");
             assertThat(parsed.project().jdk()).isEqualTo("25");
@@ -86,7 +86,7 @@ class SelfHostingTomlTest {
         assertThat(cli.project().isRunnable()).isTrue();
 
         // The project's jk.toml files declare sibling coordinates
-        // explicitly (no `.workspace = true` shorthand) so member builds
+        // explicitly (no `.workspace = true` shorthand) so module builds
         // can resolve lock-time + classpath without needing the parser
         // to apply WorkspaceMerge.
         List<String> mainModules = cli.dependencies().of(Scope.MAIN).stream()
@@ -96,10 +96,10 @@ class SelfHostingTomlTest {
                 "dev.jkbuild:jk-engine");
 
         // Confirm the workspace-root merge still rewrites/dedupes the
-        // member coords cleanly when invoked from the root.
+        // module coords cleanly when invoked from the root.
         JkBuild root = JkBuildParser.parse(REPO.resolve("jk.toml"));
         JkBuild merged = WorkspaceMerge.merge(
-                root, WorkspaceLoader.loadMembers(REPO, root).values());
+                root, WorkspaceLoader.loadModules(REPO, root).values());
         List<String> mergedRootMain = merged.dependencies().of(Scope.MAIN).stream()
                 .map(d -> d.module()).toList();
         // jk-engine is a workspace-internal dep and is filtered by WorkspaceMerge;

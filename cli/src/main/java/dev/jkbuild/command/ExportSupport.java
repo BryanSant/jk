@@ -26,27 +26,27 @@ final class ExportSupport {
      * A loaded project (or workspace root) ready to export.
      *
      * @param locked merged {@code group:artifact}→version across the root and
-     *               every member lock — unified workspace resolution means one
+     *               every module lock — unified workspace resolution means one
      *               version per module, so a flat map is faithful.
      */
-    record Loaded(Path rootDir, JkBuild root, Map<Path, JkBuild> members, Map<String, String> locked) {
+    record Loaded(Path rootDir, JkBuild root, Map<Path, JkBuild> modules, Map<String, String> locked) {
         boolean isWorkspace() { return root.isWorkspaceRoot(); }
 
-        /** Members keyed by their root-relative directory (for Gradle {@code include(...)}). */
-        Map<String, JkBuild> membersByRelPath() {
+        /** Modules keyed by their root-relative directory (for Gradle {@code include(...)}). */
+        Map<String, JkBuild> modulesByRelPath() {
             Map<String, JkBuild> out = new LinkedHashMap<>();
-            for (Map.Entry<Path, JkBuild> e : members.entrySet()) {
+            for (Map.Entry<Path, JkBuild> e : modules.entrySet()) {
                 String rel = rootDir.relativize(e.getKey()).toString().replace('\\', '/');
                 if (!rel.isBlank()) out.put(rel, e.getValue());
             }
             return out;
         }
 
-        /** Concrete (AUTO-resolved) source layout per project, keyed like {@link #membersByRelPath()} (root = ""). */
+        /** Concrete (AUTO-resolved) source layout per project, keyed like {@link #modulesByRelPath()} (root = ""). */
         Map<String, JkBuild.Layout> layoutByRelPath() {
             Map<String, JkBuild.Layout> out = new LinkedHashMap<>();
             out.put("", resolveLayout(rootDir, root));
-            for (Map.Entry<Path, JkBuild> e : members.entrySet()) {
+            for (Map.Entry<Path, JkBuild> e : modules.entrySet()) {
                 String rel = rootDir.relativize(e.getKey()).toString().replace('\\', '/');
                 if (!rel.isBlank()) out.put(rel, resolveLayout(e.getKey(), e.getValue()));
             }
@@ -62,7 +62,7 @@ final class ExportSupport {
 
     /**
      * Parse the project at {@code startDir}; if it's a workspace root, also load
-     * its members. Versions come from {@code jk.lock} (root + each member) when
+     * its modules. Versions come from {@code jk.lock} (root + each module) when
      * present. Returns {@code null} after printing an error when there's no
      * {@code jk.toml}.
      */
@@ -79,14 +79,14 @@ final class ExportSupport {
             System.err.println(cmd + ": " + e.getMessage());
             return null;
         }
-        Map<Path, JkBuild> members = root.isWorkspaceRoot()
-                ? WorkspaceLoader.loadMembers(startDir, root) : Map.of();
+        Map<Path, JkBuild> modules = root.isWorkspaceRoot()
+                ? WorkspaceLoader.loadModules(startDir, root) : Map.of();
 
         Map<String, String> locked = new LinkedHashMap<>(lockedVersions(startDir));
-        for (Path memberDir : members.keySet()) {
-            lockedVersions(memberDir).forEach(locked::putIfAbsent);
+        for (Path moduleDir : modules.keySet()) {
+            lockedVersions(moduleDir).forEach(locked::putIfAbsent);
         }
-        return new Loaded(startDir, root, members, locked);
+        return new Loaded(startDir, root, modules, locked);
     }
 
     /** {@code group:artifact} → exact resolved version from {@code jk.lock}; empty when no lock. */

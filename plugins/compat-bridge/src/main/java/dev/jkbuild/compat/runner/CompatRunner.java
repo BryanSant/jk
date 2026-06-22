@@ -121,13 +121,13 @@ public final class CompatRunner implements Plugin {
         try {
             String filename = source.getFileName().toString().toLowerCase(Locale.ROOT);
             JkBuild root;
-            Map<String, JkBuild> members = new LinkedHashMap<>();
+            Map<String, JkBuild> modules = new LinkedHashMap<>();
             ImportReport importReport;
 
             if (filename.endsWith("pom.xml")) {
                 PomImporter.WorkspaceImportResult result = PomImporter.importWorkspace(source);
                 root = result.root();
-                members.putAll(result.members());
+                modules.putAll(result.modules());
                 importReport = result.report();
             } else if (filename.equals("build.gradle") || filename.equals("build.gradle.kts")) {
                 GradleImporter.Result result = GradleImporter.importFrom(source);
@@ -142,16 +142,16 @@ public final class CompatRunner implements Plugin {
             out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(outPath.toString()) + "}");
 
             Path effectiveBaseDir = baseDir != null ? baseDir : source.getParent();
-            for (Map.Entry<String, JkBuild> e : members.entrySet()) {
-                Path memberJkBuild = effectiveBaseDir.resolve(e.getKey()).resolve("jk.toml");
-                if (Files.exists(memberJkBuild) && !force) {
+            for (Map.Entry<String, JkBuild> e : modules.entrySet()) {
+                Path moduleJkBuild = effectiveBaseDir.resolve(e.getKey()).resolve("jk.toml");
+                if (Files.exists(moduleJkBuild) && !force) {
                     out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
-                            + memberJkBuild + " — pass --force\"}");
+                            + moduleJkBuild + " — pass --force\"}");
                     return 73;
                 }
-                Files.writeString(memberJkBuild, JkBuildRenderer.render(e.getValue()),
+                Files.writeString(moduleJkBuild, JkBuildRenderer.render(e.getValue()),
                         StandardCharsets.UTF_8);
-                out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(memberJkBuild.toString()) + "}");
+                out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(moduleJkBuild.toString()) + "}");
             }
 
             // Write import report.

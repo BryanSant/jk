@@ -37,7 +37,7 @@ import java.util.stream.Collectors;
  *
  * <p>Independent units build <em>in parallel</em> (a topo level-scheduled driver):
  * dependency units are compile-only, so parallelism never runs tests concurrently
- * (tests stay serial — that's a workspace-member concern). The CPU work inside
+ * (tests stay serial — that's a workspace-module concern). The CPU work inside
  * each unit shares the bounded {@link JkThreads#cpu()} pool, so node parallelism
  * doesn't oversubscribe. Each unit builds silently and reports a one-line result
  * (concurrent live progress bars can't share one terminal region).

@@ -23,7 +23,7 @@ junit-jupiter           = { group = "org.junit.jupiter",  name = "junit-jupiter"
 junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform-launcher", version = "6.1.0" }
 
 # Self-host: engine's tests fork jk's own worker jars. These workers are
-# Gradle-only (no jk.toml), so jk build can't build them as members — it reuses
+# Gradle-only (no jk.toml), so jk build can't build them as modules — it reuses
 # the RUNNING jk's worker identity instead:
 #  - test-worker-jars: GitSource{Resolution,Materializer}Test fork the git-client
 #    worker, injected as -Djk.git-client.worker.jar (located from the running jk's

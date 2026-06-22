@@ -39,7 +39,7 @@ import java.util.Optional;
  *
  * <p>Must run <em>before</em> the progress UI ({@code CommandManager}) opens —
  * prompting/installing inside a captured-output region corrupts the display.
- * Results are memoized by spec so a workspace with many native members fetches
+ * Results are memoized by spec so a workspace with many native modules fetches
  * the catalog and installs at most once per distinct spec.
  */
 public final class GraalResolver {

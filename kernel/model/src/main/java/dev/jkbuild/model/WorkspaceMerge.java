@@ -13,7 +13,7 @@ import java.util.Set;
 
 /**
  * Builds a synthetic {@link JkBuild} that combines a workspace root with
- * its members so the existing {@code LockOrchestrator} can resolve the
+ * its modules so the existing {@code LockOrchestrator} can resolve the
  * whole workspace in a single pass.
  *
  * <p>In addition to scope-aggregated deduping (root wins, then declaration
@@ -36,7 +36,7 @@ public final class WorkspaceMerge {
     private WorkspaceMerge() {}
 
     /**
-     * Apply workspace context to a single member's manifest. Resolves any
+     * Apply workspace context to a single module's manifest. Resolves any
      * {@code workspace:*} placeholders against the workspace siblings and
      * the root's {@code [workspace.dependencies]}, then filters out any
      * dep whose resolved coordinate matches a workspace sibling — those
@@ -44,32 +44,32 @@ public final class WorkspaceMerge {
      * {@link dev.jkbuild.config.WorkspaceClasspath} at compile time from
      * the workspace's shared {@code target/} directory.
      *
-     * <p>Returns a JkBuild shaped like {@code member} (same project,
+     * <p>Returns a JkBuild shaped like {@code module} (same project,
      * repositories, profiles, features) but with the dep list trimmed to
      * only external Maven coords. Lock orchestration sees a clean,
      * resolvable set; classpath construction (which keeps the original
-     * parsed member) still sees the sibling refs.
+     * parsed module) still sees the sibling refs.
      */
-    public static JkBuild applyToMember(
-            JkBuild root, JkBuild member, Collection<JkBuild> allMembers) {
-        if (allMembers.isEmpty()) return member;
+    public static JkBuild applyToModule(
+            JkBuild root, JkBuild module, Collection<JkBuild> allModules) {
+        if (allModules.isEmpty()) return module;
 
         Map<String, JkBuild> siblingByArtifact = new LinkedHashMap<>();
         Set<String> internal = new HashSet<>();
-        for (JkBuild m : allMembers) {
+        for (JkBuild m : allModules) {
             siblingByArtifact.put(m.project().name(), m);
             internal.add(m.project().group() + ":" + m.project().name());
         }
         Map<String, Workspace.WorkspaceDependency> wsDeps = root.workspace() != null
                 ? root.workspace().dependencies() : Map.of();
 
-        // First pass: resolve this member's own deps, strip sibling refs, and
+        // First pass: resolve this module's own deps, strip sibling refs, and
         // track which siblings are direct dependencies (for export propagation).
         Set<String> dependedSiblingNames = new LinkedHashSet<>();
         Map<Scope, List<Dependency>> resolvedByScope = new EnumMap<>(Scope.class);
         for (Scope scope : Scope.values()) {
             List<Dependency> resolved = new ArrayList<>();
-            for (Dependency d : member.dependencies().of(scope)) {
+            for (Dependency d : module.dependencies().of(scope)) {
                 Dependency r = resolve(d, siblingByArtifact, wsDeps);
                 if (internal.contains(r.module())) {
                     dependedSiblingNames.add(r.name());
@@ -80,8 +80,8 @@ public final class WorkspaceMerge {
             if (!resolved.isEmpty()) resolvedByScope.put(scope, resolved);
         }
 
-        // Second pass: pull each direct sibling's export deps into this member's
-        // main scope so they land in this member's lockfile and compile classpath.
+        // Second pass: pull each direct sibling's export deps into this module's
+        // main scope so they land in this module's lockfile and compile classpath.
         for (String siblingName : dependedSiblingNames) {
             JkBuild sibling = siblingByArtifact.get(siblingName);
             if (sibling == null) continue;
@@ -97,26 +97,26 @@ public final class WorkspaceMerge {
         }
 
         return new JkBuild(
-                member.project(),
+                module.project(),
                 new JkBuild.Dependencies(resolvedByScope),
-                member.repositories(),
-                member.profiles(),
-                member.features(),
-                member.workspace(),
-                member.manifest(),
-                member.plugins(),
-                member.nativeConfig());
+                module.repositories(),
+                module.profiles(),
+                module.features(),
+                module.workspace(),
+                module.manifest(),
+                module.plugins(),
+                module.nativeConfig());
     }
 
-    public static JkBuild merge(JkBuild root, Collection<JkBuild> members) {
-        if (members.isEmpty()) return root;
+    public static JkBuild merge(JkBuild root, Collection<JkBuild> modules) {
+        if (modules.isEmpty()) return root;
 
         // Build the sibling lookup: artifact → JkBuild (full manifest).
         Map<String, JkBuild> siblingByArtifact = new LinkedHashMap<>();
         Set<String> internal = new HashSet<>();
-        for (JkBuild member : members) {
-            String coord = member.project().group() + ":" + member.project().name();
-            siblingByArtifact.put(member.project().name(), member);
+        for (JkBuild module : modules) {
+            String coord = module.project().group() + ":" + module.project().name();
+            siblingByArtifact.put(module.project().name(), module);
             internal.add(coord);
         }
 
@@ -132,8 +132,8 @@ public final class WorkspaceMerge {
                 if (internal.contains(resolved.module())) continue;
                 dedup.putIfAbsent(resolved.module(), resolved);
             }
-            for (JkBuild member : members) {
-                for (Dependency d : member.dependencies().of(scope)) {
+            for (JkBuild module : modules) {
+                for (Dependency d : module.dependencies().of(scope)) {
                     Dependency resolved = resolve(d, siblingByArtifact, wsDeps);
                     if (internal.contains(resolved.module())) continue;
                     dedup.putIfAbsent(resolved.module(), resolved);
@@ -166,7 +166,7 @@ public final class WorkspaceMerge {
             Map<String, Workspace.WorkspaceDependency> wsDeps) {
         if (!d.module().startsWith(UNRESOLVED_PREFIX)) return d;
         String name = d.library();
-        // Sibling lookup first. Members typically name siblings as
+        // Sibling lookup first. Modules typically name siblings as
         // jk-core, jk-cli, etc. — the dep handle is expected to match the
         // sibling's name directly.
         JkBuild sibling = siblingByArtifact.get(name);

@@ -21,9 +21,9 @@ import java.util.Optional;
  *       {@code --jdk <vendor>-<major>}. The wizard never emits a vendor.</li>
  *   <li>{@code jdkMajor} — the JDK toolchain feature-release (which JDK runs
  *       the build), parsed from {@code jdk}. Defaults to the parent's for a
- *       member; user-pickable.</li>
+ *       module; user-pickable.</li>
  *   <li>{@code javaRelease} — the {@code java = N} compile target. Usually
- *       equal to {@code jdkMajor}, but a workspace member inherits the parent's
+ *       equal to {@code jdkMajor}, but a workspace module inherits the parent's
  *       release even when it diverges (e.g. {@code jdk = 25}, {@code java = 17}).
  *       Drives the instance-{@code main} syntax decision.</li>
  *   <li>{@code layout} — "simple" for flat ./src + ./test layout, "traditional" for Maven layout,

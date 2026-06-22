@@ -19,8 +19,8 @@ import java.util.List;
  * replaced by a {@code ✓}/{@code ✗} result line built from the
  * {@link ConsoleSpec} mappers.
  *
- * <p>All phases of this goal are attributed to a single {@code member} (the
- * project's {@code group:artifact}). Workspace aggregation across members feeds
+ * <p>All phases of this goal are attributed to a single {@code module} (the
+ * project's {@code group:artifact}). Workspace aggregation across modules feeds
  * one shared {@link CommandManager} from several goals; that path is built on
  * the same component.
  */
@@ -28,7 +28,7 @@ public final class CommandManagerListener implements GoalListener {
 
     private final PrintStream out;
     private final ConsoleSpec spec;
-    private final String member;
+    private final String module;
     private final List<Phase> phases;
     private final boolean animate;
 
@@ -36,10 +36,10 @@ public final class CommandManagerListener implements GoalListener {
     private CommandManager.OutputScope capture;
 
     public CommandManagerListener(PrintStream out, ConsoleSpec spec,
-                                  String member, List<Phase> phases, boolean animate) {
+                                  String module, List<Phase> phases, boolean animate) {
         this.out = out;
         this.spec = spec;
-        this.member = member;
+        this.module = module;
         this.phases = phases;
         this.animate = animate;
     }
@@ -47,9 +47,9 @@ public final class CommandManagerListener implements GoalListener {
     @Override
     public void goalStart(GoalView view) {
         cm = CommandManager.goal(out, spec.verb(), animate);
-        cm.target(member);
+        cm.target(module);
         for (Phase p : phases) {
-            cm.addPhaseLabeled(member, p.name(), display(p));
+            cm.addPhaseLabeled(module, p.name(), display(p));
         }
         cm.progress(view.numerator(), view.denominator());
         // Route phase/process output above the pinned region for the goal's lifetime.
@@ -58,12 +58,12 @@ public final class CommandManagerListener implements GoalListener {
 
     @Override
     public void phaseStart(String phase, int scope) {
-        cm.phaseRunning(member, phase);
+        cm.phaseRunning(module, phase);
     }
 
     @Override
     public void label(String phase, String label) {
-        cm.phaseMessage(member, phase, label);
+        cm.phaseMessage(module, phase, label);
     }
 
     @Override
@@ -83,7 +83,7 @@ public final class CommandManagerListener implements GoalListener {
 
     @Override
     public void phaseFinish(String phase, PhaseStatus status, Duration duration) {
-        cm.phaseDone(member, phase, status == PhaseStatus.SUCCESS);
+        cm.phaseDone(module, phase, status == PhaseStatus.SUCCESS);
     }
 
     @Override

@@ -131,7 +131,7 @@ class IdeaCommandTest {
     }
 
     @Test
-    void per_module_jdk_when_a_member_differs_from_the_project_default(@TempDir Path tmp)
+    void per_module_jdk_when_a_module_differs_from_the_project_default(@TempDir Path tmp)
             throws IOException {
         Path ws = tmp.resolve("ws");
         Files.createDirectories(ws);
@@ -143,10 +143,10 @@ class IdeaCommandTest {
                 jdk = 25
 
                 [workspace]
-                members = ["a", "b"]
+                modules = ["a", "b"]
                 """);
-        member(ws.resolve("a"), "a", 25);
-        member(ws.resolve("b"), "b", 21);   // differs from the project default (25)
+        module(ws.resolve("a"), "a", 25);
+        module(ws.resolve("b"), "b", 21);   // differs from the project default (25)
 
         Path jdks = tmp.resolve("jdks");
         Files.createDirectories(jdks);
@@ -159,11 +159,11 @@ class IdeaCommandTest {
         int exit = runIdea(ws, jdks, ideConfig, tmp.resolve("cache"));
         assertThat(exit).isEqualTo(0);
 
-        // Default-level member inherits the project SDK.
+        // Default-level module inherits the project SDK.
         assertThat(Files.readString(ws.resolve("a/a.iml")))
                 .contains("<orderEntry type=\"inheritedJdk\" />");
 
-        // #2 — the off-level member gets its own SDK + source language level.
+        // #2 — the off-level module gets its own SDK + source language level.
         String bIml = Files.readString(ws.resolve("b/b.iml"));
         assertThat(bIml)
                 .contains("LANGUAGE_LEVEL=\"JDK_21\"")
@@ -190,9 +190,9 @@ class IdeaCommandTest {
                 jdk = 25
 
                 [workspace]
-                members = ["a", "b"]
+                modules = ["a", "b"]
                 """);
-        member(ws.resolve("a"), "a", 25);
+        module(ws.resolve("a"), "a", 25);
         // b depends on sibling a — and nothing has been built, so a/target/*.jar
         // does not exist. The IDE module edge must still be emitted.
         Files.createDirectories(ws.resolve("b"));
@@ -292,7 +292,7 @@ class IdeaCommandTest {
         assertThat(iml).doesNotContain("org.example:myprocessor:1.0.0");
     }
 
-    private static void member(Path dir, String name, int jdk) throws IOException {
+    private static void module(Path dir, String name, int jdk) throws IOException {
         Files.createDirectories(dir);
         Files.writeString(dir.resolve("jk.toml"), """
                 [project]

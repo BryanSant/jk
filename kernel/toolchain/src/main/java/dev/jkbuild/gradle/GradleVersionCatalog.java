@@ -35,7 +35,7 @@ public final class GradleVersionCatalog {
 
     /** accessor (dot-folded) → {@code group:artifact:version}. */
     private final Map<String, String> coordinates;
-    /** bundle accessor (dot-folded) → member library accessors. */
+    /** bundle accessor (dot-folded) → module library accessors. */
     private final Map<String, List<String>> bundles;
 
     private GradleVersionCatalog(Map<String, String> coordinates, Map<String, List<String>> bundles) {
@@ -99,11 +99,11 @@ public final class GradleVersionCatalog {
             for (String key : bundlesTable.keySet()) {
                 TomlArray arr = bundlesTable.getArray(key);
                 if (arr == null) continue;
-                List<String> members = new ArrayList<>();
+                List<String> modules = new ArrayList<>();
                 for (int i = 0; i < arr.size(); i++) {
-                    if (arr.get(i) instanceof String s) members.add(accessor(s));
+                    if (arr.get(i) instanceof String s) modules.add(accessor(s));
                 }
-                bundles.put(accessor(key), members);
+                bundles.put(accessor(key), modules);
             }
         }
         return new GradleVersionCatalog(coordinates, bundles);
@@ -114,13 +114,13 @@ public final class GradleVersionCatalog {
         return Optional.ofNullable(coordinates.get(accessorPath));
     }
 
-    /** Resolve a bundle accessor (catalog name already stripped) to its member coordinates. */
+    /** Resolve a bundle accessor (catalog name already stripped) to its module coordinates. */
     public Optional<List<String>> resolveBundle(String accessorPath) {
-        List<String> members = bundles.get(accessorPath);
-        if (members == null) return Optional.empty();
+        List<String> modules = bundles.get(accessorPath);
+        if (modules == null) return Optional.empty();
         List<String> coords = new ArrayList<>();
-        for (String member : members) {
-            String coord = coordinates.get(member);
+        for (String module : modules) {
+            String coord = coordinates.get(module);
             if (coord != null) coords.add(coord);
         }
         return Optional.of(coords);

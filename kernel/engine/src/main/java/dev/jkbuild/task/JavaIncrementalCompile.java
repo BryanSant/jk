@@ -255,7 +255,7 @@ public final class JavaIncrementalCompile {
         store(taskId, key, request, out, cas, actionCache, units);
         saveUnion(stateDir, JavaClasspathAbi.union(
                 request.classpath(), cas, cas.root().resolve("cp-abi-snapshots")));
-        // Remember whether this project source-generates (so the next build routes
+        // Remodule whether this project source-generates (so the next build routes
         // through the worker) and whether those processors are isolating.
         boolean sgap = flags.sourceGenAps() || a.hasGenerated() || a.orphans();
         saveApFlags(stateDir, new ApFlags(sgap, !a.orphans() && a.isolatingSafe()));

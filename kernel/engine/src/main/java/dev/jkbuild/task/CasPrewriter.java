@@ -24,7 +24,7 @@ import java.util.stream.Stream;
  * <p>Polls {@code outputDir} on a background thread. When a file's
  * {@code (size, mtime)} matches across two consecutive polls — i.e. it
  * has been stable for at least one poll interval — hash it, hard-link
- * it into the CAS, and remember the {@code (relPath → hex)} mapping.
+ * it into the CAS, and remodule the {@code (relPath → hex)} mapping.
  * By the time the compile finishes, most outputs are already in the
  * CAS and the manifest write just needs to consult the precomputed map.
  *

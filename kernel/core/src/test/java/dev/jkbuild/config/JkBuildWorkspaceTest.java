@@ -23,7 +23,7 @@ class JkBuildWorkspaceTest {
             """;
 
     @Test
-    void parses_workspace_members() {
+    void parses_workspace_modules() {
         JkBuild parsed = JkBuildParser.parse("""
                 [project]
                 group    = "com.example"
@@ -31,12 +31,46 @@ class JkBuildWorkspaceTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["libs/core", "services/api"]
+                modules = ["libs/core", "services/api"]
                 """);
 
         assertThat(parsed.isWorkspaceRoot()).isTrue();
-        assertThat(parsed.workspace().members())
+        assertThat(parsed.workspace().modules())
                 .containsExactly("libs/core", "services/api");
+    }
+
+    @Test
+    void members_is_an_undocumented_synonym_for_modules() {
+        JkBuild parsed = JkBuildParser.parse("""
+                [project]
+                group = "com.example"
+                name = "root"
+                version = "0.1.0"
+
+                [workspace]
+                members = ["libs/core", "services/api"]
+                """);
+
+        assertThat(parsed.workspace().modules())
+                .containsExactly("libs/core", "services/api");
+    }
+
+    @Test
+    void modules_and_members_merge_with_members_appended() {
+        JkBuild parsed = JkBuildParser.parse("""
+                [project]
+                group = "com.example"
+                name = "root"
+                version = "0.1.0"
+
+                [workspace]
+                modules = ["a", "b"]
+                members = ["c", "d"]
+                """);
+
+        // modules first, then members appended — in declaration order within each.
+        assertThat(parsed.workspace().modules())
+                .containsExactly("a", "b", "c", "d");
     }
 
     @Test
@@ -52,21 +86,21 @@ class JkBuildWorkspaceTest {
                 [workspace]
                 """);
         assertThat(parsed.isWorkspaceRoot()).isFalse();
-        assertThat(parsed.workspace().members()).isEmpty();
+        assertThat(parsed.workspace().modules()).isEmpty();
     }
 
     @Test
-    void non_list_members_rejected() {
+    void non_list_modules_rejected() {
         assertThatThrownBy(() -> JkBuildParser.parse(LEAF_PROJECT + """
                 [workspace]
-                members = "libs/core"
+                modules = "libs/core"
                 """))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("list");
     }
 
     @Test
-    void workspace_loader_loads_member_jk_tomls(@TempDir Path tempDir) throws IOException {
+    void workspace_loader_loads_module_jk_tomls(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
@@ -74,12 +108,12 @@ class JkBuildWorkspaceTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["libs/a", "libs/b"]
+                modules = ["libs/a", "libs/b"]
                 """);
         for (String name : new String[]{"libs/a", "libs/b"}) {
-            Path memberDir = tempDir.resolve(name);
-            Files.createDirectories(memberDir);
-            Files.writeString(memberDir.resolve("jk.toml"), """
+            Path moduleDir = tempDir.resolve(name);
+            Files.createDirectories(moduleDir);
+            Files.writeString(moduleDir.resolve("jk.toml"), """
                     [project]
                     group    = "com.example"
                     name     = "%s"
@@ -88,13 +122,13 @@ class JkBuildWorkspaceTest {
         }
 
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        Map<Path, JkBuild> members = WorkspaceLoader.loadMembers(tempDir, root);
-        assertThat(members).hasSize(2);
-        assertThat(members).containsKey(tempDir.resolve("libs/a"));
+        Map<Path, JkBuild> modules = WorkspaceLoader.loadModules(tempDir, root);
+        assertThat(modules).hasSize(2);
+        assertThat(modules).containsKey(tempDir.resolve("libs/a"));
     }
 
     @Test
-    void workspace_loader_reports_missing_member(@TempDir Path tempDir) throws IOException {
+    void workspace_loader_reports_missing_module(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
@@ -102,16 +136,16 @@ class JkBuildWorkspaceTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["libs/missing"]
+                modules = ["libs/missing"]
                 """);
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThatThrownBy(() -> WorkspaceLoader.loadMembers(tempDir, root))
+        assertThatThrownBy(() -> WorkspaceLoader.loadModules(tempDir, root))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("missing jk.toml");
     }
 
     @Test
-    void workspace_loader_rejects_artifact_collision_between_members(@TempDir Path tempDir) throws IOException {
+    void workspace_loader_rejects_artifact_collision_between_modules(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
@@ -119,14 +153,14 @@ class JkBuildWorkspaceTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["libs/a", "libs/b"]
+                modules = ["libs/a", "libs/b"]
                 """);
-        // Two members both call themselves `widget-0.1.0` — they'd race to
+        // Two modules both call themselves `widget-0.1.0` — they'd race to
         // write the same jar under <root>/target/.
         for (String name : new String[]{"libs/a", "libs/b"}) {
-            Path memberDir = tempDir.resolve(name);
-            Files.createDirectories(memberDir);
-            Files.writeString(memberDir.resolve("jk.toml"), """
+            Path moduleDir = tempDir.resolve(name);
+            Files.createDirectories(moduleDir);
+            Files.writeString(moduleDir.resolve("jk.toml"), """
                     [project]
                     group    = "com.example"
                     name     = "widget"
@@ -134,7 +168,7 @@ class JkBuildWorkspaceTest {
                     """);
         }
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThatThrownBy(() -> WorkspaceLoader.loadMembers(tempDir, root))
+        assertThatThrownBy(() -> WorkspaceLoader.loadModules(tempDir, root))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("workspace artifact collision")
                 .hasMessageContaining("widget-0.1.0.jar")
@@ -143,7 +177,7 @@ class JkBuildWorkspaceTest {
     }
 
     @Test
-    void workspace_loader_rejects_collision_between_root_and_member(@TempDir Path tempDir) throws IOException {
+    void workspace_loader_rejects_collision_between_root_and_module(@TempDir Path tempDir) throws IOException {
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
@@ -151,18 +185,18 @@ class JkBuildWorkspaceTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["libs/a"]
+                modules = ["libs/a"]
                 """);
-        Path memberA = tempDir.resolve("libs/a");
-        Files.createDirectories(memberA);
-        Files.writeString(memberA.resolve("jk.toml"), """
+        Path moduleA = tempDir.resolve("libs/a");
+        Files.createDirectories(moduleA);
+        Files.writeString(moduleA.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
                 name     = "widget"
                 version  = "0.1.0"
                 """);
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThatThrownBy(() -> WorkspaceLoader.loadMembers(tempDir, root))
+        assertThatThrownBy(() -> WorkspaceLoader.loadModules(tempDir, root))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("workspace artifact collision")
                 .hasMessageContaining("<workspace root>")
@@ -178,22 +212,22 @@ class JkBuildWorkspaceTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["libs/a"]
+                modules = ["libs/a"]
                 """);
-        Path memberA = tempDir.resolve("libs/a");
-        Files.createDirectories(memberA);
-        // Member tries to declare its own [workspace] — should be rejected.
-        Files.writeString(memberA.resolve("jk.toml"), """
+        Path moduleA = tempDir.resolve("libs/a");
+        Files.createDirectories(moduleA);
+        // Module tries to declare its own [workspace] — should be rejected.
+        Files.writeString(moduleA.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
                 name     = "a"
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["sub"]
+                modules = ["sub"]
                 """);
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThatThrownBy(() -> WorkspaceLoader.loadMembers(tempDir, root))
+        assertThatThrownBy(() -> WorkspaceLoader.loadModules(tempDir, root))
                 .isInstanceOf(JkBuildParseException.class)
                 .hasMessageContaining("workspaces cannot be nested")
                 .hasMessageContaining("libs/a");
@@ -208,7 +242,7 @@ class JkBuildWorkspaceTest {
                 version  = "0.1.0"
 
                 [workspace]
-                members = ["libs/a", "libs/b"]
+                modules = ["libs/a", "libs/b"]
                 """);
         // Same artifact, different versions → no collision (jar filenames differ).
         Path a = tempDir.resolve("libs/a");
@@ -228,7 +262,7 @@ class JkBuildWorkspaceTest {
                 version  = "0.2.0"
                 """);
         JkBuild root = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        Map<Path, JkBuild> members = WorkspaceLoader.loadMembers(tempDir, root);
-        assertThat(members).hasSize(2);
+        Map<Path, JkBuild> modules = WorkspaceLoader.loadModules(tempDir, root);
+        assertThat(modules).hasSize(2);
     }
 }

@@ -161,20 +161,20 @@ restored build is bit-for-bit identical to a fresh one.
 
 ### 6. Workspaces & monorepos
 
-A workspace is a root `jk.toml` with a `[workspace]` table listing members.
+A workspace is a root `jk.toml` with a `[workspace]` table listing modules.
 There is **one `jk.lock` at the root**, and `jk lock` / `jk build` from any
-member resolve the whole workspace — Cargo/uv semantics, not Maven's
+module resolve the whole workspace — Cargo/uv semantics, not Maven's
 per-module model.
 
 ```bash
-jk new libs/widget        # scaffold a member; auto-registers it in [workspace]
+jk new libs/widget        # scaffold a module; auto-registers it in [workspace]
 cd libs/widget-core && jk init
-jk add ../widget          # depend on a local member by path
-jk add :widget            # …or by name (':' marks a local member)
+jk add ../widget          # depend on a local module by path
+jk add :widget            # …or by name (':' marks a local module)
 ```
 
-The project commands register members for you, so you never hand-edit
-`[workspace].members`. A bare name with no `:` and no path separator
+The project commands register modules for you, so you never hand-edit
+`[workspace].modules`. A bare name with no `:` and no path separator
 (`jk add jackson`) is treated as a catalog name / Maven coordinate, not a path.
 
 ### 7. Supply chain, built in — not bolted on

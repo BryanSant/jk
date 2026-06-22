@@ -20,7 +20,7 @@ class BuildLayoutTest {
         BuildLayout layout = BuildLayout.of(dir, project("widget", "0.1.0"));
 
         assertThat(layout.workspaceRoot()).isEqualTo(dir);
-        assertThat(layout.memberRoot()).isEqualTo(dir);
+        assertThat(layout.moduleRoot()).isEqualTo(dir);
         assertThat(layout.buildDir()).isEqualTo(dir.resolve("target/build"));
         assertThat(layout.targetDir()).isEqualTo(dir.resolve("target"));
     }
@@ -69,17 +69,17 @@ class BuildLayoutTest {
     }
 
     @Test
-    void workspace_root_can_differ_from_member_root(@TempDir Path workspace) {
-        Path member = workspace.resolve("core");
+    void workspace_root_can_differ_from_module_root(@TempDir Path workspace) {
+        Path module = workspace.resolve("core");
         JkBuild proj = project("jk-core", "0.7.0");
-        BuildLayout layout = BuildLayout.of(workspace, member, proj);
+        BuildLayout layout = BuildLayout.of(workspace, module, proj);
 
-        // Intermediates stay with the member (under member/target/build/).
+        // Intermediates stay with the module (under module/target/build/).
         assertThat(layout.classesDir())
-                .isEqualTo(member.resolve("target/build/classes/main"));
-        // Final artifacts also land under the member's own target/.
-        assertThat(layout.mainJar()).isEqualTo(member.resolve("target/jk-core-0.7.0.jar"));
-        assertThat(layout.nativeBinary()).isEqualTo(member.resolve("target/jk-core"));
+                .isEqualTo(module.resolve("target/build/classes/main"));
+        // Final artifacts also land under the module's own target/.
+        assertThat(layout.mainJar()).isEqualTo(module.resolve("target/jk-core-0.7.0.jar"));
+        assertThat(layout.nativeBinary()).isEqualTo(module.resolve("target/jk-core"));
     }
 
     @Test
@@ -91,28 +91,28 @@ class BuildLayoutTest {
                 version  = "1.0.0"
 
                 [workspace]
-                members = ["core"]
+                modules = ["core"]
                 """);
-        Path member = workspace.resolve("core");
-        java.nio.file.Files.createDirectories(member);
-        java.nio.file.Files.writeString(member.resolve("jk.toml"), """
+        Path module = workspace.resolve("core");
+        java.nio.file.Files.createDirectories(module);
+        java.nio.file.Files.writeString(module.resolve("jk.toml"), """
                 [project]
                 group    = "com.example"
                 name     = "core"
                 version  = "1.0.0"
                 """);
 
-        JkBuild memberProject = dev.jkbuild.config.JkBuildParser.parse(member.resolve("jk.toml"));
-        BuildLayout layout = BuildLayout.of(member, memberProject);
+        JkBuild moduleProject = dev.jkbuild.config.JkBuildParser.parse(module.resolve("jk.toml"));
+        BuildLayout layout = BuildLayout.of(module, moduleProject);
 
         assertThat(layout.workspaceRoot()).isEqualTo(workspace.toAbsolutePath().normalize());
-        assertThat(layout.memberRoot()).isEqualTo(member);
-        // Each member owns its own target/ — the jar lives with the member.
+        assertThat(layout.moduleRoot()).isEqualTo(module);
+        // Each module owns its own target/ — the jar lives with the module.
         assertThat(layout.mainJar())
-                .isEqualTo(member.resolve("target/core-1.0.0.jar"));
-        // But intermediates stay member-local (member/target/build/).
+                .isEqualTo(module.resolve("target/core-1.0.0.jar"));
+        // But intermediates stay module-local (module/target/build/).
         assertThat(layout.classesDir())
-                .isEqualTo(member.resolve("target/build/classes/main"));
+                .isEqualTo(module.resolve("target/build/classes/main"));
     }
 
     @Test
@@ -120,7 +120,7 @@ class BuildLayoutTest {
         BuildLayout layout = BuildLayout.of(workspace,
                 workspaceRootProject("ws-root", "1.0.0"));
         assertThat(layout.workspaceRoot()).isEqualTo(workspace);
-        assertThat(layout.memberRoot()).isEqualTo(workspace);
+        assertThat(layout.moduleRoot()).isEqualTo(workspace);
         assertThat(layout.mainJar()).isEqualTo(workspace.resolve("target/ws-root-1.0.0.jar"));
     }
 
@@ -132,7 +132,7 @@ class BuildLayoutTest {
                 version  = "%s"
 
                 [workspace]
-                members = []
+                modules = []
                 """.formatted(artifact, version));
     }
 

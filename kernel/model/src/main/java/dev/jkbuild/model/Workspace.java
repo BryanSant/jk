@@ -8,28 +8,28 @@ import java.util.Objects;
 
 /**
  * The {@code [workspace]} block of a root {@code jk.toml}: the literal
- * member paths plus the optional {@code [workspace.dependencies]} table
- * of shared external dep declarations inherited by members via
+ * module paths plus the optional {@code [workspace.dependencies]} table
+ * of shared external dep declarations inherited by modules via
  * {@code <name>.workspace = true}.
  */
 public record Workspace(
-        List<String> members,
+        List<String> modules,
         Map<String, WorkspaceDependency> dependencies) {
 
     public Workspace {
-        Objects.requireNonNull(members, "members");
+        Objects.requireNonNull(modules, "modules");
         Objects.requireNonNull(dependencies, "dependencies");
-        members = List.copyOf(members);
+        modules = List.copyOf(modules);
         dependencies = Map.copyOf(new LinkedHashMap<>(dependencies));
     }
 
-    /** Members-only constructor; no shared workspace dependencies. */
-    public Workspace(List<String> members) {
-        this(members, Map.of());
+    /** Modules-only constructor; no shared workspace dependencies. */
+    public Workspace(List<String> modules) {
+        this(modules, Map.of());
     }
 
     public boolean isEmpty() {
-        return members.isEmpty();
+        return modules.isEmpty();
     }
 
     /**

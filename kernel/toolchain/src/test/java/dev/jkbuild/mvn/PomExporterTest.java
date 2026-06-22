@@ -125,7 +125,7 @@ class PomExporterTest {
                 java = 21
 
                 [workspace]
-                members = ["mod-a", "mod-b"]
+                modules = ["mod-a", "mod-b"]
                 """);
 
         String xml = PomExporter.export(root).xml();

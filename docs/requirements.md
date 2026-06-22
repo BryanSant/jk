@@ -220,7 +220,7 @@ Conventions:
 
 - All top-level tables are optional. A `jk.toml` with only `[project]` (`group`, `name`, `version`) is a valid project.
 - A JSON Schema is published alongside the binary; IntelliJ/VS Code/Helix can autocomplete and validate.
-- Dependencies use **name-as-key** sub-tables per scope: `[dependencies.<scope>]` maps a short local name to an inline coord table (`{ group, artifact, version }`). The short name is the user-controlled identifier; the coordinate is a resolution detail. Source overrides (`path`, `git` + `tag`/`branch`/`rev`) are inline fields on the same table — there is **no separate `[sources]` table**. Shared external deps live in `[workspace.dependencies]`; children inherit by writing `name.workspace = true`. Workspace siblings are resolved through the same `name.workspace = true` mechanism (matched against members' `[project].name`). A `[dependencies]` block whose direct children are all inline dep tables is shorthand for `[dependencies.main]`. See [docs/artifact-coord-design.md](./artifact-coord-design.md) for the full grammar.
+- Dependencies use **name-as-key** sub-tables per scope: `[dependencies.<scope>]` maps a short local name to an inline coord table (`{ group, artifact, version }`). The short name is the user-controlled identifier; the coordinate is a resolution detail. Source overrides (`path`, `git` + `tag`/`branch`/`rev`) are inline fields on the same table — there is **no separate `[sources]` table**. Shared external deps live in `[workspace.dependencies]`; children inherit by writing `name.workspace = true`. Workspace siblings are resolved through the same `name.workspace = true` mechanism (matched against modules' `[project].name`). A `[dependencies]` block whose direct children are all inline dep tables is shorthand for `[dependencies.main]`. See [docs/artifact-coord-design.md](./artifact-coord-design.md) for the full grammar.
 
 ### 5.2 `jk.lock`
 
@@ -243,15 +243,15 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 
 | Command | Purpose |
 |---|---|
-| `jk new <name> [--lib\|--bin]` | Create a new project from a template. Inside a workspace, also registers it in the root `[workspace].members`. |
-| `jk init` | Initialize jk in an existing directory (with optional `--from pom.xml` / `--from build.gradle`). Inside a workspace, registers the directory as a member. |
-| `jk add <coord\|path> [--test] [--processor] [--runtime] [--provided] [--features=...]` | Add a dependency. A path or `:name` argument adds a local workspace member (dependency edge + `[workspace].members` registration). |
+| `jk new <name> [--lib\|--bin]` | Create a new project from a template. Inside a workspace, also registers it in the root `[workspace].modules`. |
+| `jk init` | Initialize jk in an existing directory (with optional `--from pom.xml` / `--from build.gradle`). Inside a workspace, registers the directory as a module. |
+| `jk add <coord\|path> [--test] [--processor] [--runtime] [--provided] [--features=...]` | Add a dependency. A path or `:name` argument adds a local workspace module (dependency edge + `[workspace].modules` registration). |
 | `jk remove <coord>` | Remove a dependency. |
 | `jk lock` | Re-resolve and write `jk.lock`. |
 | `jk sync [--locked\|--frozen] [--offline-prepare]` | Reconcile cache/`.jk/` to the lockfile. `--offline-prepare` downloads everything without building (CI-friendly). |
 | `jk update [--precise <coord>@<ver>]` | Re-resolve deps, updating `jk.lock`. |
-| `jk build [-p <member>] [--profile=...] [--features=...]` | Compile and package. |
-| `jk test [-p <member>] [--filter=...]` | Run tests. |
+| `jk build [-p <module>] [--profile=...] [--features=...]` | Compile and package. |
+| `jk test [-p <module>] [--filter=...]` | Run tests. |
 | `jk run [-- args...]` | Run the current project's main artifact, forwarding args to its `main`. (Loose files/tools run via `jk tool run`.) |
 | `jk check` | Type-check without producing artifacts (Kotlin/Java compile to in-memory). |
 | `jk fmt` | Format `jk.toml`/`build.toml`/`jk.lock` and (optionally) source via plugged-in formatter. |
@@ -285,7 +285,7 @@ Common flags:
 - `--offline` — fail rather than touch the network.
 - `--locked` — fail if `jk.lock` would change.
 - `--frozen` — `--locked` + `--offline`.
-- `-p <member>` — scope to a workspace member.
+- `-p <module>` — scope to a workspace module.
 - `--jobs N` — worker parallelism.
 - `--color {auto,always,never}` — ANSI control.
 
@@ -369,7 +369,7 @@ When pinned, jk will *refuse* to fetch the package from any other repo even at a
 spring-boot-dependencies = { group = "org.springframework.boot", name = "spring-boot-dependencies", version = "3.4.0" }
 ```
 
-Imported `<dependencyManagement>` constraints apply to all other scopes in the project (and, in a workspace root, to all members).
+Imported `<dependencyManagement>` constraints apply to all other scopes in the project (and, in a workspace root, to all modules).
 
 ### 7.7 Target-conditional dependencies
 
@@ -778,14 +778,14 @@ GraalVM distributions advertise the `native-image` capability. `jk native` requi
 
 ### 13.1 Model
 
-Cargo + Nx hybrid. One root `jk.toml` declares members. Members are themselves valid `jk.toml` projects.
+Cargo + Nx hybrid. One root `jk.toml` declares modules. Modules are themselves valid `jk.toml` projects.
 
 ```toml
 # workspace root jk.toml
 [workspace]
-members         = ["libs/*", "services/*"]
+modules         = ["libs/*", "services/*"]
 exclude         = ["libs/legacy-shim"]
-default-members = ["services/api", "services/web"]
+default-modules = ["services/api", "services/web"]
 resolver        = 2                              # one resolver only; this field exists for future-proofing
 
 [toolchain]
@@ -800,7 +800,7 @@ jackson-databind = { group = "com.fasterxml.jackson.core", name = "jackson-datab
 reactor-core     = { group = "io.projectreactor",          name = "reactor-core",     version = "3.6.10" }
 ```
 
-Member `services/api/jk.toml`:
+Module `services/api/jk.toml`:
 
 ```toml
 [project]
@@ -811,7 +811,7 @@ version  = "$workspace"
 [dependencies.main]
 # Shared external dep — inherited from [workspace.dependencies] above.
 jackson-databind.workspace = true
-# Workspace sibling — short name matches the sibling member's [project].name.
+# Workspace sibling — short name matches the sibling module's [project].name.
 # The resolver looks up siblings before [workspace.dependencies].
 widget-core.workspace = true
 ```
@@ -819,36 +819,36 @@ widget-core.workspace = true
 ### 13.2 Properties
 
 - **One `jk.lock` at workspace root.** Always.
-- **Shared `target/`** under workspace root. Incremental compilation reuses across members.
-- **Shared external deps** declared once in `[workspace.dependencies]`; members opt in with `name.workspace = true`.
+- **Shared `target/`** under workspace root. Incremental compilation reuses across modules.
+- **Shared external deps** declared once in `[workspace.dependencies]`; modules opt in with `name.workspace = true`.
 - **Workspace siblings** resolved through the same `name.workspace = true` mechanism — the short name is matched against the sibling's `[project].name`.
-- **`jk -p <member> <cmd>`** scopes a command.
+- **`jk -p <module> <cmd>`** scopes a command.
 - **Virtual workspaces** supported — a root `jk.toml` with `workspace { }` but no `project { }` is valid.
-- **Glob members** (`libs/*`) to avoid hand-listing.
+- **Glob modules** (`libs/*`) to avoid hand-listing.
 - **Affected-by-change**: `jk build --affected-since=origin/main` computes the changed set via git + reverse dep graph.
 
-### 13.3 Adding members from the CLI
+### 13.3 Adding modules from the CLI
 
-Members are never hand-registered. Like `cargo new` / `uv init`, the project
-verbs edit `[workspace].members` for you (preserving formatting and comments)
+Modules are never hand-registered. Like `cargo new` / `uv init`, the project
+verbs edit `[workspace].modules` for you (preserving formatting and comments)
 when run inside a workspace:
 
-- **`jk new <path>`** scaffolds a member, appends its root-relative path to
-  `[workspace].members`, inherits the workspace root's `[project].group`, and
-  writes **no** per-member `jk.lock` (the root lock owns resolution).
+- **`jk new <path>`** scaffolds a module, appends its root-relative path to
+  `[workspace].modules`, inherits the workspace root's `[project].group`, and
+  writes **no** per-module `jk.lock` (the root lock owns resolution).
 - **`jk init`** does the same for the current directory.
 - **`jk add <path>`** (≈ `uv add ./lib`) adds a dependency edge on a local
   sibling — pinned to the sibling's `[project].version` — and registers its
-  path as a member. The argument is treated as a local member when it begins
+  path as a module. The argument is treated as a local module when it begins
   with `:` (`:widget`, a name marker) or contains a path separator
   (`./widget`, `../widget`, `libs/widget`, `widget/`). A bare name with
   neither (`jk add jackson`) is resolved as a library-catalog name / Maven coord, not
   a path. A path outside the workspace root adds the edge but is not
-  registered as a member.
+  registered as a module.
 
 ### 13.4 Composite-build semantics
 
-`[workspace.substitute]` lets a workspace member replace any binary dep (including a git dep) at build time:
+`[workspace.substitute]` lets a workspace module replace any binary dep (including a git dep) at build time:
 
 ```toml
 [workspace.substitute]
@@ -1454,7 +1454,7 @@ mode = "auto"
 
 ### 28.2 Project-level overrides
 
-Anything in `~/.jk/config.toml` is overridable in `jk.toml`'s top-level scope. Workspaces override per-member.
+Anything in `~/.jk/config.toml` is overridable in `jk.toml`'s top-level scope. Workspaces override per-module.
 
 ### 28.3 Environment variables
 
@@ -1550,7 +1550,7 @@ Explicit non-goals at v1.0 (most have a future-phase home, see §30):
 3. **TOML syntax-error UX** — TOML's diagnostics are mediocre. jk must wrap the parser with line-precise error rendering.
 4. **`~/.m2`-cache sharing safety** — reading existing `~/.m2/repository` entries means trusting a cache jk didn't populate. Mitigate via SHA-256 verification against the Maven Central metadata; refuse on mismatch.
 5. **`gh auth token` reuse trust boundary** — automatically reusing the `gh` CLI's token is convenient but security-flavored. Should it require explicit opt-in?
-6. **Workspace member discovery cost** — glob-based `members = [ "libs/*" ]` requires filesystem walks. On huge monorepos this can be slow. Cache the resolved list and invalidate on directory mtime.
+6. **Workspace module discovery cost** — glob-based `modules = [ "libs/*" ]` requires filesystem walks. On huge monorepos this can be slow. Cache the resolved list and invalidate on directory mtime.
 
 ### Risks
 

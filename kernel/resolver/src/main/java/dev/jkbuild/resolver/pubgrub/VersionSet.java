@@ -107,7 +107,7 @@ public sealed interface VersionSet
 
         public Range {
             // Reject inverted bounds at construction time so callers don't
-            // have to remember to check; ALL / EMPTY are the singletons for
+            // have to remodule to check; ALL / EMPTY are the singletons for
             // unbounded / empty.
             if (min != null && max != null) {
                 int cmp = Versions.compare(min, max);

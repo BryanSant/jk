@@ -37,7 +37,7 @@ import java.util.Optional;
 
 /**
  * {@code jk add &lt;coord|path&gt;} — add a dependency (or a local workspace
- * member) to {@code jk.toml}.
+ * module) to {@code jk.toml}.
  *
  * <p>The argument may be:
  * <ul>
@@ -49,12 +49,12 @@ import java.util.Optional;
  *       {@code @version} suffix ({@code spring-web@3.4.0}), resolved against the
  *       library catalog. The version defaults to {@code latest} when omitted.
  *       Combine with {@code --group}/{@code --ver} for names not in the catalog.</li>
- *   <li>A local workspace member, when the argument begins with {@code :}
+ *   <li>A local workspace module, when the argument begins with {@code :}
  *       ({@code :widget}) or contains a path separator ({@code ./widget},
  *       {@code ../widget}, {@code libs/widget}, {@code widget/}). jk adds a
  *       dependency edge on the sibling — pinned to its {@code [project].version}
  *       — and registers its path in the workspace root's
- *       {@code [workspace].members} (≈ {@code uv add ./lib}).</li>
+ *       {@code [workspace].modules} (≈ {@code uv add ./lib}).</li>
  * </ul>
  *
  * <p>Pass {@code --ping} to check availability without modifying anything.
@@ -80,7 +80,7 @@ public final class AddCommand implements CliCommand {
 
     @Override
     public String description() {
-        return "Add a dependency, or workspace member, to jk.toml";
+        return "Add a dependency, or workspace module, to jk.toml";
     }
 
     @Override
@@ -110,7 +110,7 @@ public final class AddCommand implements CliCommand {
     public List<Param> parameters() {
         return List.of(Param.of("dep|path", Arity.ONE,
                 "A dependency by its short-name, group:artifact@version, or group:artifact:version\n"
-                        + "...or a local workspace member (:name or a relative path like ./foo/bar)."));
+                        + "...or a local workspace module (:name or a relative path like ./foo/bar)."));
     }
 
     @Override
@@ -142,7 +142,7 @@ public final class AddCommand implements CliCommand {
             }
             Scope scope = resolveScope();
             if (scope == null) return 64;
-            return addMember(dir, scope);
+            return addModule(dir, scope);
         }
 
         ParsedDep parsed;
@@ -203,7 +203,7 @@ public final class AddCommand implements CliCommand {
     }
 
     /**
-     * Whether the positional argument denotes a local workspace member rather
+     * Whether the positional argument denotes a local workspace module rather
      * than a Maven coord or catalog library. True when it begins with
      * {@code :} (an explicit local marker, e.g. {@code :jackson}) or looks
      * like a filesystem path — i.e. contains a {@code /} or {@code \}
@@ -224,9 +224,9 @@ public final class AddCommand implements CliCommand {
     /**
      * Add a local sibling as a dependency of the current project (pinned to
      * the sibling's declared version) and register it in the enclosing
-     * workspace root's {@code [workspace].members}.
+     * workspace root's {@code [workspace].modules}.
      */
-    private int addMember(Path cwd, Scope scope) throws IOException {
+    private int addModule(Path cwd, Scope scope) throws IOException {
         Path currentToml = cwd.resolve("jk.toml");
         if (!Files.exists(currentToml)) {
             System.err.println("jk add: no jk.toml in current directory");
@@ -237,7 +237,7 @@ public final class AddCommand implements CliCommand {
         String raw = coord.charAt(0) == ':' ? coord.substring(1) : coord;
         raw = raw.replace('\\', '/');
         if (raw.isBlank()) {
-            System.err.println("jk add: empty member path");
+            System.err.println("jk add: empty module path");
             return 64;
         }
         Path target = cwd.resolve(raw).normalize();
@@ -246,20 +246,20 @@ public final class AddCommand implements CliCommand {
             System.err.println("jk add: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(target));
             return 2;
         }
-        JkBuild member;
+        JkBuild module;
         try {
-            member = JkBuildParser.parse(targetToml);
+            module = JkBuildParser.parse(targetToml);
         } catch (RuntimeException e) {
             System.err.println("jk add: " + e.getMessage());
             return 1;
         }
-        String group = member.project().group();
-        String artifact = member.project().name();
-        String version = member.project().version();
+        String group = module.project().group();
+        String artifact = module.project().name();
+        String version = module.project().version();
         String name = (libraryFlag != null && !libraryFlag.isBlank()) ? libraryFlag : artifact;
 
-        // 1. Dependency edge into the current project, pinned to the member's
-        //    version — matching how this repo's own members reference siblings.
+        // 1. Dependency edge into the current project, pinned to the module's
+        //    version — matching how this repo's own modules reference siblings.
         String original = Files.readString(currentToml);
         String updated;
         try {
@@ -282,18 +282,18 @@ public final class AddCommand implements CliCommand {
             if (!target.startsWith(root)) {
                 System.err.println("jk add: " + raw
                         + " is outside the workspace root " + root
-                        + "; added the dependency but not registering it as a member.");
+                        + "; added the dependency but not registering it as a module.");
             } else if (Files.exists(rootToml) && JkBuildParser.parse(rootToml).isWorkspaceRoot()) {
                 String rel = root.relativize(target).toString().replace('\\', '/');
                 String rootContent = Files.readString(rootToml);
-                String newRoot = JkBuildEditor.addWorkspaceMember(rootContent, rel);
+                String newRoot = JkBuildEditor.addWorkspaceModule(rootContent, rel);
                 if (!newRoot.equals(rootContent)) {
                     Files.writeString(rootToml, newRoot, StandardCharsets.UTF_8);
-                    System.out.println("Registered member '" + rel + "' in workspace " + dev.jkbuild.cli.PathDisplay.styledRaw(root));
+                    System.out.println("Registered module '" + rel + "' in workspace " + dev.jkbuild.cli.PathDisplay.styledRaw(root));
                 }
             }
         } catch (RuntimeException e) {
-            System.err.println("jk add: could not register workspace member: " + e.getMessage());
+            System.err.println("jk add: could not register workspace module: " + e.getMessage());
         }
         return 0;
     }

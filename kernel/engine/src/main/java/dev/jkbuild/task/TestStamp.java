@@ -32,8 +32,8 @@ import java.util.List;
  *   <li><b>{@code jk.lock}</b> — content hash (resolved dep set + JDK).</li>
  *   <li><b>Runtime classpath</b> — by <em>content</em> via
  *       {@link ClasspathFingerprint}: CAS jars by their hash-path, workspace-local
- *       outputs (sibling members) by their bytes.  Content (not mtime) is what
- *       makes a sibling member's change ripple into every dependent's key, and
+ *       outputs (sibling modules) by their bytes.  Content (not mtime) is what
+ *       makes a sibling module's change ripple into every dependent's key, and
  *       what stops a byte-identical rebuild — jk re-jars every build with a new
  *       file mtime but stable bytes — from needlessly busting the key.</li>
  *   <li><b>Toolchain / runner / forked-worker identity</b> — caller-supplied
@@ -95,7 +95,7 @@ public final class TestStamp {
                 feed(md, "lock:" + Hashing.sha256Hex(Files.readAllBytes(lockFile)));
             }
 
-            // Runtime classpath by CONTENT: a sibling member's change ripples in,
+            // Runtime classpath by CONTENT: a sibling module's change ripples in,
             // and a byte-identical rebuild (new mtime, same bytes) does not.
             feed(md, "cp:" + ClasspathFingerprint.of(runtimeCp));
 

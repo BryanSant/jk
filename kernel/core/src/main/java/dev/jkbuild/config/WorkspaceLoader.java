@@ -13,75 +13,75 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Loads every member's {@code jk.toml} for a workspace root.
+ * Loads every module's {@code jk.toml} for a workspace root.
  *
- * <p>Literal member paths only (no globs). Each entry in
- * {@code workspace.members} must resolve to a directory containing a
- * {@code jk.toml}. Missing members raise {@link JkBuildParseException}.
+ * <p>Literal module paths only (no globs). Each entry in
+ * {@code workspace.modules} must resolve to a directory containing a
+ * {@code jk.toml}. Missing modules raise {@link JkBuildParseException}.
  */
 public final class WorkspaceLoader {
 
     private WorkspaceLoader() {}
 
-    public static Map<Path, JkBuild> loadMembers(Path workspaceRoot, JkBuild root) throws IOException {
+    public static Map<Path, JkBuild> loadModules(Path workspaceRoot, JkBuild root) throws IOException {
         Objects.requireNonNull(workspaceRoot, "workspaceRoot");
         Objects.requireNonNull(root, "root");
         if (!root.isWorkspaceRoot()) return Map.of();
 
-        Map<Path, JkBuild> members = new LinkedHashMap<>();
+        Map<Path, JkBuild> modules = new LinkedHashMap<>();
         List<String> bad = new ArrayList<>();
-        for (String member : root.workspace().members()) {
-            Path memberDir = workspaceRoot.resolve(member).normalize();
-            Path memberJkToml = memberDir.resolve("jk.toml");
-            if (!Files.exists(memberJkToml)) {
-                bad.add(member);
+        for (String module : root.workspace().modules()) {
+            Path moduleDir = workspaceRoot.resolve(module).normalize();
+            Path moduleJkToml = moduleDir.resolve("jk.toml");
+            if (!Files.exists(moduleJkToml)) {
+                bad.add(module);
                 continue;
             }
-            JkBuild memberBuild = JkBuildParser.parse(memberJkToml);
-            // Workspaces cannot be nested — a member declaring its own
+            JkBuild moduleBuild = JkBuildParser.parse(moduleJkToml);
+            // Workspaces cannot be nested — a module declaring its own
             // [workspace] block would imply two competing roots and an
             // ambiguous shared <root>/target/. Reject loudly so the
             // user fixes the manifest rather than discovers it at build
             // time when paths quietly diverge.
-            if (memberBuild.isWorkspaceRoot()) {
+            if (moduleBuild.isWorkspaceRoot()) {
                 throw new JkBuildParseException(
-                        "workspaces cannot be nested — `" + member
+                        "workspaces cannot be nested — `" + module
                                 + "` declares its own `[workspace]` block "
-                                + "while being a member of `" + workspaceRoot + "`.");
+                                + "while being a module of `" + workspaceRoot + "`.");
             }
-            members.put(memberDir, memberBuild);
+            modules.put(moduleDir, moduleBuild);
         }
         if (!bad.isEmpty()) {
             throw new JkBuildParseException(
-                    "workspace members missing jk.toml: " + bad);
+                    "workspace modules missing jk.toml: " + bad);
         }
-        checkArtifactCollisions(root, members);
-        return members;
+        checkArtifactCollisions(root, modules);
+        return modules;
     }
 
     /**
      * Final artifacts land in a shared {@code <workspaceRoot>/target/}
-     * directory keyed by {@code <artifact>-<version>.jar} — so two members
+     * directory keyed by {@code <artifact>-<version>.jar} — so two modules
      * declaring the same artifact + version would race to write the same
      * jar and the second one would silently win. Reject at workspace-parse
      * time so the failure is loud and the file paths in the error point
      * at the conflict.
      *
-     * <p>Members and the workspace root itself can collide (a workspace
+     * <p>Modules and the workspace root itself can collide (a workspace
      * root that's <i>also</i> a runnable project is rare but legal, so we
      * include the root in the uniqueness set).
      */
-    private static void checkArtifactCollisions(JkBuild root, Map<Path, JkBuild> members) {
+    private static void checkArtifactCollisions(JkBuild root, Map<Path, JkBuild> modules) {
         Map<String, Path> claimed = new LinkedHashMap<>();
         record Entry(Path dir, JkBuild build) {}
-        List<Entry> all = new ArrayList<>(members.size() + 1);
+        List<Entry> all = new ArrayList<>(modules.size() + 1);
         // Only include the root if it could plausibly produce its own jar
         // (i.e., it declares a non-blank artifact). Many workspace roots
         // are pure coordinators with no own artifact; skip those.
         if (!root.project().name().isBlank()) {
             all.add(new Entry(null, root));
         }
-        for (Map.Entry<Path, JkBuild> e : members.entrySet()) {
+        for (Map.Entry<Path, JkBuild> e : modules.entrySet()) {
             all.add(new Entry(e.getKey(), e.getValue()));
         }
         for (Entry e : all) {
@@ -98,8 +98,8 @@ public final class WorkspaceLoader {
                         "workspace artifact collision: `" + key + ".jar` would be "
                                 + "produced by both `" + prevLabel + "` and `" + thisLabel
                                 + "`. Final artifacts share <workspaceRoot>/target/, so two "
-                                + "members can't emit the same `<artifact>-<version>.jar`. "
-                                + "Differentiate via the members' [project].artifact or "
+                                + "modules can't emit the same `<artifact>-<version>.jar`. "
+                                + "Differentiate via the modules' [project].artifact or "
                                 + "[project].version.");
             }
             claimed.put(key, e.dir);

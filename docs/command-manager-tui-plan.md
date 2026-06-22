@@ -5,19 +5,19 @@ Branch: `feat/command-manager-tui` · worktree: `/home/bsant/src/oss/jk-command-
 A new TUI component, `CommandManager`, with two presentation modes — **simple task**
 and **goal-oriented** — that replaces the current goal/phase TUI for `jk build` and the
 other build-like commands, and is **workspace-aware**: it aggregates *all* goals and
-phases across *all* members into a single progress bar and a single phase list.
+phases across *all* modules into a single progress bar and a single phase list.
 
 ---
 
 ## 1. Decisions (locked)
 
-- **Workspace aggregation:** *shared aggregate listener*. Keep today's one-`Goal`-per-member
-  model and sequential member ordering; `CommandManager` subscribes to every member goal and
+- **Workspace aggregation:** *shared aggregate listener*. Keep today's one-`Goal`-per-module
+  model and sequential module ordering; `CommandManager` subscribes to every module goal and
   sums ticks/estimates into one bar and one merged phase list. (Lowest blast radius on the
   core `Goal` engine.)
-- **Phase list labeling:** *member carried in the `›` path*. The header shows the active
-  member; each phase line is `{member} › {Phase} › {message}` so interleaved phases from
-  different members stay unambiguous.
+- **Phase list labeling:** *module carried in the `›` path*. The header shows the active
+  module; each phase line is `{module} › {Phase} › {message}` so interleaved phases from
+  different modules stay unambiguous.
 - **Mode mapping:** build-like commands → goal view (`build`, `test`, `compile`, `native`,
   `image`, `publish`, `verify-build`, `audit`). Everything else that runs a Goal → simple
   spinner (`lock`, `sync`, `add`, `update`, `clean`, `deny`, `install`, `tool-install`,
@@ -60,7 +60,7 @@ command-supplied.
 - The list **floats**: outstanding (active/pending) rows on top in start order, completed
   rows sink to the bottom; when rows exceed the cap, completed rows collapse to
   `… +N completed`.
-- Bar is the aggregate of *all* members' estimated phase steps using the existing
+- Bar is the aggregate of *all* modules' estimated phase steps using the existing
   tick/estimate/actual + gap-fill machinery (`GoalView.numerator/denominator`).
 
 On completion the whole live region is replaced with a single line:
@@ -94,9 +94,9 @@ or
   per-phase gap-fill at finish, `snapshot()`, `interactive` flag, `GoalResult(success,
   duration, phases[PhaseReport(name,status,duration)], warnings, errors, cancelled,
   userCancelled)`.
-- **Workspace builds:** `BuildCommand.runWorkspaceBuild` topo-sorts members and calls
-  `runForDir(member)` **per member** → each member = its own `Goal` + its own
-  `GoalConsole.run` (its own bar), printed under `══ member (i/N) ══`. **No aggregation today.**
+- **Workspace builds:** `BuildCommand.runWorkspaceBuild` topo-sorts modules and calls
+  `runForDir(module)` **per module** → each module = its own `Goal` + its own
+  `GoalConsole.run` (its own bar), printed under `══ module (i/N) ══`. **No aggregation today.**
 - Primitives: `Ansi` (cursorUp/Down/PrevLine/toColumn, ERASE_LINE_TO_END,
   ERASE_DISPLAY_TO_END, HIDE/SHOW_CURSOR, taskbarProgress), `Rail` (╭ │ ╰ ── glyphs +
   StepState), `Theme` (error/success/warning/darkGray=bright-black/cyan/blue/primary/
@@ -123,15 +123,15 @@ cli/.../tui/
   CommandManager.java      (new)  controller/facade. Modes: simple(out, verb) / goal(out, name).
                                   Owns animator thread, spinner frame, OSC, multi-line redraw,
                                   finishSuccess(msg)/finishFailure(msg). Implements LiveRegion.
-  PhaseRow.java            (new)  {member, phase, status, message} render model for the list.
+  PhaseRow.java            (new)  {module, phase, status, message} render model for the list.
 
 cli/.../run/
   CommandManagerListener.java (new) GoalListener → drives a CommandManager in goal mode.
                                     Replaces ProgressBarListener for goal commands.
   AggregateView.java          (new) sums numerator/denominator + merges PhaseRows across
-                                    multiple member goals; thread-safe.
-  WorkspaceBuildView.java     (new) ties N sequential member goals to ONE CommandManager +
-                                    AggregateView (header shows the active member).
+                                    multiple module goals; thread-safe.
+  WorkspaceBuildView.java     (new) ties N sequential module goals to ONE CommandManager +
+                                    AggregateView (header shows the active module).
   GoalConsole.java            (edit) add ConsoleStyle {GOAL, SIMPLE}; route GOAL→
                                     CommandManagerListener, SIMPLE→a spinner-backed listener;
                                     overload run(...) to accept style + display metadata +
@@ -176,19 +176,19 @@ the goal-oriented multi-line region.
 ## 6. Workspace aggregation (shared aggregate listener)
 
 In `BuildCommand.runWorkspaceBuild`:
-1. Topo-sort members (unchanged).
-2. **Pre-estimate** every member goal's scope and seed `AggregateView.denominator` with the
-   sum up front, so the single bar doesn't visibly regress as later members start. (Build each
-   member `Goal` first; sum `Phase.estimateScope`.)
+1. Topo-sort modules (unchanged).
+2. **Pre-estimate** every module goal's scope and seed `AggregateView.denominator` with the
+   sum up front, so the single bar doesn't visibly regress as later modules start. (Build each
+   module `Goal` first; sum `Phase.estimateScope`.)
 3. Create ONE `CommandManager.goal(...)` + ONE `WorkspaceBuildView`.
-4. Run members **sequentially** (current order). For each, attach a member-scoped adapter that
+4. Run modules **sequentially** (current order). For each, attach a module-scoped adapter that
    forwards `progress/scopeUpdate/label/phaseStart/phaseFinish/warn/error` into the shared
-   `AggregateView` tagged with the member name; the header's `{workspace}:{member}` reflects
-   the running member. The aggregate numerator advances continuously across members.
-5. On the last member finishing (or any failure), `CommandManager.finishSuccess/Failure` with
-   a workspace-level message (e.g. `Built 3 members in 4.1s` / `tests failed in acme:web`).
+   `AggregateView` tagged with the module name; the header's `{workspace}:{module}` reflects
+   the running module. The aggregate numerator advances continuously across modules.
+5. On the last module finishing (or any failure), `CommandManager.finishSuccess/Failure` with
+   a workspace-level message (e.g. `Built 3 modules in 4.1s` / `tests failed in acme:web`).
 
-Single-project builds use the same `CommandManager.goal(...)` with one member (the project's
+Single-project builds use the same `CommandManager.goal(...)` with one module (the project's
 own `group:artifact`), so the code path is uniform.
 
 ---
@@ -238,10 +238,10 @@ own `group:artifact`), so the code path is uniform.
   brackets, color stripping.
 - `CommandManagerTest`:
   - simple mode: spinner+verb, success/failure lines, glyph colors.
-  - goal mode: header (name/member/elapsed, bright-black `›`/brackets), bar line, phase-row
-    ordering (outstanding top, completed sink, `… +N completed` collapse), member in `›` path,
+  - goal mode: header (name/module/elapsed, bright-black `›`/brackets), bar line, phase-row
+    ordering (outstanding top, completed sink, `… +N completed` collapse), module in `›` path,
     multi-line redraw (count `cursorUp`/`ERASE_DISPLAY_TO_END`, width truncation), final line.
-- `AggregateViewTest`: feed events from 2 simulated member goals → one denominator = sum, one
+- `AggregateViewTest`: feed events from 2 simulated module goals → one denominator = sum, one
   merged ordered row list.
 - ANSI handling: full-ESC strip regex (`\033\[[0-9;?]*[a-zA-Z]`), color-on by default in tests.
 - Update any `GoalConsole` tests for the new `ConsoleSpec` overload.
@@ -261,8 +261,8 @@ own `group:artifact`), so the code path is uniform.
 6. Add `CommandManager` goal-mode multi-line view + `CommandManagerListener`; switch
    single-project build-like commands (replace `ProgressBarListener` in AUTO).
 7. Add `AggregateView` + `WorkspaceBuildView`; wire `BuildCommand.runWorkspaceBuild` to the
-   shared aggregate (header shows active member, rows carry member). Drop the per-member
-   `══ member (i/N) ══` banners.
+   shared aggregate (header shows active module, rows carry module). Drop the per-module
+   `══ module (i/N) ══` banners.
 8. Delete `ProgressBarListener`; final cleanup + docs/changelog.
 
 ---
@@ -278,16 +278,16 @@ Delivered on this branch (all `./gradlew test` green):
   `✓`/`✗` result line) and **goal mode** (spinner header + aggregate bar +
   floating phase list, region replaced by the result line on finish).
 - ✅ Plumbing: `ConsoleSpec`, `SimpleTaskListener`, `CommandManagerListener`,
-  `GoalConsole.run(…, ConsoleSpec)` (simple) and `GoalConsole.runGoal(…, member)`
+  `GoalConsole.run(…, ConsoleSpec)` (simple) and `GoalConsole.runGoal(…, module)`
   (goal).
-- ✅ Workspace aggregation: `AggregateContext` + `AggregateMemberListener` +
+- ✅ Workspace aggregation: `AggregateContext` + `AggregateModuleListener` +
   `GoalConsole.runGoalInto`; `BuildCommand.runWorkspaceBuild` renders ONE
-  aggregate view for AUTO/QUIET (VERBOSE/JSON keep per-member).
+  aggregate view for AUTO/QUIET (VERBOSE/JSON keep per-module).
 - ✅ Migrated to the new view: **`jk build`** (single + workspace),
   **`jk compile`**, **`jk test`**, **`jk native`**.
 - ✅ Migrated to simple mode: **`jk lock`**.
 - ✅ Tests: `ProgressBarTest`, `SpinnerProgressBarTest`, `CommandManagerTest`
-  (simple + goal render), `AggregateMemberListenerTest`.
+  (simple + goal render), `AggregateModuleListenerTest`.
 
 ### Remaining follow-up (not done this session)
 
@@ -297,7 +297,7 @@ churn on peripheral/report-style commands:
 - **Simple mode wiring:** `sync`, `deny`, `update`, `install` (3 run sites),
   `tool-install` → `GoalConsole.run(goal, mode, cache, new ConsoleSpec(verb, ok, fail))`,
   removing their hand-rolled `✓ …` summary.
-- **Goal view wiring:** `publish`, `image` → `runGoal(…, member)` (have
+- **Goal view wiring:** `publish`, `image` → `runGoal(…, module)` (have
   dry-run / tarball-vs-push branches to fold into the success mapper).
 - **Report-style (`verify-build`, `audit`):** they print multi-line reports
   (hashes / markdown), not a single result line — decide whether to keep their
@@ -308,9 +308,9 @@ churn on peripheral/report-style commands:
   command above is migrated (it's still the AUTO listener for the unmigrated
   ones). Then drop the `ProgressBarListener` branch in
   `GoalConsole.chooseConsoleListener`.
-- **Pre-sum member scopes** (§6): split goal construction out of
+- **Pre-sum module scopes** (§6): split goal construction out of
   `BuildCommand.runForDir` so the aggregate denominator is seeded up front and
-  the bar doesn't dip as each member starts.
+  the bar doesn't dip as each module starts.
 - **Live `jk build` visual pass:** the multi-line region math (cursor-up/erase,
   width truncation, float/collapse) is unit-tested but has not been eyeballed on
   a real terminal — verify with `/run` or a manual build before merge.
@@ -319,9 +319,9 @@ churn on peripheral/report-style commands:
 
 - **Cursor math vs. line wrap** → enforce per-row truncation to terminal width (JLine width).
 - **Concurrency/interleaving** → single render lock + animator-only writes.
-- **Denominator stability across sequential members** → pre-estimate scopes (§6.2);
+- **Denominator stability across sequential modules** → pre-estimate scopes (§6.2);
   if pre-estimation is too costly/side-effecting, fall back to growing-D with smoothing.
-- **Cross-member parallelism** is explicitly out of scope (sequential members chosen); the
+- **Cross-module parallelism** is explicitly out of scope (sequential modules chosen); the
   `AggregateView` API is built to allow it later without changing the renderer.
-- **EventLog/JSON parity** — ensure the member tag is also surfaced in NDJSON if we later want
-  machine-readable per-member events (not required now).
+- **EventLog/JSON parity** — ensure the module tag is also surfaced in NDJSON if we later want
+  machine-readable per-module events (not required now).

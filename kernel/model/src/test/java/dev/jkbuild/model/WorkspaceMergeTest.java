@@ -13,15 +13,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class WorkspaceMergeTest {
 
     @Test
-    void merge_combines_member_deps_into_root() {
+    void merge_combines_module_deps_into_root() {
         JkBuild root = newProject("root", Map.of(Scope.MAIN, List.of(
                 dep("a", "com.foo:a", "1.0"))));
-        JkBuild memberA = newProject("a", Map.of(Scope.MAIN, List.of(
+        JkBuild moduleA = newProject("a", Map.of(Scope.MAIN, List.of(
                 dep("b", "com.foo:b", "2.0"))));
-        JkBuild memberB = newProject("b", Map.of(Scope.TEST, List.of(
+        JkBuild moduleB = newProject("b", Map.of(Scope.TEST, List.of(
                 dep("junit-jupiter", "org.junit.jupiter:junit-jupiter", "6.1.0"))));
 
-        JkBuild merged = WorkspaceMerge.merge(root, List.of(memberA, memberB));
+        JkBuild merged = WorkspaceMerge.merge(root, List.of(moduleA, moduleB));
 
         assertThat(merged.dependencies().of(Scope.MAIN))
                 .extracting(Dependency::module)
@@ -35,23 +35,23 @@ class WorkspaceMergeTest {
     void root_declaration_wins_on_module_conflict() {
         JkBuild root = newProject("root", Map.of(Scope.MAIN, List.of(
                 dep("bar", "com.foo:bar", "3.0"))));
-        JkBuild member = newProject("member", Map.of(Scope.MAIN, List.of(
+        JkBuild module = newProject("module", Map.of(Scope.MAIN, List.of(
                 dep("bar", "com.foo:bar", "1.0"))));
 
-        JkBuild merged = WorkspaceMerge.merge(root, List.of(member));
+        JkBuild merged = WorkspaceMerge.merge(root, List.of(module));
         Dependency surviving = merged.dependencies().of(Scope.MAIN).getFirst();
         assertThat(surviving.version().raw()).isEqualTo("3.0");
     }
 
     @Test
-    void empty_members_returns_root_unchanged() {
+    void empty_modules_returns_root_unchanged() {
         JkBuild root = newProject("root", Map.of());
         assertThat(WorkspaceMerge.merge(root, List.of())).isSameAs(root);
     }
 
     @Test
     void workspace_dep_resolves_against_sibling_artifact() {
-        // Member dep `jk-core.workspace = true` materializes as a placeholder
+        // Module dep `jk-core.workspace = true` materializes as a placeholder
         // module `workspace:jk-core`; the merge step rewrites it to the
         // sibling's actual coord (and then dedupes since it's internal).
         JkBuild root = workspaceRoot("jk", List.of("jk-core", "jk-cli"));
@@ -111,14 +111,14 @@ class WorkspaceMergeTest {
                 new JkBuild.Dependencies(by));
     }
 
-    private static JkBuild workspaceRoot(String artifact, List<String> members) {
+    private static JkBuild workspaceRoot(String artifact, List<String> modules) {
         return new JkBuild(
                 new JkBuild.Project("dev.jkbuild", artifact, "0.1.0", 0),
                 JkBuild.Dependencies.empty(),
                 List.of(),
                 Profiles.empty(),
                 Features.empty(),
-                new Workspace(members));
+                new Workspace(modules));
     }
 
     private static Dependency dep(String name, String module, String version) {

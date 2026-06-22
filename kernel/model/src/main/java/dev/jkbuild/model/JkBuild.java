@@ -385,20 +385,20 @@ public record JkBuild(
      * The optional {@code [build]} block — build-time directives that are not
      * dependencies and never reach a classpath or {@code jk.lock}.
      *
-     * <p>{@code orderAfter} lists workspace members (by project name or
+     * <p>{@code orderAfter} lists workspace modules (by project name or
      * {@code group:artifact}) that must build before this one, <em>without</em>
      * adding a compile/test/runtime edge — the "build-order-only dependency" jk
      * otherwise can't express.
      *
      * <p>{@code embedSha} ({@code [build.embed-sha]}) maps a resource basename to
-     * a workspace member: the build hashes that member's output jar and writes
+     * a workspace module: the build hashes that module's output jar and writes
      * the digest to {@code META-INF/<basename>-sha256.txt} in this module's
      * classes. Each value is implicitly an {@code orderAfter} entry — you must
      * build a sibling before you can hash its jar (see {@link #allOrderAfter()}).
      * This is how the engine pins the first-party worker jars it locates at runtime.
      *
      * <p>{@code testWorkerJars} ({@code [build.test-worker-jars]}) lists workspace
-     * members whose built worker jar must be handed to this module's test JVM (as
+     * modules whose built worker jar must be handed to this module's test JVM (as
      * {@code -Djk.<worker>.worker.jar}) so tests that fork that worker locate it by
      * path. Also implicitly {@code orderAfter} (the worker must be built first).
      */
@@ -424,7 +424,7 @@ public record JkBuild(
 
         /**
          * All build-order prerequisites: explicit {@code orderAfter} plus every
-         * {@code embedSha} source and {@code testWorkerJars} member (a sibling
+         * {@code embedSha} source and {@code testWorkerJars} module (a sibling
          * must be built before you can hash its jar or hand it to a test).
          * De-duplicated, order preserved.
          */

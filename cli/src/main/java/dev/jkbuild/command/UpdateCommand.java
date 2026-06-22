@@ -51,9 +51,9 @@ import java.util.Map;
  * intent: {@code lock} is "make sure a lock exists", {@code update} is
  * "throw away whatever I have and resolve fresh."
  *
- * <p>For workspace roots, updating cascades to each declared member in
+ * <p>For workspace roots, updating cascades to each declared module in
  * declaration order, writing a fresh {@code jk.lock} alongside each
- * member's {@code jk.toml}.
+ * module's {@code jk.toml}.
  *
  * <p>{@code --precise &lt;coord&gt;@&lt;ver&gt;} per PRD §6 is accepted
  * but a no-op until selective resolution lands.
@@ -130,35 +130,35 @@ public final class UpdateCommand implements CliCommand {
             return refreshGitBranches(dir, root, cache);
         }
 
-        // When updating a workspace member directly, filter sibling-internal deps.
-        JkBuild effectiveRoot = applyWorkspaceContextIfMember(dir, root);
+        // When updating a workspace module directly, filter sibling-internal deps.
+        JkBuild effectiveRoot = applyWorkspaceContextIfModule(dir, root);
 
         // Re-resolve the current directory (root or standalone project).
         int result = updateSingleProject(dir, effectiveRoot, cache);
         if (result != 0) return result;
 
-        // Cascade: re-resolve each declared workspace member in declaration order.
+        // Cascade: re-resolve each declared workspace module in declaration order.
         if (effectiveRoot.isWorkspaceRoot()) {
-            Map<Path, JkBuild> members;
+            Map<Path, JkBuild> modules;
             try {
-                members = WorkspaceLoader.loadMembers(dir, effectiveRoot);
+                modules = WorkspaceLoader.loadModules(dir, effectiveRoot);
             } catch (RuntimeException e) {
                 System.err.println("jk update: " + e.getMessage());
                 return 2;
             }
-            for (Map.Entry<Path, JkBuild> entry : members.entrySet()) {
-                Path memberDir = entry.getKey();
-                JkBuild rawMember = entry.getValue();
-                JkBuild effectiveMember = WorkspaceMerge.applyToMember(
-                        effectiveRoot, rawMember, members.values());
-                int memberResult = updateSingleProject(memberDir, effectiveMember, cache);
-                if (memberResult != 0) return memberResult;
+            for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
+                Path moduleDir = entry.getKey();
+                JkBuild rawModule = entry.getValue();
+                JkBuild effectiveModule = WorkspaceMerge.applyToModule(
+                        effectiveRoot, rawModule, modules.values());
+                int moduleResult = updateSingleProject(moduleDir, effectiveModule, cache);
+                if (moduleResult != 0) return moduleResult;
             }
         }
         return 0;
     }
 
-    private static JkBuild applyWorkspaceContextIfMember(Path dir, JkBuild project) {
+    private static JkBuild applyWorkspaceContextIfModule(Path dir, JkBuild project) {
         if (project.isWorkspaceRoot()) return project;
         try {
             var rootOpt = WorkspaceLocator.findRoot(dir);
@@ -166,8 +166,8 @@ public final class UpdateCommand implements CliCommand {
             Path wsRoot = rootOpt.get();
             JkBuild wsRootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
             if (!wsRootBuild.isWorkspaceRoot()) return project;
-            var siblings = WorkspaceLoader.loadMembers(wsRoot, wsRootBuild);
-            return WorkspaceMerge.applyToMember(wsRootBuild, project, siblings.values());
+            var siblings = WorkspaceLoader.loadModules(wsRoot, wsRootBuild);
+            return WorkspaceMerge.applyToModule(wsRootBuild, project, siblings.values());
         } catch (Exception ignored) {
             return project;
         }
@@ -253,13 +253,13 @@ public final class UpdateCommand implements CliCommand {
 
     /**
      * {@code jk update --git}: clear the branch-tip freshness stamp for every
-     * branch git dependency (project + workspace members), so the next build
+     * branch git dependency (project + workspace modules), so the next build
      * re-resolves the remote tip regardless of the freshness window.
      */
     private int refreshGitBranches(Path dir, JkBuild root, Path cache) throws Exception {
         List<JkBuild> builds = new java.util.ArrayList<>();
         builds.add(root);
-        if (root.isWorkspaceRoot()) builds.addAll(WorkspaceLoader.loadMembers(dir, root).values());
+        if (root.isWorkspaceRoot()) builds.addAll(WorkspaceLoader.loadModules(dir, root).values());
 
         GitFetcher fetcher = new GitFetcher(cache.resolve("git"));
         java.util.Set<String> seen = new java.util.LinkedHashSet<>();

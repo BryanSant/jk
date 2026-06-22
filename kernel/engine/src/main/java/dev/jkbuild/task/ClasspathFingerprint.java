@@ -25,7 +25,7 @@ import java.util.zip.ZipFile;
  *   <li>A CAS blob (path under {@code .../sha256/AA/BB/<rest>}) already encodes
  *       its content hash in the path, so the path is the fingerprint.</li>
  *   <li>A workspace-local output is hashed by its <em>logical</em> content — a
- *       jar by the sorted {@code (entry name + entry SHA)} of its members, a
+ *       jar by the sorted {@code (entry name + entry SHA)} of its modules, a
  *       directory by the sorted {@code (relpath + file SHA)} of its files. We
  *       hash logical content, not the raw jar bytes, because jk does not build
  *       byte-reproducible jars: a no-op rebuild re-jars the same classes in a

@@ -21,7 +21,7 @@ import java.util.List;
 public final class InitCommand implements CliCommand {
 
     @Override public String name() { return "init"; }
-    @Override public String description() { return "Initialize the current directory into a project (or member)"; }
+    @Override public String description() { return "Initialize the current directory into a project (or module)"; }
 
     @Override public List<Opt> options() {
         // Same options as NewCommand (minus the positional directory parameter)
@@ -53,7 +53,7 @@ public final class InitCommand implements CliCommand {
         delegate.depsCsv      = in.value("deps").orElse(null);
         delegate.layoutFlag   = in.value("layout").orElse(null);
         delegate.kotlinModule = in.value("kotlin-module").orElse(null);
-        delegate.noMember     = in.isSet("no-member");
+        delegate.noModule     = in.isSet("no-module");
         delegate.directory    = Path.of(".");
         delegate.global       = GlobalOptions.from(in);
         return delegate.callBody();

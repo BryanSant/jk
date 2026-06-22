@@ -111,21 +111,21 @@ public final class GoalConsole {
     /**
      * Goal-oriented variant: render the goal with the new {@link CommandManagerListener}
      * (spinner header + aggregate bar + dynamic phase list) attributed to
-     * {@code member} (the project's {@code group:artifact}), then a
+     * {@code module} (the project's {@code group:artifact}), then a
      * {@code ✓}/{@code ✗} result line from {@code spec}. {@code --output json}
      * still emits NDJSON and {@code --verbose} still prints per-phase lines.
      */
     public static GoalResult runGoal(Goal goal, Mode mode, Path cacheRoot,
-                                     ConsoleSpec spec, String member) {
+                                     ConsoleSpec spec, String module) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
 
         GoalListener console = switch (mode) {
             case JSON -> new NdjsonListener(System.out);
             case VERBOSE -> new VerboseListener(System.out, System.err);
-            case AUTO -> new CommandManagerListener(System.out, spec, member,
+            case AUTO -> new CommandManagerListener(System.out, spec, module,
                     goal.phases(), isInteractiveTerminal());
-            case QUIET -> new CommandManagerListener(System.out, spec, member,
+            case QUIET -> new CommandManagerListener(System.out, spec, module,
                     goal.phases(), false);
         };
         goal.addListener(console);
@@ -190,45 +190,45 @@ public final class GoalConsole {
     }
 
     /**
-     * Run a workspace member's goal into a shared {@link AggregateContext} — its
+     * Run a workspace module's goal into a shared {@link AggregateContext} — its
      * events feed the one aggregate {@link dev.jkbuild.cli.tui.CommandManager}
-     * (bar + phase list) instead of a per-member view. The shared view is
-     * settled by the caller after the last member. Always records the event log.
+     * (bar + phase list) instead of a per-module view. The shared view is
+     * settled by the caller after the last module. Always records the event log.
      */
-    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String member,
+    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String module,
                                          AggregateContext agg) {
-        return runGoalInto(goal, cacheRoot, member, agg, 0);
+        return runGoalInto(goal, cacheRoot, module, agg, 0);
     }
 
     /**
      * As {@link #runGoalInto(Goal, Path, String, AggregateContext)}, but with the
-     * member's reserved {@code slice} of the calibrated total (its pre-scan
-     * estimate). The slice scales the member's own 0→100% into its share of the
+     * module's reserved {@code slice} of the calibrated total (its pre-scan
+     * estimate). The slice scales the module's own 0→100% into its share of the
      * aggregate bar so the bar advances cumulatively without backtracking. Pass
      * the same estimate that was summed into {@link AggregateContext#calibrate}.
      */
-    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String member,
+    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String module,
                                          AggregateContext agg, long slice) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
-        goal.addListener(new AggregateMemberListener(agg, member, goal.phases(), slice));
+        goal.addListener(new AggregateModuleListener(agg, module, goal.phases(), slice));
         return goal.run();
     }
 
     /**
      * As {@link #runGoalInto(Goal, Path, String, AggregateContext, long)} but for a
-     * member built <em>concurrently</em>: its process output is appended to
+     * module built <em>concurrently</em>: its process output is appended to
      * {@code outBuffer} instead of being written above the live region as it
-     * arrives, so parallel members' logs never interleave. The caller flushes the
-     * buffer (above the shared region) when the member completes. Phase/progress
+     * arrives, so parallel modules' logs never interleave. The caller flushes the
+     * buffer (above the shared region) when the module completes. Phase/progress
      * events still feed the shared aggregate view live (the running rows + bar).
      */
-    public static GoalResult runGoalIntoBuffered(Goal goal, Path cacheRoot, String member,
+    public static GoalResult runGoalIntoBuffered(Goal goal, Path cacheRoot, String module,
                                                  AggregateContext agg, long slice,
                                                  java.util.List<String> outBuffer) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
-        AggregateMemberListener lis = new AggregateMemberListener(agg, member, goal.phases(), slice);
+        AggregateModuleListener lis = new AggregateModuleListener(agg, module, goal.phases(), slice);
         lis.bufferOutputInto(outBuffer);
         goal.addListener(lis);
         return goal.run();

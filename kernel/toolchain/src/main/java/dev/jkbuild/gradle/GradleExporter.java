@@ -41,20 +41,20 @@ public final class GradleExporter {
     }
 
     /** Workspace export with auto layout for every project. */
-    public static Result export(JkBuild root, Map<String, JkBuild> membersByRelPath,
+    public static Result export(JkBuild root, Map<String, JkBuild> modulesByRelPath,
                                 Map<String, String> locked) {
-        return export(root, membersByRelPath, Map.of(), locked);
+        return export(root, modulesByRelPath, Map.of(), locked);
     }
 
     /**
-     * Export a project or workspace. {@code membersByRelPath} (empty for a single
-     * project) maps each member's path relative to the root to its parsed build;
+     * Export a project or workspace. {@code modulesByRelPath} (empty for a single
+     * project) maps each module's path relative to the root to its parsed build;
      * {@code layoutByRelPath} carries the concrete {@link JkBuild.Layout} for each
      * project keyed the same way (root = {@code ""}), so jk's flat {@code SIMPLE}
      * layout emits a matching {@code sourceSets} block (callers resolve {@code AUTO}
      * against the directory tree). Missing entries default to {@code AUTO}.
      */
-    public static Result export(JkBuild root, Map<String, JkBuild> membersByRelPath,
+    public static Result export(JkBuild root, Map<String, JkBuild> modulesByRelPath,
                                 Map<String, JkBuild.Layout> layoutByRelPath,
                                 Map<String, String> locked) {
         if (locked == null) locked = Map.of();
@@ -62,17 +62,17 @@ public final class GradleExporter {
         ImportReport.Builder report = ImportReport.builder();
         Map<String, String> buildFiles = new LinkedHashMap<>();
 
-        String settings = renderSettings(root, membersByRelPath.keySet());
+        String settings = renderSettings(root, modulesByRelPath.keySet());
         buildFiles.put("", renderBuild(root, layoutOf(layoutByRelPath, ""), locked, report));
-        for (Map.Entry<String, JkBuild> e : membersByRelPath.entrySet()) {
+        for (Map.Entry<String, JkBuild> e : modulesByRelPath.entrySet()) {
             buildFiles.put(e.getKey(),
                     renderBuild(e.getValue(), layoutOf(layoutByRelPath, e.getKey()), locked, report));
             // includeBuild lives in the root settings.gradle.kts and is root-relative;
-            // a member's own path dep can't be expressed there automatically.
+            // a module's own path dep can't be expressed there automatically.
             for (java.util.List<Dependency> list : e.getValue().dependencies().byScope().values()) {
                 for (Dependency d : list) {
                     if (d.isPath()) {
-                        report.warning("member `" + e.getKey() + "` has a path dep `" + d.module()
+                        report.warning("module `" + e.getKey() + "` has a path dep `" + d.module()
                                 + "`; add `includeBuild(\"" + e.getKey() + "/" + d.pathSource()
                                 + "\")` to settings.gradle.kts manually.");
                     }
@@ -87,7 +87,7 @@ public final class GradleExporter {
         return l != null ? l : JkBuild.Layout.AUTO;
     }
 
-    private static String renderSettings(JkBuild root, java.util.Set<String> memberRelPaths) {
+    private static String renderSettings(JkBuild root, java.util.Set<String> moduleRelPaths) {
         StringBuilder sb = new StringBuilder();
         sb.append("plugins {\n");
         sb.append("    // Auto-provisions JDK toolchains via the foojay Disco API (jk's `project.jdk`).\n");
@@ -111,9 +111,9 @@ public final class GradleExporter {
             }
         }
 
-        if (!memberRelPaths.isEmpty()) {
+        if (!moduleRelPaths.isEmpty()) {
             sb.append('\n');
-            for (String rel : memberRelPaths) {
+            for (String rel : moduleRelPaths) {
                 sb.append("include(\":").append(kEsc(rel.replace('/', ':'))).append("\")\n");
             }
         }
