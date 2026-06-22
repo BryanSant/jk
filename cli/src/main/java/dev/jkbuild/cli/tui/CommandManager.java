@@ -303,6 +303,11 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         settle(GoalChrome.successLine(goalName(), nerdfont, tail), above);
     }
 
+    /** {@link #finishGoalSuccess(String, List)} with no buffered output above. */
+    public void finishGoalSuccess(String tail) {
+        finishGoalSuccess(tail, List.of());
+    }
+
     /** Settle the build goal with the red chip: {@code  ‼ Build ▶ Failure <tail>}. */
     public void finishGoalFailure(String tail, List<String> above) {
         settle(GoalChrome.failureLine(goalName(), nerdfont, tail), above);

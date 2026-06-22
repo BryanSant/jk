@@ -40,7 +40,9 @@ public final class GoalChrome {
 
     /**
      * Settled success: {@code  ✓ Build ▶ Build successful for N modules took T} — the
-     * "{goal} successful" phrase in green, tail pre-styled by the caller.
+     * "{goal} successful" phrase in green. The {@code tail} is pre-styled by the caller
+     * and carries its own leading separator (a {@code " for …"} or a {@code ", …"}), so
+     * it abuts the verb directly.
      */
     public static String successLine(String name, boolean nerdfont, String tail) {
         Theme t = Theme.active();
@@ -48,9 +50,9 @@ public final class GoalChrome {
         String verb = Theme.colorize(goal + " successful", t.success());
         if (nerdfont) {
             return chip(Glyphs.CHECK, name, t.goalSuccessChip())
-                    + cap(t.goalChipColor(), true) + " " + verb + " " + tail;
+                    + cap(t.goalChipColor(), true) + " " + verb + tail;
         }
-        return Theme.colorize(Glyphs.CHECK, t.success()) + " " + verb + " " + tail;
+        return Theme.colorize(Glyphs.CHECK, t.success()) + " " + verb + tail;
     }
 
     /**

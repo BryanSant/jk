@@ -391,7 +391,9 @@ public final class BuildCommand implements CliCommand {
         dev.jkbuild.runtime.PhaseTimings.record(
                 cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA,
                 System.currentTimeMillis());
-        view.finishGoalSuccess(modulesTail(total, start), snapshot(deferredOutput));
+        view.finishGoalSuccess(
+                dirtyDirs.isEmpty() ? upToDateTail("all modules", start) : modulesTail(total, start),
+                snapshot(deferredOutput));
         return 0;
     }
 
@@ -623,68 +625,8 @@ public final class BuildCommand implements CliCommand {
                 built++;
             }
         }
-        String duration = " " + elapsedSince(buildStart);
-        // "✓ Build Successful: " prefix costs ~20 visible columns.
-        String msg = workspaceSummary(root, workspaceRoot, sorted, view.width() - 20, duration);
-        view.finishSuccess(msg + duration);
+        view.finishGoalSuccess(modulesTail(sorted.size(), buildStart));
         return 0;
-    }
-
-    /**
-     * "Built jktest and its :cli member"
-     * "Built jktest and its :cli, :core members"
-     * "Built jktest and its :cli, :runtime and 1 other member"
-     * "Built jktest and its :cli, :runtime and 4 other members"
-     *
-     * Falls back to "Built jktest and its N members" when {@code maxCols} is too
-     * small to fit the named form (including the {@code durationSuffix}).
-     */
-    private static String workspaceSummary(JkBuild root, Path workspaceRoot,
-                                           List<Path> members, int maxCols, String durationSuffix) {
-        String rootName = root.project().name();
-        if (rootName.isBlank()) rootName = workspaceRoot.getFileName().toString();
-        String cyanRoot = Theme.colorize(rootName, Theme.active().cyan());
-
-        int n = members.size();
-        if (n == 0) return "Built " + cyanRoot;
-
-        String m0 = Theme.colorize(":" + workspaceRoot.relativize(members.get(0)),
-                Theme.active().cyan());
-        String candidate;
-        if (n == 1) {
-            candidate = "Built " + cyanRoot + " and its " + m0 + " member";
-        } else {
-            String m1 = Theme.colorize(":" + workspaceRoot.relativize(members.get(1)),
-                    Theme.active().cyan());
-            if (n == 2) {
-                candidate = "Built " + cyanRoot + " and its " + m0 + ", " + m1 + " members";
-            } else {
-                int others = n - 2;
-                candidate = "Built " + cyanRoot + " and its " + m0 + ", " + m1
-                        + " and " + others + " other " + (others == 1 ? "member" : "members");
-            }
-        }
-        if (visibleLength(candidate + durationSuffix) <= maxCols) return candidate;
-
-        // Terminal too narrow: compact form with just the count.
-        return "Built " + cyanRoot + " and its " + n + " " + (n == 1 ? "member" : "members");
-    }
-
-    /** Count visible (non-ANSI-escape) characters in {@code s}. */
-    private static int visibleLength(String s) {
-        int count = 0;
-        for (int i = 0; i < s.length(); ) {
-            char c = s.charAt(i);
-            if (c == '\033' && i + 1 < s.length() && s.charAt(i + 1) == '[') {
-                i += 2;
-                while (i < s.length() && !Character.isLetter(s.charAt(i))) i++;
-                if (i < s.length()) i++; // consume the final letter
-            } else {
-                count++;
-                i++;
-            }
-        }
-        return count;
     }
 
     /**
@@ -861,9 +803,12 @@ public final class BuildCommand implements CliCommand {
             // member's progress into its reserved slice of the calibrated total.
             result = GoalConsole.runGoalInto(goal, pm.cache(), pm.target(), agg, pm.barWeight());
         } else {
+            // chip = true → settle through the goal chip (" ✓ Build ▶ Build successful …"),
+            // matching the workspace path. onSuccess/onFailure return the tail after the verb.
             ConsoleSpec spec = new ConsoleSpec("Build",
-                    r -> successMessage(goal, r),
-                    r -> failureMessage(goal, r));
+                    r -> projectTail(goal),
+                    r -> styledCoord(pm.target()),
+                    true);
             result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
 
@@ -900,52 +845,6 @@ public final class BuildCommand implements CliCommand {
         }
     }
 
-    /** Success result line (sans the leading ✓ and trailing duration). */
-    private static String successMessage(Goal goal, GoalResult result) {
-        String outcome = goal.get(BUILD_OUTCOME).orElse("");
-        if ("up-to-date".equals(outcome)) {
-            return "Up to date";
-        }
-        String built = Theme.colorize("Built", Theme.active().focused());
-        String label = jarLabel(goal);
-        return label.isEmpty() ? built : built + " " + label;
-    }
-
-    /**
-     * The built jar as a yellow, project-relative path — {@code target/foo-1.0.jar}
-     * rather than the bare filename — so the result line points at the artifact on
-     * disk. Falls back to the filename if the layout can't relativize it, and to
-     * {@code ""} when no jar was produced.
-     */
-    private static String jarLabel(Goal goal) {
-        Path jar = goal.get(JAR_PATH).orElse(null);
-        if (jar == null) return "";
-        String rel = goal.get(LAYOUT)
-                .map(layout -> relativeOrName(layout.memberRoot(), jar))
-                .orElseGet(() -> jar.getFileName().toString());
-        return Theme.colorize(rel, Theme.active().path());
-    }
-
-    /** {@code base}-relative path with forward slashes, or the bare filename on failure. */
-    private static String relativeOrName(Path base, Path jar) {
-        try {
-            return base.relativize(jar).toString().replace(java.io.File.separatorChar, '/');
-        } catch (RuntimeException e) {
-            return jar.getFileName().toString();
-        }
-    }
-
-    /** Failure result line (sans the leading ✗ and trailing duration), in red. */
-    private static String failureMessage(Goal goal, GoalResult result) {
-        var err = Theme.active().error();
-        var testResult = goal.get(TEST_RESULT).orElse(null);
-        if (testResult != null && !testResult.allPassed()) {
-            String jar = goal.get(JAR_PATH).map(p -> p.getFileName().toString()).orElse("");
-            return Theme.colorize(jar.isEmpty() ? "Tests failed" : "Tests failed while building " + jar, err);
-        }
-        return Theme.colorize("Build failed", err);
-    }
-
     /** Dim italic {@code "took Xms"} from a wall-clock start captured with {@link System#nanoTime()}. */
     static String elapsedSince(long startNanos) {
         long ms = (System.nanoTime() - startNanos) / 1_000_000;
@@ -957,21 +856,35 @@ public final class BuildCommand implements CliCommand {
      * in cyan, dim duration — e.g. {@code ‼ Build failed: Failure at kernel/core in 8.7s}
      * (the {@code ‼} + red is added by {@code finishFailure}).
      */
-    /** Success tail {@code for N modules took T} — N bold-white, {@code took T} bright-black. */
+    /** Success tail {@code  for N modules took T} (work done) — leading space, N bold-white. */
     private static String modulesTail(int total, long start) {
-        return "for " + Theme.colorize(String.valueOf(total), Theme.active().focused())
-                + " module" + (total == 1 ? "" : "s") + " "
-                + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
+        return " for " + Theme.colorize(String.valueOf(total), Theme.active().focused())
+                + " module" + (total == 1 ? "" : "s") + " " + elapsedSince(start);
+    }
+
+    /** Success tail {@code , <scope> up to date took T} — when nothing was rebuilt. */
+    private static String upToDateTail(String scope, long start) {
+        return ", " + scope + " up to date " + elapsedSince(start);
+    }
+
+    /** Single-project success tail: {@code , project up to date} / {@code , project built} (no duration; the framework appends it). */
+    private static String projectTail(Goal goal) {
+        return "up-to-date".equals(goal.get(BUILD_OUTCOME).orElse(""))
+                ? ", project up to date" : ", project built";
+    }
+
+    /** {@code group:name} with the group cyan and the name bright-cyan. */
+    private static String styledCoord(String coord) {
+        int i = coord.indexOf(':');
+        return i < 0
+                ? Theme.colorize(coord, Theme.active().coordGroup())
+                : Theme.colorize(coord.substring(0, i), Theme.active().coordGroup())
+                        + ":" + Theme.colorize(coord.substring(i + 1), Theme.active().coordName());
     }
 
     /** Failure tail {@code group:name took T} — coord colored, {@code took T} bright-black. */
     private static String failureTail(String coord, long start) {
-        int i = coord.indexOf(':');
-        String styled = i < 0
-                ? Theme.colorize(coord, Theme.active().coordGroup())
-                : Theme.colorize(coord.substring(0, i), Theme.active().coordGroup())
-                        + ":" + Theme.colorize(coord.substring(i + 1), Theme.active().coordName());
-        return styled + " " + Theme.colorize(elapsedSince(start), Theme.active().darkGray());
+        return styledCoord(coord) + " " + elapsedSince(start);
     }
 
     /** Failure tail for a member missing its {@code jk.toml}. */

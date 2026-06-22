@@ -22,7 +22,20 @@ import java.util.function.Function;
 public record ConsoleSpec(
         String verb,
         Function<GoalResult, String> onSuccess,
-        Function<GoalResult, String> onFailure) {
+        Function<GoalResult, String> onFailure,
+        boolean chip) {
+
+    /**
+     * Default presentation — the generic {@code ✓ <Verb> Successful: <msg>} finish.
+     * Set {@code chip = true} (the 4-arg form) to settle through the goal-chip
+     * renderer instead ({@code  ✓ Build ▶ <onSuccess>}); {@code onSuccess}/{@code
+     * onFailure} then return the tail that follows the chip's verb.
+     */
+    public ConsoleSpec(String verb,
+                       Function<GoalResult, String> onSuccess,
+                       Function<GoalResult, String> onFailure) {
+        this(verb, onSuccess, onFailure, false);
+    }
 
     /** Dim italic {@code "took Xms"} duration suffix — appended by the framework to every result line. */
     public static String took(Duration d) {
