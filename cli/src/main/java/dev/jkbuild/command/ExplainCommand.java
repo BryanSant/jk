@@ -108,19 +108,14 @@ public final class ExplainCommand implements CliCommand {
             etaMillis = 0;   // never fail explain over the estimate
         }
 
-        // Header: a green " - Build Plan " chip (the same chip family as jk tree),
-        // capped by a green ▶ segment arrow when nerdfont.
+        // Header: a green " - Build Plan " chip (the same chip family as jk tree), capped
+        // by a green ▶ segment arrow when nerdfont, with the "Rebuild N of M modules ·
+        // ETA ~time" summary on the same line. The ● root coordinate follows.
         String header = nerdfont
                 ? Theme.colorize(" - Build Plan ", t.goalSuccessChip())
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
                                 t.bright(t.goalChipColor()))
                 : Theme.colorize(" - Build Plan ", t.goalSuccessChip());
-        System.out.println();
-        System.out.println(header);
-        // Root node: ● bullet, then the entry project's group:artifact in bold.
-        System.out.println(" " + Theme.colorize("●", t.darkGray()) + " "
-                + boldCoord(entry.project().group() + ":" + entry.project().name(), t));
-        // Status line: a rail bar, then "Rebuild N of M modules · ETA ~time".
         String etaPart = etaMillis > 0
                 ? " " + Theme.colorize("·", t.darkGray()) + " ETA "
                         + Theme.colorize("~" + fmtDuration(etaMillis), t.focused())
@@ -129,7 +124,11 @@ public final class ExplainCommand implements CliCommand {
                 ? "All " + Theme.colorize(Long.toString(total), t.focused()) + " modules cached"
                 : "Rebuild " + Theme.colorize(Long.toString(rebuild), t.focused())
                         + " of " + total + " modules";
-        System.out.println(" " + Theme.colorize("│", t.darkGray()) + " " + status + etaPart);
+        System.out.println();
+        System.out.println(header + "  " + status + etaPart);
+        // Root node: ● bullet, then the entry project's group:artifact in bold.
+        System.out.println(" " + Theme.colorize("●", t.darkGray()) + " "
+                + boldCoord(entry.project().group() + ":" + entry.project().name(), t));
 
         // Partition the topo order by cache status: every fully-cached module (wherever
         // it sits in the order) collapses into the "Fully Cached" section (names only);
@@ -156,9 +155,14 @@ public final class ExplainCommand implements CliCommand {
             } else {
                 List<String> names = new ArrayList<>();
                 for (int i : cachedIdx) names.add(":" + shortName(modules.get(i).unit().coord()));
-                String elided = elideDeps(names, Math.max(10, width - 8));
-                System.out.println(childPrefix + Theme.colorize("╰─ ", t.darkGray())
-                        + renderCachedNames(elided, t));
+                // Wrap the full list across lines (no truncation): the first line hangs off
+                // a "╰─ " connector; continuations align under the first name.
+                List<String> lines = wrapNames(names, Math.max(20, width - 7));
+                String cont = childPrefix + "   ";   // align past "╰─ "
+                for (int li = 0; li < lines.size(); li++) {
+                    System.out.println((li == 0 ? childPrefix + Theme.colorize("╰─ ", t.darkGray()) : cont)
+                            + renderCachedNames(lines.get(li), t));
+                }
             }
         }
         if (!dirtyIdx.isEmpty()) {
@@ -326,6 +330,29 @@ public final class ExplainCommand implements CliCommand {
             best = candidate;
         }
         return best;
+    }
+
+    /**
+     * Greedily pack {@code tokens} into {@code ", "}-joined lines, each at most
+     * {@code avail} visible columns wide (the wrap point drops the separator rather
+     * than leaving a trailing comma). On a non-TTY {@code avail} is effectively
+     * unbounded, so the whole list lands on one line.
+     */
+    static List<String> wrapNames(List<String> tokens, int avail) {
+        List<String> lines = new ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        for (String tok : tokens) {
+            if (cur.length() == 0) {
+                cur.append(tok);
+            } else if (cur.length() + 2 + tok.length() <= avail) {
+                cur.append(", ").append(tok);
+            } else {
+                lines.add(cur.toString());
+                cur = new StringBuilder(tok);
+            }
+        }
+        if (cur.length() > 0) lines.add(cur.toString());
+        return lines;
     }
 
     /**

@@ -75,6 +75,21 @@ class ExplainCommandTest {
     }
 
     @Test
+    void wrapNames_packs_tokens_into_width_bounded_lines() {
+        List<String> tokens = List.of(":model", ":plugin-api", ":core", ":io", ":auditor");
+
+        // Unbounded (the non-TTY MAX_VALUE) → the whole list on one line.
+        assertThat(ExplainCommand.wrapNames(tokens, Integer.MAX_VALUE))
+                .containsExactly(String.join(", ", tokens));
+
+        // Narrow → several lines, each within the budget; every token kept, order preserved.
+        List<String> lines = ExplainCommand.wrapNames(tokens, 20);
+        assertThat(lines.size()).isGreaterThan(1);
+        for (String line : lines) assertThat(line.length()).isLessThanOrEqualTo(20);
+        assertThat(String.join(", ", lines)).isEqualTo(String.join(", ", tokens));
+    }
+
+    @Test
     void renders_units_origins_and_edges_in_dependency_order(@TempDir Path tmp) throws Exception {
         project(tmp.resolve("lib"), "lib");
         project(tmp.resolve("app"), "app", "lib");
