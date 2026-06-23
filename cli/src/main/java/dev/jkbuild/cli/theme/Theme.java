@@ -125,7 +125,7 @@ public interface Theme {
     /** Pure-black text on the warning yellow — jk explain's "Rebuild" section chip. */
     AttributedStyle warningChip();
 
-    /** Pure-black text on bright-white — jk explain's "Fully Cached" section chip. */
+    /** Pure-black text on light gray — jk explain's "Fully Cached" section chip. */
     AttributedStyle cachedChip();
 
     /** The goal chip's green — the foreground of the powerline cap that closes the green chip. */
