@@ -84,7 +84,9 @@ class ExplainCommandTest {
         String out = runExplainCapturingStdout(tmp.resolve("app"));
 
         assertThat(out).contains("2 modules");
-        assertThat(out).contains("com.example:app").contains("root");
+        // The ● root coord colors group/artifact separately, so assert single-color-span
+        // tokens (the full "com.example:app" is no longer one contiguous span under color).
+        assertThat(out).contains("com.example").contains("app").contains("root");
         assertThat(out).contains("path dep");
         assertThat(out).contains("←").contains("lib");          // app's edge to lib (abbreviated)
         // lib (the path dep) is printed before app (the root) — dependency-first order.

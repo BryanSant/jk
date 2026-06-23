@@ -108,47 +108,67 @@ public final class ExplainCommand implements CliCommand {
             etaMillis = 0;   // never fail explain over the estimate
         }
 
-        // Header: a leading blank line, then a left-flush cyan powerline segment —
-        // " Build Plan for <coord> " on the cyan chip, capped on the right by a ▶ segment
-        // arrow. A module/rebuild summary follows, then a trunk rail.
-        String title = " Build Plan for " + entry.project().group() + ":" + entry.project().name() + " ";
+        // Header: a green " - Build Plan " chip (the same chip family as jk tree),
+        // capped by a green ▶ segment arrow when nerdfont.
         String header = nerdfont
-                ? Theme.colorize(title, t.cyanBadge())
-                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.cyan())
-                : Theme.colorize(title, t.cyanBadge());
-        String summary = Theme.colorize(total + (total == 1 ? " module" : " modules"), t.brightWhite())
-                + Theme.colorize(" · ", t.darkGray())
-                + (rebuild == 0
-                        ? Theme.colorize("all cached", t.success())
-                        : Theme.colorize(rebuild + " will rebuild", t.brightWhite()))
-                + (etaMillis > 0
-                        ? Theme.colorize(" · ~" + fmtDuration(etaMillis), t.darkGray())
-                        : "");
+                ? Theme.colorize(" - Build Plan ", t.goalSuccessChip())
+                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
+                                t.bright(t.goalChipColor()))
+                : Theme.colorize(" - Build Plan ", t.goalSuccessChip());
         System.out.println();
-        System.out.println(header + " " + summary);
-        System.out.println(Theme.colorize("│", t.darkGray()));
+        System.out.println(header);
+        // Root node: ● bullet, then the entry project's group:artifact in bold.
+        System.out.println(" " + Theme.colorize("●", t.darkGray()) + " "
+                + boldCoord(entry.project().group() + ":" + entry.project().name(), t));
+        // Status line: a rail bar, then "Rebuild N of M modules · ETA ~time".
+        String etaPart = etaMillis > 0
+                ? " " + Theme.colorize("·", t.darkGray()) + " ETA "
+                        + Theme.colorize("~" + fmtDuration(etaMillis), t.focused())
+                : "";
+        String status = rebuild == 0
+                ? "All " + Theme.colorize(Long.toString(total), t.focused()) + " modules cached"
+                : "Rebuild " + Theme.colorize(Long.toString(rebuild), t.focused())
+                        + " of " + total + " modules";
+        System.out.println(" " + Theme.colorize("│", t.darkGray()) + " " + status + etaPart);
 
-        // Group into display rows: dirty modules render individually (with a phase
-        // sub-tree); a contiguous run of more than COLLAPSE fully-cached modules
-        // collapses to one summary line (--verbose expands everything).
-        List<int[]> rows = new ArrayList<>();   // {startIndex, count}; count>1 ⇒ collapsed cached run
-        for (int i = 0; i < modules.size(); ) {
-            if (all || modules.get(i).dirty()) { rows.add(new int[]{i, 1}); i++; continue; }
-            int j = i;
-            while (j < modules.size() && !modules.get(j).dirty()) j++;
-            int run = j - i;
-            if (run > COLLAPSE) rows.add(new int[]{i, run});
-            else for (int k = i; k < j; k++) rows.add(new int[]{k, 1});
-            i = j;
+        // Split the topo order at the first dirty module: the leading run of fully-cached
+        // modules collapses into a "Fully Cached" section (names only); everything from the
+        // first rebuild onward is the detailed "Rebuild" section (cached modules in that
+        // tail still show, just without a phase sub-tree). --verbose expands every phase.
+        boolean verbose = all;
+        int firstDirty = 0;
+        while (firstDirty < modules.size() && !modules.get(firstDirty).dirty()) firstDirty++;
+        boolean hasCached = firstDirty > 0;
+        boolean hasTail = firstDirty < modules.size();
+
+        if (hasCached) {
+            boolean lastSection = !hasTail;
+            System.out.println(" " + Theme.colorize(lastSection ? "╰─" : "├─", t.darkGray())
+                    + dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont));
+            String childPrefix = " " + Theme.colorize(lastSection ? "   " : "│  ", t.darkGray());
+            if (verbose) {
+                for (int k = 0; k < firstDirty; k++) {
+                    renderModuleRow(modules.get(k), k + 1, graph, coordByDir, k == firstDirty - 1,
+                            childPrefix, 4, width, nerdfont, true, t);
+                }
+            } else {
+                List<String> names = new ArrayList<>();
+                for (int k = 0; k < firstDirty; k++) {
+                    names.add(":" + shortName(modules.get(k).unit().coord()));
+                }
+                String elided = elideDeps(names, Math.max(10, width - 8));
+                System.out.println(childPrefix + Theme.colorize("╰─ ", t.darkGray())
+                        + renderCachedNames(elided, t));
+            }
         }
-        for (int r = 0; r < rows.size(); r++) {
-            boolean last = r == rows.size() - 1;
-            int[] row = rows.get(r);
-            if (row[1] > 1) renderCollapsed(modules, row[0], row[1], last, width, t);
-            else renderModule(modules.get(row[0]), row[0] + 1, graph, coordByDir, last, width, nerdfont, t);
+        if (hasTail) {
+            System.out.println(" " + Theme.colorize("╰─", t.darkGray())
+                    + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
+            for (int k = firstDirty; k < modules.size(); k++) {
+                renderModuleRow(modules.get(k), k + 1, graph, coordByDir, k == modules.size() - 1,
+                        "    ", 4, width, nerdfont, verbose, t);
+            }
         }
-        System.out.println();
-        System.out.println(Theme.colorize((total - rebuild) + " cached · " + rebuild + " rebuild", t.darkGray()));
         return 0;
     }
 
@@ -162,13 +182,17 @@ public final class ExplainCommand implements CliCommand {
 
     /** Longest phase-name column (e.g. {@code package-shadow}, {@code compile-kotlin}). */
     private static final int PHASE_COL = 14;
-    /** Contiguous fully-cached runs longer than this collapse to one summary line. */
-    private static final int COLLAPSE = 3;
 
-    /** Render one module: a header line + (when dirty) its phase sub-tree. */
-    private static void renderModule(BuildPlanForecast.Module m, int idx, BuildGraph.Result graph,
-                                     Map<Path, String> coordByDir, boolean last, int width,
-                                     boolean nerdfont, Theme t) {
+    /**
+     * Render one module row under a section: {@code prefix} + connector + index badge +
+     * coordinate + origin + dependency edges + verdict, then (when the module rebuilds,
+     * or {@code verbose}) its phase sub-tree. {@code prefixWidth} is {@code prefix}'s
+     * visible column count, used to keep the verdict aligned.
+     */
+    private static void renderModuleRow(BuildPlanForecast.Module m, int idx, BuildGraph.Result graph,
+                                        Map<Path, String> coordByDir, boolean last, String prefix,
+                                        int prefixWidth, int width, boolean nerdfont,
+                                        boolean verbose, Theme t) {
         BuildGraph.BuildUnit u = m.unit();
         String origin = switch (u.origin()) {
             case ROOT -> "root";
@@ -178,8 +202,8 @@ public final class ExplainCommand implements CliCommand {
         };
         String idxStr = String.format("%02d", idx);
         // Visible (uncolored) width as we go, so the verdict can be column-aligned.
-        int plain = 2 + (idxStr.length() + 2) + 1 + u.coord().length() + 1 + origin.length();
-        StringBuilder line = new StringBuilder()
+        int plain = prefixWidth + 2 + (idxStr.length() + 2) + 1 + u.coord().length() + 1 + origin.length();
+        StringBuilder line = new StringBuilder(prefix)
                 .append(Theme.colorize((last ? "╰" : "├") + "─", t.darkGray()))
                 .append(dev.jkbuild.cli.tui.Badge.pill(idxStr, nerdfont))
                 .append(' ').append(coloredCoord(u.coord(), t))
@@ -201,44 +225,53 @@ public final class ExplainCommand implements CliCommand {
         line.append(" ".repeat(pad)).append(verdict);
         System.out.println(line);
 
-        if (m.dirty()) {
-            String spine = last ? " " : Theme.colorize("│", t.darkGray());
+        if (m.dirty() || verbose) {
+            String spine = prefix + (last ? "   " : Theme.colorize("│", t.darkGray()) + "  ");
             List<BuildPlanForecast.Phase> ph = m.phases();
             for (int k = 0; k < ph.size(); k++) {
                 boolean lp = k == ph.size() - 1;
-                System.out.println(spine + "  " + Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
+                System.out.println(spine + Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
                         + Theme.colorize(padRight(ph.get(k).name(), PHASE_COL), t.brightWhite())
                         + "  " + renderStatus(ph.get(k), t));
             }
         }
     }
 
-    /** Column the per-module verdict ("✓ fully cached" / "□ rebuild") aligns to. */
-    private static final int VERDICT_COL = 44;
+    /** The entry project's {@code group:artifact} in bold, each segment in its coord color. */
+    private static String boldCoord(String coord, Theme t) {
+        int colon = coord.indexOf(':');
+        if (colon < 0) return Theme.colorize(coord, t.coordName().bold());
+        return Theme.colorize(coord.substring(0, colon), t.coordGroup().bold())
+                + ":" + Theme.colorize(coord.substring(colon + 1), t.coordName().bold());
+    }
 
-    /** Render a collapsed run of fully-cached modules as one summary line. */
-    private static void renderCollapsed(List<BuildPlanForecast.Module> modules, int start, int count,
-                                        boolean last, int width, Theme t) {
-        List<String> names = new ArrayList<>();
-        for (int k = start; k < start + count; k++) {
-            String coord = modules.get(k).unit().coord();
-            int c = coord.indexOf(':');
-            names.add(c < 0 ? coord : coord.substring(c + 1));
-        }
-        String label = count + " modules fully cached";
-        String elided = elideDeps(names, Math.max(10, width - label.length() - 8));
-        StringBuilder sb = new StringBuilder(Theme.colorize((last ? "╰" : "├") + "─ ", t.darkGray()))
-                .append(Theme.colorize("✓ ", t.success()))
-                .append(Theme.colorize(label + ": ", t.darkGray()));
+    /** The artifact half of a {@code group:artifact} coordinate. */
+    private static String shortName(String coord) {
+        int c = coord.indexOf(':');
+        return c < 0 ? coord : coord.substring(c + 1);
+    }
+
+    /** Color a comma-list of {@code :name} cached-module refs (the {@code …+N more…} marker dim). */
+    private static String renderCachedNames(String elided, Theme t) {
+        StringBuilder sb = new StringBuilder();
         String[] pieces = elided.split(", ");
         for (int i = 0; i < pieces.length; i++) {
             if (i > 0) sb.append(Theme.colorize(", ", t.darkGray()));
-            sb.append(pieces[i].matches("…\\+\\d+ more…")
-                    ? Theme.colorize(pieces[i], t.darkGray())
-                    : Theme.colorize(pieces[i], t.coordName()));
+            String p = pieces[i];
+            if (p.matches("…\\+\\d+ more…")) {
+                sb.append(Theme.colorize(p, t.darkGray()));
+            } else if (p.startsWith(":")) {
+                sb.append(Theme.colorize(":", t.darkGray()))
+                        .append(Theme.colorize(p.substring(1), t.coordName()));
+            } else {
+                sb.append(Theme.colorize(p, t.coordName()));
+            }
         }
-        System.out.println(sb);
+        return sb.toString();
     }
+
+    /** Column the per-module verdict ("✓ fully cached" / "□ rebuild") aligns to. */
+    private static final int VERDICT_COL = 44;
 
     /** A phase's status: {@code ✓ cached <key> · detail} (green) or {@code □ detail} (white). */
     private static String renderStatus(BuildPlanForecast.Phase p, Theme t) {
