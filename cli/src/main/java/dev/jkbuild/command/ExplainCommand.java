@@ -18,6 +18,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * {@code jk explain} — forecast the build (the same {@link BuildGraph} the build
@@ -39,6 +40,8 @@ public final class ExplainCommand implements CliCommand {
         return List.of(
                 Opt.flag("Build the plan instead of printing it (`jk build`).", "--run"),
                 Opt.flag("Expand every module's phases, even cached ones.", "--verbose", "-v"),
+                Opt.flag("Estimate the ETA for a serial build (one module at a time).", "--no-parallel"),
+                Opt.flag("", "--parallel").hide(),
                 Opt.value("<dir>",
                         "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                         "--cache-dir").hide());
@@ -82,23 +85,34 @@ public final class ExplainCommand implements CliCommand {
         int total = modules.size();
         long rebuild = modules.stream().filter(BuildPlanForecast.Module::dirty).count();
 
-        // Predicted wall-clock for the build: sum each module's bar weight (the SAME
-        // estimate the live bar calibrates to — weights ≈150 ms each, with the cascade
-        // reserved via forceRebuild), × MS_PER_WEIGHT. Computed even for an all-cached
-        // plan: re-parsing every build file and re-checking stamps/CAS across the
-        // workspace is a real couple of seconds (measured ~2.3 s on jk.jk's 17 modules),
-        // not instant — so explain always quantifies how long the next build will take.
+        // Predicted wall-clock for the build. Each module's predicted weight (≈150 ms
+        // each, cascade reserved via forceRebuild) feeds a schedule-aware estimate that
+        // mirrors `jk build`: serial (--no-parallel) sums everything; otherwise the
+        // parallel graph build overlaps independent modules, so we take the critical
+        // path / throughput / serial-test bound (see EffortWeights.scheduleMillis).
+        // Computed even for an all-cached plan: re-parsing every build file and
+        // re-checking stamps/CAS across the workspace is a real couple of seconds.
+        boolean serial = in.isSet("no-parallel");
         long etaMillis = 0;
         try {
+            List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>();
             for (BuildPlanForecast.Module m : modules) {
                 Path mdir = m.unit().dir();
                 var inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
                         mdir, cache, mdir.resolve("jk.toml"), mdir.resolve("jk.lock"), mdir, 1,
                         TestCommand.estimateTestCount(mdir.resolve("src/test/java")),
                         null, JkDirs.jdks(), false, false);
-                etaMillis += (long) dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty())
-                        .build().estimatedTotalWeight() * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT;
+                var goal = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty()).build();
+                int weight = goal.estimatedTotalWeight();
+                int testWeight = goal.phases().stream()
+                        .filter(p -> p.name().equals("run-tests"))
+                        .mapToInt(dev.jkbuild.run.Phase::estimateWeight).sum();
+                costs.add(new dev.jkbuild.runtime.EffortWeights.ModuleCost(
+                        mdir, graph.edges().getOrDefault(mdir, Set.of()), weight, testWeight));
             }
+            int concurrency = Math.max(1,
+                    Math.min(Runtime.getRuntime().availableProcessors(), modules.size()));
+            etaMillis = dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, serial, false);
         } catch (RuntimeException e) {
             etaMillis = 0;   // never fail explain over the estimate
         }

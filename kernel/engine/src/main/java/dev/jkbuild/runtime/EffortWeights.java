@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Predicts each build phase's progress-bar weight from the work it will
@@ -312,6 +313,67 @@ public final class EffortWeights {
         } catch (Exception e) {
             return SKIP;
         }
+    }
+
+    // --- parallel-aware wall-clock estimate ----------------------------------
+
+    /** One module's cost for the schedule estimate: its weight, its serialized test weight, and its prereqs. */
+    public record ModuleCost(Path dir, Set<Path> prereqs, int weight, int testWeight) {}
+
+    /**
+     * Estimate a build's wall-clock (ms) from per-module weights, honoring how
+     * {@code jk build} actually schedules. Serial ({@code --no-parallel}) sums every
+     * module's weight. The parallel graph build overlaps independent modules, so the
+     * estimate is the largest of three lower bounds — the dependency <b>critical path</b>
+     * (longest weighted chain, since a module can't start before its prereqs finish),
+     * the <b>throughput</b> ceiling (Σweight ÷ concurrency, when work saturates the
+     * worker JVMs), and — when tests are serialized across modules (the default, no
+     * {@code --parallel-tests}) — the <b>serial test-phase total</b>, since those phases
+     * share one test JVM and cannot overlap. Summing everything (the old estimate)
+     * over-counts the compile/package work that overlaps the long serial test tail.
+     */
+    public static long scheduleMillis(List<ModuleCost> mods, int concurrency,
+                                      boolean serial, boolean parallelTests) {
+        long serialSum = 0;
+        long testSum = 0;
+        for (ModuleCost m : mods) { serialSum += m.weight(); testSum += m.testWeight(); }
+        if (serial || concurrency <= 1) return serialSum * MS_PER_WEIGHT;
+        long critical = criticalPath(mods);
+        long throughput = (serialSum + concurrency - 1) / concurrency;
+        long testFloor = parallelTests ? 0 : testSum;
+        return Math.max(critical, Math.max(throughput, testFloor)) * MS_PER_WEIGHT;
+    }
+
+    /**
+     * Longest <em>blocking</em>-weighted path through the module DAG:
+     * {@code finish(m) = blocking(m) + max prereq finish}. Only a module's blocking work
+     * (compile + package — what produces the jar dependents wait on) sits on the path; its
+     * test phase doesn't block dependents and is accounted for separately by the serial
+     * test floor, so counting it here would double the tail.
+     */
+    private static long criticalPath(List<ModuleCost> mods) {
+        java.util.Map<Path, ModuleCost> byDir = new java.util.HashMap<>();
+        for (ModuleCost m : mods) byDir.put(m.dir(), m);
+        java.util.Map<Path, Long> finish = new java.util.HashMap<>();
+        long best = 0;
+        for (ModuleCost m : mods) best = Math.max(best, pathFinish(m, byDir, finish));
+        return best;
+    }
+
+    private static long pathFinish(ModuleCost m, java.util.Map<Path, ModuleCost> byDir,
+                                   java.util.Map<Path, Long> memo) {
+        Long cached = memo.get(m.dir());
+        if (cached != null) return cached;
+        long blocking = Math.max(0, m.weight() - m.testWeight());
+        memo.put(m.dir(), blocking);   // cycle guard
+        long upstream = 0;
+        for (Path p : m.prereqs()) {
+            ModuleCost pm = byDir.get(p);
+            if (pm != null) upstream = Math.max(upstream, pathFinish(pm, byDir, memo));
+        }
+        long f = blocking + upstream;
+        memo.put(m.dir(), f);
+        return f;
     }
 
 }

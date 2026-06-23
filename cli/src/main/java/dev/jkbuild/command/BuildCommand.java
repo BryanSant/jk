@@ -74,6 +74,7 @@ public final class BuildCommand implements CliCommand {
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"),
                 Opt.flag("Build modules one at a time (rich serial view).", "--no-parallel"),
+                Opt.flag("", "--parallel").hide(),
                 Opt.flag("Run modules' tests concurrently too. Default: off.", "--parallel-tests"));
     }
 
@@ -108,7 +109,7 @@ public final class BuildCommand implements CliCommand {
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
-        this.noParallel = in.isSet("no-parallel");
+        this.noParallel = in.isSet("no-parallel") && !in.isSet("parallel");
         this.global = GlobalOptions.from(in);
         // Opt-in: run modules' tests concurrently. Default serializes them
         // (shared ports/locks/fixtures) — see BuildPipeline's test gate.
@@ -343,9 +344,24 @@ public final class BuildCommand implements CliCommand {
             totalWeight += pm.barWeight();
         }
         agg.calibrate(totalWeight);
-        // Seed the countdown with the predicted total (= the jk explain figure):
-        // bar weight × ≈150 ms. It then ticks down purely by wall-clock.
-        view.setEtaEstimate((long) totalWeight * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT);
+        // Seed the countdown with a schedule-aware estimate (the same model jk explain
+        // uses): the parallel graph build overlaps independent modules, so the serial
+        // sum over-counts. (--no-parallel runs runWorkspaceBuild, not this path, so here
+        // is always parallel.) The bar still calibrates to the summed tick total above;
+        // only the wall-clock countdown is parallel-aware.
+        List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>();
+        for (var e : prepared.entrySet()) {
+            int tw = e.getValue().goal().phases().stream()
+                    .filter(p -> p.name().equals("run-tests"))
+                    .mapToInt(dev.jkbuild.run.Phase::estimateWeight).sum();
+            costs.add(new dev.jkbuild.runtime.EffortWeights.ModuleCost(
+                    e.getKey(), edges.getOrDefault(e.getKey(), Set.of()), (int) e.getValue().barWeight(), tw));
+        }
+        int etaWorkers = workers != null && workers > 0 ? workers : 1;
+        int concurrency = dev.jkbuild.worker.HeapPlan.requestedJvms(maxReadyWidth(units, edges),
+                etaWorkers, parallelTests, Runtime.getRuntime().availableProcessors());
+        view.setEtaEstimate(dev.jkbuild.runtime.EffortWeights.scheduleMillis(
+                costs, concurrency, false, parallelTests));
 
         Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
         List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);

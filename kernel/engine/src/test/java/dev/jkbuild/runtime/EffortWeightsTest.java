@@ -6,11 +6,55 @@ import org.junit.jupiter.api.io.TempDir;
 
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /** The compile-weight formula: ceil(sources × 0.1), floored at 1 when the phase runs. */
 class EffortWeightsTest {
+
+    private static final int MS = EffortWeights.MS_PER_WEIGHT;
+
+    @Test
+    void scheduleMillis_serial_sums_every_module() {
+        var mods = List.of(
+                new EffortWeights.ModuleCost(Path.of("/a"), Set.of(), 10, 4),
+                new EffortWeights.ModuleCost(Path.of("/b"), Set.of(), 20, 8));
+        assertThat(EffortWeights.scheduleMillis(mods, 4, true, false)).isEqualTo(30L * MS);
+    }
+
+    @Test
+    void scheduleMillis_parallel_overlaps_independent_modules() {
+        // Three independent compile-only modules → bounded by throughput, not the sum.
+        var mods = List.of(
+                new EffortWeights.ModuleCost(Path.of("/a"), Set.of(), 12, 0),
+                new EffortWeights.ModuleCost(Path.of("/b"), Set.of(), 12, 0),
+                new EffortWeights.ModuleCost(Path.of("/c"), Set.of(), 12, 0));
+        assertThat(EffortWeights.scheduleMillis(mods, 3, false, false)).isEqualTo(12L * MS);
+        assertThat(EffortWeights.scheduleMillis(mods, 3, false, false))
+                .isLessThan(EffortWeights.scheduleMillis(mods, 3, true, false));
+    }
+
+    @Test
+    void scheduleMillis_serialized_tests_form_a_floor() {
+        // Independent modules whose serial test phases (20 each) dwarf their blocking work (5).
+        var mods = List.of(
+                new EffortWeights.ModuleCost(Path.of("/a"), Set.of(), 25, 20),
+                new EffortWeights.ModuleCost(Path.of("/b"), Set.of(), 25, 20));
+        assertThat(EffortWeights.scheduleMillis(mods, 8, false, false)).isEqualTo(40L * MS); // test floor
+        // --parallel-tests lifts the floor, so the estimate drops.
+        assertThat(EffortWeights.scheduleMillis(mods, 8, false, true)).isLessThan(40L * MS);
+    }
+
+    @Test
+    void scheduleMillis_chain_gets_no_parallelism_benefit() {
+        // A → B → C dependency chain of compile-only work: critical path == serial sum.
+        var mods = List.of(
+                new EffortWeights.ModuleCost(Path.of("/a"), Set.of(), 10, 0),
+                new EffortWeights.ModuleCost(Path.of("/b"), Set.of(Path.of("/a")), 10, 0),
+                new EffortWeights.ModuleCost(Path.of("/c"), Set.of(Path.of("/b")), 10, 0));
+        assertThat(EffortWeights.scheduleMillis(mods, 8, false, false)).isEqualTo(30L * MS);
+    }
 
     @Test
     void compile_weight_is_ceil_of_a_tenth() {
