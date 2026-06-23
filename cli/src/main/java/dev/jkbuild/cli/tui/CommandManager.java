@@ -643,31 +643,24 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                     .append(Theme.colorize(name, Theme.active().focused()))
                     .append(' ').append(barStr);
         }
-        // ETA countdown between the percent and the elapsed: `{bar} 7% [00:01:02] …4s…`.
-        // Seeded with the predicted total (the jk explain figure) and ticked down by
-        // pure wall-clock: remaining = max(0, estimate − elapsed). It holds at zero if
-        // the build overruns the estimate, and the settle line replaces it when the
-        // build finishes early.
-        if (etaEstimateMs > 0) {
-            h.append(' ').append(clock(Math.max(0, etaEstimateMs - elapsedMillis)));
-        }
-        h.append(' ').append(Theme.colorize(
-                ELLIPSIS + fmtElapsed(elapsedMillis) + ELLIPSIS, dim.italic()));
+        // After the bar's percent: a bright-black middle dot, then the build clock in
+        // yellow. With a useful ETA (learned timings) the clock counts down from the
+        // estimate (remaining = max(0, estimate − elapsed), holding at 0s on overrun);
+        // with no useful timings the ETA is left at 0 and the clock counts the elapsed
+        // time up from 0s.
+        long clockMs = etaEstimateMs > 0 ? Math.max(0, etaEstimateMs - elapsedMillis) : elapsedMillis;
+        h.append(' ').append(Theme.colorize("·", dim))
+                .append(' ').append(Theme.colorize(fmtClock(clockMs), Theme.active().warning()));
         return h.toString();
     }
 
-    /** {@code [hh:mm:ss]} remaining — bright-black brackets/colons, gray digits. */
-    private static String clock(long remainingMs) {
-        long s = Math.max(0, remainingMs) / 1000;
-        AttributedStyle bracket = Theme.active().darkGray();   // [ : ]
-        AttributedStyle digit = Theme.active().normalGray();   // the numbers
-        return Theme.colorize("[", bracket)
-                + Theme.colorize(String.format("%02d", s / 3600), digit)
-                + Theme.colorize(":", bracket)
-                + Theme.colorize(String.format("%02d", (s % 3600) / 60), digit)
-                + Theme.colorize(":", bracket)
-                + Theme.colorize(String.format("%02d", s % 60), digit)
-                + Theme.colorize("]", bracket);
+    /** Build-clock content: {@code "42s"}, {@code "1m 02s"}, {@code "1h 05m 09s"} (units past the lead zero-padded). */
+    static String fmtClock(long millis) {
+        long totalSec = Math.max(0, millis) / 1000;
+        long h = totalSec / 3600, m = (totalSec % 3600) / 60, s = totalSec % 60;
+        if (h > 0) return h + "h " + String.format("%02d", m) + "m " + String.format("%02d", s) + "s";
+        if (m > 0) return m + "m " + String.format("%02d", s) + "s";
+        return s + "s";
     }
 
     /**

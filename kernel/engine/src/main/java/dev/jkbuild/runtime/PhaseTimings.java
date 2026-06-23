@@ -71,6 +71,21 @@ public final class PhaseTimings {
         return entries.isEmpty();
     }
 
+    /**
+     * True when this ledger has at least one learned rate for any of {@code dirs} — i.e.
+     * the project has useful timings, so a countdown ETA is trustworthy (vs. a cold
+     * project, whose estimate is a static guess and should count up instead).
+     */
+    public boolean hasTimingsFor(java.util.Collection<String> dirs) {
+        for (String d : dirs) {
+            String prefix = d + ' ';
+            for (String k : entries.keySet()) {
+                if (k.startsWith(prefix)) return true;
+            }
+        }
+        return false;
+    }
+
     /** The learned per-unit weight for a module's phase, or empty when unseen (cold → caller's fallback). */
     public OptionalDouble perUnit(String dir, String phase) {
         Entry e = entries.get(key(dir, phase));

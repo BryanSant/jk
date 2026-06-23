@@ -153,17 +153,18 @@ class CommandManagerTest {
         cm.nerdfont = false;
         cm.progress(50, 100);
 
-        // No estimate set → no countdown clock.
-        assertThat(stripAnsi(cm.renderGoalLines(120, 4_000).get(0))).doesNotContain("[");
+        // No estimate set → the clock counts elapsed up from 0s (4s elapsed → "4s").
+        String up = cm.renderGoalLines(120, 4_000).get(0);
+        assertThat(stripAnsi(up)).contains("4s");
 
         // Seeded with a 60s estimate, the clock counts down by pure wall-clock: at 4s
         // elapsed, 56s remain — independent of the bar's numerator/denominator.
         cm.setEtaEstimate(60_000);
         String header = cm.renderGoalLines(120, 4_000).get(0);
-        assertThat(stripAnsi(header)).contains("[00:00:56]");
-        // Brackets/colons bright-black; digits gray.
-        assertThat(header).contains(Theme.colorize("[", Theme.active().darkGray()));
-        assertThat(header).contains(Theme.colorize("56", Theme.active().normalGray()));
+        assertThat(stripAnsi(header)).contains("56s");
+        // The clock is yellow; the · separator is bright-black.
+        assertThat(header).contains(Theme.colorize("56s", Theme.active().warning()));
+        assertThat(header).contains(Theme.colorize("·", Theme.active().darkGray()));
     }
 
     @Test
@@ -172,7 +173,7 @@ class CommandManagerTest {
         cm.nerdfont = false;
         cm.setEtaEstimate(10_000);   // 10s estimate
         // 15s elapsed → past the estimate → clamped to zero, never negative.
-        assertThat(stripAnsi(cm.renderGoalLines(120, 15_000).get(0))).contains("[00:00:00]");
+        assertThat(stripAnsi(cm.renderGoalLines(120, 15_000).get(0))).contains("0s");
     }
 
     @Test
@@ -187,9 +188,9 @@ class CommandManagerTest {
 
         var raw = cm.renderGoalLines(120, 112_000);
         String all = String.join("\n", stripAll(raw));
-        // Header: {name} {bar} …elapsed… — bright-white name, bar inlined, module NOT
-        // in the header. No ETA clock here (timings not enabled on this view).
-        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("…1m 52s…")
+        // Header: {name} {bar} · {clock} — bright-white name, bar inlined, module NOT in
+        // the header. No estimate set, so the clock counts elapsed up (112s → "1m 52s").
+        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("1m 52s")
                 .doesNotContain("[").doesNotContain("acme:api");
         assertThat(raw.get(0)).contains(Theme.colorize("Building", Theme.active().focused()));
         // Bar with percent, inlined into the header line — the N-of-M count is gone.

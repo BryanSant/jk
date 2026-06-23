@@ -360,8 +360,13 @@ public final class BuildCommand implements CliCommand {
         int etaWorkers = workers != null && workers > 0 ? workers : 1;
         int concurrency = dev.jkbuild.worker.HeapPlan.requestedJvms(maxReadyWidth(units, edges),
                 etaWorkers, parallelTests, Runtime.getRuntime().availableProcessors());
-        view.setEtaEstimate(dev.jkbuild.runtime.EffortWeights.scheduleMillis(
-                costs, concurrency, false, parallelTests));
+        // Countdown only when this project has useful learned timings; otherwise leave the
+        // estimate at 0 so the clock counts elapsed time up from 0s.
+        boolean usefulTimings = dev.jkbuild.runtime.PhaseTimings.load(cache)
+                .hasTimingsFor(prepared.keySet().stream().map(Path::toString).toList());
+        view.setEtaEstimate(usefulTimings
+                ? dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, false, parallelTests)
+                : 0);
 
         Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
         List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
@@ -611,8 +616,12 @@ public final class BuildCommand implements CliCommand {
                 prepared.put(moduleDir, pm);
             }
             agg.calibrate(total);
-            // Seed the wall-clock countdown with the predicted total (the jk explain figure).
-            view.setEtaEstimate((long) total * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT);
+            // Countdown only with useful learned timings; otherwise count up from 0s.
+            Path etaCache = cacheDir != null ? cacheDir : JkDirs.cache();
+            boolean usefulTimings = dev.jkbuild.runtime.PhaseTimings.load(etaCache)
+                    .hasTimingsFor(prepared.keySet().stream().map(Path::toString).toList());
+            view.setEtaEstimate(usefulTimings
+                    ? (long) total * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT : 0);
 
             for (Path moduleDir : sorted) {
                 String module = workspaceRoot.relativize(moduleDir).toString();
