@@ -46,6 +46,7 @@ public final class JkDarkTheme implements Theme {
     public static final Rgb NORMAL_MAGENTA = Rgb.hex(0x9C27B0); // Purple 500
     public static final Rgb NORMAL_CYAN    = Rgb.hex(0x00BCD4); // Cyan 500
     public static final Rgb NORMAL_WHITE   = Rgb.hex(0xCFD8DC); // Blue Grey 100
+    public static final Rgb GRAY           = Rgb.hex(0x90A4AE); // Blue Grey 300 — badge chips
 
     /** Filesystem paths shown to the user. */
     public static final Rgb PATH           = Rgb.hex(0x969DD4); // periwinkle
@@ -113,6 +114,11 @@ public final class JkDarkTheme implements Theme {
     @Override
     public AttributedStyle normalGray() {
         return withColor(AttributedStyle.DEFAULT, PRIMARY_LIGHT);
+    }
+
+    @Override
+    public AttributedStyle gray() {
+        return withColor(AttributedStyle.DEFAULT, GRAY);
     }
 
     @Override
@@ -212,8 +218,8 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle scopeBadge() {
-        // Pure-black text on light gray — the shared badge/chip across the TUIs.
-        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_WHITE);
+        // Pure-black text on gray — the shared badge/chip across the TUIs.
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), GRAY);
     }
 
     @Override

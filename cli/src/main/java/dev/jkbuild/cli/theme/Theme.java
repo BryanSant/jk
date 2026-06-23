@@ -43,6 +43,9 @@ public interface Theme {
     /** De-emphasised body text adjacent to bright labels — Jk Dark primary-light. */
     AttributedStyle normalGray();
 
+    /** Medium gray — the shared badge/chip background (and its powerline caps). */
+    AttributedStyle gray();
+
     /** Active rail / step bullet — the highlight accent (Jk Dark accent). */
     AttributedStyle activeStep();
 

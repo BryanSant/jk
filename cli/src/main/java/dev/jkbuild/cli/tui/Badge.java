@@ -5,7 +5,7 @@ import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedStyle;
 
 /**
- * A small "chip" / "pill" label — black text on a light-gray background, used
+ * A small "chip" / "pill" label — black text on a gray background, used
  * for {@code jk tree}'s scope sections and {@code jk explain}'s unit indices so
  * the two read consistently.
  *
@@ -18,10 +18,10 @@ public final class Badge {
 
     private Badge() {}
 
-    /** The shared light-gray scope/index chip. */
+    /** The shared gray scope/index chip. */
     public static String pill(String label, boolean nerdfont) {
         Theme t = Theme.active();
-        return pill(label, nerdfont, t.scopeBadge(), t.plainWhite());
+        return pill(label, nerdfont, t.scopeBadge(), t.gray());
     }
 
     /**
