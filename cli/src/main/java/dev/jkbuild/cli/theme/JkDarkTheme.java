@@ -45,6 +45,7 @@ public final class JkDarkTheme implements Theme {
     public static final Rgb NORMAL_BLUE    = Rgb.hex(0x3F51B5); // Indigo 500
     public static final Rgb NORMAL_MAGENTA = Rgb.hex(0x9C27B0); // Purple 500
     public static final Rgb NORMAL_CYAN    = Rgb.hex(0x00BCD4); // Cyan 500
+    public static final Rgb PLAN_BLUE      = Rgb.hex(0x039BE5); // Light Blue 600
     public static final Rgb NORMAL_WHITE   = Rgb.hex(0xCFD8DC); // Blue Grey 100
     public static final Rgb GRAY           = Rgb.hex(0x90A4AE); // Blue Grey 300 — badge chips
 
@@ -228,6 +229,14 @@ public final class JkDarkTheme implements Theme {
         // chip background — by the caller).
         return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_CYAN);
     }
+
+    @Override
+    public AttributedStyle planBadge() {
+        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), PLAN_BLUE);
+    }
+
+    @Override
+    public Rgb planBadgeColor() { return PLAN_BLUE; }
 
     /** Pure black (#000000) — the text color for every chip/badge that sets a background. */
     private static final Rgb CHIP_TEXT = Rgb.hex(0x000000);

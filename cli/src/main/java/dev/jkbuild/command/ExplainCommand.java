@@ -42,6 +42,7 @@ public final class ExplainCommand implements CliCommand {
                 Opt.flag("Expand every module's phases, even cached ones.", "--verbose", "-v"),
                 Opt.flag("Estimate the ETA for a serial build (one module at a time).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
+                Opt.flag("Estimate the ETA with tests running concurrently across modules.", "--parallel-tests"),
                 Opt.value("<dir>",
                         "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
                         "--cache-dir").hide());
@@ -92,7 +93,8 @@ public final class ExplainCommand implements CliCommand {
         // path / throughput / serial-test bound (see EffortWeights.scheduleMillis).
         // Computed even for an all-cached plan: re-parsing every build file and
         // re-checking stamps/CAS across the workspace is a real couple of seconds.
-        boolean serial = in.isSet("no-parallel");
+        boolean serial = in.isSet("no-parallel") && !in.isSet("parallel") && !in.isSet("parallel-tests");
+        boolean parallelTests = in.isSet("parallel-tests");
         long etaMillis = 0;
         try {
             List<dev.jkbuild.runtime.EffortWeights.ModuleCost> costs = new ArrayList<>();
@@ -112,18 +114,18 @@ public final class ExplainCommand implements CliCommand {
             }
             int concurrency = Math.max(1,
                     Math.min(Runtime.getRuntime().availableProcessors(), modules.size()));
-            etaMillis = dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, serial, false);
+            etaMillis = dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, serial, parallelTests);
         } catch (RuntimeException e) {
             etaMillis = 0;   // never fail explain over the estimate
         }
 
-        // Header: a green " - Build Plan " chip (the same chip family as jk tree), capped
-        // by a green ▶ segment arrow when nerdfont, then the build-time estimate (yellow).
+        // Header: a light-blue (#039BE5) " - Build Plan " chip, capped by a matching ▶
+        // segment arrow when nerdfont, then the build-time estimate (yellow).
         String header = nerdfont
-                ? Theme.colorize(" - Build Plan ", t.goalSuccessChip())
+                ? Theme.colorize(" - Build Plan ", t.planBadge())
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
-                                t.bright(t.goalChipColor()))
-                : Theme.colorize(" - Build Plan ", t.goalSuccessChip());
+                                t.bright(t.planBadgeColor()))
+                : Theme.colorize(" - Build Plan ", t.planBadge());
         String estimate = "Build time estimate "
                 + Theme.colorize("~" + fmtDuration(Math.max(1, etaMillis)), t.warning());
         System.out.println();
@@ -131,6 +133,22 @@ public final class ExplainCommand implements CliCommand {
         // Root node: ● bullet, then the entry project's group:artifact in bold.
         System.out.println(" " + Theme.colorize("●", t.darkGray()) + " "
                 + boldCoord(entry.project().group() + ":" + entry.project().name(), t));
+
+        // Workspace-wide stats directly under the root bullet.
+        int totalModules = modules.size();
+        int totalSources = modules.stream().mapToInt(BuildPlanForecast.Module::sourceCount).sum();
+        int totalTests   = modules.stream().mapToInt(BuildPlanForecast.Module::testCount).sum();
+        int totalJars    = (int) modules.stream().filter(BuildPlanForecast.Module::producesJar).count();
+        int totalImages  = (int) modules.stream().filter(BuildPlanForecast.Module::producesImage).count();
+        String rootPfx = " " + Theme.colorize("│", t.darkGray()) + " · ";
+        if (totalModules > 1)
+            System.out.println(rootPfx + "Modules: " + String.format("%,d", totalModules));
+        System.out.println(rootPfx + "Sources: " + fmtCount(totalSources, "file", "files"));
+        System.out.println(rootPfx + "Tests: "   + fmtCount(totalTests,   "test", "tests"));
+        if (totalJars > 0)
+            System.out.println(rootPfx + "Packages: " + fmtCount(totalJars, "jar", "jars"));
+        if (totalImages > 0)
+            System.out.println(rootPfx + "Containers: " + fmtCount(totalImages, "image", "images"));
 
         // Partition the topo order by cache status: every fully-cached module (wherever
         // it sits in the order) collapses into the "Fully Cached" section (names only);
@@ -170,10 +188,22 @@ public final class ExplainCommand implements CliCommand {
         if (!dirtyIdx.isEmpty()) {
             System.out.println(" " + Theme.colorize("╰─", t.darkGray())
                     + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
-            // First child of the section: the rebuild count.
-            System.out.println("    " + Theme.colorize("├─ ", t.darkGray())
-                    + "Rebuild " + Theme.colorize(Long.toString(rebuild), t.warning())
-                    + " of " + total + " modules");
+            String secPfx = "    " + Theme.colorize("│", t.darkGray()) + " · ";
+            int dirtyModules = dirtyIdx.size();
+            int dirtySources = modules.stream().filter(BuildPlanForecast.Module::dirty)
+                    .mapToInt(BuildPlanForecast.Module::sourceCount).sum();
+            int dirtyTests   = modules.stream().filter(BuildPlanForecast.Module::dirty)
+                    .mapToInt(BuildPlanForecast.Module::testCount).sum();
+            int dirtyJars    = (int) modules.stream().filter(m -> m.dirty() && m.producesJar()).count();
+            int dirtyImages  = (int) modules.stream().filter(m -> m.dirty() && m.producesImage()).count();
+            if (totalModules > 1)
+                System.out.println(secPfx + "Modules: " + String.format("%,d", dirtyModules) + pct(dirtyModules, totalModules));
+            System.out.println(secPfx + "Sources: "    + fmtCount(dirtySources, "file",   "files")   + pct(dirtySources, totalSources));
+            System.out.println(secPfx + "Tests: "      + fmtCount(dirtyTests,   "test",   "tests")   + pct(dirtyTests,   totalTests));
+            if (totalJars > 0)
+                System.out.println(secPfx + "Packages: "   + fmtCount(dirtyJars,    "jar",    "jars")    + pct(dirtyJars,    totalJars));
+            if (totalImages > 0)
+                System.out.println(secPfx + "Containers: " + fmtCount(dirtyImages,  "image",  "images")  + pct(dirtyImages,  totalImages));
             for (int j = 0; j < dirtyIdx.size(); j++) {
                 int i = dirtyIdx.get(j);
                 renderModuleRow(modules.get(i), i + 1, j == dirtyIdx.size() - 1,
@@ -288,6 +318,15 @@ public final class ExplainCommand implements CliCommand {
                     .append(' ').append(Theme.colorize(detail, t.brightWhite().italic()));
         }
         return s.toString();
+    }
+
+    private static String fmtCount(int n, String singular, String plural) {
+        return String.format("%,d", n) + " " + (n == 1 ? singular : plural);
+    }
+
+    private static String pct(int part, int whole) {
+        if (whole <= 0) return "";
+        return " - " + (part * 100 / whole) + "%";
     }
 
     private static String padRight(String s, int width) {

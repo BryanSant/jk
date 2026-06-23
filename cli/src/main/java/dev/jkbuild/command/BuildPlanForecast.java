@@ -5,6 +5,7 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.JavacLint;
+import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
@@ -71,7 +72,9 @@ final class BuildPlanForecast {
     }
 
     /** A module's forecast: its build unit and the ordered phases that apply to it. */
-    record Module(BuildGraph.BuildUnit unit, List<Phase> phases) {
+    record Module(BuildGraph.BuildUnit unit, List<Phase> phases,
+                  int sourceCount, int testCount,
+                  boolean producesJar, boolean producesImage) {
         boolean dirty() { return phases.stream().anyMatch(p -> !p.cached()); }
     }
 
@@ -116,8 +119,10 @@ final class BuildPlanForecast {
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.isRegularFile(lockFile)) {
             phases.add(new Phase("compile-main", Status.RUN, "not locked yet (run `jk build`)", null));
-            return new Module(u, phases);
+            return new Module(u, phases, 0, 0, false, false);
         }
+        int sourceCount = 0, testCount = 0;
+        boolean producesJar = false, producesImage = false;
         try {
             Lockfile lock = LockfileReader.read(lockFile);
             ClasspathResolver resolver = new ClasspathResolver(cas);
@@ -158,11 +163,18 @@ final class BuildPlanForecast {
                 if (!fresh) compileDirty = true;
             }
 
+            producesJar = !mainSrc.isEmpty() || !ktSrc.isEmpty();
+            try {
+                var img = ImageConfigParser.parse(dir.resolve("jk.toml"));
+                producesImage = img.base() != null || img.registry() != null;
+            } catch (Exception ignored) {}
+
             // ---- compile-test ----
             Path javaTestDir = compact ? dir.resolve("test") : dir.resolve("src/test/java");
             List<Path> javaTest = CompileSupport.collectJavaSources(javaTestDir);
             List<Path> ktTest = CompileSupport.collectKotlinTestSources(dir, compact);
             boolean haveTests = !javaTest.isEmpty() || !ktTest.isEmpty();
+            sourceCount = mainSrc.size() + ktSrc.size() + javaTest.size() + ktTest.size();
             boolean testDirty = false;
             if (haveTests) {
                 int testSrcCount = javaTest.size() + ktTest.size();
@@ -196,6 +208,7 @@ final class BuildPlanForecast {
 
                 // ---- run-tests ----
                 int estimated = TestCommand.estimateTestCount(javaTestDir);
+                testCount = estimated;
                 String tests = estimated > 0 ? "~" + count(estimated, "test") : "tests";
                 if (compileDirty || testDirty) {
                     phases.add(new Phase("run-tests", Status.RUN, "run tests · " + tests, null));
@@ -246,7 +259,7 @@ final class BuildPlanForecast {
             phases.add(new Phase("compile-main", Status.RUN,
                     "could not predict (" + e.getClass().getSimpleName() + ")", null));
         }
-        return new Module(u, phases);
+        return new Module(u, phases, sourceCount, testCount, producesJar, producesImage);
     }
 
     /** Map a {@link JavaIncrementalCompile.Prediction} to a phase, honoring upstream dirtiness. */

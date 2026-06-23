@@ -109,7 +109,7 @@ public final class BuildCommand implements CliCommand {
         this.jdksDir = in.value("jdks-dir").map(Path::of).orElse(null);
         this.buildOpts = new dev.jkbuild.cli.BuildOptions();
         this.buildOpts.skipTests = in.isSet("skip-tests");
-        this.noParallel = in.isSet("no-parallel") && !in.isSet("parallel");
+        this.noParallel = in.isSet("no-parallel") && !in.isSet("parallel") && !in.isSet("parallel-tests");
         this.global = GlobalOptions.from(in);
         // Opt-in: run modules' tests concurrently. Default serializes them
         // (shared ports/locks/fixtures) — see BuildPipeline's test gate.

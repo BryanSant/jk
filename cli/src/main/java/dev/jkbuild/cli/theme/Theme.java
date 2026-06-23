@@ -116,6 +116,12 @@ public interface Theme {
     /** Header segment (jk explain's "Build Plan for …") — near-black on a cyan background. */
     AttributedStyle cyanBadge();
 
+    /** {@code jk explain} "Build Plan" header chip — pure-black on {@code #039BE5}. */
+    AttributedStyle planBadge();
+
+    /** The light-blue behind {@link #planBadge()} — for the powerline cap. */
+    Rgb planBadgeColor();
+
     /** The live build goal chip (spinner + verb) — near-black on the goal green. */
     AttributedStyle goalChip();
 
