@@ -917,8 +917,8 @@ public final class NewCommand implements CliCommand {
 
         return Wizard.builder()
                 .title(module
-                        ? "Jk - Create a New Module for " + parent.displayName()
-                        : "Jk - Create a New Project")
+                        ? "Create a New Module for " + parent.displayName()
+                        : "Create a New Project")
                 .step(WizardStep.InputStep.of("name", module ? "Module name:" : "Project name:")
                         .placeholder("untitled")
                         .defaultValue("untitled")

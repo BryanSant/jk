@@ -368,16 +368,18 @@ public final class Wizard {
     }
 
     /**
-     * Build the header as raw ANSI: dark-gray {@code ╭── } (via the standard
-     * Rail opener) followed by the gradient title with bold stamped on every
-     * codepoint's SGR. Bypassing {@link AttributedString#toAnsi} for the title
-     * is what keeps bold from being optimized into a single emit at the first
-     * char (and then "drifting away" on terminals that render bold-as-bright).
+     * Build the header: the dark-gray {@code ╭──} corner, then the title on a
+     * bright-black chip (pure-black text), space-padded so it reads as a badge.
+     * The chip's leading pad doubles as the gap after the corner dashes.
      */
     private String headerLine(Terminal terminal) {
-        var cornerWithSpace = Rail.opener("", Rail.StepState.INACTIVE).toAnsi(terminal);
-        var titleAnsi = Theme.active().gradientHeaderAnsi(title.isEmpty() ? "Wizard" : title);
-        return cornerWithSpace + titleAnsi;
+        Theme t = Theme.active();
+        String text = title.isEmpty() ? "Wizard" : title;
+        return new AttributedStringBuilder()
+                .append("╭──", t.railStyle(Rail.StepState.INACTIVE, Rail.RailGlyph.OPEN))
+                .append(" " + text + " ", t.scopeBadge())
+                .toAttributedString()
+                .toAnsi(terminal);
     }
 
     private static List<AttributedString> summarize(WizardStep step, Map<String, Object> answers) {
