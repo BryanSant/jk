@@ -90,21 +90,19 @@ class ExplainCommandTest {
     }
 
     @Test
-    void renders_units_origins_and_edges_in_dependency_order(@TempDir Path tmp) throws Exception {
+    void renders_units_in_dependency_order(@TempDir Path tmp) throws Exception {
         project(tmp.resolve("lib"), "lib");
         project(tmp.resolve("app"), "app", "lib");
 
-        // Assertions target single-color-span tokens, so they hold whether or not
-        // ANSI color is active (coords / labels / edges are each one colorize call).
+        // Assertions target single-color-span tokens, so they hold whether or not ANSI
+        // color is active (each coordinate segment is one colorize call).
         String out = runExplainCapturingStdout(tmp.resolve("app"));
 
         assertThat(out).contains("2 modules");
-        // The ● root coord colors group/artifact separately, so assert single-color-span
-        // tokens (the full "com.example:app" is no longer one contiguous span under color).
-        assertThat(out).contains("com.example").contains("app").contains("root");
-        assertThat(out).contains("path dep");
-        assertThat(out).contains("←").contains("lib");          // app's edge to lib (abbreviated)
-        // lib (the path dep) is printed before app (the root) — dependency-first order.
-        assertThat(out.indexOf("path dep")).isLessThan(out.indexOf("root"));
+        assertThat(out).contains("com.example").contains("app").contains("lib");
+        // Both modules rebuild (fresh), listed dependency-first: lib (the path dep) before
+        // app (the root). app also appears once on the ● root line, so compare app's row
+        // via lastIndexOf.
+        assertThat(out.indexOf("lib")).isLessThan(out.lastIndexOf("app"));
     }
 }

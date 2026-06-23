@@ -198,7 +198,7 @@ final class BuildPlanForecast {
                 int estimated = TestCommand.estimateTestCount(javaTestDir);
                 String tests = estimated > 0 ? "~" + count(estimated, "test") : "tests";
                 if (compileDirty || testDirty) {
-                    phases.add(new Phase("run-tests", Status.RUN, "run · " + tests, null));
+                    phases.add(new Phase("run-tests", Status.RUN, "test · " + tests, null));
                 } else {
                     // Mirror the build's run-tests stamp EXACTLY: main classes are a
                     // separate computeKey arg, NOT part of the runtime classpath.
@@ -210,7 +210,7 @@ final class BuildPlanForecast {
                     boolean hit = stampKey != null && present(actionCache, stampKey);
                     phases.add(hit
                             ? new Phase("run-tests", Status.CACHED, "· " + tests, null)
-                            : new Phase("run-tests", Status.RUN, "run · " + tests, null));
+                            : new Phase("run-tests", Status.RUN, "test · " + tests, null));
                 }
             }
 

@@ -17,10 +17,7 @@ import dev.jkbuild.util.JkDirs;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Set;
 
 /**
  * {@code jk explain} — forecast the build (the same {@link BuildGraph} the build
@@ -73,12 +70,10 @@ public final class ExplainCommand implements CliCommand {
 
         Theme t = Theme.active();
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
-        // On a TTY, elide long dependency edges to the terminal width; piped output
-        // gets the full list (MAX_VALUE → never truncates).
+        // On a TTY, wrap the cached-module list to the terminal width; piped output gets
+        // the full list on one line (MAX_VALUE → never wraps).
         int width = dev.jkbuild.cli.run.GoalConsole.isInteractiveTerminal()
                 ? dev.jkbuild.cli.tui.CommandManager.detectColumns() : Integer.MAX_VALUE;
-        Map<Path, String> coordByDir = new LinkedHashMap<>();
-        for (BuildGraph.BuildUnit u : graph.topoOrder()) coordByDir.put(u.dir(), u.coord());
 
         // Forecast every module's full phase pipeline (compile → test → package),
         // truthfully — see BuildPlanForecast.
@@ -117,23 +112,22 @@ public final class ExplainCommand implements CliCommand {
                                 t.bright(t.goalChipColor()))
                 : Theme.colorize(" - Build Plan ", t.goalSuccessChip());
         boolean allCached = rebuild == 0;
-        // ETA is yellow when the plan is all-cached (just the cache-verify pass), bold-white
-        // when there's real rebuild work to time.
+        // ETA is yellow throughout; the rebuild count is yellow too (cache status in green).
         String etaPart = etaMillis > 0
                 ? " " + Theme.colorize("·", t.darkGray()) + " ETA "
-                        + Theme.colorize("~" + fmtDuration(etaMillis), allCached ? t.warning() : t.focused())
+                        + Theme.colorize("~" + fmtDuration(etaMillis), t.warning())
                 : "";
         String status;
         if (total == 1) {
             // A single (no-module) project: phrase it as the project, not "1 modules".
             status = allCached
                     ? "Project fully " + Theme.colorize("cached", t.success())
-                    : "Project will " + Theme.colorize("rebuild", t.focused());
+                    : "Project will " + Theme.colorize("rebuild", t.warning());
         } else {
             status = allCached
                     ? "All " + Theme.colorize(Long.toString(total), t.focused()) + " modules "
                             + Theme.colorize("cached", t.success())
-                    : "Rebuild " + Theme.colorize(Long.toString(rebuild), t.focused())
+                    : "Rebuild " + Theme.colorize(Long.toString(rebuild), t.warning())
                             + " of " + total + " modules";
         }
         System.out.println();
@@ -161,8 +155,8 @@ public final class ExplainCommand implements CliCommand {
             if (verbose) {
                 for (int j = 0; j < cachedIdx.size(); j++) {
                     int i = cachedIdx.get(j);
-                    renderModuleRow(modules.get(i), i + 1, graph, coordByDir, j == cachedIdx.size() - 1,
-                            childPrefix, 4, width, nerdfont, true, t);
+                    renderModuleRow(modules.get(i), i + 1, j == cachedIdx.size() - 1,
+                            childPrefix, nerdfont, true, t);
                 }
             } else {
                 List<String> names = new ArrayList<>();
@@ -182,8 +176,8 @@ public final class ExplainCommand implements CliCommand {
                     + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
             for (int j = 0; j < dirtyIdx.size(); j++) {
                 int i = dirtyIdx.get(j);
-                renderModuleRow(modules.get(i), i + 1, graph, coordByDir, j == dirtyIdx.size() - 1,
-                        "    ", 4, width, nerdfont, verbose, t);
+                renderModuleRow(modules.get(i), i + 1, j == dirtyIdx.size() - 1,
+                        "    ", nerdfont, verbose, t);
             }
         }
         return 0;
@@ -202,45 +196,16 @@ public final class ExplainCommand implements CliCommand {
 
     /**
      * Render one module row under a section: {@code prefix} + connector + index badge +
-     * coordinate + origin + dependency edges + verdict, then (when the module rebuilds,
-     * or {@code verbose}) its phase sub-tree. {@code prefixWidth} is {@code prefix}'s
-     * visible column count, used to keep the verdict aligned.
+     * coordinate, then its phase sub-tree. The verdict is implied by the enclosing section
+     * (Fully Cached / Rebuild) and the origin / dependency edges are omitted as noise.
+     * Phases render when the module rebuilds, or always under {@code verbose}.
      */
-    private static void renderModuleRow(BuildPlanForecast.Module m, int idx, BuildGraph.Result graph,
-                                        Map<Path, String> coordByDir, boolean last, String prefix,
-                                        int prefixWidth, int width, boolean nerdfont,
-                                        boolean verbose, Theme t) {
-        BuildGraph.BuildUnit u = m.unit();
-        String origin = switch (u.origin()) {
-            case ROOT -> "root";
-            case MODULE -> "module";
-            case PATH -> "path dep";
-            case BRANCH_GIT -> "branch git dep";
-        };
-        String idxStr = String.format("%02d", idx);
-        // Visible (uncolored) width as we go, so the verdict can be column-aligned.
-        int plain = prefixWidth + 2 + (idxStr.length() + 2) + 1 + u.coord().length() + 1 + origin.length();
-        StringBuilder line = new StringBuilder(prefix)
-                .append(Theme.colorize((last ? "╰" : "├") + "─", t.darkGray()))
-                .append(dev.jkbuild.cli.tui.Badge.pill(idxStr, nerdfont))
-                .append(' ').append(coloredCoord(u.coord(), t))
-                .append(' ').append(Theme.colorize(origin, t.darkGray()));
-        List<String> prereqs = new ArrayList<>();
-        for (Path p : graph.edges().getOrDefault(u.dir(), Set.of())) {
-            String c = coordByDir.get(p);
-            if (c != null) prereqs.add(abbreviate(c, u.coord())); // same-group → :name
-        }
-        if (!prereqs.isEmpty()) {
-            String elided = elideDeps(prereqs, Math.max(8, width - plain - VERDICT_COL - 3));
-            line.append(' ').append(renderDeps(elided, t));
-            plain += 1 + 2 + elided.length();   // " " + "← " + edges
-        }
-        String verdict = m.dirty()
-                ? Theme.colorize("□ rebuild", t.brightWhite())
-                : Theme.colorize("✓ fully cached", t.success());
-        int pad = Math.max(2, VERDICT_COL - plain);
-        line.append(" ".repeat(pad)).append(verdict);
-        System.out.println(line);
+    private static void renderModuleRow(BuildPlanForecast.Module m, int idx, boolean last,
+                                        String prefix, boolean nerdfont, boolean verbose, Theme t) {
+        System.out.println(prefix
+                + Theme.colorize((last ? "╰" : "├") + "─", t.darkGray())
+                + dev.jkbuild.cli.tui.Badge.pill(String.format("%02d", idx), nerdfont)
+                + ' ' + coloredCoord(m.unit().coord(), t));
 
         if (m.dirty() || verbose) {
             String spine = prefix + (last ? "   " : Theme.colorize("│", t.darkGray()) + "  ");
@@ -287,9 +252,6 @@ public final class ExplainCommand implements CliCommand {
         return sb.toString();
     }
 
-    /** Column the per-module verdict ("✓ fully cached" / "□ rebuild") aligns to. */
-    private static final int VERDICT_COL = 44;
-
     /** A phase's status: {@code ✓ cached <key> · detail} (green) or {@code □ detail} (white). */
     private static String renderStatus(BuildPlanForecast.Phase p, Theme t) {
         if (p.cached()) {
@@ -312,16 +274,6 @@ public final class ExplainCommand implements CliCommand {
         if (colon < 0) return Theme.colorize(coord, t.coordName());
         return Theme.colorize(coord.substring(0, colon), t.coordGroup())
                 + ":" + Theme.colorize(coord.substring(colon + 1), t.coordName());
-    }
-
-    /** Abbreviate a prereq to {@code :name} when it shares {@code unitCoord}'s group. */
-    private static String abbreviate(String prereq, String unitCoord) {
-        int pc = prereq.indexOf(':');
-        int uc = unitCoord.indexOf(':');
-        if (pc > 0 && uc > 0 && prereq.substring(0, pc).equals(unitCoord.substring(0, uc))) {
-            return prereq.substring(pc); // ":name"
-        }
-        return prereq;
     }
 
     /**
@@ -365,29 +317,6 @@ public final class ExplainCommand implements CliCommand {
         }
         if (cur.length() > 0) lines.add(cur.toString());
         return lines;
-    }
-
-    /**
-     * Color an elided dep list: {@code ← } and separators dim, each dep's name in the
-     * coordinate-name color (the {@code :} dim for same-group {@code :name} refs), and
-     * a {@code …+N more…} remaining-count marker dim.
-     */
-    private static String renderDeps(String elided, Theme t) {
-        StringBuilder sb = new StringBuilder(Theme.colorize("← ", t.darkGray()));
-        String[] pieces = elided.split(", ");
-        for (int i = 0; i < pieces.length; i++) {
-            if (i > 0) sb.append(Theme.colorize(", ", t.darkGray()));
-            String p = pieces[i];
-            if (p.matches("…\\+\\d+ more…")) {
-                sb.append(Theme.colorize(p, t.darkGray()));            // remaining-count marker
-            } else if (p.startsWith(":")) {
-                sb.append(Theme.colorize(":", t.darkGray()))
-                        .append(Theme.colorize(p.substring(1), t.coordName()));
-            } else {
-                sb.append(coloredCoord(p, t));                         // full group:name
-            }
-        }
-        return sb.toString();
     }
 
 }
