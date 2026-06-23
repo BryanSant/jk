@@ -76,9 +76,10 @@ class CleanExplainWhyRebuiltTest {
         String stdout = captureStdout(() ->
                 run("explain", "-C", tempDir.toString(),
                         "--cache-dir", tempDir.resolve("cache").toString()));
-        // Header "- Build Plan" chip + the ● root coord + "N modules".
+        // Header "- Build Plan" chip + the ● root coord; a single never-built project
+        // rebuilds ("Project will rebuild").
         assertThat(stdout).contains("Build Plan").contains("widget");
-        assertThat(stdout).contains("module");
+        assertThat(stdout).contains("rebuild");
         assertThat(stdout).contains("compile-main");
         // Never built → the module rebuilds: "□ full compile · N sources".
         assertThat(stdout).contains("full compile");

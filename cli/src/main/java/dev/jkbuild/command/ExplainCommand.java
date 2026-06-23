@@ -116,16 +116,28 @@ public final class ExplainCommand implements CliCommand {
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
                                 t.bright(t.goalChipColor()))
                 : Theme.colorize(" - Build Plan ", t.goalSuccessChip());
+        boolean allCached = rebuild == 0;
+        // ETA is yellow when the plan is all-cached (just the cache-verify pass), bold-white
+        // when there's real rebuild work to time.
         String etaPart = etaMillis > 0
                 ? " " + Theme.colorize("·", t.darkGray()) + " ETA "
-                        + Theme.colorize("~" + fmtDuration(etaMillis), t.focused())
+                        + Theme.colorize("~" + fmtDuration(etaMillis), allCached ? t.warning() : t.focused())
                 : "";
-        String status = rebuild == 0
-                ? "All " + Theme.colorize(Long.toString(total), t.focused()) + " modules cached"
-                : "Rebuild " + Theme.colorize(Long.toString(rebuild), t.focused())
-                        + " of " + total + " modules";
+        String status;
+        if (total == 1) {
+            // A single (no-module) project: phrase it as the project, not "1 modules".
+            status = allCached
+                    ? "Project fully " + Theme.colorize("cached", t.success())
+                    : "Project will " + Theme.colorize("rebuild", t.focused());
+        } else {
+            status = allCached
+                    ? "All " + Theme.colorize(Long.toString(total), t.focused()) + " modules "
+                            + Theme.colorize("cached", t.success())
+                    : "Rebuild " + Theme.colorize(Long.toString(rebuild), t.focused())
+                            + " of " + total + " modules";
+        }
         System.out.println();
-        System.out.println(header + "  " + status + etaPart);
+        System.out.println(header + " " + status + etaPart);
         // Root node: ● bullet, then the entry project's group:artifact in bold.
         System.out.println(" " + Theme.colorize("●", t.darkGray()) + " "
                 + boldCoord(entry.project().group() + ":" + entry.project().name(), t));
