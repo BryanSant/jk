@@ -122,9 +122,6 @@ public interface Theme {
     /** The settled failure chip ({@code ‼ Build}) — bright-black on the failure red. */
     AttributedStyle goalFailureChip();
 
-    /** Pure-black text on the warning yellow — jk explain's "Rebuild" section chip. */
-    AttributedStyle warningChip();
-
     /** The goal chip's green — the foreground of the powerline cap that closes the green chip. */
     Rgb goalChipColor();
 

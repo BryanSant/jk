@@ -169,7 +169,7 @@ public final class ExplainCommand implements CliCommand {
         }
         if (!dirtyIdx.isEmpty()) {
             System.out.println(" " + Theme.colorize("╰─", t.darkGray())
-                    + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont, t.warningChip(), t.warning()));
+                    + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
             // First child of the section: the rebuild count.
             System.out.println("    " + Theme.colorize("├─ ", t.darkGray())
                     + "Rebuild " + Theme.colorize(Long.toString(rebuild), t.warning())
