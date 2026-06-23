@@ -212,8 +212,8 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle scopeBadge() {
-        // Pure-black text on the bright-black chip.
-        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), BRIGHT_BLACK);
+        // Pure-black text on light gray — the shared badge/chip across the TUIs.
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_WHITE);
     }
 
     @Override
@@ -248,12 +248,6 @@ public final class JkDarkTheme implements Theme {
     public AttributedStyle warningChip() {
         // Pure-black text on the warning yellow (jk explain's "Rebuild" section chip).
         return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_YELLOW);
-    }
-
-    @Override
-    public AttributedStyle cachedChip() {
-        // Pure-black text on light gray (jk explain's "Fully Cached" section chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_WHITE);
     }
 
     @Override
