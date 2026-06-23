@@ -245,6 +245,12 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle warningChip() {
+        // Pure-black text on the warning yellow (jk explain's "Rebuild" section chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_YELLOW);
+    }
+
+    @Override
     public Rgb goalChipColor() {
         return NORMAL_GREEN;
     }

@@ -77,9 +77,9 @@ class CleanExplainWhyRebuiltTest {
                 run("explain", "-C", tempDir.toString(),
                         "--cache-dir", tempDir.resolve("cache").toString()));
         // Header "- Build Plan" chip + the ● root coord; a single never-built project
-        // rebuilds ("Project will rebuild").
+        // lands in the "Rebuild" section.
         assertThat(stdout).contains("Build Plan").contains("widget");
-        assertThat(stdout).contains("rebuild");
+        assertThat(stdout).containsIgnoringCase("rebuild");
         assertThat(stdout).contains("compile-main");
         // Never built → the module rebuilds: "□ full compile · N sources".
         assertThat(stdout).contains("full compile");
@@ -98,9 +98,9 @@ class CleanExplainWhyRebuiltTest {
 
         String stdout = captureStdout(() ->
                 run("explain", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
-        // After a real build the module is cached (collapsed "✓ fully cached", or its
-        // compile phase shows "✓ cached <key>" if a downstream phase still rebuilds).
-        assertThat(stdout).contains("cached");
+        // After a real build the module is cached: the "Fully Cached" section (or a
+        // "✓ cached <key>" phase if a downstream phase still rebuilds).
+        assertThat(stdout).containsIgnoringCase("cached");
     }
 
     // --- helpers -----------------------------------------------------------

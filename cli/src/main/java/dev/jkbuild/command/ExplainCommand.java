@@ -118,34 +118,16 @@ public final class ExplainCommand implements CliCommand {
         }
 
         // Header: a green " - Build Plan " chip (the same chip family as jk tree), capped
-        // by a green ▶ segment arrow when nerdfont, with the "Rebuild N of M modules ·
-        // ETA ~time" summary on the same line. The ● root coordinate follows.
+        // by a green ▶ segment arrow when nerdfont, then the build-time estimate (yellow).
         String header = nerdfont
                 ? Theme.colorize(" - Build Plan ", t.goalSuccessChip())
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
                                 t.bright(t.goalChipColor()))
                 : Theme.colorize(" - Build Plan ", t.goalSuccessChip());
-        boolean allCached = rebuild == 0;
-        // ETA is yellow throughout; the rebuild count is yellow too (cache status in green).
-        String etaPart = etaMillis > 0
-                ? " " + Theme.colorize("·", t.darkGray()) + " ETA "
-                        + Theme.colorize("~" + fmtDuration(etaMillis), t.warning())
-                : "";
-        String status;
-        if (total == 1) {
-            // A single (no-module) project: phrase it as the project, not "1 modules".
-            status = allCached
-                    ? "Project fully " + Theme.colorize("cached", t.success())
-                    : "Project will " + Theme.colorize("rebuild", t.warning());
-        } else {
-            status = allCached
-                    ? "All " + Theme.colorize(Long.toString(total), t.focused()) + " modules "
-                            + Theme.colorize("cached", t.success())
-                    : "Rebuild " + Theme.colorize(Long.toString(rebuild), t.warning())
-                            + " of " + total + " modules";
-        }
+        String estimate = "Build time estimate "
+                + Theme.colorize("~" + fmtDuration(Math.max(1, etaMillis)), t.warning());
         System.out.println();
-        System.out.println(header + " " + status + etaPart);
+        System.out.println(header + " " + estimate);
         // Root node: ● bullet, then the entry project's group:artifact in bold.
         System.out.println(" " + Theme.colorize("●", t.darkGray()) + " "
                 + boldCoord(entry.project().group() + ":" + entry.project().name(), t));
@@ -164,7 +146,8 @@ public final class ExplainCommand implements CliCommand {
         if (!cachedIdx.isEmpty()) {
             boolean lastSection = dirtyIdx.isEmpty();
             System.out.println(" " + Theme.colorize(lastSection ? "╰─" : "├─", t.darkGray())
-                    + dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont));
+                    + dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont,
+                            t.goalSuccessChip(), t.bright(t.goalChipColor())));
             String childPrefix = " " + Theme.colorize(lastSection ? "   " : "│  ", t.darkGray());
             if (verbose) {
                 for (int j = 0; j < cachedIdx.size(); j++) {
@@ -187,7 +170,11 @@ public final class ExplainCommand implements CliCommand {
         }
         if (!dirtyIdx.isEmpty()) {
             System.out.println(" " + Theme.colorize("╰─", t.darkGray())
-                    + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
+                    + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont, t.warningChip(), t.warning()));
+            // First child of the section: the rebuild count.
+            System.out.println("    " + Theme.colorize("├─ ", t.darkGray())
+                    + "Rebuild " + Theme.colorize(Long.toString(rebuild), t.warning())
+                    + " of " + total + " modules");
             for (int j = 0; j < dirtyIdx.size(); j++) {
                 int i = dirtyIdx.get(j);
                 renderModuleRow(modules.get(i), i + 1, j == dirtyIdx.size() - 1,
@@ -280,14 +267,15 @@ public final class ExplainCommand implements CliCommand {
     /**
      * A phase's status: {@code ✓ cached <key> · detail} (green) when cached, otherwise
      * {@code □ <verb> · <detail>} with the verb in yellow (padded to {@code verbCol} so
-     * the {@code ·} lines up across the module's phases) and the {@code ·} bright-black.
+     * the {@code ·} lines up across the module's phases), the {@code ·} bright-black, and
+     * the trailing detail in italic.
      */
     private static String renderStatus(BuildPlanForecast.Phase p, int verbCol, Theme t) {
         if (p.cached()) {
             StringBuilder s = new StringBuilder(Theme.colorize("✓ cached", t.success()));
             if (p.key() != null) s.append(' ').append(Theme.colorize(p.key(), t.path()));
             if (p.text() != null && !p.text().isEmpty())
-                s.append(' ').append(Theme.colorize(p.text(), t.darkGray()));
+                s.append(' ').append(Theme.colorize(p.text(), t.darkGray().italic()));
             return s.toString();
         }
         String text = p.text();
@@ -298,7 +286,7 @@ public final class ExplainCommand implements CliCommand {
                 .append(Theme.colorize(padRight(verb, verbCol), t.warning()));
         if (detail != null) {
             s.append(' ').append(Theme.colorize("·", t.darkGray()))
-                    .append(' ').append(Theme.colorize(detail, t.brightWhite()));
+                    .append(' ').append(Theme.colorize(detail, t.brightWhite().italic()));
         }
         return s.toString();
     }
