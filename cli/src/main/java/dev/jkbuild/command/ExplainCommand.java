@@ -210,13 +210,24 @@ public final class ExplainCommand implements CliCommand {
         if (m.dirty() || verbose) {
             String spine = prefix + (last ? "   " : Theme.colorize("│", t.darkGray()) + "  ");
             List<BuildPlanForecast.Phase> ph = m.phases();
+            // Pad each □ phase's verb to the widest in this module so the · column lines up.
+            int verbCol = 0;
+            for (BuildPlanForecast.Phase p : ph) {
+                if (!p.cached()) verbCol = Math.max(verbCol, verbWidth(p.text()));
+            }
             for (int k = 0; k < ph.size(); k++) {
                 boolean lp = k == ph.size() - 1;
                 System.out.println(spine + Theme.colorize(lp ? "╰─ " : "├─ ", t.darkGray())
                         + Theme.colorize(padRight(ph.get(k).name(), PHASE_COL), t.brightWhite())
-                        + "  " + renderStatus(ph.get(k), t));
+                        + "  " + renderStatus(ph.get(k), verbCol, t));
             }
         }
+    }
+
+    /** Visible width of a phase verb — the text before {@code " · "} (or the whole text). */
+    private static int verbWidth(String text) {
+        int sep = text.indexOf(" · ");
+        return (sep < 0 ? text : text.substring(0, sep)).length();
     }
 
     /** The entry project's {@code group:artifact} in bold, each segment in its coord color. */
@@ -252,8 +263,12 @@ public final class ExplainCommand implements CliCommand {
         return sb.toString();
     }
 
-    /** A phase's status: {@code ✓ cached <key> · detail} (green) or {@code □ detail} (white). */
-    private static String renderStatus(BuildPlanForecast.Phase p, Theme t) {
+    /**
+     * A phase's status: {@code ✓ cached <key> · detail} (green) when cached, otherwise
+     * {@code □ <verb> · <detail>} with the verb in yellow (padded to {@code verbCol} so
+     * the {@code ·} lines up across the module's phases) and the {@code ·} bright-black.
+     */
+    private static String renderStatus(BuildPlanForecast.Phase p, int verbCol, Theme t) {
         if (p.cached()) {
             StringBuilder s = new StringBuilder(Theme.colorize("✓ cached", t.success()));
             if (p.key() != null) s.append(' ').append(Theme.colorize(p.key(), t.path()));
@@ -261,7 +276,17 @@ public final class ExplainCommand implements CliCommand {
                 s.append(' ').append(Theme.colorize(p.text(), t.darkGray()));
             return s.toString();
         }
-        return Theme.colorize("□ " + p.text(), t.brightWhite());
+        String text = p.text();
+        int sep = text.indexOf(" · ");
+        String verb = sep < 0 ? text : text.substring(0, sep);
+        String detail = sep < 0 ? null : text.substring(sep + 3);
+        StringBuilder s = new StringBuilder(Theme.colorize("□ ", t.brightWhite()))
+                .append(Theme.colorize(padRight(verb, verbCol), t.warning()));
+        if (detail != null) {
+            s.append(' ').append(Theme.colorize("·", t.darkGray()))
+                    .append(' ').append(Theme.colorize(detail, t.brightWhite()));
+        }
+        return s.toString();
     }
 
     private static String padRight(String s, int width) {

@@ -198,7 +198,7 @@ final class BuildPlanForecast {
                 int estimated = TestCommand.estimateTestCount(javaTestDir);
                 String tests = estimated > 0 ? "~" + count(estimated, "test") : "tests";
                 if (compileDirty || testDirty) {
-                    phases.add(new Phase("run-tests", Status.RUN, "test · " + tests, null));
+                    phases.add(new Phase("run-tests", Status.RUN, "run tests · " + tests, null));
                 } else {
                     // Mirror the build's run-tests stamp EXACTLY: main classes are a
                     // separate computeKey arg, NOT part of the runtime classpath.
@@ -210,7 +210,7 @@ final class BuildPlanForecast {
                     boolean hit = stampKey != null && present(actionCache, stampKey);
                     phases.add(hit
                             ? new Phase("run-tests", Status.CACHED, "· " + tests, null)
-                            : new Phase("run-tests", Status.RUN, "test · " + tests, null));
+                            : new Phase("run-tests", Status.RUN, "run tests · " + tests, null));
                 }
             }
 
@@ -256,7 +256,7 @@ final class BuildPlanForecast {
                     ? new Phase(name, Status.RUN, "recompile · dependency changed", null)
                     : new Phase(name, Status.CACHED, "", key8(pred.actionKey()));
             case INCREMENTAL -> new Phase(name, Status.PARTIAL,
-                    "partial compile · " + count(pred.sourceCount(), "source"), null);
+                    "compile · " + count(pred.sourceCount(), "source"), null);
             case FULL -> new Phase(name, Status.FULL,
                     "full compile · " + count(pred.sourceCount(), "source"), null);
         };
