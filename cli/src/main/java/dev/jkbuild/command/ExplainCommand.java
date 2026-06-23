@@ -131,41 +131,42 @@ public final class ExplainCommand implements CliCommand {
                         + " of " + total + " modules";
         System.out.println(" " + Theme.colorize("│", t.darkGray()) + " " + status + etaPart);
 
-        // Split the topo order at the first dirty module: the leading run of fully-cached
-        // modules collapses into a "Fully Cached" section (names only); everything from the
-        // first rebuild onward is the detailed "Rebuild" section (cached modules in that
-        // tail still show, just without a phase sub-tree). --verbose expands every phase.
+        // Partition the topo order by cache status: every fully-cached module (wherever
+        // it sits in the order) collapses into the "Fully Cached" section (names only);
+        // only the modules that actually rebuild appear in the detailed "Rebuild" section,
+        // each keeping its topo index. --verbose expands every phase (cached ones too).
         boolean verbose = all;
-        int firstDirty = 0;
-        while (firstDirty < modules.size() && !modules.get(firstDirty).dirty()) firstDirty++;
-        boolean hasCached = firstDirty > 0;
-        boolean hasTail = firstDirty < modules.size();
+        List<Integer> cachedIdx = new ArrayList<>();
+        List<Integer> dirtyIdx = new ArrayList<>();
+        for (int i = 0; i < modules.size(); i++) {
+            (modules.get(i).dirty() ? dirtyIdx : cachedIdx).add(i);
+        }
 
-        if (hasCached) {
-            boolean lastSection = !hasTail;
+        if (!cachedIdx.isEmpty()) {
+            boolean lastSection = dirtyIdx.isEmpty();
             System.out.println(" " + Theme.colorize(lastSection ? "╰─" : "├─", t.darkGray())
                     + dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont));
             String childPrefix = " " + Theme.colorize(lastSection ? "   " : "│  ", t.darkGray());
             if (verbose) {
-                for (int k = 0; k < firstDirty; k++) {
-                    renderModuleRow(modules.get(k), k + 1, graph, coordByDir, k == firstDirty - 1,
+                for (int j = 0; j < cachedIdx.size(); j++) {
+                    int i = cachedIdx.get(j);
+                    renderModuleRow(modules.get(i), i + 1, graph, coordByDir, j == cachedIdx.size() - 1,
                             childPrefix, 4, width, nerdfont, true, t);
                 }
             } else {
                 List<String> names = new ArrayList<>();
-                for (int k = 0; k < firstDirty; k++) {
-                    names.add(":" + shortName(modules.get(k).unit().coord()));
-                }
+                for (int i : cachedIdx) names.add(":" + shortName(modules.get(i).unit().coord()));
                 String elided = elideDeps(names, Math.max(10, width - 8));
                 System.out.println(childPrefix + Theme.colorize("╰─ ", t.darkGray())
                         + renderCachedNames(elided, t));
             }
         }
-        if (hasTail) {
+        if (!dirtyIdx.isEmpty()) {
             System.out.println(" " + Theme.colorize("╰─", t.darkGray())
                     + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
-            for (int k = firstDirty; k < modules.size(); k++) {
-                renderModuleRow(modules.get(k), k + 1, graph, coordByDir, k == modules.size() - 1,
+            for (int j = 0; j < dirtyIdx.size(); j++) {
+                int i = dirtyIdx.get(j);
+                renderModuleRow(modules.get(i), i + 1, graph, coordByDir, j == dirtyIdx.size() - 1,
                         "    ", 4, width, nerdfont, verbose, t);
             }
         }
