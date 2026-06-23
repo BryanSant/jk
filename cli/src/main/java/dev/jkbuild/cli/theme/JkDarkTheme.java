@@ -251,6 +251,12 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
+    public AttributedStyle cachedChip() {
+        // Pure-black text on bright-white (jk explain's "Fully Cached" section chip).
+        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), BRIGHT_WHITE);
+    }
+
+    @Override
     public Rgb goalChipColor() {
         return NORMAL_GREEN;
     }

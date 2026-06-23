@@ -147,7 +147,7 @@ public final class ExplainCommand implements CliCommand {
             boolean lastSection = dirtyIdx.isEmpty();
             System.out.println(" " + Theme.colorize(lastSection ? "╰─" : "├─", t.darkGray())
                     + dev.jkbuild.cli.tui.Badge.pill("Fully Cached", nerdfont,
-                            t.goalSuccessChip(), t.bright(t.goalChipColor())));
+                            t.cachedChip(), t.brightWhite()));
             String childPrefix = " " + Theme.colorize(lastSection ? "   " : "│  ", t.darkGray());
             if (verbose) {
                 for (int j = 0; j < cachedIdx.size(); j++) {
