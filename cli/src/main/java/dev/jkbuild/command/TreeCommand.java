@@ -193,6 +193,21 @@ public final class TreeCommand implements CliCommand {
                 s -> Theme.colorize(s, Coords.versionStyle()),
                 // ⎋ back-reference rows: the whole entry in bright-black (= darkGray).
                 s -> Theme.colorize(s, Theme.active().darkGray()),
-                scopeBadge);
+                scopeBadge,
+                TreeCommand::boldCoord);
+    }
+
+    /**
+     * The root project coordinate in bold — {@code group:artifact:version}, each
+     * segment bold and in its usual {@link Coords} color. Bold must be baked into
+     * each segment's style (a wrapping bold escape is cancelled by every segment's
+     * color reset). Input is the plain {@code group:artifact:version}.
+     */
+    private static String boldCoord(String gav) {
+        String[] p = gav.split(":", 3);
+        if (p.length < 3) return Theme.colorize(gav, Coords.groupStyle().bold());
+        return Theme.colorize(p[0], Coords.groupStyle().bold()) + ":"
+                + Theme.colorize(p[1], Coords.artifactStyle().bold()) + ":"
+                + Theme.colorize(p[2], Coords.versionStyle().bold());
     }
 }

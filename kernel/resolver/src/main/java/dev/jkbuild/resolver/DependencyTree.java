@@ -61,7 +61,19 @@ public final class DependencyTree {
             UnaryOperator<String> artifact,
             UnaryOperator<String> version,
             UnaryOperator<String> reference,
-            UnaryOperator<String> scopeBadge) {
+            UnaryOperator<String> scopeBadge,
+            UnaryOperator<String> boldCoord) {
+
+        /**
+         * Back-compat 6-arg form (no {@code boldCoord}): the root project coordinate
+         * renders with the same {@code group/artifact/version} stylers as any other.
+         */
+        public Styling(UnaryOperator<String> rail, UnaryOperator<String> group,
+                       UnaryOperator<String> artifact, UnaryOperator<String> version,
+                       UnaryOperator<String> reference, UnaryOperator<String> scopeBadge) {
+            this(rail, group, artifact, version, reference, scopeBadge, UnaryOperator.identity());
+        }
+
         public static Styling plain() {
             return new Styling(UnaryOperator.identity(), UnaryOperator.identity(),
                     UnaryOperator.identity(), UnaryOperator.identity(),
@@ -160,10 +172,12 @@ public final class DependencyTree {
                                 int maxDepth, Styling styling, boolean flatten,
                                 List<Scope> scopeOrder, boolean stack) {
         StringBuilder out = new StringBuilder();
-        // Root node: a bright-black ● bullet, then the project's group:artifact:version.
+        // Root node: a bright-black ● bullet, then the project's group:artifact:version
+        // in bold (via boldCoord, so the project stands out as the tree root).
         out.append(' ').append(styling.rail().apply("●")).append(' ')
-                .append(formatCoord(project.project().group(), project.project().name(),
-                        project.project().version(), styling)).append('\n');
+                .append(styling.boldCoord().apply(project.project().group() + ":"
+                        + project.project().name() + ":" + project.project().version()))
+                .append('\n');
         Set<String> seenModules = new HashSet<>();
         Set<String> seenDirs = new HashSet<>();
         if (project.isWorkspaceRoot()) {
