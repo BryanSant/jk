@@ -297,10 +297,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     /**
      * Settle the build goal with the green chip: {@code  ✓ Build ▶ Successfully
      * <tail>}. The {@code tail} (e.g. "built 17 modules took 1.4s") is pre-styled by
-     * the caller; this owns only the chip + cap + verb. See {@link GoalChrome}.
+     * the caller; this owns only the chip + cap + verb. See {@link GoalWedge}.
      */
     public void finishGoalSuccess(String tail, List<String> above) {
-        settle(GoalChrome.chipLine(Glyphs.CHECK, goalName(), nerdfont, tail), above);
+        settle(GoalWedge.chipLine(Glyphs.CHECK, goalName(), nerdfont, tail), above);
     }
 
     /** {@link #finishGoalSuccess(String, List)} with no buffered output above. */
@@ -313,7 +313,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * hand off to a subprocess after the goal settles (e.g. {@code jk run}).
      */
     public void finishGoalExec(String tail, List<String> above) {
-        settle(GoalChrome.chipLine(Glyphs.PLAY, goalName(), nerdfont, tail), above);
+        settle(GoalWedge.chipLine(Glyphs.PLAY, goalName(), nerdfont, tail), above);
     }
 
     /** {@link #finishGoalExec(String, List)} with no buffered output above. */
@@ -323,7 +323,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
 
     /** Settle the build goal with the red chip: {@code  ‼ Build ▶ Failure <tail>}. */
     public void finishGoalFailure(String tail, List<String> above) {
-        settle(GoalChrome.failureLine(goalName(), nerdfont, tail), above);
+        settle(GoalWedge.failureLine(goalName(), nerdfont, tail), above);
     }
 
     /** {@link #finishGoalFailure(String, List)} with no buffered output above. */
@@ -614,11 +614,11 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      */
     private String goalHeader(long elapsedMillis) {
         AttributedStyle dim = Theme.active().darkGray();
-        String barStr = bar.render(numerator, denominator);
+        String barStr = bar.render(numerator, denominator, nerdfont);
         StringBuilder h = new StringBuilder();
         if (nerdfont) {
-            // The spinner + name share the goal chip: black text on the goal green.
-            // The chip is closed by a U+E0B0 cap whose foreground is the chip green (so
+            // The spinner + name share the goal chip: white text on PLAN_BLUE.
+            // The chip is closed by a U+E0B0 cap whose foreground is PLAN_BLUE (so
             // its solid body continues the chip) and whose background tracks the bar's
             // first cell color — so the chip tapers into whatever block sits immediately
             // to its right and re-tints live as the bar fills. Only the spinner glyph
@@ -627,7 +627,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             // pill to the left edge.
             AttributedStyle chip = Theme.active().goalChip();
             AttributedStyle cap = Theme.active().withBackground(
-                    Theme.active().bright(Theme.active().goalChipColor()),
+                    Theme.active().bright(Theme.active().planBadgeColor()),
                     bar.leadColor(numerator, denominator));
             h.append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(FRAMES[frame], chip))

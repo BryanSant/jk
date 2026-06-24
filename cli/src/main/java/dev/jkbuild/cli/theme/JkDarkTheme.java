@@ -214,7 +214,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle coordVersion() {
-        return withColor(AttributedStyle.DEFAULT, BRIGHT_BLUE);     // bright-blue
+        return withColor(AttributedStyle.DEFAULT, BRIGHT_WHITE);
     }
 
     @Override
@@ -256,18 +256,17 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle goalSuccessChip() {
-        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), PLAN_BLUE);
+        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), NORMAL_GREEN);
     }
 
     @Override
     public AttributedStyle goalFailureChip() {
-        // Pure-black text on the failure red (the settled "‼ Build" chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_RED);
+        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), NORMAL_RED);
     }
 
     @Override
     public Rgb goalChipColor() {
-        return PLAN_BLUE;
+        return NORMAL_GREEN;
     }
 
     @Override

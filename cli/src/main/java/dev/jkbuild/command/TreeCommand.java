@@ -97,17 +97,16 @@ public final class TreeCommand implements CliCommand {
         int max = depth != null ? depth : Integer.MAX_VALUE;
 
         // Header: a leading blank line, then a left-flush green powerline chip
-        // " - Dependencies Tree " (black on green, capped by a green ▶ segment arrow
-        // when nerdfont) — the same chip family as jk build/idea. The project coord
-        // moves to the root node line below.
+        // " - Dependencies Tree " — white on PLAN_BLUE with a PLAN_BLUE cap.
+        // '-' is not a status glyph, so the chip follows the default blue rule.
         boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
         Theme t = Theme.active();
         String title = " - Dependencies Tree ";
         String header = nerdfont
-                ? Theme.colorize(title, t.goalSuccessChip())
+                ? Theme.colorize(title, t.goalChip())
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
-                                t.bright(t.goalChipColor()))
-                : Theme.colorize(title, t.goalSuccessChip());
+                                t.bright(t.planBadgeColor()))
+                : Theme.colorize(title, t.goalChip());
         System.out.println();
         System.out.println(header);
         // Composite-aware: walks path deps' own trees too (anchored at `dir`).

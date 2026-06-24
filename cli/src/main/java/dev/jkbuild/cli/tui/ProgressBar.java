@@ -73,14 +73,24 @@ public final class ProgressBar {
 
     /**
      * Render one bar line for {@code (numerator, denominator)} — the underlined
-     * block bar followed by a trailing {@code  NN%}. Colored text, no trailing
-     * newline and no cursor control.
+     * block bar followed by a trailing percent badge. With a Nerd Font the percent
+     * is a white pill ({@code  NN%  }); without one it's gradient-colored text.
      */
-    public String render(long numerator, long denominator) {
+    public String render(long numerator, long denominator, boolean nerdfont) {
         StringBuilder sb = new StringBuilder();
         appendBar(sb, numerator, denominator);
-        sb.append(' ').append(Theme.colorize(percent(numerator, denominator) + "%",
-                Theme.active().brightWhite()));
+        int pct = percent(numerator, denominator);
+        sb.append(' ');
+        if (nerdfont) {
+            AttributedStyle body = Theme.active().withBackground(
+                    Theme.active().bright(Rgb.hex(0x000000)), Rgb.hex(0xFFFFFF));
+            AttributedStyle caps = Theme.active().bright(Rgb.hex(0xFFFFFF));
+            sb.append(Theme.colorize(Glyphs.PILL_LEFT_NERD, caps));
+            sb.append(Theme.colorize(pct + "%", body));
+            sb.append(Theme.colorize(Glyphs.PILL_RIGHT_NERD, caps));
+        } else {
+            sb.append(Theme.colorize(pct + "%", percentStyle(pct)));
+        }
         return sb.toString();
     }
 
@@ -167,5 +177,10 @@ public final class ProgressBar {
             a[i] = Theme.active().bright(gradient.at(t));
         }
         return a;
+    }
+
+    private AttributedStyle percentStyle(int pct) {
+        double t = Math.max(0.0, Math.min(1.0, (double) pct / 100.0));
+        return Theme.active().bright(gradient.at(t)).bold();
     }
 }

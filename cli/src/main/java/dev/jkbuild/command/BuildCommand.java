@@ -10,7 +10,7 @@ import dev.jkbuild.cli.run.AggregateContext;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.tui.CommandManager;
-import dev.jkbuild.cli.tui.GoalChrome;
+import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
@@ -299,7 +299,7 @@ public final class BuildCommand implements CliCommand {
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
             remaining.removeAll(ready);
         }
-        System.out.println(GoalChrome.chipLine(dev.jkbuild.cli.tui.Glyphs.CHECK, "Build",
+        System.out.println(GoalWedge.chipLine(dev.jkbuild.cli.tui.Glyphs.CHECK, "Build",
                 GlobalConfig.nerdfont(), modulesTail(total, start)));
         return 0;
     }
@@ -832,7 +832,7 @@ public final class BuildCommand implements CliCommand {
             // matching the workspace path. onSuccess/onFailure return the tail after the verb.
             ConsoleSpec spec = new ConsoleSpec("Build",
                     r -> projectTail(goal),
-                    r -> GoalChrome.coord(pm.target()),
+                    r -> GoalWedge.coord(pm.target()),
                     true);
             result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
@@ -941,7 +941,7 @@ public final class BuildCommand implements CliCommand {
 
     /** Failure tail {@code group:name took T} — coord colored, {@code took T} bright-black. */
     private static String failureTail(String coord, long start) {
-        return GoalChrome.coord(coord) + " " + elapsedSince(start);
+        return GoalWedge.coord(coord) + " " + elapsedSince(start);
     }
 
     /** Failure tail for a module missing its {@code jk.toml}. */

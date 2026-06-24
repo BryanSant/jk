@@ -4,7 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.cli.tui.GoalChrome;
+import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
@@ -253,7 +253,7 @@ public final class IdeaCommand implements CliCommand {
         String check = Theme.colorize("✓", t.success());
 
         // Header chip: " ✓ IDEA ▶ The <project> project is ready".
-        System.out.println(GoalChrome.chipLine(Glyphs.CHECK, "IDEA", GlobalConfig.nerdfont(),
+        System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "IDEA", GlobalConfig.nerdfont(),
                 "The " + Theme.colorize(rootBuild.project().name(), t.focused()) + " project is ready"));
 
         // A tree of what was done: JDK registration (when any) then the generated files.

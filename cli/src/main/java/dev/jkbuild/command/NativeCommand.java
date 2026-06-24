@@ -8,7 +8,7 @@ import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.CommandManager;
-import dev.jkbuild.cli.tui.GoalChrome;
+import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.ImageConfigParser;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -194,12 +194,12 @@ public final class NativeCommand implements CliCommand {
                 try {
                     exit = runPreparedNative(pm, agg);
                 } catch (Exception e) {
-                    view.finishGoalFailure(GoalChrome.coord(moduleName)
+                    view.finishGoalFailure(GoalWedge.coord(moduleName)
                             + " " + BuildCommand.elapsedSince(buildStart));
                     throw e;
                 }
                 if (exit != 0) {
-                    view.finishGoalFailure(GoalChrome.coord(moduleName)
+                    view.finishGoalFailure(GoalWedge.coord(moduleName)
                             + " " + BuildCommand.elapsedSince(buildStart));
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
                         System.err.println(ConsoleSpec.renderError(d));
@@ -264,7 +264,7 @@ public final class NativeCommand implements CliCommand {
             String verb = pm.eligible() ? "Native build successful" : "Build successful";
             ConsoleSpec spec = new ConsoleSpec("Build",
                     r -> Theme.colorize(verb, Theme.active().success()) + BuildCommand.builtArtifact(pm.goal()),
-                    r -> GoalChrome.coord(pm.target()), true);
+                    r -> GoalWedge.coord(pm.target()), true);
             result = GoalConsole.runGoal(pm.goal(), GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
         return result.success() ? 0 : 1;
@@ -315,7 +315,7 @@ public final class NativeCommand implements CliCommand {
         ConsoleSpec spec = new ConsoleSpec("Build",
                 r -> Theme.colorize("Native build successful", Theme.active().success())
                         + BuildCommand.builtArtifact(goal),
-                r -> GoalChrome.coord(coord),
+                r -> GoalWedge.coord(coord),
                 true);
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec, coord);
 

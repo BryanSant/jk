@@ -19,9 +19,9 @@ import java.util.Locale;
  * result line). Without a Nerd Font there is no chip background and no cap: the glyph
  * and verb are simply colored.
  */
-public final class GoalChrome {
+public final class GoalWedge {
 
-    private GoalChrome() {}
+    private GoalWedge() {}
 
     /** {@code " {glyph} {name} "} painted on {@code chip}. A leading + trailing space pad the pill. */
     static String chip(String glyph, String name, AttributedStyle chip) {
@@ -47,8 +47,11 @@ public final class GoalChrome {
      */
     public static String chipLine(String glyph, String verb, boolean nerdfont, String message) {
         Theme t = Theme.active();
+        boolean isCheck = Glyphs.CHECK.equals(glyph);
         if (nerdfont) {
-            return chip(glyph, verb, t.goalSuccessChip()) + cap(t.goalChipColor(), true) + " " + message;
+            var chipStyle = isCheck ? t.goalSuccessChip() : t.goalChip();
+            var capColor  = isCheck ? t.goalChipColor()   : t.planBadgeColor();
+            return chip(glyph, verb, chipStyle) + cap(capColor, true) + " " + message;
         }
         return Theme.colorize(glyph + " " + verb, t.success()) + " " + message;
     }

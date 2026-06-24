@@ -107,7 +107,7 @@ public interface Theme {
     /** Coordinate artifact/name segment — bright cyan (Jk Dark bright cyan {@code #18FFFF}). */
     AttributedStyle coordName();
 
-    /** Coordinate version segment — bright blue (Jk Dark bright blue {@code #536DFE}). */
+    /** Coordinate version segment — bright white ({@code #ECEFF1}). */
     AttributedStyle coordVersion();
 
     /** Chip / pill badge (jk tree scope sections, jk explain unit indices) — black on a bright-black background. */
@@ -131,13 +131,13 @@ public interface Theme {
     /** The live build goal chip (spinner + verb) — white on dark royal blue ({@code #0F4786}). */
     AttributedStyle goalChip();
 
-    /** The settled success chip ({@code ✓ Build}) — white on dark royal blue ({@code #0F4786}). */
+    /** The settled success chip ({@code ✓ Build}) — white on green. */
     AttributedStyle goalSuccessChip();
 
-    /** The settled failure chip ({@code ‼ Build}) — bright-black on the failure red. */
+    /** The settled failure chip ({@code ‼ Build}) — white on red. */
     AttributedStyle goalFailureChip();
 
-    /** The goal chip's green — the foreground of the powerline cap that closes the green chip. */
+    /** The green behind {@link #goalSuccessChip()} — foreground of the powerline cap. */
     Rgb goalChipColor();
 
     /** The failure chip's red — the foreground of the powerline cap that closes the red chip. */

@@ -12,7 +12,7 @@ import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
-import dev.jkbuild.cli.tui.GoalChrome;
+import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
@@ -132,7 +132,7 @@ public final class RunCommand implements CliCommand {
                     try { return execTail(projectDir, execCommand(projectDir, project, layout)); }
                     catch (IOException e) { return "Executing"; }
                 },
-                r -> GoalChrome.coord(coord),
+                r -> GoalWedge.coord(coord),
                 true, true);
         GoalResult result = GoalConsole.runGoal(goal, mode, cache, spec, coord);
         if (!result.success()) {
