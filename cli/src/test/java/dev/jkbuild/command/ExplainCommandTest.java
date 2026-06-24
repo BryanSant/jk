@@ -98,7 +98,7 @@ class ExplainCommandTest {
         // color is active (each coordinate segment is one colorize call).
         String out = runExplainCapturingStdout(tmp.resolve("app"));
 
-        assertThat(out).contains("2 modules");
+        assertThat(out).contains("Modules: 2");
         assertThat(out).contains("com.example").contains("app").contains("lib");
         // Both modules rebuild (fresh), listed dependency-first: lib (the path dep) before
         // app (the root). app also appears once on the ● root line, so compare app's row

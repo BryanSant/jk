@@ -119,7 +119,7 @@ public final class ExplainCommand implements CliCommand {
             etaMillis = 0;   // never fail explain over the estimate
         }
 
-        // Header: a light-blue (#039BE5) " - Build Plan " chip, capped by a matching ▶
+        // Header: a dark royal blue (#1565C0) " - Build Plan " chip, capped by a matching ▶
         // segment arrow when nerdfont, then the build-time estimate (yellow).
         String header = nerdfont
                 ? Theme.colorize(" - Build Plan ", t.planBadge())
