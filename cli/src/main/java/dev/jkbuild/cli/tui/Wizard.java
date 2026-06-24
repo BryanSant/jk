@@ -377,9 +377,9 @@ public final class Wizard {
         String text = title.isEmpty() ? "Wizard" : title;
         return new AttributedStringBuilder()
                 .append("╭──", t.railStyle(Rail.StepState.INACTIVE, Rail.RailGlyph.OPEN))
-                .append("", t.gray())
-                .append(" " + text + " ", t.scopeBadge())
-                .append("", t.gray())
+                .append("", t.bright(t.indigoBadgeColor()))
+                .append(" " + text + " ", t.indigoBadge())
+                .append("", t.bright(t.indigoBadgeColor()))
                 .toAttributedString()
                 .toAnsi(terminal);
     }
