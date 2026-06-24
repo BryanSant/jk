@@ -242,7 +242,7 @@ public final class ProgressBarListener implements GoalListener {
         // Percent box: [dark-gray-bracket bold-white-pct dark-gray-bracket]
         String pctStr = String.format("%3d%%", pct);
         out.print(Theme.colorize("[", Theme.active().darkGray()));
-        out.print(Theme.colorize(pctStr, Theme.active().focused()));
+        out.print(Theme.colorize(pctStr, percentStyle(pct)));
         out.print(Theme.colorize("]", Theme.active().darkGray()));
         out.print(" ");
 
@@ -301,7 +301,7 @@ public final class ProgressBarListener implements GoalListener {
         // Percent box (unchanged).
         String pctStr = String.format("%3d%%", pct);
         out.print(Theme.colorize("[", Theme.active().darkGray()));
-        out.print(Theme.colorize(pctStr, Theme.active().focused()));
+        out.print(Theme.colorize(pctStr, percentStyle(pct)));
         out.print(Theme.colorize("]", Theme.active().darkGray()));
         out.print(" ");
 
@@ -355,7 +355,7 @@ public final class ProgressBarListener implements GoalListener {
         out.print(" ");
         String pctStr = String.format("%3d%%", pct);
         out.print(Theme.colorize("[", Theme.active().darkGray()));
-        out.print(Theme.colorize(pctStr, Theme.active().focused()));
+        out.print(Theme.colorize(pctStr, percentStyle(pct)));
         out.print(Theme.colorize("]", Theme.active().darkGray()));
         out.print(" ");
         out.print(Theme.colorize(num + " of " + (den <= 0 ? "—" : den), Theme.active().normalGray()));
@@ -428,5 +428,10 @@ public final class ProgressBarListener implements GoalListener {
             a[i] = Theme.active().bright(gradient.at(t));
         }
         return a;
+    }
+
+    private static AttributedStyle percentStyle(int pct) {
+        double t = Math.max(0.0, Math.min(1.0, (double) pct / 100.0));
+        return Theme.active().bright(Theme.active().progressGradient().at(t)).bold();
     }
 }

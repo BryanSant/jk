@@ -76,6 +76,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
     private String lastStatus = "";
     private boolean drawn = false;
     private boolean closed = false;
+    private int lastPercentVal = 0;
 
     private SpinnerProgressBar(PrintStream out, boolean silent) {
         this.out = out;
@@ -115,13 +116,14 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
 
         out.print(Ansi.taskbarProgress(clamped));
         if (!drawn) {
-            renderInitial(filled, percentStr, statusStr);
+            renderInitial(filled, clamped, percentStr, statusStr);
         } else {
-            renderDiff(filled, percentStr, statusStr);
+            renderDiff(filled, clamped, percentStr, statusStr);
         }
         out.flush();
         lastFilled = filled;
         lastPercent = percentStr;
+        lastPercentVal = clamped;
         lastStatus = statusStr;
         drawn = true;
     }
@@ -192,7 +194,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
         // `drawn`, renderDiff would no-op on identical state and the bar
         // wouldn't reappear.
         drawn = false;
-        renderInitial(lastFilled, lastPercent, lastStatus);
+        renderInitial(lastFilled, lastPercentVal, lastPercent, lastStatus);
         out.print(Ansi.taskbarProgress(
                 (int) Math.round(lastFilled * 100.0 / SEGMENTS)));
         out.flush();
@@ -226,7 +228,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
             out.print(Theme.colorize(String.valueOf(EMPTY_CHAR), failColors[i]));
         }
         out.print(GAP);
-        out.print(Theme.colorize(lastPercent, Theme.active().settled()));
+        out.print(Theme.colorize(lastPercent, percentStyle(lastPercentVal)));
         out.print(SEPARATOR);
         out.print(Theme.colorize(lastStatus, strikeStyle));
         out.print(Ansi.ERASE_LINE_TO_END); // wipe any residue past the (shorter) status
@@ -255,7 +257,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
             out.print(Theme.colorize(String.valueOf(c), redStyle));
         }
         out.print(GAP);
-        out.print(Theme.colorize(lastPercent, Theme.active().settled()));
+        out.print(Theme.colorize(lastPercent, percentStyle(lastPercentVal)));
         out.print(SEPARATOR);
         out.print(Theme.colorize(lastStatus, strikeStyle));
         out.print(Ansi.ERASE_LINE_TO_END); // wipe any residue past the (shorter) cancel status
@@ -264,16 +266,16 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
         out.flush();
     }
 
-    private void renderInitial(int filled, String percent, String status) {
+    private void renderInitial(int filled, int percent, String percentStr, String status) {
         out.print("\r");
         renderSegments(0, SEGMENTS, filled);
         out.print(GAP);
-        out.print(Theme.colorize(percent, Theme.active().settled()));
+        out.print(Theme.colorize(percentStr, percentStyle(percent)));
         out.print(SEPARATOR);
         out.print(Theme.colorize(status, Theme.active().dim()));
     }
 
-    private void renderDiff(int filled, String percent, String status) {
+    private void renderDiff(int filled, int percent, String percentStr, String status) {
         // Segments: the moving gradient re-colors every filled glyph when
         // the frontier advances, so there's no surgical sub-range to redraw.
         // Jump to the first glyph and overwrite the whole row in place.
@@ -282,9 +284,9 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
             renderSegments(0, SEGMENTS, filled);
         }
         // Percent: repaint the 4-char block (it's already fixed-width).
-        if (!percent.equals(lastPercent)) {
+        if (!percentStr.equals(lastPercent)) {
             moveToCol(1 + SEGMENTS + GAP.length());
-            out.print(Theme.colorize(percent, Theme.active().settled()));
+            out.print(Theme.colorize(percentStr, percentStyle(percent)));
         }
         // Status: repaint; overwrite shrinkage with the exact number of spaces.
         if (!status.equals(lastStatus)) {
@@ -337,6 +339,11 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
             a[i] = Theme.active().bright(gradient.at(t));
         }
         return a;
+    }
+
+    private AttributedStyle percentStyle(int pct) {
+        double t = Math.max(0.0, Math.min(1.0, (double) pct / 100.0));
+        return Theme.active().bright(Theme.active().progressGradient().at(t)).bold();
     }
 
 }
