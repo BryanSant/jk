@@ -48,6 +48,14 @@ public final class CompileSupport {
         return new Languages(java, kotlin);
     }
 
+    /** True if {@code projectDir} contains any Java or Kotlin source files. */
+    static boolean hasSources(Path projectDir) {
+        return Files.isDirectory(projectDir.resolve("src/main/java"))
+            || Files.isDirectory(projectDir.resolve("src/main/kotlin"))
+            || anySourceUnder(projectDir.resolve("src"), ".java")
+            || anySourceUnder(projectDir.resolve("src"), ".kt");
+    }
+
     /** True if any regular file ending in {@code ext} exists anywhere under {@code root}. */
     private static boolean anySourceUnder(Path root, String ext) {
         if (!Files.isDirectory(root)) return false;

@@ -195,12 +195,20 @@ public final class BuildPipeline {
         boolean useKotlin = false;
         boolean useJava = true;
         boolean compactLayout = false;
+        boolean workspaceNoSources = false;
         try {
-            var project = JkBuildParser.parse(in.buildFile()).project();
+            var jkBuild = JkBuildParser.parse(in.buildFile());
+            var project = jkBuild.project();
             CompileSupport.Languages langs = CompileSupport.resolveLanguages(project, in.dir());
             useJava = langs.java();
             useKotlin = langs.kotlin();
             compactLayout = CompileSupport.isSimpleLayout(project, in.dir());
+            // Workspace root with no source tree: nothing to compile or package.
+            if (jkBuild.isWorkspaceRoot() && !CompileSupport.hasSources(in.dir())) {
+                useJava = false;
+                useKotlin = false;
+                workspaceNoSources = true;
+            }
         } catch (Exception ignored) {
             // Unparseable/missing jk.toml — parse-build will surface the real error.
         }
@@ -1054,6 +1062,8 @@ public final class BuildPipeline {
                 .addPhase(parseBuild)
                 .addPhase(syncDeps)
                 .addPhase(ensureJdk);
+        // Workspace root with no sources: validate jk.toml + sync deps, nothing more.
+        if (workspaceNoSources) return b;
         if (useJava) {
             b.addPhase(compileJava);
         }
