@@ -40,7 +40,7 @@ public final class GoalWedge {
 
     /**
      * A generic settled chip line: {@code  ✓ Clean ▶ <message>}. The {@code glyph} +
-     * {@code verb} form the green chip (closed by the powerline cap); {@code message}
+     * {@code verb} form the chip (closed by the powerline cap); {@code message}
      * is caller-styled and follows the cap. For commands whose result reads as its own
      * sentence (e.g. {@code jk clean}'s "Removed N files") rather than the "{goal}
      * successful" phrasing of {@link #successLine}.
@@ -53,7 +53,7 @@ public final class GoalWedge {
             var capColor  = isCheck ? t.goalChipColor()   : t.planBadgeColor();
             return chip(glyph, verb, chipStyle) + cap(capColor, true) + " " + message;
         }
-        return Theme.colorize(glyph + " " + verb, t.success()) + " " + message;
+        return Theme.colorize(glyph + " " + verb, t.focused()) + " " + message;
     }
 
     /** {@code group:name} with the group cyan and the name bright-cyan — for failure tails. */
