@@ -826,7 +826,8 @@ public final class BuildPipeline {
                     try {
                         result = new JUnitLauncher().run(
                                 ctx.require(JAVA_HOME), ctx.require(TEST_CLASSES),
-                                runtimeCp, in.cache(), in.workerCount(), workerJars, listener);
+                                runtimeCp, in.cache(), in.workerCount(), workerJars, listener,
+                                ctx.require(LAYOUT).testResultsDir());
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         ctx.error("test", "interrupted");

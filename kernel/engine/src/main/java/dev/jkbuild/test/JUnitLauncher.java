@@ -98,6 +98,25 @@ public final class JUnitLauncher {
             Map<String, String> workerJarProps,
             TestProgressListener listener)
             throws IOException, InterruptedException {
+        return run(javaHome, testClassesDir, runtimeClasspath, cacheRoot, workers,
+                workerJarProps, listener, null);
+    }
+
+    /**
+     * As {@link #run(Path, Path, List, Path, int, Map, TestProgressListener)} but also
+     * writes Gradle-compatible {@code TEST-<classname>.xml} files into {@code testResultsDir}
+     * after the run completes. {@code testResultsDir} may be {@code null} to skip XML output.
+     */
+    public Result run(
+            Path javaHome,
+            Path testClassesDir,
+            List<Path> runtimeClasspath,
+            Path cacheRoot,
+            int workers,
+            Map<String, String> workerJarProps,
+            TestProgressListener listener,
+            Path testResultsDir)
+            throws IOException, InterruptedException {
         Objects.requireNonNull(javaHome, "javaHome");
         Objects.requireNonNull(testClassesDir, "testClassesDir");
         Objects.requireNonNull(runtimeClasspath, "runtimeClasspath");
@@ -115,17 +134,19 @@ public final class JUnitLauncher {
         Path javaBinary = javaBinary(javaHome);
 
         if (workers == 1) {
-            return runSingle(javaBinary, classpath, testClassesDir, listener);
+            return runSingle(javaBinary, classpath, testClassesDir, listener, testResultsDir);
         }
-        return runParallel(javaBinary, classpath, testClassesDir, workers, listener);
+        return runParallel(javaBinary, classpath, testClassesDir, workers, listener, testResultsDir);
     }
 
     // -------- single-worker ---------------------------------------------
 
     private Result runSingle(
-            Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener)
+            Path javaBinary, String classpath, Path testClassesDir,
+            TestProgressListener listener, Path testResultsDir)
             throws IOException, InterruptedException {
-        var aggregator = new ResultAggregator(listener, /* workerId */ 0);
+        XmlTestReport xml = testResultsDir != null ? new XmlTestReport() : null;
+        var aggregator = new ResultAggregator(listener, /* workerId */ 0, xml);
         // Capture the worker's non-protocol output so a hard crash (uncaught
         // throwable / System.exit before any test event) can be explained instead
         // of surfacing only as "runner exited N".
@@ -135,13 +156,19 @@ public final class JUnitLauncher {
                 List.of("--scan-classpath=" + testClassesDir),
                 aggregator::accept,
                 line -> { crash.add(line); listener.onUserOutput(0, line); });
-        return aggregator.toResult(exit, crash.text());
+        Result result = aggregator.toResult(exit, crash.text());
+        if (xml != null) {
+            try { xml.writeAll(testResultsDir); }
+            catch (IOException e) { /* non-fatal: tests ran, just report writing failed */ }
+        }
+        return result;
     }
 
     // -------- parallel pull-queue ---------------------------------------
 
     private Result runParallel(
-            Path javaBinary, String classpath, Path testClassesDir, int workers, TestProgressListener listener)
+            Path javaBinary, String classpath, Path testClassesDir,
+            int workers, TestProgressListener listener, Path testResultsDir)
             throws IOException, InterruptedException {
         // 1. Discovery — one fork, list-only mode, harvest class FQCNs.
         List<String> classes = discoverClasses(javaBinary, classpath, testClassesDir, listener);
@@ -151,6 +178,9 @@ public final class JUnitLauncher {
         // Don't waste workers on small suites — N workers > N classes leaves
         // some idle waiting for a class that'll never come.
         int actualWorkers = Math.min(workers, classes.size());
+
+        // One shared XmlTestReport — all worker threads write into it (it is thread-safe).
+        XmlTestReport xml = testResultsDir != null ? new XmlTestReport() : null;
 
         var queue = new ConcurrentLinkedDeque<>(classes);
         var aggregators = new java.util.ArrayList<ResultAggregator>();
@@ -165,7 +195,7 @@ public final class JUnitLauncher {
                     "--pull",
                     "--worker=" + workerId,
                     "--scan-classpath=" + testClassesDir);
-            var agg = new ResultAggregator(listener, workerId);
+            var agg = new ResultAggregator(listener, workerId, xml);
             aggregators.add(agg);
             final var crash = new CaptureBuffer();
             captures.add(crash);
@@ -208,6 +238,10 @@ public final class JUnitLauncher {
             }
             return new Result(1, 0, 1, 0, List.of(
                     new Failure("(test run)", "", "runner exited " + worstExit, crash.toString())));
+        }
+        if (xml != null) {
+            try { xml.writeAll(testResultsDir); }
+            catch (IOException e) { /* non-fatal: tests ran, just report writing failed */ }
         }
         return new Result(total, succeeded, failed, skipped, allFailures);
     }
@@ -348,6 +382,7 @@ public final class JUnitLauncher {
 
         private final TestProgressListener listener;
         private final int workerId;
+        private final XmlTestReport xmlReport;
         private long succeeded;
         private long failed;
         private long skipped;
@@ -359,14 +394,19 @@ public final class JUnitLauncher {
         // so progress UIs can keep a stable static-plan denominator.
         private final java.util.Set<String> dynamicIds = new java.util.HashSet<>();
 
-        /** Test-friendly ctor: no listener, no worker id. */
+        /** Test-friendly ctor: no listener, no worker id, no XML report. */
         ResultAggregator() {
-            this(TestProgressListener.noop(), 0);
+            this(TestProgressListener.noop(), 0, null);
         }
 
         ResultAggregator(TestProgressListener listener, int workerId) {
+            this(listener, workerId, null);
+        }
+
+        ResultAggregator(TestProgressListener listener, int workerId, XmlTestReport xmlReport) {
             this.listener = listener;
             this.workerId = workerId;
+            this.xmlReport = xmlReport;
         }
 
         synchronized void accept(String json) {
@@ -430,6 +470,13 @@ public final class JUnitLauncher {
                 captureFailure(id, display + " (container)", json);
             }
             listener.onTestFinished(id, display, status, isTest, wasStatic, duration, workerId);
+            if (xmlReport != null && isTest) {
+                if ("ABORTED".equals(status)) {
+                    xmlReport.recordSkipped(id, display, "aborted");
+                } else {
+                    xmlReport.recordFinished(id, display, duration, Ndjson.nested(json, "throwable"));
+                }
+            }
         }
 
         /** Record a FAILED test/container: count it and keep its summary + full stack. */
@@ -460,6 +507,9 @@ public final class JUnitLauncher {
                     isTest,
                     wasStatic,
                     workerId);
+            if (xmlReport != null && isTest) {
+                xmlReport.recordSkipped(id, Ndjson.str(json, "display"), reason);
+            }
         }
 
         synchronized Result toResult(int exitCode) {
