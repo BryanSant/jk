@@ -86,7 +86,7 @@ public final class ProgressBar {
         if (nerdfont) {
             Rgb rightmost = gradient.at(1.0);
             AttributedStyle body = Theme.active().withBackground(
-                    Theme.active().bright(Rgb.hex(0x000000)), rightmost);
+                    Theme.active().bright(Rgb.hex(0xFFFFFF)), rightmost);
             sb.append(Theme.colorize(" " + pct + "%", body));
             sb.append(Theme.colorize(Glyphs.SEGMENT_END_NERD, Theme.active().bright(rightmost)));
         } else {
