@@ -41,6 +41,7 @@ public final class JkDarkTheme implements Theme {
     public static final Rgb NORMAL_BLACK   = Rgb.hex(0x263238); // Blue Grey 900
     public static final Rgb NORMAL_RED     = Rgb.hex(0xE91E63); // Pink 500
     public static final Rgb NORMAL_GREEN   = Rgb.hex(0x4CAF50); // Green 500
+    public static final Rgb GOAL_GREEN    = Rgb.hex(0x357B38); // Green 500 × 0.7 — build wedge background
     public static final Rgb NORMAL_YELLOW  = Rgb.hex(0xFFC107); // Amber 500
     public static final Rgb NORMAL_BLUE    = Rgb.hex(0x3F51B5); // Indigo 500
     public static final Rgb NORMAL_MAGENTA = Rgb.hex(0x9C27B0); // Purple 500
@@ -256,7 +257,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle goalSuccessChip() {
-        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), NORMAL_GREEN);
+        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), GOAL_GREEN);
     }
 
     @Override
@@ -266,7 +267,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public Rgb goalChipColor() {
-        return NORMAL_GREEN;
+        return GOAL_GREEN;
     }
 
     @Override
