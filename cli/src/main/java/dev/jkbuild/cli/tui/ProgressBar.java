@@ -73,26 +73,14 @@ public final class ProgressBar {
 
     /**
      * Render one bar line for {@code (numerator, denominator)} — the underlined
-     * block bar followed by a trailing percent badge. With a Nerd Font the percent
-     * sits flush against the bar: a leading space + black text on the gradient's
-     * rightmost color, closed by a solid right-pointing powerline arrow (▶) in
-     * that same color — matching the wedge style used by the Build chip. Without a Nerd
-     * Font it's a plain space then gradient-colored text.
+     * block bar followed by a plain white {@code  NN%} trailing the bar.
      */
-    public String render(long numerator, long denominator, boolean nerdfont) {
+    public String render(long numerator, long denominator) {
         StringBuilder sb = new StringBuilder();
         appendBar(sb, numerator, denominator);
         int pct = percent(numerator, denominator);
-        if (nerdfont) {
-            Rgb rightmost = gradient.at(1.0);
-            AttributedStyle body = Theme.active().withBackground(
-                    Theme.active().bright(Rgb.hex(0xFFFFFF)), rightmost);
-            sb.append(Theme.colorize(" " + pct + "%", body));
-            sb.append(Theme.colorize(Glyphs.SEGMENT_END_NERD, Theme.active().bright(rightmost)));
-        } else {
-            sb.append(' ');
-            sb.append(Theme.colorize(pct + "%", percentStyle(pct)));
-        }
+        sb.append(' ');
+        sb.append(Theme.colorize(pct + "%", Theme.active().brightWhite()));
         return sb.toString();
     }
 

@@ -614,7 +614,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      */
     private String goalHeader(long elapsedMillis) {
         AttributedStyle dim = Theme.active().darkGray();
-        String barStr = bar.render(numerator, denominator, nerdfont);
+        String barStr = bar.render(numerator, denominator);
         StringBuilder h = new StringBuilder();
         if (nerdfont) {
             // The spinner + name share the goal chip: white text on PLAN_BLUE.
