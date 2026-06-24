@@ -45,7 +45,7 @@ public final class JkDarkTheme implements Theme {
     public static final Rgb NORMAL_BLUE    = Rgb.hex(0x3F51B5); // Indigo 500
     public static final Rgb NORMAL_MAGENTA = Rgb.hex(0x9C27B0); // Purple 500
     public static final Rgb NORMAL_CYAN    = Rgb.hex(0x00BCD4); // Cyan 500
-    public static final Rgb PLAN_BLUE      = Rgb.hex(0x1565C0); // Blue 800 — dark royal blue
+    public static final Rgb PLAN_BLUE      = Rgb.hex(0x0F4786); // dark royal blue (#1565C0 × 0.7)
     public static final Rgb NORMAL_WHITE   = Rgb.hex(0xCFD8DC); // Blue Grey 100
     public static final Rgb GRAY           = Rgb.hex(0x90A4AE); // Blue Grey 300 — badge chips
 
@@ -251,14 +251,12 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle goalChip() {
-        // Pure-black text on the goal green (the live build spinner + verb chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_GREEN);
+        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), PLAN_BLUE);
     }
 
     @Override
     public AttributedStyle goalSuccessChip() {
-        // Pure-black text on the goal green (the settled "✓ Build" chip).
-        return withBg(withColor(AttributedStyle.DEFAULT, CHIP_TEXT), NORMAL_GREEN);
+        return withBg(withColor(AttributedStyle.DEFAULT, Rgb.hex(0xFFFFFF)), PLAN_BLUE);
     }
 
     @Override
@@ -269,7 +267,7 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public Rgb goalChipColor() {
-        return NORMAL_GREEN;
+        return PLAN_BLUE;
     }
 
     @Override

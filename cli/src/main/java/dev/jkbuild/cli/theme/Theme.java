@@ -116,7 +116,7 @@ public interface Theme {
     /** Header segment (jk explain's "Build Plan for …") — near-black on a cyan background. */
     AttributedStyle cyanBadge();
 
-    /** {@code jk explain} "Build Plan" header chip — white on dark royal blue ({@code #1565C0}). */
+    /** {@code jk explain} "Build Plan" header chip — white on dark royal blue ({@code #0F4786}). */
     AttributedStyle planBadge();
 
     /** The dark royal blue behind {@link #planBadge()} — for the powerline cap. */
@@ -128,10 +128,10 @@ public interface Theme {
     /** The indigo behind {@link #indigoBadge()} — for the powerline cap. */
     Rgb indigoBadgeColor();
 
-    /** The live build goal chip (spinner + verb) — near-black on the goal green. */
+    /** The live build goal chip (spinner + verb) — white on dark royal blue ({@code #0F4786}). */
     AttributedStyle goalChip();
 
-    /** The settled success chip ({@code ✓ Build}) — bright-black on the goal green. */
+    /** The settled success chip ({@code ✓ Build}) — white on dark royal blue ({@code #0F4786}). */
     AttributedStyle goalSuccessChip();
 
     /** The settled failure chip ({@code ‼ Build}) — bright-black on the failure red. */
