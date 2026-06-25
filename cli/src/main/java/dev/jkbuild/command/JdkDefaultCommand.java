@@ -81,13 +81,8 @@ public final class JdkDefaultCommand implements CliCommand {
         String identifier = JdkRegistry.identifierFor(hit.home());
         defaults.set(new InstalledJdk(identifier, hit.home()));
         dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(identifier, "default-set");
-        Theme t = Theme.active();
-        String name   = Theme.colorize(renderDisplayName(hit), t.focused());
-        String source = Theme.colorize("[", t.darkGray())
-                      + Theme.colorize(hit.source(), t.cyan())
-                      + Theme.colorize("]", t.darkGray());
-        String id     = Theme.colorize(identifier, t.path());
-        String message = "Default JDK set to " + name + ": " + source + id;
+        String name    = Theme.colorize(renderDisplayName(hit), Theme.active().focused());
+        String message = "Default JDK set to " + name + ": " + JdkRender.coord(hit.source(), identifier);
         out.println(GoalWedge.chipLine(Glyphs.CHECK, "JDK", GlobalConfig.nerdfont(), message));
     }
 

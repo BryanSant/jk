@@ -340,14 +340,9 @@ public final class JdkUninstallCommand implements CliCommand {
                             + " Failed to remove " + Theme.colorize(label, Theme.active().warning()) + "!");
             throw e;
         }
-        // `[source]/identifier`: brackets bright-black, source cyan, /name in the path color.
-        String tagged = Theme.colorize("[", Theme.active().darkGray())
-                + Theme.colorize(hit.source(), Theme.active().cyan())
-                + Theme.colorize("]", Theme.active().darkGray())
-                + Theme.colorize("/" + identifier, Theme.active().path());
         System.out.println(
                 Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
-                        + " Removed " + tagged);
+                        + " Removed " + JdkRender.coord(hit.source(), identifier));
     }
 
     /**
