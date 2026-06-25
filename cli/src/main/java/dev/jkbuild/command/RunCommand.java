@@ -184,9 +184,9 @@ public final class RunCommand implements CliCommand {
     }
 
     /**
-     * The styled text that follows "Executing" in the exec chip line or banner:
-     * {@code ", with [cyan]{jdk}[/]: [yellow]java …[/]"} for JVM,
-     * {@code " the native binary: [yellow]target/app[/]"} for native.
+     * The styled tail shown in the exec chip line or banner:
+     * {@code "[cyan]{jdk}[/]: [yellow]java …[/]"} for JVM,
+     * {@code "Executing the native binary: [yellow]target/app[/]"} for native.
      * Shared between the chip-mode tail (returned to the {@link ConsoleSpec} lambda)
      * and the banner printed in verbose/JSON modes.
      */
@@ -195,7 +195,7 @@ public final class RunCommand implements CliCommand {
         if (command.size() == 1) {
             // Native binary — exec'd directly, no JVM.
             Path bin = Path.of(command.get(0));
-            return "Executing the native binary: "
+            return "native binary: "
                     + Theme.colorize(PathDisplay.of(bin, projectDir), t.highlight());
         }
         // JVM — derive the jdk leaf, resolving symlinks so "current" shows the real spec.
@@ -215,7 +215,7 @@ public final class RunCommand implements CliCommand {
             String jarDisplay = PathDisplay.of(firstClasspathEntry(command), projectDir);
             javaCmd = (hasDeps ? "java -cp … -jar " : "java -jar ") + jarDisplay;
         }
-        return "Executing, with " + Theme.colorize(jdkLeaf, t.cyan())
+        return Theme.colorize(jdkLeaf, t.cyan())
                 + ": " + Theme.colorize(javaCmd, t.highlight());
     }
 

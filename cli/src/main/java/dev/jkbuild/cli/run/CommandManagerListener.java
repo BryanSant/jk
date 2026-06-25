@@ -92,7 +92,8 @@ public final class CommandManagerListener implements GoalListener {
         // itself routed back above the (closing) region.
         if (capture != null) capture.close();
         if (cm == null) cm = CommandManager.goal(out, spec.verb(), animate);
-        String suffix = " " + ConsoleSpec.took(result.duration());
+        // Exec commands hand off to a subprocess — the build duration is meaningless there.
+        String suffix = spec.exec() ? "" : " " + ConsoleSpec.took(result.duration());
         // All diagnostics print ABOVE the result line (which stays last) — warnings
         // first, then errors nearest the line — so the failure route reads just like
         // the success route and the outcome is the last thing on screen.
