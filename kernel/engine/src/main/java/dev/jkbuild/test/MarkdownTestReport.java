@@ -86,32 +86,53 @@ public final class MarkdownTestReport {
 
     private String buildMarkdown() {
         long failures = entries.stream().filter(Entry::isFail).count();
-        long skipped  = entries.stream().filter(Entry::isSkip).count();
-        long passed   = entries.stream().filter(Entry::isPass).count();
         long total    = entries.size();
         long totalMs  = entries.stream().mapToLong(Entry::durationMs).sum();
 
         var sb = new StringBuilder();
-
-        // ── Summary ──────────────────────────────────────────────────────────
         int passRate = total == 0 ? 100
                 : (int) Math.round((double)(total - failures) / total * 100);
-        sb.append("# Test Results\n");
-        sb.append("**").append(passRate).append("%** Pass Rate\n>");
+
+        // ── Header + Summary ─────────────────────────────────────────────────
+        sb.append("# Test Results\n\n");
+        sb.append("## Summary\n");
+        sb.append("#### **").append(passRate).append("%** Pass Rate · ");
         if (failures == 0) {
             sb.append("No failures for **").append(total).append("** ")
               .append(total == 1 ? "test" : "tests");
         } else if (total == 1) {
-            sb.append("1 failure for **1** test");
+            sb.append("**1 failure** out of **1** test");
         } else {
-            sb.append(failures).append(failures == 1 ? " failure" : " failures")
+            sb.append("**").append(failures)
+              .append(failures == 1 ? " failure**" : " failures**")
               .append(" out of **").append(total).append("** tests");
         }
-        sb.append(" — _duration ").append(fmtDuration(totalMs)).append("_\n");
+        sb.append(" · _took ").append(fmtDuration(totalMs)).append("_\n\n");
 
-        // ── All Failed Tests ─────────────────────────────────────────────────
+        // ── Package table ─────────────────────────────────────────────────────
+        Map<String, long[]> byPkg = new LinkedHashMap<>();
+        for (Entry e : entries) {
+            long[] c = byPkg.computeIfAbsent(packageOf(e.className()), k -> new long[4]);
+            c[3]++;
+            if (e.isFail())      c[0]++;
+            else if (e.isSkip()) c[1]++;
+            else                 c[2]++;
+        }
+        sb.append("| Package | Fail | Skip | Pass | Total |\n");
+        sb.append("|---|---|---|---|---|\n");
+        for (var kv : byPkg.entrySet()) {
+            long[] c = kv.getValue();
+            sb.append("| ").append(kv.getKey())
+              .append(" | ").append(c[0])
+              .append(" | ").append(c[1])
+              .append(" | ").append(c[2])
+              .append(" | ").append(c[3])
+              .append(" |\n");
+        }
+
+        // ── Failed Tests ─────────────────────────────────────────────────────
         if (failures > 0) {
-            sb.append("\n\n## All Failed Tests\n");
+            sb.append("\n## Failed Tests\n");
             Map<String, List<Entry>> byClass = new LinkedHashMap<>();
             for (Entry e : entries) {
                 if (e.isFail()) {
@@ -121,40 +142,16 @@ public final class MarkdownTestReport {
             for (var kv : byClass.entrySet()) {
                 sb.append("### ").append(kv.getKey()).append("\n");
                 for (Entry e : kv.getValue()) {
-                    sb.append("- `").append(e.displayName()).append("`")
+                    sb.append("#### `").append(e.displayName()).append("`")
                       .append(" — _took ").append(fmtDuration(e.durationMs())).append("_\n");
                     String detail = e.failureStack() != null && !e.failureStack().isBlank()
                             ? e.failureStack().trim()
                             : (e.failureMessage() != null ? e.failureMessage().trim() : "");
                     if (!detail.isEmpty()) {
-                        sb.append("<br/>\n\n```\n").append(detail).append("\n```\n\n");
+                        sb.append("```\n").append(detail).append("\n```\n\n");
                     }
                 }
             }
-        }
-
-        // ── All Tests table ──────────────────────────────────────────────────
-        sb.append("\n## All Tests\n\n");
-        sb.append("| Package | Fail | Skip | Pass | Total |\n");
-        sb.append("|---|---|---|---|---|\n");
-
-        // [fail, skip, pass, total] per package
-        Map<String, long[]> byPkg = new LinkedHashMap<>();
-        for (Entry e : entries) {
-            long[] c = byPkg.computeIfAbsent(packageOf(e.className()), k -> new long[4]);
-            c[3]++;
-            if (e.isFail())      c[0]++;
-            else if (e.isSkip()) c[1]++;
-            else                 c[2]++;
-        }
-        for (var kv : byPkg.entrySet()) {
-            long[] c = kv.getValue();
-            sb.append("| ").append(kv.getKey())
-              .append(" | ").append(c[0])
-              .append(" | ").append(c[1])
-              .append(" | ").append(c[2])
-              .append(" | ").append(c[3])
-              .append(" |\n");
         }
 
         return sb.toString();
