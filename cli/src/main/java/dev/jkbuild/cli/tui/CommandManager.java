@@ -385,21 +385,35 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     @Override
-    public void renderCanceled() {
-        // Ctrl-C: hand the streams back so GlobalCancel's notice goes to the real
-        // stderr below the wiped region, then wipe.
+    public boolean renderCanceled() {
+        // Ctrl-C: hand the streams back so any buffered output flushes above the
+        // region, stop animating, then settle. Goal mode replaces the wiped region
+        // in place with its own cancel line — the failed-build wedge reading
+        // "Canceled by user took Xs" — and returns true so GlobalCancel suppresses
+        // its generic notice (no extra blank line). Simple / non-animating modes
+        // just settle and let the handler print the notice.
         restoreStreams();
         stopAnimator();
         synchronized (lock) {
-            if (done) return;
+            if (done) return true;
             done = true;
             LiveRegion.clearActive(this);
-            if (!animate) return;
-            if (goalMode) wipeRegion();
-            else freezeSpinnerLine();
+            if (!animate) return false;
+            if (goalMode) {
+                wipeRegion();
+                out.print(Ansi.TASKBAR_CLEAR);
+                out.print(Ansi.SHOW_CURSOR);
+                String took = dev.jkbuild.cli.run.ConsoleSpec.took(
+                        java.time.Duration.ofMillis(elapsedMillis()));
+                out.println(GoalWedge.canceledLine(goalName(), nerdfont, took));
+                out.flush();
+                return true;
+            }
+            freezeSpinnerLine();
             out.print(Ansi.TASKBAR_CLEAR);
             out.print(Ansi.SHOW_CURSOR);
             out.flush();
+            return false;
         }
     }
 

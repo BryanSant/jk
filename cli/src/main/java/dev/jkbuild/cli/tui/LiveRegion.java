@@ -20,8 +20,12 @@ public interface LiveRegion {
      * Repaint this region in its canceled state. Invoked from the Ctrl-C
      * handler thread, so implementations must be safe to call concurrently
      * with their own rendering (today they all {@code synchronized}).
+     *
+     * @return {@code true} when the region emitted its own complete, user-facing
+     *     cancel line (so {@link GlobalCancel} suppresses the generic
+     *     {@code ‼ <message>} notice); {@code false} to let the handler print it.
      */
-    void renderCanceled();
+    boolean renderCanceled();
 
     /**
      * The message {@link GlobalCancel} prints after wiping this region on Ctrl-C

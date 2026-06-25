@@ -244,11 +244,11 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
      * before the process halts. Leaves the cursor at the end of the bar line
      * with no trailing newline so the caller can emit a follow-up line.
      */
-    public synchronized void renderCanceled() {
-        if (closed) return;
+    public synchronized boolean renderCanceled() {
+        if (closed) return false;
         closed = true;
         LiveRegion.clearActive(this);
-        if (silent) return;
+        if (silent) return false;
         AttributedStyle redStyle = Theme.active().error();
         AttributedStyle strikeStyle = Theme.active().dim().crossedOut();
         out.print("\r");
@@ -264,6 +264,9 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.flush();
+        // Cursor is left mid-line with no newline; GlobalCancel prints the
+        // "‼ Canceled by user" notice on the next line.
+        return false;
     }
 
     private void renderInitial(int filled, int percent, String percentStr, String status) {

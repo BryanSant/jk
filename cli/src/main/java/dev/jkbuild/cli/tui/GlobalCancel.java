@@ -27,15 +27,21 @@ public final class GlobalCancel {
     public static void install() {
         Signals.register("INT", () -> {
             LiveRegion active = LiveRegion.active();
+            boolean handled = false;
             String message = "Canceled by user";
             if (active != null) {
-                // Wipe / settle the in-flight region, then use its cancel text
-                // (the goal view names the goal: "Building canceled by user").
-                active.renderCanceled();
+                // Wipe / settle the in-flight region. When it renders its own
+                // complete cancel line (the goal view's "‼ Build Canceled by user
+                // took Xs" wedge), it returns true and we skip the generic notice;
+                // otherwise we print it, named by the region's cancel text (e.g.
+                // "Building canceled by user").
+                handled = active.renderCanceled();
                 message = active.canceledMessage();
             }
             var err = System.err;
-            err.print("\n" + Theme.colorize("‼ " + message, Theme.active().error()) + "\n");
+            if (!handled) {
+                err.print("\n" + Theme.colorize("‼ " + message, Theme.active().error()) + "\n");
+            }
             err.print(Ansi.RESET); // explicit SGR reset beyond the inline reset
             err.flush();
             Runtime.getRuntime().halt(2);

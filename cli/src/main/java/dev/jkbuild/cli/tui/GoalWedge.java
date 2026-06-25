@@ -82,4 +82,21 @@ public final class GoalWedge {
         String head = Theme.colorize(Glyphs.CROSS + (name.isEmpty() ? "" : " " + name), t.error());
         return head + " " + verb + " " + tail;
     }
+
+    /**
+     * Settled cancellation: {@code  ‼ Build Canceled by user <tail>}. Reuses the
+     * failed-build chrome — the same red chip (white on red) and cap as
+     * {@link #failureLine} — but reads "Canceled" (in red) "by user"; {@code tail}
+     * (the {@code "took Xs"} suffix) is pre-styled by the caller.
+     */
+    public static String canceledLine(String name, boolean nerdfont, String tail) {
+        Theme t = Theme.active();
+        String verb = Theme.colorize("Canceled", t.error()) + " by user";
+        if (nerdfont) {
+            return chip(Glyphs.CROSS, name, t.goalFailureChip())
+                    + cap(t.goalFailColor(), true) + " " + verb + " " + tail;
+        }
+        String head = Theme.colorize(Glyphs.CROSS + (name.isEmpty() ? "" : " " + name), t.error());
+        return head + " " + verb + " " + tail;
+    }
 }
