@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.ActiveJavac;
@@ -379,15 +380,15 @@ public final class JdkListCommand implements CliCommand {
     }
 
     private static String titleLine(String title, int inner) {
-        // Center the title and color it with the accent (matching the `jk tree`
-        // header), bracketed by the dark-gray box rails.
+        // Full-width banner: the centered title runs white on the build-goal blue
+        // wedge (Theme.goalChip), so the whole span between the box rails — padding
+        // included — carries the blue background. The rails stay dark gray.
         int total = Math.max(0, inner - title.length());
         int left = total / 2;
         int right = total - left;
+        String banner = " ".repeat(left) + title + " ".repeat(right);
         return Theme.colorize("│", Theme.active().darkGray())
-                + " ".repeat(left)
-                + Theme.colorize(title, Theme.active().activeStep())
-                + " ".repeat(right)
+                + Theme.colorize(banner, Theme.active().goalChip())
                 + Theme.colorize("│", Theme.active().darkGray());
     }
 
@@ -404,41 +405,63 @@ public final class JdkListCommand implements CliCommand {
     }
 
     private static String dataRow(String version, Row r, int[] widths) {
-        var bar = Theme.colorize("│", Theme.active().darkGray());
         Status status = r.status();
-        // Row-level emphasis: the active JDK is italic, the default JDK is bold; a
-        // JDK that's both gets bold + italic. Derived from the composite status
-        // label since one JDK can hold several roles at once (e.g. "active/default").
+        // Row-level emphasis: the active JDK is BOLD and sits on an indigo band;
+        // the default JDK is italic. A JDK that's both gets bold + italic. Derived
+        // from the composite status label since one JDK can hold several roles at
+        // once (e.g. "active/default").
         String label = r.statusLabel();
-        boolean italic = label.contains("active");
-        boolean bold = label.contains("default");
+        boolean active = label.contains("active");
+        boolean bold = active;
+        boolean italic = label.contains("default");
+        // The active row's interior carries an indigo background band, spanning
+        // everything between the outer rails (cells, padding, inner separators).
+        Rgb band = active ? Theme.active().indigoBadgeColor() : null;
+
+        String outerBar = Theme.colorize("│", Theme.active().darkGray());
+        String innerBar = band == null ? outerBar
+                : Theme.colorize("│", banded(Theme.active().darkGray(), band));
+        String sp = bandSpaces(1, band);
 
         String versionCell = Theme.colorize(center(version, widths[0]),
-                deco(AttributedStyle.DEFAULT, italic, bold));
+                banded(deco(AttributedStyle.DEFAULT, italic, bold), band));
         String vendor = r.vendor() == null ? "" : r.vendor();
         String vendorCell = Theme.colorize(padRight(vendor, widths[1]),
-                deco(AttributedStyle.DEFAULT, italic, bold));
+                banded(deco(AttributedStyle.DEFAULT, italic, bold), band));
         String specCell = Theme.colorize(padRight(r.spec(), widths[2]),
-                deco(Theme.active().settled(), italic, bold));
+                banded(deco(Theme.active().settled(), italic, bold), band));
 
         String location = r.location();
         String locStyled;
         if (location == null || location.isEmpty()) {
-            locStyled = padRight("", widths[4]);
+            locStyled = bandSpaces(widths[4], band);
         } else {
             // AVAILABLE rows render the source ("download") in the same dark-gray
             // as their status, so the entire catalog-only row reads as de-emphasised
             // relative to actually-installed JDKs.
             AttributedStyle locStyle = status == Status.AVAILABLE ? Theme.active().darkGray() : Theme.active().path();
-            locStyled = Theme.colorize(location, deco(locStyle, italic, bold))
-                    + " ".repeat(widths[4] - location.length());
+            locStyled = Theme.colorize(location, banded(deco(locStyle, italic, bold), band))
+                    + bandSpaces(widths[4] - location.length(), band);
         }
-        return bar
-                + " " + versionCell + " " + bar
-                + " " + vendorCell + " " + bar
-                + " " + specCell + " " + bar
-                + " " + statusCell(label, widths[3], italic, bold) + " " + bar
-                + " " + locStyled + " " + bar;
+        return outerBar
+                + sp + versionCell + sp + innerBar
+                + sp + vendorCell + sp + innerBar
+                + sp + specCell + sp + innerBar
+                + sp + statusCell(label, widths[3], italic, bold, band) + sp + innerBar
+                + sp + locStyled + sp + outerBar;
+    }
+
+    /** Layer the active-row indigo band background onto a cell style (no-op when not banded). */
+    private static AttributedStyle banded(AttributedStyle base, Rgb band) {
+        return band == null ? base : Theme.active().withBackground(base, band);
+    }
+
+    /** {@code n} spaces, carrying the active-row band background when set. */
+    private static String bandSpaces(int n, Rgb band) {
+        if (n <= 0) return "";
+        String spaces = " ".repeat(n);
+        return band == null ? spaces
+                : Theme.colorize(spaces, Theme.active().withBackground(AttributedStyle.DEFAULT, band));
     }
 
     /** Layer the row-level italic (active) / bold (default) attributes onto a cell style. */
@@ -454,15 +477,15 @@ public final class JdkListCommand implements CliCommand {
      * bright-green — joined by a dim slash, then padded to the column width. The
      * row's italic/bold emphasis is layered on so the whole line reads uniformly.
      */
-    private static String statusCell(String label, int width, boolean italic, boolean bold) {
+    private static String statusCell(String label, int width, boolean italic, boolean bold, Rgb band) {
         String[] parts = label.split("/");
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < parts.length; i++) {
-            if (i > 0) sb.append(Theme.colorize("/", Theme.active().darkGray()));
-            sb.append(Theme.colorize(parts[i], deco(segmentStyle(parts[i]), italic, bold)));
+            if (i > 0) sb.append(Theme.colorize("/", banded(Theme.active().darkGray(), band)));
+            sb.append(Theme.colorize(parts[i], banded(deco(segmentStyle(parts[i]), italic, bold), band)));
         }
         int pad = width - label.length();
-        if (pad > 0) sb.append(" ".repeat(pad));
+        if (pad > 0) sb.append(bandSpaces(pad, band));
         return sb.toString();
     }
 
