@@ -94,12 +94,20 @@ public final class MarkdownTestReport {
         var sb = new StringBuilder();
 
         // ── Summary ──────────────────────────────────────────────────────────
+        int passRate = total == 0 ? 100
+                : (int) Math.round((double)(total - failures) / total * 100);
         sb.append("# Test Results\n");
-        sb.append("**").append(failures).append("** ")
-          .append(failures == 1 ? "Failure" : "Failures")
-          .append(" out of **").append(total).append("** ")
-          .append(total == 1 ? "Test" : "Tests")
-          .append(" — _took ").append(fmtDuration(totalMs)).append("_\n");
+        sb.append("**").append(passRate).append("%** Pass Rate\n>");
+        if (failures == 0) {
+            sb.append("No failures for **").append(total).append("** ")
+              .append(total == 1 ? "test" : "tests");
+        } else if (total == 1) {
+            sb.append("1 failure for **1** test");
+        } else {
+            sb.append(failures).append(failures == 1 ? " failure" : " failures")
+              .append(" out of **").append(total).append("** tests");
+        }
+        sb.append(" — _duration ").append(fmtDuration(totalMs)).append("_\n");
 
         // ── All Failed Tests ─────────────────────────────────────────────────
         if (failures > 0) {

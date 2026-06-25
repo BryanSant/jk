@@ -648,13 +648,21 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         // estimate (remaining = max(0, estimate − elapsed), holding at 0s on overrun);
         // with no useful timings the ETA is left at 0 and the clock counts the elapsed
         // time up from 0s.
-        long clockMs = etaEstimateMs > 0 ? Math.max(0, etaEstimateMs - elapsedMillis) : elapsedMillis;
+        // Clock: count down from estimate to 0s, then flip to count-up with a + prefix.
+        // No estimate → count up from +0s immediately.
+        String clockStr;
+        if (etaEstimateMs > 0) {
+            long remaining = etaEstimateMs - elapsedMillis;
+            clockStr = remaining > 0 ? fmtClock(remaining) : "+" + fmtClock(-remaining);
+        } else {
+            clockStr = "+" + fmtClock(elapsedMillis);
+        }
         h.append(' ').append(Theme.colorize("·", dim))
-                .append(' ').append(Theme.colorize(fmtClock(clockMs), Theme.active().warning()));
+                .append(' ').append(Theme.colorize(clockStr, Theme.active().warning()));
         return h.toString();
     }
 
-    /** Build-clock content: {@code "42s"}, {@code "1m 02s"}, {@code "1h 05m 09s"} (units past the lead zero-padded). */
+    /** Countdown/elapsed duration: {@code "42s"}, {@code "1m 02s"}, {@code "1h 05m 09s"} (units past the lead zero-padded). Callers prepend {@code "+"} for count-up display. */
     static String fmtClock(long millis) {
         long totalSec = Math.max(0, millis) / 1000;
         long h = totalSec / 3600, m = (totalSec % 3600) / 60, s = totalSec % 60;

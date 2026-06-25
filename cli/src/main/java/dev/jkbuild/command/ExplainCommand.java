@@ -126,8 +126,9 @@ public final class ExplainCommand implements CliCommand {
                         + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
                                 t.bright(t.planBadgeColor()))
                 : Theme.colorize(" - Build Plan ", t.planBadge());
-        String estimate = "Build time estimate "
-                + Theme.colorize("~" + fmtDuration(Math.max(1, etaMillis)), t.warning());
+        String estimate = etaMillis == 0
+                ? "Build time " + Theme.colorize("unknown", t.warning())
+                : "Build time estimate " + Theme.colorize("~" + fmtDuration(etaMillis), t.warning());
         System.out.println();
         System.out.println(header + " " + estimate);
         // Root node: ● bullet, then the entry project's group:artifact in bold.
