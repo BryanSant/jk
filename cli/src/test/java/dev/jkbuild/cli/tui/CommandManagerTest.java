@@ -168,12 +168,12 @@ class CommandManagerTest {
     }
 
     @Test
-    void eta_countdown_holds_at_zero_when_the_build_overruns_the_estimate() {
+    void eta_countdown_flips_to_count_up_when_the_build_overruns_the_estimate() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
         cm.nerdfont = false;
         cm.setEtaEstimate(10_000);   // 10s estimate
-        // 15s elapsed → past the estimate → clamped to zero, never negative.
-        assertThat(stripAnsi(cm.renderGoalLines(120, 15_000).get(0))).contains("0s");
+        // 15s elapsed → 5s overrun → clock flips to "+5s".
+        assertThat(stripAnsi(cm.renderGoalLines(120, 15_000).get(0))).contains("+5s");
     }
 
     @Test
