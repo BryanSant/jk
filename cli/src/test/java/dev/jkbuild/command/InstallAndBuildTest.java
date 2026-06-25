@@ -106,7 +106,7 @@ class InstallAndBuildTest {
         assertThat(run("lock", "-C", projectDir.toString(), "--cache-dir=" + cache)).isEqualTo(0);
         assertThat(run("build", "-C", projectDir.toString(), "--cache-dir=" + cache)).isEqualTo(0);
 
-        Path classFile = projectDir.resolve("target/build/classes/main/app/Main.class");
+        Path classFile = projectDir.resolve("target/classes/main/app/Main.class");
         assertThat(classFile).exists();
         long mtimeAfterFirst = Files.getLastModifiedTime(classFile).toMillis();
 
@@ -149,7 +149,7 @@ class InstallAndBuildTest {
         assertThat(run("lock", "-C", projectDir.toString(), "--cache-dir=" + cache)).isEqualTo(0);
         assertThat(run("build", "-C", projectDir.toString(), "--cache-dir=" + cache)).isEqualTo(0);
 
-        Path classFile = projectDir.resolve("target/build/classes/main/app/Main.class");
+        Path classFile = projectDir.resolve("target/classes/main/app/Main.class");
         long mtimeAfterFirst = Files.getLastModifiedTime(classFile).toMillis();
 
         // Edit the source (body-only change) and bump its mtime past the stamp.

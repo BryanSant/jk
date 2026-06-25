@@ -21,32 +21,34 @@ class BuildLayoutTest {
 
         assertThat(layout.workspaceRoot()).isEqualTo(dir);
         assertThat(layout.moduleRoot()).isEqualTo(dir);
-        assertThat(layout.buildDir()).isEqualTo(dir.resolve("target/build"));
+        assertThat(layout.buildDir()).isEqualTo(dir.resolve("target"));
         assertThat(layout.targetDir()).isEqualTo(dir.resolve("target"));
     }
 
     @Test
-    void intermediates_live_under_target_build(@TempDir Path dir) {
+    void intermediates_live_under_target(@TempDir Path dir) {
         BuildLayout layout = BuildLayout.of(dir, project("widget", "0.1.0"));
 
         assertThat(layout.classesDir())
-                .isEqualTo(dir.resolve("target/build/classes/main"));
+                .isEqualTo(dir.resolve("target/classes/main"));
         assertThat(layout.testClassesDir())
-                .isEqualTo(dir.resolve("target/build/classes/test"));
+                .isEqualTo(dir.resolve("target/classes/test"));
         assertThat(layout.kotlinClassesDir())
-                .isEqualTo(dir.resolve("target/build/kotlin/main"));
+                .isEqualTo(dir.resolve("target/kotlin/main"));
         assertThat(layout.kotlinTestClassesDir())
-                .isEqualTo(dir.resolve("target/build/kotlin/test"));
+                .isEqualTo(dir.resolve("target/kotlin/test"));
         assertThat(layout.resourcesDir())
-                .isEqualTo(dir.resolve("target/build/resources/main"));
+                .isEqualTo(dir.resolve("target/resources/main"));
         assertThat(layout.testResourcesDir())
-                .isEqualTo(dir.resolve("target/build/resources/test"));
+                .isEqualTo(dir.resolve("target/resources/test"));
         assertThat(layout.tmpDir())
-                .isEqualTo(dir.resolve("target/build/tmp"));
+                .isEqualTo(dir.resolve("target/tmp"));
         assertThat(layout.generatedSourcesDir("immutables"))
-                .isEqualTo(dir.resolve("target/build/generated/sources/immutables/main"));
+                .isEqualTo(dir.resolve("target/generated/sources/immutables/main"));
         assertThat(layout.testResultsDir())
-                .isEqualTo(dir.resolve("target/build/test-results"));
+                .isEqualTo(dir.resolve("target/test-results"));
+        assertThat(layout.markdownTestResults())
+                .isEqualTo(dir.resolve("target/test-results.md"));
     }
 
     @Test
@@ -61,7 +63,7 @@ class BuildLayoutTest {
         assertThat(layout.nativeLibrary()).isEqualTo(dir.resolve("target/libwidget"));
         assertThat(layout.ociImageTar()).isEqualTo(dir.resolve("target/widget.oci.tar"));
         assertThat(layout.testReportsDir("core"))
-                .isEqualTo(dir.resolve("target/build/reports/core"));
+                .isEqualTo(dir.resolve("target/reports/core"));
         assertThat(layout.sbomDir())
                 .isEqualTo(dir.resolve("target/widget-1.2.3-sbom"));
         assertThat(layout.provenanceDir())
@@ -74,9 +76,9 @@ class BuildLayoutTest {
         JkBuild proj = project("jk-core", "0.7.0");
         BuildLayout layout = BuildLayout.of(workspace, module, proj);
 
-        // Intermediates stay with the module (under module/target/build/).
+        // Intermediates stay with the module (under module/target/).
         assertThat(layout.classesDir())
-                .isEqualTo(module.resolve("target/build/classes/main"));
+                .isEqualTo(module.resolve("target/classes/main"));
         // Final artifacts also land under the module's own target/.
         assertThat(layout.mainJar()).isEqualTo(module.resolve("target/jk-core-0.7.0.jar"));
         assertThat(layout.nativeBinary()).isEqualTo(module.resolve("target/jk-core"));
@@ -110,9 +112,9 @@ class BuildLayoutTest {
         // Each module owns its own target/ — the jar lives with the module.
         assertThat(layout.mainJar())
                 .isEqualTo(module.resolve("target/core-1.0.0.jar"));
-        // But intermediates stay module-local (module/target/build/).
+        // Intermediates stay module-local (module/target/).
         assertThat(layout.classesDir())
-                .isEqualTo(module.resolve("target/build/classes/main"));
+                .isEqualTo(module.resolve("target/classes/main"));
     }
 
     @Test

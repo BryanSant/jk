@@ -163,7 +163,7 @@ public final class JUnitLauncher {
             catch (IOException e) { /* non-fatal: tests ran, just report writing failed */ }
         }
         if (md != null) {
-            try { md.writeAll(testResultsDir); }
+            try { md.writeAll(testResultsDir.getParent()); }
             catch (IOException e) { /* non-fatal */ }
         }
         return result;
@@ -250,7 +250,7 @@ public final class JUnitLauncher {
             catch (IOException e) { /* non-fatal: tests ran, just report writing failed */ }
         }
         if (md != null) {
-            try { md.writeAll(testResultsDir); }
+            try { md.writeAll(testResultsDir.getParent()); }
             catch (IOException e) { /* non-fatal */ }
         }
         return new Result(total, succeeded, failed, skipped, allFailures);

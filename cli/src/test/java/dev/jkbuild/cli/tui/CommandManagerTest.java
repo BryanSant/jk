@@ -226,7 +226,7 @@ class CommandManagerTest {
         // so the chip tapers into the block immediately to its right.
         Rgb lead = new ProgressBar().leadColor(45, 100);
         assertThat(header).contains(Theme.colorize(Glyphs.SEGMENT_END_NERD,
-                Theme.active().withBackground(Theme.active().bright(Theme.active().goalChipColor()), lead)));
+                Theme.active().withBackground(Theme.active().bright(Theme.active().planBadgeColor()), lead)));
     }
 
     @Test

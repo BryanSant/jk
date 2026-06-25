@@ -75,8 +75,8 @@ class KotlinCompilationTest {
         Path cache = tempDir.resolve("cache");
 
         assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
-        Path ktClass = tempDir.resolve("target/build/classes/main/example/HelloKt.class");
-        Path stamp = tempDir.resolve("target/build/classes/main/.kstamp");
+        Path ktClass = tempDir.resolve("target/classes/main/example/HelloKt.class");
+        Path stamp = tempDir.resolve("target/classes/main/.kstamp");
         assertThat(stamp).exists();                  // freshness stamp written
         assertThat(ktClass).exists();
         long firstMtime = Files.getLastModifiedTime(ktClass).toMillis();
@@ -100,7 +100,7 @@ class KotlinCompilationTest {
         Path cache = tempDir.resolve("cache");
 
         assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
-        Path ktClass = tempDir.resolve("target/build/classes/main/example/HelloKt.class");
+        Path ktClass = tempDir.resolve("target/classes/main/example/HelloKt.class");
         long firstMtime = Files.getLastModifiedTime(ktClass).toMillis();
 
         // Edit the source forward in time so its mtime exceeds the stamp; the

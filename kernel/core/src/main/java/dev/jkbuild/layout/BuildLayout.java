@@ -11,12 +11,14 @@ import java.util.Objects;
 /**
  * Centralized path decisions for jk's build output layout.
  *
- * <p>Everything lives under {@code target/}:
+ * <p>Everything lives directly under {@code <moduleRoot>/target/}:
  * <ul>
- *   <li><b>Final artifacts</b> directly under {@code <workspaceRoot>/target/}
- *       — jars, native binaries, OCI tarballs. Shared across workspace modules.</li>
- *   <li><b>Build intermediates</b> under {@code <moduleRoot>/target/build/}
- *       — compiler outputs, generated sources, test reports. Per-module.</li>
+ *   <li><b>Build intermediates</b> — {@code classes/}, {@code kotlin/},
+ *       {@code resources/}, {@code generated/}, {@code tmp/}</li>
+ *   <li><b>Test results</b> — XML/HTML files in {@code test-results/};
+ *       the human-readable {@code test-results.md} at the top of {@code target/}</li>
+ *   <li><b>Final artifacts</b> — jars, native binaries, OCI tarballs directly
+ *       under {@code target/}</li>
  * </ul>
  *
  * <p>For a single-project (no {@code [workspace]} block), workspace root and
@@ -25,8 +27,8 @@ import java.util.Objects;
  * <p>Compiler output is split by toolchain to prevent the Kotlin incremental
  * compiler from pruning Java-compiled classes (it owns and prunes its directory):
  * <ul>
- *   <li>{@code target/build/kotlin/main} — kotlinc incremental workspace</li>
- *   <li>{@code target/build/classes/main} — javac output <em>and</em> the final
+ *   <li>{@code target/kotlin/main} — kotlinc incremental workspace</li>
+ *   <li>{@code target/classes/main} — javac output <em>and</em> the final
  *       assembled classes (kotlinc output is merged here after compilation)</li>
  * </ul>
  *
@@ -74,20 +76,25 @@ public final class BuildLayout {
     public String artifact()    { return artifact; }
     public String version()     { return version; }
 
-    // ---- Per-module build intermediates (under moduleRoot/target/build/) ----
+    // ---- Per-module output (under moduleRoot/target/) ----------------------
 
     /** {@code <moduleRoot>/target/} — root of this module's output tree. */
     public Path moduleTargetDir() {
         return moduleRoot.resolve("target");
     }
 
-    /** {@code <moduleRoot>/target/build/} — root of all per-module build intermediates. */
+    /**
+     * {@code target/} — root of all per-module build intermediates.
+     *
+     * <p>Previously {@code target/build/}; all outputs now sit directly
+     * under {@code target/} alongside the final artifacts.
+     */
     public Path buildDir() {
-        return moduleTargetDir().resolve("build");
+        return moduleTargetDir();
     }
 
     /**
-     * {@code target/build/classes/main/} — final assembled main classes.
+     * {@code target/classes/main/} — final assembled main classes.
      *
      * <p>Both javac output and (after assembly) kotlinc output land here.
      * This is the directory the JAR packager reads from, so it contains
@@ -99,13 +106,13 @@ public final class BuildLayout {
         return buildDir().resolve("classes").resolve("main");
     }
 
-    /** {@code target/build/classes/test/} — final assembled test classes. */
+    /** {@code target/classes/test/} — final assembled test classes. */
     public Path testClassesDir() {
         return buildDir().resolve("classes").resolve("test");
     }
 
     /**
-     * {@code target/build/kotlin/main/} — kotlinc incremental workspace for main sources.
+     * {@code target/kotlin/main/} — kotlinc incremental workspace for main sources.
      *
      * <p>The Kotlin BTA incremental compiler owns this directory and prunes
      * any {@code .class} file it did not produce. It must never share a dir
@@ -116,28 +123,28 @@ public final class BuildLayout {
         return buildDir().resolve("kotlin").resolve("main");
     }
 
-    /** {@code target/build/kotlin/test/} — kotlinc incremental workspace for test sources. */
+    /** {@code target/kotlin/test/} — kotlinc incremental workspace for test sources. */
     public Path kotlinTestClassesDir() {
         return buildDir().resolve("kotlin").resolve("test");
     }
 
-    /** {@code target/build/resources/main/} — copied main resources. */
+    /** {@code target/resources/main/} — copied main resources. */
     public Path resourcesDir() {
         return buildDir().resolve("resources").resolve("main");
     }
 
-    /** {@code target/build/resources/test/} — copied test resources. */
+    /** {@code target/resources/test/} — copied test resources. */
     public Path testResourcesDir() {
         return buildDir().resolve("resources").resolve("test");
     }
 
-    /** {@code target/build/generated/sources/<processor>/main/} — annotation-processor output. */
+    /** {@code target/generated/sources/<processor>/main/} — annotation-processor output. */
     public Path generatedSourcesDir(String processor) {
         return generatedSourcesDir(processor, "main");
     }
 
     /**
-     * {@code target/build/generated/sources/<processor>/<sourceSet>/} — annotation-processor
+     * {@code target/generated/sources/<processor>/<sourceSet>/} — annotation-processor
      * output for a given source set ({@code main} or {@code test}). Test processing must
      * not share a directory with main, or the two would clobber each other's generated files.
      */
@@ -148,36 +155,42 @@ public final class BuildLayout {
                 .resolve(processor).resolve(sourceSet);
     }
 
-    /** {@code target/build/tmp/} — scratch space safe to delete between runs. */
+    /** {@code target/tmp/} — scratch space safe to delete between runs. */
     public Path tmpDir() {
         return buildDir().resolve("tmp");
     }
 
-    /** {@code target/build/reports/} — test and coverage reports. */
+    /** {@code target/reports/} — test and coverage reports. */
     public Path reportsDir() {
         return buildDir().resolve("reports");
     }
 
-    /** {@code target/build/reports/<module>/} — JUnit reports for a workspace module. */
+    /** {@code target/reports/<module>/} — JUnit reports for a workspace module. */
     public Path testReportsDir(String module) {
         Objects.requireNonNull(module, "module");
         return reportsDir().resolve(module);
     }
 
-    /** {@code target/build/test-results/} — JUnit XML test results. */
+    /** {@code target/test-results/} — JUnit XML (and future HTML) test results. */
     public Path testResultsDir() {
         return buildDir().resolve("test-results");
     }
 
-    // ---- Shared workspace artifacts (under workspaceRoot/target/) -----------
+    /**
+     * {@code target/test-results.md} — human-readable markdown test results,
+     * written at the top of {@code target/} rather than inside {@code test-results/}.
+     */
+    public Path markdownTestResults() {
+        return moduleTargetDir().resolve("test-results.md");
+    }
+
+    // ---- Final artifacts (under moduleRoot/target/) -------------------------
 
     /**
      * {@code <moduleRoot>/target/} — this module's final artifacts.
      *
      * <p>Each project owns its own {@code target/} directory. The workspace root
      * only gets a {@code target/} if it has its own source code to build.
-     * This mirrors Gradle multi-project builds where every subproject has its
-     * own build directory.
      */
     public Path targetDir() {
         return moduleRoot.resolve("target");

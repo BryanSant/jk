@@ -35,7 +35,7 @@ import java.util.stream.Stream;
  * <p>Each module owns its own {@code target/} directory (final artifacts +
  * build intermediates). By default {@code jk clean} removes the full
  * {@code target/} tree for every project directory. With
- * {@code --keep-artifacts}, only {@code target/build/} (compiler outputs,
+ * {@code --keep-artifacts}, only {@code target/} (compiler outputs,
  * test reports, etc.) is removed — handy when you want a fresh compile but
  * still need the existing jars around for downstream consumers.
  *
@@ -83,7 +83,13 @@ public final class CleanCommand implements CliCommand {
                 if (!keepArtifacts) {
                     deleteRecursively(projectDir.resolve("target"), stats);
                 } else {
-                    deleteRecursively(projectDir.resolve("target").resolve("build"), stats);
+                    // Keep final artifacts (jars, native binaries) in target/; remove
+                    // build intermediates by their known subdirectory names.
+                    Path target = projectDir.resolve("target");
+                    for (String sub : List.of("classes", "kotlin", "resources",
+                            "generated", "tmp", "test-results", "reports")) {
+                        deleteRecursively(target.resolve(sub), stats);
+                    }
                 }
                 // Legacy pre-layout directories, best-effort.
                 deleteRecursively(projectDir.resolve("build"), stats);
