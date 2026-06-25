@@ -16,6 +16,7 @@ import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkHit;
+import dev.jkbuild.jdk.JdkInstaller;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
@@ -115,6 +116,8 @@ public final class JdkUninstallCommand implements CliCommand {
         this.global = GlobalOptions.from(in);
 
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
+        // Reclaim any partial archive left by a previously canceled download.
+        JdkInstaller.sweepStaleDownloads(registry.jdksRoot());
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
 
         if (argument != null && !argument.isBlank()) {

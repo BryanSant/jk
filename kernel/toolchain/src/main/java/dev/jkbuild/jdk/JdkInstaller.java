@@ -15,6 +15,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -25,6 +26,7 @@ import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.function.LongConsumer;
+import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -55,6 +57,21 @@ public final class JdkInstaller {
     public record DownloadedArchive(Path path, long bytes) {}
 
     private static final int DOWNLOAD_BUFFER = 64 * 1024;
+
+    /** Scratch dir for in-flight downloads, under the jdks root (dot-prefixed → JkProbe skips it). */
+    private static final String DOWNLOAD_DIR = ".downloads";
+
+    /** Prefix for the streamed archive temp file; recognised by the stale-download sweep. */
+    private static final String DOWNLOAD_PREFIX = "jk-jdk-";
+
+    /**
+     * A partial archive older than this is treated as orphaned — left by a
+     * Ctrl-C'd download, which calls {@code Runtime.halt} and so skips the
+     * finally-block cleanup in {@link #download} — and removed by
+     * {@link #sweepStaleDownloads}. Comfortably longer than any realistic
+     * download so an in-flight one from a concurrent run is never deleted.
+     */
+    private static final long STALE_DOWNLOAD_AGE_MILLIS = Duration.ofHours(6).toMillis();
 
     private final Http http;
     private final JdkRegistry registry;
@@ -125,8 +142,8 @@ public final class JdkInstaller {
      */
     public DownloadedArchive download(JdkCatalog.Entry entry, LongConsumer onBytesRead)
             throws IOException, InterruptedException {
-        Files.createDirectories(registry.jdksRoot());
-        Path archive = Files.createTempFile("jk-jdk-",
+        Path downloads = prepareDownloadDir();
+        Path archive = Files.createTempFile(downloads, DOWNLOAD_PREFIX,
                 "-" + extensionFor(entry.packageType()));
         boolean keep = false;
         try {
@@ -234,8 +251,8 @@ public final class JdkInstaller {
             String displayName,
             String archiveType,
             Path target) throws IOException, InterruptedException {
-        Files.createDirectories(registry.jdksRoot());
-        Path archive = Files.createTempFile("jk-jdk-", "-" + extensionFor(archiveType));
+        Path downloads = prepareDownloadDir();
+        Path archive = Files.createTempFile(downloads, DOWNLOAD_PREFIX, "-" + extensionFor(archiveType));
         try {
             HttpResponse<byte[]> response = http.get(uri);
             if (response.statusCode() != 200) {
@@ -269,6 +286,63 @@ public final class JdkInstaller {
             deleteRecursively(stagingDir);
         } finally {
             Files.deleteIfExists(archive);
+        }
+    }
+
+    /**
+     * Ensure the download scratch dir exists and sweep any orphaned partials
+     * from previously-canceled downloads, returning the dir to stream into.
+     *
+     * <p>The dir is {@code <jdksRoot>/.downloads}: under the JDK root so the
+     * archive shares a filesystem with the install target, and dot-prefixed so
+     * {@link dev.jkbuild.discovery.JkProbe} (which skips dot dirs) never mistakes
+     * it for an installed JDK.
+     */
+    private Path prepareDownloadDir() throws IOException {
+        Path dir = registry.jdksRoot().resolve(DOWNLOAD_DIR);
+        Files.createDirectories(dir);
+        sweepDir(dir);
+        return dir;
+    }
+
+    /**
+     * Delete partial archives orphaned by a canceled download under
+     * {@code <jdksRoot>/.downloads}. The download path runs this automatically,
+     * but it's also the public entry point for {@code jk jdk} commands that
+     * don't download (uninstall) or may early-return before downloading (install
+     * /update when the target is already present) — call it once per command so
+     * a leftover partial never outlives the user's next {@code jk jdk} action.
+     * No-op when the scratch dir is absent.
+     */
+    public static void sweepStaleDownloads(Path jdksRoot) {
+        Path dir = jdksRoot.resolve(DOWNLOAD_DIR);
+        if (Files.isDirectory(dir)) sweepDir(dir);
+    }
+
+    /**
+     * Delete partial archives orphaned by a canceled download. Ctrl-C triggers
+     * {@code Runtime.halt}, which terminates the JVM without running the
+     * finally-block cleanup in {@link #download}, so the partial archive is left
+     * behind; the next {@code jk jdk} command sweeps it. Only files older than
+     * {@link #STALE_DOWNLOAD_AGE_MILLIS} are removed, so a download in flight
+     * from a concurrent {@code jk jdk install} is never yanked out from under it.
+     * Best-effort: unreadable or vanished entries are left for the next sweep.
+     */
+    private static void sweepDir(Path downloadDir) {
+        long cutoff = System.currentTimeMillis() - STALE_DOWNLOAD_AGE_MILLIS;
+        try (Stream<Path> entries = Files.list(downloadDir)) {
+            entries.filter(p -> p.getFileName().toString().startsWith(DOWNLOAD_PREFIX))
+                    .forEach(p -> {
+                        try {
+                            if (Files.getLastModifiedTime(p).toMillis() < cutoff) {
+                                Files.deleteIfExists(p);
+                            }
+                        } catch (IOException ignored) {
+                            // vanished or unreadable — the next sweep catches it
+                        }
+                    });
+        } catch (IOException ignored) {
+            // can't list the dir — nothing here is load-bearing
         }
     }
 

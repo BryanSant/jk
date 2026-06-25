@@ -110,6 +110,9 @@ public final class JdkInstallCommand implements CliCommand {
 
         Path cache = JkDirs.cache();
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
+        // Reclaim any partial archive left by a previously canceled download
+        // (Ctrl-C halts the JVM mid-download, skipping the inline cleanup).
+        JdkInstaller.sweepStaleDownloads(registry.jdksRoot());
         JdkInstaller installer = new JdkInstaller(new Http(), registry);
 
         // Pre-goal sanity: when no spec and no TTY, we can't go further.

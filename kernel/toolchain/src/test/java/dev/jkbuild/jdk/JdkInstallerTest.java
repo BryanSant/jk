@@ -14,7 +14,11 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.FileTime;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
@@ -70,6 +74,59 @@ class JdkInstallerTest {
         assertThat(installed.identifier()).isEqualTo("21.0.5-tem-x64-linux");
         assertThat(installed.home().resolve("bin/java")).exists();
         assertThat(installed.home().resolve("release")).exists();
+    }
+
+    @Test
+    void stale_partial_downloads_are_swept_on_next_install(@TempDir Path tempDir) throws Exception {
+        byte[] archive = buildTarGz("jdk-21.0.5+11", Map.of(
+                "bin/java", "#!/fake/java",
+                "release", "JAVA_VERSION=21.0.5\n"));
+        served.put("/jdk.tar.gz", archive);
+        Path jdksRoot = tempDir.resolve("jdks");
+
+        // Seed the scratch dir with: an orphaned partial from a Ctrl-C'd run
+        // (old mtime), a recent partial that could be a concurrent download, and
+        // an unrelated file. Only the old jk-jdk-* one should be swept.
+        Path downloads = Files.createDirectories(jdksRoot.resolve(".downloads"));
+        Path stale = Files.writeString(downloads.resolve("jk-jdk-stale-.tar.gz"), "partial");
+        Path fresh = Files.writeString(downloads.resolve("jk-jdk-fresh-.tar.gz"), "partial");
+        Path unrelated = Files.writeString(downloads.resolve("keepme.txt"), "x");
+        Files.setLastModifiedTime(stale, FileTime.from(Instant.now().minus(Duration.ofDays(2))));
+
+        JdkInstaller installer = new JdkInstaller(new Http(), new JdkRegistry(jdksRoot));
+        JdkPackage pkg = new JdkPackage(
+                "temurin", "21.0.5", "x64", "linux", "tar.gz",
+                "OpenJDK21U.tar.gz",
+                base.resolve("/jdk.tar.gz"),
+                Hashing.sha256Hex(archive),
+                archive.length);
+
+        installer.install(pkg);
+
+        assertThat(stale).doesNotExist();   // orphan from a canceled download — swept
+        assertThat(fresh).exists();         // recent — left alone (may be a concurrent run)
+        assertThat(unrelated).exists();     // not a jk-jdk-* partial — untouched
+    }
+
+    @Test
+    void static_sweep_reclaims_orphans_without_downloading(@TempDir Path tempDir) throws Exception {
+        // The entry point jk jdk uninstall/update call — sweeps with no download.
+        Path jdksRoot = tempDir.resolve("jdks");
+
+        // No scratch dir yet → must be a silent no-op, not an error.
+        JdkInstaller.sweepStaleDownloads(jdksRoot);
+
+        Path downloads = Files.createDirectories(jdksRoot.resolve(".downloads"));
+        Path stale = Files.writeString(downloads.resolve("jk-jdk-stale-.tar.gz"), "partial");
+        Path fresh = Files.writeString(downloads.resolve("jk-jdk-fresh-.tar.gz"), "partial");
+        Path unrelated = Files.writeString(downloads.resolve("keepme.txt"), "x");
+        Files.setLastModifiedTime(stale, FileTime.from(Instant.now().minus(Duration.ofDays(2))));
+
+        JdkInstaller.sweepStaleDownloads(jdksRoot);
+
+        assertThat(stale).doesNotExist();
+        assertThat(fresh).exists();
+        assertThat(unrelated).exists();
     }
 
     @Test

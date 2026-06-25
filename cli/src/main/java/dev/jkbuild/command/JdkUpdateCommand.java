@@ -90,6 +90,8 @@ public final class JdkUpdateCommand implements CliCommand {
         this.cacheFile = in.value("cache-file").map(Path::of).orElse(null);
 
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
+        // Reclaim any partial archive left by a previously canceled download.
+        JdkInstaller.sweepStaleDownloads(registry.jdksRoot());
 
         List<JdkHit> managed = registry.managedHits(spec);
         if (managed.isEmpty()) {
