@@ -206,11 +206,14 @@ public final class RunCommand implements CliCommand {
                 ? jdkHome.getFileName().toString() : "java";
         String javaCmd;
         if ("-jar".equals(command.get(1))) {
-            // Shadow jar — full relative path, no classpath noise.
+            // Shadow jar bundles all deps — runnable with -jar alone.
             javaCmd = "java -jar " + PathDisplay.of(Path.of(command.get(2)), projectDir);
         } else {
-            // Plain jar + classpath — elide the full cp, show the project jar.
-            javaCmd = "java -cp … " + PathDisplay.of(firstClasspathEntry(command), projectDir);
+            // Plain jar: show -jar <jar>; prefix with -cp … only when deps are present.
+            String cp = command.size() >= 3 ? command.get(2) : "";
+            boolean hasDeps = cp.contains(System.getProperty("path.separator"));
+            String jarDisplay = PathDisplay.of(firstClasspathEntry(command), projectDir);
+            javaCmd = (hasDeps ? "java -cp … -jar " : "java -jar ") + jarDisplay;
         }
         return "Executing, with " + Theme.colorize(jdkLeaf, t.cyan())
                 + ": " + Theme.colorize(javaCmd, t.highlight());
@@ -233,7 +236,7 @@ public final class RunCommand implements CliCommand {
         }
     }
 
-    /** The first {@code -cp} entry (the project's main jar) from a {@code java -cp … main} command. */
+    /** The project's main jar — first entry in the {@code -cp} classpath string. */
     private static Path firstClasspathEntry(List<String> command) {
         String cp = command.size() >= 3 ? command.get(2) : "";
         String sep = System.getProperty("path.separator");
