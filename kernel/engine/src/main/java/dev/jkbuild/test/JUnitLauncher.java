@@ -146,7 +146,8 @@ public final class JUnitLauncher {
             TestProgressListener listener, Path testResultsDir)
             throws IOException, InterruptedException {
         XmlTestReport xml = testResultsDir != null ? new XmlTestReport() : null;
-        var aggregator = new ResultAggregator(listener, /* workerId */ 0, xml);
+        MarkdownTestReport md = testResultsDir != null ? new MarkdownTestReport() : null;
+        var aggregator = new ResultAggregator(listener, /* workerId */ 0, xml, md);
         // Capture the worker's non-protocol output so a hard crash (uncaught
         // throwable / System.exit before any test event) can be explained instead
         // of surfacing only as "runner exited N".
@@ -160,6 +161,10 @@ public final class JUnitLauncher {
         if (xml != null) {
             try { xml.writeAll(testResultsDir); }
             catch (IOException e) { /* non-fatal: tests ran, just report writing failed */ }
+        }
+        if (md != null) {
+            try { md.writeAll(testResultsDir); }
+            catch (IOException e) { /* non-fatal */ }
         }
         return result;
     }
@@ -179,8 +184,9 @@ public final class JUnitLauncher {
         // some idle waiting for a class that'll never come.
         int actualWorkers = Math.min(workers, classes.size());
 
-        // One shared XmlTestReport — all worker threads write into it (it is thread-safe).
+        // One shared report per format — all worker threads write into them (both are thread-safe).
         XmlTestReport xml = testResultsDir != null ? new XmlTestReport() : null;
+        MarkdownTestReport md = testResultsDir != null ? new MarkdownTestReport() : null;
 
         var queue = new ConcurrentLinkedDeque<>(classes);
         var aggregators = new java.util.ArrayList<ResultAggregator>();
@@ -195,7 +201,7 @@ public final class JUnitLauncher {
                     "--pull",
                     "--worker=" + workerId,
                     "--scan-classpath=" + testClassesDir);
-            var agg = new ResultAggregator(listener, workerId, xml);
+            var agg = new ResultAggregator(listener, workerId, xml, md);
             aggregators.add(agg);
             final var crash = new CaptureBuffer();
             captures.add(crash);
@@ -242,6 +248,10 @@ public final class JUnitLauncher {
         if (xml != null) {
             try { xml.writeAll(testResultsDir); }
             catch (IOException e) { /* non-fatal: tests ran, just report writing failed */ }
+        }
+        if (md != null) {
+            try { md.writeAll(testResultsDir); }
+            catch (IOException e) { /* non-fatal */ }
         }
         return new Result(total, succeeded, failed, skipped, allFailures);
     }
@@ -383,6 +393,7 @@ public final class JUnitLauncher {
         private final TestProgressListener listener;
         private final int workerId;
         private final XmlTestReport xmlReport;
+        private final MarkdownTestReport mdReport;
         private long succeeded;
         private long failed;
         private long skipped;
@@ -394,19 +405,21 @@ public final class JUnitLauncher {
         // so progress UIs can keep a stable static-plan denominator.
         private final java.util.Set<String> dynamicIds = new java.util.HashSet<>();
 
-        /** Test-friendly ctor: no listener, no worker id, no XML report. */
+        /** Test-friendly ctor: no listener, no worker id, no reports. */
         ResultAggregator() {
-            this(TestProgressListener.noop(), 0, null);
+            this(TestProgressListener.noop(), 0, null, null);
         }
 
         ResultAggregator(TestProgressListener listener, int workerId) {
-            this(listener, workerId, null);
+            this(listener, workerId, null, null);
         }
 
-        ResultAggregator(TestProgressListener listener, int workerId, XmlTestReport xmlReport) {
+        ResultAggregator(TestProgressListener listener, int workerId,
+                         XmlTestReport xmlReport, MarkdownTestReport mdReport) {
             this.listener = listener;
             this.workerId = workerId;
             this.xmlReport = xmlReport;
+            this.mdReport = mdReport;
         }
 
         synchronized void accept(String json) {
@@ -470,11 +483,14 @@ public final class JUnitLauncher {
                 captureFailure(id, display + " (container)", json);
             }
             listener.onTestFinished(id, display, status, isTest, wasStatic, duration, workerId);
-            if (xmlReport != null && isTest) {
+            if (isTest) {
+                String throwable = Ndjson.nested(json, "throwable");
                 if ("ABORTED".equals(status)) {
-                    xmlReport.recordSkipped(id, display, "aborted");
+                    if (xmlReport != null) xmlReport.recordSkipped(id, display, "aborted");
+                    if (mdReport  != null) mdReport.recordSkipped(id, display, "aborted");
                 } else {
-                    xmlReport.recordFinished(id, display, duration, Ndjson.nested(json, "throwable"));
+                    if (xmlReport != null) xmlReport.recordFinished(id, display, duration, throwable);
+                    if (mdReport  != null) mdReport.recordFinished(id, display, duration, throwable);
                 }
             }
         }
@@ -507,8 +523,10 @@ public final class JUnitLauncher {
                     isTest,
                     wasStatic,
                     workerId);
-            if (xmlReport != null && isTest) {
-                xmlReport.recordSkipped(id, Ndjson.str(json, "display"), reason);
+            if (isTest) {
+                String display = Ndjson.str(json, "display");
+                if (xmlReport != null) xmlReport.recordSkipped(id, display, reason);
+                if (mdReport  != null) mdReport.recordSkipped(id, display, reason);
             }
         }
 
