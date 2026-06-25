@@ -40,6 +40,12 @@ public interface Theme {
     /** Inactive/completed rail glyphs (┌ │ └) and completed step prompts — Jk Dark bright black. */
     AttributedStyle darkGray();
 
+    /** 40% darker than {@link #darkGray()} (bright black) — the dimmest gray, for ultra-low-emphasis filler. */
+    AttributedStyle darkBlack();
+
+    /** The {@link #darkBlack()} color as an {@link Rgb} — for use as a background fill. */
+    Rgb darkBlackColor();
+
     /** De-emphasised body text adjacent to bright labels — Jk Dark primary-light. */
     AttributedStyle normalGray();
 

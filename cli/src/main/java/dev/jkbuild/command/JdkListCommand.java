@@ -414,9 +414,9 @@ public final class JdkListCommand implements CliCommand {
         boolean active = label.contains("active");
         boolean bold = active;
         boolean italic = label.contains("default");
-        // The active row's interior carries an indigo background band, spanning
+        // The active row's interior carries a dark-black background band, spanning
         // everything between the outer rails (cells, padding, inner separators).
-        Rgb band = active ? Theme.active().indigoBadgeColor() : null;
+        Rgb band = active ? Theme.active().darkBlackColor() : null;
 
         String outerBar = Theme.colorize("│", Theme.active().darkGray());
         String innerBar = band == null ? outerBar

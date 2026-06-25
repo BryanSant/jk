@@ -64,6 +64,7 @@ public final class JkDarkTheme implements Theme {
 
     // Bright (the 8 bright ANSI colors).
     public static final Rgb BRIGHT_BLACK   = Rgb.hex(0x546E7A); // Blue Grey 600
+    public static final Rgb DARK_BLACK     = BRIGHT_BLACK.darker(0.40); // bright black × 0.6 — the dimmest gray
     public static final Rgb BRIGHT_RED     = Rgb.hex(0xFF4081); // Pink A200
     public static final Rgb BRIGHT_GREEN   = Rgb.hex(0x69F0AE); // Green A200
     public static final Rgb BRIGHT_YELLOW  = Rgb.hex(0xFFD54F); // Amber 300
@@ -111,6 +112,16 @@ public final class JkDarkTheme implements Theme {
     @Override
     public AttributedStyle darkGray() {
         return withColor(AttributedStyle.DEFAULT, BRIGHT_BLACK);
+    }
+
+    @Override
+    public AttributedStyle darkBlack() {
+        return withColor(AttributedStyle.DEFAULT, DARK_BLACK);
+    }
+
+    @Override
+    public Rgb darkBlackColor() {
+        return DARK_BLACK;
     }
 
     @Override
