@@ -38,7 +38,7 @@ import java.util.Optional;
  */
 final class JdkUninstallWizard {
 
-    private static final String TITLE = "Jk - Uninstall Java Development Kits";
+    private static final String TITLE = "Uninstall Java Development Kits";
 
     static final String VICTIMS_KEY = "victims";
 

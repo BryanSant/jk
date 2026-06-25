@@ -317,8 +317,8 @@ public final class JdkUninstallCommand implements CliCommand {
         String identifier = JdkRegistry.identifierFor(hit.home());
         Path installDir = IntellijJdkDir.installDirOf(hit.home());
         InstalledJdk installed = new InstalledJdk(identifier, hit.home());
-        // The result lines name the resolved `<source>/<identifier>` in yellow,
-        // matching the cyan target shown in the confirmation prompt.
+        // Failure names the resolved `<source>/<identifier>` in yellow; the
+        // success line (below) styles it as `[source]/identifier` instead.
         String label = hit.source() + "/" + identifier;
         try (var sp = Spinner.show(System.out,
                 "Deleting " + Theme.colorize(JdkInstallCommand.tildeCollapse(installDir), Theme.active().path())
@@ -340,9 +340,14 @@ public final class JdkUninstallCommand implements CliCommand {
                             + " Failed to remove " + Theme.colorize(label, Theme.active().warning()) + "!");
             throw e;
         }
+        // `[source]/identifier`: brackets bright-black, source cyan, /name in the path color.
+        String tagged = Theme.colorize("[", Theme.active().darkGray())
+                + Theme.colorize(hit.source(), Theme.active().cyan())
+                + Theme.colorize("]", Theme.active().darkGray())
+                + Theme.colorize("/" + identifier, Theme.active().path());
         System.out.println(
                 Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
-                        + " Removed " + Theme.colorize(label, Theme.active().warning()));
+                        + " Removed " + tagged);
     }
 
     /**
@@ -360,11 +365,15 @@ public final class JdkUninstallCommand implements CliCommand {
             question = "\n" + warn + " Are you sure you want to delete "
                     + target(victims.getFirst()) + "?";
         } else {
-            System.out.println("\n" + warn + " Are you sure you want to delete the following "
+            // The wizard already left a blank line after its "╰── Done" closer,
+            // so this header needs no leading newline of its own.
+            System.out.println(warn + " Are you sure you want to delete the following "
                     + victims.size() + " JDKs?");
+            String dash = Theme.colorize("-", Theme.active().warning());
             for (JdkHit h : victims) {
-                System.out.println("   " + target(h));
+                System.out.println(dash + "  " + target(h));
             }
+            System.out.println();   // blank line before the Proceed prompt
             question = warn + " Proceed?";
         }
         // Reuse the wizard's already-open terminal when present (the bulk path);
