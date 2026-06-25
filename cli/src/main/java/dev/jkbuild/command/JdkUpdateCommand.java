@@ -2,7 +2,6 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.cli.tui.SpinnerProgressBar;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
@@ -228,18 +227,12 @@ public final class JdkUpdateCommand implements CliCommand {
         if (already != null) return already;
 
         String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-        String downloading = "Downloading " + label + " (" + entry.os() + "/" + entry.arch() + ")";
         long total = entry.archiveSize();
         InstalledJdk installed;
-        try (SpinnerProgressBar pb = SpinnerProgressBar.show(System.out)) {
-            pb.update(0, downloading);
-            installed = installer.install(entry, bytes -> {
-                int pct = total > 0 ? (int) Math.min(100, bytes * 100L / total) : 0;
-                pb.update(pct, downloading);
-            });
-            pb.finish(Theme.colorize("✓", Theme.active().completedStep())
-                    + " " + Theme.colorize("Download finished for ", Theme.active().normalGray())
-                    + Theme.colorize(label, Theme.active().focused()));
+        try (dev.jkbuild.cli.tui.JdkDownloadBar pb =
+                     dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+            installed = installer.install(entry, bytes -> pb.update(bytes, total));
+            pb.finish();
         }
         dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "install");
         return installed;

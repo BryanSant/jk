@@ -761,14 +761,10 @@ public final class NewCommand implements CliCommand {
                     new dev.jkbuild.http.Http(), new dev.jkbuild.jdk.JdkRegistry());
             // Download (progress bar) then extract (spinner).
             var label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
-            try (var pb = dev.jkbuild.cli.tui.SpinnerProgressBar.show(System.out)) {
-                pb.update(0, "Downloading " + label);
-                long total = entry.archiveSize();
-                var dl = installer.download(entry, bytes -> {
-                    int pct = total > 0 ? (int) Math.min(100, bytes * 100L / total) : 0;
-                    pb.update(pct, "Downloading " + label);
-                });
-                pb.finish("✓ Download finished for " + label);
+            long total = entry.archiveSize();
+            try (var pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+                var dl = installer.download(entry, bytes -> pb.update(bytes, total));
+                pb.finish();
                 try (var sp = dev.jkbuild.cli.tui.Spinner.show(System.out, "Installing " + label + "...")) {
                     var installed = installer.extractInstalled(entry, dl);
                     System.out.println("✓ Installed " + label + " → " + installed.home());

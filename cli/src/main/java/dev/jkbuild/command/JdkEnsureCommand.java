@@ -2,7 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.cli.tui.SpinnerProgressBar;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
@@ -135,7 +135,7 @@ public final class JdkEnsureCommand implements CliCommand {
                 return 0;
             }
             if (min == null || atLeast(e.version(), min)) {
-                report(installEntry(installer, e, unableToLocatePreface(e)));
+                report(label(e), installEntry(installer, e, unableToLocatePreface(e)));
                 return 0;
             }
         }
@@ -166,7 +166,7 @@ public final class JdkEnsureCommand implements CliCommand {
                 e.majorVersion(), e.version(), JdkKeywords.satisfactionHints(spec)))) {
             return 0;
         }
-        report(installEntry(installer, e, unableToLocatePreface(e)));
+        report(label(e), installEntry(installer, e, unableToLocatePreface(e)));
         return 0;
     }
 
@@ -190,12 +190,12 @@ public final class JdkEnsureCommand implements CliCommand {
         if (hit.isPresent()) {
             System.out.println(head + "using the latest LTS "
                     + Theme.colorize(label(e), Theme.active().cyan()) + " instead");
-            report(JdkRegistry.identifierFor(hit.get().home()), hit.get().home());
+            report(JdkRender.displayName(hit.get()), hit.get().home(), false);
             return 0;
         }
         String preface = head + "installing the latest LTS "
                 + Theme.colorize(label(e), Theme.active().cyan()) + " instead...";
-        report(installEntry(installer, e, preface));
+        report(label(e), installEntry(installer, e, preface));
         return 0;
     }
 
@@ -214,18 +214,12 @@ public final class JdkEnsureCommand implements CliCommand {
 
         if (preface != null) System.out.println(preface);
         String label = label(entry);
-        String downloading = "Downloading " + label + " (" + entry.os() + "/" + entry.arch() + ")";
         long total = entry.archiveSize();
         InstalledJdk installed;
-        try (SpinnerProgressBar pb = SpinnerProgressBar.show(System.out)) {
-            pb.update(0, downloading);
-            installed = installer.install(entry, bytes -> {
-                int pct = total > 0 ? (int) Math.min(100, bytes * 100L / total) : 0;
-                pb.update(pct, downloading);
-            });
-            pb.finish(Theme.colorize("✓", Theme.active().completedStep())
-                    + " " + Theme.colorize("Download finished for ", Theme.active().normalGray())
-                    + Theme.colorize(label, Theme.active().focused()));
+        try (dev.jkbuild.cli.tui.JdkDownloadBar pb =
+                     dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+            installed = installer.install(entry, bytes -> pb.update(bytes, total));
+            pb.finish();
         }
         // Journal the install for the JDK-usage stats, same as `jk jdk install`.
         dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "install");
@@ -247,21 +241,16 @@ public final class JdkEnsureCommand implements CliCommand {
     /** Print the report line for an installed hit if present; return whether it was. */
     private static boolean reportIfPresent(Optional<JdkHit> hit) {
         if (hit.isEmpty()) return false;
-        report(JdkRegistry.identifierFor(hit.get().home()), hit.get().home());
+        report(JdkRender.displayName(hit.get()), hit.get().home(), false);
         return true;
     }
 
-    private static void report(InstalledJdk jdk) {
-        report(jdk.identifier(), jdk.home());
+    private static void report(String displayName, InstalledJdk jdk) {
+        report(displayName, jdk.home(), true);
     }
 
-    /** {@code ✓ <identifier> is available at <~/path>} — cyan id, yellow path. */
-    private static void report(String identifier, Path home) {
-        System.out.println(
-                Theme.colorize("✓", Theme.active().completedStep())
-                        + " " + Theme.colorize(identifier, Theme.active().cyan())
-                        + Theme.colorize(" is available at ", Theme.active().normalGray())
-                        + Theme.colorize(JdkInstallCommand.tildeCollapse(home), Theme.active().path()));
+    private static void report(String displayName, Path home, boolean downloaded) {
+        System.out.println(JdkRender.available(displayName, home, GlobalConfig.nerdfont(), downloaded));
     }
 
     /** {@code true} when {@code version >= floor} per {@link JdkSelector#versionKey} ordering. */

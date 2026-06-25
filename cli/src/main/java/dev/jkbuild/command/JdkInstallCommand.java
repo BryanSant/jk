@@ -5,7 +5,6 @@ import dev.jkbuild.cli.GlobalOptions;
 
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.tui.Confirm;
-import dev.jkbuild.cli.tui.SpinnerProgressBar;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Wizard;
@@ -213,21 +212,13 @@ public final class JdkInstallCommand implements CliCommand {
                     }
                     String label = entry.vendor() + " " + entry.product()
                             + " " + entry.majorVersion();
-                    String hostLabel = entry.os() + "/" + entry.arch();
-                    ctx.label("download " + label + " (" + hostLabel + ")");
-                    String downloading = "Downloading " + label + " (" + hostLabel + ")";
+                    ctx.label("download " + label);
                     long total = entry.archiveSize();
-                    try (SpinnerProgressBar pb = SpinnerProgressBar.show(System.out)) {
-                        pb.update(0, downloading);
-                        JdkInstaller.DownloadedArchive dl = installer.download(entry, bytes -> {
-                            int pct = total > 0
-                                    ? (int) Math.min(100, bytes * 100L / total)
-                                    : 0;
-                            pb.update(pct, downloading);
-                        });
-                        pb.finish(Theme.colorize("✓", Theme.active().completedStep())
-                                + " " + Theme.colorize("Download finished for ", Theme.active().normalGray())
-                                + Theme.colorize(label, Theme.active().focused()));
+                    try (dev.jkbuild.cli.tui.JdkDownloadBar pb =
+                                 dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+                        JdkInstaller.DownloadedArchive dl = installer.download(entry, bytes ->
+                                pb.update(bytes, total));
+                        pb.finish();
                         ctx.put(ARCHIVE, dl);
                     } catch (Exception e) {
                         ctx.error("download", e.getMessage());
