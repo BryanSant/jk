@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import dev.jkbuild.config.EnvValues;
+import dev.jkbuild.config.TomlValues;
 import org.tomlj.Toml;
 import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
@@ -15,7 +17,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.OptionalDouble;
+import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
 
@@ -285,29 +289,20 @@ public final class PhaseTimings {
         }
     }
 
-    private static java.util.OptionalLong envLong(Function<String, String> env, String name) {
-        try {
-            String v = env.apply(name);
-            if (v != null && !v.isBlank()) return java.util.OptionalLong.of(Long.parseLong(v.trim()));
-        } catch (NumberFormatException ignored) {
-            // bad override → fall through to config/default
-        }
-        return java.util.OptionalLong.empty();
+    private static OptionalLong envLong(Function<String, String> env, String name) {
+        return toOptionalLong(EnvValues.longValue(env, name));
     }
 
-    private static java.util.OptionalLong tomlLong(Path userConfig, String key) {
-        try {
-            if (userConfig != null && Files.isRegularFile(userConfig)) {
-                TomlParseResult toml = Toml.parse(userConfig);
-                TomlTable cache = toml.getTable("cache");
-                if (cache != null && cache.get(key) instanceof Long l) {
-                    return java.util.OptionalLong.of(l);
-                }
-            }
-        } catch (Exception ignored) {
-            // unreadable config → default
-        }
-        return java.util.OptionalLong.empty();
+    private static OptionalLong tomlLong(Path userConfig, String key) {
+        // The [cache] table of the user-global ~/.jk/config.toml; missing/malformed → empty.
+        Optional<Long> v = TomlValues.parse(userConfig)
+                .map(toml -> toml.getTable("cache"))
+                .flatMap(cache -> TomlValues.optLong(cache, key));
+        return toOptionalLong(v);
+    }
+
+    private static OptionalLong toOptionalLong(Optional<Long> v) {
+        return v.isPresent() ? OptionalLong.of(v.get()) : OptionalLong.empty();
     }
 
     private static String key(String dir, String phase) {

@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.worker;
 
-import org.tomlj.Toml;
-import org.tomlj.TomlArray;
+import dev.jkbuild.config.EnvValues;
+import dev.jkbuild.config.TomlValues;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 
 /**
  * JVM tuning for the worker JVMs jk forks (compilers, test runners, etc.).
@@ -73,34 +73,31 @@ public final class JvmOptions {
         return eff;
     }
 
-    /** The {@code JK_*} environment layer. */
+    /** The {@code JK_*} environment layer. Coercion via the shared {@link EnvValues}. */
     public static Settings fromEnv() {
         return new Settings(
-                parseDouble(System.getenv(ENV_MAX_RAM)),
-                blankToNull(System.getenv(ENV_GC)),
-                parseBool(System.getenv(ENV_STRING_DEDUP)),
+                EnvValues.doubleValue(System::getenv, ENV_MAX_RAM).orElse(null),
+                EnvValues.string(System::getenv, ENV_GC).orElse(null),
+                EnvValues.bool(System::getenv, ENV_STRING_DEDUP).orElse(null),
                 splitArgs(System.getenv(ENV_ARGS)));
     }
 
-    /** The {@code [jvm]} table of a {@code jk.toml}, or {@link Settings#NONE}. Never throws. */
+    /**
+     * The {@code [jvm]} table of a {@code jk.toml}, or {@link Settings#NONE}.
+     * Never throws — a missing/malformed file or table degrades to {@code NONE}.
+     * Coercion via the shared {@link TomlValues} ({@code max-ram-percent} accepts
+     * a TOML integer or float; {@code args} keeps only string elements).
+     */
     public static Settings fromToml(Path jkToml) {
-        try {
-            if (jkToml == null || !Files.isRegularFile(jkToml)) return Settings.NONE;
-            TomlParseResult r = Toml.parse(jkToml);
-            TomlTable jvm = r.getTable("jvm");
-            if (jvm == null) return Settings.NONE;
-            // Accept both TOML integer (33) and float (33.0) for the percentage.
-            Double maxRam = (jvm.get("max-ram-percent") instanceof Number n) ? n.doubleValue() : null;
-            Boolean dedup = jvm.contains("string-dedup") ? jvm.getBoolean("string-dedup") : null;
-            List<String> args = new ArrayList<>();
-            TomlArray arr = jvm.getArray("args");
-            if (arr != null) {
-                for (int i = 0; i < arr.size(); i++) args.add(String.valueOf(arr.get(i)));
-            }
-            return new Settings(maxRam, blankToNull(jvm.getString("gc")), dedup, args);
-        } catch (Exception e) {
-            return Settings.NONE;   // a malformed [jvm] never fails a build
-        }
+        Optional<TomlParseResult> parsed = TomlValues.parse(jkToml);
+        if (parsed.isEmpty()) return Settings.NONE;
+        TomlTable jvm = parsed.get().getTable("jvm");
+        if (jvm == null) return Settings.NONE;
+        return new Settings(
+                TomlValues.optDouble(jvm, "max-ram-percent").orElse(null),
+                TomlValues.optString(jvm, "gc").orElse(null),
+                TomlValues.optBoolean(jvm, "string-dedup").orElse(null),
+                TomlValues.stringList(jvm, "args"));
     }
 
     /**
@@ -269,20 +266,6 @@ public final class JvmOptions {
     private static String fmt(double v) {
         if (v == Math.floor(v) && !Double.isInfinite(v)) return Long.toString((long) v);
         return String.format(Locale.ROOT, "%.1f", v);
-    }
-
-    private static Double parseDouble(String s) {
-        if (s == null || s.isBlank()) return null;
-        try { return Double.valueOf(s.trim()); } catch (NumberFormatException e) { return null; }
-    }
-
-    private static Boolean parseBool(String s) {
-        if (s == null || s.isBlank()) return null;
-        return Boolean.valueOf(s.trim());
-    }
-
-    private static String blankToNull(String s) {
-        return (s == null || s.isBlank()) ? null : s.trim();
     }
 
     private static List<String> splitArgs(String s) {

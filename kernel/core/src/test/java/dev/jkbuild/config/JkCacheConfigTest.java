@@ -7,6 +7,7 @@ import org.junit.jupiter.api.io.TempDir;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -62,12 +63,46 @@ class JkCacheConfigTest {
     }
 
     @Test
-    void overlay_lets_user_global_provide_max_size(@TempDir Path tempDir) {
-        JkCacheConfig project = new JkCacheConfig(true, java.util.Optional.empty(), 7, 30);
-        JkCacheConfig user = new JkCacheConfig(false, java.util.Optional.of(20), 7, 30);
-        // Project wins on autoPrune; missing maxSize falls through to user.
-        JkCacheConfig merged = project.overlay(user);
-        assertThat(merged.autoPrune()).isTrue();
-        assertThat(merged.maxSizeGb()).hasValue(20);
+    void env_vars_override_user_config(@TempDir Path tempDir) throws IOException {
+        Path toml = tempDir.resolve("config.toml");
+        Files.writeString(toml, """
+                [cache]
+                auto-prune          = true
+                max-size-gb         = 25
+                prune-interval-days = 14
+                record-ttl-days     = 45
+                """);
+        var env = Map.of(
+                "JK_AUTO_PRUNE", "false",
+                "JK_MAX_SIZE_GB", "100",
+                "JK_PRUNE_INTERVAL_DAYS", "1",
+                "JK_RECORD_TTL_DAYS", "7");
+
+        JkCacheConfig c = JkCacheConfig.resolve(toml, env::get);
+        assertThat(c.autoPrune()).isFalse();          // env wins over file
+        assertThat(c.maxSizeGb()).hasValue(100);
+        assertThat(c.pruneIntervalDays()).isEqualTo(1);
+        assertThat(c.recordTtlDays()).isEqualTo(7);
+    }
+
+    @Test
+    void env_falls_through_to_file_then_defaults(@TempDir Path tempDir) throws IOException {
+        Path toml = tempDir.resolve("config.toml");
+        Files.writeString(toml, "[cache]\nmax-size-gb = 25\n");
+
+        // No env set: file value for max-size, defaults for the rest.
+        JkCacheConfig c = JkCacheConfig.resolve(toml, name -> null);
+        assertThat(c.maxSizeGb()).hasValue(25);
+        assertThat(c.autoPrune()).isEqualTo(JkCacheConfig.DEFAULTS.autoPrune());
+        assertThat(c.pruneIntervalDays()).isEqualTo(JkCacheConfig.DEFAULTS.pruneIntervalDays());
+
+        // env can supply max-size even when the file omits it entirely.
+        JkCacheConfig c2 = JkCacheConfig.resolve(tempDir.resolve("none.toml"),
+                Map.of("JK_MAX_SIZE_GB", "50")::get);
+        assertThat(c2.maxSizeGb()).hasValue(50);
+
+        // Garbage env value is ignored — falls through to the file/default.
+        JkCacheConfig c3 = JkCacheConfig.resolve(toml, Map.of("JK_MAX_SIZE_GB", "huge")::get);
+        assertThat(c3.maxSizeGb()).hasValue(25);
     }
 }

@@ -12,7 +12,7 @@ import java.util.function.Function;
  *
  * <pre>
  *   ~/.jk/
- *   ├── config.toml      # user config (was ~/.config/jk.toml)
+ *   ├── config.toml      # the single user-global config file (jk never reads ~/.config)
  *   ├── cache/           # downloads + content-addressed action cache
  *   ├── state/           # mutable per-host state
  *   ├── data/            # immutable installed data (ledgers, registries)

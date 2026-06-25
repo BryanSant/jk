@@ -6,16 +6,19 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Immutable view of the merged user/project/system configuration. Built
- * by {@link JkConfigLoader} which honours the precedence:
+ * Immutable view of the merged user/project configuration. Built by
+ * {@link JkConfigLoader} (file layers from {@link ConfigSources}) which honours
+ * the precedence:
  *
  * <ol>
  *   <li>command-line flag (highest — applied by callers AFTER load)</li>
  *   <li>environment variable</li>
  *   <li>project-local {@code jk.toml} (from {@code [config]} table)</li>
- *   <li>{@code ~/.config/jk/jk.toml}</li>
- *   <li>{@code /etc/jk/jk.toml}</li>
+ *   <li>user-global {@code ~/.jk/config.toml} (from {@code [config]} table)</li>
  * </ol>
+ *
+ * <p>There is no {@code /etc/jk} system layer and jk never reads {@code ~/.config}
+ * — see {@link ConfigSources}.
  *
  * <p>Each setting is an {@link Optional} — empty means "no layer set
  * this; use the built-in default". A consumer asks the config and falls

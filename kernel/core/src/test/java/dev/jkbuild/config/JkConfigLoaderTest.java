@@ -98,7 +98,7 @@ class JkConfigLoaderTest {
         Path projectToml = tempDir.resolve("a").resolve("jk.toml");
         Files.writeString(projectToml, "[config]\ncolor = \"always\"\n");
 
-        Path found = JkConfigLoader.findProjectConfig(nested);
+        Path found = ConfigSources.findProjectConfig(nested);
         assertThat(found).isEqualTo(projectToml);
     }
 

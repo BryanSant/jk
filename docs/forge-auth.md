@@ -222,8 +222,8 @@ resolved per provider and per host:
 registered).
 
 Config lives under a `[forge]` table in the standard jk config files
-(`/etc/jk/jk.toml` < `~/.config/jk/jk.toml` < project `jk.toml`, or an
-explicit `--config-file`), parsed by `ForgeAuthConfig` in `:core`:
+(user-global `~/.jk/config.toml` < project `jk.toml`, or an explicit
+`--config-file`), parsed by `ForgeAuthConfig` in `:core`:
 
 ```toml
 # provider default — used for that provider's default host

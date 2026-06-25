@@ -1,22 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import org.tomlj.Toml;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.function.Function;
 
 /**
- * Discovers and merges configuration into a single {@link JkConfig} per
- * the precedence documented on that record. CLI-flag values are applied
- * <em>by the caller after</em> {@link #load} returns — this class handles
- * env vars, project-local {@code jk.toml}, user config, and system config.
+ * Discovers and merges configuration into a single {@link JkConfig} per the
+ * precedence documented on that record. CLI-flag values are applied <em>by the
+ * caller after</em> {@link #load} returns — this class folds the file layers
+ * (from {@link ConfigSources}) and the {@code JK_*} environment layer.
  *
  * <p>Toml shape (all sections optional):
  * <pre>
@@ -29,14 +27,16 @@ import java.util.function.Function;
  *   directory = "/some/path"   # rarely set here; mostly CLI-only
  * </pre>
  *
- * <p>Project-local discovery: walks up from {@code startDir} until it
- * finds the first {@code jk.toml} (or hits the filesystem root). The
- * config layer extracts only the {@code [config]} table; the rest of the
- * file is consumed by {@link JkBuildParser}.
+ * <p>File discovery and precedence live in {@link ConfigSources}: the
+ * user-global {@code ~/.jk/config.toml} then the project {@code jk.toml} (or an
+ * explicit {@code --config-file}). There is no {@code /etc/jk} system layer and
+ * jk never reads {@code ~/.config}. The config layer extracts only the
+ * {@code [config]} table; the rest of a {@code jk.toml} is consumed by
+ * {@code JkBuildParser}.
  *
- * <p>{@code --no-config} short-circuits all four file layers; env vars
- * still apply. {@code --config-file <path>} replaces the project layer
- * exclusively (user + system still merge underneath).
+ * <p>{@code --no-config} short-circuits the file layers; env vars still apply.
+ * {@code --config-file <path>} replaces the project layer exclusively (the
+ * user-global layer still merges underneath).
  */
 public final class JkConfigLoader {
 
@@ -50,83 +50,51 @@ public final class JkConfigLoader {
     private static final String ENV_VERBOSE = "JK_VERBOSE";
     private static final String ENV_NO_COLOR = "NO_COLOR";
 
-    /**
-     * Discoverable file paths, in order (lowest precedence to highest within "files").
-     * Package-private so sibling slice parsers (e.g. {@link ForgeAuthConfig}) reuse the
-     * same locations and precedence rather than re-deriving them.
-     */
-    static final Path USER_CONFIG = Paths.get(
-            System.getProperty("user.home", ""), ".config", "jk", "jk.toml");
-    static final Path SYSTEM_CONFIG = Paths.get("/etc/jk/jk.toml");
-
     private JkConfigLoader() {}
 
     /**
-     * Load and merge config layers. {@code startDir} is the search root
-     * for project-local {@code jk.toml}; pass the current working
-     * directory in normal use.
+     * Load and merge config layers. {@code startDir} is the search root for the
+     * project {@code jk.toml}; pass the current working directory in normal use.
      *
-     * <p>The returned config does NOT include CLI-flag values — the
-     * caller should call {@link JkConfig#mergedWith(JkConfig)} with the
-     * CLI-derived layer last to enforce the documented precedence.
+     * <p>The returned config does NOT include CLI-flag values — the caller
+     * should call {@link JkConfig#mergedWith(JkConfig)} with the CLI-derived
+     * layer last to enforce the documented precedence.
      */
     public static JkConfig load(Path startDir, boolean noConfig, Optional<Path> explicitConfigFile)
             throws IOException {
-        // Layers built from LOWEST precedence to HIGHEST, then folded with mergedWith.
+        // File layers, lowest precedence first, then the env layer on top.
         JkConfig out = JkConfig.empty();
-        if (!noConfig) {
-            out = out.mergedWith(loadTomlOrEmpty(SYSTEM_CONFIG));
-            out = out.mergedWith(loadTomlOrEmpty(USER_CONFIG));
-            if (explicitConfigFile.isPresent()) {
-                // Explicit --config-file replaces only the project layer.
-                out = out.mergedWith(loadTomlOrEmpty(explicitConfigFile.get()));
-            } else {
-                Path projectConfig = findProjectConfig(startDir);
-                if (projectConfig != null) {
-                    out = out.mergedWith(loadTomlOrEmpty(projectConfig));
-                }
-            }
+        for (Path layer : ConfigSources.discover(startDir, noConfig, explicitConfigFile).layers()) {
+            out = out.mergedWith(loadTomlOrEmpty(layer));
         }
         // Env vars override files but are overridden by CLI flags (caller's job).
         out = out.mergedWith(loadFromEnv(System::getenv));
         return out;
     }
 
-    /** Search {@code startDir} and ancestors for a {@code jk.toml}. */
-    static Path findProjectConfig(Path startDir) {
-        Path here = startDir == null ? null : startDir.toAbsolutePath().normalize();
-        while (here != null) {
-            Path candidate = here.resolve("jk.toml");
-            if (Files.isRegularFile(candidate)) return candidate;
-            here = here.getParent();
-        }
-        return null;
-    }
-
-    /** Parse a {@code jk.toml}'s {@code [config]} table into a config layer; missing file → empty. */
+    /** Parse a TOML file's {@code [config]} table into a config layer; missing/malformed → empty. */
     static JkConfig loadTomlOrEmpty(Path path) throws IOException {
-        if (path == null || !Files.isRegularFile(path)) return JkConfig.empty();
-        TomlParseResult toml = Toml.parse(path);
-        // Don't fail loud on syntax errors in foreign files — system/user configs may be
-        // experimental; report problems but degrade gracefully.
-        if (toml.hasErrors()) return JkConfig.empty();
-        TomlTable config = toml.getTable("config");
+        // Degrade gracefully on missing or syntactically-broken files — system/user
+        // configs may be experimental; problems fall back rather than fail the build.
+        Optional<TomlParseResult> parsed = TomlValues.parse(path);
+        if (parsed.isEmpty()) return JkConfig.empty();
+        TomlTable config = parsed.get().getTable("config");
         if (config == null) return JkConfig.empty();
         return new JkConfig(
-                stringFrom(config, "color").flatMap(JkConfig.ColorChoice::parse),
-                booleanFrom(config, "offline"),
-                booleanFrom(config, "rerun"),
-                booleanFrom(config, "refresh"),
-                booleanFrom(config, "no-progress"),
-                booleanFrom(config, "quiet"),
-                booleanFrom(config, "verbose"),
-                stringFrom(config, "directory").map(Paths::get));
+                TomlValues.optString(config, "color").flatMap(JkConfig.ColorChoice::parse),
+                TomlValues.optBoolean(config, "offline"),
+                TomlValues.optBoolean(config, "rerun"),
+                TomlValues.optBoolean(config, "refresh"),
+                TomlValues.optBoolean(config, "no-progress"),
+                TomlValues.optBoolean(config, "quiet"),
+                TomlValues.optBoolean(config, "verbose"),
+                TomlValues.optString(config, "directory").map(Paths::get));
     }
 
     /** Build a config layer from environment variables. */
     static JkConfig loadFromEnv(Function<String, String> env) {
         // NO_COLOR (any non-empty value) → never; defers to JK_COLOR if also set.
-        Optional<JkConfig.ColorChoice> color = stringEnv(env, ENV_COLOR)
+        Optional<JkConfig.ColorChoice> color = EnvValues.string(env, ENV_COLOR)
                 .flatMap(JkConfig.ColorChoice::parse)
                 .or(() -> {
                     String noColor = env.apply(ENV_NO_COLOR);
@@ -136,41 +104,12 @@ public final class JkConfigLoader {
                 });
         return new JkConfig(
                 color,
-                booleanEnv(env, ENV_OFFLINE),
-                booleanEnv(env, ENV_RERUN),
-                booleanEnv(env, ENV_REFRESH),
-                booleanEnv(env, ENV_NO_PROGRESS),
-                booleanEnv(env, ENV_QUIET),
-                booleanEnv(env, ENV_VERBOSE),
+                EnvValues.bool(env, ENV_OFFLINE),
+                EnvValues.bool(env, ENV_RERUN),
+                EnvValues.bool(env, ENV_REFRESH),
+                EnvValues.bool(env, ENV_NO_PROGRESS),
+                EnvValues.bool(env, ENV_QUIET),
+                EnvValues.bool(env, ENV_VERBOSE),
                 Optional.empty()); // directory isn't env-var-driven
-    }
-
-    // ------ TOML / env value coercion -------------------------------------
-
-    private static Optional<String> stringFrom(TomlTable table, String key) {
-        Object v = table.get(key);
-        return (v instanceof String s && !s.isBlank()) ? Optional.of(s) : Optional.empty();
-    }
-
-    private static Optional<Boolean> booleanFrom(TomlTable table, String key) {
-        Object v = table.get(key);
-        return (v instanceof Boolean b) ? Optional.of(b) : Optional.empty();
-    }
-
-    private static Optional<String> stringEnv(Function<String, String> env, String name) {
-        String v = env.apply(name);
-        return (v != null && !v.isBlank()) ? Optional.of(v) : Optional.empty();
-    }
-
-    private static Optional<Boolean> booleanEnv(Function<String, String> env, String name) {
-        String v = env.apply(name);
-        if (v == null) return Optional.empty();
-        String t = v.trim().toLowerCase(java.util.Locale.ROOT);
-        if (t.isEmpty()) return Optional.empty();
-        return switch (t) {
-            case "1", "true", "yes", "on" -> Optional.of(Boolean.TRUE);
-            case "0", "false", "no", "off" -> Optional.of(Boolean.FALSE);
-            default -> Optional.empty();
-        };
     }
 }

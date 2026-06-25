@@ -122,13 +122,8 @@ public final class CacheCommand implements CliCommand {
             // Utilization denominator: the configured LRU ceiling ([cache]
             // max-size-gb in ~/.jk/config.toml), or the documented 20 GiB default
             // when unset, so the bar is always meaningful.
-            long maxBytes;
-            try {
-                var cfg = dev.jkbuild.config.JkCacheConfig.fromToml(dev.jkbuild.util.JkDirs.userConfigFile());
-                maxBytes = (long) cfg.maxSizeGb().orElse(20) * 1024L * 1024L * 1024L;
-            } catch (IOException e) {
-                maxBytes = 20L * 1024L * 1024L * 1024L;
-            }
+            var cfg = dev.jkbuild.config.JkCacheConfig.resolve();
+            long maxBytes = (long) cfg.maxSizeGb().orElse(20) * 1024L * 1024L * 1024L;
 
             for (String line : renderInfoTable(sha, actions, totalFiles, totalBytes, maxBytes)) {
                 System.out.println(line);

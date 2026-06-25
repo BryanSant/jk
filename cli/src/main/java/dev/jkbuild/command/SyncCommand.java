@@ -355,16 +355,12 @@ public final class SyncCommand implements CliCommand {
 
         if (result.success()) {
             printSuccessSummary(goal, lockFile);
-            // Opportunistic cache prune — no-op when auto-prune is off.
-            try {
-                var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(
-                        dir.resolve("jk.toml"));
-                dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
-                        dev.jkbuild.task.CachePruneScheduler.maybeRun(
-                                cacheConfig, cache, exe));
-            } catch (IOException ignored) {
-                // Cache hygiene is never load-bearing.
-            }
+            // Opportunistic cache prune — no-op when auto-prune is off. Cache
+            // settings are user-global only; resolve() reads ~/.jk/config.toml
+            // (a project jk.toml's [cache] is intentionally ignored).
+            var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
+            dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
+                    dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
             // Cascade: sync each module's lock file for workspace roots.
             cascadeSyncModules(dir, cache);
             return 0;

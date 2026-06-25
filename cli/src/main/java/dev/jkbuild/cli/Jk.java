@@ -210,7 +210,7 @@ public final class Jk {
                     java.nio.file.Path.of("").toAbsolutePath(), noConfig, explicit);
             ActiveConfig.install(resolved);
         } catch (java.io.IOException e) {
-            // Best-effort — a broken user/system config shouldn't kill the CLI.
+            // Best-effort — a broken user/project config shouldn't kill the CLI.
             System.err.println("jk: warning: could not load config (" + e.getMessage() + "); using defaults.");
             ActiveConfig.install(JkConfig.empty());
         }

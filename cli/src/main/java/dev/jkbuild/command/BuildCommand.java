@@ -838,11 +838,11 @@ public final class BuildCommand implements CliCommand {
         }
 
         if (result.success()) {
-            try {
-                var cacheConfig = dev.jkbuild.config.JkCacheConfig.fromToml(pm.dir().resolve("jk.toml"));
-                dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
-                        dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, pm.cache(), exe));
-            } catch (IOException ignored) {}
+            // Cache settings are user-global only; resolve() reads ~/.jk/config.toml
+            // (a project jk.toml's [cache] is intentionally ignored).
+            var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
+            dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
+                    dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, pm.cache(), exe));
             return 0;
         }
         // Test failures get exit 4; other failures exit 1.

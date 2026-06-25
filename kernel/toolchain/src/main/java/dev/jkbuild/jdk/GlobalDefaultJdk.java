@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
+import dev.jkbuild.config.TomlValues;
 import dev.jkbuild.util.JkDirs;
-import org.tomlj.Toml;
-import org.tomlj.TomlParseResult;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -152,14 +151,11 @@ public final class GlobalDefaultJdk {
     }
 
     private Optional<Path> resolveHome(String configKey, Path symlink) {
-        try {
-            Optional<String> recorded = readKey(configKey);
-            if (recorded.isPresent()) {
-                Path home = Path.of(recorded.get());
-                if (Files.isDirectory(home)) return Optional.of(home);
-            }
-        } catch (IOException ignored) {
-            // malformed config — fall back to the symlink
+        // Config record is authoritative; readKey degrades to empty on a bad file.
+        Optional<String> recorded = readKey(configKey);
+        if (recorded.isPresent()) {
+            Path home = Path.of(recorded.get());
+            if (Files.isDirectory(home)) return Optional.of(home);
         }
         try {
             if (Files.exists(symlink)) return Optional.of(symlink.toRealPath());
@@ -223,17 +219,16 @@ public final class GlobalDefaultJdk {
         return readKey(DEFAULT_KEY);
     }
 
-    /** Read a string config key, or empty when absent/blank. */
-    private Optional<String> readKey(String key) throws IOException {
-        if (!Files.exists(configFile)) return Optional.empty();
-        TomlParseResult toml = Toml.parse(configFile);
-        if (toml.hasErrors()) {
-            // Surface the first error so callers can decide whether to ignore.
-            throw new IOException("malformed " + configFile + ": "
-                    + toml.errors().getFirst().getMessage());
-        }
-        String value = toml.getString(key);
-        return Optional.ofNullable(value).filter(s -> !s.isBlank());
+    /**
+     * Read a top-level string config key, or empty when absent/blank. Degrades to
+     * empty on a missing or malformed config (consistent with every other jk
+     * config reader — a stray syntax error must not break {@code jk jdk}); the
+     * symlink channel remains as a fallback signal. Reads through the shared
+     * {@link TomlValues} coercion.
+     */
+    private Optional<String> readKey(String key) {
+        return TomlValues.parse(configFile)
+                .flatMap(toml -> TomlValues.optString(toml, key));
     }
 
     private void writeSymlink(Path symlink, Path target) throws IOException {

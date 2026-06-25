@@ -1,13 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import org.tomlj.Toml;
 import org.tomlj.TomlArray;
 import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Locale;
@@ -38,8 +35,9 @@ import java.util.Optional;
  *   client-id = "Iv1.fedcba9876543210"
  * </pre>
  *
- * <p>Precedence mirrors {@link JkConfigLoader}: system &lt; user &lt; project
- * (or explicit {@code --config-file}). The environment variable
+ * <p>Precedence mirrors {@link JkConfigLoader} via the shared
+ * {@link ConfigSources}: user-global {@code ~/.jk/config.toml} &lt; project
+ * {@code jk.toml} (or explicit {@code --config-file}). The environment variable
  * {@code JK_<PROVIDER>_OAUTH_CLIENT_ID} sits above all of these and is applied
  * by the caller, not here.
  */
@@ -90,40 +88,27 @@ public final class ForgeAuthConfig {
     }
 
     /**
-     * Discover and merge client-id config across the standard layers,
-     * matching {@link JkConfigLoader#load}'s precedence: system &lt; user
-     * &lt; project (or explicit {@code --config-file}). {@code noConfig}
+     * Discover and merge client-id config across the standard layers, matching
+     * {@link JkConfigLoader#load}'s precedence via the shared
+     * {@link ConfigSources}: user-global {@code ~/.jk/config.toml} &lt; project
+     * {@code jk.toml} (or explicit {@code --config-file}). {@code noConfig}
      * short-circuits all file layers.
      */
     public static ForgeAuthConfig discover(Path startDir, boolean noConfig,
                                            Optional<Path> explicitConfigFile) {
         ForgeAuthConfig out = empty();
-        if (noConfig) return out;
-        out = out.mergedWith(loadFrom(JkConfigLoader.SYSTEM_CONFIG));
-        out = out.mergedWith(loadFrom(JkConfigLoader.USER_CONFIG));
-        if (explicitConfigFile.isPresent()) {
-            out = out.mergedWith(loadFrom(explicitConfigFile.get()));
-        } else {
-            Path projectConfig = JkConfigLoader.findProjectConfig(startDir);
-            if (projectConfig != null) {
-                out = out.mergedWith(loadFrom(projectConfig));
-            }
+        for (Path layer : ConfigSources.discover(startDir, noConfig, explicitConfigFile).layers()) {
+            out = out.mergedWith(loadFrom(layer));
         }
         return out;
     }
 
     /** Parse the {@code [forge]} table from a single TOML file; missing/invalid → empty. */
     public static ForgeAuthConfig loadFrom(Path path) {
-        if (path == null || !Files.isRegularFile(path)) return empty();
-        TomlParseResult toml;
-        try {
-            toml = Toml.parse(path);
-        } catch (IOException e) {
-            return empty();
-        }
-        // Degrade gracefully on foreign/experimental files, like JkConfigLoader.
-        if (toml.hasErrors()) return empty();
-        TomlTable forge = toml.getTable("forge");
+        // Degrade gracefully on missing/foreign/malformed files, like JkConfigLoader.
+        Optional<TomlParseResult> parsed = TomlValues.parse(path);
+        if (parsed.isEmpty()) return empty();
+        TomlTable forge = parsed.get().getTable("forge");
         if (forge == null) return empty();
 
         Map<String, String> byProvider = new HashMap<>();

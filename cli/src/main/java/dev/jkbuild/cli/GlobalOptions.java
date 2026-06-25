@@ -12,8 +12,9 @@ import java.util.List;
  * parsed {@link dev.jkbuild.model.command.Invocation} via {@link #from(dev.jkbuild.model.command.Invocation)}.
  *
  * <p>Precedence for resolving each setting: explicit flag &gt; env var
- * &gt; project {@code jk.toml} &gt; {@code ~/.config/jk/jk.toml} &gt;
- * {@code /etc/jk/jk.toml}.
+ * &gt; project {@code jk.toml} &gt; user-global {@code ~/.jk/config.toml}.
+ * There is no {@code /etc/jk} system layer and jk never reads
+ * {@code ~/.config} — see {@link dev.jkbuild.config.ConfigSources}.
  */
 public final class GlobalOptions {
     public boolean quiet;
