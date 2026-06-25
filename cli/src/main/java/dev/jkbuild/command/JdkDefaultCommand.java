@@ -3,6 +3,9 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Glyphs;
+import dev.jkbuild.cli.tui.GoalWedge;
+import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkHit;
@@ -78,11 +81,14 @@ public final class JdkDefaultCommand implements CliCommand {
         String identifier = JdkRegistry.identifierFor(hit.home());
         defaults.set(new InstalledJdk(identifier, hit.home()));
         dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(identifier, "default-set");
-        String displayName = renderDisplayName(hit);
-        out.println(Theme.colorize("➜", Theme.active().brightGreen())
-                + " The " + Theme.colorize("default", Theme.active().focused())
-                + " JDK is now set to " + Theme.colorize(displayName, Theme.active().focused())
-                + " " + Theme.colorize("(" + identifier + ")", Theme.active().darkGray()));
+        Theme t = Theme.active();
+        String name   = Theme.colorize(renderDisplayName(hit), t.focused());
+        String source = Theme.colorize("[", t.darkGray())
+                      + Theme.colorize(hit.source(), t.cyan())
+                      + Theme.colorize("]", t.darkGray());
+        String id     = Theme.colorize(identifier, t.path());
+        String message = "Default JDK set to " + name + ": " + source + id;
+        out.println(GoalWedge.chipLine(Glyphs.CHECK, "JDK", GlobalConfig.nerdfont(), message));
     }
 
     private static String renderDisplayName(JdkHit hit) {
