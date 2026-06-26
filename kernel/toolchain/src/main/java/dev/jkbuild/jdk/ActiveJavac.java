@@ -31,8 +31,7 @@ public final class ActiveJavac {
 
     private ActiveJavac() {}
 
-    private static final boolean WINDOWS =
-            System.getProperty("os.name", "").toLowerCase(java.util.Locale.ROOT).contains("win");
+    private static final boolean WINDOWS = HostPlatform.isWindows();
 
     /** Resolve the current JDK home from the process {@code PATH}. */
     public static Optional<Path> home() {

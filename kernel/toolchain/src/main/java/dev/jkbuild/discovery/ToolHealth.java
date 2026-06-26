@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.JdkVendor;
 
 import java.io.ByteArrayInputStream;
@@ -10,7 +11,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.Properties;
 import java.util.jar.Attributes;
@@ -171,7 +171,7 @@ public final class ToolHealth {
 
     /** {@code <home>/bin/<binary>} (or {@code .exe} / {@code .bat} on Windows). */
     public static Path requiredBinary(ToolSpec spec, Path home) {
-        boolean win = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        boolean win = HostPlatform.isWindows();
         return home.resolve("bin").resolve(switch (spec.kind()) {
             case "java" -> win ? "java.exe" : "java";
             case "maven" -> win ? "mvn.cmd" : "mvn";

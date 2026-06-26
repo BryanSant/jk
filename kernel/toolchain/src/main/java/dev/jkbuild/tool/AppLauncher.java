@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.tool;
 
+import dev.jkbuild.jdk.HostPlatform;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -9,7 +11,6 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.PosixFilePermission;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -35,8 +36,8 @@ public final class AppLauncher {
     public static Path install(Path binDir, Path javaHome, String binName,
                                String mainClass, List<Path> classpathJars) throws IOException {
         Files.createDirectories(binDir);
-        Path launcher = binDir.resolve(binName + (isWindows() ? ".cmd" : ""));
-        String script = isWindows()
+        Path launcher = binDir.resolve(binName + (HostPlatform.isWindows() ? ".cmd" : ""));
+        String script = HostPlatform.isWindows()
                 ? renderWindows(javaHome, mainClass, classpathJars)
                 : renderPosix(javaHome, mainClass, classpathJars);
         Files.writeString(launcher, script, StandardCharsets.UTF_8,
@@ -66,11 +67,11 @@ public final class AppLauncher {
     }
 
     private static Path javaBinary(Path javaHome) {
-        return javaHome.resolve("bin").resolve(isWindows() ? "java.exe" : "java");
+        return javaHome.resolve("bin").resolve(HostPlatform.isWindows() ? "java.exe" : "java");
     }
 
     private static String joinClasspath(List<Path> classpath) {
-        String sep = isWindows() ? ";" : ":";
+        String sep = HostPlatform.isWindows() ? ";" : ":";
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < classpath.size(); i++) {
             if (i > 0) sb.append(sep);
@@ -91,7 +92,7 @@ public final class AppLauncher {
     }
 
     private static void markExecutable(Path file) {
-        if (isWindows()) return;
+        if (HostPlatform.isWindows()) return;
         try {
             Set<PosixFilePermission> perms = EnumSet.copyOf(Files.getPosixFilePermissions(file));
             perms.add(PosixFilePermission.OWNER_EXECUTE);
@@ -103,7 +104,4 @@ public final class AppLauncher {
         }
     }
 
-    private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
-    }
 }

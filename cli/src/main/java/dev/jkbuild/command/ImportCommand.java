@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
@@ -150,6 +151,6 @@ public final class ImportCommand implements CliCommand {
 
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win");
+        return HostPlatform.isWindows();
     }
 }

@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.audit.AuditReport;
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.lock.LockfileReader;
@@ -195,6 +196,6 @@ public final class AuditCommand implements CliCommand {
      */
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win");
+        return HostPlatform.isWindows();
     }
 }

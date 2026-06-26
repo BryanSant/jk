@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.config.JkBuildParser;
@@ -324,6 +325,6 @@ public final class PublishCommand implements CliCommand {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win");
+        return HostPlatform.isWindows();
     }
 }

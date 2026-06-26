@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.PassthroughEnv;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.plugin.protocol.Ndjson;
@@ -120,5 +121,5 @@ public final class MvnCommand implements CliCommand {
         }
     }
 
-    private static boolean isWindows() { return System.getProperty("os.name","").toLowerCase().contains("win"); }
+    private static boolean isWindows() { return HostPlatform.isWindows(); }
 }

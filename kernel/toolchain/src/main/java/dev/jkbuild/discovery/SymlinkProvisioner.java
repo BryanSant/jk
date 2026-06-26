@@ -1,12 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import dev.jkbuild.jdk.HostPlatform;
+
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.Comparator;
-import java.util.Locale;
 
 /**
  * Helpers for the link side of the discover-and-link pattern. Splits out
@@ -22,7 +23,7 @@ public final class SymlinkProvisioner {
 
     /** False on Windows (junction handling is too quirky). True elsewhere. */
     public static boolean canSymlink() {
-        return !isWindows();
+        return !HostPlatform.isWindows();
     }
 
     /**
@@ -83,7 +84,4 @@ public final class SymlinkProvisioner {
         Files.deleteIfExists(path);
     }
 
-    private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
-    }
 }

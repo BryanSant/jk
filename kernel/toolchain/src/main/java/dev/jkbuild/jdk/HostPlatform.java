@@ -30,6 +30,17 @@ public final class HostPlatform {
         return !UNSUPPORTED.equals(currentOs()) && !UNSUPPORTED.equals(currentArch());
     }
 
+    /**
+     * Returns {@code true} when the current JVM is running on Windows.
+     *
+     * <p>Callers should use this rather than inlining
+     * {@code System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win")}
+     * which appears in many places and is inconsistent about locale.
+     */
+    public static boolean isWindows() {
+        return "windows".equals(currentOs());
+    }
+
     /** Friendly display name for an OS (feed vocabulary → user-facing). */
     public static String displayOs(String os) {
         return switch (os) {

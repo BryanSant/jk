@@ -2,6 +2,7 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.runtime.BuildPipeline;
 
 import dev.jkbuild.cli.GlobalOptions;
@@ -314,6 +315,6 @@ public final class ImageCommand implements CliCommand {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win");
+        return HostPlatform.isWindows();
     }
 }

@@ -25,11 +25,11 @@ import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
+import dev.jkbuild.util.PathUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.List;
 
 /**
@@ -164,11 +164,6 @@ public final class VerifyBuildCommand implements CliCommand {
     }
 
     private static void deleteRecursively(Path root) {
-        if (root == null || !Files.exists(root)) return;
-        try (var stream = Files.walk(root)) {
-            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (IOException ignored) {}
-            });
-        } catch (IOException ignored) {}
+        PathUtil.deleteRecursively(root);
     }
 }

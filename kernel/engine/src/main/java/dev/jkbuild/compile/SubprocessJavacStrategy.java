@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
+import dev.jkbuild.jdk.HostPlatform;
+import dev.jkbuild.util.PathUtil;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -9,7 +12,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
@@ -202,14 +204,11 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        return HostPlatform.isWindows();
     }
 
     private static void deleteRecursively(Path root) {
-        try (var stream = Files.walk(root)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
-        } catch (IOException ignored) {}
+        PathUtil.deleteRecursively(root);
     }
 
     // Allow ServiceLoader.load to instantiate this without a META-INF/services

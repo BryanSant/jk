@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.tool;
 
+import dev.jkbuild.jdk.HostPlatform;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -9,7 +11,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -202,7 +203,7 @@ public final class NativeImageDriver {
      * Returns the first candidate that exists as a regular file.
      */
     public static Optional<Path> resolve(Path javaHome) {
-        boolean win = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        boolean win = HostPlatform.isWindows();
         String exe = win ? "native-image.cmd" : "native-image";
 
         // 1. Project-pinned JDK
@@ -234,7 +235,7 @@ public final class NativeImageDriver {
 
     /** Resolve {@code <javaHome>/bin/native-image} for the current OS (no fallback). */
     public static Path nativeImageBinary(Path javaHome) {
-        boolean win = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        boolean win = HostPlatform.isWindows();
         return javaHome.resolve("bin").resolve(win ? "native-image.cmd" : "native-image");
     }
 

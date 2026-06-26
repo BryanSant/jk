@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.runtime.KotlinWorkerSetup;
 
@@ -658,6 +659,6 @@ final class ScriptRunner {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        return HostPlatform.isWindows();
     }
 }

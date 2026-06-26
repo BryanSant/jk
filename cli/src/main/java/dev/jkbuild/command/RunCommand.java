@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.runtime.CompositeLocator;
@@ -35,7 +36,6 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 
 /**
  * {@code jk run [-- <args>...]} — build the current project through the shared
@@ -298,6 +298,6 @@ public final class RunCommand implements CliCommand {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        return HostPlatform.isWindows();
     }
 }

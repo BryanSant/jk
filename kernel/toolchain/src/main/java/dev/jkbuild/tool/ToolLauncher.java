@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.tool;
 
+import dev.jkbuild.jdk.HostPlatform;
+
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -10,7 +12,6 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Set;
 
 /**
@@ -50,8 +51,8 @@ public final class ToolLauncher {
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING);
 
-        Path launcher = binDir.resolve(env.binName() + (isWindows() ? ".cmd" : ""));
-        String script = isWindows()
+        Path launcher = binDir.resolve(env.binName() + (HostPlatform.isWindows() ? ".cmd" : ""));
+        String script = HostPlatform.isWindows()
                 ? renderWindowsLauncher(env, javaHome)
                 : renderPosixLauncher(env, javaHome);
         Files.writeString(launcher, script, StandardCharsets.UTF_8,
@@ -76,12 +77,12 @@ public final class ToolLauncher {
     }
 
     private static Path javaBinary(Path javaHome) {
-        String exe = isWindows() ? "java.exe" : "java";
+        String exe = HostPlatform.isWindows() ? "java.exe" : "java";
         return javaHome.resolve("bin").resolve(exe);
     }
 
     private static String joinClasspath(List<Path> classpath) {
-        String sep = isWindows() ? ";" : ":";
+        String sep = HostPlatform.isWindows() ? ";" : ":";
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < classpath.size(); i++) {
             if (i > 0) sb.append(sep);
@@ -160,7 +161,7 @@ public final class ToolLauncher {
     }
 
     private static void markExecutable(Path file) {
-        if (isWindows()) return;
+        if (HostPlatform.isWindows()) return;
         try {
             Set<PosixFilePermission> perms = EnumSet.copyOf(Files.getPosixFilePermissions(file));
             perms.add(PosixFilePermission.OWNER_EXECUTE);
@@ -172,7 +173,4 @@ public final class ToolLauncher {
         }
     }
 
-    private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
-    }
 }

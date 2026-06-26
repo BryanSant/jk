@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerProcess;
 
@@ -72,7 +73,7 @@ public final class WorkerJavac {
             // Fork the java-compiler worker under the project JDK. It's a thin,
             // JDK-only plugin (the compile classpath travels in the spec, not on the
             // worker JVM classpath), so its own jar is the whole classpath.
-            boolean win = System.getProperty("os.name", "").toLowerCase().contains("win");
+            boolean win = HostPlatform.isWindows();
             Path javaExe = req.javaHome().resolve("bin").resolve(win ? "java.exe" : "java");
             int exit = dev.jkbuild.worker.PluginLoader.run(
                     javaExe, req.workerJar().toString(),

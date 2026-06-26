@@ -2,6 +2,7 @@
 package dev.jkbuild.test;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
@@ -14,7 +15,6 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedDeque;
@@ -369,7 +369,7 @@ public final class JUnitLauncher {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+        return HostPlatform.isWindows();
     }
 
     // -------- event aggregation -----------------------------------------

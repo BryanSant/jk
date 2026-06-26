@@ -4,6 +4,7 @@ package dev.jkbuild.jdk;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkThreads;
+import dev.jkbuild.util.PathUtil;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,7 +19,6 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
@@ -515,10 +515,6 @@ public final class JdkInstaller {
     }
 
     private static void deleteRecursively(Path root) {
-        try (var stream = Files.walk(root)) {
-            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (IOException ignored) {}
-            });
-        } catch (IOException ignored) {}
+        PathUtil.deleteRecursively(root);
     }
 }

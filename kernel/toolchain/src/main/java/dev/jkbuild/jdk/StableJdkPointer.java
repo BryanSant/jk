@@ -11,7 +11,6 @@ import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.util.Comparator;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Stream;
@@ -46,8 +45,7 @@ import java.util.stream.Stream;
  */
 public final class StableJdkPointer {
 
-    private static final boolean WINDOWS =
-            System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
+    private static final boolean WINDOWS = HostPlatform.isWindows();
 
     private final Path jdksRoot;
 

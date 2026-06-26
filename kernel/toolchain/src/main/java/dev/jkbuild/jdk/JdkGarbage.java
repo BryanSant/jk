@@ -2,6 +2,7 @@
 package dev.jkbuild.jdk;
 
 import dev.jkbuild.util.JkDirs;
+import dev.jkbuild.util.PathUtil;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -9,10 +10,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.stream.Stream;
 
 /**
  * Deferred deletion of superseded JDK installs, recorded in
@@ -108,12 +107,6 @@ public final class JdkGarbage {
     }
 
     private static void deleteRecursively(Path root) {
-        try (Stream<Path> walk = Files.walk(root)) {
-            walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (IOException ignored) {}
-            });
-        } catch (IOException ignored) {
-            // Locked or vanished mid-walk — leave it for the next drain.
-        }
+        PathUtil.deleteRecursively(root);
     }
 }

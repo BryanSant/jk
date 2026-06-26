@@ -3,6 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
@@ -231,6 +232,6 @@ public final class FormatCommand implements CliCommand {
     }
 
     private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase().contains("win");
+        return HostPlatform.isWindows();
     }
 }
