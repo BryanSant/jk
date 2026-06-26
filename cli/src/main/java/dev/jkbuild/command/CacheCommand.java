@@ -12,16 +12,19 @@ import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.resolver.Versions;
 import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
+import java.io.PrintStream;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 
-/**
- * {@code jk cache} — manage the on-disk cache at {@code $JK_CACHE_DIR}.
- */
+/** {@code jk cache} — manage the on-disk cache at {@code $JK_CACHE_DIR}. */
 public final class CacheCommand implements CliCommand {
 
     @Override
@@ -99,7 +102,9 @@ public final class CacheCommand implements CliCommand {
         return String.format("%.1f %s", v, units[unit]);
     }
 
-    /** Compact size for tight table cells: {@code 545.3M}, {@code 30.8M}, {@code 1.2G} (1024-based). */
+    /**
+     * Compact size for tight table cells: {@code 545.3M}, {@code 30.8M}, {@code 1.2G} (1024-based).
+     */
     static String fmtSize(long bytes) {
         if (bytes < 1024) return bytes + "B";
         String units = "KMGT";
@@ -256,9 +261,18 @@ public final class CacheCommand implements CliCommand {
         private static String metricRow(String[] r, int[] w) {
             String bar = Theme.colorize("│", Theme.active().darkGray());
             return bar
-                    + " " + Theme.colorize(padLeft(r[0], w[0]), Theme.active().brightWhite()) + " " + bar
-                    + " " + padRight(r[1], w[1]) + " " + bar
-                    + " " + padRight(r[2], w[2]) + " " + bar;
+                    + " "
+                    + Theme.colorize(padLeft(r[0], w[0]), Theme.active().brightWhite())
+                    + " "
+                    + bar
+                    + " "
+                    + padRight(r[1], w[1])
+                    + " "
+                    + bar
+                    + " "
+                    + padRight(r[2], w[2])
+                    + " "
+                    + bar;
         }
 
         /** Full-width "Utilization <bar> NN%" row. */
@@ -338,7 +352,9 @@ public final class CacheCommand implements CliCommand {
                 versionCount += versions.size();
                 String key = m.moduleKey();
                 String gap = " ".repeat(Math.max(0, keyWidth - key.length()));
-                System.out.println(Coords.module(key) + gap + "  "
+                System.out.println(Coords.module(key)
+                        + gap
+                        + "  "
                         + String.join(
                                 ", ", versions.stream().map(Coords::version).toList()));
             }
@@ -410,24 +426,21 @@ public final class CacheCommand implements CliCommand {
                 return 0;
             }
 
-            java.nio.channels.FileChannel lockChan = null;
-            java.nio.channels.FileLock lock = null;
-            java.io.PrintStream originalOut = null, originalErr = null;
+            FileChannel lockChan = null;
+            FileLock lock = null;
+            PrintStream originalOut = null, originalErr = null;
             if (background) {
                 Files.createDirectories(root);
                 Path lockFile = root.resolve(".prune.lock");
-                lockChan = java.nio.channels.FileChannel.open(
-                        lockFile, java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.WRITE);
+                lockChan = FileChannel.open(lockFile, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
                 lock = lockChan.tryLock();
                 if (lock == null) {
                     lockChan.close();
                     return 0;
                 }
                 Path logFile = root.resolve(".prune-log");
-                var logStream = new java.io.PrintStream(java.nio.file.Files.newOutputStream(
-                        logFile,
-                        java.nio.file.StandardOpenOption.CREATE,
-                        java.nio.file.StandardOpenOption.TRUNCATE_EXISTING));
+                var logStream = new PrintStream(Files.newOutputStream(
+                        logFile, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING));
                 originalOut = System.out;
                 originalErr = System.err;
                 System.setOut(logStream);
@@ -458,6 +471,8 @@ public final class CacheCommand implements CliCommand {
                     }
                 }
                 var runLogReport = dev.jkbuild.task.RunLogGc.sweep(root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
+                var formatStampReport =
+                        dev.jkbuild.task.FormatStampGc.sweep(root, dev.jkbuild.task.FormatStampGc.DEFAULT_TTL, dryRun);
                 var timingsReport = dev.jkbuild.runtime.PhaseTimings.prune(
                         root,
                         dev.jkbuild.runtime.PhaseTimings.Limits.resolve(
@@ -511,6 +526,10 @@ public final class CacheCommand implements CliCommand {
                         fmtBytes(tempsBytes),
                         fmtCount(runLogReport.deleted()),
                         fmtBytes(runLogReport.freedBytes()));
+                if (formatStampReport.deleted() > 0)
+                    System.out.printf(
+                            ", format-stamps %s (%s)",
+                            fmtCount(formatStampReport.deleted()), fmtBytes(formatStampReport.freedBytes()));
                 if (cacheDir == null)
                     System.out.printf(", tmp %s (%s)", fmtCount(tmpReport.deleted()), fmtBytes(tmpReport.freedBytes()));
                 if (timingsReport.evictedByAge() + timingsReport.evictedBySize() > 0)
@@ -529,7 +548,8 @@ public final class CacheCommand implements CliCommand {
                             fmtCount(evictedCount), fmtBytes(evictedBytes), fmtBytes(budgetBytes));
                 System.out.println();
                 if (evictedReachable > 0)
-                    System.err.println("Warning: evicted " + evictedReachable
+                    System.err.println("Warning: evicted "
+                            + evictedReachable
                             + " reachable objects to fit the budget — consider raising --max-size.");
                 return 0;
             } finally {
@@ -538,7 +558,7 @@ public final class CacheCommand implements CliCommand {
                         Files.writeString(
                                 root.resolve(dev.jkbuild.task.CachePruneScheduler.LAST_PRUNED_FILE),
                                 Long.toString(System.currentTimeMillis()),
-                                java.nio.charset.StandardCharsets.UTF_8);
+                                StandardCharsets.UTF_8);
                     } catch (IOException ignored) {
                     }
                 }
