@@ -165,6 +165,14 @@ graalvmNative {
         // a version-mismatch warning on every startup. Initializing at build time
         // bakes the check into the image so it never runs at the user's terminal.
         buildArgs.add("--initialize-at-build-time=org.antlr")
+        // jline-native ships a resource-config with a broad "org/jline/nativ/.*"
+        // pattern that embeds ALL platform native libs (Windows DLLs, Linux/macOS/
+        // FreeBSD .so/.dylib for every arch) as image resources.  jk uses the FFM
+        // terminal provider exclusively; the JNI/JNA fallback (JLineNativeLoader,
+        // CLibrary, Kernel32, etc.) is reachable via jline-terminal's AbstractPty
+        // but never exercised at runtime.  Exclude those cross-platform binaries
+        // with -H:ExcludeResources so they are not baked into the image heap.
+        buildArgs.add("-H:ExcludeResources=org/jline/nativ/.*")
     }
 }
 
