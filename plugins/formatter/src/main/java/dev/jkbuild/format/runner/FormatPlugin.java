@@ -14,6 +14,9 @@ import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,25 +24,45 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Pattern;
+import org.openrewrite.ExecutionContext;
+import org.openrewrite.InMemoryExecutionContext;
+import org.openrewrite.Recipe;
+import org.openrewrite.RecipeRun;
+import org.openrewrite.Result;
+import org.openrewrite.SourceFile;
+import org.openrewrite.config.CompositeRecipe;
+import org.openrewrite.config.Environment;
+import org.openrewrite.config.YamlResourceLoader;
+import org.openrewrite.internal.InMemoryLargeSourceSet;
+import org.openrewrite.java.JavaParser;
+import org.openrewrite.java.ShortenFullyQualifiedTypeReferences;
 
 /**
- * The {@code jk-formatter} worker: formats Java/Kotlin sources through the
- * Spotless engine. The host forks it with a single spec-file path; the spec is
- * tab-delimited records:
+ * The {@code jk-formatter} worker: formats Java/Kotlin sources through an optional
+ * OpenRewrite pass (import optimisation) followed by the Spotless engine. The host
+ * forks it with a single spec-file path; the spec is tab-delimited records:
  *
  * <pre>{@code
- *   mode    <apply|check>
- *   java    <style>  <version>  <jarPathsJoinedByPathSeparator>
- *   kotlin  <style>  <version>  <maxWidth>  <jarPaths>
- *   f       <java|kotlin>  <absoluteFilePath>
+ *   mode          <apply|check>
+ *   java          <style>  <version>  <jarPathsJoinedByPathSeparator>
+ *   kotlin        <style>  <version>  <maxWidth>  <jarPaths>
+ *   rewrite-flags optimize-imports=<bool>  static-imports=<bool>
+ *   rewrite-config  <absolutePathToConfigFile>   (optional)
+ *   f             <java|kotlin>  <absoluteFilePath>
  * }</pre>
  *
- * <p>The formatter implementation jars (palantir-java-format, ktfmt) are
- * resolved by jk and passed in — the worker serves them to Spotless via a
- * classpath {@link Provisioner}, so nothing is downloaded here. Emits one NDJSON
- * record per file plus a final summary, all prefixed with {@code ##JKFMT:}.
+ * <p>The OpenRewrite pass runs first (when requested), writing changes to disk in
+ * apply mode or detecting would-be changes in check mode. Spotless then reads the
+ * (possibly OpenRewrite-modified) files for its own formatting step.
+ *
+ * <p>The formatter implementation jars (palantir-java-format, ktfmt) are resolved by
+ * jk and passed in — the worker serves them to Spotless via a classpath
+ * {@link Provisioner}, so nothing is downloaded here. OpenRewrite's engine is bundled
+ * directly in this fat JAR. Emits one NDJSON record per file plus a final summary, all
+ * prefixed with {@code ##JKFMT:}.
  */
 public final class FormatPlugin implements Plugin {
 
@@ -55,6 +78,9 @@ public final class FormatPlugin implements Plugin {
             return 2;
         }
         Spec spec = Spec.parse(Path.of(args.get(0)));
+
+        // Build the OpenRewrite recipe once (null when no rewrite is requested).
+        Recipe rewriteRecipe = spec.hasRewrite() ? buildRecipe(spec) : null;
 
         Formatter javaFmt = spec.javaJars.isEmpty()
                 ? null
@@ -89,17 +115,26 @@ public final class FormatPlugin implements Plugin {
                     continue;
                 }
                 try {
+                    // --- OpenRewrite pass (Java only) --------------------------------
+                    boolean rewriteChanged = false;
+                    if (!ref.kotlin && rewriteRecipe != null) {
+                        rewriteChanged = applyRewrite(rewriteRecipe, ref.file, spec.apply);
+                    }
+
+                    // --- Spotless pass -----------------------------------------------
                     DirtyState state = DirtyState.of(fmt, ref.file);
-                    if (state.isClean()) {
-                        clean++;
-                        emitFile(out, ref.file, "clean", null);
-                    } else if (state.didNotConverge()) {
+                    boolean spotlessChanged = !state.isClean() && !state.didNotConverge();
+
+                    if (state.didNotConverge()) {
                         errors++;
                         emitFile(out, ref.file, "error", "formatter did not converge");
-                    } else {
+                    } else if (rewriteChanged || spotlessChanged) {
                         changed++;
-                        if (spec.apply) state.writeCanonicalTo(ref.file);
+                        if (spec.apply && spotlessChanged) state.writeCanonicalTo(ref.file);
                         emitFile(out, ref.file, "changed", null);
+                    } else {
+                        clean++;
+                        emitFile(out, ref.file, "clean", null);
                     }
                 } catch (Exception e) {
                     errors++;
@@ -118,6 +153,73 @@ public final class FormatPlugin implements Plugin {
         return 0;
     }
 
+    // -------------------------------------------------------------------------
+    // OpenRewrite helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Assemble the composite OpenRewrite recipe from flags + optional YAML config.
+     * Flag-driven built-ins come first; the config file layers additional recipes on
+     * top. Returns a single Recipe that represents all active transformations, or
+     * {@code null} if nothing is active.
+     */
+    private static Recipe buildRecipe(Spec spec) throws IOException {
+        List<Recipe> recipes = new ArrayList<>();
+        if (spec.optimizeImports) recipes.add(new ShortenFullyQualifiedTypeReferences());
+        // UseStaticImport requires a methodPattern and has no default; patterns must be
+        // declared in the --rewrite-config YAML (e.g. "org.junit.jupiter.api.Assertions *").
+        // The --static-imports flag signals intent; the actual recipes come from the config.
+
+        if (spec.rewriteConfigFile != null) {
+            try (InputStream is = new FileInputStream(spec.rewriteConfigFile)) {
+                Environment env = Environment.builder()
+                        .load(new YamlResourceLoader(is, spec.rewriteConfigFile.toURI(), new Properties()))
+                        .build();
+                env.listRecipes().forEach(d -> recipes.add(env.activateRecipes(d.getName())));
+            }
+        }
+        if (recipes.isEmpty()) return null;
+        return recipes.size() == 1 ? recipes.get(0) : new CompositeRecipe(recipes);
+    }
+
+    /**
+     * Run the recipe against a single Java file. In apply mode the file is written
+     * back if the recipe produced changes. Returns whether the file was (or would be)
+     * changed.
+     */
+    private static boolean applyRewrite(Recipe recipe, File file, boolean apply) throws IOException {
+        ExecutionContext ctx = new InMemoryExecutionContext(e -> {});
+        List<SourceFile> parsed;
+        try {
+            parsed = JavaParser.fromJavaVersion()
+                    .logCompilationWarningsAndErrors(false)
+                    .build()
+                    .parse(List.of(file.toPath()), file.toPath().getParent(), ctx)
+                    .toList();
+        } catch (Exception e) {
+            // Unparseable file (unnamed class, syntax error, …) — skip silently.
+            return false;
+        }
+        if (parsed.isEmpty()) return false;
+
+        RecipeRun run = recipe.run(new InMemoryLargeSourceSet(parsed), ctx);
+        List<Result> results = run.getChangeset().getAllResults();
+        if (results.isEmpty()) return false;
+
+        if (apply) {
+            for (Result result : results) {
+                if (result.getAfter() != null) {
+                    Files.writeString(file.toPath(), result.getAfter().printAll(), StandardCharsets.UTF_8);
+                }
+            }
+        }
+        return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // Spotless helpers
+    // -------------------------------------------------------------------------
+
     private static void emitFile(ProtocolWriter out, File file, String status, String msg) {
         StringBuilder sb = new StringBuilder("{\"t\":\"file\",\"path\":")
                 .append(Ndjson.quote(file.getAbsolutePath()))
@@ -129,8 +231,8 @@ public final class FormatPlugin implements Plugin {
 
     /**
      * The Java step for the chosen style: {@code palantir} → palantir-java-format
-     * (PALANTIR); {@code google}/{@code aosp} → google-java-format (GOOGLE/AOSP).
-     * The version is whatever jk resolved and put in the spec.
+     * (PALANTIR); {@code google}/{@code aosp} → google-java-format (GOOGLE/AOSP). The
+     * version is whatever jk resolved and put in the spec.
      */
     private static FormatterStep javaStep(Spec spec) {
         Provisioner prov = provisioner(spec.javaJars);
@@ -165,7 +267,7 @@ public final class FormatPlugin implements Plugin {
             Pattern.compile("\\b(class|interface|enum|record)\\s+\\w|@interface\\s+\\w");
 
     /** True if the file has no top-level type declaration (Java 21+ unnamed class). */
-    private static boolean isUnnamedClass(File file) throws java.io.IOException {
+    private static boolean isUnnamedClass(File file) throws IOException {
         String src = Files.readString(file.toPath(), StandardCharsets.UTF_8);
         // Strip line and block comments before checking for type declarations.
         String stripped = src.replaceAll("//[^\n]*", "").replaceAll("(?s)/\\*.*?\\*/", " ");
@@ -174,7 +276,7 @@ public final class FormatPlugin implements Plugin {
 
     private record FileRef(boolean kotlin, File file) {}
 
-    /** Parsed spec: modes, per-language style/version/jars, and the file list. */
+    /** Parsed spec: modes, per-language style/version/jars, rewrite flags, and the file list. */
     private static final class Spec {
         boolean apply = true;
         String javaStyle = "palantir";
@@ -184,9 +286,17 @@ public final class FormatPlugin implements Plugin {
         String kotlinVersion = KtfmtStep.defaultVersion();
         int kotlinMaxWidth = 0;
         Set<File> kotlinJars = new LinkedHashSet<>();
+        // OpenRewrite fields
+        boolean optimizeImports = false;
+        boolean staticImports = false;
+        File rewriteConfigFile = null;
         final List<FileRef> files = new ArrayList<>();
 
-        static Spec parse(Path specFile) throws java.io.IOException {
+        boolean hasRewrite() {
+            return optimizeImports || staticImports || rewriteConfigFile != null;
+        }
+
+        static Spec parse(Path specFile) throws IOException {
             Spec s = new Spec();
             for (String line : Files.readAllLines(specFile, StandardCharsets.UTF_8)) {
                 if (line.isBlank()) continue;
@@ -204,6 +314,20 @@ public final class FormatPlugin implements Plugin {
                         s.kotlinMaxWidth = Integer.parseInt(p[3]);
                         s.kotlinJars = jars(p[4]);
                     }
+                    case "rewrite-flags" -> {
+                        // tokens: "optimize-imports=<bool>" "static-imports=<bool>"
+                        for (int i = 1; i < p.length; i++) {
+                            String[] kv = p[i].split("=", 2);
+                            if (kv.length == 2) {
+                                boolean val = Boolean.parseBoolean(kv[1]);
+                                switch (kv[0]) {
+                                    case "optimize-imports" -> s.optimizeImports = val;
+                                    case "static-imports" -> s.staticImports = val;
+                                }
+                            }
+                        }
+                    }
+                    case "rewrite-config" -> s.rewriteConfigFile = new File(p[1]);
                     case "f" -> s.files.add(new FileRef("kotlin".equals(p[1]), new File(p[2])));
                     default -> {
                         /* ignore unknown records for forward-compat */

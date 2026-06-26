@@ -35,12 +35,16 @@ final class FormatStyles {
 
     private static Map<String, Resolved> buildAliases() {
         var m = new LinkedHashMap<String, Resolved>();
-        m.put("standard", new Resolved("palantir", "kotlinlang"));
+        // Aliases carry style names only; boolean flags are resolved separately.
+        m.put("standard", new Resolved("palantir", "kotlinlang", DEFAULT_OPTIMIZE_IMPORTS, DEFAULT_STATIC_IMPORTS));
         return Map.copyOf(m);
     }
 
-    /** The chosen concrete styles for each language. */
-    record Resolved(String java, String kotlin) {}
+    static final boolean DEFAULT_OPTIMIZE_IMPORTS = true;
+    static final boolean DEFAULT_STATIC_IMPORTS = false;
+
+    /** The chosen concrete styles and OpenRewrite flags for each language. */
+    record Resolved(String java, String kotlin, boolean optimizeImports, boolean staticImports) {}
 
     /**
      * Resolve the effective styles from (CLI flags) + (jk.toml {@code [format]}).
@@ -49,7 +53,13 @@ final class FormatStyles {
      *
      * @throws IllegalArgumentException on an unknown style or alias (message is user-facing)
      */
-    static Resolved resolve(String cliJava, String cliKotlin, String cliAlias, JkBuild.FormatConfig cfg) {
+    static Resolved resolve(
+            String cliJava,
+            String cliKotlin,
+            String cliAlias,
+            Boolean cliOptimizeImports,
+            Boolean cliStaticImports,
+            JkBuild.FormatConfig cfg) {
         JkBuild.FormatConfig fmt = cfg == null ? JkBuild.FormatConfig.EMPTY : cfg;
         Resolved cliAliasPair = alias(cliAlias, "--style");
         Resolved tomlAliasPair = alias(fmt.style(), "format.style");
@@ -69,7 +79,19 @@ final class FormatStyles {
 
         validate(java, JAVA_STYLES, "java");
         validate(kotlin, KOTLIN_STYLES, "kotlin");
-        return new Resolved(java, kotlin);
+
+        // Flag precedence: CLI → env var (caller-resolved) → jk.toml → default.
+        boolean optimizeImports = firstNonNullBool(cliOptimizeImports, fmt.optimizeImports(), DEFAULT_OPTIMIZE_IMPORTS);
+        boolean staticImports = firstNonNullBool(cliStaticImports, fmt.staticImports(), DEFAULT_STATIC_IMPORTS);
+
+        return new Resolved(java, kotlin, optimizeImports, staticImports);
+    }
+
+    private static boolean firstNonNullBool(Boolean... vals) {
+        for (Boolean v : vals) {
+            if (v != null) return v;
+        }
+        return false; // unreachable: last arg is always a non-null default
     }
 
     private static Resolved alias(String name, String source) {

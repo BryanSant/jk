@@ -19,6 +19,7 @@ maven-artifact = "3.9.16"
 picocli = "4.7.7"
 sigstore = "2.1.0"
 spdx-java = "2.0.3"
+openrewrite = "8.56.1"
 slf4j = "2.0.16"
 spotless = "4.6.2"
 tomlj = "1.1.1"
@@ -61,6 +62,8 @@ kotlin-stdlib          = { module = "org.jetbrains.kotlin:kotlin-stdlib",       
 
 # Format worker (Spotless engine — the formatter impls are resolved at runtime
 # via jk's own resolver, NOT bundled, so only spotless-lib is a compile dep).
+openrewrite-java       = { module = "org.openrewrite:rewrite-java",                version.ref = "openrewrite" }
+openrewrite-java21     = { module = "org.openrewrite:rewrite-java-21",             version.ref = "openrewrite" }
 spotless-lib           = { module = "com.diffplug.spotless:spotless-lib",           version.ref = "spotless" }
 # spotless-lib declares slf4j-api as compileOnly ("zero runtime deps"), so the
 # worker bundles slf4j-api + a no-op binding to satisfy it at runtime.
