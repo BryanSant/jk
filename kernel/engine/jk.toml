@@ -24,12 +24,9 @@ junit-platform-launcher = { group = "org.junit.platform", name = "junit-platform
 
 # Self-host: engine's tests fork jk's own worker jars. These workers are
 # Gradle-only (no jk.toml), so jk build can't build them as modules — it reuses
-# the RUNNING jk's worker identity instead:
+# the running jk's worker identity instead.
 #  - test-worker-jars: GitSource{Resolution,Materializer}Test fork the git-client
 #    worker, injected as -Djk.git-client.worker.jar (located from the running jk's
 #    repos/local/ store; requires `./gradlew :git-client:installLocal`).
-# [build.embed-sha] is removed: SHA-embedding was the old CAS-by-hash location
-# mechanism. WorkerJar now uses coordinate-based lookup (repos/local/ then
-# repos/central/), so no SHA resources need to be baked into the engine JAR.
 [build]
 test-worker-jars = ["git-client"]

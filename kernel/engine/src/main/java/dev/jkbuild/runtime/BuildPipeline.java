@@ -946,7 +946,7 @@ public final class BuildPipeline {
         Phase runTests = Phase.builder("run-tests")
                 .label("Testing")
                 .kind(PhaseKind.IO)
-                .requires("compile-test", "copy-resources", "embed-sha")
+                .requires("compile-test", "copy-resources")
                 .weight(() -> plan.get().runTests())
                 .scope(in.estimatedTestCount())
                 .execute(ctx -> {
@@ -1072,9 +1072,7 @@ public final class BuildPipeline {
                 .label("Packaging")
                 .kind(PhaseKind.CPU)
                 .requires(
-                        in.skipTests()
-                                ? new String[] {"copy-resources", "embed-sha"}
-                                : new String[] {"copy-resources", "embed-sha", "run-tests"})
+                        in.skipTests() ? new String[] {"copy-resources"} : new String[] {"copy-resources", "run-tests"})
                 .weight(() -> plan.get().pkg())
                 .scope(1)
                 .execute(ctx -> {
@@ -1205,66 +1203,6 @@ public final class BuildPipeline {
                 })
                 .build();
 
-        // ---- embed-sha --------------------------------------------------
-        // Pin sibling worker jars: hash each [build.embed-sha] module's output
-        // jar and write META-INF/<basename>-sha256.txt into this module's classes,
-        // so the resource ships in the jar and is on the test classpath. Sibling
-        // build-order is guaranteed by the order-after edges those entries imply
-        // (BuildCommand.topoSortModules). No-op when the table is empty. Runs
-        // IN-PROCESS — deliberately not a worker, which would need its own sha
-        // resource and recurse.
-        //
-        // An unknown module (not in the workspace) is a config typo → fail. A
-        // module that exists but isn't built yet is skipped, not fatal: a SCOPED
-        // build (jk build -C this-module) doesn't build the order-after siblings,
-        // so their jars are legitimately absent — only a full workspace build
-        // (where order-after runs them first) embeds every sha.
-        Phase embedSha = Phase.builder("embed-sha")
-                .label("Embedding SHAs")
-                .kind(PhaseKind.CPU)
-                .requires("copy-resources")
-                .weight(() -> plan.get().fullyCached() ? 0 : W_RESOURCES)
-                .scope(1)
-                .execute(ctx -> {
-                    Map<String, String> embed = ctx.require(PROJECT).build().embedSha();
-                    if (embed.isEmpty()) {
-                        ctx.label("none");
-                        ctx.progress(1);
-                        return;
-                    }
-                    Path classes = ctx.require(MAIN_CLASSES);
-                    Map<String, Path> jarByModule = siblingMainJars(in.dir());
-                    Path metaInf = classes.resolve("META-INF");
-                    Files.createDirectories(metaInf);
-                    int written = 0;
-                    int skipped = 0;
-                    for (Map.Entry<String, String> e : embed.entrySet()) {
-                        String key = e.getKey(); // sha-resource basename, e.g. jk-kotlin-compiler
-                        String module = e.getValue(); // workspace module name
-                        Path jar = jarByModule.get(module);
-                        boolean built = jar != null && Files.exists(jar);
-                        var worker = dev.jkbuild.worker.WorkerJar.byArtifactId(key);
-                        String sha;
-                        if (built) {
-                            sha = dev.jkbuild.util.Hashing.sha256Hex(jar);
-                        } else if (jar != null) {
-                            skipped++;
-                            continue; // declared module, not built in this (scoped) run
-                        } else {
-                            ctx.error("embed-sha", "'" + module + "' is not a workspace module or a known worker");
-                            throw new RuntimeException("embed-sha: unknown '" + module + "'");
-                        }
-                        Files.writeString(metaInf.resolve(key + "-sha256.txt"), sha);
-                        written++;
-                    }
-                    ctx.label(
-                            skipped == 0
-                                    ? "embedded " + written + " SHA" + (written == 1 ? "" : "s")
-                                    : "embedded " + written + ", skipped " + skipped + " unbuilt");
-                    ctx.progress(1);
-                })
-                .build();
-
         Goal.Builder b =
                 Goal.builder("build").addPhase(parseBuild).addPhase(syncDeps).addPhase(ensureJdk);
         // Workspace root with no sources: validate jk.toml + sync deps, nothing more.
@@ -1290,7 +1228,6 @@ public final class BuildPipeline {
             return b;
         }
         b.addPhase(copyResources);
-        b.addPhase(embedSha);
         if (in.testOnly() || !in.skipTests()) {
             b.addPhase(compileTest).addPhase(runTests);
         }
@@ -1786,8 +1723,8 @@ public final class BuildPipeline {
 
     /**
      * Map each workspace sibling to its main output jar, keyed by both project name and {@code
-     * group:artifact} coord. Used by the {@code embed-sha} phase to find the jar a {@code
-     * [build.embed-sha]} entry names. Empty when this module isn't in a workspace.
+     * group:artifact} coord. Used by {@link #workerJarProps} to locate {@code test-worker-jars}
+     * entries. Empty when this module isn't in a workspace.
      */
     static Map<String, Path> siblingMainJars(Path moduleDir) throws IOException {
         Map<String, Path> out = new LinkedHashMap<>();

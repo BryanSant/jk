@@ -520,26 +520,17 @@ public record JkBuild(
      * must build before this one, <em>without</em> adding a compile/test/runtime edge — the
      * "build-order-only dependency" jk otherwise can't express.
      *
-     * <p>{@code embedSha} ({@code [build.embed-sha]}) maps a resource basename to a workspace module:
-     * the build hashes that module's output jar and writes the digest to {@code
-     * META-INF/<basename>-sha256.txt} in this module's classes. Each value is implicitly an {@code
-     * orderAfter} entry — you must build a sibling before you can hash its jar (see {@link
-     * #allOrderAfter()}). This is how the engine pins the first-party worker jars it locates at
-     * runtime.
-     *
      * <p>{@code testWorkerJars} ({@code [build.test-worker-jars]}) lists workspace modules whose
      * built worker jar must be handed to this module's test JVM (as {@code -Djk.<worker>.worker.jar})
      * so tests that fork that worker locate it by path. Also implicitly {@code orderAfter} (the
      * worker must be built first).
      */
-    public record Build(
-            List<String> orderAfter, Map<String, String> embedSha, List<String> testWorkerJars, boolean lint) {
+    public record Build(List<String> orderAfter, List<String> testWorkerJars, boolean lint) {
 
-        public static final Build EMPTY = new Build(List.of(), Map.of(), List.of(), true);
+        public static final Build EMPTY = new Build(List.of(), List.of(), true);
 
         public Build {
             orderAfter = orderAfter == null ? List.of() : List.copyOf(orderAfter);
-            embedSha = embedSha == null ? Map.of() : Map.copyOf(embedSha);
             testWorkerJars = testWorkerJars == null ? List.of() : List.copyOf(testWorkerJars);
         }
 
@@ -548,19 +539,18 @@ public record JkBuild(
          * surfaces javac deprecation/unchecked warnings. Set {@code [build] lint = false} in jk.toml to
          * suppress that default.
          */
-        public Build(List<String> orderAfter, Map<String, String> embedSha, List<String> testWorkerJars) {
-            this(orderAfter, embedSha, testWorkerJars, true);
+        public Build(List<String> orderAfter, List<String> testWorkerJars) {
+            this(orderAfter, testWorkerJars, true);
         }
 
         /**
-         * All build-order prerequisites: explicit {@code orderAfter} plus every {@code embedSha} source
-         * and {@code testWorkerJars} module (a sibling must be built before you can hash its jar or
-         * hand it to a test). De-duplicated, order preserved.
+         * All build-order prerequisites: explicit {@code orderAfter} plus every {@code testWorkerJars}
+         * module (a sibling must be built before its jar can be handed to a test). De-duplicated,
+         * order preserved.
          */
         public List<String> allOrderAfter() {
-            if (embedSha.isEmpty() && testWorkerJars.isEmpty()) return orderAfter;
+            if (testWorkerJars.isEmpty()) return orderAfter;
             var all = new java.util.LinkedHashSet<>(orderAfter);
-            all.addAll(embedSha.values());
             all.addAll(testWorkerJars);
             return List.copyOf(all);
         }

@@ -950,9 +950,9 @@ public final class JkBuildParser {
      * <ul>
      *   <li>{@code order-after} — workspace modules (by project name or {@code group:artifact}) that
      *       must build before this one, with no classpath/lockfile edge.
-     *   <li>{@code [build.embed-sha]} — a {@code <resource-basename> = <module>} map; the build
-     *       writes {@code META-INF/<basename>-sha256.txt} = the SHA-256 of {@code <module>}'s output
-     *       jar.
+     *   <li>{@code test-worker-jars} — workspace modules whose built worker jar is handed to this
+     *       module's test JVM via {@code -Djk.<worker>.worker.jar}.
+     *   <li>{@code lint} — defaults {@code true}; set {@code false} to suppress javac lint flags.
      * </ul>
      *
      * Absent table/keys yield {@link JkBuild.Build#EMPTY}.
@@ -970,16 +970,6 @@ public final class JkBuildParser {
                 if (!s.isBlank()) orderAfter.add(s);
             }
         }
-        Map<String, String> embedSha = new LinkedHashMap<>();
-        TomlTable embed = build.getTable("embed-sha");
-        if (embed != null) {
-            for (String key : embed.keySet()) {
-                if (!(embed.get(key) instanceof String module))
-                    throw new JkBuildParseException(
-                            "[build.embed-sha]." + key + " must be a string (the workspace module to hash)");
-                embedSha.put(key, module);
-            }
-        }
         List<String> testWorkerJars = new ArrayList<>();
         TomlArray twj = build.getArray("test-worker-jars");
         if (twj != null) {
@@ -993,7 +983,7 @@ public final class JkBuildParser {
         // `lint` defaults on (surface deprecation/unchecked); `lint = false`
         // suppresses jk's default javac lint flags for users who don't want it.
         boolean lint = !Boolean.FALSE.equals(build.getBoolean("lint"));
-        return new JkBuild.Build(orderAfter, embedSha, testWorkerJars, lint);
+        return new JkBuild.Build(orderAfter, testWorkerJars, lint);
     }
 
     private static final java.util.Set<String> PLUGIN_RESERVED = java.util.Set.of("group", "name", "version");
