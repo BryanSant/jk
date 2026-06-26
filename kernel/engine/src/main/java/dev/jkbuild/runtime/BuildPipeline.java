@@ -1438,14 +1438,6 @@ public final class BuildPipeline {
     }
 
     /**
-     * Add the consumer's composite ({@code path} / branch-git) dependency jars +
-     * their external transitive deps to {@code cp} — <em>locate-only</em>: the
-     * build driver ({@code BuildGraph} in the CLI) has already built every
-     * composite unit via the real pipeline, so this just finds the jars (jk's
-     * includeBuild analog). Returns any not-yet-built coords as "missing", handled
-     * like {@code WorkspaceClasspath.missingSiblingJars}.
-     */
-    /**
      * Warn (best-effort) when the consumer and a composite ({@code path}/branch-git)
      * dependency disagree on a shared external coordinate's version — both jars are
      * on the classpath, deduped by path not coordinate, since each project resolves
@@ -1643,18 +1635,6 @@ public final class BuildPipeline {
     }
 
     /**
-     * {@code jk.<worker>.worker.jar} → built jar path for each module named in this
-     * module's {@code [build.test-worker-jars]}, handed to the test JVM so a test that
-     * forks that worker locates it by path instead of CAS-by-sha. Per-module by design:
-     * {@code engine} declares only {@code git-client} (its {@code KotlinWorkerSetupTest}
-     * deliberately exercises the CAS path, so {@code kotlin} must stay unset), while
-     * {@code cli} declares the workers its publish/import/compile tests fork. The built
-     * sibling jars exist because the declaration also implies an order-after edge
-     * ({@link JkBuild.Build#allOrderAfter()}); a module with no built (or no shadow,
-     * for fat workers) jar is silently skipped. Module name → property comes from the
-     * {@link dev.jkbuild.worker.WorkerJar} registry (artifactId is {@code jk-<module>}).
-     */
-    /**
      * Packaging cache (mirrors the compile {@link ActionCache} path, for artifacts).
      * Returns {@code true} when a cached artifact for {@code key} was hard-linked
      * back into {@code baseDir} — the caller then skips the (re)packaging work.
@@ -1696,12 +1676,6 @@ public final class BuildPipeline {
         return props;
     }
 
-    /**
-     * Toolchain / runner / forked-worker identity tokens for the test freshness
-     * key — so a jk-version, test-runner, or worker-jar change retests. The
-     * resolved JDK and dependency set are already covered by jk.lock's content,
-     * and a {@code --release} change recompiles main (caught via its output).
-     */
     /**
      * The run-tests stamp's identity tokens for {@code project} at {@code dir} —
      * the same set the build folds into its {@code TestStamp} key, exposed so
