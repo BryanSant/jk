@@ -27,7 +27,7 @@ public final class JdkUpdateShellCommand implements CliCommand {
 
     @Override public List<Opt> options() {
         return List.of(
-                Opt.value("<shell>", "Force a specific shell: bash | zsh | fish. Default: detected from $SHELL.", "--shell"),
+                Opt.value("<shell>", "Shell override: bash | zsh | fish. Default: detected from $SHELL.", "--shell"),
                 Opt.value("<dir>", "Override the user home root (for tests). Default: $HOME.", "--home").hide(),
                 Opt.value("<dir>", "Override the bin directory the export line points at.", "--bin-dir").hide());
     }

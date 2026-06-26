@@ -648,7 +648,7 @@ public final class BuildPipeline {
 
         // ---- compile-test -----------------------------------------------
         Phase compileTest = Phase.builder("compile-test")
-                .label("Test compile")
+                .label("Test Compile")
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile, "sync-deps")
                 .weight(() -> plan.get().compileTest())

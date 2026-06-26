@@ -52,7 +52,7 @@ public final class ToolInstallCommand implements CliCommand {
     @Override public List<Opt> options() {
         return List.of(
                 Opt.value("<name>", "Launcher name under $JK_BIN_DIR. Default: the artifact id.", "--bin"),
-                Opt.value("<class>", "Override the Main-Class to exec (otherwise read from the jar's manifest).", "--main"),
+                Opt.value("<class>", "Override the Main-Class (default: read from the jar manifest).", "--main"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the tool state directory.", "--state-dir").hide(),
                 Opt.value("<dir>", "Override the bin directory.", "--bin-dir").hide(),

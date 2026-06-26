@@ -132,7 +132,7 @@ public final class LockCommand implements CliCommand {
         JkBuild effectiveRoot = applyWorkspaceContextIfModule(dir, root);
 
         // Lock the current directory (root or standalone project).
-        int result = lockSingleProject(dir, effectiveRoot, cache, "Dependency Lock");
+        int result = lockSingleProject(dir, effectiveRoot, cache, "Lock");
         if (result != 0) return result;
 
         // Cascade: lock each declared workspace module in declaration order.

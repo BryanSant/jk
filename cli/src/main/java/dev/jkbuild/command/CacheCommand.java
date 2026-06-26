@@ -280,8 +280,8 @@ public final class CacheCommand implements CliCommand {
                     Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                     Opt.value("<days>", "Prune action-cache entries with mtime older than N days. Default: 30.", "--older-than"),
                     Opt.flag("Print what would be removed; touch nothing.", "--dry-run"),
-                    Opt.flag("After expiring stale records, mark-and-sweep unreferenced objects out of the CAS pool.", "--sweep"),
-                    Opt.value("<size>", "After sweep, evict oldest-accessed objects until the CAS pool is under <size> (e.g. 20G, 500M). Forces --sweep.", "--max-size"),
+                    Opt.flag("Mark-and-sweep unreferenced CAS objects after expiring stale records.", "--sweep"),
+                    Opt.value("<size>", "Evict oldest CAS objects to <size> (e.g. 20G, 500M). Implies --sweep.", "--max-size"),
                     Opt.flag("Internal: opportunistic prune.", "--background").hide());
         }
 

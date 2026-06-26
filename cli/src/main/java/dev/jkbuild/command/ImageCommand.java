@@ -185,7 +185,7 @@ public final class ImageCommand implements CliCommand {
         builder.addPhase(imagePlan).addPhase(writeImage);
         Goal goal = builder.build();
 
-        ConsoleSpec spec = new ConsoleSpec("Image Build",
+        ConsoleSpec spec = new ConsoleSpec("Image",
                 r -> "Built image",
                 r -> "Image build failed");
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,

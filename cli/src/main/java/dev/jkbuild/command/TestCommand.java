@@ -45,7 +45,7 @@ public final class TestCommand implements CliCommand {
     @Override public String description() { return "Compile and run tests"; }
     @Override public List<Opt> options() {
         return List.of(
-                Opt.value("<name>", "Build profile to apply.", "--profile"),
+                Opt.value("<name>", "Apply a build profile. Default: auto (ci on CI).", "--profile"),
                 Opt.value("<N>", "Test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
                 Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
                 Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
@@ -103,7 +103,7 @@ public final class TestCommand implements CliCommand {
                 /* skipTests */ false, global.verbose, /* testOnly */ true);
         Goal goal = BuildPipeline.coreBuilder(inputs).build();
 
-        ConsoleSpec spec = new ConsoleSpec("Testing",
+        ConsoleSpec spec = new ConsoleSpec("Test",
                 r -> testSummary(goal, r),
                 r -> testFailureMessage(goal, r));
         GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
