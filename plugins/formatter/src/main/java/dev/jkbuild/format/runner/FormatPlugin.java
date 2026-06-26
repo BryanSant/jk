@@ -49,7 +49,7 @@ import org.openrewrite.java.ShortenFullyQualifiedTypeReferences;
  *   mode          <apply|check>
  *   java          <style>  <version>  <jarPathsJoinedByPathSeparator>
  *   kotlin        <style>  <version>  <maxWidth>  <jarPaths>
- *   rewrite-flags optimize-imports=<bool>  static-imports=<bool>
+ *   rewrite-flags optimize-imports=<bool>
  *   rewrite-config  <absolutePathToConfigFile>   (optional)
  *   f             <java|kotlin>  <absoluteFilePath>
  * }</pre>
@@ -166,9 +166,6 @@ public final class FormatPlugin implements Plugin {
     private static Recipe buildRecipe(Spec spec) throws IOException {
         List<Recipe> recipes = new ArrayList<>();
         if (spec.optimizeImports) recipes.add(new ShortenFullyQualifiedTypeReferences());
-        // UseStaticImport requires a methodPattern and has no default; patterns must be
-        // declared in the --rewrite-config YAML (e.g. "org.junit.jupiter.api.Assertions *").
-        // The --static-imports flag signals intent; the actual recipes come from the config.
 
         if (spec.rewriteConfigFile != null) {
             try (InputStream is = new FileInputStream(spec.rewriteConfigFile)) {
@@ -288,12 +285,11 @@ public final class FormatPlugin implements Plugin {
         Set<File> kotlinJars = new LinkedHashSet<>();
         // OpenRewrite fields
         boolean optimizeImports = false;
-        boolean staticImports = false;
         File rewriteConfigFile = null;
         final List<FileRef> files = new ArrayList<>();
 
         boolean hasRewrite() {
-            return optimizeImports || staticImports || rewriteConfigFile != null;
+            return optimizeImports || rewriteConfigFile != null;
         }
 
         static Spec parse(Path specFile) throws IOException {
@@ -315,15 +311,11 @@ public final class FormatPlugin implements Plugin {
                         s.kotlinJars = jars(p[4]);
                     }
                     case "rewrite-flags" -> {
-                        // tokens: "optimize-imports=<bool>" "static-imports=<bool>"
+                        // tokens: "optimize-imports=<bool>"
                         for (int i = 1; i < p.length; i++) {
                             String[] kv = p[i].split("=", 2);
-                            if (kv.length == 2) {
-                                boolean val = Boolean.parseBoolean(kv[1]);
-                                switch (kv[0]) {
-                                    case "optimize-imports" -> s.optimizeImports = val;
-                                    case "static-imports" -> s.staticImports = val;
-                                }
+                            if (kv.length == 2 && "optimize-imports".equals(kv[0])) {
+                                s.optimizeImports = Boolean.parseBoolean(kv[1]);
                             }
                         }
                     }

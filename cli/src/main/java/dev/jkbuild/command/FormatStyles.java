@@ -36,15 +36,14 @@ final class FormatStyles {
     private static Map<String, Resolved> buildAliases() {
         var m = new LinkedHashMap<String, Resolved>();
         // Aliases carry style names only; boolean flags are resolved separately.
-        m.put("standard", new Resolved("palantir", "kotlinlang", DEFAULT_OPTIMIZE_IMPORTS, DEFAULT_STATIC_IMPORTS));
+        m.put("standard", new Resolved("palantir", "kotlinlang", DEFAULT_OPTIMIZE_IMPORTS));
         return Map.copyOf(m);
     }
 
     static final boolean DEFAULT_OPTIMIZE_IMPORTS = true;
-    static final boolean DEFAULT_STATIC_IMPORTS = false;
 
     /** The chosen concrete styles and OpenRewrite flags for each language. */
-    record Resolved(String java, String kotlin, boolean optimizeImports, boolean staticImports) {}
+    record Resolved(String java, String kotlin, boolean optimizeImports) {}
 
     /**
      * Resolve the effective styles from (CLI flags) + (jk.toml {@code [format]}).
@@ -58,7 +57,6 @@ final class FormatStyles {
             String cliKotlin,
             String cliAlias,
             Boolean cliOptimizeImports,
-            Boolean cliStaticImports,
             JkBuild.FormatConfig cfg) {
         JkBuild.FormatConfig fmt = cfg == null ? JkBuild.FormatConfig.EMPTY : cfg;
         Resolved cliAliasPair = alias(cliAlias, "--style");
@@ -82,9 +80,8 @@ final class FormatStyles {
 
         // Flag precedence: CLI → env var (caller-resolved) → jk.toml → default.
         boolean optimizeImports = firstNonNullBool(cliOptimizeImports, fmt.optimizeImports(), DEFAULT_OPTIMIZE_IMPORTS);
-        boolean staticImports = firstNonNullBool(cliStaticImports, fmt.staticImports(), DEFAULT_STATIC_IMPORTS);
 
-        return new Resolved(java, kotlin, optimizeImports, staticImports);
+        return new Resolved(java, kotlin, optimizeImports);
     }
 
     private static boolean firstNonNullBool(Boolean... vals) {

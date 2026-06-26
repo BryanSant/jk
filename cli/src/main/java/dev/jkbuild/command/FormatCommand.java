@@ -86,8 +86,6 @@ public final class FormatCommand implements CliCommand {
                 Opt.value("<preset>", "Cross-language preset for both: standard.", "--style"),
                 Opt.flag("Shorten FQCNs and add imports (default on).", "--optimize-imports"),
                 Opt.flag("Skip FQCN-to-import optimization.", "--no-optimize-imports"),
-                Opt.flag("Convert qualifying refs to static imports.", "--static-imports"),
-                Opt.flag("Skip static-import conversion.", "--no-static-imports"),
                 Opt.value("<file>", "OpenRewrite YAML config; overrides/extends recipes.", "--rewrite-config"));
     }
 
@@ -108,10 +106,6 @@ public final class FormatCommand implements CliCommand {
         Boolean cliOptimize = in.isSet("optimize-imports")
                 ? Boolean.TRUE
                 : in.isSet("no-optimize-imports") ? Boolean.FALSE : envBool("JK_FORMAT_OPTIMIZE_IMPORTS");
-        // --static-imports / --no-static-imports / env var / jk.toml / default false
-        Boolean cliStatic = in.isSet("static-imports")
-                ? Boolean.TRUE
-                : in.isSet("no-static-imports") ? Boolean.FALSE : envBool("JK_FORMAT_STATIC_IMPORTS");
         // --rewrite-config / env var
         Path rewriteConfig = in.value("rewrite-config")
                 .or(() -> java.util.Optional.ofNullable(System.getenv("JK_FORMAT_REWRITE_CONFIG")))
@@ -125,7 +119,6 @@ public final class FormatCommand implements CliCommand {
                     in.value("kotlin-style").orElse(null),
                     in.value("style").orElse(null),
                     cliOptimize,
-                    cliStatic,
                     build.format());
         } catch (IllegalArgumentException e) {
             System.err.println("jk format: " + e.getMessage());
@@ -135,7 +128,6 @@ public final class FormatCommand implements CliCommand {
         // flag nor env var said otherwise (so the OpenRewrite pipeline actually runs).
         boolean optimizeImports = styles.optimizeImports()
                 || (rewriteConfig != null && cliOptimize == null && envBool("JK_FORMAT_OPTIMIZE_IMPORTS") == null);
-        boolean staticImports = styles.staticImports();
 
         List<Path> javaFiles = collectSources(projectDir, ".java");
         List<Path> kotlinFiles = collectSources(projectDir, ".kt");
@@ -158,16 +150,8 @@ public final class FormatCommand implements CliCommand {
                 : resolver.resolve(Coordinate.of("com.facebook", "ktfmt", KTFMT_VERSION), "ktfmt", "ignored")
                         .classpath();
 
-        Path spec = writeSpec(
-                check,
-                styles,
-                javaFiles,
-                javaJars,
-                kotlinFiles,
-                kotlinJars,
-                optimizeImports,
-                staticImports,
-                rewriteConfig);
+        Path spec = writeSpec(check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars,
+                optimizeImports, rewriteConfig);
         try {
             return forkWorker(cas, spec, !javaFiles.isEmpty(), check, global, startMs, projectDir);
         } finally {
@@ -200,7 +184,6 @@ public final class FormatCommand implements CliCommand {
             List<Path> kotlinFiles,
             List<Path> kotlinJars,
             boolean optimizeImports,
-            boolean staticImports,
             Path rewriteConfig)
             throws IOException {
         List<String> lines = new ArrayList<>();
@@ -213,10 +196,9 @@ public final class FormatCommand implements CliCommand {
                     + joinJars(kotlinJars));
         }
         // OpenRewrite fields — only written when the OpenRewrite pipeline is active.
-        boolean anyRewrite = (optimizeImports || staticImports || rewriteConfig != null) && !javaFiles.isEmpty();
+        boolean anyRewrite = (optimizeImports || rewriteConfig != null) && !javaFiles.isEmpty();
         if (anyRewrite) {
-            // rewrite-flags carries per-recipe booleans for the worker
-            lines.add("rewrite-flags\toptimize-imports=" + optimizeImports + "\tstatic-imports=" + staticImports);
+            lines.add("rewrite-flags\toptimize-imports=" + optimizeImports);
             if (rewriteConfig != null) {
                 lines.add("rewrite-config\t" + rewriteConfig.toAbsolutePath());
             }

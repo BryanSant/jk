@@ -142,13 +142,11 @@ public final class JkBuildParser {
         TomlTable format = root.getTable("format");
         if (format == null) return JkBuild.FormatConfig.EMPTY;
         Boolean optimizeImports = format.contains("optimize-imports") ? format.getBoolean("optimize-imports") : null;
-        Boolean staticImports = format.contains("static-imports") ? format.getBoolean("static-imports") : null;
         return new JkBuild.FormatConfig(
                 stringOrThrow(format, "style", "format.style"),
                 stringOrThrow(format, "java", "format.java"),
                 stringOrThrow(format, "kotlin", "format.kotlin"),
-                optimizeImports,
-                staticImports);
+                optimizeImports);
     }
 
     /** Read an optional string key; present-but-non-string is a parse error; absent → null. */

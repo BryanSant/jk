@@ -586,10 +586,9 @@ public record JkBuild(
      * Resolution of these strings to concrete formatters lives in the CLI /
      * {@code jk-formatter} worker, not in the model.
      */
-    public record FormatConfig(
-            String style, String java, String kotlin, Boolean optimizeImports, Boolean staticImports) {
+    public record FormatConfig(String style, String java, String kotlin, Boolean optimizeImports) {
 
-        public static final FormatConfig EMPTY = new FormatConfig(null, null, null, null, null);
+        public static final FormatConfig EMPTY = new FormatConfig(null, null, null, null);
 
         public FormatConfig {
             if (style != null && style.isBlank()) style = null;
