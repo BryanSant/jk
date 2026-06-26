@@ -5,7 +5,11 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.run.ConsoleSpec;
+import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.CommandManager;
+import dev.jkbuild.cli.tui.Glyphs;
+import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.HostPlatform;
@@ -33,16 +37,21 @@ import java.util.stream.Stream;
 
 /**
  * {@code jk format} — format the project's Java/Kotlin sources via the
- * {@code jk-formatter} worker (Spotless engine).
+ * {@code jk-formatter} worker (Spotless + optional OpenRewrite import optimisation).
  *
- * <p>Defaults to Palantir (Java) + ktfmt KOTLINLANG (Kotlin), both 4-space /
- * 120-col. {@code --java-style}/{@code --kotlin-style}/{@code --style} and the
- * {@code [format]} block override (see {@link FormatStyles}). {@code --check}
- * verifies without writing and exits non-zero if anything is unformatted.
+ * <p>On an interactive TTY (apply mode, non-quiet) the command runs a silent stealth
+ * check first to count how many files need formatting, then renders a live
+ * {@link CommandManager} progress view as files are processed. On a pipe / under
+ * {@code --quiet} / in {@code --check} mode it falls back to plain println output.
  *
- * <p>The formatter implementation jars (palantir-java-format / google-java-format
- * / ktfmt) are resolved on demand through jk's own resolver into the CAS and
- * handed to the worker, so they never enter the main jk binary.
+ * <p>Defaults to Palantir (Java) + ktfmt KOTLINLANG (Kotlin), both 4-space / 120-col.
+ * {@code --java-style}/{@code --kotlin-style}/{@code --style} and the {@code [format]}
+ * block override (see {@link FormatStyles}). {@code --check} verifies without writing
+ * and exits non-zero if anything is unformatted.
+ *
+ * <p>The formatter implementation jars (palantir-java-format / google-java-format /
+ * ktfmt) are resolved on demand through jk's own resolver into the CAS and handed to
+ * the worker, so they never enter the main jk binary.
  */
 public final class FormatCommand implements CliCommand {
 
@@ -97,7 +106,7 @@ public final class FormatCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path buildFile = projectDir.resolve("jk.toml");
         if (!Files.exists(buildFile)) {
-            System.err.println("jk format: no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir));
+            System.err.println("jk format: no jk.toml in " + PathDisplay.styledRaw(projectDir));
             return 2;
         }
         JkBuild build = JkBuildParser.parse(buildFile);
@@ -140,7 +149,6 @@ public final class FormatCommand implements CliCommand {
         var cas = new Cas(cache);
         var resolver = ToolResolver.mavenCentral(new Http(), cas);
 
-        // Resolve the formatter impl jars jk hands to the worker's Provisioner.
         List<Path> javaJars = javaFiles.isEmpty()
                 ? List.of()
                 : resolver.resolve(javaCoord(styles.java()), "java-format", "ignored")
@@ -150,14 +158,234 @@ public final class FormatCommand implements CliCommand {
                 : resolver.resolve(Coordinate.of("com.facebook", "ktfmt", KTFMT_VERSION), "ktfmt", "ignored")
                         .classpath();
 
-        Path spec = writeSpec(check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars,
-                optimizeImports, rewriteConfig);
+        // Build the worker command once — shared by the stealth check and the apply run.
+        List<String> workerCmd = buildWorkerCmd(cas, !javaFiles.isEmpty());
+
+        // Animated TUI: apply mode on an interactive TTY without --quiet/--json.
+        boolean animate = !check && !global.outputIsJson() && !global.noProgress && GoalConsole.isInteractiveTerminal();
+
+        if (!animate) {
+            // Plain path: --check mode, piped output, CI, or --no-progress.
+            Path spec = writeSpec(
+                    check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
+            try {
+                return runPlain(workerCmd, spec, check, global, startMs, projectDir);
+            } finally {
+                Files.deleteIfExists(spec);
+            }
+        }
+
+        // Animated path ──────────────────────────────────────────────────────
+        // 1. Silent stealth check — count files that need formatting.
+        Path checkSpec =
+                writeSpec(true, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
+        int toFormat;
         try {
-            return forkWorker(cas, spec, !javaFiles.isEmpty(), check, global, startMs, projectDir);
+            toFormat = stealthCount(workerCmd, checkSpec, global);
         } finally {
-            Files.deleteIfExists(spec);
+            Files.deleteIfExists(checkSpec);
+        }
+
+        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
+        String took = ConsoleSpec.took(Duration.ofMillis(System.currentTimeMillis() - startMs));
+
+        if (toFormat == 0) {
+            // Nothing to do — settle immediately without a second worker pass.
+            System.out.println(GoalWedge.chipLine(
+                    Glyphs.CHECK,
+                    "Format",
+                    nerdfont,
+                    Theme.colorize("Already clean", Theme.active().success()) + " " + took));
+            return 0;
+        }
+
+        // 2. Format with live TUI.
+        Path applySpec =
+                writeSpec(false, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
+        try {
+            return runAnimated(workerCmd, applySpec, global, startMs, projectDir, toFormat, optimizeImports, nerdfont);
+        } finally {
+            Files.deleteIfExists(applySpec);
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Worker command builder
+    // -------------------------------------------------------------------------
+
+    private List<String> buildWorkerCmd(Cas cas, boolean hasJava) throws IOException {
+        Path workerJar = WorkerJar.FORMATTER.locate(cas);
+        Path javaExe = CompileToolchain.runningJavaHome()
+                .resolve("bin")
+                .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
+        List<String> rest = new ArrayList<>();
+        if (hasJava) rest.addAll(JAVAC_EXPORTS);
+        rest.add("-jar");
+        rest.add(workerJar.toString());
+        return JvmOptions.javaCommand(javaExe.toString(), 1, rest);
+    }
+
+    // -------------------------------------------------------------------------
+    // Plain (non-animated) execution — used for --check and non-TTY apply
+    // -------------------------------------------------------------------------
+
+    private int runPlain(
+            List<String> baseCmd, Path spec, boolean check, GlobalOptions global, long startMs, Path projectDir)
+            throws IOException, InterruptedException {
+        List<String> cmd = withSpec(baseCmd, spec);
+        int[] counts = {0, 0, 0}; // changed, clean, errors
+        int exit = WorkerProcess.run(
+                cmd,
+                "##JKFMT:",
+                json -> {
+                    String t = Ndjson.str(json, "t");
+                    if ("file".equals(t)) {
+                        String status = Ndjson.str(json, "status");
+                        String path = Ndjson.str(json, "path");
+                        if ("changed".equals(status)) {
+                            counts[0]++;
+                            if (!global.outputIsJson()) {
+                                String mark = Theme.colorize(
+                                        Glyphs.CHECK, Theme.active().success());
+                                String rel = Theme.colorize(
+                                        PathDisplay.of(Path.of(path), projectDir),
+                                        Theme.active().path());
+                                System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
+                            }
+                        } else if ("error".equals(status)) {
+                            counts[2]++;
+                            System.err.println("  error  " + path + ": " + Ndjson.str(json, "msg"));
+                        } else {
+                            counts[1]++;
+                        }
+                    }
+                },
+                line -> {
+                    if (global.verbose) System.err.println("  [formatter] " + line);
+                });
+
+        if (!global.outputIsJson()) {
+            String mark = Theme.colorize(Glyphs.CHECK, Theme.active().success());
+            String verb = Theme.colorize(
+                    check ? "Checked" : "Formatted", Theme.active().focused());
+            String body = check
+                    ? counts[0] + " to format, " + counts[1] + " already clean"
+                    : counts[0] + " file" + (counts[0] == 1 ? "" : "s") + ", " + counts[1] + " already clean";
+            if (counts[2] > 0) body += ", " + counts[2] + " error" + (counts[2] == 1 ? "" : "s");
+            String inTime = ConsoleSpec.took(Duration.ofMillis(System.currentTimeMillis() - startMs));
+            System.out.println(mark + " " + verb + " " + body + " " + inTime);
+        }
+        return exit;
+    }
+
+    // -------------------------------------------------------------------------
+    // Stealth check — silent pass to count files that need formatting
+    // -------------------------------------------------------------------------
+
+    private int stealthCount(List<String> baseCmd, Path checkSpec, GlobalOptions global)
+            throws IOException, InterruptedException {
+        List<String> cmd = withSpec(baseCmd, checkSpec);
+        int[] changed = {0};
+        WorkerProcess.run(
+                cmd,
+                "##JKFMT:",
+                json -> {
+                    if ("file".equals(Ndjson.str(json, "t")) && "changed".equals(Ndjson.str(json, "status"))) {
+                        changed[0]++;
+                    }
+                },
+                line -> {
+                    if (global.verbose) System.err.println("  [formatter-check] " + line);
+                });
+        return changed[0];
+    }
+
+    // -------------------------------------------------------------------------
+    // Animated TUI execution
+    // -------------------------------------------------------------------------
+
+    private int runAnimated(
+            List<String> baseCmd,
+            Path applySpec,
+            GlobalOptions global,
+            long startMs,
+            Path projectDir,
+            int toFormat,
+            boolean optimizeImports,
+            boolean nerdfont)
+            throws IOException, InterruptedException {
+        List<String> cmd = withSpec(baseCmd, applySpec);
+        String subtitle = optimizeImports ? "Optimizing Imports & Applying Code Style" : "Applying Code Style";
+
+        try (CommandManager cm = CommandManager.goal(System.out, "Format", true)) {
+            cm.progress(0, toFormat);
+            cm.addPhaseLabeled("", "fmt", subtitle);
+            cm.phaseRunning("", "fmt");
+
+            int[] counts = {0, 0, 0}; // changed, clean, errors
+            int exit = WorkerProcess.run(
+                    cmd,
+                    "##JKFMT:",
+                    json -> {
+                        String t = Ndjson.str(json, "t");
+                        if (!"file".equals(t)) return;
+                        String status = Ndjson.str(json, "status");
+                        String path = Ndjson.str(json, "path");
+                        if ("changed".equals(status)) {
+                            counts[0]++;
+                            cm.progress(counts[0], toFormat);
+                            cm.addCompletion(completionLine(counts[0], toFormat, path, projectDir));
+                        } else if ("error".equals(status)) {
+                            counts[2]++;
+                            cm.writeAbove(
+                                    Theme.colorize("  error", Theme.active().error()) + "  " + path + ": "
+                                            + Ndjson.str(json, "msg"));
+                        } else {
+                            counts[1]++;
+                        }
+                    },
+                    line -> {
+                        if (global.verbose) cm.writeAbove("  [formatter] " + line);
+                    });
+
+            cm.phaseDone("", "fmt", counts[2] == 0);
+
+            String took = ConsoleSpec.took(Duration.ofMillis(System.currentTimeMillis() - startMs));
+            if (counts[2] > 0) {
+                String errTail = counts[2] + " error" + (counts[2] == 1 ? "" : "s");
+                cm.finishGoalFailure(errTail);
+            } else {
+                int pct = toFormat > 0 ? counts[0] * 100 / toFormat : 100;
+                String tail =
+                        Theme.colorize("Successfully formatted", Theme.active().success())
+                                + " " + counts[0] + " of " + toFormat
+                                + " files (" + pct + "%) " + took;
+                cm.finishGoalSuccess(tail);
+            }
+            return exit;
+        }
+    }
+
+    /** Format a single completion line: {@code ✓ [NNN of MMM] path/to/File.java}. */
+    private static String completionLine(int num, int total, String absPath, Path projectDir) {
+        int digits = String.valueOf(total).length();
+        String numStr = String.format("%0" + digits + "d", num);
+        Theme t = Theme.active();
+        String counter = Theme.colorize("[" + numStr + " of " + total + "]", t.darkGray());
+        String rel = Theme.colorize(PathDisplay.of(Path.of(absPath), projectDir), t.path());
+        return Theme.colorize(Glyphs.CHECK, t.success()) + " " + counter + " " + rel;
+    }
+
+    /** Append the spec-file path argument to a base worker command. */
+    private static List<String> withSpec(List<String> baseCmd, Path spec) {
+        List<String> cmd = new ArrayList<>(baseCmd);
+        cmd.add(spec.toAbsolutePath().toString());
+        return cmd;
+    }
+
+    // -------------------------------------------------------------------------
+    // Helpers shared by all execution paths
+    // -------------------------------------------------------------------------
 
     /** Read an env var as a Boolean; returns null when absent or empty. */
     private static Boolean envBool(String name) {
@@ -195,7 +423,6 @@ public final class FormatCommand implements CliCommand {
             lines.add("kotlin\t" + styles.kotlin() + "\t" + KTFMT_VERSION + "\t" + KOTLIN_MAX_WIDTH + "\t"
                     + joinJars(kotlinJars));
         }
-        // OpenRewrite fields — only written when the OpenRewrite pipeline is active.
         boolean anyRewrite = (optimizeImports || rewriteConfig != null) && !javaFiles.isEmpty();
         if (anyRewrite) {
             lines.add("rewrite-flags\toptimize-imports=" + optimizeImports);
@@ -215,64 +442,6 @@ public final class FormatCommand implements CliCommand {
                 .map(p -> p.toAbsolutePath().toString())
                 .reduce((a, b) -> a + File.pathSeparator + b)
                 .orElse("");
-    }
-
-    private int forkWorker(
-            Cas cas, Path spec, boolean hasJava, boolean check, GlobalOptions global, long startMs, Path projectDir)
-            throws IOException, InterruptedException {
-        Path workerJar = WorkerJar.FORMATTER.locate(cas);
-        Path javaExe = CompileToolchain.runningJavaHome()
-                .resolve("bin")
-                .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
-        List<String> rest = new ArrayList<>();
-        if (hasJava) rest.addAll(JAVAC_EXPORTS);
-        rest.add("-jar");
-        rest.add(workerJar.toString());
-        rest.add(spec.toAbsolutePath().toString());
-        List<String> cmd = JvmOptions.javaCommand(javaExe.toString(), 1, rest);
-
-        int[] counts = {0, 0, 0}; // changed, clean, errors
-        int exit = WorkerProcess.run(
-                cmd,
-                "##JKFMT:",
-                json -> {
-                    String t = Ndjson.str(json, "t");
-                    if ("file".equals(t)) {
-                        String status = Ndjson.str(json, "status");
-                        String path = Ndjson.str(json, "path");
-                        if ("changed".equals(status)) {
-                            counts[0]++;
-                            if (!global.outputIsJson()) {
-                                String mark = Theme.colorize("✓", Theme.active().success());
-                                String rel = Theme.colorize(
-                                        PathDisplay.of(Path.of(path), projectDir),
-                                        Theme.active().path());
-                                System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
-                            }
-                        } else if ("error".equals(status)) {
-                            counts[2]++;
-                            System.err.println("  error  " + path + ": " + Ndjson.str(json, "msg"));
-                        } else {
-                            counts[1]++;
-                        }
-                    }
-                },
-                line -> {
-                    if (global.verbose) System.err.println("  [formatter] " + line);
-                });
-
-        if (!global.outputIsJson()) {
-            String check_ = Theme.colorize("✓", Theme.active().success());
-            String verb = Theme.colorize(
-                    check ? "Checked" : "Formatted", Theme.active().focused());
-            String body = check
-                    ? counts[0] + " to format, " + counts[1] + " already clean"
-                    : counts[0] + " file" + (counts[0] == 1 ? "" : "s") + ", " + counts[1] + " already clean";
-            if (counts[2] > 0) body += ", " + counts[2] + " error" + (counts[2] == 1 ? "" : "s");
-            String inTime = ConsoleSpec.took(Duration.ofMillis(System.currentTimeMillis() - startMs));
-            System.out.println(check_ + " " + verb + " " + body + " " + inTime);
-        }
-        return exit;
     }
 
     /** Collect project source files with the given extension, skipping build/VCS output dirs. */
