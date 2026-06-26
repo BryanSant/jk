@@ -57,6 +57,10 @@ public final class Confirm {
             return cookedFallback();
         }
         try (Terminal terminal = Wizard.openTerminal()) {
+            // Drain probe responses (DA / DECRQM) that TerminalBuilder emits on
+            // open — same as Wizard.run() does — so they don't land in the reader
+            // as garbage keys.
+            Wizard.drainInput(terminal.reader(), 40L);
             return ask(terminal);
         } catch (IOException e) {
             return cookedFallback();

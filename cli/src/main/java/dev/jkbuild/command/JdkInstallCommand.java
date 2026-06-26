@@ -331,13 +331,17 @@ public final class JdkInstallCommand implements CliCommand {
     /** Prompt to make {@code jdk} the default JDK and/or default GraalVM when it's ≥ the current ones. */
     private void offerDefaults(InstalledJdk jdk, boolean alreadyMadeDefault) {
         int newMajor = JdkListCommand.parseMajor(jdk.identifier());
-        if (newMajor == 0) return;
-        try {
+        if (newMajor == 0 || !Confirm.isInteractiveTerminal()) return;
+        // Open one terminal for all prompts in this call — avoids repeated
+        // TerminalBuilder probes (DA / DECRQM) that would accumulate in stdin
+        // and cause JLine errors on the second Confirm.ask() invocation.
+        try (org.jline.terminal.Terminal terminal = Wizard.openTerminal()) {
+            Wizard.drainInput(terminal.reader(), 40L);
             dev.jkbuild.jdk.GlobalDefaultJdk defaults = dev.jkbuild.jdk.GlobalDefaultJdk.current();
             if (!alreadyMadeDefault) {
                 Integer cur = defaults.currentIdentifier().map(JdkListCommand::parseMajor).orElse(null);
                 if (cur == null || newMajor >= cur) {
-                    if (Confirm.of("Make " + jdk.identifier() + " the default JDK?", true).ask()) {
+                    if (Confirm.of("Make " + jdk.identifier() + " the default JDK?", true).ask(terminal)) {
                         defaults.set(jdk);
                     }
                 }
@@ -345,7 +349,7 @@ public final class JdkInstallCommand implements CliCommand {
             if (isGraalHome(jdk.home())) {
                 Integer curGraal = defaults.graalIdentifier().map(JdkListCommand::parseMajor).orElse(null);
                 if (curGraal == null || newMajor >= curGraal) {
-                    if (Confirm.of("Make it the default GraalVM (jk native / GRAALVM_HOME)?", true).ask()) {
+                    if (Confirm.of("Make it the default GraalVM (jk native / GRAALVM_HOME)?", true).ask(terminal)) {
                         defaults.setGraal(jdk);
                     }
                 }

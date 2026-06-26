@@ -221,7 +221,7 @@ public final class Wizard {
         }
     }
 
-    private static void drainInput(NonBlockingReader reader, long maxWaitMs) {
+    public static void drainInput(NonBlockingReader reader, long maxWaitMs) {
         try {
             var deadline = System.currentTimeMillis() + maxWaitMs;
             while (System.currentTimeMillis() < deadline) {
