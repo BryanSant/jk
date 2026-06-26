@@ -9,7 +9,6 @@ import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.cli.tui.Glyphs;
-import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.HostPlatform;
@@ -158,7 +157,7 @@ public final class FormatCommand implements CliCommand {
                 : resolver.resolve(Coordinate.of("com.facebook", "ktfmt", KTFMT_VERSION), "ktfmt", "ignored")
                         .classpath();
 
-        // Build the worker command once — shared by the stealth check and the apply run.
+        // Build the worker command once.
         List<String> workerCmd = buildWorkerCmd(cas, !javaFiles.isEmpty());
 
         // Animated TUI: apply mode on an interactive TTY without --quiet/--json.
@@ -175,35 +174,16 @@ public final class FormatCommand implements CliCommand {
             }
         }
 
-        // Animated path ──────────────────────────────────────────────────────
-        // 1. Silent stealth check — count files that need formatting.
-        Path checkSpec =
-                writeSpec(true, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
-        int toFormat;
-        try {
-            toFormat = stealthCount(workerCmd, checkSpec, global);
-        } finally {
-            Files.deleteIfExists(checkSpec);
-        }
-
-        boolean nerdfont = dev.jkbuild.config.GlobalConfig.nerdfont();
-        String took = ConsoleSpec.took(Duration.ofMillis(System.currentTimeMillis() - startMs));
-
-        if (toFormat == 0) {
-            // Nothing to do — settle immediately without a second worker pass.
-            System.out.println(GoalWedge.chipLine(
-                    Glyphs.CHECK,
-                    "Format",
-                    nerdfont,
-                    Theme.colorize("Already clean", Theme.active().success()) + " " + took));
-            return 0;
-        }
-
-        // 2. Format with live TUI.
+        // Animated path — single pass, no stealth check.
+        // The denominator is total source files; progress advances on every file
+        // processed (changed or clean). The TUI starts immediately so the spinner
+        // is visible while the worker JVM warms up (~0.5s), eliminating the blank
+        // wait that the old stealth-check approach caused.
+        int totalFiles = javaFiles.size() + kotlinFiles.size();
         Path applySpec =
                 writeSpec(false, styles, javaFiles, javaJars, kotlinFiles, kotlinJars, optimizeImports, rewriteConfig);
         try {
-            return runAnimated(workerCmd, applySpec, global, startMs, projectDir, toFormat, optimizeImports, nerdfont);
+            return runAnimated(workerCmd, applySpec, global, startMs, projectDir, totalFiles, optimizeImports);
         } finally {
             Files.deleteIfExists(applySpec);
         }
@@ -279,29 +259,7 @@ public final class FormatCommand implements CliCommand {
     }
 
     // -------------------------------------------------------------------------
-    // Stealth check — silent pass to count files that need formatting
-    // -------------------------------------------------------------------------
-
-    private int stealthCount(List<String> baseCmd, Path checkSpec, GlobalOptions global)
-            throws IOException, InterruptedException {
-        List<String> cmd = withSpec(baseCmd, checkSpec);
-        int[] changed = {0};
-        WorkerProcess.run(
-                cmd,
-                "##JKFMT:",
-                json -> {
-                    if ("file".equals(Ndjson.str(json, "t")) && "changed".equals(Ndjson.str(json, "status"))) {
-                        changed[0]++;
-                    }
-                },
-                line -> {
-                    if (global.verbose) System.err.println("  [formatter-check] " + line);
-                });
-        return changed[0];
-    }
-
-    // -------------------------------------------------------------------------
-    // Animated TUI execution
+    // Animated TUI execution — single pass, no stealth check
     // -------------------------------------------------------------------------
 
     private int runAnimated(
@@ -310,18 +268,21 @@ public final class FormatCommand implements CliCommand {
             GlobalOptions global,
             long startMs,
             Path projectDir,
-            int toFormat,
-            boolean optimizeImports,
-            boolean nerdfont)
+            int totalFiles,
+            boolean optimizeImports)
             throws IOException, InterruptedException {
         List<String> cmd = withSpec(baseCmd, applySpec);
-        String subtitle = optimizeImports ? "Optimizing Imports & Applying Code Style" : "Applying Code Style";
+        // Subtitle communicates what the single pass is doing.
+        String subtitle = optimizeImports ? "Examining source files & optimizing imports" : "Examining source files";
 
+        // Start the TUI immediately — the spinner runs on its daemon thread while the
+        // worker JVM starts in its own process, so there is no blank wait before output.
         try (CommandManager cm = CommandManager.goal(System.out, "Format", true)) {
-            cm.progress(0, toFormat);
+            cm.progress(0, totalFiles);
             cm.addPhaseLabeled("", "fmt", subtitle);
             cm.phaseRunning("", "fmt");
 
+            int[] scanned = {0};
             int[] counts = {0, 0, 0}; // changed, clean, errors
             int exit = WorkerProcess.run(
                     cmd,
@@ -331,10 +292,11 @@ public final class FormatCommand implements CliCommand {
                         if (!"file".equals(t)) return;
                         String status = Ndjson.str(json, "status");
                         String path = Ndjson.str(json, "path");
+                        // Advance bar on every file so the scan is visually smooth.
+                        cm.progress(++scanned[0], totalFiles);
                         if ("changed".equals(status)) {
                             counts[0]++;
-                            cm.progress(counts[0], toFormat);
-                            cm.addCompletion(completionLine(counts[0], toFormat, path, projectDir));
+                            cm.addCompletion(completionLine(path, projectDir));
                         } else if ("error".equals(status)) {
                             counts[2]++;
                             cm.writeAbove(
@@ -354,26 +316,26 @@ public final class FormatCommand implements CliCommand {
             if (counts[2] > 0) {
                 String errTail = counts[2] + " error" + (counts[2] == 1 ? "" : "s");
                 cm.finishGoalFailure(errTail);
+            } else if (counts[0] == 0) {
+                // Nothing needed formatting.
+                cm.finishGoalSuccess(
+                        Theme.colorize("Already clean", Theme.active().success()) + " " + took);
             } else {
-                int pct = toFormat > 0 ? counts[0] * 100 / toFormat : 100;
-                String tail =
-                        Theme.colorize("Successfully formatted", Theme.active().success())
-                                + " " + counts[0] + " of " + toFormat
-                                + " files (" + pct + "%) " + took;
-                cm.finishGoalSuccess(tail);
+                // N formatted, M already clean.
+                String formatted = Theme.colorize("Formatted", Theme.active().success()) + " " + counts[0] + " file"
+                        + (counts[0] == 1 ? "" : "s");
+                String clean = counts[1] > 0 ? ", " + counts[1] + " already clean" : "";
+                cm.finishGoalSuccess(formatted + clean + "  " + took);
             }
             return exit;
         }
     }
 
-    /** Format a single completion line: {@code ✓ [NNN of MMM] path/to/File.java}. */
-    private static String completionLine(int num, int total, String absPath, Path projectDir) {
-        int digits = String.valueOf(total).length();
-        String numStr = String.format("%0" + digits + "d", num);
+    /** Format a single completion line: {@code ✓ path/to/File.java}. */
+    private static String completionLine(String absPath, Path projectDir) {
         Theme t = Theme.active();
-        String counter = Theme.colorize("[" + numStr + " of " + total + "]", t.darkGray());
-        String rel = Theme.colorize(PathDisplay.of(Path.of(absPath), projectDir), t.path());
-        return Theme.colorize(Glyphs.CHECK, t.success()) + " " + counter + " " + rel;
+        return Theme.colorize(Glyphs.CHECK, t.success()) + " "
+                + Theme.colorize(PathDisplay.of(Path.of(absPath), projectDir), t.path());
     }
 
     /** Append the spec-file path argument to a base worker command. */
