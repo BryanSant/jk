@@ -1415,29 +1415,6 @@ public final class BuildPipeline {
     }
 
     /**
-     * Predicted Java-source count for {@code compile-java}'s up-front scope,
-     * collected the same way {@code parse-build} populates {@link #JAVA_SOURCES}.
-     * Best-effort — a walk failure yields 0 (a flat segment), never an error.
-     */
-    private static int estimateJavaSources(Inputs in, boolean compact) {
-        Path javaMainSrc = compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java");
-        try {
-            return CompileSupport.collectJavaSources(javaMainSrc).size();
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    /** Predicted Kotlin-source count for {@code compile-kotlin}'s up-front scope. */
-    private static int estimateKotlinSources(Inputs in, boolean compact) {
-        try {
-            return CompileSupport.collectKotlinSources(in.dir(), compact).size();
-        } catch (Exception ignored) {
-            return 0;
-        }
-    }
-
-    /**
      * Warn (best-effort) when the consumer and a composite ({@code path}/branch-git)
      * dependency disagree on a shared external coordinate's version — both jars are
      * on the classpath, deduped by path not coordinate, since each project resolves
