@@ -338,7 +338,7 @@ public final class FormatCommand implements CliCommand {
             } else if (counts[0] == 0) {
                 // Nothing needed formatting.
                 cm.finishGoalSuccess(
-                        Theme.colorize("Already clean", Theme.active().success()) + " " + took);
+                        Theme.colorize("Already formatted", Theme.active().success()) + " " + took);
             } else {
                 // N formatted, M already clean.
                 String formatted = Theme.colorize("Formatted", Theme.active().success())
