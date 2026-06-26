@@ -161,6 +161,6 @@ public final class LockfileReader {
         if (value == null) {
             throw new IllegalArgumentException("[[artifact]] is missing required key `" + key + "`");
         }
-        return Objects.requireNonNull(value);
+        return value;
     }
 }
