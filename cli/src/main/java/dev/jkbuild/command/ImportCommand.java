@@ -104,7 +104,7 @@ public final class ImportCommand implements CliCommand {
         try {
             Files.write(spec, specLines, StandardCharsets.UTF_8);
             Path javaExe = CompileToolchain.runningJavaHome()
-                    .resolve("bin").resolve(isWindows() ? "java.exe" : "java");
+                    .resolve("bin").resolve(HostPlatform.isWindows() ? "java.exe" : "java");
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
             StringBuilder diag = new StringBuilder();
@@ -149,8 +149,4 @@ public final class ImportCommand implements CliCommand {
         return null;
     }
 
-
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
-    }
 }

@@ -257,7 +257,7 @@ public final class ImageCommand implements CliCommand {
             Files.write(spec, lines, StandardCharsets.UTF_8);
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
-                    .resolve(isWindows() ? "java.exe" : "java");
+                    .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
             String[] ref = {null};
@@ -314,7 +314,4 @@ public final class ImageCommand implements CliCommand {
         return result;
     }
 
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
-    }
 }

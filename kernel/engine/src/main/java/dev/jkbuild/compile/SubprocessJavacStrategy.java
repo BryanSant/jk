@@ -60,7 +60,7 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
         Path javaHome = request.javaHome() != null
                 ? request.javaHome()
                 : Path.of(System.getProperty("java.home"));
-        Path javac = javaHome.resolve("bin").resolve(isWindows() ? "javac.exe" : "javac");
+        Path javac = javaHome.resolve("bin").resolve(HostPlatform.isWindows() ? "javac.exe" : "javac");
         if (!Files.exists(javac)) {
             throw new IOException("javac not found at " + javac
                     + " — project.jdk needs to point at a JDK (not a JRE).");
@@ -82,7 +82,7 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
             Thread.currentThread().interrupt();
             throw new IOException("javac was interrupted", e);
         } finally {
-            if (scratch != null) deleteRecursively(scratch);
+            if (scratch != null) PathUtil.deleteRecursively(scratch);
         }
     }
 
@@ -201,14 +201,6 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
 
     private static boolean hasErrors(List<CompileResult.Diagnostic> diagnostics) {
         return diagnostics.stream().anyMatch(d -> d.severity() == CompileResult.Severity.ERROR);
-    }
-
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
-    }
-
-    private static void deleteRecursively(Path root) {
-        PathUtil.deleteRecursively(root);
     }
 
     // Allow ServiceLoader.load to instantiate this without a META-INF/services

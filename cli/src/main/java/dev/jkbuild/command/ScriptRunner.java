@@ -401,7 +401,7 @@ final class ScriptRunner {
                     ctx.label("provision kotlinc");
                     Path kotlinHome = CompileToolchain.resolveKotlinHome(cacheDir, null, ctx::output);
                     Path kotlinc = kotlinHome.resolve("bin").resolve(
-                            isWindows() ? "kotlinc.bat" : "kotlinc");
+                            HostPlatform.isWindows() ? "kotlinc.bat" : "kotlinc");
                     if (!Files.exists(kotlinc)) {
                         ctx.error("kotlinc-missing", "kotlinc not found at " + kotlinc);
                         throw new RuntimeException("kotlinc missing");
@@ -537,7 +537,7 @@ final class ScriptRunner {
         List<Path> classpath = (List<Path>) goal.get(CLASSPATH).orElseThrow();
 
         Path java = CompileToolchain.runningJavaHome().resolve("bin")
-                .resolve(isWindows() ? "java.exe" : "java");
+                .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<String> command = new ArrayList<>();
         command.add(java.toString());
         if (classpath.size() == 1) {
@@ -625,7 +625,7 @@ final class ScriptRunner {
                          String mainClass, List<String> args)
             throws IOException, InterruptedException {
         Path java = CompileToolchain.runningJavaHome().resolve("bin")
-                .resolve(isWindows() ? "java.exe" : "java");
+                .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<Path> full = new ArrayList<>();
         full.add(classesDir);
         full.addAll(classpath);
@@ -658,7 +658,4 @@ final class ScriptRunner {
                 : name;
     }
 
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
-    }
 }

@@ -213,7 +213,7 @@ public final class PublishCommand implements CliCommand {
             Path workerJar = WorkerJar.PUBLISHER.locate(new Cas(cache));
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
-                    .resolve(isWindows() ? "java.exe" : "java");
+                    .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
 
@@ -324,7 +324,4 @@ public final class PublishCommand implements CliCommand {
         return null;
     }
 
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
-    }
 }

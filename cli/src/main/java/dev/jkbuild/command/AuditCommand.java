@@ -152,7 +152,7 @@ public final class AuditCommand implements CliCommand {
         try {
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
-                    .resolve(isWindows() ? "java.exe" : "java");
+                    .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
 
@@ -194,8 +194,4 @@ public final class AuditCommand implements CliCommand {
      * Extract a JSON string field value from a simple NDJSON object without a
      * full parser. Handles basic backslash escapes but not surrogate pairs.
      */
-
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
-    }
 }

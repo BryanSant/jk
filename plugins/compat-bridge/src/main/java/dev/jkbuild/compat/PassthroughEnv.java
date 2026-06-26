@@ -40,7 +40,7 @@ public final class PassthroughEnv {
             String binDir = javaHome.resolve("bin").toAbsolutePath().toString();
             String pathKey = pathKey(env);
             String existing = env.getOrDefault(pathKey, "");
-            String separator = isWindows() ? ";" : ":";
+            String separator = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win") ? ";" : ":";
             env.put(pathKey, existing.isEmpty() ? binDir : binDir + separator + existing);
         }
     }
@@ -54,7 +54,4 @@ public final class PassthroughEnv {
         return "PATH";
     }
 
-    private static boolean isWindows() {
-        return System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win");
-    }
 }

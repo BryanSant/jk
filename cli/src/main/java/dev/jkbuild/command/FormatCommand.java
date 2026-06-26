@@ -165,7 +165,7 @@ public final class FormatCommand implements CliCommand {
             throws IOException, InterruptedException {
         Path workerJar = WorkerJar.FORMATTER.locate(cas);
         Path javaExe = CompileToolchain.runningJavaHome().resolve("bin")
-                .resolve(isWindows() ? "java.exe" : "java");
+                .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<String> rest = new ArrayList<>();
         if (hasJava) rest.addAll(JAVAC_EXPORTS);
         rest.add("-jar");
@@ -231,7 +231,4 @@ public final class FormatCommand implements CliCommand {
         return true;
     }
 
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
-    }
 }

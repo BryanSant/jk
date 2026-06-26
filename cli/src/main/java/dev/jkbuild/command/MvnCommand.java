@@ -94,7 +94,7 @@ public final class MvnCommand implements CliCommand {
                     "NO_DISCOVER " + noDiscover), StandardCharsets.UTF_8);
 
             Path javaExe = CompileToolchain.runningJavaHome()
-                    .resolve("bin").resolve(isWindows() ? "java.exe" : "java");
+                    .resolve("bin").resolve(HostPlatform.isWindows() ? "java.exe" : "java");
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
             String[] bin = {null};
@@ -121,5 +121,4 @@ public final class MvnCommand implements CliCommand {
         }
     }
 
-    private static boolean isWindows() { return HostPlatform.isWindows(); }
 }

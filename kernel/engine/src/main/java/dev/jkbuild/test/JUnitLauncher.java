@@ -365,11 +365,7 @@ public final class JUnitLauncher {
     }
 
     private static Path javaBinary(Path javaHome) {
-        return javaHome.resolve("bin").resolve(isWindows() ? "java.exe" : "java");
-    }
-
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
+        return javaHome.resolve("bin").resolve(HostPlatform.isWindows() ? "java.exe" : "java");
     }
 
     // -------- event aggregation -----------------------------------------

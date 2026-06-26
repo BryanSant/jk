@@ -7,11 +7,11 @@ import dev.jkbuild.discovery.ToolHealth;
 import dev.jkbuild.discovery.ToolProvisioner;
 import dev.jkbuild.discovery.ToolSpec;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.util.PathUtil;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Comparator;
 import java.util.Optional;
 
 /**
@@ -86,7 +86,7 @@ public final class ToolProvisioning {
             if (Files.isSymbolicLink(entry)) {
                 SymlinkProvisioner.unlink(entry);
             } else if (Files.exists(entry)) {
-                deleteRecursively(entry);
+                PathUtil.deleteRecursively(entry);
             }
         }
 
@@ -126,11 +126,4 @@ public final class ToolProvisioning {
         return new ToolSpec(distribution.tool().slug(), distribution.version(), null);
     }
 
-    private static void deleteRecursively(Path root) throws IOException {
-        if (!Files.exists(root)) return;
-        try (var stream = Files.walk(root)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
-        }
-    }
 }

@@ -167,7 +167,7 @@ public final class RunCommand implements CliCommand {
         }
 
         String javaExe = CompileToolchain.runningJavaHome().resolve("bin")
-                .resolve(isWindows() ? "java.exe" : "java").toString();
+                .resolve(HostPlatform.isWindows() ? "java.exe" : "java").toString();
         command.add(javaExe);
 
         Path shadow = layout.shadowJar();
@@ -297,7 +297,4 @@ public final class RunCommand implements CliCommand {
         return sb.toString();
     }
 
-    private static boolean isWindows() {
-        return HostPlatform.isWindows();
-    }
 }
