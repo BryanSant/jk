@@ -3,7 +3,6 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
-
 import java.util.List;
 
 /**
@@ -11,9 +10,20 @@ import java.util.List;
  */
 public final class LibraryCommand implements CliCommand {
 
-    @Override public String name() { return "library"; }
-    @Override public String description() { return "Manage the short-name-to-coordinate library catalog"; }
-    @Override public List<String> aliases() { return List.of("lib"); }
+    @Override
+    public String name() {
+        return "library";
+    }
+
+    @Override
+    public String description() {
+        return "Manage the short-name-to-coordinate library catalog";
+    }
+
+    @Override
+    public List<String> aliases() {
+        return List.of("lib");
+    }
 
     @Override
     public List<CliCommand> subcommands() {
@@ -21,5 +31,7 @@ public final class LibraryCommand implements CliCommand {
     }
 
     @Override
-    public int run(Invocation in) { return 64; }
+    public int run(Invocation in) {
+        return 64;
+    }
 }

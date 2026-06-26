@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 class RailTest {
 
@@ -12,7 +12,8 @@ class RailTest {
         // JLine downsamples truecolor to indexed-256 when toAnsi() runs
         // without a truecolor-capable Terminal, so we anchor on the foreground
         // SGR + absence of strikethrough rather than the exact RGB.
-        var rendered = Rail.stepBullet(Rail.StepState.COMPLETED, "Project name:").toAnsi();
+        var rendered =
+                Rail.stepBullet(Rail.StepState.COMPLETED, "Project name:").toAnsi();
         // No SGR 9 (strikethrough) anywhere in the emit.
         assertThat(rendered).doesNotMatch("(?s).*\\[(?:\\d+;)*9(?:;\\d+)*m.*");
         // Some kind of gray/indexed foreground is present.

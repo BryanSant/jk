@@ -1,9 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.audit;
 
-import tools.jackson.databind.JsonNode;
-import tools.jackson.databind.json.JsonMapper;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -14,6 +11,8 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Tiny client over <a href="https://api.osv.dev/v1/querybatch">OSV v1 batch
@@ -53,8 +52,13 @@ public final class OsvClient {
     public record Query(String ecosystem, String name, String version) {}
 
     public record Result(List<String> vulnIds) {
-        public Result { vulnIds = List.copyOf(vulnIds); }
-        public boolean clean() { return vulnIds.isEmpty(); }
+        public Result {
+            vulnIds = List.copyOf(vulnIds);
+        }
+
+        public boolean clean() {
+            return vulnIds.isEmpty();
+        }
     }
 
     public record Vulnerability(String id, String summary, String severity, String details) {}
@@ -70,9 +74,13 @@ public final class OsvClient {
             if (i > 0) body.append(',');
             Query q = queries.get(i);
             body.append("{\"package\":{")
-                    .append("\"ecosystem\":").append(quote(q.ecosystem())).append(',')
-                    .append("\"name\":").append(quote(q.name()))
-                    .append("},\"version\":").append(quote(q.version()))
+                    .append("\"ecosystem\":")
+                    .append(quote(q.ecosystem()))
+                    .append(',')
+                    .append("\"name\":")
+                    .append(quote(q.name()))
+                    .append("},\"version\":")
+                    .append(quote(q.version()))
                     .append('}');
         }
         body.append("]}");
@@ -84,8 +92,7 @@ public final class OsvClient {
                 .build();
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("OSV batch query failed: HTTP " + response.statusCode()
-                    + " — " + response.body());
+            throw new IOException("OSV batch query failed: HTTP " + response.statusCode() + " — " + response.body());
         }
         return parseBatchResponse(response.body(), queries.size());
     }
@@ -99,8 +106,7 @@ public final class OsvClient {
                 .build();
         HttpResponse<String> response = http.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IOException("OSV vuln fetch failed for " + vulnId
-                    + ": HTTP " + response.statusCode());
+            throw new IOException("OSV vuln fetch failed for " + vulnId + ": HTTP " + response.statusCode());
         }
         try {
             var node = json.readTree(response.body());
@@ -135,8 +141,8 @@ public final class OsvClient {
                 out.add(new Result(ids));
             }
             if (out.size() != expectedSize) {
-                throw new IOException("OSV returned " + out.size()
-                        + " result(s) for " + expectedSize + " quer" + (expectedSize == 1 ? "y" : "ies"));
+                throw new IOException("OSV returned " + out.size() + " result(s) for " + expectedSize + " quer"
+                        + (expectedSize == 1 ? "y" : "ies"));
             }
             return out;
         } catch (Exception e) {

@@ -1,16 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,6 +11,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 /**
  * Parses Maven POM XML into a {@link Pom}.
@@ -72,8 +71,8 @@ public final class PomParser {
     private static Pom parseDocument(Document doc) {
         Element project = doc.getDocumentElement();
         if (project == null || !"project".equals(project.getNodeName())) {
-            throw new PomParseException("POM root element must be <project>, got: "
-                    + (project == null ? "<none>" : project.getNodeName()));
+            throw new PomParseException(
+                    "POM root element must be <project>, got: " + (project == null ? "<none>" : project.getNodeName()));
         }
 
         Pom.Parent parent = parseParent(project);
@@ -107,8 +106,8 @@ public final class PomParser {
         }
 
         List<Pom.Dep> deps = parseDependencies(childElement(project, "dependencies"), ctx);
-        List<Pom.Dep> managed = parseDependencies(
-                childElement(childElement(project, "dependencyManagement"), "dependencies"), ctx);
+        List<Pom.Dep> managed =
+                parseDependencies(childElement(childElement(project, "dependencyManagement"), "dependencies"), ctx);
 
         return new Pom(
                 substitute(groupId, ctx),
@@ -171,8 +170,7 @@ public final class PomParser {
         List<Pom.Dep.Exclusion> result = new ArrayList<>();
         for (Element e : childElements(exclusions, "exclusion")) {
             result.add(new Pom.Dep.Exclusion(
-                    required(e, "groupId", "<exclusion>"),
-                    required(e, "artifactId", "<exclusion>")));
+                    required(e, "groupId", "<exclusion>"), required(e, "artifactId", "<exclusion>")));
         }
         return result;
     }

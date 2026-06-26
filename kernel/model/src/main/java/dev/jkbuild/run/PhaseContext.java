@@ -45,7 +45,9 @@ public interface PhaseContext {
      * already-emitted ticks pulls the bar back slightly). A no-op for unweighted
      * phases and for implementations that don't size dynamically.
      */
-    default void reweight(int newWeight) { /* dynamic-weight phases override via DefaultPhaseContext */ }
+    default void reweight(int newWeight) {
+        /* dynamic-weight phases override via DefaultPhaseContext */
+    }
 
     /**
      * Set the phase's current sub-task label — what's happening right

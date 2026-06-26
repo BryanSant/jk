@@ -38,8 +38,7 @@ public final class JdkKeywords {
     public static boolean isKeyword(String raw) {
         if (raw == null) return false;
         var norm = raw.trim().toLowerCase(Locale.ROOT);
-        return norm.equals("lts") || norm.equals("stable") || norm.equals("latest")
-                || norm.equals(NATIVE);
+        return norm.equals("lts") || norm.equals("stable") || norm.equals("latest") || norm.equals(NATIVE);
     }
 
     /**
@@ -54,8 +53,7 @@ public final class JdkKeywords {
      *       for this host.</li>
      * </ul>
      */
-    public static Optional<String> resolveToMajorSpec(
-            JdkCatalog catalog, String raw, String os, String arch) {
+    public static Optional<String> resolveToMajorSpec(JdkCatalog catalog, String raw, String os, String arch) {
         var norm = raw == null ? "" : raw.trim().toLowerCase(Locale.ROOT);
         if (norm.equals(NATIVE)) return latestOracleGraalVm(catalog, os, arch);
 
@@ -89,9 +87,7 @@ public final class JdkKeywords {
      * so they return an empty list.
      */
     public static List<String> satisfactionHints(String raw) {
-        return raw != null && raw.trim().equalsIgnoreCase(NATIVE)
-                ? List.of("graalvm")
-                : List.of();
+        return raw != null && raw.trim().equalsIgnoreCase(NATIVE) ? List.of("graalvm") : List.of();
     }
 
     /**
@@ -106,8 +102,8 @@ public final class JdkKeywords {
      */
     public static Optional<JdkHit> bestInstalledMatch(String keyword, List<JdkHit> hits) {
         if (!isKeyword(keyword) || keyword.trim().equalsIgnoreCase(NATIVE)) return Optional.empty();
-        boolean wantLts = keyword.trim().equalsIgnoreCase("lts")
-                || keyword.trim().equalsIgnoreCase("stable");
+        boolean wantLts =
+                keyword.trim().equalsIgnoreCase("lts") || keyword.trim().equalsIgnoreCase("stable");
         var candidates = new ArrayList<JdkHit>();
         for (JdkHit h : hits) {
             Integer m = leadingMajor(h.version());
@@ -116,12 +112,11 @@ public final class JdkKeywords {
             candidates.add(h);
         }
         if (candidates.isEmpty()) return Optional.empty();
-        candidates.sort(Comparator
-                .<JdkHit, Integer>comparing(h -> leadingMajor(h.version()) == null ? 0 : leadingMajor(h.version()),
+        candidates.sort(Comparator.<JdkHit, Integer>comparing(
+                        h -> leadingMajor(h.version()) == null ? 0 : leadingMajor(h.version()),
                         Comparator.reverseOrder())
                 .thenComparing(h -> h.vendor() == JdkVendor.TEMURIN ? 0 : 1)
-                .thenComparing(h -> h.version() == null ? "" : h.version(),
-                        Comparator.reverseOrder()));
+                .thenComparing(h -> h.version() == null ? "" : h.version(), Comparator.reverseOrder()));
         return Optional.of(candidates.get(0));
     }
 
@@ -131,8 +126,11 @@ public final class JdkKeywords {
         int end = 0;
         while (end < version.length() && Character.isDigit(version.charAt(end))) end++;
         if (end == 0) return null;
-        try { return Integer.parseInt(version.substring(0, end)); }
-        catch (NumberFormatException e) { return null; }
+        try {
+            return Integer.parseInt(version.substring(0, end));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     /** The {@code suggested_sdk_name} of the highest-versioned Oracle GraalVM on the host. */
@@ -142,8 +140,8 @@ public final class JdkKeywords {
             if (e.preview()) continue;
             if (!e.os().equals(os) || !e.arch().equals(arch)) continue;
             if (!isOracleGraalVm(e)) continue;
-            if (best == null || JdkSelector.versionKey(e.version())
-                    .compareTo(JdkSelector.versionKey(best.version())) > 0) {
+            if (best == null
+                    || JdkSelector.versionKey(e.version()).compareTo(JdkSelector.versionKey(best.version())) > 0) {
                 best = e;
             }
         }

@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile.incremental;
 
+import java.util.Set;
+import java.util.TreeSet;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.commons.ClassRemapper;
 import org.objectweb.asm.commons.Remapper;
 import org.objectweb.asm.tree.ClassNode;
-
-import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * Extracts the set of other classes a compiled class references — the forward

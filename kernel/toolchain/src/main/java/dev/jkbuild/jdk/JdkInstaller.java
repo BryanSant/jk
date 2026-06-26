@@ -22,9 +22,7 @@ import java.util.Collections;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Objects;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.function.LongConsumer;
 import java.util.stream.Stream;
 import java.util.zip.GZIPInputStream;
@@ -87,12 +85,7 @@ public final class JdkInstaller {
         if (Files.exists(target)) {
             return new InstalledJdk(identifier, target);
         }
-        downloadAndExtractBuffered(
-                pkg.downloadUri(),
-                pkg.sha256(),
-                pkg.filename(),
-                pkg.archiveType(),
-                target);
+        downloadAndExtractBuffered(pkg.downloadUri(), pkg.sha256(), pkg.filename(), pkg.archiveType(), target);
         return new InstalledJdk(identifier, target);
     }
 
@@ -143,16 +136,11 @@ public final class JdkInstaller {
     public DownloadedArchive download(JdkCatalog.Entry entry, LongConsumer onBytesRead)
             throws IOException, InterruptedException {
         Path downloads = prepareDownloadDir();
-        Path archive = Files.createTempFile(downloads, DOWNLOAD_PREFIX,
-                "-" + extensionFor(entry.packageType()));
+        Path archive = Files.createTempFile(downloads, DOWNLOAD_PREFIX, "-" + extensionFor(entry.packageType()));
         boolean keep = false;
         try {
-            long bytes = streamingDownload(
-                    entry.url(),
-                    entry.sha256(),
-                    entry.installFolderName(),
-                    archive,
-                    onBytesRead);
+            long bytes =
+                    streamingDownload(entry.url(), entry.sha256(), entry.installFolderName(), archive, onBytesRead);
             keep = true;
             return new DownloadedArchive(archive, bytes);
         } finally {
@@ -165,8 +153,7 @@ public final class JdkInstaller {
      * resulting {@link InstalledJdk}. The temp archive is deleted on
      * success or failure — the caller does not need to clean it up.
      */
-    public InstalledJdk extractInstalled(JdkCatalog.Entry entry, DownloadedArchive dl)
-            throws IOException {
+    public InstalledJdk extractInstalled(JdkCatalog.Entry entry, DownloadedArchive dl) throws IOException {
         String installName = installName(entry);
         Path target = registry.jdksRoot().resolve(installName);
         Path javaHome = javaHomeFor(entry, target);
@@ -191,8 +178,7 @@ public final class JdkInstaller {
         // pinning a path) survives point-release upgrades. Best-effort — a
         // failure here must not fail the install itself.
         try {
-            new StableJdkPointer(registry.jdksRoot())
-                    .ensure(pointerName(entry), target);
+            new StableJdkPointer(registry.jdksRoot()).ensure(pointerName(entry), target);
         } catch (IOException ignored) {
             // Pointer is a convenience; the install is already complete.
         }
@@ -200,9 +186,7 @@ public final class JdkInstaller {
     }
 
     private static Path javaHomeFor(JdkCatalog.Entry entry, Path target) {
-        return entry.javaHomeSubpath().isEmpty()
-                ? target
-                : target.resolve(entry.javaHomeSubpath());
+        return entry.javaHomeSubpath().isEmpty() ? target : target.resolve(entry.javaHomeSubpath());
     }
 
     // jk owns the on-disk names: the durable install dir is
@@ -245,26 +229,21 @@ public final class JdkInstaller {
      * Smaller scope (no progress, no streaming) — kept for the test
      * fixtures that go through the {@link JdkPackage} API.
      */
-    private void downloadAndExtractBuffered(
-            URI uri,
-            String sha256,
-            String displayName,
-            String archiveType,
-            Path target) throws IOException, InterruptedException {
+    private void downloadAndExtractBuffered(URI uri, String sha256, String displayName, String archiveType, Path target)
+            throws IOException, InterruptedException {
         Path downloads = prepareDownloadDir();
         Path archive = Files.createTempFile(downloads, DOWNLOAD_PREFIX, "-" + extensionFor(archiveType));
         try {
             HttpResponse<byte[]> response = http.get(uri);
             if (response.statusCode() != 200) {
-                throw new IOException("JDK download " + uri
-                        + " returned " + response.statusCode());
+                throw new IOException("JDK download " + uri + " returned " + response.statusCode());
             }
             byte[] body = response.body();
             if (sha256 != null && !sha256.isEmpty()) {
                 String actual = Hashing.sha256Hex(body);
                 if (!actual.equalsIgnoreCase(sha256)) {
-                    throw new IOException("sha256 mismatch for " + displayName
-                            + " — expected " + sha256 + ", got " + actual);
+                    throw new IOException(
+                            "sha256 mismatch for " + displayName + " — expected " + sha256 + ", got " + actual);
                 }
             }
             Files.write(archive, body);
@@ -352,18 +331,14 @@ public final class JdkInstaller {
      * the digest against {@code expectedSha256} on completion (when set).
      */
     private long streamingDownload(
-            URI uri,
-            String expectedSha256,
-            String displayName,
-            Path archive,
-            LongConsumer onBytesRead) throws IOException, InterruptedException {
+            URI uri, String expectedSha256, String displayName, Path archive, LongConsumer onBytesRead)
+            throws IOException, InterruptedException {
         HttpResponse<InputStream> response = http.getStream(uri);
         if (response.statusCode() != 200) {
             try (var body = response.body()) {
                 body.transferTo(OutputStream.nullOutputStream());
             }
-            throw new IOException("JDK download " + uri
-                    + " returned " + response.statusCode());
+            throw new IOException("JDK download " + uri + " returned " + response.statusCode());
         }
         MessageDigest sha;
         try {
@@ -373,7 +348,7 @@ public final class JdkInstaller {
         }
         long total = 0;
         try (InputStream body = response.body();
-             OutputStream sink = Files.newOutputStream(archive)) {
+                OutputStream sink = Files.newOutputStream(archive)) {
             byte[] buf = new byte[DOWNLOAD_BUFFER];
             int n;
             while ((n = body.read(buf)) > 0) {
@@ -386,8 +361,8 @@ public final class JdkInstaller {
         if (expectedSha256 != null && !expectedSha256.isEmpty()) {
             String actual = HexFormat.of().formatHex(sha.digest());
             if (!actual.equalsIgnoreCase(expectedSha256)) {
-                throw new IOException("sha256 mismatch for " + displayName
-                        + " — expected " + expectedSha256 + ", got " + actual);
+                throw new IOException(
+                        "sha256 mismatch for " + displayName + " — expected " + expectedSha256 + ", got " + actual);
             }
         }
         return total;
@@ -413,7 +388,7 @@ public final class JdkInstaller {
 
     private static void extractTar(Path archive, Path destDir, boolean gzipped) throws IOException {
         try (InputStream fis = new BufferedInputStream(Files.newInputStream(archive));
-             InputStream inflated = gzipped ? new GZIPInputStream(fis) : fis) {
+                InputStream inflated = gzipped ? new GZIPInputStream(fis) : fis) {
             MinimalTar.stream(inflated, (name, linkName, mode, isDir, isLink, data, size) -> {
                 // Drop macOS AppleDouble sidecars (`._foo`) anywhere in the tree.
                 if (isAppleDoubleSidecar(name)) return;
@@ -466,20 +441,23 @@ public final class JdkInstaller {
             List<CompletableFuture<Void>> futures = new ArrayList<>(entries.size());
             for (ZipEntry entry : entries) {
                 if (entry.isDirectory()) continue;
-                futures.add(CompletableFuture.runAsync(() -> {
-                    try {
-                        Path out = safeResolve(destDir, entry.getName());
-                        if (out.getParent() != null) Files.createDirectories(out.getParent());
-                        try (InputStream in = zip.getInputStream(entry)) {
-                            Files.copy(in, out);
-                        }
-                    } catch (IOException e) {
-                        throw new UncheckedIOException(e);
-                    }
-                }, JkThreads.cpu()));
+                futures.add(CompletableFuture.runAsync(
+                        () -> {
+                            try {
+                                Path out = safeResolve(destDir, entry.getName());
+                                if (out.getParent() != null) Files.createDirectories(out.getParent());
+                                try (InputStream in = zip.getInputStream(entry)) {
+                                    Files.copy(in, out);
+                                }
+                            } catch (IOException e) {
+                                throw new UncheckedIOException(e);
+                            }
+                        },
+                        JkThreads.cpu()));
             }
             try {
-                CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new)).join();
+                CompletableFuture.allOf(futures.toArray(CompletableFuture[]::new))
+                        .join();
             } catch (java.util.concurrent.CompletionException e) {
                 Throwable cause = e.getCause() != null ? e.getCause() : e;
                 if (cause instanceof UncheckedIOException uio) throw uio.getCause();

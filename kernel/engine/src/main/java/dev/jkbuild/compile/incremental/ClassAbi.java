@@ -2,15 +2,13 @@
 package dev.jkbuild.compile.incremental;
 
 import dev.jkbuild.util.Hashing;
-
+import java.util.Arrays;
+import java.util.TreeSet;
 import org.objectweb.asm.ClassReader;
 import org.objectweb.asm.ClassVisitor;
 import org.objectweb.asm.FieldVisitor;
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
-
-import java.util.Arrays;
-import java.util.TreeSet;
 
 /**
  * Computes a stable hash of a compiled class's <em>ABI</em> — the surface a
@@ -33,8 +31,8 @@ public final class ClassAbi {
     /** Hex SHA-256 of the class's ABI. Two classes with the same public surface hash equally. */
     public static String hash(byte[] classBytes) {
         StringBuilder sb = new StringBuilder();
-        new ClassReader(classBytes).accept(new AbiVisitor(sb),
-                ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        new ClassReader(classBytes)
+                .accept(new AbiVisitor(sb), ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
         return Hashing.sha256Hex(sb.toString());
     }
 
@@ -45,28 +43,37 @@ public final class ClassAbi {
      */
     public static boolean definesInlinableConstant(byte[] classBytes) {
         boolean[] found = {false};
-        new ClassReader(classBytes).accept(new ClassVisitor(ASM) {
-            @Override
-            public FieldVisitor visitField(int access, String name, String descriptor,
-                                           String signature, Object value) {
-                if (value != null
-                        && (access & Opcodes.ACC_STATIC) != 0
-                        && (access & Opcodes.ACC_FINAL) != 0
-                        && (access & Opcodes.ACC_PRIVATE) == 0) {
-                    found[0] = true;
-                }
-                return null;
-            }
-        }, ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
+        new ClassReader(classBytes)
+                .accept(
+                        new ClassVisitor(ASM) {
+                            @Override
+                            public FieldVisitor visitField(
+                                    int access, String name, String descriptor, String signature, Object value) {
+                                if (value != null
+                                        && (access & Opcodes.ACC_STATIC) != 0
+                                        && (access & Opcodes.ACC_FINAL) != 0
+                                        && (access & Opcodes.ACC_PRIVATE) == 0) {
+                                    found[0] = true;
+                                }
+                                return null;
+                            }
+                        },
+                        ClassReader.SKIP_CODE | ClassReader.SKIP_DEBUG | ClassReader.SKIP_FRAMES);
         return found[0];
     }
 
     /** Collects an order-independent canonical rendering of the ABI into {@code sb}. */
     private static final class AbiVisitor extends ClassVisitor {
         // API-relevant class modifiers (exclude ACC_SUPER and the like, which aren't ABI).
-        private static final int CLASS_ACCESS_MASK = Opcodes.ACC_PUBLIC | Opcodes.ACC_PROTECTED
-                | Opcodes.ACC_PRIVATE | Opcodes.ACC_FINAL | Opcodes.ACC_ABSTRACT
-                | Opcodes.ACC_INTERFACE | Opcodes.ACC_ENUM | Opcodes.ACC_ANNOTATION | Opcodes.ACC_STATIC;
+        private static final int CLASS_ACCESS_MASK = Opcodes.ACC_PUBLIC
+                | Opcodes.ACC_PROTECTED
+                | Opcodes.ACC_PRIVATE
+                | Opcodes.ACC_FINAL
+                | Opcodes.ACC_ABSTRACT
+                | Opcodes.ACC_INTERFACE
+                | Opcodes.ACC_ENUM
+                | Opcodes.ACC_ANNOTATION
+                | Opcodes.ACC_STATIC;
 
         private final StringBuilder out;
         private final TreeSet<String> members = new TreeSet<>();
@@ -77,30 +84,36 @@ public final class ClassAbi {
         }
 
         @Override
-        public void visit(int version, int access, String name, String signature,
-                          String superName, String[] interfaces) {
+        public void visit(
+                int version, int access, String name, String signature, String superName, String[] interfaces) {
             String ifaces = interfaces == null ? "" : String.join(",", sorted(interfaces));
-            out.append("C ").append(access & CLASS_ACCESS_MASK).append(' ').append(name)
-                    .append(' ').append(nz(signature)).append(' ').append(nz(superName))
-                    .append(" [").append(ifaces).append("]\n");
+            out.append("C ")
+                    .append(access & CLASS_ACCESS_MASK)
+                    .append(' ')
+                    .append(name)
+                    .append(' ')
+                    .append(nz(signature))
+                    .append(' ')
+                    .append(nz(superName))
+                    .append(" [")
+                    .append(ifaces)
+                    .append("]\n");
         }
 
         @Override
-        public FieldVisitor visitField(int access, String name, String descriptor,
-                                       String signature, Object value) {
+        public FieldVisitor visitField(int access, String name, String descriptor, String signature, Object value) {
             if ((access & Opcodes.ACC_PRIVATE) != 0) return null;
-            members.add("F " + access + ' ' + name + ' ' + descriptor + ' '
-                    + nz(signature) + ' ' + (value == null ? "" : value));
+            members.add("F " + access + ' ' + name + ' ' + descriptor + ' ' + nz(signature) + ' '
+                    + (value == null ? "" : value));
             return null;
         }
 
         @Override
-        public MethodVisitor visitMethod(int access, String name, String descriptor,
-                                         String signature, String[] exceptions) {
+        public MethodVisitor visitMethod(
+                int access, String name, String descriptor, String signature, String[] exceptions) {
             if ((access & Opcodes.ACC_PRIVATE) != 0) return null;
             String ex = exceptions == null ? "" : String.join(",", sorted(exceptions));
-            members.add("M " + access + ' ' + name + ' ' + descriptor + ' '
-                    + nz(signature) + " [" + ex + "]");
+            members.add("M " + access + ' ' + name + ' ' + descriptor + ' ' + nz(signature) + " [" + ex + "]");
             return null;
         }
 

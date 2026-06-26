@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
-import dev.jkbuild.cli.theme.Theme;
+import static org.assertj.core.api.Assertions.assertThat;
 
-import org.junit.jupiter.api.Test;
+import dev.jkbuild.cli.theme.Theme;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * {@link SyntaxHighlight} colorizes a single source line without changing its
@@ -25,8 +24,8 @@ class SyntaxHighlightTest {
     void highlighting_never_changes_the_text() {
         String src = "    public static final int X = 0x1F; // hi";
         String out = SyntaxHighlight.highlight(src, -1);
-        assertThat(out).contains(ESC);            // styling was applied
-        assertThat(plain(out)).isEqualTo(src);    // ...but the text round-trips exactly
+        assertThat(out).contains(ESC); // styling was applied
+        assertThat(plain(out)).isEqualTo(src); // ...but the text round-trips exactly
     }
 
     @Test
@@ -72,16 +71,16 @@ class SyntaxHighlightTest {
         String out = SyntaxHighlight.highlight(src, 1);
         AttributedStyle kw = Theme.active().synKeyword();
         assertThat(out)
-                .contains(Theme.colorize("n", kw))                 // un-underlined keyword head
-                .contains(Theme.colorize("e", kw.underline()))     // caret char: color + underline
-                .contains(Theme.colorize("w", kw));                // un-underlined keyword tail
+                .contains(Theme.colorize("n", kw)) // un-underlined keyword head
+                .contains(Theme.colorize("e", kw.underline())) // caret char: color + underline
+                .contains(Theme.colorize("w", kw)); // un-underlined keyword tail
         assertThat(plain(out)).isEqualTo(src);
     }
 
     @Test
     void misaligned_caret_still_highlights_without_underline() {
         String src = "int x;";
-        String out = SyntaxHighlight.highlight(src, 999);   // caret past EOL
+        String out = SyntaxHighlight.highlight(src, 999); // caret past EOL
         assertThat(out).isEqualTo(SyntaxHighlight.highlight(src, -1)); // identical to no-caret render
         assertThat(plain(out)).isEqualTo(src);
     }
@@ -92,7 +91,7 @@ class SyntaxHighlightTest {
         String fun = Theme.colorize("fun", Theme.active().synKeyword());
         String out = SyntaxHighlight.highlight(src, -1, SyntaxHighlight.Language.KOTLIN);
         assertThat(out).contains(fun);
-        assertThat(plain(out)).isEqualTo(src);   // text still round-trips
+        assertThat(plain(out)).isEqualTo(src); // text still round-trips
     }
 
     @Test

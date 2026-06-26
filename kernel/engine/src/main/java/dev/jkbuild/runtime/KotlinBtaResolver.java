@@ -9,7 +9,6 @@ import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.PubGrubResolver;
 import dev.jkbuild.resolver.Resolution;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -68,10 +67,9 @@ public final class KotlinBtaResolver {
         List<Path> jars = new ArrayList<>();
         List<String> shas = new ArrayList<>();
         for (Resolution.ResolvedModule mod : resolution.modules().values()) {
-            String module = mod.module();               // "group:artifact"
+            String module = mod.module(); // "group:artifact"
             int colon = module.indexOf(':');
-            Coordinate coord = Coordinate.of(
-                    module.substring(0, colon), module.substring(colon + 1), mod.version());
+            Coordinate coord = Coordinate.of(module.substring(0, colon), module.substring(colon + 1), mod.version());
             // POM-only modules (BOMs/parents) carry no jar — tryFetchArtifact
             // returns empty and we simply omit them from the classpath.
             var hit = repos.tryFetchArtifact(coord);
@@ -101,8 +99,7 @@ public final class KotlinBtaResolver {
         Coordinate coord = Coordinate.of("org.jetbrains.kotlin", "kotlin-stdlib", kotlinVersion);
         var hit = repos.tryFetchArtifact(coord);
         if (hit.isEmpty()) {
-            throw new IOException("kotlin-stdlib:" + kotlinVersion
-                    + " not found in the configured repositories");
+            throw new IOException("kotlin-stdlib:" + kotlinVersion + " not found in the configured repositories");
         }
         return hit.get().fetched().cachePath();
     }
@@ -118,8 +115,7 @@ public final class KotlinBtaResolver {
         if (parts.length > 0) major = parseLeadingInt(parts[0]);
         if (parts.length > 1) minor = parseLeadingInt(parts[1]);
         if (major < 2 || (major == 2 && minor < 4)) {
-            throw new IllegalArgumentException(
-                    "jk requires Kotlin 2.4.0 or newer (Build Tools API), but the project "
+            throw new IllegalArgumentException("jk requires Kotlin 2.4.0 or newer (Build Tools API), but the project "
                     + "targets " + version + ". Pin a newer version in jk.toml (project.kotlin).");
         }
     }
@@ -131,7 +127,10 @@ public final class KotlinBtaResolver {
     }
 
     private static Path cacheFile(Cas cas, String kotlinVersion) {
-        return cas.root().resolve("tools").resolve("kotlin-bta").resolve(kotlinVersion)
+        return cas.root()
+                .resolve("tools")
+                .resolve("kotlin-bta")
+                .resolve(kotlinVersion)
                 .resolve("closure.shas");
     }
 
@@ -146,7 +145,7 @@ public final class KotlinBtaResolver {
         for (String line : Files.readAllLines(cacheFile, StandardCharsets.UTF_8)) {
             String sha = line.strip();
             if (sha.isEmpty()) continue;
-            if (!cas.contains(sha)) return null;     // evicted → re-resolve
+            if (!cas.contains(sha)) return null; // evicted → re-resolve
             jars.add(cas.pathFor(sha));
         }
         return jars.isEmpty() ? null : jars;

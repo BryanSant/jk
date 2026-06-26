@@ -6,8 +6,6 @@ import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkSelector;
-import org.jline.terminal.Terminal;
-
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -15,6 +13,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
+import org.jline.terminal.Terminal;
 
 /**
  * 3-step TUI for {@code jk jdk install} when no {@code <spec>} was given.
@@ -49,11 +48,8 @@ final class JdkInstallWizard {
      * this and exposes every (vendor, product) from the feed. Order here is
      * preserved in the rendered list.
      */
-    private static final List<String> CURATED_VENDOR_IDS = List.of(
-            "Eclipse|Temurin",
-            "Oracle|GraalVM",
-            "Amazon|Corretto",
-            "BellSoft|Liberica JDK");
+    private static final List<String> CURATED_VENDOR_IDS =
+            List.of("Eclipse|Temurin", "Oracle|GraalVM", "Amazon|Corretto", "BellSoft|Liberica JDK");
 
     private JdkInstallWizard() {}
 
@@ -68,11 +64,7 @@ final class JdkInstallWizard {
      * reactively when the user changes their version selection.
      */
     record VendorOption(
-            String id,
-            String label,
-            String vendor,
-            String product,
-            Map<Integer, String> installFolderByMajor) {
+            String id, String label, String vendor, String product, Map<Integer, String> installFolderByMajor) {
 
         VendorOption {
             installFolderByMajor = Map.copyOf(installFolderByMajor);
@@ -83,8 +75,7 @@ final class JdkInstallWizard {
         }
     }
 
-    public static Optional<Result> run(
-            JdkCatalog catalog, String os, String arch, boolean showAll, Terminal terminal) {
+    public static Optional<Result> run(JdkCatalog catalog, String os, String arch, boolean showAll, Terminal terminal) {
         List<VendorOption> vendors = vendorsFor(catalog, os, arch, showAll);
         if (vendors.isEmpty()) {
             return Optional.empty();
@@ -109,8 +100,7 @@ final class JdkInstallWizard {
     }
 
     static Wizard buildWizard(List<Integer> majors, List<VendorOption> vendors, String vendorDefault) {
-        WizardStep.RadioStep.Builder versionStep = WizardStep.RadioStep
-                .horizontal("version", "Select a JDK Version");
+        WizardStep.RadioStep.Builder versionStep = WizardStep.RadioStep.horizontal("version", "Select a JDK Version");
         for (Integer m : majors) {
             String s = m.toString();
             versionStep.choice(s, s);
@@ -123,15 +113,13 @@ final class JdkInstallWizard {
                 .orElse(majors.getFirst());
         versionStep.defaultChoice(String.valueOf(defaultMajor));
 
-        WizardStep.RadioStep.Builder vendorStep = WizardStep.RadioStep
-                .vertical("vendor", "Select a JDK Vendor");
+        WizardStep.RadioStep.Builder vendorStep = WizardStep.RadioStep.vertical("vendor", "Select a JDK Vendor");
         for (VendorOption v : vendors) {
             vendorStep.choice(v.id(), v.label(), answers -> hintForAnswers(v, answers));
         }
         vendorStep.defaultChoice(vendorDefault);
 
-        WizardStep.RadioStep makeDefaultStep = WizardStep.RadioStep
-                .horizontal("default", "Make this the default JDK?")
+        WizardStep.RadioStep makeDefaultStep = WizardStep.RadioStep.horizontal("default", "Make this the default JDK?")
                 .choice("yes", "Yes")
                 .choice("no", "No")
                 .defaultChoice("no")
@@ -195,8 +183,8 @@ final class JdkInstallWizard {
             String key = e.vendor() + VENDOR_PRODUCT_SEP + e.product();
             var byMajor = perKey.computeIfAbsent(key, k -> new TreeMap<>());
             var prior = byMajor.get(e.majorVersion());
-            if (prior == null || JdkSelector.versionKey(e.version())
-                    .compareTo(JdkSelector.versionKey(prior.version())) > 0) {
+            if (prior == null
+                    || JdkSelector.versionKey(e.version()).compareTo(JdkSelector.versionKey(prior.version())) > 0) {
                 byMajor.put(e.majorVersion(), e);
             }
         }

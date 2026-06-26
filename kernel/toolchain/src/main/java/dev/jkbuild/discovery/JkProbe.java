@@ -4,7 +4,6 @@ package dev.jkbuild.discovery;
 import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -37,7 +36,9 @@ public final class JkProbe implements LocalToolProbe {
     }
 
     @Override
-    public String name() { return "jk"; }
+    public String name() {
+        return "jk";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {

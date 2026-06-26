@@ -3,11 +3,9 @@ package dev.jkbuild.compile;
 
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.util.PathUtil;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,11 +38,13 @@ import java.util.regex.Pattern;
  */
 public final class SubprocessJavacStrategy implements JavaCompileStrategy {
 
-    private static final Pattern DIAGNOSTIC = Pattern.compile(
-            "^(?<file>.+?):(?<line>\\d+): (?<sev>error|warning|note): (?<msg>.*)$");
+    private static final Pattern DIAGNOSTIC =
+            Pattern.compile("^(?<file>.+?):(?<line>\\d+): (?<sev>error|warning|note): (?<msg>.*)$");
 
     @Override
-    public String name() { return "subprocess"; }
+    public String name() {
+        return "subprocess";
+    }
 
     @Override
     public CompileResult compile(CompileRequest request) throws IOException {
@@ -57,20 +57,17 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
             Files.createDirectories(outDir);
         }
 
-        Path javaHome = request.javaHome() != null
-                ? request.javaHome()
-                : Path.of(System.getProperty("java.home"));
+        Path javaHome = request.javaHome() != null ? request.javaHome() : Path.of(System.getProperty("java.home"));
         Path javac = javaHome.resolve("bin").resolve(HostPlatform.isWindows() ? "javac.exe" : "javac");
         if (!Files.exists(javac)) {
-            throw new IOException("javac not found at " + javac
-                    + " — project.jdk needs to point at a JDK (not a JRE).");
+            throw new IOException(
+                    "javac not found at " + javac + " — project.jdk needs to point at a JDK (not a JRE).");
         }
 
         try {
             Path argfile = writeArgfile(request, outDir);
             try {
-                ProcessBuilder pb = new ProcessBuilder(javac.toString(), "@" + argfile)
-                        .redirectErrorStream(true);
+                ProcessBuilder pb = new ProcessBuilder(javac.toString(), "@" + argfile).redirectErrorStream(true);
                 Process process = pb.start();
                 List<CompileResult.Diagnostic> diagnostics = parseStream(process);
                 int exit = process.waitFor();
@@ -156,8 +153,8 @@ public final class SubprocessJavacStrategy implements JavaCompileStrategy {
      */
     private static List<CompileResult.Diagnostic> parseStream(Process process) throws IOException {
         List<CompileResult.Diagnostic> diagnostics = new ArrayList<>();
-        try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader =
+                new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             CompileResult.Severity sev = null;
             Path file = null;
             long lineNo = -1;

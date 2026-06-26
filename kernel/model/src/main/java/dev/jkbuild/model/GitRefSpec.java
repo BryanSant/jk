@@ -22,7 +22,9 @@ public sealed interface GitRefSpec {
     String token();
 
     /** Whether the spec is intrinsically reproducible (a full SHA). */
-    default boolean isPin() { return false; }
+    default boolean isPin() {
+        return false;
+    }
 
     /**
      * Whether the spec names an effectively-immutable ref ({@link Tag} or
@@ -31,29 +33,53 @@ public sealed interface GitRefSpec {
      * A {@link Branch} is a moving target: it is built-from-source on demand and
      * injected onto the classpath like a {@code path} dependency, never locked.
      */
-    default boolean isImmutable() { return true; }
+    default boolean isImmutable() {
+        return true;
+    }
 
     record Tag(String name) implements GitRefSpec {
-        public Tag { Objects.requireNonNull(name, "name"); }
-        @Override public String token() { return "tag=" + name; }
+        public Tag {
+            Objects.requireNonNull(name, "name");
+        }
+
+        @Override
+        public String token() {
+            return "tag=" + name;
+        }
     }
 
     record Branch(String name) implements GitRefSpec {
-        public Branch { Objects.requireNonNull(name, "name"); }
-        @Override public String token() { return "branch=" + name; }
-        @Override public boolean isImmutable() { return false; }
+        public Branch {
+            Objects.requireNonNull(name, "name");
+        }
+
+        @Override
+        public String token() {
+            return "branch=" + name;
+        }
+
+        @Override
+        public boolean isImmutable() {
+            return false;
+        }
     }
 
     record Rev(String sha) implements GitRefSpec {
         public Rev {
             Objects.requireNonNull(sha, "sha");
-            if (sha.length() != 40 || !sha.chars().allMatch(c
-                    -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
-                throw new IllegalArgumentException(
-                        "rev must be a 40-char lowercase hex SHA (got: " + sha + ")");
+            if (sha.length() != 40 || !sha.chars().allMatch(c -> (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'))) {
+                throw new IllegalArgumentException("rev must be a 40-char lowercase hex SHA (got: " + sha + ")");
             }
         }
-        @Override public String token() { return "rev=" + sha; }
-        @Override public boolean isPin() { return true; }
+
+        @Override
+        public String token() {
+            return "rev=" + sha;
+        }
+
+        @Override
+        public boolean isPin() {
+            return true;
+        }
     }
 }

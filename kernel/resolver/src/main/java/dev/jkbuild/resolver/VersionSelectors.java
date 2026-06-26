@@ -72,9 +72,9 @@ public final class VersionSelectors {
 
     static VersionSet parseComparator(String spec) {
         if (spec.startsWith(">=")) return VersionSet.atLeast(spec.substring(2).trim(), true);
-        if (spec.startsWith(">"))  return VersionSet.atLeast(spec.substring(1).trim(), false);
+        if (spec.startsWith(">")) return VersionSet.atLeast(spec.substring(1).trim(), false);
         if (spec.startsWith("<=")) return VersionSet.lessThan(spec.substring(2).trim(), true);
-        if (spec.startsWith("<"))  return VersionSet.lessThan(spec.substring(1).trim(), false);
+        if (spec.startsWith("<")) return VersionSet.lessThan(spec.substring(1).trim(), false);
         if (spec.startsWith("=")) return VersionSet.exact(spec.substring(1).trim());
         return VersionSet.exact(spec);
     }

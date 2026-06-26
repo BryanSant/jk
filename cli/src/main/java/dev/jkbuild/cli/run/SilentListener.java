@@ -3,7 +3,6 @@ package dev.jkbuild.cli.run;
 
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
-
 import java.io.PrintStream;
 
 /**

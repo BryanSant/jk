@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;

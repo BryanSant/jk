@@ -16,7 +16,10 @@ import java.util.List;
  */
 public final class ImportReport {
 
-    public enum Severity { WARNING, ERROR }
+    public enum Severity {
+        WARNING,
+        ERROR
+    }
 
     public record Issue(Severity severity, String message) {}
 
@@ -47,8 +50,10 @@ public final class ImportReport {
             sb.append("Import was lossless — no warnings.\n");
             return sb.toString();
         }
-        List<Issue> warnings = issues.stream().filter(i -> i.severity() == Severity.WARNING).toList();
-        List<Issue> errors = issues.stream().filter(i -> i.severity() == Severity.ERROR).toList();
+        List<Issue> warnings =
+                issues.stream().filter(i -> i.severity() == Severity.WARNING).toList();
+        List<Issue> errors =
+                issues.stream().filter(i -> i.severity() == Severity.ERROR).toList();
         if (!errors.isEmpty()) {
             sb.append("## Tier 3 — not imported\n\n");
             sb.append("These constructs have no jk equivalent and were skipped or stubbed.\n\n");

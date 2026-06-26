@@ -6,7 +6,6 @@ import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.PhaseStatus;
-
 import java.io.PrintStream;
 import java.time.Duration;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,8 +37,7 @@ public final class VerboseListener implements GoalListener {
 
     @Override
     public void phaseStart(String phase, int scope) {
-        out.println("  " + Theme.colorize("·", Theme.active().normalGray())
-                + " " + phase + " (scope: " + scope + ")");
+        out.println("  " + Theme.colorize("·", Theme.active().normalGray()) + " " + phase + " (scope: " + scope + ")");
     }
 
     @Override
@@ -54,21 +52,22 @@ public final class VerboseListener implements GoalListener {
 
     @Override
     public void phaseFinish(String phase, PhaseStatus status, Duration duration) {
-        String glyph = switch (status) {
-            case SUCCESS -> Theme.colorize("✓", Theme.active().completedStep());
-            case FAIL    -> Theme.colorize("𝘅", Theme.active().error());
-            case CANCELLED -> Theme.colorize("·", Theme.active().normalGray());
-            default      -> "·";
-        };
+        String glyph =
+                switch (status) {
+                    case SUCCESS -> Theme.colorize("✓", Theme.active().completedStep());
+                    case FAIL -> Theme.colorize("𝘅", Theme.active().error());
+                    case CANCELLED -> Theme.colorize("·", Theme.active().normalGray());
+                    default -> "·";
+                };
         out.println("  " + glyph + " " + phase + "  "
-                + Theme.colorize(ConsoleSpec.fmtDuration(duration), Theme.active().darkGray()));
+                + Theme.colorize(
+                        ConsoleSpec.fmtDuration(duration), Theme.active().darkGray()));
     }
 
     @Override
     public void warn(String phase, String code, String message) {
         String location = (code != null && !code.isBlank()) ? " " + phase + "/" + code : "";
-        err.println("    " + Theme.colorize("⚠", Theme.active().warning())
-                + location + ": " + message);
+        err.println("    " + Theme.colorize("⚠", Theme.active().warning()) + location + ": " + message);
     }
 
     @Override
@@ -76,8 +75,8 @@ public final class VerboseListener implements GoalListener {
         if ("verbatim".equals(code)) {
             err.println(message);
         } else {
-            err.println("    " + Theme.colorize("✗", Theme.active().error())
-                    + " " + phase + "/" + code + ": " + message);
+            err.println(
+                    "    " + Theme.colorize("✗", Theme.active().error()) + " " + phase + "/" + code + ": " + message);
         }
     }
 

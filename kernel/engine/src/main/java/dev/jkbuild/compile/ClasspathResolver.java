@@ -4,7 +4,6 @@ package dev.jkbuild.compile;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Scope;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -33,8 +32,7 @@ public final class ClasspathResolver {
     public static final Set<Scope> COMPILE_MAIN = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED);
 
     /** Scopes visible while compiling test sources. */
-    public static final Set<Scope> COMPILE_TEST =
-            EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED, Scope.TEST);
+    public static final Set<Scope> COMPILE_TEST = EnumSet.of(Scope.EXPORT, Scope.MAIN, Scope.PROVIDED, Scope.TEST);
 
     private final Cas cas;
 
@@ -55,9 +53,7 @@ public final class ClasspathResolver {
             if (!pkg.inAnyScope(scopes)) continue;
             String checksum = pkg.checksum();
             if (checksum == null) continue;
-            String hex = checksum.startsWith("sha256:")
-                    ? checksum.substring("sha256:".length())
-                    : checksum;
+            String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
             result.add(cas.pathFor(hex));
             ledger.touch(hex);
         }

@@ -30,42 +30,35 @@ import java.util.Optional;
  * caller, not consumed from the enum.
  */
 public enum ForgeKind {
+    GITHUB("github", "GitHub", "github.com", true, List.of("gh", "auth", "token"), new String[] {
+        "GH_TOKEN", "GITHUB_TOKEN"
+    }),
 
-    GITHUB("github", "GitHub", "github.com",
-            true,
-            List.of("gh", "auth", "token"),
-            new String[]{"GH_TOKEN", "GITHUB_TOKEN"}),
-
-    GITLAB("gitlab", "GitLab", "gitlab.com",
-            true,
-            List.of("glab", "auth", "token"),
-            new String[]{"GITLAB_TOKEN"}),
+    GITLAB("gitlab", "GitLab", "gitlab.com", true, List.of("glab", "auth", "token"), new String[] {"GITLAB_TOKEN"}),
 
     // Covers Gitea and its forks (Forgejo, Codeberg). No single canonical
     // host, so --host is effectively required; no widely-installed native
     // token CLI to piggyback on.
-    GITEA("gitea", "Gitea/Forgejo", null,
-            true,
-            null,
-            new String[]{"GITEA_TOKEN", "FORGEJO_TOKEN"}),
+    GITEA("gitea", "Gitea/Forgejo", null, true, null, new String[] {"GITEA_TOKEN", "FORGEJO_TOKEN"}),
 
     // Bitbucket Cloud has no device-authorization grant; auth is via app
     // passwords / OAuth consumers. We fall back to token paste.
-    BITBUCKET("bitbucket", "Bitbucket", "bitbucket.org",
-            false,
-            null,
-            new String[]{"BITBUCKET_TOKEN"});
+    BITBUCKET("bitbucket", "Bitbucket", "bitbucket.org", false, null, new String[] {"BITBUCKET_TOKEN"});
 
     private final String id;
     private final String displayName;
-    private final String defaultHost;       // null → --host required
+    private final String defaultHost; // null → --host required
     private final boolean supportsDeviceFlow;
-    private final List<String> nativeCliToken;   // null → none
+    private final List<String> nativeCliToken; // null → none
     private final String[] nativeEnvVars;
 
-    ForgeKind(String id, String displayName, String defaultHost,
-              boolean supportsDeviceFlow, List<String> nativeCliToken,
-              String[] nativeEnvVars) {
+    ForgeKind(
+            String id,
+            String displayName,
+            String defaultHost,
+            boolean supportsDeviceFlow,
+            List<String> nativeCliToken,
+            String[] nativeEnvVars) {
         this.id = id;
         this.displayName = displayName;
         this.defaultHost = defaultHost;
@@ -74,12 +67,22 @@ public enum ForgeKind {
         this.nativeEnvVars = nativeEnvVars;
     }
 
-    public String id()                  { return id; }
-    public String displayName()         { return displayName; }
-    public boolean supportsDeviceFlow() { return supportsDeviceFlow; }
+    public String id() {
+        return id;
+    }
+
+    public String displayName() {
+        return displayName;
+    }
+
+    public boolean supportsDeviceFlow() {
+        return supportsDeviceFlow;
+    }
 
     /** Default host, or empty when the user must pass {@code --host}. */
-    public Optional<String> defaultHost() { return Optional.ofNullable(defaultHost); }
+    public Optional<String> defaultHost() {
+        return Optional.ofNullable(defaultHost);
+    }
 
     /** Native token CLI argv ({@code gh auth token}), or empty if none. */
     public Optional<List<String>> nativeCliToken() {
@@ -87,7 +90,9 @@ public enum ForgeKind {
     }
 
     /** Ecosystem-native env vars to honour, in precedence order. */
-    public List<String> nativeEnvVars() { return List.of(nativeEnvVars); }
+    public List<String> nativeEnvVars() {
+        return List.of(nativeEnvVars);
+    }
 
     /** jk's own override variable: {@code JK_GITHUB_TOKEN}, etc. */
     public String jkEnvVar() {
@@ -113,8 +118,8 @@ public enum ForgeKind {
     public Optional<String> defaultOAuthClientId() {
         return switch (this) {
             // Registered under github.com/jkbuild.
-            case GITHUB                       -> Optional.of("Ov23liOYrWd84ZK2Eg2n");
-            case GITLAB, GITEA, BITBUCKET     -> Optional.empty();
+            case GITHUB -> Optional.of("Ov23liOYrWd84ZK2Eg2n");
+            case GITLAB, GITEA, BITBUCKET -> Optional.empty();
         };
     }
 
@@ -124,9 +129,9 @@ public enum ForgeKind {
     public URI deviceCodeUri(String host) {
         String h = normalizeHost(host);
         return switch (this) {
-            case GITHUB    -> URI.create("https://" + h + "/login/device/code");
-            case GITLAB    -> URI.create("https://" + h + "/oauth/authorize_device");
-            case GITEA     -> URI.create("https://" + h + "/login/oauth/authorize_device");
+            case GITHUB -> URI.create("https://" + h + "/login/device/code");
+            case GITLAB -> URI.create("https://" + h + "/oauth/authorize_device");
+            case GITEA -> URI.create("https://" + h + "/login/oauth/authorize_device");
             case BITBUCKET -> throw new AuthException("Bitbucket does not support the device flow.");
         };
     }
@@ -135,9 +140,9 @@ public enum ForgeKind {
     public URI tokenUri(String host) {
         String h = normalizeHost(host);
         return switch (this) {
-            case GITHUB    -> URI.create("https://" + h + "/login/oauth/access_token");
-            case GITLAB    -> URI.create("https://" + h + "/oauth/token");
-            case GITEA     -> URI.create("https://" + h + "/login/oauth/access_token");
+            case GITHUB -> URI.create("https://" + h + "/login/oauth/access_token");
+            case GITLAB -> URI.create("https://" + h + "/oauth/token");
+            case GITEA -> URI.create("https://" + h + "/login/oauth/access_token");
             case BITBUCKET -> throw new AuthException("Bitbucket does not support the device flow.");
         };
     }
@@ -147,11 +152,10 @@ public enum ForgeKind {
         String h = normalizeHost(host);
         return switch (this) {
             // github.com → api.github.com; GHE → https://HOST/api/v3
-            case GITHUB    -> h.equals("github.com")
-                    ? URI.create("https://api.github.com")
-                    : URI.create("https://" + h + "/api/v3");
-            case GITLAB    -> URI.create("https://" + h + "/api/v4");
-            case GITEA     -> URI.create("https://" + h + "/api/v1");
+            case GITHUB ->
+                h.equals("github.com") ? URI.create("https://api.github.com") : URI.create("https://" + h + "/api/v3");
+            case GITLAB -> URI.create("https://" + h + "/api/v4");
+            case GITEA -> URI.create("https://" + h + "/api/v1");
             case BITBUCKET -> URI.create("https://api.bitbucket.org/2.0");
         };
     }
@@ -163,11 +167,11 @@ public enum ForgeKind {
         if (raw == null) return Optional.empty();
         String id = raw.toLowerCase(Locale.ROOT).strip();
         return switch (id) {
-            case "github", "gh"                       -> Optional.of(GITHUB);
-            case "gitlab", "glab"                     -> Optional.of(GITLAB);
-            case "gitea", "forgejo", "codeberg"       -> Optional.of(GITEA);
-            case "bitbucket", "bb"                    -> Optional.of(BITBUCKET);
-            default                                   -> Optional.empty();
+            case "github", "gh" -> Optional.of(GITHUB);
+            case "gitlab", "glab" -> Optional.of(GITLAB);
+            case "gitea", "forgejo", "codeberg" -> Optional.of(GITEA);
+            case "bitbucket", "bb" -> Optional.of(BITBUCKET);
+            default -> Optional.empty();
         };
     }
 

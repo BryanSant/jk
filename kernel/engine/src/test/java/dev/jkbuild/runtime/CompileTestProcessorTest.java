@@ -1,24 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.PhaseContext;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import javax.tools.ToolProvider;
 import java.io.IOException;
-import java.nio.file.Path;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import javax.tools.ToolProvider;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Regression guard for the compile-test annotation-processor wiring (the bug where
@@ -42,13 +40,21 @@ class CompileTestProcessorTest {
         Path out = dir.resolve("out");
 
         boolean ok = TestSupport.compileWithCache(
-                new NoopContext(), "compile-test", testSrc, out,
-                List.of(procDir), List.of(procDir),   // processor jar on cp AND processorpath
-                21, List.of(), Path.of(System.getProperty("java.home")),
-                null, new Cas(dir.resolve("cas")), dir.resolve("cache"));
+                new NoopContext(),
+                "compile-test",
+                testSrc,
+                out,
+                List.of(procDir),
+                List.of(procDir), // processor jar on cp AND processorpath
+                21,
+                List.of(),
+                Path.of(System.getProperty("java.home")),
+                null,
+                new Cas(dir.resolve("cas")),
+                dir.resolve("cache"));
 
         assertThat(ok).isTrue();
-        assertThat(out.resolve("app/WidgetTestGen.class")).isRegularFile();  // processor ran
+        assertThat(out.resolve("app/WidgetTestGen.class")).isRegularFile(); // processor ran
         assertThat(out.resolve("app/WidgetTest.class")).isRegularFile();
     }
 
@@ -66,10 +72,18 @@ class CompileTestProcessorTest {
         Path out = dir.resolve("out");
 
         boolean ok = TestSupport.compileWithCache(
-                new NoopContext(), "compile-test", testSrc, out,
-                List.of(procDir), List.of(),   // NO processor path — the regression
-                21, List.of(), Path.of(System.getProperty("java.home")),
-                null, new Cas(dir.resolve("cas")), dir.resolve("cache"));
+                new NoopContext(),
+                "compile-test",
+                testSrc,
+                out,
+                List.of(procDir),
+                List.of(), // NO processor path — the regression
+                21,
+                List.of(),
+                Path.of(System.getProperty("java.home")),
+                null,
+                new Cas(dir.resolve("cas")),
+                dir.resolve("cache"));
 
         assertThat(ok).isFalse();
         assertThat(out.resolve("app/WidgetTestGen.class")).doesNotExist();
@@ -80,14 +94,16 @@ class CompileTestProcessorTest {
     /** Source-generating processor: emits {@code <Type>Gen} for each {@code @gen.Gen} type. */
     private static Path sourceGenProcessor(Path dir) throws IOException {
         Path procDir = dir.resolve("proc");
-        compile(procDir, Map.of(
-                "gen.Gen", """
+        compile(
+                procDir,
+                Map.of(
+                        "gen.Gen", """
                         package gen;
                         import java.lang.annotation.*;
                         @Retention(RetentionPolicy.SOURCE) @Target(ElementType.TYPE)
                         public @interface Gen {}
                         """,
-                "gen.GenProc", """
+                        "gen.GenProc", """
                         package gen;
                         import javax.annotation.processing.*;
                         import javax.lang.model.SourceVersion;
@@ -145,15 +161,40 @@ class CompileTestProcessorTest {
 
     /** Minimal PhaseContext — compileWithCache only labels / warns / errors / reweights. */
     private static final class NoopContext implements PhaseContext {
-        @Override public void progress(int delta) {}
-        @Override public void updateScope(int additionalScope) {}
-        @Override public void label(String description) {}
-        @Override public void output(String line) {}
-        @Override public void warn(String code, String message) {}
-        @Override public void error(String code, String message) {}
-        @Override public boolean cancelled() { return false; }
-        @Override public <T> void put(GoalKey<T> key, T value) {}
-        @Override public <T> Optional<T> get(GoalKey<T> key) { return Optional.empty(); }
-        @Override public <T> T require(GoalKey<T> key) { throw new IllegalStateException("no " + key); }
+        @Override
+        public void progress(int delta) {}
+
+        @Override
+        public void updateScope(int additionalScope) {}
+
+        @Override
+        public void label(String description) {}
+
+        @Override
+        public void output(String line) {}
+
+        @Override
+        public void warn(String code, String message) {}
+
+        @Override
+        public void error(String code, String message) {}
+
+        @Override
+        public boolean cancelled() {
+            return false;
+        }
+
+        @Override
+        public <T> void put(GoalKey<T> key, T value) {}
+
+        @Override
+        public <T> Optional<T> get(GoalKey<T> key) {
+            return Optional.empty();
+        }
+
+        @Override
+        public <T> T require(GoalKey<T> key) {
+            throw new IllegalStateException("no " + key);
+        }
     }
 }

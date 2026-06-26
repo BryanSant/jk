@@ -48,41 +48,89 @@ public record JkBuild(
     }
 
     /** Back-compat constructor for callers that don't set the {@code [format]} block. */
-    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
-                   Profiles profiles, Features features, Workspace workspace,
-                   Map<String, String> manifest, List<PluginDeclaration> plugins,
-                   NativeConfig nativeConfig, Build build) {
-        this(project, dependencies, repositories, profiles, features, workspace,
-                manifest, plugins, nativeConfig, build, null);
+    public JkBuild(
+            Project project,
+            Dependencies dependencies,
+            List<RepositorySpec> repositories,
+            Profiles profiles,
+            Features features,
+            Workspace workspace,
+            Map<String, String> manifest,
+            List<PluginDeclaration> plugins,
+            NativeConfig nativeConfig,
+            Build build) {
+        this(
+                project,
+                dependencies,
+                repositories,
+                profiles,
+                features,
+                workspace,
+                manifest,
+                plugins,
+                nativeConfig,
+                build,
+                null);
     }
 
     /** Back-compat constructor for callers that don't set the {@code [build]} block. */
-    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
-                   Profiles profiles, Features features, Workspace workspace,
-                   Map<String, String> manifest, List<PluginDeclaration> plugins,
-                   NativeConfig nativeConfig) {
-        this(project, dependencies, repositories, profiles, features, workspace,
-                manifest, plugins, nativeConfig, null, null);
+    public JkBuild(
+            Project project,
+            Dependencies dependencies,
+            List<RepositorySpec> repositories,
+            Profiles profiles,
+            Features features,
+            Workspace workspace,
+            Map<String, String> manifest,
+            List<PluginDeclaration> plugins,
+            NativeConfig nativeConfig) {
+        this(
+                project,
+                dependencies,
+                repositories,
+                profiles,
+                features,
+                workspace,
+                manifest,
+                plugins,
+                nativeConfig,
+                null,
+                null);
     }
 
     /** Back-compat constructor for callers that don't set nativeConfig. */
-    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
-                   Profiles profiles, Features features, Workspace workspace,
-                   Map<String, String> manifest, List<PluginDeclaration> plugins) {
-        this(project, dependencies, repositories, profiles, features, workspace,
-                manifest, plugins, null, null);
+    public JkBuild(
+            Project project,
+            Dependencies dependencies,
+            List<RepositorySpec> repositories,
+            Profiles profiles,
+            Features features,
+            Workspace workspace,
+            Map<String, String> manifest,
+            List<PluginDeclaration> plugins) {
+        this(project, dependencies, repositories, profiles, features, workspace, manifest, plugins, null, null);
     }
 
     /** Back-compat constructor for callers that don't set plugin declarations. */
-    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
-                   Profiles profiles, Features features, Workspace workspace,
-                   Map<String, String> manifest) {
+    public JkBuild(
+            Project project,
+            Dependencies dependencies,
+            List<RepositorySpec> repositories,
+            Profiles profiles,
+            Features features,
+            Workspace workspace,
+            Map<String, String> manifest) {
         this(project, dependencies, repositories, profiles, features, workspace, manifest, List.of());
     }
 
     /** Back-compat constructor for callers that don't set manifest attributes. */
-    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories,
-                   Profiles profiles, Features features, Workspace workspace) {
+    public JkBuild(
+            Project project,
+            Dependencies dependencies,
+            List<RepositorySpec> repositories,
+            Profiles profiles,
+            Features features,
+            Workspace workspace) {
         this(project, dependencies, repositories, profiles, features, workspace, Map.of(), List.of());
     }
 
@@ -97,26 +145,38 @@ public record JkBuild(
     }
 
     /** With profiles. */
-    public JkBuild(Project project, Dependencies dependencies,
-                   List<RepositorySpec> repositories, Profiles profiles) {
+    public JkBuild(Project project, Dependencies dependencies, List<RepositorySpec> repositories, Profiles profiles) {
         this(project, dependencies, repositories, profiles, Features.empty(), null);
     }
 
     /** With profiles + features. */
-    public JkBuild(Project project, Dependencies dependencies,
-                   List<RepositorySpec> repositories, Profiles profiles, Features features) {
+    public JkBuild(
+            Project project,
+            Dependencies dependencies,
+            List<RepositorySpec> repositories,
+            Profiles profiles,
+            Features features) {
         this(project, dependencies, repositories, profiles, features, null);
     }
 
     public static JkBuild of(Project project) {
-        return new JkBuild(project, Dependencies.empty(), List.of(),
-                Profiles.empty(), Features.empty(), null);
+        return new JkBuild(project, Dependencies.empty(), List.of(), Profiles.empty(), Features.empty(), null);
     }
 
     /** Return a copy with the given custom jar-manifest attributes. */
     public JkBuild withManifest(Map<String, String> manifest) {
-        return new JkBuild(project, dependencies, repositories, profiles, features, workspace,
-                manifest, plugins, nativeConfig, build, format);
+        return new JkBuild(
+                project,
+                dependencies,
+                repositories,
+                profiles,
+                features,
+                workspace,
+                manifest,
+                plugins,
+                nativeConfig,
+                build,
+                format);
     }
 
     /** True iff this is a workspace root (has a non-empty {@code workspace} block). */
@@ -186,26 +246,29 @@ public record JkBuild(
      * </ul>
      */
     public enum Layout {
-        SIMPLE, TRADITIONAL, AUTO;
+        SIMPLE,
+        TRADITIONAL,
+        AUTO;
 
         /** Parse from a jk.toml string value; null or blank → AUTO. */
         public static Layout parse(String raw) {
             if (raw == null || raw.isBlank()) return AUTO;
             return switch (raw.trim().toLowerCase()) {
-                case "simple"      -> SIMPLE;
+                case "simple" -> SIMPLE;
                 case "traditional" -> TRADITIONAL;
-                case "auto"        -> AUTO;
-                default -> throw new IllegalArgumentException(
-                        "project.layout must be \"simple\", \"traditional\", or \"auto\" (got: " + raw + ")");
+                case "auto" -> AUTO;
+                default ->
+                    throw new IllegalArgumentException(
+                            "project.layout must be \"simple\", \"traditional\", or \"auto\" (got: " + raw + ")");
             };
         }
 
         /** The string written to jk.toml, or null for AUTO (omitted). */
         public String tomlValue() {
             return switch (this) {
-                case SIMPLE      -> "simple";
+                case SIMPLE -> "simple";
                 case TRADITIONAL -> "traditional";
-                case AUTO        -> null;
+                case AUTO -> null;
             };
         }
     }
@@ -224,14 +287,26 @@ public record JkBuild(
          */
         ALWAYS;
 
-        public boolean isEnabled() { return this != DISABLED; }
+        public boolean isEnabled() {
+            return this != DISABLED;
+        }
     }
 
-    public record Project(String group, String name, String version,
-                          String jdk, String graal, int java, VersionSelector kotlin,
-                          String main, boolean shadow, NativeMode nativeMode,
-                          String description, boolean application, boolean m2install,
-                          Layout layout) {
+    public record Project(
+            String group,
+            String name,
+            String version,
+            String jdk,
+            String graal,
+            int java,
+            VersionSelector kotlin,
+            String main,
+            boolean shadow,
+            NativeMode nativeMode,
+            String description,
+            boolean application,
+            boolean m2install,
+            Layout layout) {
 
         public Project {
             Objects.requireNonNull(group, "group");
@@ -251,26 +326,82 @@ public record JkBuild(
         }
 
         /** Back-compat constructor (pre-{@code layout}); bare-major {@code jdk} (0 → unset). */
-        public Project(String group, String name, String version,
-                       int jdk, int java, VersionSelector kotlin,
-                       String main, boolean shadow, NativeMode nativeMode,
-                       String description, boolean application, boolean m2install) {
-            this(group, name, version, majorSpec(jdk), null, java, kotlin, main, shadow, nativeMode,
-                    description, application, m2install, Layout.AUTO);
+        public Project(
+                String group,
+                String name,
+                String version,
+                int jdk,
+                int java,
+                VersionSelector kotlin,
+                String main,
+                boolean shadow,
+                NativeMode nativeMode,
+                String description,
+                boolean application,
+                boolean m2install) {
+            this(
+                    group,
+                    name,
+                    version,
+                    majorSpec(jdk),
+                    null,
+                    java,
+                    kotlin,
+                    main,
+                    shadow,
+                    nativeMode,
+                    description,
+                    application,
+                    m2install,
+                    Layout.AUTO);
         }
 
         /** Back-compat constructor (pre-{@code application}/{@code m2install}); bare-major {@code jdk}. */
-        public Project(String group, String name, String version,
-                       int jdk, int java, VersionSelector kotlin,
-                       String main, boolean shadow, NativeMode nativeMode, String description) {
-            this(group, name, version, majorSpec(jdk), null, java, kotlin, main, shadow, nativeMode,
-                    description, main != null, false, Layout.AUTO);
+        public Project(
+                String group,
+                String name,
+                String version,
+                int jdk,
+                int java,
+                VersionSelector kotlin,
+                String main,
+                boolean shadow,
+                NativeMode nativeMode,
+                String description) {
+            this(
+                    group,
+                    name,
+                    version,
+                    majorSpec(jdk),
+                    null,
+                    java,
+                    kotlin,
+                    main,
+                    shadow,
+                    nativeMode,
+                    description,
+                    main != null,
+                    false,
+                    Layout.AUTO);
         }
 
         /** Library project — no main, no shadow, no native; bare-major {@code jdk} (0 → unset). */
         public Project(String group, String name, String version, int jdk) {
-            this(group, name, version, majorSpec(jdk), null, jdk, null, null, false, NativeMode.DISABLED,
-                    null, false, false, Layout.AUTO);
+            this(
+                    group,
+                    name,
+                    version,
+                    majorSpec(jdk),
+                    null,
+                    jdk,
+                    null,
+                    null,
+                    false,
+                    NativeMode.DISABLED,
+                    null,
+                    false,
+                    false,
+                    Layout.AUTO);
         }
 
         /** A bare-major int as a jdk spec string ({@code 25} → {@code "25"}); 0/negative → unset. */
@@ -279,7 +410,9 @@ public record JkBuild(
         }
 
         /** Backward-compat: true when native mode is not DISABLED. */
-        public boolean nativeImage() { return nativeMode != NativeMode.DISABLED; }
+        public boolean nativeImage() {
+            return nativeMode != NativeMode.DISABLED;
+        }
 
         /** True when an explicit {@code main} class is set. */
         public boolean isRunnable() {
@@ -402,8 +535,8 @@ public record JkBuild(
      * {@code -Djk.<worker>.worker.jar}) so tests that fork that worker locate it by
      * path. Also implicitly {@code orderAfter} (the worker must be built first).
      */
-    public record Build(List<String> orderAfter, Map<String, String> embedSha,
-                        List<String> testWorkerJars, boolean lint) {
+    public record Build(
+            List<String> orderAfter, Map<String, String> embedSha, List<String> testWorkerJars, boolean lint) {
 
         public static final Build EMPTY = new Build(List.of(), Map.of(), List.of(), true);
 

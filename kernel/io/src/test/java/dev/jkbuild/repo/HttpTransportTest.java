@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class HttpTransportTest {
 
@@ -50,8 +49,7 @@ class HttpTransportTest {
             ex.close();
         });
 
-        Optional<byte[]> body = transport().fetch(base.resolve("/a.jar"),
-                new RepoCredential.Bearer("tok"));
+        Optional<byte[]> body = transport().fetch(base.resolve("/a.jar"), new RepoCredential.Bearer("tok"));
         assertThat(body).isPresent();
         assertThat(new String(body.get(), StandardCharsets.UTF_8)).isEqualTo("bytes");
         assertThat(seenAuth.get()).isEqualTo("Bearer tok");
@@ -89,8 +87,8 @@ class HttpTransportTest {
             ex.close();
         });
 
-        Optional<java.io.InputStream> body = transport().fetchStream(base.resolve("/a.jar"),
-                new RepoCredential.Bearer("tok"));
+        Optional<java.io.InputStream> body =
+                transport().fetchStream(base.resolve("/a.jar"), new RepoCredential.Bearer("tok"));
         assertThat(body).isPresent();
         try (var in = body.get()) {
             assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("bytes");
@@ -131,8 +129,8 @@ class HttpTransportTest {
         });
 
         byte[] payload = {1, 2, 3};
-        int status = transport().put(base.resolve("/up.jar"), payload,
-                "application/java-archive", new RepoCredential.Basic("u", "p"));
+        int status = transport()
+                .put(base.resolve("/up.jar"), payload, "application/java-archive", new RepoCredential.Basic("u", "p"));
         assertThat(status).isEqualTo(201);
         assertThat(seenType.get()).isEqualTo("application/java-archive");
         assertThat(seenBody.get()).isEqualTo(payload);

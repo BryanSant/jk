@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JkEnvTest {
 
@@ -45,14 +44,12 @@ class JkEnvTest {
         var jdkHome = jdksRoot.resolve("temurin-25.0.3");
         Files.createDirectories(jdkHome.resolve("bin"));
         Files.writeString(jdkHome.resolve("bin").resolve("java"), "#!/fake\n");
-        Files.writeString(jdkHome.resolve("release"),
-                "JAVA_VERSION=\"25.0.3\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+        Files.writeString(jdkHome.resolve("release"), "JAVA_VERSION=\"25.0.3\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
 
         var project = tempDir.resolve("project");
         Files.createDirectories(project);
         Files.writeString(project.resolve("jk.toml"), "[project]\ngroup=\"x\"\nname=\"y\"\nversion=\"1.0\"\n");
-        LockfileWriter.write(Lockfile.empty("0.1", "temurin-25.0.3"),
-                project.resolve("jk.lock"));
+        LockfileWriter.write(Lockfile.empty("0.1", "temurin-25.0.3"), project.resolve("jk.lock"));
 
         var env = new JkEnv(new JdkRegistry(jdksRoot), "/usr/bin:/bin", noGlobalDefault(tempDir));
         var target = env.resolve(project);
@@ -75,14 +72,14 @@ class JkEnvTest {
         var jdkHome = jdksRoot.resolve("graalvm-jdk-25");
         Files.createDirectories(jdkHome.resolve("bin"));
         Files.writeString(jdkHome.resolve("bin").resolve("java"), "#!/fake\n");
-        Files.writeString(jdkHome.resolve("release"),
+        Files.writeString(
+                jdkHome.resolve("release"),
                 "JAVA_VERSION=\"25.0.0\"\nIMPLEMENTOR=\"Oracle Corporation\"\nIMPLEMENTOR_VERSION=\"Oracle GraalVM 25\"\n");
 
         var project = tempDir.resolve("project");
         Files.createDirectories(project);
         Files.writeString(project.resolve("jk.toml"), "[project]\ngroup=\"x\"\nname=\"y\"\nversion=\"1.0\"\n");
-        LockfileWriter.write(Lockfile.empty("0.1", "graalvm-jdk-25"),
-                project.resolve("jk.lock"));
+        LockfileWriter.write(Lockfile.empty("0.1", "graalvm-jdk-25"), project.resolve("jk.lock"));
 
         var env = new JkEnv(new JdkRegistry(jdksRoot), "/usr/bin", noGlobalDefault(tempDir));
         var target = env.resolve(project);
@@ -111,8 +108,7 @@ class JkEnvTest {
         var project = tempDir.resolve("project");
         Files.createDirectories(project);
         Files.writeString(project.resolve("jk.toml"), "[project]\ngroup=\"x\"\nname=\"y\"\nversion=\"1.0\"\n");
-        LockfileWriter.write(Lockfile.empty("0.1", "nonexistent-jdk-999"),
-                project.resolve("jk.lock"));
+        LockfileWriter.write(Lockfile.empty("0.1", "nonexistent-jdk-999"), project.resolve("jk.lock"));
 
         var env = new JkEnv(new JdkRegistry(tempDir.resolve("jdks")), "/usr/bin", noGlobalDefault(tempDir));
         assertThat(env.resolve(project).isActive()).isFalse();
@@ -133,8 +129,7 @@ class JkEnvTest {
         assertThat(target.isActive()).isTrue();
         assertThat(target.projectRoot()).isEmpty();
         assertThat(target.vars().get("JAVA_HOME")).isEqualTo(realHome.toString());
-        assertThat(target.vars().get("PATH"))
-                .isEqualTo(realHome.resolve("bin") + File.pathSeparator + "/usr/bin");
+        assertThat(target.vars().get("PATH")).isEqualTo(realHome.resolve("bin") + File.pathSeparator + "/usr/bin");
     }
 
     @Test
@@ -151,29 +146,30 @@ class JkEnvTest {
         var env = new JkEnv(new JdkRegistry(jdksRoot), "/usr/bin", defaults);
         var target = env.resolve(project);
 
-        assertThat(target.isActive()).isTrue();   // no pin → default fills in
-        assertThat(target.vars().get("JAVA_HOME")).isEqualTo(jdkHome.toRealPath().toString());
+        assertThat(target.isActive()).isTrue(); // no pin → default fills in
+        assertThat(target.vars().get("JAVA_HOME"))
+                .isEqualTo(jdkHome.toRealPath().toString());
     }
 
     @Test
     void current_jdk_symlink_wins_over_default(@TempDir Path tempDir) throws IOException {
         var jdksRoot = tempDir.resolve("jdks");
         var current = fakeJdk(jdksRoot.resolve("temurin-26.0.1"));
-        fakeJdk(jdksRoot.resolve("temurin-21.0.5"));   // the configured default
+        fakeJdk(jdksRoot.resolve("temurin-21.0.5")); // the configured default
 
         var data = tempDir.resolve("jkdata");
         Files.createDirectories(data);
         var configFile = data.resolve("config.toml");
         Files.writeString(configFile, "default-jdk = \"temurin-21.0.5\"\n");
         Files.createSymbolicLink(data.resolve("current-jdk"), current);
-        var defaults = new GlobalDefaultJdk(
-                data.resolve("default-jdk"), data.resolve("current-jdk"), configFile);
+        var defaults = new GlobalDefaultJdk(data.resolve("default-jdk"), data.resolve("current-jdk"), configFile);
 
         var env = new JkEnv(new JdkRegistry(jdksRoot), "/usr/bin", defaults);
         var target = env.resolve(tempDir);
 
         // current-jdk (26) is honoured ahead of the configured default (21).
-        assertThat(target.vars().get("JAVA_HOME")).isEqualTo(current.toRealPath().toString());
+        assertThat(target.vars().get("JAVA_HOME"))
+                .isEqualTo(current.toRealPath().toString());
     }
 
     /** A GlobalDefaultJdk pointing at empty, non-existent channels — no current, no default. */
@@ -189,16 +185,14 @@ class JkEnvTest {
         Files.createDirectories(data);
         var configFile = data.resolve("config.toml");
         Files.writeString(configFile, "default-jdk = \"" + id + "\"\n");
-        return new GlobalDefaultJdk(
-                data.resolve("default-jdk"), data.resolve("current-jdk"), configFile);
+        return new GlobalDefaultJdk(data.resolve("default-jdk"), data.resolve("current-jdk"), configFile);
     }
 
     /** Stand up a fake jk-managed JDK install (bin/java + release) and return its home. */
     private static Path fakeJdk(Path home) throws IOException {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake\n");
-        Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"25.0.3\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+        Files.writeString(home.resolve("release"), "JAVA_VERSION=\"25.0.3\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
         return home;
     }
 }

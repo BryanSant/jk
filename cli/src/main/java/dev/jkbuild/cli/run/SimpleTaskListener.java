@@ -5,7 +5,6 @@ import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
-
 import java.io.PrintStream;
 
 /**

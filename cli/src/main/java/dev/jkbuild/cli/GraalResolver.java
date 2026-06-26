@@ -14,7 +14,6 @@ import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkResolver;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.tool.NativeImageDriver;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -44,8 +43,8 @@ import java.util.Optional;
  */
 public final class GraalResolver {
 
-    private final Path jdksDir;        // nullable — overrides the default jdks root
-    private final boolean assumeYes;   // --yes: install without prompting
+    private final Path jdksDir; // nullable — overrides the default jdks root
+    private final boolean assumeYes; // --yes: install without prompting
     private final Map<String, Path> memo = new HashMap<>();
 
     public GraalResolver(Path jdksDir, boolean assumeYes) {
@@ -80,8 +79,7 @@ public final class GraalResolver {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
 
         // 1. Explicit spec: --graal switch (jk.graal) > project.graal > JK_GRAAL env.
-        String effective = firstNonBlank(
-                System.getProperty("jk.graal"), graalSpec, System.getenv("JK_GRAAL"));
+        String effective = firstNonBlank(System.getProperty("jk.graal"), graalSpec, System.getenv("JK_GRAAL"));
         if (effective != null && !effective.isBlank()) {
             Optional<InstalledJdk> hit = registry.findBySpec(effective);
             if (hit.isPresent() && NativeImageDriver.resolve(hit.get().home()).isPresent()) {
@@ -100,7 +98,8 @@ public final class GraalResolver {
             Optional<String> gid = gd.graalIdentifier();
             if (gid.isPresent()) {
                 Optional<InstalledJdk> byId = registry.find(gid.get());
-                if (byId.isPresent() && NativeImageDriver.resolve(byId.get().home()).isPresent()) {
+                if (byId.isPresent()
+                        && NativeImageDriver.resolve(byId.get().home()).isPresent()) {
                     return byId.get().home();
                 }
             }
@@ -115,7 +114,8 @@ public final class GraalResolver {
         Path projectJavaHome = null;
         try {
             projectJavaHome = JdkResolver.forProject(projectDir, jdksDir)
-                    .map(InstalledJdk::home).orElse(null);
+                    .map(InstalledJdk::home)
+                    .orElse(null);
         } catch (IOException ignored) {
             // fall through with null
         }
@@ -128,7 +128,8 @@ public final class GraalResolver {
             // Hand the phase the GraalVM home that owns native-image (.../bin/native-image).
             Path bin = binary.get();
             return bin.getParent() != null && bin.getParent().getParent() != null
-                    ? bin.getParent().getParent() : projectJavaHome;
+                    ? bin.getParent().getParent()
+                    : projectJavaHome;
         }
 
         // 3. Missing — offer Oracle GraalVM (prompt / --yes / non-TTY fail).
@@ -145,8 +146,10 @@ public final class GraalResolver {
         }
         if (!assumeYes) {
             String warn = Theme.colorize("‼", Theme.active().warning());
-            boolean ok = Confirm.of(warn + " native-image not found. "
-                    + "Install Oracle GraalVM to build native artifacts?", true).ask();
+            boolean ok = Confirm.of(
+                            warn + " native-image not found. " + "Install Oracle GraalVM to build native artifacts?",
+                            true)
+                    .ask();
             if (!ok) {
                 System.err.println("Aborted — no GraalVM to build with. Pin one with "
                         + "`graal = \"native\"` or install: jk jdk install native");
@@ -169,21 +172,20 @@ public final class GraalResolver {
             JdkCatalog catalog = new JdkCatalogClient().fetch();
             String effective = spec;
             if (JdkKeywords.isKeyword(spec)) {
-                effective = JdkKeywords.resolveToMajorSpec(catalog, spec, os, arch).orElse(spec);
+                effective =
+                        JdkKeywords.resolveToMajorSpec(catalog, spec, os, arch).orElse(spec);
             }
             Optional<JdkCatalog.Entry> entry = JdkSelector.selectPreferred(catalog, effective, os, arch);
             if (entry.isEmpty()) {
-                System.err.println("jk native: no GraalVM matches " + spec
-                        + " on " + os + "/" + arch + ".");
+                System.err.println("jk native: no GraalVM matches " + spec + " on " + os + "/" + arch + ".");
                 return null;
             }
             JdkCatalog.Entry e = entry.get();
             System.out.println(Theme.colorize("⬇", Theme.active().cyan())
-                    + " Installing GraalVM " + Theme.colorize(e.installFolderName(),
-                            Theme.active().focused()) + " (" + announce + ")…");
+                    + " Installing GraalVM "
+                    + Theme.colorize(e.installFolderName(), Theme.active().focused()) + " (" + announce + ")…");
             InstalledJdk installed = new JdkInstaller(new Http(), registry).install(e);
-            System.out.println(Theme.colorize("✓", Theme.active().success())
-                    + " GraalVM ready: " + installed.home());
+            System.out.println(Theme.colorize("✓", Theme.active().success()) + " GraalVM ready: " + installed.home());
             return installed.home();
         } catch (InterruptedException ie) {
             Thread.currentThread().interrupt();

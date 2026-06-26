@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.test.runner;
 
-import org.junit.jupiter.api.Test;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import java.util.LinkedHashMap;
 import java.util.List;
-
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import org.junit.jupiter.api.Test;
 
 class JsonOutTest {
 

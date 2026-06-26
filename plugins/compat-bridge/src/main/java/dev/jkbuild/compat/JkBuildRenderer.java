@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compat;
 
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
-
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -58,7 +57,10 @@ public final class JkBuildRenderer {
         if (manifest == null || manifest.isEmpty()) return;
         sb.append("\n[manifest]\n");
         for (Map.Entry<String, String> e : manifest.entrySet()) {
-            sb.append(quote(e.getKey())).append(" = ").append(quote(e.getValue())).append('\n');
+            sb.append(quote(e.getKey()))
+                    .append(" = ")
+                    .append(quote(e.getValue()))
+                    .append('\n');
         }
     }
 
@@ -110,16 +112,18 @@ public final class JkBuildRenderer {
         sb.append('\n');
         sb.append("[repositories]\n");
         for (RepositorySpec r : repos) {
-            sb.append(safeKey(r.name())).append(" = ")
-                    .append(quote(r.url().toString())).append('\n');
+            sb.append(safeKey(r.name()))
+                    .append(" = ")
+                    .append(quote(r.url().toString()))
+                    .append('\n');
         }
     }
 
     private static void renderDependencies(StringBuilder sb, JkBuild jkBuild) {
         Map<Scope, List<Dependency>> byScope = jkBuild.dependencies().byScope();
         if (byScope.isEmpty()) return;
-        for (Scope scope : new Scope[] {
-                Scope.PLATFORM, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR}) {
+        for (Scope scope :
+                new Scope[] {Scope.PLATFORM, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST, Scope.PROCESSOR}) {
             List<Dependency> deps = byScope.get(scope);
             if (deps == null || deps.isEmpty()) continue;
             // Sort by short name for determinism. The dep `name` is the

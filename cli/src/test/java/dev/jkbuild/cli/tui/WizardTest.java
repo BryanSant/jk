@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
-import org.jline.terminal.impl.DumbTerminal;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -15,8 +14,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.jline.terminal.impl.DumbTerminal;
+import org.junit.jupiter.api.Test;
 
 /**
  * Drives the wizard against JLine's {@link DumbTerminal}. The terminal is
@@ -192,7 +191,8 @@ class WizardTest {
         var wizard = Wizard.builder()
                 .title("Test")
                 .step(WizardStep.InputStep.of("name", "Name").build())
-                .step(WizardStep.OutputStep.of("preview", a -> java.util.List.of("Hello " + a.get("name"))).build())
+                .step(WizardStep.OutputStep.of("preview", a -> java.util.List.of("Hello " + a.get("name")))
+                        .build())
                 .build();
 
         var exec = Executors.newSingleThreadExecutor();

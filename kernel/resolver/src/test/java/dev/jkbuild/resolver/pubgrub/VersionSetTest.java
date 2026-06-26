@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver.pubgrub;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
 
 class VersionSetTest {
 

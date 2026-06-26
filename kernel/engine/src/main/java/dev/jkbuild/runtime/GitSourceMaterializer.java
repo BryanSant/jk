@@ -13,7 +13,6 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.util.GitUrl;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -34,8 +33,7 @@ import java.nio.file.Path;
 public final class GitSourceMaterializer {
 
     /** Outcome: the published coordinate, the {@code file://} repo, and lock provenance. */
-    record Materialized(String group, String artifact, String version,
-                        URI repoUrl, Lockfile.Artifact.GitInfo gitInfo) {
+    record Materialized(String group, String artifact, String version, URI repoUrl, Lockfile.Artifact.GitInfo gitInfo) {
         String coordinate() {
             return group + ":" + artifact;
         }
@@ -51,13 +49,25 @@ public final class GitSourceMaterializer {
 
     /** Production wiring: caches under {@code $JK_CACHE_DIR}, forge-auth git credentials. */
     GitSourceMaterializer(Cas cas, RepoGroup buildRepos, Path javaHome, String jkVersion) {
-        this(JkDirs.cache().resolve("git"), JkDirs.cache().resolve("git-artifacts"),
-                cas, buildRepos, javaHome, jkVersion, new ForgeGitCredentials());
+        this(
+                JkDirs.cache().resolve("git"),
+                JkDirs.cache().resolve("git-artifacts"),
+                cas,
+                buildRepos,
+                javaHome,
+                jkVersion,
+                new ForgeGitCredentials());
     }
 
     /** Visible for tests — inject roots and credentials. */
-    GitSourceMaterializer(Path gitRoot, Path artifactsRoot, Cas cas, RepoGroup buildRepos,
-                          Path javaHome, String jkVersion, ForgeGitCredentials credentials) {
+    GitSourceMaterializer(
+            Path gitRoot,
+            Path artifactsRoot,
+            Cas cas,
+            RepoGroup buildRepos,
+            Path javaHome,
+            String jkVersion,
+            ForgeGitCredentials credentials) {
         this.gitRoot = gitRoot;
         this.artifactsRoot = artifactsRoot;
         this.cas = cas;
@@ -84,9 +94,8 @@ public final class GitSourceMaterializer {
         String sha = fetched.sha();
         // An explicit `version` override relabels the artifact without touching
         // the ref → commit selection, so we can skip ref-derived versioning.
-        String version = source.overrideVersion() != null
-                ? source.overrideVersion()
-                : deriveVersion(fetcher, source, sha);
+        String version =
+                source.overrideVersion() != null ? source.overrideVersion() : deriveVersion(fetcher, source, sha);
 
         Path projectDir = source.path() != null && !source.path().isBlank()
                 ? fetched.checkoutPath().resolve(source.path())
@@ -101,13 +110,17 @@ public final class GitSourceMaterializer {
         // Discovery with override: explicit group/artifact replace the
         // coordinate read from the repo's [project] (docs/git-source-deps.md).
         String group = source.overrideGroup() != null
-                ? source.overrideGroup() : project.project().group();
+                ? source.overrideGroup()
+                : project.project().group();
         String artifact = source.overrideArtifact() != null
-                ? source.overrideArtifact() : project.project().name();
+                ? source.overrideArtifact()
+                : project.project().name();
 
         // Per-commit local Maven repo; reused on a cache hit (immutable tag/rev).
-        Path repo = artifactsRoot.resolve(GitUrl.canonicalHash(source.canonicalUrl()))
-                .resolve(sha).resolve("repo");
+        Path repo = artifactsRoot
+                .resolve(GitUrl.canonicalHash(source.canonicalUrl()))
+                .resolve(sha)
+                .resolve("repo");
         String dir = group.replace('.', '/') + "/" + artifact + "/" + version + "/";
         Path jarPath = repo.resolve(dir + artifact + "-" + version + ".jar");
         Path pomPath = repo.resolve(dir + artifact + "-" + version + ".pom");
@@ -128,13 +141,12 @@ public final class GitSourceMaterializer {
             Files.writeString(metaPath, metadataXml(group, artifact, version));
         }
 
-        Lockfile.Artifact.GitInfo gitInfo =
-                new Lockfile.Artifact.GitInfo(source.canonicalUrl(), sha, source.ref().token());
+        Lockfile.Artifact.GitInfo gitInfo = new Lockfile.Artifact.GitInfo(
+                source.canonicalUrl(), sha, source.ref().token());
         return new Materialized(group, artifact, version, repo.toUri(), gitInfo);
     }
 
-    private static String deriveVersion(GitFetcher fetcher, GitSource source, String sha)
-            throws IOException {
+    private static String deriveVersion(GitFetcher fetcher, GitSource source, String sha) throws IOException {
         GitRefSpec ref = source.ref();
         if (ref instanceof GitRefSpec.Tag t) {
             return GitVersion.fromTag(t.name());

@@ -3,7 +3,6 @@ package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkVendor;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;

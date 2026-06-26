@@ -1,46 +1,39 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class AddRemoveCommandTest {
 
     @Test
     void add_modifies_build_jk(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        int exit = run("add", "com.fasterxml.jackson.core:jackson-databind:2.18.2",
-                "-C", tempDir.toString());
+        int exit = run("add", "com.fasterxml.jackson.core:jackson-databind:2.18.2", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(parsed.dependencies().of(Scope.MAIN))
-                .singleElement()
-                .satisfies(d -> {
-                    assertThat(d.library()).isEqualTo("jackson-databind");
-                    assertThat(d.module())
-                            .isEqualTo("com.fasterxml.jackson.core:jackson-databind");
-                });
+        assertThat(parsed.dependencies().of(Scope.MAIN)).singleElement().satisfies(d -> {
+            assertThat(d.library()).isEqualTo("jackson-databind");
+            assertThat(d.module()).isEqualTo("com.fasterxml.jackson.core:jackson-databind");
+        });
     }
 
     @Test
     void add_test_scope(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        int exit = run("add", "org.junit.jupiter:junit-jupiter:6.1.0", "--test",
-                "-C", tempDir.toString());
+        int exit = run("add", "org.junit.jupiter:junit-jupiter:6.1.0", "--test", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
@@ -51,26 +44,29 @@ class AddRemoveCommandTest {
     @Test
     void add_with_structured_flags(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        int exit = run("add", "spring-web",
-                "--group", "org.springframework.boot",
-                "--name", "spring-boot-starter-web",
-                "--ver", "3.4.0",
-                "-C", tempDir.toString());
+        int exit = run(
+                "add",
+                "spring-web",
+                "--group",
+                "org.springframework.boot",
+                "--name",
+                "spring-boot-starter-web",
+                "--ver",
+                "3.4.0",
+                "-C",
+                tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         String toml = Files.readString(tempDir.resolve("jk.toml"));
-        assertThat(toml).contains(
-                "spring-web = { group = \"org.springframework.boot\", "
+        assertThat(toml)
+                .contains("spring-web = { group = \"org.springframework.boot\", "
                         + "name = \"spring-boot-starter-web\", version = \"3.4.0\" }");
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(parsed.dependencies().of(Scope.MAIN))
-                .singleElement()
-                .satisfies(d -> {
-                    assertThat(d.library()).isEqualTo("spring-web");
-                    assertThat(d.module())
-                            .isEqualTo("org.springframework.boot:spring-boot-starter-web");
-                });
+        assertThat(parsed.dependencies().of(Scope.MAIN)).singleElement().satisfies(d -> {
+            assertThat(d.library()).isEqualTo("spring-web");
+            assertThat(d.module()).isEqualTo("org.springframework.boot:spring-boot-starter-web");
+        });
     }
 
     @Test

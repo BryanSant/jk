@@ -2,7 +2,6 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.model.Coordinate;
-
 import java.io.IOException;
 import java.util.List;
 import java.util.Objects;
@@ -60,8 +59,7 @@ public final class RepoGroup {
         return List.copyOf(union);
     }
 
-    private Optional<RepoFetched> tryFetch(Coordinate coord, Fetcher fetcher)
-            throws IOException, InterruptedException {
+    private Optional<RepoFetched> tryFetch(Coordinate coord, Fetcher fetcher) throws IOException, InterruptedException {
         for (MavenRepo repo : repos) {
             try {
                 MavenRepo.Fetched f = fetcher.fetch(repo, coord);

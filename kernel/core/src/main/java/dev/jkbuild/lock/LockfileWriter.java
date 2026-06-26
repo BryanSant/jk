@@ -2,7 +2,6 @@
 package dev.jkbuild.lock;
 
 import dev.jkbuild.model.Scope;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -30,7 +29,9 @@ public final class LockfileWriter {
         StringBuilder out = new StringBuilder(256);
         out.append("version = ").append(lockfile.version()).append('\n');
         out.append("generated-by = ").append(quote(lockfile.generatedBy())).append('\n');
-        out.append("resolution-algorithm = ").append(quote(lockfile.resolutionAlgorithm())).append('\n');
+        out.append("resolution-algorithm = ")
+                .append(quote(lockfile.resolutionAlgorithm()))
+                .append('\n');
         if (lockfile.jdk() != null) {
             out.append("jdk = ").append(quote(lockfile.jdk())).append('\n');
         }
@@ -39,9 +40,7 @@ public final class LockfileWriter {
         }
 
         List<Lockfile.Artifact> sorted = new ArrayList<>(lockfile.artifacts());
-        sorted.sort(Comparator
-                .comparing(Lockfile.Artifact::name)
-                .thenComparing(Lockfile.Artifact::version));
+        sorted.sort(Comparator.comparing(Lockfile.Artifact::name).thenComparing(Lockfile.Artifact::version));
 
         for (Lockfile.Artifact pkg : sorted) {
             out.append('\n');
@@ -90,9 +89,8 @@ public final class LockfileWriter {
         }
 
         List<Lockfile.PluginEntry> sortedPlugins = new ArrayList<>(lockfile.plugins());
-        sortedPlugins.sort(Comparator
-                .comparing(Lockfile.PluginEntry::coordinate)
-                .thenComparing(Lockfile.PluginEntry::version));
+        sortedPlugins.sort(
+                Comparator.comparing(Lockfile.PluginEntry::coordinate).thenComparing(Lockfile.PluginEntry::version));
 
         for (Lockfile.PluginEntry p : sortedPlugins) {
             out.append('\n');
@@ -111,12 +109,12 @@ public final class LockfileWriter {
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
             switch (c) {
-                case '"'  -> sb.append("\\\"");
+                case '"' -> sb.append("\\\"");
                 case '\\' -> sb.append("\\\\");
                 case '\n' -> sb.append("\\n");
                 case '\r' -> sb.append("\\r");
                 case '\t' -> sb.append("\\t");
-                default   -> {
+                default -> {
                     if (c < 0x20) {
                         sb.append(String.format("\\u%04x", (int) c));
                     } else {

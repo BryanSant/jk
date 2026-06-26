@@ -2,7 +2,6 @@
 package dev.jkbuild.plugin;
 
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
 import java.util.List;
 
 /**

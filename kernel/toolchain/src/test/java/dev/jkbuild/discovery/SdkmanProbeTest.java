@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class SdkmanProbeTest {
 
@@ -24,8 +23,7 @@ class SdkmanProbeTest {
         Path synthetic = candidate.getParent().resolve("jdk-21.0.5");
         moveContents(synthetic, candidate);
 
-        Optional<DiscoveredTool> hit = new SdkmanProbe(sdkman)
-                .find(ToolSpec.jdk("21.0.5", "tem"));
+        Optional<DiscoveredTool> hit = new SdkmanProbe(sdkman).find(ToolSpec.jdk("21.0.5", "tem"));
         assertThat(hit).isPresent();
         assertThat(hit.get().home()).isEqualTo(candidate.toRealPath());
         assertThat(hit.get().source()).isEqualTo("sdkman");
@@ -66,9 +64,8 @@ class SdkmanProbeTest {
         ToolHealthTest.jdkLayout(candidate.getParent(), "21.0.5", "Eclipse Adoptium");
         moveContents(candidate.getParent().resolve("jdk-21.0.5"), candidate);
 
-        Optional<DiscoveredTool> hit = new ToolProvisioner(
-                List.of(new SdkmanProbe(sdkman)))
-                .discover(ToolSpec.jdk("21.0.5", "tem"));
+        Optional<DiscoveredTool> hit =
+                new ToolProvisioner(List.of(new SdkmanProbe(sdkman))).discover(ToolSpec.jdk("21.0.5", "tem"));
         assertThat(hit).isPresent();
     }
 
@@ -87,8 +84,12 @@ class SdkmanProbeTest {
             }
         }
         try (var stream = Files.walk(src)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .forEach(p -> { try { Files.deleteIfExists(p); } catch (Exception ignored) {} });
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (Exception ignored) {
+                }
+            });
         }
     }
 }

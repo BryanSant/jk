@@ -1,11 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.java.compiler;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -15,8 +12,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import javax.tools.JavaCompiler;
+import javax.tools.ToolProvider;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Drives the worker's protocol end-to-end (in-process via {@link JavaCompilerWorker#run}):
@@ -30,14 +29,16 @@ class JavaCompilerWorkerTest {
         // A standalone annotation processor + annotation, compiled into procDir and
         // registered via META-INF/services so the worker discovers it.
         Path procDir = dir.resolve("proc");
-        compile(procDir, Map.of(
-                "gen.Gen", """
+        compile(
+                procDir,
+                Map.of(
+                        "gen.Gen", """
                         package gen;
                         import java.lang.annotation.*;
                         @Retention(RetentionPolicy.SOURCE) @Target(ElementType.TYPE)
                         public @interface Gen {}
                         """,
-                "gen.GenProc", """
+                        "gen.GenProc", """
                         package gen;
                         import javax.annotation.processing.*;
                         import javax.lang.model.SourceVersion;
@@ -75,17 +76,23 @@ class JavaCompilerWorkerTest {
         Path classOut = dir.resolve("classes");
         Path genOut = dir.resolve("gen-src");
         Path spec = dir.resolve("spec.txt");
-        Files.writeString(spec, String.join("\n",
-                "CLASSOUTPUT " + classOut,
-                "SOURCEOUTPUT " + genOut,
-                "RELEASE 21",
-                "SOURCE " + src.toAbsolutePath(),
-                "CLASSPATH " + procDir,        // so javac resolves @gen.Gen
-                "PROCESSORPATH " + procDir) + "\n");
+        Files.writeString(
+                spec,
+                String.join(
+                                "\n",
+                                "CLASSOUTPUT " + classOut,
+                                "SOURCEOUTPUT " + genOut,
+                                "RELEASE 21",
+                                "SOURCE " + src.toAbsolutePath(),
+                                "CLASSPATH " + procDir, // so javac resolves @gen.Gen
+                                "PROCESSORPATH " + procDir)
+                        + "\n");
 
         ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        int code = JavaCompilerWorker.compileSpec(spec, new dev.jkbuild.plugin.protocol.ProtocolWriter(
-                new PrintStream(buf, true, StandardCharsets.UTF_8), "##JKJC:"));
+        int code = JavaCompilerWorker.compileSpec(
+                spec,
+                new dev.jkbuild.plugin.protocol.ProtocolWriter(
+                        new PrintStream(buf, true, StandardCharsets.UTF_8), "##JKJC:"));
         String out = buf.toString(StandardCharsets.UTF_8);
 
         assertThat(code).isZero();

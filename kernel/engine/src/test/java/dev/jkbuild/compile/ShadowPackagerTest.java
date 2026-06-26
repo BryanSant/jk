@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -15,8 +14,8 @@ import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ShadowPackagerTest {
 
@@ -39,13 +38,14 @@ class ShadowPackagerTest {
         }
 
         Path out = tmp.resolve("app-all.jar");
-        new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
-                classes, List.of(dep), out, "app.Main",
-                Map.of("Implementation-Title", "app"), 0L));
+        new ShadowPackager()
+                .packageShadow(new ShadowPackager.ShadowRequest(
+                        classes, List.of(dep), out, "app.Main", Map.of("Implementation-Title", "app"), 0L));
 
         try (JarFile jf = new JarFile(out.toFile())) {
             Manifest mf = jf.getManifest();
-            assertThat(mf.getMainAttributes().getValue(Attributes.Name.MAIN_CLASS)).isEqualTo("app.Main");
+            assertThat(mf.getMainAttributes().getValue(Attributes.Name.MAIN_CLASS))
+                    .isEqualTo("app.Main");
             assertThat(mf.getMainAttributes().getValue("Implementation-Title")).isEqualTo("app");
 
             assertThat(jf.getJarEntry("app/Main.class")).isNotNull();
@@ -55,8 +55,10 @@ class ShadowPackagerTest {
             assertThat(jf.getJarEntry("META-INF/FOO.RSA")).isNull();
 
             // Service file merges both providers.
-            String svc = new String(jf.getInputStream(jf.getJarEntry("META-INF/services/com.example.SPI"))
-                    .readAllBytes(), StandardCharsets.UTF_8);
+            String svc = new String(
+                    jf.getInputStream(jf.getJarEntry("META-INF/services/com.example.SPI"))
+                            .readAllBytes(),
+                    StandardCharsets.UTF_8);
             assertThat(svc).contains("app.Provider").contains("lib.Provider");
         }
     }
@@ -71,12 +73,12 @@ class ShadowPackagerTest {
             putEntry(jos, "x/A.class", "DEP");
         }
         Path out = tmp.resolve("out.jar");
-        new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
-                classes, List.of(dep), out, null, Map.of(), 0L));
+        new ShadowPackager()
+                .packageShadow(new ShadowPackager.ShadowRequest(classes, List.of(dep), out, null, Map.of(), 0L));
 
         try (JarFile jf = new JarFile(out.toFile())) {
-            String content = new String(jf.getInputStream(jf.getJarEntry("x/A.class"))
-                    .readAllBytes(), StandardCharsets.UTF_8);
+            String content =
+                    new String(jf.getInputStream(jf.getJarEntry("x/A.class")).readAllBytes(), StandardCharsets.UTF_8);
             assertThat(content).isEqualTo("PROJECT");
         }
     }
@@ -93,14 +95,14 @@ class ShadowPackagerTest {
         }
 
         Path a = tmp.resolve("a-all.jar");
-        new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
-                classes, List.of(dep), a, "app.Main", Map.of(), 0L));
+        new ShadowPackager()
+                .packageShadow(new ShadowPackager.ShadowRequest(classes, List.of(dep), a, "app.Main", Map.of(), 0L));
         // The freshness stamp's content changes every build; the fat jar must
         // not bundle it (and the manifest must be pinned), or the jar churns.
         Files.writeString(classes.resolve(".jstamp"), "stamp-run-2-different");
         Path b = tmp.resolve("b-all.jar");
-        new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
-                classes, List.of(dep), b, "app.Main", Map.of(), 0L));
+        new ShadowPackager()
+                .packageShadow(new ShadowPackager.ShadowRequest(classes, List.of(dep), b, "app.Main", Map.of(), 0L));
 
         assertThat(Files.readAllBytes(a)).isEqualTo(Files.readAllBytes(b));
         try (JarFile jf = new JarFile(a.toFile())) {

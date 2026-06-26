@@ -41,7 +41,7 @@ public final class JarPackager {
         Manifest manifest = buildManifest(request);
 
         try (OutputStream out = Files.newOutputStream(request.outputJar());
-             JarOutputStream jos = new JarOutputStream(out)) {
+                JarOutputStream jos = new JarOutputStream(out)) {
             long epoch = request.timestampEpochSeconds();
             // Write the manifest ourselves as the first entry with a fixed
             // timestamp. The JarOutputStream(out, manifest) convenience
@@ -57,7 +57,7 @@ public final class JarPackager {
             for (Path file : files) {
                 String name = normalize(request.inputDir(), file);
                 if (name.equals("META-INF/MANIFEST.MF")) continue; // already written
-                if (isBuildStamp(name)) continue;                   // build-host artefact, not jar content
+                if (isBuildStamp(name)) continue; // build-host artefact, not jar content
                 JarEntry entry = new JarEntry(name);
                 entry.setTimeLocal(LocalDateTime.ofEpochSecond(epoch, 0, ZoneOffset.UTC));
                 jos.putNextEntry(entry);
@@ -69,8 +69,7 @@ public final class JarPackager {
     }
 
     /** Write the manifest as the first entry with a fixed timestamp (reproducible). */
-    private static void writeManifest(JarOutputStream jos, Manifest manifest, long epochSeconds)
-            throws IOException {
+    private static void writeManifest(JarOutputStream jos, Manifest manifest, long epochSeconds) throws IOException {
         java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
         manifest.write(buf);
         JarEntry entry = new JarEntry("META-INF/MANIFEST.MF");

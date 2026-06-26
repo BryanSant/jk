@@ -10,7 +10,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -49,7 +48,9 @@ public final class RemoveCommand implements CliCommand {
 
     @Override
     public List<Param> parameters() {
-        return List.of(Param.of("name", Arity.ONE,
+        return List.of(Param.of(
+                "name",
+                Arity.ONE,
                 "Short name (manifest key) of the dependency to remove.\n"
                         + "A group:artifact[:version] coord works too (uses artifactId)."));
     }
@@ -69,17 +70,14 @@ public final class RemoveCommand implements CliCommand {
             System.err.println("jk remove: no jk.toml in current directory");
             return 2;
         }
-        int selected = (test ? 1 : 0) + (runtime ? 1 : 0)
-                + (provided ? 1 : 0) + (processor ? 1 : 0);
+        int selected = (test ? 1 : 0) + (runtime ? 1 : 0) + (provided ? 1 : 0) + (processor ? 1 : 0);
         if (selected > 1) {
             System.err.println("jk remove: --test / --runtime / --provided / --processor are mutually exclusive");
             return 64;
         }
-        Scope scope = test ? Scope.TEST
-                : runtime ? Scope.RUNTIME
-                : provided ? Scope.PROVIDED
-                : processor ? Scope.PROCESSOR
-                : Scope.MAIN;
+        Scope scope = test
+                ? Scope.TEST
+                : runtime ? Scope.RUNTIME : provided ? Scope.PROVIDED : processor ? Scope.PROCESSOR : Scope.MAIN;
         String name;
         try {
             name = shortNameOf(nameArg);
@@ -116,12 +114,9 @@ public final class RemoveCommand implements CliCommand {
         int first = arg.indexOf(':');
         if (first < 0) return arg;
         int second = arg.indexOf(':', first + 1);
-        String artifact = second < 0
-                ? arg.substring(first + 1)
-                : arg.substring(first + 1, second);
+        String artifact = second < 0 ? arg.substring(first + 1) : arg.substring(first + 1, second);
         if (artifact.isBlank()) {
-            throw new IllegalArgumentException(
-                    "could not extract artifactId from: " + arg);
+            throw new IllegalArgumentException("could not extract artifactId from: " + arg);
         }
         return artifact;
     }

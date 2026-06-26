@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
+import dev.jkbuild.cli.Jk;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -21,8 +17,10 @@ import java.util.jar.Attributes;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * {@code jk tool run <file>} — file-execution modes (.java/.kt/.kts/.jar).
@@ -54,7 +52,9 @@ class ToolRunCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void runs_a_solo_script_with_no_deps(@TempDir Path tempDir) throws Exception {
@@ -67,7 +67,14 @@ class ToolRunCommandTest {
                 }
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(), script.toString());
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
         assertThat(exit).isEqualTo(0);
 
         // Cache dir was populated.
@@ -87,7 +94,14 @@ class ToolRunCommandTest {
                 }
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(), script.toString());
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
         assertThat(exit).isEqualTo(42);
     }
 
@@ -103,10 +117,17 @@ class ToolRunCommandTest {
                 }
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("tool", "run",
-                "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(),
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
                 script.toString(),
-                "one", "two", "three");
+                "one",
+                "two",
+                "three");
         assertThat(exit).isEqualTo(3);
     }
 
@@ -114,8 +135,7 @@ class ToolRunCommandTest {
     void resolves_dep_from_header(@TempDir Path tempDir) throws Exception {
         // Build a tiny "Greeter" jar that exposes a method our script will call.
         servePom("com.example", "greeter", "1.0.0");
-        served.put(mavenPath("com.example", "greeter", "1.0.0", "jar"),
-                Files.readAllBytes(buildGreeterJar(tempDir)));
+        served.put(mavenPath("com.example", "greeter", "1.0.0", "jar"), Files.readAllBytes(buildGreeterJar(tempDir)));
 
         Path script = tempDir.resolve("CallGreeter.java");
         Files.writeString(script, """
@@ -129,9 +149,15 @@ class ToolRunCommandTest {
                 }
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("tool", "run",
-                "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(),
-                "--repo-url", base.toString(),
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                "--repo-url",
+                base.toString(),
                 script.toString());
         assertThat(exit).isEqualTo(17);
     }
@@ -145,7 +171,14 @@ class ToolRunCommandTest {
                 }
                 """, StandardCharsets.UTF_8);
 
-        int firstExit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(), script.toString());
+        int firstExit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
         assertThat(firstExit).isEqualTo(0);
 
         // Find the cache directory created by the first run.
@@ -156,7 +189,14 @@ class ToolRunCommandTest {
 
         // Re-run without --force-recompile; classes should not be rewritten.
         Thread.sleep(50);
-        int secondExit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(), script.toString());
+        int secondExit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
         assertThat(secondExit).isEqualTo(0);
         long secondMtime = Files.getLastModifiedTime(classFile).toMillis();
         assertThat(secondMtime).isEqualTo(firstMtime);
@@ -169,15 +209,28 @@ class ToolRunCommandTest {
                 public class Forced { public static void main(String[] args) {} }
                 """, StandardCharsets.UTF_8);
 
-        run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(), script.toString());
+        run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
         Path scriptCache = tempDir.resolve("home/script-cache");
-        Path classFile = Files.list(scriptCache).findFirst().orElseThrow()
-                .resolve("classes/Forced.class");
+        Path classFile = Files.list(scriptCache).findFirst().orElseThrow().resolve("classes/Forced.class");
         long firstMtime = Files.getLastModifiedTime(classFile).toMillis();
 
         Thread.sleep(50);
-        run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(),
-                "--force-recompile", script.toString());
+        run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                "--force-recompile",
+                script.toString());
         long secondMtime = Files.getLastModifiedTime(classFile).toMillis();
         assertThat(secondMtime).isGreaterThan(firstMtime);
     }
@@ -192,25 +245,44 @@ class ToolRunCommandTest {
     void compile_failure_returns_nonzero(@TempDir Path tempDir) throws Exception {
         Path script = tempDir.resolve("Broken.java");
         Files.writeString(script, "public class Broken { not java }\n");
-        int exit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(), script.toString());
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                script.toString());
         assertThat(exit).isEqualTo(1);
     }
 
     @Test
     void runs_a_self_contained_jar(@TempDir Path tempDir) throws Exception {
         // Build a tiny runnable jar with Main-Class set.
-        Path jar = buildExitJar(tempDir, "RunMe", /*exitCode=*/0);
+        Path jar = buildExitJar(tempDir, "RunMe", /*exitCode=*/ 0);
 
-        int exit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(),
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
                 jar.toString());
         assertThat(exit).isEqualTo(0);
     }
 
     @Test
     void jar_exit_code_is_propagated(@TempDir Path tempDir) throws Exception {
-        Path jar = buildExitJar(tempDir, "RunMe", /*exitCode=*/7);
+        Path jar = buildExitJar(tempDir, "RunMe", /*exitCode=*/ 7);
 
-        int exit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(),
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
                 jar.toString());
         assertThat(exit).isEqualTo(7);
     }
@@ -219,8 +291,16 @@ class ToolRunCommandTest {
     void jar_args_are_forwarded(@TempDir Path tempDir) throws Exception {
         Path jar = buildArgCountJar(tempDir, "Echo");
 
-        int exit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(),
-                jar.toString(), "one", "two");
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
+                jar.toString(),
+                "one",
+                "two");
         assertThat(exit).isEqualTo(2);
     }
 
@@ -231,19 +311,31 @@ class ToolRunCommandTest {
         Manifest mf = new Manifest();
         mf.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         try (var fos = Files.newOutputStream(jar);
-             JarOutputStream jos = new JarOutputStream(fos, mf)) {
+                JarOutputStream jos = new JarOutputStream(fos, mf)) {
             jos.putNextEntry(new ZipEntry("placeholder.txt"));
             jos.write("hi".getBytes(StandardCharsets.UTF_8));
             jos.closeEntry();
         }
-        int exit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(),
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
                 jar.toString());
         assertThat(exit).isEqualTo(65);
     }
 
     @Test
     void jar_not_found_returns_no_input(@TempDir Path tempDir) {
-        int exit = run("tool", "run", "--cache-dir", tempDir.resolve("home/cache").toString(), "--state-dir", tempDir.resolve("home").toString(),
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("home/cache").toString(),
+                "--state-dir",
+                tempDir.resolve("home").toString(),
                 tempDir.resolve("missing.jar").toString());
         assertThat(exit).isEqualTo(66);
     }
@@ -254,8 +346,10 @@ class ToolRunCommandTest {
      */
     private static Path buildExitJar(Path tempDir, String className, int exitCode) throws Exception {
         Path src = tempDir.resolve(className + ".java");
-        Files.writeString(src, "public class " + className
-                + " { public static void main(String[] a) { System.exit(" + exitCode + "); } }\n");
+        Files.writeString(
+                src,
+                "public class " + className + " { public static void main(String[] a) { System.exit(" + exitCode
+                        + "); } }\n");
         javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
         int rc = compiler.run(null, null, null, src.toString());
         if (rc != 0) throw new IllegalStateException("compile of " + src + " failed");
@@ -266,7 +360,7 @@ class ToolRunCommandTest {
         mf.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         mf.getMainAttributes().put(Attributes.Name.MAIN_CLASS, className);
         try (var fos = Files.newOutputStream(jar);
-             JarOutputStream jos = new JarOutputStream(fos, mf)) {
+                JarOutputStream jos = new JarOutputStream(fos, mf)) {
             jos.putNextEntry(new ZipEntry(className + ".class"));
             jos.write(Files.readAllBytes(classFile));
             jos.closeEntry();
@@ -277,8 +371,9 @@ class ToolRunCommandTest {
     /** Jar whose main exits with {@code args.length} — for testing arg forwarding. */
     private static Path buildArgCountJar(Path tempDir, String className) throws Exception {
         Path src = tempDir.resolve(className + ".java");
-        Files.writeString(src, "public class " + className
-                + " { public static void main(String[] a) { System.exit(a.length); } }\n");
+        Files.writeString(
+                src,
+                "public class " + className + " { public static void main(String[] a) { System.exit(a.length); } }\n");
         javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
         int rc = compiler.run(null, null, null, src.toString());
         if (rc != 0) throw new IllegalStateException("compile of " + src + " failed");
@@ -289,7 +384,7 @@ class ToolRunCommandTest {
         mf.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         mf.getMainAttributes().put(Attributes.Name.MAIN_CLASS, className);
         try (var fos = Files.newOutputStream(jar);
-             JarOutputStream jos = new JarOutputStream(fos, mf)) {
+                JarOutputStream jos = new JarOutputStream(fos, mf)) {
             jos.putNextEntry(new ZipEntry(className + ".class"));
             jos.write(Files.readAllBytes(classFile));
             jos.closeEntry();
@@ -337,7 +432,7 @@ class ToolRunCommandTest {
         Manifest mf = new Manifest();
         mf.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         try (var fos = Files.newOutputStream(jar);
-             JarOutputStream jos = new JarOutputStream(fos, mf)) {
+                JarOutputStream jos = new JarOutputStream(fos, mf)) {
             jos.putNextEntry(new ZipEntry("com/example/Greeter.class"));
             jos.write(Files.readAllBytes(classFile));
             jos.closeEntry();
@@ -346,8 +441,8 @@ class ToolRunCommandTest {
     }
 
     private static String mavenPath(String group, String artifact, String version, String ext) {
-        return "/" + group.replace('.', '/') + "/" + artifact + "/"
-                + version + "/" + artifact + "-" + version + "." + ext;
+        return "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + "."
+                + ext;
     }
 
     private static int run(String... args) {

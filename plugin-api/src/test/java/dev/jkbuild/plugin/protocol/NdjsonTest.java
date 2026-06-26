@@ -36,15 +36,13 @@ class NdjsonTest {
     @Test
     void unescapesStringEscapeSequences() {
         String json = "{\"msg\":\"line1\\nline2\\ttab \\\"q\\\" \\\\slash\"}";
-        assertThat(Ndjson.str(json, "msg"))
-                .isEqualTo("line1\nline2\ttab \"q\" \\slash");
+        assertThat(Ndjson.str(json, "msg")).isEqualTo("line1\nline2\ttab \"q\" \\slash");
     }
 
     @Test
     void readsStringArrays() {
         String json = "{\"src\":[\"a.java\",\"b.java\",\"c.java\"]}";
-        assertThat(Ndjson.strArray(json, "src"))
-                .containsExactly("a.java", "b.java", "c.java");
+        assertThat(Ndjson.strArray(json, "src")).containsExactly("a.java", "b.java", "c.java");
         assertThat(Ndjson.strArray("{\"src\":[]}", "src")).isEmpty();
     }
 

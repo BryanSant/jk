@@ -1,26 +1,23 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.CompileToolchain;
-
-import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.RepositorySpec;
-import dev.jkbuild.repo.MavenRepo;
-import dev.jkbuild.repo.RepoGroup;
-import dev.jkbuild.tool.ToolEnv;
-import dev.jkbuild.tool.ToolLauncher;
-import dev.jkbuild.tool.ToolResolver;
-import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
+import dev.jkbuild.repo.MavenRepo;
+import dev.jkbuild.repo.RepoGroup;
+import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.tool.ToolEnv;
+import dev.jkbuild.tool.ToolLauncher;
+import dev.jkbuild.tool.ToolResolver;
+import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -46,17 +43,31 @@ import java.util.List;
  */
 public final class ToolRunCommand implements CliCommand {
 
-    @Override public String name() { return "run"; }
-    @Override public String description() { return "Run a tool from a Maven coord or .java/.kt/.kts/.jar file"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "run";
+    }
+
+    @Override
+    public String description() {
+        return "Run a tool from a Maven coord or .java/.kt/.kts/.jar file";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<class>", "Override the Main-Class to exec (coordinate targets only).", "--main"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the jk state directory.", "--state-dir").hide(),
-                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url").hide(),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the jk state directory.", "--state-dir")
+                        .hide(),
+                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
+                        .hide(),
                 Opt.flag("Ignore cached classes and recompile (file targets only).", "--force-recompile"));
     }
-    @Override public List<Param> parameters() {
+
+    @Override
+    public List<Param> parameters() {
         // The tool args after the target are captured as trailing positionals via ZERO_OR_MORE
         return List.of(
                 Param.of("coord|file", Arity.ONE, "Maven coordinate or .java/.kt/.kts/.jar file."),
@@ -87,8 +98,7 @@ public final class ToolRunCommand implements CliCommand {
         // extension is the signal even when the file is missing, so the user
         // gets a proper "not found" error from the matching mode handler.
         if (ScriptRunner.isRunnableFile(target)) {
-            return new ScriptRunner(global, cacheDirOverride, stateDirOverride,
-                    repoUrl, forceRecompile)
+            return new ScriptRunner(global, cacheDirOverride, stateDirOverride, repoUrl, forceRecompile)
                     .run(Path.of(target), toolArgs);
         }
 

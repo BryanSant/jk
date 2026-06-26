@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
-import org.junit.jupiter.api.Test;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.time.Duration;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * The workspace progress bar must calibrate to the aggregate tick total up front
@@ -34,15 +33,15 @@ class AggregateProgressTest {
         AggregateModuleListener a = new AggregateModuleListener(agg, "mod-a", List.of(), 40);
         a.goalStart(view(0, 40));
         assertThat(barCount(cm)).isEqualTo("0 of 100");
-        a.progress("compile", 10, view(10, 40));   // 25% of A's slice → +10
+        a.progress("compile", 10, view(10, 40)); // 25% of A's slice → +10
         assertThat(barCount(cm)).isEqualTo("10 of 100");
-        a.goalFinish(success());           // advances the base by A's slice (40)
+        a.goalFinish(success()); // advances the base by A's slice (40)
 
         // Module B starts where A's slice ended — no reset, denominator unchanged.
         AggregateModuleListener b = new AggregateModuleListener(agg, "mod-b", List.of(), 60);
         b.goalStart(view(0, 60));
         assertThat(barCount(cm)).isEqualTo("40 of 100");
-        b.progress("compile", 30, view(30, 60));   // 50% of B's slice → +30
+        b.progress("compile", 30, view(30, 60)); // 50% of B's slice → +30
         assertThat(barCount(cm)).isEqualTo("70 of 100");
     }
 
@@ -65,14 +64,14 @@ class AggregateProgressTest {
     void module_boundary_does_not_backtrack_when_a_module_overruns() {
         CommandManager cm = newView();
         AggregateContext agg = new AggregateContext(cm);
-        agg.calibrate(100);   // A slice 40, B slice 60
+        agg.calibrate(100); // A slice 40, B slice 60
 
         // A overruns its own estimate (live numerator 70 > denominator 40), but
         // its contribution is clamped to its 40-tick slice.
         AggregateModuleListener a = new AggregateModuleListener(agg, "mod-a", List.of(), 40);
         a.goalStart(view(0, 40));
         a.progress("x", 70, view(70, 40));
-        assertThat(barCount(cm)).isEqualTo("40 of 100");   // clamped to the slice
+        assertThat(barCount(cm)).isEqualTo("40 of 100"); // clamped to the slice
         a.goalFinish(success());
 
         // B must start at the slice boundary (40), not drop below it — the
@@ -85,7 +84,7 @@ class AggregateProgressTest {
     @Test
     void uncalibrated_falls_back_to_the_growing_per_module_total() {
         CommandManager cm = newView();
-        AggregateContext agg = new AggregateContext(cm);   // no calibrate()
+        AggregateContext agg = new AggregateContext(cm); // no calibrate()
 
         AggregateModuleListener a = new AggregateModuleListener(agg, "mod-a", List.of());
         a.goalStart(view(0, 40));
@@ -104,23 +103,23 @@ class AggregateProgressTest {
     void module_reweight_resizes_its_slice_and_the_aggregate_total() {
         CommandManager cm = newView();
         AggregateContext agg = new AggregateContext(cm);
-        agg.calibrate(100);   // A slice 40, B slice 60
+        agg.calibrate(100); // A slice 40, B slice 60
 
         AggregateModuleListener a = new AggregateModuleListener(agg, "mod-a", List.of(), 40);
-        a.goalStart(view(0, 40));              // initial denominator == reserved slice
+        a.goalStart(view(0, 40)); // initial denominator == reserved slice
         assertThat(agg.total()).isEqualTo(100);
 
         // A's compile turns out to be a cheap restore: its goal denominator drops
         // 40 → 3, which must shrink both its slice and the aggregate total.
         a.progress("compile", 3, view(3, 3));
-        assertThat(agg.total()).isEqualTo(63);             // 100 − 37
+        assertThat(agg.total()).isEqualTo(63); // 100 − 37
         a.goalFinish(success());
-        assertThat(barCount(cm)).isEqualTo("3 of 63");     // base advanced by the shrunk slice
+        assertThat(barCount(cm)).isEqualTo("3 of 63"); // base advanced by the shrunk slice
 
         AggregateModuleListener b = new AggregateModuleListener(agg, "mod-b", List.of(), 60);
         b.goalStart(view(0, 60));
         b.progress("x", 60, view(60, 60));
-        assertThat(barCount(cm)).isEqualTo("63 of 63");    // 3 + 60, bar reaches 100%
+        assertThat(barCount(cm)).isEqualTo("63 of 63"); // 3 + 60, bar reaches 100%
     }
 
     // --- helpers -----------------------------------------------------------

@@ -2,13 +2,12 @@
 package dev.jkbuild.gradle;
 
 import dev.jkbuild.compat.ImportReport;
-import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
-import dev.jkbuild.kotlin.KotlinResolver;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -47,67 +46,58 @@ public final class GradleImporter {
     // String literal: "foo" or 'bar', preserving the quoted body.
     private static final String STR = "(?:\"([^\"\\n]*)\"|'([^'\\n]*)')";
 
-    private static final Pattern GROUP_ASSIGN = Pattern.compile(
-            "(?m)^\\s*group\\s*[=]?\\s*" + STR);
-    private static final Pattern VERSION_ASSIGN = Pattern.compile(
-            "(?m)^\\s*version\\s*[=]?\\s*" + STR);
+    private static final Pattern GROUP_ASSIGN = Pattern.compile("(?m)^\\s*group\\s*[=]?\\s*" + STR);
+    private static final Pattern VERSION_ASSIGN = Pattern.compile("(?m)^\\s*version\\s*[=]?\\s*" + STR);
     // description = "..." / description "..." (optionally project.description).
-    private static final Pattern DESCRIPTION_ASSIGN = Pattern.compile(
-            "(?m)^\\s*(?:project\\.)?description\\s*[=]?\\s*" + STR);
-    private static final Pattern ROOT_NAME = Pattern.compile(
-            "(?m)^\\s*rootProject\\.name\\s*=\\s*" + STR);
+    private static final Pattern DESCRIPTION_ASSIGN =
+            Pattern.compile("(?m)^\\s*(?:project\\.)?description\\s*[=]?\\s*" + STR);
+    private static final Pattern ROOT_NAME = Pattern.compile("(?m)^\\s*rootProject\\.name\\s*=\\s*" + STR);
 
     // plugins { id("...") version "..." ; id 'foo' ; kotlin("jvm") ; java ; application }
-    private static final Pattern PLUGIN_ID = Pattern.compile(
-            "id\\s*\\(?\\s*" + STR + "\\s*\\)?");
-    private static final Pattern PLUGIN_KOTLIN = Pattern.compile(
-            "kotlin\\s*\\(\\s*" + STR + "\\s*\\)");
+    private static final Pattern PLUGIN_ID = Pattern.compile("id\\s*\\(?\\s*" + STR + "\\s*\\)?");
+    private static final Pattern PLUGIN_KOTLIN = Pattern.compile("kotlin\\s*\\(\\s*" + STR + "\\s*\\)");
     // kotlin("jvm") version "2.3.21" — version is groups 3/4 (after the plugin arg).
-    private static final Pattern KOTLIN_PLUGIN_VERSION = Pattern.compile(
-            "kotlin\\s*\\(\\s*" + STR + "\\s*\\)\\s*version\\s*" + STR);
+    private static final Pattern KOTLIN_PLUGIN_VERSION =
+            Pattern.compile("kotlin\\s*\\(\\s*" + STR + "\\s*\\)\\s*version\\s*" + STR);
     // id("org.jetbrains.kotlin.jvm") [version "2.3.21"]
-    private static final Pattern KOTLIN_ID = Pattern.compile(
-            "id\\s*\\(?\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']");
-    private static final Pattern KOTLIN_ID_VERSION = Pattern.compile(
-            "id\\s*\\(\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']\\s*\\)\\s*version\\s*" + STR);
+    private static final Pattern KOTLIN_ID = Pattern.compile("id\\s*\\(?\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']");
+    private static final Pattern KOTLIN_ID_VERSION =
+            Pattern.compile("id\\s*\\(\\s*[\"']org\\.jetbrains\\.kotlin[^\"']*[\"']\\s*\\)\\s*version\\s*" + STR);
 
     // application { mainClass.set("X") } / mainClass = "X" — groups 1/2 (set) or 3/4 (=).
-    private static final Pattern APPLICATION_MAIN_CLASS = Pattern.compile(
-            "mainClass\\s*(?:\\.set\\s*\\(\\s*" + STR + "\\s*\\)|=\\s*" + STR + ")");
+    private static final Pattern APPLICATION_MAIN_CLASS =
+            Pattern.compile("mainClass\\s*(?:\\.set\\s*\\(\\s*" + STR + "\\s*\\)|=\\s*" + STR + ")");
     // Groovy / older DSL: mainClassName = "X".
-    private static final Pattern MAIN_CLASS_NAME = Pattern.compile(
-            "(?m)^\\s*mainClassName\\s*[=]?\\s*" + STR);
+    private static final Pattern MAIN_CLASS_NAME = Pattern.compile("(?m)^\\s*mainClassName\\s*[=]?\\s*" + STR);
 
     // A manifest attribute pair inside a `manifest { attributes(...) }` block, in
     // either Kotlin (`"K" to V`) or Groovy (`"K": V`) form. Value is a string
     // literal (groups 3/4) or a bare expression like project.version (group 5).
-    private static final Pattern MANIFEST_ATTR = Pattern.compile(
-            STR + "\\s*(?:to|:)\\s*(?:" + STR + "|([A-Za-z_][\\w.]*))");
+    private static final Pattern MANIFEST_ATTR =
+            Pattern.compile(STR + "\\s*(?:to|:)\\s*(?:" + STR + "|([A-Za-z_][\\w.]*))");
 
     // dependencies entries: implementation("g:a:v"), testImplementation 'g:a:v',
     // or the unquoted Groovy catalog form `implementation libs.junit.jupiter`.
-    private static final Pattern DEP_ENTRY = Pattern.compile(
-            "(?m)^\\s*(?<config>[a-zA-Z][a-zA-Z0-9_]*)\\s*"
-                    + "(?:\\(\\s*(?<paren>.+?)\\s*\\)|" + STR
-                    + "|(?<accessor>[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+))"
-                    + "\\s*$");
+    private static final Pattern DEP_ENTRY = Pattern.compile("(?m)^\\s*(?<config>[a-zA-Z][a-zA-Z0-9_]*)\\s*"
+            + "(?:\\(\\s*(?<paren>.+?)\\s*\\)|" + STR
+            + "|(?<accessor>[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+))"
+            + "\\s*$");
 
     // A type-safe version-catalog accessor, e.g. libs.junit.platform.launcher.
-    private static final Pattern CATALOG_ACCESSOR = Pattern.compile(
-            "[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+");
+    private static final Pattern CATALOG_ACCESSOR = Pattern.compile("[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z0-9_]+)+");
     // platform(libs.spring.bom) — a catalog accessor wrapped in platform(...).
-    private static final Pattern PLATFORM_ACCESSOR = Pattern.compile(
-            "platform\\s*\\(\\s*(" + CATALOG_ACCESSOR.pattern() + ")\\s*\\)");
+    private static final Pattern PLATFORM_ACCESSOR =
+            Pattern.compile("platform\\s*\\(\\s*(" + CATALOG_ACCESSOR.pattern() + ")\\s*\\)");
 
     // java { sourceCompatibility = JavaVersion.VERSION_21 }
-    private static final Pattern JAVA_VERSION_TOKEN = Pattern.compile(
-            "JavaVersion\\.VERSION_([0-9_]+)|JavaLanguageVersion\\.of\\(\\s*([0-9]+)\\s*\\)"
+    private static final Pattern JAVA_VERSION_TOKEN =
+            Pattern.compile("JavaVersion\\.VERSION_([0-9_]+)|JavaLanguageVersion\\.of\\(\\s*([0-9]+)\\s*\\)"
                     + "|sourceCompatibility\\s*[=]?\\s*['\"]?([0-9.]+)['\"]?"
                     + "|jvmToolchain\\s*\\(\\s*([0-9]+)\\s*\\)");
 
     // repositories: maven { url = uri("https://...") } or maven { url 'https://...' }
-    private static final Pattern MAVEN_URL = Pattern.compile(
-            "maven\\s*\\{[^}]*?url\\s*[=]?\\s*(?:uri\\s*\\(\\s*)?" + STR);
+    private static final Pattern MAVEN_URL =
+            Pattern.compile("maven\\s*\\{[^}]*?url\\s*[=]?\\s*(?:uri\\s*\\(\\s*)?" + STR);
 
     private GradleImporter() {}
 
@@ -115,7 +105,8 @@ public final class GradleImporter {
         String text = Files.readString(script);
         String defaultArtifact = defaultArtifactFor(script);
         Path projectDir = script.toAbsolutePath().getParent();
-        GradleVersionCatalog catalog = GradleVersionCatalog.forProject(projectDir).orElse(null);
+        GradleVersionCatalog catalog =
+                GradleVersionCatalog.forProject(projectDir).orElse(null);
         return importFromString(text, defaultArtifact, catalog);
     }
 
@@ -136,7 +127,7 @@ public final class GradleImporter {
         // its compiler version); other ids are diagnostics only.
         String pluginsBody = extractBlock(stripped, "plugins").orElse("");
         VersionSelector kotlin = detectKotlinVersion(pluginsBody, report);
-        for (Matcher m = PLUGIN_ID.matcher(pluginsBody); m.find();) {
+        for (Matcher m = PLUGIN_ID.matcher(pluginsBody); m.find(); ) {
             String pluginId = firstNonNull(m.group(1), m.group(2));
             if (pluginId == null || pluginId.isBlank()) continue;
             if (pluginId.startsWith("org.jetbrains.kotlin")) continue; // handled as a Kotlin project
@@ -144,8 +135,9 @@ public final class GradleImporter {
                 case "java", "java-library", "application" -> {
                     // implicit in jk — nothing to say.
                 }
-                default -> report.warning("Gradle plugin `" + pluginId + "` not yet mapped."
-                        + " Plugin-aware mappings (Spring Boot, Quarkus, Spotless, ...) arrive in a later slice.");
+                default ->
+                    report.warning("Gradle plugin `" + pluginId + "` not yet mapped."
+                            + " Plugin-aware mappings (Spring Boot, Quarkus, Spotless, ...) arrive in a later slice.");
             }
         }
 
@@ -163,8 +155,17 @@ public final class GradleImporter {
         // A Kotlin project sets `kotlin` (a version) and leaves `java` at 0 —
         // the two are mutually exclusive. javaRelease() falls back to jdk.
         int java = kotlin != null ? 0 : jdk;
-        JkBuild.Project project = new JkBuild.Project(group, defaultArtifact, version, jdk, java, kotlin,
-                mainClass, false, JkBuild.NativeMode.DISABLED, description);
+        JkBuild.Project project = new JkBuild.Project(
+                group,
+                defaultArtifact,
+                version,
+                jdk,
+                java,
+                kotlin,
+                mainClass,
+                false,
+                JkBuild.NativeMode.DISABLED,
+                description);
         JkBuild jkBuild = new JkBuild(project, new JkBuild.Dependencies(deps), repos);
         if (!manifest.isEmpty()) jkBuild = jkBuild.withManifest(manifest);
         return new Result(jkBuild, report.build());
@@ -185,7 +186,7 @@ public final class GradleImporter {
         String body = extractBlock(text, "manifest").orElse(null);
         if (body == null) return new java.util.LinkedHashMap<>();
         Map<String, String> attrs = new java.util.LinkedHashMap<>();
-        for (Matcher m = MANIFEST_ATTR.matcher(body); m.find();) {
+        for (Matcher m = MANIFEST_ATTR.matcher(body); m.find(); ) {
             String key = firstNonNull(m.group(1), m.group(2));
             if (key == null) continue;
             String literal = firstNonNull(m.group(3), m.group(4));
@@ -327,20 +328,24 @@ public final class GradleImporter {
                     continue;
                 }
                 // Could be platform("g:a:v"), project(":core"), kotlin("test"), or a bare "g:a:v".
-                Matcher platform = Pattern.compile("platform\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);
+                Matcher platform =
+                        Pattern.compile("platform\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);
                 if (platform.find()) {
                     String coord = firstNonNull(platform.group(1), platform.group(2));
                     addDependency(byScope, Scope.PLATFORM, coord, report);
                     continue;
                 }
-                Matcher project = Pattern.compile("project\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);
+                Matcher project =
+                        Pattern.compile("project\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);
                 if (project.find()) {
                     String path = firstNonNull(project.group(1), project.group(2));
-                    report.warning("Project dependency `" + path + "` on configuration `" + configuration
-                            + "` was not mapped. Convert via a jk workspace module reference once you import the sibling module.");
+                    report.warning(
+                            "Project dependency `" + path + "` on configuration `" + configuration
+                                    + "` was not mapped. Convert via a jk workspace module reference once you import the sibling module.");
                     continue;
                 }
-                Matcher kotlinShortcut = Pattern.compile("kotlin\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);
+                Matcher kotlinShortcut =
+                        Pattern.compile("kotlin\\s*\\(\\s*" + STR + "\\s*\\)").matcher(paren);
                 if (kotlinShortcut.find()) {
                     String token = firstNonNull(kotlinShortcut.group(1), kotlinShortcut.group(2));
                     report.warning("Kotlin shortcut `kotlin(\"" + token + "\")` was not mapped to a concrete coord."
@@ -367,8 +372,8 @@ public final class GradleImporter {
         return byScope;
     }
 
-    private static void addDependency(Map<Scope, List<Dependency>> byScope, Scope scope,
-                                      String coord, ImportReport.Builder report) {
+    private static void addDependency(
+            Map<Scope, List<Dependency>> byScope, Scope scope, String coord, ImportReport.Builder report) {
         if (coord == null || coord.isBlank()) return;
         // Expect g:a:v with optional :classifier@type — strip extras with a warning.
         String[] parts = coord.split(":");
@@ -383,13 +388,12 @@ public final class GradleImporter {
             report.warning("classifier/type on `" + coord + "` dropped; jk support arrives in a later slice.");
         }
         if (versionToken.contains("$")) {
-            report.warning("dependency `" + coord + "` uses a Gradle variable for its version;"
-                    + " jk wrote `" + versionToken + "` verbatim — resolve the variable manually.");
+            report.warning("dependency `" + coord + "` uses a Gradle variable for its version;" + " jk wrote `"
+                    + versionToken + "` verbatim — resolve the variable manually.");
         }
         VersionSelector selector = VersionSelector.parse(versionToken);
         // Default the v0.7 short `name` to the Gradle dep's artifactId.
-        byScope.computeIfAbsent(scope, s -> new ArrayList<>())
-                .add(Dependency.of(artifactId, module, selector));
+        byScope.computeIfAbsent(scope, s -> new ArrayList<>()).add(Dependency.of(artifactId, module, selector));
     }
 
     /**
@@ -399,8 +403,12 @@ public final class GradleImporter {
      * stripped before lookup. Unresolvable accessors — missing catalog, unknown
      * alias, or a version/plugin accessor that isn't a dependency — are reported.
      */
-    private static void resolveCatalogAccessor(String accessor, Scope scope,
-            Map<Scope, List<Dependency>> byScope, GradleVersionCatalog catalog, ImportReport.Builder report) {
+    private static void resolveCatalogAccessor(
+            String accessor,
+            Scope scope,
+            Map<Scope, List<Dependency>> byScope,
+            GradleVersionCatalog catalog,
+            ImportReport.Builder report) {
         if (catalog == null) {
             report.error("dependency `" + accessor + "` references a Gradle version catalog, but no"
                     + " gradle/libs.versions.toml was found (searched the project dir and its parent)."
@@ -443,8 +451,8 @@ public final class GradleImporter {
             case "implementation", "api", "compile" -> Scope.MAIN;
             case "runtimeOnly", "runtime" -> Scope.RUNTIME;
             case "compileOnly", "compileOnlyApi", "providedRuntime", "providedCompile" -> Scope.PROVIDED;
-            case "testImplementation", "testApi", "testCompile",
-                 "testRuntimeOnly", "testRuntime", "testCompileOnly" -> Scope.TEST;
+            case "testImplementation", "testApi", "testCompile", "testRuntimeOnly", "testRuntime", "testCompileOnly" ->
+                Scope.TEST;
             case "annotationProcessor", "kapt", "ksp", "testAnnotationProcessor" -> Scope.PROCESSOR;
             default -> null;
         };
@@ -456,12 +464,12 @@ public final class GradleImporter {
         String body = extractBlock(text, "repositories").orElse(null);
         if (body == null) return List.of();
         Map<String, RepositorySpec> deduped = new LinkedHashMap<>();
-        for (Matcher m = MAVEN_URL.matcher(body); m.find();) {
+        for (Matcher m = MAVEN_URL.matcher(body); m.find(); ) {
             String url = firstNonNull(m.group(1), m.group(2));
             if (url == null || url.isBlank()) continue;
             // Skip the implicit Central — declaring it adds nothing.
-            if (url.startsWith("https://repo.maven.apache.org/")
-                    || url.startsWith("https://repo1.maven.org/")) continue;
+            if (url.startsWith("https://repo.maven.apache.org/") || url.startsWith("https://repo1.maven.org/"))
+                continue;
             try {
                 String name = "repo" + (deduped.size() + 1);
                 deduped.put(name, new RepositorySpec(name, new URI(url.trim())));
@@ -494,8 +502,16 @@ public final class GradleImporter {
     // --- catch-all tier 3 warnings ------------------------------------------
 
     private static final String[] TIER3_KEYWORDS = {
-            "subprojects", "allprojects", "afterEvaluate", "beforeEvaluate",
-            "configurations", "tasks.register", "task ", "withType", "ext {", "buildscript",
+        "subprojects",
+        "allprojects",
+        "afterEvaluate",
+        "beforeEvaluate",
+        "configurations",
+        "tasks.register",
+        "task ",
+        "withType",
+        "ext {",
+        "buildscript",
     };
 
     private static void warnUnsupportedSections(String text, ImportReport.Builder report) {

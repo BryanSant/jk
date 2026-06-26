@@ -22,25 +22,17 @@ public final class UsageGroups {
      * leftover bucket today is {@code activate} / {@code deactivate}.
      */
     public static final List<CommandGroup> COMMAND_GROUPS = List.of(
-            new CommandGroup("Build commands:", List.of(
-                    "build", "run", "clean", "image",
-                    "test", "compile", "native",
-                    "install", "publish")),
-            new CommandGroup("Project commands:", List.of(
-                    "new", "init",
-                    "add", "remove",
-                    "lock", "update", "sync",
-                    "deny",
-                    "tree", "why",
-                    "explain",
-                    "audit",
-                    "verify")),
-            new CommandGroup("Toolchain commands:", List.of(
-                    "jdk", "tool", "shell", "activate", "deactivate")),
-            new CommandGroup("Interop commands:", List.of(
-                    "import", "mvn", "gradle", "export")),
-            new CommandGroup("System commands:", List.of(
-                    "doctor", "cache")));
+            new CommandGroup(
+                    "Build commands:",
+                    List.of("build", "run", "clean", "image", "test", "compile", "native", "install", "publish")),
+            new CommandGroup(
+                    "Project commands:",
+                    List.of(
+                            "new", "init", "add", "remove", "lock", "update", "sync", "deny", "tree", "why", "explain",
+                            "audit", "verify")),
+            new CommandGroup("Toolchain commands:", List.of("jdk", "tool", "shell", "activate", "deactivate")),
+            new CommandGroup("Interop commands:", List.of("import", "mvn", "gradle", "export")),
+            new CommandGroup("System commands:", List.of("doctor", "cache")));
 
     /**
      * Curated subset of verbs shown when the user runs bare {@code jk}.
@@ -48,12 +40,10 @@ public final class UsageGroups {
      * The full screen is still one keystroke away via {@code --help}.
      */
     public static final List<CommandGroup> SHORT_COMMAND_GROUPS = List.of(
-            new CommandGroup("Build commands:", List.of(
-                    "build", "run", "clean", "image", "native", "install", "publish")),
-            new CommandGroup("Project commands:", List.of(
-                    "new", "init", "add", "remove", "lock", "update")),
-            new CommandGroup("Toolchain commands:", List.of(
-                    "jdk", "tool", "shell", "activate")));
+            new CommandGroup(
+                    "Build commands:", List.of("build", "run", "clean", "image", "native", "install", "publish")),
+            new CommandGroup("Project commands:", List.of("new", "init", "add", "remove", "lock", "update")),
+            new CommandGroup("Toolchain commands:", List.of("jdk", "tool", "shell", "activate")));
 
     /**
      * The long-name set every {@code GlobalOptions} option declares. Used to
@@ -63,7 +53,17 @@ public final class UsageGroups {
      * name-set check is the most portable way.
      */
     public static final Set<String> GLOBAL_OPTION_LONG_NAMES = Set.of(
-            "--quiet", "--verbose", "--color", "--offline", "--rerun", "--refresh", "--no-progress",
-            "--output", "--config-file", "--no-config", "--directory",
-            "--help", "--version");
+            "--quiet",
+            "--verbose",
+            "--color",
+            "--offline",
+            "--rerun",
+            "--refresh",
+            "--no-progress",
+            "--output",
+            "--config-file",
+            "--no-config",
+            "--directory",
+            "--help",
+            "--version");
 }

@@ -30,8 +30,7 @@ public final class FishShell implements Shell {
 
     @Override
     public String activateScript(String jkExe) {
-        return ShellResources.load("fish.fish")
-                .replace("__JK_EXE__", PosixQuote.quote(jkExe));
+        return ShellResources.load("fish.fish").replace("__JK_EXE__", PosixQuote.quote(jkExe));
     }
 
     @Override

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver.pubgrub;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class PubGrubSolverTest {
 
@@ -22,30 +21,26 @@ class PubGrubSolverTest {
 
     @Test
     void single_dep_chain() throws Exception {
-        PackageSource src = InMemoryPackageSource.builder()
-                .version("leaf", "1.0")
-                .build();
+        PackageSource src =
+                InMemoryPackageSource.builder().version("leaf", "1.0").build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        Map<String, String> solution = solver.solve("root", "1.0",
-                List.of(Term.positive("leaf", VersionSet.exact("1.0"))));
+        Map<String, String> solution =
+                solver.solve("root", "1.0", List.of(Term.positive("leaf", VersionSet.exact("1.0"))));
 
-        assertThat(solution).containsOnly(
-                Map.entry("root", "1.0"),
-                Map.entry("leaf", "1.0"));
+        assertThat(solution).containsOnly(Map.entry("root", "1.0"), Map.entry("leaf", "1.0"));
     }
 
     @Test
     void transitive_chain() throws Exception {
         PackageSource src = InMemoryPackageSource.builder()
                 .version("leaf", "1.0")
-                .version("middle", "1.0", deps -> deps
-                        .require("leaf", VersionSet.exact("1.0")))
+                .version("middle", "1.0", deps -> deps.require("leaf", VersionSet.exact("1.0")))
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        Map<String, String> solution = solver.solve("root", "1.0",
-                List.of(Term.positive("middle", VersionSet.exact("1.0"))));
+        Map<String, String> solution =
+                solver.solve("root", "1.0", List.of(Term.positive("middle", VersionSet.exact("1.0"))));
 
         assertThat(solution).containsOnlyKeys("root", "middle", "leaf");
     }
@@ -59,9 +54,8 @@ class PubGrubSolverTest {
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        Map<String, String> solution = solver.solve("root", "1.0",
-                List.of(Term.positive("widget",
-                        VersionSet.between("1.0", true, "3.0", false))));
+        Map<String, String> solution = solver.solve(
+                "root", "1.0", List.of(Term.positive("widget", VersionSet.between("1.0", true, "3.0", false))));
 
         assertThat(solution).containsEntry("widget", "2.0");
     }
@@ -77,8 +71,8 @@ class PubGrubSolverTest {
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        Map<String, String> solution = solver.solve("root", "1.0",
-                List.of(Term.positive("widget", VersionSet.atLeast("1.0.0", true))));
+        Map<String, String> solution =
+                solver.solve("root", "1.0", List.of(Term.positive("widget", VersionSet.atLeast("1.0.0", true))));
 
         assertThat(solution).containsEntry("widget", "2.0.0");
     }
@@ -92,8 +86,8 @@ class PubGrubSolverTest {
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        Map<String, String> solution = solver.solve("root", "1.0",
-                List.of(Term.positive("widget", VersionSet.atLeast("1.0.0", true))));
+        Map<String, String> solution =
+                solver.solve("root", "1.0", List.of(Term.positive("widget", VersionSet.atLeast("1.0.0", true))));
 
         assertThat(solution).containsEntry("widget", "3.0.0-RC2");
     }
@@ -105,16 +99,15 @@ class PubGrubSolverTest {
         PackageSource src = InMemoryPackageSource.builder()
                 .version("shared", "1.5")
                 .version("shared", "1.0")
-                .version("a", "1.0", deps -> deps
-                        .require("shared", VersionSet.atLeast("1.0", true)))
-                .version("b", "1.0", deps -> deps
-                        .require("shared", VersionSet.lessThan("2.0", false)))
+                .version("a", "1.0", deps -> deps.require("shared", VersionSet.atLeast("1.0", true)))
+                .version("b", "1.0", deps -> deps.require("shared", VersionSet.lessThan("2.0", false)))
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        Map<String, String> solution = solver.solve("root", "1.0", List.of(
-                Term.positive("a", VersionSet.exact("1.0")),
-                Term.positive("b", VersionSet.exact("1.0"))));
+        Map<String, String> solution = solver.solve(
+                "root",
+                "1.0",
+                List.of(Term.positive("a", VersionSet.exact("1.0")), Term.positive("b", VersionSet.exact("1.0"))));
 
         // shared must be in [1.0, 2.0). Highest version we have is 1.5.
         assertThat(solution).containsEntry("shared", "1.5");
@@ -126,28 +119,28 @@ class PubGrubSolverTest {
         PackageSource src = InMemoryPackageSource.builder()
                 .version("shared", "1.0")
                 .version("shared", "2.0")
-                .version("a", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("1.0")))
-                .version("b", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("2.0")))
+                .version("a", "1.0", deps -> deps.require("shared", VersionSet.exact("1.0")))
+                .version("b", "1.0", deps -> deps.require("shared", VersionSet.exact("2.0")))
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        assertThatThrownBy(() -> solver.solve("root", "1.0", List.of(
-                Term.positive("a", VersionSet.exact("1.0")),
-                Term.positive("b", VersionSet.exact("1.0")))))
+        assertThatThrownBy(() -> solver.solve(
+                        "root",
+                        "1.0",
+                        List.of(
+                                Term.positive("a", VersionSet.exact("1.0")),
+                                Term.positive("b", VersionSet.exact("1.0")))))
                 .isInstanceOf(UnsatisfiableException.class);
     }
 
     @Test
     void no_version_satisfies_constraint() {
-        PackageSource src = InMemoryPackageSource.builder()
-                .version("widget", "1.0")
-                .build();
+        PackageSource src =
+                InMemoryPackageSource.builder().version("widget", "1.0").build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        assertThatThrownBy(() -> solver.solve("root", "1.0", List.of(
-                Term.positive("widget", VersionSet.exact("9.9.9")))))
+        assertThatThrownBy(
+                        () -> solver.solve("root", "1.0", List.of(Term.positive("widget", VersionSet.exact("9.9.9")))))
                 .isInstanceOf(UnsatisfiableException.class);
     }
 }

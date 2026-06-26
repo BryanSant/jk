@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.credential;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * Reads {@code <server>} credentials from Maven's {@code ~/.m2/settings.xml}
@@ -80,7 +79,7 @@ public final class MavenSettings {
                 if (id == null || id.isBlank()) continue;
                 String username = childText(server, "username");
                 String password = childText(server, "password");
-                if (username == null && password == null) continue;   // no usable creds
+                if (username == null && password == null) continue; // no usable creds
                 byId.put(id.strip(), new Server(id.strip(), username, password));
             }
             return new MavenSettings(byId);

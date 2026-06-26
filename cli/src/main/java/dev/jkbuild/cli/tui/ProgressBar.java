@@ -96,13 +96,13 @@ public final class ProgressBar {
         for (int i = 0; i < SEGMENTS; i++) {
             char c;
             AttributedStyle color;
-            if (i < full) {                              // whole cell
+            if (i < full) { // whole cell
                 c = FULL_BLOCK;
                 color = fillColors[SEGMENTS - fill + i];
-            } else if (i == full && eighths > 0) {       // fractional frontier
-                c = (char) (0x2590 - eighths);           // ▏ (1/8) … ▉ (7/8)
+            } else if (i == full && eighths > 0) { // fractional frontier
+                c = (char) (0x2590 - eighths); // ▏ (1/8) … ▉ (7/8)
                 color = fillColors[SEGMENTS - fill + i]; // == brightest (the frontier)
-            } else {                                     // unreached
+            } else { // unreached
                 c = ' ';
                 color = brightest;
             }
@@ -116,7 +116,7 @@ public final class ProgressBar {
      */
     public Rgb leadColor(long numerator, long denominator) {
         int fill = cells(numerator, denominator)[2];
-        int idx = fill > 0 ? SEGMENTS - fill : SEGMENTS - 1;   // cell 0's gradient index
+        int idx = fill > 0 ? SEGMENTS - fill : SEGMENTS - 1; // cell 0's gradient index
         double t = SEGMENTS <= 1 ? 0.0 : (double) idx / (SEGMENTS - 1);
         return gradient.at(t);
     }
@@ -129,15 +129,15 @@ public final class ProgressBar {
         double exact = fraction(numerator, denominator) * SEGMENTS;
         int full = (int) Math.floor(exact);
         int eighths = (int) Math.round((exact - full) * 8);
-        if (eighths == 8) {        // rounded up to a whole cell
+        if (eighths == 8) { // rounded up to a whole cell
             full++;
             eighths = 0;
         }
-        if (full >= SEGMENTS) {    // clamp at 100%
+        if (full >= SEGMENTS) { // clamp at 100%
             full = SEGMENTS;
             eighths = 0;
         }
-        return new int[]{full, eighths, full + (eighths > 0 ? 1 : 0)};
+        return new int[] {full, eighths, full + (eighths > 0 ? 1 : 0)};
     }
 
     /**

@@ -23,55 +23,55 @@ public final class JkDarkTheme implements Theme {
     public static final String NAME = "Jk Dark";
     public static final String VARIANT = "dark";
 
-    public static final Rgb PRIMARY       = Rgb.hex(0x3F51B5); // Indigo 500
-    public static final Rgb PRIMARY_DARK  = Rgb.hex(0x303F9F); // Indigo 700
+    public static final Rgb PRIMARY = Rgb.hex(0x3F51B5); // Indigo 500
+    public static final Rgb PRIMARY_DARK = Rgb.hex(0x303F9F); // Indigo 700
     public static final Rgb PRIMARY_LIGHT = Rgb.hex(0xC5CAE9); // Indigo 100
-    public static final Rgb ACCENT        = Rgb.hex(0xFF4081); // Pink A200
+    public static final Rgb ACCENT = Rgb.hex(0xFF4081); // Pink A200
 
     public static final Rgb BACKGROUND = Rgb.hex(0x000000);
     public static final Rgb FOREGROUND = Rgb.hex(0xCFD8DC);
 
-    public static final Rgb CURSOR      = Rgb.hex(0xECEFF1);
+    public static final Rgb CURSOR = Rgb.hex(0xECEFF1);
     public static final Rgb CURSOR_TEXT = Rgb.hex(0x000000);
 
-    public static final Rgb SELECTION_BG   = Rgb.hex(0x303F9F);
+    public static final Rgb SELECTION_BG = Rgb.hex(0x303F9F);
     public static final Rgb SELECTION_TEXT = Rgb.hex(0xFFFFFF);
 
     // Normal (the 8 base ANSI colors).
-    public static final Rgb NORMAL_BLACK   = Rgb.hex(0x263238); // Blue Grey 900
-    public static final Rgb NORMAL_RED     = Rgb.hex(0xE91E63); // Pink 500
-    public static final Rgb NORMAL_GREEN   = Rgb.hex(0x4CAF50); // Green 500
-    public static final Rgb GOAL_GREEN    = Rgb.hex(0x357B38); // Green 500 × 0.7 — build wedge background
-    public static final Rgb NORMAL_YELLOW  = Rgb.hex(0xFFC107); // Amber 500
-    public static final Rgb NORMAL_BLUE    = Rgb.hex(0x3F51B5); // Indigo 500
+    public static final Rgb NORMAL_BLACK = Rgb.hex(0x263238); // Blue Grey 900
+    public static final Rgb NORMAL_RED = Rgb.hex(0xE91E63); // Pink 500
+    public static final Rgb NORMAL_GREEN = Rgb.hex(0x4CAF50); // Green 500
+    public static final Rgb GOAL_GREEN = Rgb.hex(0x357B38); // Green 500 × 0.7 — build wedge background
+    public static final Rgb NORMAL_YELLOW = Rgb.hex(0xFFC107); // Amber 500
+    public static final Rgb NORMAL_BLUE = Rgb.hex(0x3F51B5); // Indigo 500
     public static final Rgb NORMAL_MAGENTA = Rgb.hex(0x9C27B0); // Purple 500
-    public static final Rgb NORMAL_CYAN    = Rgb.hex(0x00BCD4); // Cyan 500
-    public static final Rgb HEADER_BLUE      = Rgb.hex(0x0F4786); // dark royal blue (#1565C0 × 0.7)
-    public static final Rgb NORMAL_WHITE   = Rgb.hex(0xCFD8DC); // Blue Grey 100
-    public static final Rgb GRAY           = Rgb.hex(0x90A4AE); // Blue Grey 300 — badge chips
+    public static final Rgb NORMAL_CYAN = Rgb.hex(0x00BCD4); // Cyan 500
+    public static final Rgb HEADER_BLUE = Rgb.hex(0x0F4786); // dark royal blue (#1565C0 × 0.7)
+    public static final Rgb NORMAL_WHITE = Rgb.hex(0xCFD8DC); // Blue Grey 100
+    public static final Rgb GRAY = Rgb.hex(0x90A4AE); // Blue Grey 300 — badge chips
 
     /** Filesystem paths shown to the user. */
-    public static final Rgb PATH           = Rgb.hex(0x969DD4); // periwinkle
+    public static final Rgb PATH = Rgb.hex(0x969DD4); // periwinkle
 
     // Syntax-highlight palette — GitHub's dark default theme, so compiler
     // snippets read like a github.com code block rather than jk's own hues.
-    public static final Rgb GH_KEYWORD    = Rgb.hex(0xFF7B72); // red
-    public static final Rgb GH_TYPE       = Rgb.hex(0xFFA657); // orange
-    public static final Rgb GH_FUNCTION   = Rgb.hex(0xD2A8FF); // purple
-    public static final Rgb GH_CONSTANT   = Rgb.hex(0x79C0FF); // blue (also numbers)
-    public static final Rgb GH_STRING     = Rgb.hex(0xA5D6FF); // light blue
-    public static final Rgb GH_COMMENT    = Rgb.hex(0x8B949E); // gray
+    public static final Rgb GH_KEYWORD = Rgb.hex(0xFF7B72); // red
+    public static final Rgb GH_TYPE = Rgb.hex(0xFFA657); // orange
+    public static final Rgb GH_FUNCTION = Rgb.hex(0xD2A8FF); // purple
+    public static final Rgb GH_CONSTANT = Rgb.hex(0x79C0FF); // blue (also numbers)
+    public static final Rgb GH_STRING = Rgb.hex(0xA5D6FF); // light blue
+    public static final Rgb GH_COMMENT = Rgb.hex(0x8B949E); // gray
 
     // Bright (the 8 bright ANSI colors).
-    public static final Rgb BRIGHT_BLACK   = Rgb.hex(0x546E7A); // Blue Grey 600
-    public static final Rgb DARK_BLACK     = BRIGHT_BLACK.darker(0.40); // bright black × 0.6 — the dimmest gray
-    public static final Rgb BRIGHT_RED     = Rgb.hex(0xFF4081); // Pink A200
-    public static final Rgb BRIGHT_GREEN   = Rgb.hex(0x69F0AE); // Green A200
-    public static final Rgb BRIGHT_YELLOW  = Rgb.hex(0xFFD54F); // Amber 300
-    public static final Rgb BRIGHT_BLUE    = Rgb.hex(0x536DFE); // Indigo A200
+    public static final Rgb BRIGHT_BLACK = Rgb.hex(0x546E7A); // Blue Grey 600
+    public static final Rgb DARK_BLACK = BRIGHT_BLACK.darker(0.40); // bright black × 0.6 — the dimmest gray
+    public static final Rgb BRIGHT_RED = Rgb.hex(0xFF4081); // Pink A200
+    public static final Rgb BRIGHT_GREEN = Rgb.hex(0x69F0AE); // Green A200
+    public static final Rgb BRIGHT_YELLOW = Rgb.hex(0xFFD54F); // Amber 300
+    public static final Rgb BRIGHT_BLUE = Rgb.hex(0x536DFE); // Indigo A200
     public static final Rgb BRIGHT_MAGENTA = Rgb.hex(0xE040FB); // Purple A200
-    public static final Rgb BRIGHT_CYAN    = Rgb.hex(0x18FFFF); // Cyan A200
-    public static final Rgb BRIGHT_WHITE   = Rgb.hex(0xECEFF1); // Blue Grey 50
+    public static final Rgb BRIGHT_CYAN = Rgb.hex(0x18FFFF); // Cyan A200
+    public static final Rgb BRIGHT_WHITE = Rgb.hex(0xECEFF1); // Blue Grey 50
 
     // --- gradients --------------------------------------------------------
     // Named gradients, each independently tunable (all from the Jk Dark scheme):
@@ -216,12 +216,12 @@ public final class JkDarkTheme implements Theme {
 
     @Override
     public AttributedStyle coordGroup() {
-        return withColor(AttributedStyle.DEFAULT, NORMAL_CYAN);     // cyan
+        return withColor(AttributedStyle.DEFAULT, NORMAL_CYAN); // cyan
     }
 
     @Override
     public AttributedStyle coordName() {
-        return withColor(AttributedStyle.DEFAULT, BRIGHT_CYAN);     // bright-cyan
+        return withColor(AttributedStyle.DEFAULT, BRIGHT_CYAN); // bright-cyan
     }
 
     @Override
@@ -248,7 +248,9 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
-    public Rgb planBadgeColor() { return HEADER_BLUE; }
+    public Rgb planBadgeColor() {
+        return HEADER_BLUE;
+    }
 
     @Override
     public AttributedStyle indigoBadge() {
@@ -256,7 +258,9 @@ public final class JkDarkTheme implements Theme {
     }
 
     @Override
-    public Rgb indigoBadgeColor() { return PRIMARY; }
+    public Rgb indigoBadgeColor() {
+        return PRIMARY;
+    }
 
     /** Pure black (#000000) — the text color for every chip/badge that sets a background. */
     private static final Rgb CHIP_TEXT = Rgb.hex(0x000000);
@@ -439,7 +443,8 @@ public final class JkDarkTheme implements Theme {
         for (var i = 0; i < n; i++) {
             var t = n == 1 ? 0.0 : (double) i / (n - 1);
             Rgb c = TITLE_GRADIENT.at(t);
-            sb.append(new String(Character.toChars(codepoints[i])),
+            sb.append(
+                    new String(Character.toChars(codepoints[i])),
                     AttributedStyle.DEFAULT.bold().foreground(c.r(), c.g(), c.b()));
         }
         return sb.toAttributedString();
@@ -465,10 +470,11 @@ public final class JkDarkTheme implements Theme {
     @Override
     public AttributedStyle railStyle(Rail.StepState state, Rail.RailGlyph glyph) {
         return switch (glyph) {
-            case BULLET, OPEN, MID, CLOSE -> switch (state) {
-                case ACTIVE -> activeStep();
-                case COMPLETED, INACTIVE -> darkGray();
-            };
+            case BULLET, OPEN, MID, CLOSE ->
+                switch (state) {
+                    case ACTIVE -> activeStep();
+                    case COMPLETED, INACTIVE -> darkGray();
+                };
         };
     }
 }

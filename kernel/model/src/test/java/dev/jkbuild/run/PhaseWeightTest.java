@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.run;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * A phase's {@code weight} is its share of the progress bar — time-proportional,
@@ -19,9 +18,11 @@ class PhaseWeightTest {
 
     /** Records the numerator/denominator seen on each progress event. */
     private static final class ProgressTrace implements GoalListener {
-        final List<long[]> points = new ArrayList<>();   // {numerator, denominator}
-        @Override public void progress(String phase, int delta, GoalView v) {
-            points.add(new long[]{v.numerator(), v.denominator()});
+        final List<long[]> points = new ArrayList<>(); // {numerator, denominator}
+
+        @Override
+        public void progress(String phase, int delta, GoalView v) {
+            points.add(new long[] {v.numerator(), v.denominator()});
         }
     }
 
@@ -29,7 +30,11 @@ class PhaseWeightTest {
     void denominator_sums_weights_not_scopes() {
         // A: weight 40 over 4 units; B: no weight → tracks its scope of 6.
         Goal goal = Goal.builder("g")
-                .addPhase(Phase.builder("a").weight(40).scope(4).execute(ctx -> {}).build())
+                .addPhase(Phase.builder("a")
+                        .weight(40)
+                        .scope(4)
+                        .execute(ctx -> {})
+                        .build())
                 .addPhase(Phase.builder("b").scope(6).execute(ctx -> {}).build())
                 .build();
 
@@ -45,8 +50,12 @@ class PhaseWeightTest {
         Goal goal = Goal.builder("g")
                 .addListener(trace)
                 // 4 internal ticks mapped onto a 40- tick weight → +10 each.
-                .addPhase(Phase.builder("a").weight(40).scope(4)
-                        .execute(ctx -> { for (int i = 0; i < 4; i++) ctx.progress(1); })
+                .addPhase(Phase.builder("a")
+                        .weight(40)
+                        .scope(4)
+                        .execute(ctx -> {
+                            for (int i = 0; i < 4; i++) ctx.progress(1);
+                        })
                         .build())
                 .build();
 
@@ -54,8 +63,7 @@ class PhaseWeightTest {
 
         // Each progress(1) advances 1/4 of the 40-tick budget against a fixed
         // denominator — smooth, monotonic, and exactly filling the weight.
-        assertThat(trace.points).extracting(p -> p[0])
-                .containsExactly(10L, 20L, 30L, 40L);
+        assertThat(trace.points).extracting(p -> p[0]).containsExactly(10L, 20L, 30L, 40L);
         assertThat(trace.points).allSatisfy(p -> assertThat(p[1]).isEqualTo(40L));
     }
 
@@ -65,8 +73,12 @@ class PhaseWeightTest {
         Goal goal = Goal.builder("g")
                 .addListener(trace)
                 // 3 units over a weight of 10: round(10/3)=3, round(20/3)=7, 10.
-                .addPhase(Phase.builder("a").weight(10).scope(3)
-                        .execute(ctx -> { for (int i = 0; i < 3; i++) ctx.progress(1); })
+                .addPhase(Phase.builder("a")
+                        .weight(10)
+                        .scope(3)
+                        .execute(ctx -> {
+                            for (int i = 0; i < 3; i++) ctx.progress(1);
+                        })
                         .build())
                 .build();
 
@@ -86,8 +98,12 @@ class PhaseWeightTest {
         Goal goal = Goal.builder("g")
                 .addListener(trace)
                 // Reports more units (5) than its scope (2): the bar clamps at weight.
-                .addPhase(Phase.builder("a").weight(20).scope(2)
-                        .execute(ctx -> { for (int i = 0; i < 5; i++) ctx.progress(1); })
+                .addPhase(Phase.builder("a")
+                        .weight(20)
+                        .scope(2)
+                        .execute(ctx -> {
+                            for (int i = 0; i < 5; i++) ctx.progress(1);
+                        })
                         .build())
                 .build();
 
@@ -102,14 +118,22 @@ class PhaseWeightTest {
     void reweight_resizes_the_slice_and_the_denominator_mid_run() {
         // 'a' is estimated at 40 up front but discovers early it's a cheap restore (3).
         Goal goal = Goal.builder("g")
-                .addPhase(Phase.builder("a").weight(40).scope(1)
-                        .execute(ctx -> { ctx.reweight(3); ctx.progress(1); })
+                .addPhase(Phase.builder("a")
+                        .weight(40)
+                        .scope(1)
+                        .execute(ctx -> {
+                            ctx.reweight(3);
+                            ctx.progress(1);
+                        })
                         .build())
-                .addPhase(Phase.builder("b").weight(10).scope(1)
-                        .execute(ctx -> ctx.progress(1)).build())
+                .addPhase(Phase.builder("b")
+                        .weight(10)
+                        .scope(1)
+                        .execute(ctx -> ctx.progress(1))
+                        .build())
                 .build();
 
-        assertThat(goal.estimatedTotalWeight()).isEqualTo(50);   // 40 + 10, before running
+        assertThat(goal.estimatedTotalWeight()).isEqualTo(50); // 40 + 10, before running
         goal.run();
         // 'a' shrank 40 → 3, so the denominator drops to 3 + 10; both fill fully.
         assertThat(goal.snapshot().denominator()).isEqualTo(13);
@@ -123,15 +147,20 @@ class PhaseWeightTest {
         // weight × elapsed/expected, then holds at the 90% cap.
         Goal goal = Goal.builder("g").build();
         DefaultPhaseContext ctx = new DefaultPhaseContext(
-                "p", goal, /*scope*/ 1, /*weight*/ 100, /*weighted*/ true,
-                /*expectedNanos*/ 1_000_000L, /*startNanos*/ 0L);
+                "p",
+                goal, /*scope*/
+                1, /*weight*/
+                100, /*weighted*/
+                true,
+                /*expectedNanos*/ 1_000_000L, /*startNanos*/
+                0L);
         assertThat(ctx.interpolating()).isTrue();
 
-        ctx.tick(500_000L);                       // 50% elapsed → 50
+        ctx.tick(500_000L); // 50% elapsed → 50
         assertThat(goal.snapshot().numerator()).isEqualTo(50);
-        ctx.tick(900_000L);                       // 90% elapsed → 90
+        ctx.tick(900_000L); // 90% elapsed → 90
         assertThat(goal.snapshot().numerator()).isEqualTo(90);
-        ctx.tick(5_000_000L);                      // way over → capped at 90% (90)
+        ctx.tick(5_000_000L); // way over → capped at 90% (90)
         assertThat(goal.snapshot().numerator()).isEqualTo(90);
     }
 
@@ -139,14 +168,19 @@ class PhaseWeightTest {
     void real_progress_overrides_interpolation_and_fills_past_the_cap() {
         Goal goal = Goal.builder("g").build();
         DefaultPhaseContext ctx = new DefaultPhaseContext(
-                "p", goal, /*scope*/ 1, /*weight*/ 100, /*weighted*/ true,
-                /*expectedNanos*/ 1_000_000L, /*startNanos*/ 0L);
+                "p",
+                goal, /*scope*/
+                1, /*weight*/
+                100, /*weighted*/
+                true,
+                /*expectedNanos*/ 1_000_000L, /*startNanos*/
+                0L);
 
-        ctx.tick(900_000L);                       // interpolated to the 90 cap
+        ctx.tick(900_000L); // interpolated to the 90 cap
         assertThat(goal.snapshot().numerator()).isEqualTo(90);
-        ctx.progress(1);                          // real completion (scope 1) → full weight
+        ctx.progress(1); // real completion (scope 1) → full weight
         assertThat(goal.snapshot().numerator()).isEqualTo(100);
-        ctx.tick(950_000L);                       // a late tick can't pull it back
+        ctx.tick(950_000L); // a late tick can't pull it back
         assertThat(goal.snapshot().numerator()).isEqualTo(100);
     }
 
@@ -155,8 +189,11 @@ class PhaseWeightTest {
         ProgressTrace trace = new ProgressTrace();
         Goal goal = Goal.builder("g")
                 .addListener(trace)
-                .addPhase(Phase.builder("a").scope(3)
-                        .execute(ctx -> { for (int i = 0; i < 3; i++) ctx.progress(1); })
+                .addPhase(Phase.builder("a")
+                        .scope(3)
+                        .execute(ctx -> {
+                            for (int i = 0; i < 3; i++) ctx.progress(1);
+                        })
                         .build())
                 .build();
 

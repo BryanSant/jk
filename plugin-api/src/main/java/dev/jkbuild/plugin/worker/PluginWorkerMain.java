@@ -3,7 +3,6 @@ package dev.jkbuild.plugin.worker;
 
 import dev.jkbuild.plugin.Plugin;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
@@ -76,8 +75,8 @@ public final class PluginWorkerMain {
             for (Plugin p : plugins) {
                 if (wanted.equals(p.getClass().getName())) return p;
             }
-            System.err.println("jk-plugin-host: requested plugin " + wanted
-                    + " not found among " + classNames(plugins));
+            System.err.println(
+                    "jk-plugin-host: requested plugin " + wanted + " not found among " + classNames(plugins));
             return null;
         }
         if (plugins.size() == 1) return plugins.get(0);

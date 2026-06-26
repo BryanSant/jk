@@ -73,8 +73,8 @@ public record Term(String pkg, VersionSet versions, boolean positive) {
         boolean bSubsetA = b.subsetOf(a);
         boolean disjoint = a.intersect(b).isEmpty();
 
-        if (aSubsetB && bSubsetA) return Relation.SATISFIES;     // equal sets
-        if (aSubsetB) return Relation.SATISFIES;                 // this ⊆ other
+        if (aSubsetB && bSubsetA) return Relation.SATISFIES; // equal sets
+        if (aSubsetB) return Relation.SATISFIES; // this ⊆ other
         if (disjoint) return Relation.CONTRADICTS;
         return Relation.OVERLAPS;
     }

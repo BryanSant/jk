@@ -3,7 +3,6 @@ package dev.jkbuild.worker;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -84,8 +83,8 @@ public enum WorkerJar {
     private String expectedSha() {
         String sha = expectedShaOrNull();
         if (sha == null || sha.isBlank()) {
-            throw new IllegalStateException(shaResource
-                    + " missing from this jk build (the worker-sha resource wasn't generated)");
+            throw new IllegalStateException(
+                    shaResource + " missing from this jk build (the worker-sha resource wasn't generated)");
         }
         return sha;
     }
@@ -100,8 +99,8 @@ public enum WorkerJar {
         if (override != null && !override.isBlank()) {
             Path jar = Path.of(override);
             if (Files.isRegularFile(jar)) return jar;
-            throw new IllegalStateException("-D" + jarProperty + " is set to '" + override
-                    + "' but no file exists there.");
+            throw new IllegalStateException(
+                    "-D" + jarProperty + " is set to '" + override + "' but no file exists there.");
         }
         String expectedHash = expectedSha();
         Path target = cas.pathFor(expectedHash);

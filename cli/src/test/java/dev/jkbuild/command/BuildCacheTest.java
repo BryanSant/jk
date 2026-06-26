@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -14,8 +12,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.function.IntSupplier;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class BuildCacheTest {
 
@@ -42,8 +40,7 @@ class BuildCacheTest {
 
         // Second build: stamp is fresh, no input newer → fast skip without
         // even hashing source content for an action-key lookup.
-        String stdout = captureStdout(() ->
-                run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
+        String stdout = captureStdout(() -> run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
         assertThat(stdout).contains("project up to date");
     }
 
@@ -68,8 +65,7 @@ class BuildCacheTest {
         deleteRecursively(tempDir.resolve("build"));
         deleteRecursively(tempDir.resolve("target"));
 
-        String stdout = captureStdout(() ->
-                run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
+        String stdout = captureStdout(() -> run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
         assertThat(stdout).contains("Built");
     }
 
@@ -107,8 +103,7 @@ class BuildCacheTest {
         // which let a real content change look "up to date".
         Files.setLastModifiedTime(src, FileTime.fromMillis(System.currentTimeMillis() + 5_000));
 
-        String stdout = captureStdout(() ->
-                run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
+        String stdout = captureStdout(() -> run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()));
         assertThat(stdout).doesNotContain("Cache hit");
         assertThat(stdout).contains("Built");
     }

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile.incremental;
 
-import javax.tools.JavaCompiler;
-import javax.tools.ToolProvider;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -12,6 +10,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
+import javax.tools.JavaCompiler;
+import javax.tools.ToolProvider;
 
 /** Compiles small Java sources to {@code .class} bytes via the in-JVM javac (tests run under a JDK). */
 public final class JavacFixture {
@@ -42,8 +42,8 @@ public final class JavacFixture {
             for (Path p : (Iterable<Path>) walk::iterator) {
                 if (!p.toString().endsWith(".class")) continue;
                 String rel = out.relativize(p).toString().replace(File.separatorChar, '/');
-                classes.put(rel.substring(0, rel.length() - ".class".length()).replace('/', '.'),
-                        Files.readAllBytes(p));
+                classes.put(
+                        rel.substring(0, rel.length() - ".class".length()).replace('/', '.'), Files.readAllBytes(p));
             }
         }
         return classes;

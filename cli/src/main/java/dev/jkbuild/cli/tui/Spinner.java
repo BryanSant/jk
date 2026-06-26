@@ -4,9 +4,8 @@ package dev.jkbuild.cli.tui;
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Gradient;
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.utils.AttributedStyle;
-
 import java.io.PrintStream;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Single-line animated spinner widget for indeterminate-progress CLI
@@ -143,5 +142,4 @@ public final class Spinner implements AutoCloseable {
         }
         return a;
     }
-
 }

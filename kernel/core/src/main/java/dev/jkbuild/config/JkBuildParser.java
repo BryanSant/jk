@@ -1,29 +1,24 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Dependency;
-import dev.jkbuild.model.PluginDeclaration;
+import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.library.LibraryCatalog;
+import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.Feature;
 import dev.jkbuild.model.Features;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
+import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.ObjectStoreConfig;
+import dev.jkbuild.model.PluginDeclaration;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
-import dev.jkbuild.credential.RepoCredential;
-import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.Workspace;
 import dev.jkbuild.model.Workspace.WorkspaceDependency;
 import dev.jkbuild.util.GitUrl;
-import org.tomlj.Toml;
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -31,14 +26,18 @@ import java.nio.file.NoSuchFileException;
 import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
-import java.util.Optional;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import org.tomlj.Toml;
+import org.tomlj.TomlArray;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * Loads {@code jk.toml} into a {@link JkBuild}.
@@ -90,8 +89,7 @@ public final class JkBuildParser {
         } catch (NoSuchFileException e) {
             throw new JkBuildParseException("jk.toml not found: " + file);
         }
-        CacheKey key = new CacheKey(
-                file.toAbsolutePath().normalize(), attrs.size(), attrs.lastModifiedTime());
+        CacheKey key = new CacheKey(file.toAbsolutePath().normalize(), attrs.size(), attrs.lastModifiedTime());
         JkBuild cached = PARSE_CACHE.get(key);
         if (cached != null) {
             return cached;
@@ -130,8 +128,8 @@ public final class JkBuildParser {
         JkBuild.NativeConfig nativeConfig = parseNativeConfig(result);
         JkBuild.Build build = parseBuild(result);
         JkBuild.FormatConfig format = parseFormat(result);
-        return new JkBuild(project, deps, repos, profiles, features, workspace, manifest, plugins,
-                nativeConfig, build, format);
+        return new JkBuild(
+                project, deps, repos, profiles, features, workspace, manifest, plugins, nativeConfig, build, format);
     }
 
     /**
@@ -175,8 +173,7 @@ public final class JkBuildParser {
                 throw new JkBuildParseException("manifest." + key + " must be a string");
             }
             if (key.equalsIgnoreCase("Main-Class")) {
-                throw new JkBuildParseException(
-                        "manifest.Main-Class is not allowed; set project.main instead");
+                throw new JkBuildParseException("manifest.Main-Class is not allowed; set project.main instead");
             }
             attrs.put(key, value);
         }
@@ -213,15 +210,15 @@ public final class JkBuildParser {
         requireSupportedMajor("project.java", java);
         String main = project.getString("main");
         boolean shadow = Boolean.TRUE.equals(project.getBoolean("shadow"));
-        // native = true           → ALWAYS    (eligible: `jk native` builds it; `jk install` of an app builds+deploys it)
+        // native = true           → ALWAYS    (eligible: `jk native` builds it; `jk install` of an app builds+deploys
+        // it)
         // native = "always"       → ALWAYS    (same as true)
         // native = false          → DISABLED  (never build a native artifact)
         // native absent           → SUPPORTED (not eligible — `jk native` skips it)
         // Only ALWAYS is native-eligible; `jk build` never builds native artifacts.
         Object nativeRaw = project.get("native");
         JkBuild.NativeMode nativeMode;
-        if ("always".equalsIgnoreCase(nativeRaw instanceof String s ? s : "")
-                || Boolean.TRUE.equals(nativeRaw)) {
+        if ("always".equalsIgnoreCase(nativeRaw instanceof String s ? s : "") || Boolean.TRUE.equals(nativeRaw)) {
             nativeMode = JkBuild.NativeMode.ALWAYS;
         } else if (Boolean.FALSE.equals(nativeRaw)) {
             nativeMode = JkBuild.NativeMode.DISABLED;
@@ -233,9 +230,8 @@ public final class JkBuildParser {
         // application defaults to "has a main class"; an explicit key overrides
         // (e.g. application = false for a runnable project that shouldn't be
         // make-installed). m2install defaults to false.
-        boolean application = project.contains("application")
-                ? Boolean.TRUE.equals(project.getBoolean("application"))
-                : main != null;
+        boolean application =
+                project.contains("application") ? Boolean.TRUE.equals(project.getBoolean("application")) : main != null;
         boolean m2install = Boolean.TRUE.equals(project.getBoolean("m2install"));
         // project.layout = "simple"|"traditional"|"auto" (preferred).
         // Legacy: compact = true → "simple", compact = false → keep auto-detect.
@@ -248,12 +244,25 @@ public final class JkBuildParser {
                 throw new JkBuildParseException(e.getMessage());
             }
         } else if (Boolean.TRUE.equals(project.getBoolean("compact"))) {
-            layout = JkBuild.Layout.SIMPLE;   // legacy compact = true
+            layout = JkBuild.Layout.SIMPLE; // legacy compact = true
         } else {
             layout = JkBuild.Layout.AUTO;
         }
-        return new JkBuild.Project(group, name, version, jdk, graal, java, kotlin,
-                main, shadow, nativeMode, description, application, m2install, layout);
+        return new JkBuild.Project(
+                group,
+                name,
+                version,
+                jdk,
+                graal,
+                java,
+                kotlin,
+                main,
+                shadow,
+                nativeMode,
+                description,
+                application,
+                m2install,
+                layout);
     }
 
     /**
@@ -274,8 +283,7 @@ public final class JkBuildParser {
         } else if (raw instanceof String s) {
             spec = s.trim();
         } else {
-            throw new JkBuildParseException(
-                    "project.jdk must be a string, e.g. \"temurin-25\" or \"25\"");
+            throw new JkBuildParseException("project.jdk must be a string, e.g. \"temurin-25\" or \"25\"");
         }
         if (spec.isEmpty()) return null;
         if (JkBuild.Project.hasPointRelease(spec)) {
@@ -285,8 +293,8 @@ public final class JkBuildParser {
         }
         int major = JkBuild.Project.majorOf(spec);
         if (major == 0) {
-            throw new JkBuildParseException("project.jdk = \"" + spec
-                    + "\" must include a major version (e.g. \"temurin-25\" or \"25\")");
+            throw new JkBuildParseException(
+                    "project.jdk = \"" + spec + "\" must include a major version (e.g. \"temurin-25\" or \"25\")");
         }
         requireSupportedMajor("project.jdk", major);
         return spec;
@@ -343,8 +351,7 @@ public final class JkBuildParser {
         if (!project.contains("kotlin")) return null;
         String raw = project.getString("kotlin");
         if (raw == null) {
-            throw new JkBuildParseException(
-                    "project.kotlin must be a version string, e.g. \"2.3.21\"");
+            throw new JkBuildParseException("project.kotlin must be a version string, e.g. \"2.3.21\"");
         }
         if (raw.isBlank()) return null;
         return VersionSelector.parseFloating(raw);
@@ -368,8 +375,7 @@ public final class JkBuildParser {
     // Dependencies
     // ---------------------------------------------------------------------
 
-    private static JkBuild.Dependencies parseDependencies(
-            TomlTable root, Workspace workspace, LibraryCatalog catalog) {
+    private static JkBuild.Dependencies parseDependencies(TomlTable root, Workspace workspace, LibraryCatalog catalog) {
         TomlTable deps = root.getTable("dependencies");
         if (deps == null) return JkBuild.Dependencies.empty();
         EnumMap<Scope, List<Dependency>> byScope = new EnumMap<>(Scope.class);
@@ -391,9 +397,8 @@ public final class JkBuildParser {
             }
         }
         if (!flatDepKeys.isEmpty() && !subScopeKeys.isEmpty()) {
-            throw new JkBuildParseException(
-                    "mixed flat and sub-scope dep tables are ambiguous in [dependencies]; "
-                            + "move flat entries under [dependencies.main] or remove the sub-scope tables");
+            throw new JkBuildParseException("mixed flat and sub-scope dep tables are ambiguous in [dependencies]; "
+                    + "move flat entries under [dependencies.main] or remove the sub-scope tables");
         }
 
         if (!flatDepKeys.isEmpty()) {
@@ -407,11 +412,10 @@ public final class JkBuildParser {
             Scope scope = scopeOf(scopeKey);
             TomlTable scopeTable = deps.getTable(scopeKey);
             if (scopeTable == null) {
-                throw new JkBuildParseException(
-                        "dependencies." + scopeKey + " must be a table of name → dep entries");
+                throw new JkBuildParseException("dependencies." + scopeKey + " must be a table of name → dep entries");
             }
-            List<Dependency> parsed = parseScopeTable(scopeTable,
-                    new ArrayList<>(scopeTable.keySet()), scope, workspace, catalog);
+            List<Dependency> parsed =
+                    parseScopeTable(scopeTable, new ArrayList<>(scopeTable.keySet()), scope, workspace, catalog);
             if (!parsed.isEmpty()) byScope.put(scope, parsed);
         }
         return new JkBuild.Dependencies(byScope);
@@ -432,8 +436,7 @@ public final class JkBuildParser {
     }
 
     private static List<Dependency> parseScopeTable(
-            TomlTable scopeTable, List<String> keys, Scope scope,
-            Workspace workspace, LibraryCatalog catalog) {
+            TomlTable scopeTable, List<String> keys, Scope scope, Workspace workspace, LibraryCatalog catalog) {
         List<Dependency> result = new ArrayList<>(keys.size());
         for (String name : keys) {
             Object value = scopeTable.get(List.of(name));
@@ -445,10 +448,9 @@ public final class JkBuildParser {
                 continue;
             }
             if (!(value instanceof TomlTable entry)) {
-                throw new JkBuildParseException(
-                        "dependencies." + scope.canonical() + "." + name
-                                + " must be an inline table (e.g. { group = \"...\", version = \"...\" })"
-                                + " or a version-string shorthand for a catalog-known name");
+                throw new JkBuildParseException("dependencies." + scope.canonical() + "." + name
+                        + " must be an inline table (e.g. { group = \"...\", version = \"...\" })"
+                        + " or a version-string shorthand for a catalog-known name");
             }
             result.add(parseDepEntry(name, entry, scope, workspace, catalog));
         }
@@ -459,14 +461,13 @@ public final class JkBuildParser {
      * Resolve a {@code name = "version-spec"} shorthand by looking the
      * short name up in the bundled library catalog.
      */
-    private static Dependency parseShorthandEntry(
-            String name, String versionRaw, Scope scope, LibraryCatalog catalog) {
+    private static Dependency parseShorthandEntry(String name, String versionRaw, Scope scope, LibraryCatalog catalog) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
         if (versionRaw.isBlank()) {
             throw new JkBuildParseException(displayPath + " has an empty version string");
         }
-        LibraryCatalog.Module mod = catalog.lookup(name).orElseThrow(() ->
-                new JkBuildParseException(unknownLibraryMessage(displayPath, name, catalog)));
+        LibraryCatalog.Module mod = catalog.lookup(name)
+                .orElseThrow(() -> new JkBuildParseException(unknownLibraryMessage(displayPath, name, catalog)));
         VersionSelector selector = VersionSelector.parseFloating(versionRaw);
         return Dependency.of(name, mod.moduleKey(), selector);
     }
@@ -479,7 +480,9 @@ public final class JkBuildParser {
      */
     private static String unknownLibraryMessage(String displayPath, String name, LibraryCatalog catalog) {
         StringBuilder msg = new StringBuilder(displayPath)
-                .append(" — unknown short name `").append(name).append("`. ");
+                .append(" — unknown short name `")
+                .append(name)
+                .append("`. ");
         List<String> suggestions = catalog.suggestionsFor(name, 5);
         if (!suggestions.isEmpty()) {
             msg.append("Did you mean: ").append(String.join(", ", suggestions)).append("? ");
@@ -491,8 +494,7 @@ public final class JkBuildParser {
     }
 
     private static Dependency parseDepEntry(
-            String name, TomlTable entry, Scope scope,
-            Workspace workspace, LibraryCatalog catalog) {
+            String name, TomlTable entry, Scope scope, Workspace workspace, LibraryCatalog catalog) {
         // `optional = true` withholds the dep from the default resolution; a
         // [features] entry pulls it in by name. Works with every dep form
         // (coord / git / path / workspace / sha256) since it's applied to the
@@ -502,8 +504,7 @@ public final class JkBuildParser {
     }
 
     private static Dependency parseDepEntryForm(
-            String name, TomlTable entry, Scope scope,
-            Workspace workspace, LibraryCatalog catalog) {
+            String name, TomlTable entry, Scope scope, Workspace workspace, LibraryCatalog catalog) {
         String displayPath = "dependencies." + scope.canonical() + "." + name;
         boolean hasWorkspace = entry.contains("workspace");
         boolean hasVersion = entry.contains("version");
@@ -511,8 +512,11 @@ public final class JkBuildParser {
         boolean hasGit = entry.contains("git");
         boolean hasSha256 = entry.contains("sha256");
 
-        int sourceCount = (hasVersion ? 1 : 0) + (hasPath ? 1 : 0)
-                + (hasGit ? 1 : 0) + (hasWorkspace ? 1 : 0) + (hasSha256 ? 1 : 0);
+        int sourceCount = (hasVersion ? 1 : 0)
+                + (hasPath ? 1 : 0)
+                + (hasGit ? 1 : 0)
+                + (hasWorkspace ? 1 : 0)
+                + (hasSha256 ? 1 : 0);
         // Two legal multi-source pairings:
         //   git + version: version overrides the ref-derived version (git-source-deps.md).
         //   sha256 + version: version is required alongside sha256 to record the coordinate.
@@ -520,8 +524,8 @@ public final class JkBuildParser {
         boolean gitWithVersionOverride = hasGit && hasVersion && !hasPath && !hasWorkspace && !hasSha256;
         boolean sha256WithVersion = hasSha256 && hasVersion && !hasPath && !hasGit && !hasWorkspace;
         if (sourceCount == 0) {
-            throw new JkBuildParseException(displayPath
-                    + " must set exactly one of `version`, `path`, `git`, `sha256`, or `workspace = true`");
+            throw new JkBuildParseException(
+                    displayPath + " must set exactly one of `version`, `path`, `git`, `sha256`, or `workspace = true`");
         }
         if (sourceCount > 1 && !gitWithVersionOverride && !sha256WithVersion) {
             throw new JkBuildParseException(displayPath
@@ -532,13 +536,12 @@ public final class JkBuildParser {
         if (hasWorkspace) {
             Boolean ws = entry.getBoolean("workspace");
             if (!Boolean.TRUE.equals(ws)) {
-                throw new JkBuildParseException(displayPath
-                        + ".workspace must be `true` (the only legal value)");
+                throw new JkBuildParseException(displayPath + ".workspace must be `true` (the only legal value)");
             }
             // workspace = true is mutually exclusive with group/name too.
             if (entry.contains("group") || entry.contains("name")) {
-                throw new JkBuildParseException(displayPath
-                        + " with `workspace = true` must not set `group` or `name`");
+                throw new JkBuildParseException(
+                        displayPath + " with `workspace = true` must not set `group` or `name`");
             }
             return resolveWorkspaceDep(name, displayPath, workspace);
         }
@@ -550,13 +553,12 @@ public final class JkBuildParser {
         // surprising.
         String groupExplicit = entry.getString("group");
         String artifactExplicit = entry.getString("name");
-        LibraryCatalog.Module catalogHit = (groupExplicit == null)
-                ? catalog.lookup(name).orElse(null) : null;
+        LibraryCatalog.Module catalogHit =
+                (groupExplicit == null) ? catalog.lookup(name).orElse(null) : null;
 
-        String group = groupExplicit != null ? groupExplicit
-                : (catalogHit != null ? catalogHit.group() : null);
-        String artifact = artifactExplicit != null ? artifactExplicit
-                : (catalogHit != null ? catalogHit.artifact() : name);
+        String group = groupExplicit != null ? groupExplicit : (catalogHit != null ? catalogHit.group() : null);
+        String artifact =
+                artifactExplicit != null ? artifactExplicit : (catalogHit != null ? catalogHit.artifact() : name);
         if (artifact != null && artifact.isBlank()) {
             throw new JkBuildParseException(displayPath + ".name must not be blank");
         }
@@ -573,8 +575,7 @@ public final class JkBuildParser {
             }
             String versionRaw = entry.getString("version");
             if (versionRaw == null || versionRaw.isBlank()) {
-                throw new JkBuildParseException(displayPath
-                        + " with `sha256 = ...` must also set `version`");
+                throw new JkBuildParseException(displayPath + " with `sha256 = ...` must also set `version`");
             }
             return Dependency.file(name, group + ":" + artifact, versionRaw, sha256);
         }
@@ -622,8 +623,7 @@ public final class JkBuildParser {
 
         // version-only.
         if (group == null || group.isBlank()) {
-            throw new JkBuildParseException(displayPath
-                    + " must set a `group` (or use a catalog-known short name)");
+            throw new JkBuildParseException(displayPath + " must set a `group` (or use a catalog-known short name)");
         }
         String versionRaw = entry.getString("version");
         if (versionRaw == null || versionRaw.isBlank()) {
@@ -633,8 +633,7 @@ public final class JkBuildParser {
         return Dependency.of(name, group + ":" + artifact, selector);
     }
 
-    private static Dependency resolveWorkspaceDep(
-            String name, String displayPath, Workspace workspace) {
+    private static Dependency resolveWorkspaceDep(String name, String displayPath, Workspace workspace) {
         // The workspace lookup chain: modules are resolved upstream at
         // merge time (we don't have them here at single-file parse time),
         // so first check [workspace.dependencies], then fall back to
@@ -653,8 +652,8 @@ public final class JkBuildParser {
         // encode the unresolved state via a synthetic module of the form
         // "workspace:<name>" and a Latest selector; the resolver never
         // sees this because WorkspaceMerge rewrites it first.
-        return new Dependency(name, "workspace:" + name,
-                new VersionSelector.Latest("workspace"), null, null, null, false);
+        return new Dependency(
+                name, "workspace:" + name, new VersionSelector.Latest("workspace"), null, null, null, false);
     }
 
     private static Dependency materialize(String name, WorkspaceDependency wd) {
@@ -679,12 +678,10 @@ public final class JkBuildParser {
         String rev = obj.getString("rev");
         int set = (tag != null ? 1 : 0) + (branch != null ? 1 : 0) + (rev != null ? 1 : 0);
         if (set == 0) {
-            throw new JkBuildParseException(
-                    displayPath + " must set one of `tag`, `branch`, or `rev`");
+            throw new JkBuildParseException(displayPath + " must set one of `tag`, `branch`, or `rev`");
         }
         if (set > 1) {
-            throw new JkBuildParseException(
-                    displayPath + " must set exactly one of `tag`, `branch`, or `rev`");
+            throw new JkBuildParseException(displayPath + " must set exactly one of `tag`, `branch`, or `rev`");
         }
         GitRefSpec ref;
         if (tag != null) ref = new GitRefSpec.Tag(tag);
@@ -698,8 +695,7 @@ public final class JkBuildParser {
             throw new JkBuildParseException(displayPath + ".fetch must be \"always\", \"0\", "
                     + "or a duration like \"30m\", \"12h\", \"3d\" (got: " + fetch + ")");
         }
-        return new GitSource(canonical, urlRaw, ref, path, submodules, verifySigned)
-                .withFetch(fetch);
+        return new GitSource(canonical, urlRaw, ref, path, submodules, verifySigned).withFetch(fetch);
     }
 
     /** A git branch-tip freshness policy: {@code "always"}/{@code "0"}, or a duration {@code <n>[smhd]}. */
@@ -725,8 +721,7 @@ public final class JkBuildParser {
             } else if (value instanceof TomlTable t) {
                 String u = t.getString("url");
                 if (u == null) {
-                    throw new JkBuildParseException(
-                            "repositories." + name + " requires a string `url` field");
+                    throw new JkBuildParseException("repositories." + name + " requires a string `url` field");
                 }
                 url = u;
                 credential = parseRepoCredential(name, t);
@@ -738,8 +733,7 @@ public final class JkBuildParser {
             try {
                 result.add(new RepositorySpec(name, URI.create(url), credential, objectStore));
             } catch (IllegalArgumentException e) {
-                throw new JkBuildParseException(
-                        "repositories." + name + " has malformed URL: " + url, e);
+                throw new JkBuildParseException("repositories." + name + " has malformed URL: " + url, e);
             }
         }
         return result;
@@ -759,8 +753,11 @@ public final class JkBuildParser {
         String secretKey = interpolateEnv(name, t.getString("secret-key"));
         String sessionToken = interpolateEnv(name, t.getString("session-token"));
         ObjectStoreConfig cfg = new ObjectStoreConfig(
-                blankToNull(region), blankToNull(endpoint),
-                blankToNull(accessKey), blankToNull(secretKey), blankToNull(sessionToken));
+                blankToNull(region),
+                blankToNull(endpoint),
+                blankToNull(accessKey),
+                blankToNull(secretKey),
+                blankToNull(sessionToken));
         return cfg.isEmpty() ? Optional.empty() : Optional.of(cfg);
     }
 
@@ -800,8 +797,8 @@ public final class JkBuildParser {
             String var = m.group(1);
             String val = System.getenv(var);
             if (val == null) {
-                throw new JkBuildParseException("repositories." + repoName
-                        + " references unset environment variable ${" + var + "}");
+                throw new JkBuildParseException(
+                        "repositories." + repoName + " references unset environment variable ${" + var + "}");
             }
             m.appendReplacement(out, java.util.regex.Matcher.quoteReplacement(val));
         }
@@ -835,8 +832,7 @@ public final class JkBuildParser {
             if (key.equals("default")) continue;
             TomlTable body = features.getTable(key);
             if (body == null) {
-                throw new JkBuildParseException(
-                        "features." + key + " must be a table with `deps` and/or `features`");
+                throw new JkBuildParseException("features." + key + " must be a table with `deps` and/or `features`");
             }
             // `deps` and `features` are both lists of names (not coord strings).
             // Resolution against [dependencies.*] happens at activation time.
@@ -854,8 +850,10 @@ public final class JkBuildParser {
         // for back-compat. When both are present, members are appended after modules.
         List<String> modules = optionalStringList(workspace, "modules", "workspace.modules");
         List<String> members = optionalStringList(workspace, "members", "workspace.members");
-        List<String> all = members.isEmpty() ? modules
-                : java.util.stream.Stream.concat(modules.stream(), members.stream()).toList();
+        List<String> all = members.isEmpty()
+                ? modules
+                : java.util.stream.Stream.concat(modules.stream(), members.stream())
+                        .toList();
         Map<String, WorkspaceDependency> wsDeps = parseWorkspaceDependencies(workspace);
         return new Workspace(all, wsDeps);
     }
@@ -867,8 +865,7 @@ public final class JkBuildParser {
         for (String name : wsDeps.keySet()) {
             Object value = wsDeps.get(List.of(name));
             if (!(value instanceof TomlTable entry)) {
-                throw new JkBuildParseException(
-                        "workspace.dependencies." + name + " must be an inline table");
+                throw new JkBuildParseException("workspace.dependencies." + name + " must be an inline table");
             }
             out.put(name, parseWorkspaceDepEntry(name, entry));
         }
@@ -891,12 +888,11 @@ public final class JkBuildParser {
         boolean hasGit = entry.contains("git");
         int sourceCount = (hasVersion ? 1 : 0) + (hasPath ? 1 : 0) + (hasGit ? 1 : 0);
         if (sourceCount == 0) {
-            throw new JkBuildParseException(displayPath
-                    + " must set exactly one of `version`, `path`, or `git`");
+            throw new JkBuildParseException(displayPath + " must set exactly one of `version`, `path`, or `git`");
         }
         if (sourceCount > 1) {
-            throw new JkBuildParseException(displayPath
-                    + " sets more than one of `version` / `path` / `git`; pick exactly one");
+            throw new JkBuildParseException(
+                    displayPath + " sets more than one of `version` / `path` / `git`; pick exactly one");
         }
         if (hasPath) {
             String path = entry.getString("path");
@@ -925,20 +921,19 @@ public final class JkBuildParser {
         TomlTable native_ = root.getTable("native");
         if (native_ == null) return JkBuild.NativeConfig.EMPTY;
         String mainClass = native_.getString("main-class");
-        String name      = native_.getString("name");
+        String name = native_.getString("name");
         List<String> args = new ArrayList<>();
         TomlArray argsArr = native_.getArray("args");
         if (argsArr != null) {
             for (int i = 0; i < argsArr.size(); i++) {
                 Object val = argsArr.get(i);
                 if (!(val instanceof String s))
-                    throw new JkBuildParseException(
-                            "[native].args must be an array of strings");
+                    throw new JkBuildParseException("[native].args must be an array of strings");
                 args.add(s);
             }
         }
         if (mainClass != null && mainClass.isBlank()) mainClass = null;
-        if (name      != null && name.isBlank())      name      = null;
+        if (name != null && name.isBlank()) name = null;
         return new JkBuild.NativeConfig(mainClass, name, args);
     }
 
@@ -963,8 +958,7 @@ public final class JkBuildParser {
             for (int i = 0; i < arr.size(); i++) {
                 Object val = arr.get(i);
                 if (!(val instanceof String s))
-                    throw new JkBuildParseException(
-                            "[build].order-after must be an array of strings");
+                    throw new JkBuildParseException("[build].order-after must be an array of strings");
                 if (!s.isBlank()) orderAfter.add(s);
             }
         }
@@ -984,8 +978,7 @@ public final class JkBuildParser {
             for (int i = 0; i < twj.size(); i++) {
                 Object val = twj.get(i);
                 if (!(val instanceof String s))
-                    throw new JkBuildParseException(
-                            "[build].test-worker-jars must be an array of strings");
+                    throw new JkBuildParseException("[build].test-worker-jars must be an array of strings");
                 if (!s.isBlank()) testWorkerJars.add(s);
             }
         }
@@ -995,8 +988,7 @@ public final class JkBuildParser {
         return new JkBuild.Build(orderAfter, embedSha, testWorkerJars, lint);
     }
 
-    private static final java.util.Set<String> PLUGIN_RESERVED =
-            java.util.Set.of("group", "name", "version");
+    private static final java.util.Set<String> PLUGIN_RESERVED = java.util.Set.of("group", "name", "version");
 
     private static List<PluginDeclaration> parsePlugins(TomlTable root) {
         TomlTable plugins = root.getTable("plugins");
@@ -1007,8 +999,8 @@ public final class JkBuildParser {
             if (!(val instanceof TomlTable entry)) {
                 throw new JkBuildParseException("plugins." + alias + " must be a table");
             }
-            String group   = entry.getString("group");
-            String name    = entry.getString("name");
+            String group = entry.getString("group");
+            String name = entry.getString("name");
             String version = entry.getString("version");
             if (group == null || group.isBlank())
                 throw new JkBuildParseException("plugins." + alias + " must declare `group`");
@@ -1023,8 +1015,8 @@ public final class JkBuildParser {
                     config.put(key, tomlToJava(entry.get(key)));
                 }
             }
-            result.add(new PluginDeclaration(alias, group, name, version,
-                    java.util.Collections.unmodifiableMap(config)));
+            result.add(
+                    new PluginDeclaration(alias, group, name, version, java.util.Collections.unmodifiableMap(config)));
         }
         return List.copyOf(result);
     }

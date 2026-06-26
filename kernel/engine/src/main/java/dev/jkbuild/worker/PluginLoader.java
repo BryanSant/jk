@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.worker;
 
-import dev.jkbuild.worker.WorkerProcess;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -41,12 +39,16 @@ public final class PluginLoader {
      * @param prefix      the protocol-line marker the plugin emits (its manifest prefix)
      * @param args        program args passed after {@code PluginWorkerMain}
      */
-    public static int run(Path javaExe, String classpath, List<String> jvmFlags, String prefix,
-                          List<String> args,
-                          Consumer<String> onProtocol, Consumer<String> onPassthrough)
+    public static int run(
+            Path javaExe,
+            String classpath,
+            List<String> jvmFlags,
+            String prefix,
+            List<String> args,
+            Consumer<String> onProtocol,
+            Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
-        return WorkerProcess.run(command(javaExe, classpath, jvmFlags, args),
-                prefix, onProtocol, onPassthrough);
+        return WorkerProcess.run(command(javaExe, classpath, jvmFlags, args), prefix, onProtocol, onPassthrough);
     }
 
     /**
@@ -54,17 +56,19 @@ public final class PluginLoader {
      * protocol line arrives with a {@link WorkerProcess.Conversation} the caller
      * can use to send commands back to the worker's stdin.
      */
-    public static int converse(Path javaExe, String classpath, List<String> jvmFlags, String prefix,
-                               List<String> args,
-                               BiConsumer<String, WorkerProcess.Conversation> onProtocol,
-                               Consumer<String> onPassthrough)
+    public static int converse(
+            Path javaExe,
+            String classpath,
+            List<String> jvmFlags,
+            String prefix,
+            List<String> args,
+            BiConsumer<String, WorkerProcess.Conversation> onProtocol,
+            Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
-        return WorkerProcess.converse(command(javaExe, classpath, jvmFlags, args),
-                prefix, onProtocol, onPassthrough);
+        return WorkerProcess.converse(command(javaExe, classpath, jvmFlags, args), prefix, onProtocol, onPassthrough);
     }
 
-    private static List<String> command(Path javaExe, String classpath,
-                                        List<String> jvmFlags, List<String> args) {
+    private static List<String> command(Path javaExe, String classpath, List<String> jvmFlags, List<String> args) {
         var cmd = new ArrayList<String>();
         cmd.add(javaExe.toString());
         cmd.addAll(jvmFlags);

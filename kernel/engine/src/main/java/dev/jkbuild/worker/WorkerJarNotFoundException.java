@@ -19,8 +19,19 @@ public final class WorkerJarNotFoundException extends RuntimeException {
         this.jarProperty = jarProperty;
     }
 
-    public String artifactId() { return artifactId; }
-    public String sha() { return sha; }
-    public Path path() { return path; }
-    public String jarProperty() { return jarProperty; }
+    public String artifactId() {
+        return artifactId;
+    }
+
+    public String sha() {
+        return sha;
+    }
+
+    public Path path() {
+        return path;
+    }
+
+    public String jarProperty() {
+        return jarProperty;
+    }
 }

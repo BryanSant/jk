@@ -3,7 +3,6 @@ package dev.jkbuild.script;
 
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.VersionSelector;
-
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -79,7 +78,9 @@ public final class ScriptHeaderParser {
                             String v = d.value.trim();
                             if (!v.isEmpty()) kotlinVersion = v;
                         }
-                        default -> { /* unknown directive — ignore for forward-compat */ }
+                        default -> {
+                            /* unknown directive — ignore for forward-compat */
+                        }
                     }
                 }
                 continue;
@@ -88,8 +89,7 @@ public final class ScriptHeaderParser {
             break;
         }
 
-        return new ScriptHeader(deps, release, repos, features,
-                javacOptions, javaOptions, sources, kotlinVersion);
+        return new ScriptHeader(deps, release, repos, features, javacOptions, javaOptions, sources, kotlinVersion);
     }
 
     private static ParsedDirective parseDirective(String line) {
@@ -102,10 +102,12 @@ public final class ScriptHeaderParser {
         if (line.startsWith("//") && line.length() > 2 && Character.isUpperCase(line.charAt(2))) {
             int spaceIdx = -1;
             for (int i = 2; i < line.length(); i++) {
-                if (Character.isWhitespace(line.charAt(i))) { spaceIdx = i; break; }
+                if (Character.isWhitespace(line.charAt(i))) {
+                    spaceIdx = i;
+                    break;
+                }
             }
-            String name = (spaceIdx < 0 ? line.substring(2) : line.substring(2, spaceIdx))
-                    .toLowerCase();
+            String name = (spaceIdx < 0 ? line.substring(2) : line.substring(2, spaceIdx)).toLowerCase();
             String value = spaceIdx < 0 ? "" : line.substring(spaceIdx + 1).trim();
             return new ParsedDirective(name, value);
         }
@@ -116,9 +118,8 @@ public final class ScriptHeaderParser {
         String spec = coord.trim();
         int firstColon = spec.indexOf(':');
         if (firstColon < 0) {
-            throw new IllegalArgumentException(
-                    "script dependency must be `group:artifact:version` or "
-                            + "`group:artifact@version`, got: " + coord);
+            throw new IllegalArgumentException("script dependency must be `group:artifact:version` or "
+                    + "`group:artifact@version`, got: " + coord);
         }
         int nextColon = spec.indexOf(':', firstColon + 1);
         int atSign = spec.indexOf('@', firstColon + 1);
@@ -128,8 +129,7 @@ public final class ScriptHeaderParser {
         boolean floating;
 
         if (nextColon < 0 && atSign < 0) {
-            throw new IllegalArgumentException(
-                    "script dependency must include a version, got: " + coord);
+            throw new IllegalArgumentException("script dependency must include a version, got: " + coord);
         } else if (atSign >= 0 && (nextColon < 0 || atSign < nextColon)) {
             module = spec.substring(0, atSign);
             versionPart = spec.substring(atSign + 1);
@@ -141,8 +141,7 @@ public final class ScriptHeaderParser {
         }
 
         if (versionPart.isBlank()) {
-            throw new IllegalArgumentException(
-                    "script dependency has empty version: " + coord);
+            throw new IllegalArgumentException("script dependency has empty version: " + coord);
         }
 
         VersionSelector selector;
@@ -150,12 +149,14 @@ public final class ScriptHeaderParser {
             selector = VersionSelector.parseFloating(versionPart);
         } else {
             String trimmed = versionPart.trim();
-            if (trimmed.startsWith("^") || trimmed.startsWith("~")
-                    || trimmed.startsWith(">") || trimmed.startsWith("<")
-                    || trimmed.contains(",") || "latest".equalsIgnoreCase(trimmed)) {
-                throw new IllegalArgumentException(
-                        coord + " — the `:` form is for pinned versions only. "
-                                + "Use `" + module + "@" + versionPart + "` for a floating constraint.");
+            if (trimmed.startsWith("^")
+                    || trimmed.startsWith("~")
+                    || trimmed.startsWith(">")
+                    || trimmed.startsWith("<")
+                    || trimmed.contains(",")
+                    || "latest".equalsIgnoreCase(trimmed)) {
+                throw new IllegalArgumentException(coord + " — the `:` form is for pinned versions only. " + "Use `"
+                        + module + "@" + versionPart + "` for a floating constraint.");
             }
             selector = VersionSelector.parse(versionPart);
         }

@@ -2,7 +2,6 @@
 package dev.jkbuild.runtime;
 
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Dependency;
@@ -11,9 +10,9 @@ import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
+import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -51,16 +50,14 @@ public final class GitSourceResolution {
      * repo, and a map from {@code group:artifact@version} to the git provenance
      * to stamp onto the matching lockfile package.
      */
-    public record Prepared(JkBuild project, RepoGroup repos,
-                    Map<String, Lockfile.Artifact.GitInfo> gitInfoByKey) {}
+    public record Prepared(JkBuild project, RepoGroup repos, Map<String, Lockfile.Artifact.GitInfo> gitInfoByKey) {}
 
     /**
      * Materialize every git dependency in {@code effective}, augment
      * {@code baseRepos}, and rewrite git deps to coordinate pins, accepting any
      * upstream ref movement. Used on first-run resolve and {@code jk update}.
      */
-    public static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas,
-                            Path javaHome, String jkVersion)
+    public static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas, Path javaHome, String jkVersion)
             throws IOException, InterruptedException {
         return prepare(effective, baseRepos, cas, javaHome, jkVersion, Map.of());
     }
@@ -77,9 +74,13 @@ public final class GitSourceResolution {
      * <p>The git artifacts are themselves built (with {@code javaHome}),
      * resolving their own dependencies against {@code baseRepos}.
      */
-    public static Prepared prepare(JkBuild effective, RepoGroup baseRepos, Cas cas,
-                            Path javaHome, String jkVersion,
-                            Map<String, String> lockedShas)
+    public static Prepared prepare(
+            JkBuild effective,
+            RepoGroup baseRepos,
+            Cas cas,
+            Path javaHome,
+            String jkVersion,
+            Map<String, String> lockedShas)
             throws IOException, InterruptedException {
         Map<Scope, List<Dependency>> byScope = effective.dependencies().byScope();
         boolean anyGit = byScope.values().stream().flatMap(List::stream).anyMatch(Dependency::isGit);
@@ -87,8 +88,7 @@ public final class GitSourceResolution {
             return new Prepared(effective, baseRepos, Map.of());
         }
 
-        GitSourceMaterializer materializer =
-                new GitSourceMaterializer(cas, baseRepos, javaHome, jkVersion);
+        GitSourceMaterializer materializer = new GitSourceMaterializer(cas, baseRepos, javaHome, jkVersion);
 
         // Materialize once per unique git source; a coordinate appearing in
         // several scopes (main + test) is built and published only once.
@@ -111,7 +111,10 @@ public final class GitSourceResolution {
                 bySource.put(key, m);
                 extraRepos.add(new MavenRepo(
                         "git:" + m.coordinate() + ":" + m.version(),
-                        m.repoUrl(), new Http(), cas, JkMavenLocalRepo.NONE));
+                        m.repoUrl(),
+                        new Http(),
+                        cas,
+                        JkMavenLocalRepo.NONE));
                 gitInfo.put(provenanceKey(m.coordinate(), m.version()), m.gitInfo());
             }
         }
@@ -128,8 +131,7 @@ public final class GitSourceResolution {
                     continue;
                 }
                 GitSourceMaterializer.Materialized m = bySource.get(sourceKey(d.gitSource()));
-                out.add(Dependency.of(d.library(), m.coordinate(),
-                        VersionSelector.parse("=" + m.version())));
+                out.add(Dependency.of(d.library(), m.coordinate(), VersionSelector.parse("=" + m.version())));
             }
             rewritten.put(scope, out);
         });
@@ -162,14 +164,22 @@ public final class GitSourceResolution {
         for (Lockfile.Artifact p : lock.artifacts()) {
             Lockfile.Artifact.GitInfo gi = gitInfoByKey.get(provenanceKey(p.name(), p.version()));
             if (gi != null && p.git() == null) {
-                out.add(new Lockfile.Artifact(p.name(), p.version(), p.source(),
-                        p.checksum(), p.path(), p.scopes(), p.deps(), p.pinnedBy(), gi));
+                out.add(new Lockfile.Artifact(
+                        p.name(),
+                        p.version(),
+                        p.source(),
+                        p.checksum(),
+                        p.path(),
+                        p.scopes(),
+                        p.deps(),
+                        p.pinnedBy(),
+                        gi));
             } else {
                 out.add(p);
             }
         }
-        return new Lockfile(lock.version(), lock.generatedBy(), lock.resolutionAlgorithm(),
-                lock.jdk(), lock.kotlin(), out);
+        return new Lockfile(
+                lock.version(), lock.generatedBy(), lock.resolutionAlgorithm(), lock.jdk(), lock.kotlin(), out);
     }
 
     /**
@@ -177,9 +187,8 @@ public final class GitSourceResolution {
      * Branches are mutable by design, so they're never checked here — their
      * tip is simply re-resolved. No locked SHA for this ref → nothing to check.
      */
-    private static void verifyImmutableRef(GitSourceMaterializer materializer,
-                                           GitSource source, Map<String, String> lockedShas)
-            throws IOException {
+    private static void verifyImmutableRef(
+            GitSourceMaterializer materializer, GitSource source, Map<String, String> lockedShas) throws IOException {
         if (lockedShas.isEmpty()) return;
         GitRefSpec ref = source.ref();
         if (!(ref instanceof GitRefSpec.Tag) && !(ref instanceof GitRefSpec.Rev)) return;
@@ -212,7 +221,8 @@ public final class GitSourceResolution {
      * commit that relabel it differently each get their own published artifact.
      */
     private static String sourceKey(GitSource source) {
-        return String.join("|",
+        return String.join(
+                "|",
                 source.canonicalUrl(),
                 source.ref().token(),
                 source.path() == null ? "" : source.path(),

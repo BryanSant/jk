@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class AddCommandTest {
 
@@ -51,8 +49,7 @@ class AddCommandTest {
         // Pinned dep edge into the current (app) project; artifact omitted since
         // it matches the key.
         String appToml = Files.readString(tmp.resolve("app/jk.toml"));
-        assertThat(appToml).contains(
-                "libb = { group = \"dev.jkbuild\", version = \"=0.2.0\" }");
+        assertThat(appToml).contains("libb = { group = \"dev.jkbuild\", version = \"=0.2.0\" }");
 
         // libb is now registered in the workspace root.
         JkBuild root = JkBuildParser.parse(tmp.resolve("jk.toml"));
@@ -141,7 +138,8 @@ class AddCommandTest {
 
         int exit = Jk.execute("add", "jackson", "-C", tmp.toString());
         assertThat(exit).isEqualTo(64); // EX_USAGE — library resolution, not a path
-        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().modules()).isEmpty();
+        assertThat(JkBuildParser.parse(tmp.resolve("jk.toml")).workspace().modules())
+                .isEmpty();
     }
 
     @Test
@@ -184,8 +182,7 @@ class AddCommandTest {
 
         int exit = Jk.execute("add", "jackson3-core@3.1.0", "-C", tmp.toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(Files.readString(tmp.resolve("jk.toml")))
-                .contains("jackson3-core = \"3.1.0\"");
+        assertThat(Files.readString(tmp.resolve("jk.toml"))).contains("jackson3-core = \"3.1.0\"");
     }
 
     @Test
@@ -203,8 +200,7 @@ class AddCommandTest {
 
         int exit = Jk.execute("add", "jackson3-core@latest", "-C", tmp.toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(Files.readString(tmp.resolve("jk.toml")))
-                .contains("jackson3-core = \"latest\"");
+        assertThat(Files.readString(tmp.resolve("jk.toml"))).contains("jackson3-core = \"latest\"");
     }
 
     @Test

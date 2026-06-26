@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
@@ -9,16 +11,13 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * {@link CompositeLocator} finds already-built composite jars without building.
@@ -38,8 +37,7 @@ class CompositeLocatorTest {
         if (pathDeps.length > 0) {
             sb.append("\n[dependencies.main]\n");
             for (String d : pathDeps) {
-                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n"
-                        .formatted(d, d, d));
+                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n".formatted(d, d, d));
             }
         }
         Files.writeString(dir.resolve("jk.toml"), sb.toString());
@@ -56,8 +54,13 @@ class CompositeLocatorTest {
 
     private static CompositeLocator.Located locate(Path consumerDir, JkBuild consumer, Path tmp)
             throws IOException, InterruptedException {
-        return CompositeLocator.locate(consumerDir, consumer, Set.of(Scope.MAIN),
-                ClasspathResolver.COMPILE_MAIN, new Cas(tmp.resolve("cas")), tmp.resolve("git"));
+        return CompositeLocator.locate(
+                consumerDir,
+                consumer,
+                Set.of(Scope.MAIN),
+                ClasspathResolver.COMPILE_MAIN,
+                new Cas(tmp.resolve("cas")),
+                tmp.resolve("git"));
     }
 
     @Test
@@ -76,7 +79,7 @@ class CompositeLocatorTest {
 
     @Test
     void reports_missing_when_jar_not_built(@TempDir Path tmp) throws Exception {
-        project(tmp.resolve("lib"), "lib");            // exists, but no jar produced
+        project(tmp.resolve("lib"), "lib"); // exists, but no jar produced
         JkBuild app = project(tmp.resolve("app"), "app", "lib");
 
         CompositeLocator.Located r = locate(tmp.resolve("app"), app, tmp);
@@ -99,9 +102,7 @@ class CompositeLocatorTest {
         assertThat(conflicts).hasSize(1);
         CompositeLocator.VersionConflict c = conflicts.get(0);
         assertThat(c.coord()).isEqualTo("com.google.guava:guava");
-        assertThat(c.versionBySource())
-                .containsEntry("com.example:app", "1.0")
-                .containsEntry("com.example:lib", "2.0");
+        assertThat(c.versionBySource()).containsEntry("com.example:app", "1.0").containsEntry("com.example:lib", "2.0");
     }
 
     @Test
@@ -111,14 +112,22 @@ class CompositeLocatorTest {
         JkBuild app = project(tmp.resolve("app"), "app", "lib");
         writeLock(tmp.resolve("app"), "com.google.guava:guava", "1.0");
 
-        assertThat(CompositeLocator.conflicts(tmp.resolve("app"), app, tmp.resolve("git"))).isEmpty();
+        assertThat(CompositeLocator.conflicts(tmp.resolve("app"), app, tmp.resolve("git")))
+                .isEmpty();
     }
 
     private static void writeLock(Path dir, String module, String version) throws IOException {
-        Lockfile lock = new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
-                Lockfile.RESOLUTION_ALGORITHM, List.of(new Lockfile.Artifact(
-                        module, version, "central+https://repo.maven.apache.org/maven2/",
-                        "sha256:dummy", null, List.of())));
+        Lockfile lock = new Lockfile(
+                Lockfile.CURRENT_VERSION,
+                "jk test",
+                Lockfile.RESOLUTION_ALGORITHM,
+                List.of(new Lockfile.Artifact(
+                        module,
+                        version,
+                        "central+https://repo.maven.apache.org/maven2/",
+                        "sha256:dummy",
+                        null,
+                        List.of())));
         LockfileWriter.write(lock, dir.resolve("jk.lock"));
     }
 

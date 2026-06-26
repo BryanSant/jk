@@ -16,7 +16,6 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.publish.PublishablePom;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -58,15 +57,22 @@ public final class LocalProjectBuilder {
      * compiles with {@code javaHome}. The jar is written to
      * {@link BuildLayout#mainJar()} so callers can reuse it on disk.
      */
-    static Built build(Path projectDir, JkBuild project,
-                       String group, String artifact, String version,
-                       Path javaHome, Cas cas, RepoGroup repos, String jkVersion)
+    static Built build(
+            Path projectDir,
+            JkBuild project,
+            String group,
+            String artifact,
+            String version,
+            Path javaHome,
+            Cas cas,
+            RepoGroup repos,
+            String jkVersion)
             throws IOException, InterruptedException {
 
         // 1. Resolve the project's own dependencies and the compile classpath.
         Lockfile lock = new LockOrchestrator(repos).lock(project, jkVersion);
-        List<Path> classpath = new ArrayList<>(
-                new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
+        List<Path> classpath =
+                new ArrayList<>(new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.COMPILE_MAIN));
 
         BuildLayout layout = BuildLayout.of(projectDir, project);
         Path classes = layout.classesDir();
@@ -87,24 +93,28 @@ public final class LocalProjectBuilder {
                 KotlinWorkerSetup.Prepared kt =
                         KotlinWorkerSetup.prepare(repos, cas, CompileToolchain.kotlinVersionFor(lock, project));
                 List<Path> ktCp = new ArrayList<>(classpath);
-                ktCp.add(kt.stdlib());                 // -no-stdlib: pair the version-matched stdlib
+                ktCp.add(kt.stdlib()); // -no-stdlib: pair the version-matched stdlib
                 List<String> ktArgs = new ArrayList<>();
                 ktArgs.add("-no-stdlib");
                 if (langs.java() && Files.isDirectory(javaRoot)) {
                     ktArgs.add("-Xjava-source-roots=" + javaRoot.toAbsolutePath());
                 }
                 KotlincRequest req = KotlincRequest.builder()
-                        .sources(ktSources).classpath(ktCp).outputDir(ktOut)
-                        .jvmTarget(CompileSupport.kotlinJvmTarget(project.project().javaRelease()))
-                        .workerClasspath(kt.workerClasspath()).javaHome(javaHome)
+                        .sources(ktSources)
+                        .classpath(ktCp)
+                        .outputDir(ktOut)
+                        .jvmTarget(
+                                CompileSupport.kotlinJvmTarget(project.project().javaRelease()))
+                        .workerClasspath(kt.workerClasspath())
+                        .javaHome(javaHome)
                         .workingDir(layout.buildDir().resolve("kotlin-work"))
-                        .extraArgs(ktArgs).build();
+                        .extraArgs(ktArgs)
+                        .build();
                 KotlincResult r = new KotlincDriver().compile(req);
                 if (!r.success()) {
-                    throw new IOException("kotlin build failed for "
-                            + group + ":" + artifact + ": " + r.output());
+                    throw new IOException("kotlin build failed for " + group + ":" + artifact + ": " + r.output());
                 }
-                javacCp.add(ktOut);                    // javac resolves Kotlin declarations from output
+                javacCp.add(ktOut); // javac resolves Kotlin declarations from output
             }
         }
 
@@ -113,16 +123,19 @@ public final class LocalProjectBuilder {
             List<Path> sources = CompileSupport.collectJavaSources(javaRoot);
             if (!sources.isEmpty()) {
                 CompileRequest request = CompileRequest.builder()
-                        .sources(sources).classpath(javacCp).outputDir(classes)
+                        .sources(sources)
+                        .classpath(javacCp)
+                        .outputDir(classes)
                         .release(project.project().javaRelease())
-                        .extraOptions(List.of()).javaHome(javaHome)
+                        .extraOptions(List.of())
+                        .javaHome(javaHome)
                         .build();
                 CompileResult result = new JavacDriver().compile(request);
                 if (!result.success()) {
                     String msgs = result.diagnostics().stream()
-                            .map(CompileResult.Diagnostic::render).collect(Collectors.joining("; "));
-                    throw new IOException("java build failed for "
-                            + group + ":" + artifact + ": " + msgs);
+                            .map(CompileResult.Diagnostic::render)
+                            .collect(Collectors.joining("; "));
+                    throw new IOException("java build failed for " + group + ":" + artifact + ": " + msgs);
                 }
             }
         }
@@ -134,14 +147,15 @@ public final class LocalProjectBuilder {
         // 3. Package the jar (epoch 0 → deterministic; identity isn't lock-pinned).
         Path jarOut = layout.mainJar();
         Files.createDirectories(jarOut.getParent());
-        new JarPackager().packageJar(new JarPackager.JarRequest(
-                classes, jarOut, project.project().main(), 0L, Map.of()));
+        new JarPackager()
+                .packageJar(new JarPackager.JarRequest(
+                        classes, jarOut, project.project().main(), 0L, Map.of()));
         byte[] jar = Files.readAllBytes(jarOut);
 
         // 4. Render the POM, stamped with the published coordinate + version.
         String pomXml = PublishablePom.render(
-                withCoordinate(project, group, artifact, version),
-                PublishablePom.Metadata.empty()).xml();
+                        withCoordinate(project, group, artifact, version), PublishablePom.Metadata.empty())
+                .xml();
 
         return new Built(group, artifact, version, jar, pomXml);
     }
@@ -150,10 +164,28 @@ public final class LocalProjectBuilder {
     private static JkBuild withCoordinate(JkBuild project, String group, String artifact, String version) {
         JkBuild.Project p = project.project();
         JkBuild.Project overridden = new JkBuild.Project(
-                group, artifact, version, p.jdk(), p.graal(), p.java(), p.kotlin(), p.main(),
-                p.shadow(), p.nativeMode(), p.description(), p.application(), p.m2install(), p.layout());
-        return new JkBuild(overridden, project.dependencies(), project.repositories(),
-                project.profiles(), project.features(), project.workspace(), project.manifest());
+                group,
+                artifact,
+                version,
+                p.jdk(),
+                p.graal(),
+                p.java(),
+                p.kotlin(),
+                p.main(),
+                p.shadow(),
+                p.nativeMode(),
+                p.description(),
+                p.application(),
+                p.m2install(),
+                p.layout());
+        return new JkBuild(
+                overridden,
+                project.dependencies(),
+                project.repositories(),
+                project.profiles(),
+                project.features(),
+                project.workspace(),
+                project.manifest());
     }
 
     /** Copy a source tree into {@code dest}; no-op if absent. */

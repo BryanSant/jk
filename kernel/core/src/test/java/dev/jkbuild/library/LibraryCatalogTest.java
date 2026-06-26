@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.library;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
 
 class LibraryCatalogTest {
 
@@ -15,18 +15,22 @@ class LibraryCatalogTest {
         // moved between 2 and 3 (com.fasterxml → tools.jackson). The
         // bundled set intentionally has no unprefixed `jackson-*`.
         assertThat(r.lookup("jackson2-databind"))
-                .get().extracting(LibraryCatalog.Module::moduleKey)
+                .get()
+                .extracting(LibraryCatalog.Module::moduleKey)
                 .isEqualTo("com.fasterxml.jackson.core:jackson-databind");
         assertThat(r.lookup("jackson3-databind"))
-                .get().extracting(LibraryCatalog.Module::moduleKey)
+                .get()
+                .extracting(LibraryCatalog.Module::moduleKey)
                 .isEqualTo("tools.jackson.core:jackson-databind");
         assertThat(r.lookup("jackson-databind")).isEmpty();
 
         assertThat(r.lookup("junit-jupiter"))
-                .get().extracting(LibraryCatalog.Module::moduleKey)
+                .get()
+                .extracting(LibraryCatalog.Module::moduleKey)
                 .isEqualTo("org.junit.jupiter:junit-jupiter");
         assertThat(r.lookup("picocli"))
-                .get().extracting(LibraryCatalog.Module::moduleKey)
+                .get()
+                .extracting(LibraryCatalog.Module::moduleKey)
                 .isEqualTo("info.picocli:picocli");
     }
 
@@ -89,7 +93,9 @@ class LibraryCatalogTest {
                 """);
         assertThat(r.size()).isEqualTo(2);
         assertThat(r.lookup("foo"))
-                .get().extracting(LibraryCatalog.Module::moduleKey).isEqualTo("com.acme:foo");
+                .get()
+                .extracting(LibraryCatalog.Module::moduleKey)
+                .isEqualTo("com.acme:foo");
     }
 
     @Test

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import dev.jkbuild.cache.Cas;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.cache.Cas;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ActionCacheTest {
 
@@ -117,12 +116,10 @@ class ActionCacheTest {
         cache.storeWithOutputs("compile-main@x", "k", Map.of(), outputs, units);
 
         var record = cache.lookup("k").orElseThrow();
-        assertThat(record.units()).containsOnlyKeys(
-                "/abs/src/com/example/Foo.java", "/abs/src/com/example/Bar.java");
+        assertThat(record.units()).containsOnlyKeys("/abs/src/com/example/Foo.java", "/abs/src/com/example/Bar.java");
         assertThat(record.units().get("/abs/src/com/example/Foo.java"))
                 .containsExactlyInAnyOrder("com/example/Foo.class", "com/example/Foo$Inner.class");
-        assertThat(record.units().get("/abs/src/com/example/Bar.java"))
-                .containsExactly("com/example/Bar.class");
+        assertThat(record.units().get("/abs/src/com/example/Bar.java")).containsExactly("com/example/Bar.class");
     }
 
     @Test

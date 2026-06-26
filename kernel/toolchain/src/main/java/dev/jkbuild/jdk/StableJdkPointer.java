@@ -2,7 +2,6 @@
 package dev.jkbuild.jdk;
 
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryNotEmptyException;
@@ -116,7 +115,10 @@ public final class StableJdkPointer {
      */
     private static void createJunction(Path pointer, Path target) throws IOException {
         ProcessBuilder pb = new ProcessBuilder(
-                "cmd.exe", "/c", "mklink", "/J",
+                "cmd.exe",
+                "/c",
+                "mklink",
+                "/J",
                 pointer.toAbsolutePath().toString(),
                 target.toAbsolutePath().toString());
         pb.redirectErrorStream(true);
@@ -156,7 +158,10 @@ public final class StableJdkPointer {
         } catch (DirectoryNotEmptyException realDir) {
             try (Stream<Path> walk = Files.walk(pointer)) {
                 walk.sorted(Comparator.reverseOrder()).forEach(p -> {
-                    try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (IOException ignored) {
+                    }
                 });
             }
         }

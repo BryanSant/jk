@@ -18,7 +18,9 @@ public final class ToolProvisioner {
 
     private final List<LocalToolProbe> probes;
 
-    public ToolProvisioner() { this(Probes.defaultChain()); }
+    public ToolProvisioner() {
+        this(Probes.defaultChain());
+    }
 
     public ToolProvisioner(List<LocalToolProbe> probes) {
         this.probes = List.copyOf(Objects.requireNonNull(probes, "probes"));

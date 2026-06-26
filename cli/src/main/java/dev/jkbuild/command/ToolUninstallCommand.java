@@ -7,7 +7,6 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -17,15 +16,27 @@ import java.util.List;
 /** {@code jk tool uninstall <name>} — remove an installed CLI tool. */
 public final class ToolUninstallCommand implements CliCommand {
 
-    @Override public String name() { return "uninstall"; }
-    @Override public String description() { return "Remove an installed CLI tool"; }
-
-    @Override public List<Opt> options() {
-        return List.of(
-                Opt.value("<dir>", "Override the tool state directory. Default: $JK_STATE_DIR.", "--state-dir").hide(),
-                Opt.value("<dir>", "Override the bin directory. Default: $JK_BIN_DIR or ~/.jk/bin.", "--bin-dir").hide());
+    @Override
+    public String name() {
+        return "uninstall";
     }
-    @Override public List<Param> parameters() {
+
+    @Override
+    public String description() {
+        return "Remove an installed CLI tool";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<dir>", "Override the tool state directory. Default: $JK_STATE_DIR.", "--state-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the bin directory. Default: $JK_BIN_DIR or ~/.jk/bin.", "--bin-dir")
+                        .hide());
+    }
+
+    @Override
+    public List<Param> parameters() {
         return List.of(Param.of("name", Arity.ONE, "Launcher name (matches `jk tool list` first column)."));
     }
 
@@ -42,11 +53,19 @@ public final class ToolUninstallCommand implements CliCommand {
 
         boolean envExists = Files.isDirectory(envDir);
         boolean launcherExists = Files.exists(launcher) || Files.exists(winLauncher);
-        if (!envExists && !launcherExists) { System.out.println(name + " is not installed."); return 0; }
+        if (!envExists && !launcherExists) {
+            System.out.println(name + " is not installed.");
+            return 0;
+        }
 
         if (envExists) {
             try (var stream = Files.walk(envDir)) {
-                stream.sorted(Comparator.reverseOrder()).forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
+                stream.sorted(Comparator.reverseOrder()).forEach(p -> {
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (IOException ignored) {
+                    }
+                });
             }
         }
         Files.deleteIfExists(launcher);

@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-
-
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -13,7 +11,6 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.WorkspaceMerge;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -37,16 +34,11 @@ public final class LockFlow {
      * are populated. Non-zero means the caller should return that exit code
      * and surface {@link #error} (a bare message, no verb prefix).
      */
-    public record Result(int status, String error, Lockfile lockfile,
-                         JkBuild build, int workspaceModuleCount) {}
+    public record Result(int status, String error, Lockfile lockfile, JkBuild build, int workspaceModuleCount) {}
 
     /** Run the lock pipeline against {@code dir}. */
-    public static Result run(
-            Path dir,
-            Path cache,
-            List<String> features,
-            boolean noDefaultFeatures,
-            URI repoUrl) throws Exception {
+    public static Result run(Path dir, Path cache, List<String> features, boolean noDefaultFeatures, URI repoUrl)
+            throws Exception {
         Path buildFile = dir.resolve("jk.toml");
         Path lockFile = dir.resolve("jk.lock");
         if (!Files.exists(buildFile)) {
@@ -82,11 +74,9 @@ public final class LockFlow {
             } else {
                 var rootOpt = WorkspaceLocator.findRoot(dir);
                 if (rootOpt.isPresent()) {
-                    JkBuild rootManifest = JkBuildParser.parse(
-                            rootOpt.get().resolve("jk.toml"));
+                    JkBuild rootManifest = JkBuildParser.parse(rootOpt.get().resolve("jk.toml"));
                     var modules = WorkspaceLoader.loadModules(rootOpt.get(), rootManifest);
-                    effective = WorkspaceMerge.applyToModule(
-                            rootManifest, parsed, modules.values());
+                    effective = WorkspaceMerge.applyToModule(rootManifest, parsed, modules.values());
                     moduleCount = modules.size();
                 }
             }
@@ -102,7 +92,11 @@ public final class LockFlow {
         GitSourceResolution.Prepared prep;
         try {
             prep = GitSourceResolution.prepare(
-                    effective, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), dev.jkbuild.util.JkVersion.VERSION);
+                    effective,
+                    baseRepos,
+                    cas,
+                    CompileToolchain.resolveJavaHome(dir),
+                    dev.jkbuild.util.JkVersion.VERSION);
         } catch (Exception e) {
             return new Result(6, e.getMessage(), null, effective, moduleCount);
         }

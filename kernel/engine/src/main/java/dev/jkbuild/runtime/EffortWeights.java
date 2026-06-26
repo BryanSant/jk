@@ -9,8 +9,6 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.task.FreshnessStamp;
-
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -46,21 +44,22 @@ public final class EffortWeights {
 
     private EffortWeights() {}
 
-    static final int SKIP           = 0;   // a phase that does no work this run — off the bar entirely
-    static final int RESTORE        = 3;   // compile output hard-linked back from the CAS (set live by the phase)
-    static final int TEST_STARTUP   = 15;  // fork the test JVM + framework init (paid even by a tiny suite)
-    static final int TEST_METHOD    = 8;   // per @Test (and ParameterizedTest/&c.)
-    static final int COMPILE_FLOOR  = 2;   // javac/kotlinc fixed startup (the learned per-source rate adds to it)
-    static final int ARTIFACT_FETCH = 8;   // per dependency artifact downloaded
+    static final int SKIP = 0; // a phase that does no work this run — off the bar entirely
+    static final int RESTORE = 3; // compile output hard-linked back from the CAS (set live by the phase)
+    static final int TEST_STARTUP = 15; // fork the test JVM + framework init (paid even by a tiny suite)
+    static final int TEST_METHOD = 8; // per @Test (and ParameterizedTest/&c.)
+    static final int COMPILE_FLOOR = 2; // javac/kotlinc fixed startup (the learned per-source rate adds to it)
+    static final int ARTIFACT_FETCH = 8; // per dependency artifact downloaded
 
     /** A weight unit is ≈150 ms — the {@code Goal} interpolation constant; the bridge between learned ms and bar weight. */
     public static final int MS_PER_WEIGHT = 150;
-    static final int PACKAGE_JAR    = 5;
-    static final int JDK_DOWNLOAD   = 70;  // a pinned JDK not yet on disk
-    static final int SHADOW_RUN     = 10;  // fat/shadow jar
-    static final int NATIVE_RUN     = 100; // native-image build ≈ 10 steps × 10
-    static final int OCI_RUN        = 40;  // OCI image build
-    static final int OCI_SKIP       = 2;   // OCI image up-to-date
+
+    static final int PACKAGE_JAR = 5;
+    static final int JDK_DOWNLOAD = 70; // a pinned JDK not yet on disk
+    static final int SHADOW_RUN = 10; // fat/shadow jar
+    static final int NATIVE_RUN = 100; // native-image build ≈ 10 steps × 10
+    static final int OCI_RUN = 40; // OCI image build
+    static final int OCI_SKIP = 2; // OCI image up-to-date
 
     /**
      * Per-phase predicted weights for one module's build. {@code fullyCached} is set
@@ -70,8 +69,14 @@ public final class EffortWeights {
      * their full static weight, which would otherwise reserve ~1.5 s of phantom time
      * per cached module in the workspace estimate for ~30 ms of real work.
      */
-    public record Plan(int sync, int compileJava, int compileKotlin,
-                       int compileTest, int runTests, int pkg, boolean fullyCached) {}
+    public record Plan(
+            int sync,
+            int compileJava,
+            int compileKotlin,
+            int compileTest,
+            int runTests,
+            int pkg,
+            boolean fullyCached) {}
 
     /** {@code ceil(sources × 0.1)}, floored at 1 once the phase runs at all. */
     static int compileWeight(int sources) {
@@ -117,7 +122,7 @@ public final class EffortWeights {
             rate = perUnit.getAsDouble();
         } else {
             var crossModule = timings.medianPerUnit(phase);
-            if (crossModule.isEmpty()) return staticWeight;   // never seen this phase → Phase-1 static
+            if (crossModule.isEmpty()) return staticWeight; // never seen this phase → Phase-1 static
             rate = crossModule.getAsDouble();
         }
         return Math.max(1, (int) Math.round(floor(phase) + rate * Math.max(0, count)));
@@ -138,8 +143,7 @@ public final class EffortWeights {
     }
 
     /** Predict the weights for {@code in}; never throws (degrades to skip-ish). */
-    public static Plan predict(BuildPipeline.Inputs in, Cas cas,
-                               boolean compact, boolean useJava, boolean useKotlin) {
+    public static Plan predict(BuildPipeline.Inputs in, Cas cas, boolean compact, boolean useJava, boolean useKotlin) {
         return predict(in, cas, compact, useJava, useKotlin, false);
     }
 
@@ -155,8 +159,13 @@ public final class EffortWeights {
      * over-reserve: the phase's own runtime cache check reweights it back down (the
      * bar jumps forward), never up.
      */
-    public static Plan predict(BuildPipeline.Inputs in, Cas cas, boolean compact,
-                               boolean useJava, boolean useKotlin, boolean forceRebuild) {
+    public static Plan predict(
+            BuildPipeline.Inputs in,
+            Cas cas,
+            boolean compact,
+            boolean useJava,
+            boolean useKotlin,
+            boolean forceRebuild) {
         boolean rerun = ActiveConfig.get().rerunOr(false) || forceRebuild;
         boolean refresh = ActiveConfig.get().refreshOr(false);
 
@@ -174,18 +183,17 @@ public final class EffortWeights {
             if (useJava) {
                 List<Path> src = CompileSupport.collectJavaSources(
                         compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java"));
-                javaRun = rerun || !FreshnessStamp.looksFresh(
-                        layout.classesDir(), FreshnessStamp.JAVA_STAMP, src);
-                compileJava = javaRun
-                        ? learned(timings, mod, "compile-java", src.size(), compileWeight(src.size())) : SKIP;
+                javaRun = rerun || !FreshnessStamp.looksFresh(layout.classesDir(), FreshnessStamp.JAVA_STAMP, src);
+                compileJava =
+                        javaRun ? learned(timings, mod, "compile-java", src.size(), compileWeight(src.size())) : SKIP;
             }
             boolean ktRun = false;
             if (useKotlin) {
                 List<Path> src = CompileSupport.collectKotlinSources(in.dir(), compact);
-                ktRun = rerun || !FreshnessStamp.looksFresh(
-                        layout.kotlinClassesDir(), FreshnessStamp.KOTLIN_STAMP, src);
-                compileKotlin = ktRun
-                        ? learned(timings, mod, "compile-kotlin", src.size(), compileWeight(src.size())) : SKIP;
+                ktRun = rerun
+                        || !FreshnessStamp.looksFresh(layout.kotlinClassesDir(), FreshnessStamp.KOTLIN_STAMP, src);
+                compileKotlin =
+                        ktRun ? learned(timings, mod, "compile-kotlin", src.size(), compileWeight(src.size())) : SKIP;
             }
             boolean compileRun = javaRun || ktRun;
 
@@ -206,12 +214,10 @@ public final class EffortWeights {
             // of pure fiction for a ~1.2s compile). The static cold fallback stays a
             // file-count guess. (compile-java is consistent: its .scope is the source
             // count, the same count predict multiplies, so it stays per-source.)
-            compileTest = testWillRun
-                    ? learned(timings, mod, "compile-test", 1, compileWeight(testSrc.size())) : SKIP;
+            compileTest = testWillRun ? learned(timings, mod, "compile-test", 1, compileWeight(testSrc.size())) : SKIP;
 
             int methods = in.estimatedTestCount();
-            runTests = testWillRun
-                    ? learned(timings, mod, "run-tests", methods, runTestsWeight(methods)) : SKIP;
+            runTests = testWillRun ? learned(timings, mod, "run-tests", methods, runTestsWeight(methods)) : SKIP;
 
             boolean jarFresh = !rerun && !compileRun && Files.isRegularFile(layout.mainJar());
             pkg = jarFresh ? SKIP : PACKAGE_JAR;
@@ -222,8 +228,12 @@ public final class EffortWeights {
         // A module whose every work phase skipped is fully cached: its always-run
         // phases will do trivial work (re-parse the build file, re-check stamps), so
         // the pipeline shrinks them to a token touch rather than full static weight.
-        boolean fullyCached = sync == SKIP && compileJava == SKIP && compileKotlin == SKIP
-                && compileTest == SKIP && runTests == SKIP && pkg == SKIP;
+        boolean fullyCached = sync == SKIP
+                && compileJava == SKIP
+                && compileKotlin == SKIP
+                && compileTest == SKIP
+                && runTests == SKIP
+                && pkg == SKIP;
         return new Plan(sync, compileJava, compileKotlin, compileTest, runTests, pkg, fullyCached);
     }
 
@@ -237,18 +247,20 @@ public final class EffortWeights {
     public static int jdkWeight(Path dir, Path jdksDir) {
         try {
             JkBuild project = JkBuildParser.parse(dir.resolve("jk.toml"));
-            Lockfile lock = Files.exists(dir.resolve("jk.lock"))
-                    ? LockfileReader.read(dir.resolve("jk.lock")) : null;
-            dev.jkbuild.jdk.JdkRegistry registry = jdksDir != null
-                    ? new dev.jkbuild.jdk.JdkRegistry(jdksDir)
-                    : new dev.jkbuild.jdk.JdkRegistry();
+            Lockfile lock = Files.exists(dir.resolve("jk.lock")) ? LockfileReader.read(dir.resolve("jk.lock")) : null;
+            dev.jkbuild.jdk.JdkRegistry registry =
+                    jdksDir != null ? new dev.jkbuild.jdk.JdkRegistry(jdksDir) : new dev.jkbuild.jdk.JdkRegistry();
             var req = new dev.jkbuild.jdk.JdkResolution.Request(
-                    dir, System.getProperty("jk.jdk"), System.getenv("JK_JDK"),
+                    dir,
+                    System.getProperty("jk.jdk"),
+                    System.getenv("JK_JDK"),
                     lock != null ? lock.jdk() : null,
                     project.project() != null ? project.project().jdk() : null,
                     project.project() != null ? project.project().javaRelease() : 0,
                     System::getenv);
-            var r = dev.jkbuild.jdk.JdkResolution.resolve(req, registry,
+            var r = dev.jkbuild.jdk.JdkResolution.resolve(
+                    req,
+                    registry,
                     dev.jkbuild.jdk.GlobalDefaultJdk.current(),
                     dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_LTS);
             return (r.jdk().isEmpty() && r.wouldInstall()) ? JDK_DOWNLOAD : SKIP;
@@ -264,8 +276,9 @@ public final class EffortWeights {
 
     /** Native binary/library present and fresh → skip; otherwise a full native-image build. */
     public static int nativeWeight(Path dir) {
-        return artifactFresh(dir, BuildLayout::nativeBinary)
-                || artifactFresh(dir, BuildLayout::nativeLibrary) ? SKIP : NATIVE_RUN;
+        return artifactFresh(dir, BuildLayout::nativeBinary) || artifactFresh(dir, BuildLayout::nativeLibrary)
+                ? SKIP
+                : NATIVE_RUN;
     }
 
     /** OCI image tarball present and fresh → skip (2); otherwise a full image build (40). */
@@ -287,7 +300,7 @@ public final class EffortWeights {
             Path art = artifact.apply(layout);
             if (!Files.isRegularFile(art)) return false;
             Path mainJar = layout.mainJar();
-            if (!Files.isRegularFile(mainJar)) return true;   // nothing to compare against
+            if (!Files.isRegularFile(mainJar)) return true; // nothing to compare against
             return Files.getLastModifiedTime(art).toMillis()
                     >= Files.getLastModifiedTime(mainJar).toMillis();
         } catch (Exception e) {
@@ -303,10 +316,12 @@ public final class EffortWeights {
             int fetches = 0;
             for (Lockfile.Artifact a : lock.artifacts()) {
                 String checksum = a.checksum();
-                if (checksum == null) continue;   // pom-only / path / git — nothing to fetch
-                if (refresh) { fetches++; continue; }
-                String hex = checksum.startsWith("sha256:")
-                        ? checksum.substring("sha256:".length()) : checksum;
+                if (checksum == null) continue; // pom-only / path / git — nothing to fetch
+                if (refresh) {
+                    fetches++;
+                    continue;
+                }
+                String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
                 if (!cas.contains(hex)) fetches++;
             }
             return fetches == 0 ? SKIP : fetches * ARTIFACT_FETCH;
@@ -332,11 +347,13 @@ public final class EffortWeights {
      * share one test JVM and cannot overlap. Summing everything (the old estimate)
      * over-counts the compile/package work that overlaps the long serial test tail.
      */
-    public static long scheduleMillis(List<ModuleCost> mods, int concurrency,
-                                      boolean serial, boolean parallelTests) {
+    public static long scheduleMillis(List<ModuleCost> mods, int concurrency, boolean serial, boolean parallelTests) {
         long serialSum = 0;
         long testSum = 0;
-        for (ModuleCost m : mods) { serialSum += m.weight(); testSum += m.testWeight(); }
+        for (ModuleCost m : mods) {
+            serialSum += m.weight();
+            testSum += m.testWeight();
+        }
         if (serial || concurrency <= 1) return serialSum * MS_PER_WEIGHT;
         long critical = criticalPath(mods);
         long throughput = (serialSum + concurrency - 1) / concurrency;
@@ -360,12 +377,12 @@ public final class EffortWeights {
         return best;
     }
 
-    private static long pathFinish(ModuleCost m, java.util.Map<Path, ModuleCost> byDir,
-                                   java.util.Map<Path, Long> memo) {
+    private static long pathFinish(
+            ModuleCost m, java.util.Map<Path, ModuleCost> byDir, java.util.Map<Path, Long> memo) {
         Long cached = memo.get(m.dir());
         if (cached != null) return cached;
         long blocking = Math.max(0, m.weight() - m.testWeight());
-        memo.put(m.dir(), blocking);   // cycle guard
+        memo.put(m.dir(), blocking); // cycle guard
         long upstream = 0;
         for (Path p : m.prereqs()) {
             ModuleCost pm = byDir.get(p);
@@ -375,5 +392,4 @@ public final class EffortWeights {
         memo.put(m.dir(), f);
         return f;
     }
-
 }

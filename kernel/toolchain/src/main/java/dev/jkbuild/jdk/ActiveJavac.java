@@ -54,8 +54,8 @@ public final class ActiveJavac {
             if (!Files.isRegularFile(candidate)) continue;
             if (!WINDOWS && !Files.isExecutable(candidate)) continue;
             try {
-                Path real = candidate.toRealPath();       // follow symlinks (SDKMAN et al.)
-                Path bin = real.getParent();               // <home>/bin
+                Path real = candidate.toRealPath(); // follow symlinks (SDKMAN et al.)
+                Path bin = real.getParent(); // <home>/bin
                 Path jdkHome = bin != null ? bin.getParent() : null;
                 if (jdkHome != null) return Optional.of(jdkHome);
             } catch (IOException ignored) {

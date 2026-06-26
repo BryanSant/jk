@@ -4,7 +4,18 @@ package dev.jkbuild.java.compiler;
 import com.sun.source.util.JavacTask;
 import com.sun.source.util.TreePath;
 import com.sun.source.util.Trees;
-
+import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeSet;
 import javax.annotation.processing.Filer;
 import javax.annotation.processing.Messager;
 import javax.annotation.processing.ProcessingEnvironment;
@@ -26,19 +37,6 @@ import javax.tools.JavaFileObject;
 import javax.tools.StandardJavaFileManager;
 import javax.tools.StandardLocation;
 import javax.tools.ToolProvider;
-
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 
 /**
  * Runs {@code javac} in-process via the {@link JavacTask} API and captures
@@ -64,8 +62,7 @@ public final class InProcessJavac {
      * @param generated  generated source file → the input source files it came from
      *                   (only source-resolvable originating elements are recorded)
      */
-    public record Result(boolean success, List<Diag> diagnostics,
-                         Map<Path, Set<Path>> generated) {
+    public record Result(boolean success, List<Diag> diagnostics, Map<Path, Set<Path>> generated) {
         public Result {
             diagnostics = List.copyOf(diagnostics);
         }
@@ -95,15 +92,19 @@ public final class InProcessJavac {
      * Compile {@code sources} into {@code classOutput}, generating any
      * processor output into {@code sourceOutput}.
      */
-    public static Result compile(List<Path> sources, List<Path> classpath, Path classOutput,
-                                 Path sourceOutput, int release, List<String> options,
-                                 List<Processor> processors) {
+    public static Result compile(
+            List<Path> sources,
+            List<Path> classpath,
+            Path classOutput,
+            Path sourceOutput,
+            int release,
+            List<String> options,
+            List<Processor> processors) {
         JavaCompiler javac = ToolProvider.getSystemJavaCompiler();
         if (javac == null) throw new IllegalStateException("no system javac (run under a JDK)");
         DiagnosticCollector<JavaFileObject> diags = new DiagnosticCollector<>();
         Provenance provenance = new Provenance();
-        try (StandardJavaFileManager fm =
-                     javac.getStandardFileManager(diags, Locale.ROOT, StandardCharsets.UTF_8)) {
+        try (StandardJavaFileManager fm = javac.getStandardFileManager(diags, Locale.ROOT, StandardCharsets.UTF_8)) {
             Files.createDirectories(classOutput);
             Files.createDirectories(sourceOutput);
             fm.setLocationFromPaths(StandardLocation.CLASS_OUTPUT, List.of(classOutput));
@@ -151,7 +152,8 @@ public final class InProcessJavac {
             Set<Path> origins = generated.computeIfAbsent(gen, k -> new TreeSet<>());
             for (Element e : originating) {
                 TreePath tp = trees.getPath(e);
-                if (tp != null) origins.add(Path.of(tp.getCompilationUnit().getSourceFile().toUri()));
+                if (tp != null)
+                    origins.add(Path.of(tp.getCompilationUnit().getSourceFile().toUri()));
             }
         }
     }
@@ -166,63 +168,109 @@ public final class InProcessJavac {
             this.provenance = provenance;
         }
 
-        @Override public Set<String> getSupportedOptions() { return delegate.getSupportedOptions(); }
-        @Override public Set<String> getSupportedAnnotationTypes() { return delegate.getSupportedAnnotationTypes(); }
-        @Override public SourceVersion getSupportedSourceVersion() { return delegate.getSupportedSourceVersion(); }
+        @Override
+        public Set<String> getSupportedOptions() {
+            return delegate.getSupportedOptions();
+        }
 
-        @Override public void init(ProcessingEnvironment env) {
+        @Override
+        public Set<String> getSupportedAnnotationTypes() {
+            return delegate.getSupportedAnnotationTypes();
+        }
+
+        @Override
+        public SourceVersion getSupportedSourceVersion() {
+            return delegate.getSupportedSourceVersion();
+        }
+
+        @Override
+        public void init(ProcessingEnvironment env) {
             provenance.trees = Trees.instance(env);
             delegate.init(new RecordingEnv(env, new RecordingFiler(env.getFiler(), provenance)));
         }
 
-        @Override public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
+        @Override
+        public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment roundEnv) {
             return delegate.process(annotations, roundEnv);
         }
 
-        @Override public Iterable<? extends javax.annotation.processing.Completion> getCompletions(
+        @Override
+        public Iterable<? extends javax.annotation.processing.Completion> getCompletions(
                 Element element, AnnotationMirror annotation, ExecutableElement module, String userText) {
             return delegate.getCompletions(element, annotation, module, userText);
         }
     }
 
     /** {@link ProcessingEnvironment} that swaps in the recording filer; everything else delegates. */
-    private record RecordingEnv(ProcessingEnvironment delegate, Filer filer)
-            implements ProcessingEnvironment {
-        @Override public Map<String, String> getOptions() { return delegate.getOptions(); }
-        @Override public Messager getMessager() { return delegate.getMessager(); }
-        @Override public Filer getFiler() { return filer; }
-        @Override public Elements getElementUtils() { return delegate.getElementUtils(); }
-        @Override public Types getTypeUtils() { return delegate.getTypeUtils(); }
-        @Override public SourceVersion getSourceVersion() { return delegate.getSourceVersion(); }
-        @Override public Locale getLocale() { return delegate.getLocale(); }
+    private record RecordingEnv(ProcessingEnvironment delegate, Filer filer) implements ProcessingEnvironment {
+        @Override
+        public Map<String, String> getOptions() {
+            return delegate.getOptions();
+        }
+
+        @Override
+        public Messager getMessager() {
+            return delegate.getMessager();
+        }
+
+        @Override
+        public Filer getFiler() {
+            return filer;
+        }
+
+        @Override
+        public Elements getElementUtils() {
+            return delegate.getElementUtils();
+        }
+
+        @Override
+        public Types getTypeUtils() {
+            return delegate.getTypeUtils();
+        }
+
+        @Override
+        public SourceVersion getSourceVersion() {
+            return delegate.getSourceVersion();
+        }
+
+        @Override
+        public Locale getLocale() {
+            return delegate.getLocale();
+        }
     }
 
     /** {@link Filer} that records originating elements before delegating file creation. */
     private record RecordingFiler(Filer delegate, Provenance provenance) implements Filer {
-        @Override public JavaFileObject createSourceFile(CharSequence name, Element... originating)
-                throws IOException {
+        @Override
+        public JavaFileObject createSourceFile(CharSequence name, Element... originating) throws IOException {
             JavaFileObject jfo = delegate.createSourceFile(name, originating);
             provenance.record(jfo, originating);
             return jfo;
         }
 
-        @Override public JavaFileObject createClassFile(CharSequence name, Element... originating)
-                throws IOException {
+        @Override
+        public JavaFileObject createClassFile(CharSequence name, Element... originating) throws IOException {
             JavaFileObject jfo = delegate.createClassFile(name, originating);
             provenance.record(jfo, originating);
             return jfo;
         }
 
-        @Override public FileObject createResource(JavaFileManager.Location location,
-                CharSequence moduleAndPkg, CharSequence relativeName, Element... originating)
+        @Override
+        public FileObject createResource(
+                JavaFileManager.Location location,
+                CharSequence moduleAndPkg,
+                CharSequence relativeName,
+                Element... originating)
                 throws IOException {
             FileObject fo = delegate.createResource(location, moduleAndPkg, relativeName, originating);
             provenance.record(fo, originating);
             return fo;
         }
 
-        @Override public FileObject getResource(JavaFileManager.Location location,
-                CharSequence moduleAndPkg, CharSequence relativeName) throws IOException {
+        @Override
+        public FileObject getResource(
+                JavaFileManager.Location location, CharSequence moduleAndPkg, CharSequence relativeName)
+                throws IOException {
             return delegate.getResource(location, moduleAndPkg, relativeName);
         }
     }

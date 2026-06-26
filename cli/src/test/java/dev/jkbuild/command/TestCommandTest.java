@@ -1,24 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
+import dev.jkbuild.cli.Jk;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class TestCommandTest {
 
@@ -44,13 +41,19 @@ class TestCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void test_with_no_test_sources_passes(@TempDir Path tempDir) throws Exception {
         scaffoldNoDeps(tempDir);
-        int exit = run("test", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "test",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
     }
 
@@ -62,9 +65,10 @@ class TestCommandTest {
     // now scaffolds a sample CalcTest, so it can't stand in for "no tests".)
     private static void scaffoldNoDeps(Path dir) throws IOException {
         Files.createDirectories(dir);
-        Files.writeString(dir.resolve("jk.toml"),
+        Files.writeString(
+                dir.resolve("jk.toml"),
                 "[project]\ngroup = \"com.example\"\nname = \"x\"\nversion = \"0.1.0\"\njdk = \"25\"\njava = 25\n");
-        ScaffoldTestSupport.writeEmptyLock(dir);   // jk test needs a lock; nothing to resolve
+        ScaffoldTestSupport.writeEmptyLock(dir); // jk test needs a lock; nothing to resolve
     }
 
     private static int run(String... args) {

@@ -13,7 +13,10 @@ public interface ResolveObserver {
 
     /** No-op observer — used when no progress tracking is needed. */
     ResolveObserver NOOP = new ResolveObserver() {
-        @Override public void onTotal(int total) {}
-        @Override public void onPackage(String module, String version) {}
+        @Override
+        public void onTotal(int total) {}
+
+        @Override
+        public void onPackage(String module, String version) {}
     };
 }

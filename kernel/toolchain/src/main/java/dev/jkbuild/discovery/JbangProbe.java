@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,7 +28,9 @@ public final class JbangProbe implements LocalToolProbe {
     }
 
     @Override
-    public String name() { return "jbang"; }
+    public String name() {
+        return "jbang";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {
@@ -41,8 +42,7 @@ public final class JbangProbe implements LocalToolProbe {
         // the install matches the full requested version + distribution.
         String major = majorOf(spec.version());
         Path[] candidates = {
-                jdksDir.resolve(spec.version()),
-                jdksDir.resolve(major),
+            jdksDir.resolve(spec.version()), jdksDir.resolve(major),
         };
         for (Path candidate : candidates) {
             if (!Files.isDirectory(candidate)) continue;
@@ -55,7 +55,11 @@ public final class JbangProbe implements LocalToolProbe {
         try (Stream<Path> entries = Files.list(jdksDir)) {
             return entries.filter(Files::isDirectory)
                     .map(p -> {
-                        try { return p.toRealPath(); } catch (IOException e) { return p; }
+                        try {
+                            return p.toRealPath();
+                        } catch (IOException e) {
+                            return p;
+                        }
                     })
                     .filter(p -> ToolHealth.isHealthy(spec, p))
                     .findFirst()

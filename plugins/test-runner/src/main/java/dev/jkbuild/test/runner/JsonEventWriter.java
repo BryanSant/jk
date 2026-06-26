@@ -2,7 +2,6 @@
 package dev.jkbuild.test.runner;
 
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
 import java.util.LinkedHashMap;
 import java.util.Map;
 

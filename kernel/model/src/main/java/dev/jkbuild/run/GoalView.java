@@ -12,12 +12,7 @@ package dev.jkbuild.run;
  * {@code numerator / denominator} clamped to {@code [0.0, 1.0]}.
  */
 public record GoalView(
-        String goalName,
-        long numerator,
-        long denominator,
-        int phasesTotal,
-        int phasesComplete,
-        boolean cancelled) {
+        String goalName, long numerator, long denominator, int phasesTotal, int phasesComplete, boolean cancelled) {
 
     public double fraction() {
         if (denominator <= 0) return 0.0;

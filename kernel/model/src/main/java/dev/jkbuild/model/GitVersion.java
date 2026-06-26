@@ -80,7 +80,10 @@ public final class GitVersion {
         String s = tag.strip();
         int firstDigit = -1;
         for (int i = 0; i < s.length(); i++) {
-            if (Character.isDigit(s.charAt(i))) { firstDigit = i; break; }
+            if (Character.isDigit(s.charAt(i))) {
+                firstDigit = i;
+                break;
+            }
         }
         if (firstDigit < 0) return null;
         s = s.substring(firstDigit);
@@ -96,7 +99,7 @@ public final class GitVersion {
         StringBuilder normalizedCore = new StringBuilder();
         for (int i = 0; i < parts.length; i++) {
             if (!parts[i].chars().allMatch(Character::isDigit) || parts[i].isEmpty()) {
-                return null;   // non-numeric core → not coercible
+                return null; // non-numeric core → not coercible
             }
             if (i > 0) normalizedCore.append('.');
             // strip leading zeros but keep a single 0

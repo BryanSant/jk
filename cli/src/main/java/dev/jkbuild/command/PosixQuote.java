@@ -23,7 +23,12 @@ final class PosixQuote {
             char c = value.charAt(i);
             // Only ASCII identifier-ish chars + path-y chars pass through unquoted.
             if (!(Character.isLetterOrDigit(c)
-                    || c == '_' || c == '-' || c == '.' || c == '/' || c == ':' || c == '+')) {
+                    || c == '_'
+                    || c == '-'
+                    || c == '.'
+                    || c == '/'
+                    || c == ':'
+                    || c == '+')) {
                 return true;
             }
         }

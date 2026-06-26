@@ -2,11 +2,8 @@
 package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.Ansi;
-import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.GlobalConfig;
-import org.jline.utils.AttributedStyle;
-
 import java.io.ByteArrayOutputStream;
 import java.io.OutputStream;
 import java.io.PrintStream;
@@ -15,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.jline.utils.AttributedStyle;
 
 /**
  * The live console component for long-running commands. Two presentation modes:
@@ -49,6 +47,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private static final long FRAME_MS = Spinner.FRAME_MS;
     /** Flush a captured partial line (no newline yet) after this much quiet. */
     private static final long STALE_FLUSH_MS = 360;
+
     private static final String ELLIPSIS = "…";
     private static final int DEFAULT_WIDTH = 80;
     private static final int DEFAULT_HEIGHT = 24;
@@ -67,18 +66,19 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * repaint/wipe ({@code cursorUp(n)}) clamps at the viewport top and can no
      * longer reach it (leaving stale lines, e.g. a lingering spinner on cancel).
      */
-    int height = DEFAULT_HEIGHT;  // package-private: tests set it directly
+    int height = DEFAULT_HEIGHT; // package-private: tests set it directly
     /** [global].nerdfont — gates the powerline pill header. Package-private: tests set it directly. */
     boolean nerdfont = GlobalConfig.nerdfont();
+
     private final AttributedStyle[] frameColors = Spinner.buildGradient(FRAMES.length);
     private final ProgressBar bar = new ProgressBar();
 
     private final Object lock = new Object();
-    private volatile boolean stopped;   // animator should stop
-    private boolean done;               // a terminal render already happened
+    private volatile boolean stopped; // animator should stop
+    private boolean done; // a terminal render already happened
     private int frame;
-    private int linesDrawn;             // goal mode: lines in the live region
-    private List<String> lastLines = List.of();  // goal mode: last painted lines, for diffing
+    private int linesDrawn; // goal mode: lines in the live region
+    private List<String> lastLines = List.of(); // goal mode: last painted lines, for diffing
 
     // simple mode
     private String label = "";
@@ -89,13 +89,14 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private long startNanos;
     private long numerator;
     private long denominator;
-    private double peakFraction;   // monotonic-display floor: the bar never renders below this
-    private long etaEstimateMs;    // total predicted build wall-clock (the jk explain figure); 0 = no countdown
+    private double peakFraction; // monotonic-display floor: the bar never renders below this
+    private long etaEstimateMs; // total predicted build wall-clock (the jk explain figure); 0 = no countdown
     private long finishSeq;
 
     private final Map<String, Row> rows = new LinkedHashMap<>();
     /** Pre-formatted completion lines, oldest→newest; bounded to {@link #MAX_COMPLETIONS}. */
     private final List<String> recentCompletions = new ArrayList<>();
+
     private int completedCount;
 
     private Thread animator;
@@ -104,7 +105,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     // output prints above the region (see captureOutput / restoreStreams).
     private PrintStream savedOut;
     private PrintStream savedErr;
-    private volatile LineSink sink;   // read by the animator thread for stale flushing
+    private volatile LineSink sink; // read by the animator thread for stale flushing
     private boolean capturing;
 
     CommandManager(PrintStream out, boolean animate, boolean goalMode, int width) {
@@ -148,7 +149,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      * (e.g. {@code "Building"}); set the active module with {@link #target}.
      */
     public static CommandManager goal(PrintStream out, String name, boolean animate) {
-        int[] size = animate ? detectSize() : new int[]{DEFAULT_HEIGHT, DEFAULT_WIDTH};
+        int[] size = animate ? detectSize() : new int[] {DEFAULT_HEIGHT, DEFAULT_WIDTH};
         CommandManager cm = new CommandManager(out, animate, true, size[1]);
         cm.height = size[0];
         cm.name = name;
@@ -163,13 +164,19 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     /** Terminal width detected at construction (columns). */
-    public int width() { return width; }
+    public int width() {
+        return width;
+    }
 
     /** Aggregate progress numerator currently driving the bar (for tests/inspection). */
-    public long numerator() { return numerator; }
+    public long numerator() {
+        return numerator;
+    }
 
     /** Aggregate progress denominator currently driving the bar (for tests/inspection). */
-    public long denominator() { return denominator; }
+    public long denominator() {
+        return denominator;
+    }
 
     /** Header module, e.g. {@code "acme:api"}. */
     public void target(String module) {
@@ -193,8 +200,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     /** Mark a phase running and make it the header's active module. */
     public void phaseRunning(String module, String phaseKey) {
         synchronized (lock) {
-            Row r = rows.computeIfAbsent(key(module, phaseKey),
-                    k -> new Row(module, humanize(phaseKey)));
+            Row r = rows.computeIfAbsent(key(module, phaseKey), k -> new Row(module, humanize(phaseKey)));
             r.state = RowState.ACTIVE;
             this.target = module;
         }
@@ -211,8 +217,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     /** Mark a phase finished (success or failure); it sinks to the completed group. */
     public void phaseDone(String module, String phaseKey, boolean ok) {
         synchronized (lock) {
-            Row r = rows.computeIfAbsent(key(module, phaseKey),
-                    k -> new Row(module, humanize(phaseKey)));
+            Row r = rows.computeIfAbsent(key(module, phaseKey), k -> new Row(module, humanize(phaseKey)));
             r.state = ok ? RowState.DONE : RowState.FAILED;
             r.message = "";
             r.seq = ++finishSeq;
@@ -243,9 +248,9 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             // (Phase 1.5), so there the total is stable and the guard is always live.
             double f = denominator > 0 ? (double) numerator / denominator : 0.0;
             if (denominator > this.denominator) {
-                peakFraction = f;                       // total grew → rebase
+                peakFraction = f; // total grew → rebase
             } else if (denominator > 0 && f < peakFraction) {
-                numerator = Math.round(peakFraction * denominator);   // hold the peak
+                numerator = Math.round(peakFraction * denominator); // hold the peak
             } else {
                 peakFraction = f;
             }
@@ -352,7 +357,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     }
 
     private void settle(String line, List<String> above) {
-        restoreStreams();   // flush any captured output above the region first
+        restoreStreams(); // flush any captured output above the region first
         stopAnimator();
         synchronized (lock) {
             if (done) return;
@@ -403,8 +408,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                 wipeRegion();
                 out.print(Ansi.TASKBAR_CLEAR);
                 out.print(Ansi.SHOW_CURSOR);
-                String took = dev.jkbuild.cli.run.ConsoleSpec.took(
-                        java.time.Duration.ofMillis(elapsedMillis()));
+                String took = dev.jkbuild.cli.run.ConsoleSpec.took(java.time.Duration.ofMillis(elapsedMillis()));
                 out.println(GoalWedge.canceledLine(goalName(), nerdfont, took));
                 out.flush();
                 return true;
@@ -534,15 +538,15 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private void paintGoal() {
         List<String> lines = renderGoalLines(width, elapsedMillis());
         int prev = lastLines.size();
-        if (prev > 0) out.print(Ansi.cursorUp(prev));   // to the top of the region
+        if (prev > 0) out.print(Ansi.cursorUp(prev)); // to the top of the region
         for (int i = 0; i < lines.size(); i++) {
             boolean changed = i >= prev || !lines.get(i).equals(lastLines.get(i));
             if (changed) {
                 out.print('\r');
                 out.print(truncateVisible(lines.get(i), width));
-                out.print(Ansi.ERASE_LINE_TO_END);  // wipe any tail from a longer prior line
+                out.print(Ansi.ERASE_LINE_TO_END); // wipe any tail from a longer prior line
             }
-            out.print('\n');                          // advance to the next line / below region
+            out.print('\n'); // advance to the next line / below region
         }
         // A shorter region than last time: erase the orphaned lines below.
         if (prev > lines.size()) out.print(Ansi.ERASE_DISPLAY_TO_END);
@@ -580,7 +584,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         // Budget the region to the viewport: header (1) + active rows + the
         // completed tail (+ an optional footer), within height-1 so a line of
         // headroom keeps the region where cursor-relative repaint can reach it.
-        int budget = Math.max(1, height - 2);   // lines available below the header
+        int budget = Math.max(1, height - 2); // lines available below the header
         int shown = Math.min(active.size(), Math.min(MAX_ROWS, budget));
         for (int i = 0; i < shown; i++) {
             // Tree branches: ├─ for every active row but the last, ╰─ to close.
@@ -640,9 +644,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             // background) gives the region its one-column indent while extending the
             // pill to the left edge.
             AttributedStyle chip = Theme.active().goalChip();
-            AttributedStyle cap = Theme.active().withBackground(
-                    Theme.active().bright(Theme.active().planBadgeColor()),
-                    bar.leadColor(numerator, denominator));
+            AttributedStyle cap = Theme.active()
+                    .withBackground(
+                            Theme.active().bright(Theme.active().planBadgeColor()),
+                            bar.leadColor(numerator, denominator));
             h.append(Theme.colorize(" ", chip))
                     .append(Theme.colorize(FRAMES[frame], chip))
                     .append(Theme.colorize(" ", chip))
@@ -653,9 +658,11 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         } else {
             // Plain leading space to match the region's one-column indent.
             h.append(' ')
-                    .append(Theme.colorize(FRAMES[frame], frameColors[frame])).append(' ')
+                    .append(Theme.colorize(FRAMES[frame], frameColors[frame]))
+                    .append(' ')
                     .append(Theme.colorize(name, Theme.active().focused()))
-                    .append(' ').append(barStr);
+                    .append(' ')
+                    .append(barStr);
         }
         // After the bar's percent: a bright-black middle dot, then the build clock in
         // yellow. With a useful ETA (learned timings) the clock counts down from the
@@ -671,8 +678,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         } else {
             clockStr = "+" + fmtClock(elapsedMillis);
         }
-        h.append(' ').append(Theme.colorize("·", dim))
-                .append(' ').append(Theme.colorize(clockStr, Theme.active().warning()));
+        h.append(' ')
+                .append(Theme.colorize("·", dim))
+                .append(' ')
+                .append(Theme.colorize(clockStr, Theme.active().warning()));
         return h.toString();
     }
 
@@ -693,10 +702,14 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
     private static String renderActiveRow(Row r, String sep) {
         StringBuilder sb = new StringBuilder();
         sb.append(coloredModule(r.module))
-                .append(' ').append(sep).append(' ')
+                .append(' ')
+                .append(sep)
+                .append(' ')
                 .append(Theme.colorize(r.phase, Theme.active().settled()));
         if (r.message != null && !r.message.isEmpty()) {
-            sb.append(' ').append(sep).append(' ')
+            sb.append(' ')
+                    .append(sep)
+                    .append(' ')
                     .append(Theme.colorize(r.message, Theme.active().settled()));
         }
         return sb.toString();
@@ -807,7 +820,10 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                 sb.append(s, i, j);
                 i = j;
             } else {
-                if (visible >= maxCols) { truncated = true; break; }
+                if (visible >= maxCols) {
+                    truncated = true;
+                    break;
+                }
                 sb.append(c);
                 visible++;
                 i++;
@@ -838,19 +854,19 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
                     .redirectInput(ProcessBuilder.Redirect.from(new java.io.File("/dev/tty")))
                     .redirectError(ProcessBuilder.Redirect.DISCARD)
                     .start();
-            String out = new String(p.getInputStream().readAllBytes(),
-                    java.nio.charset.StandardCharsets.US_ASCII).trim();
+            String out =
+                    new String(p.getInputStream().readAllBytes(), java.nio.charset.StandardCharsets.US_ASCII).trim();
             p.waitFor();
             String[] parts = out.split("\\s+"); // "<rows> <cols>"
             if (parts.length == 2) {
                 int rows = Integer.parseInt(parts[0]);
                 int cols = Integer.parseInt(parts[1]);
-                if (rows > 0 && cols > 0) return new int[]{rows, cols};
+                if (rows > 0 && cols > 0) return new int[] {rows, cols};
             }
         } catch (Exception ignored) {
             // no /dev/tty, no stty (e.g. Windows), or unparsable — fall through
         }
-        return new int[]{envInt("LINES", DEFAULT_HEIGHT), envInt("COLUMNS", DEFAULT_WIDTH)};
+        return new int[] {envInt("LINES", DEFAULT_HEIGHT), envInt("COLUMNS", DEFAULT_WIDTH)};
     }
 
     private static int envInt(String name, int fallback) {
@@ -882,7 +898,7 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
      */
     public OutputScope captureOutput() {
         synchronized (lock) {
-            if (!animate || capturing) return () -> { };
+            if (!animate || capturing) return () -> {};
             savedOut = System.out;
             savedErr = System.err;
             sink = new LineSink(this);
@@ -909,14 +925,14 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
             System.setErr(savedErr);
             toFlush = sink;
         }
-        if (toFlush != null) toFlush.flushPartial();  // may writeAbove (re-locks)
+        if (toFlush != null) toFlush.flushPartial(); // may writeAbove (re-locks)
     }
 
     /** Buffers redirected bytes and forwards each completed line to {@link #writeAbove}. */
     private static final class LineSink extends OutputStream {
         private final CommandManager cm;
         private final ByteArrayOutputStream buf = new ByteArrayOutputStream();
-        private long lastWriteNanos;   // when the current partial line last grew
+        private long lastWriteNanos; // when the current partial line last grew
 
         LineSink(CommandManager cm) {
             this.cm = cm;
@@ -971,7 +987,12 @@ public final class CommandManager implements AutoCloseable, LiveRegion {
         }
     }
 
-    private enum RowState { PENDING, ACTIVE, DONE, FAILED }
+    private enum RowState {
+        PENDING,
+        ACTIVE,
+        DONE,
+        FAILED
+    }
 
     private static final class Row {
         final String module;

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.credential.RepoCredential;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class AuthHeadersTest {
 
@@ -16,8 +16,7 @@ class AuthHeadersTest {
     @Test
     void basic_is_base64_user_colon_pass() {
         // base64("u:p") == "dTpw"
-        assertThat(AuthHeaders.of(new RepoCredential.Basic("u", "p")))
-                .containsEntry("Authorization", "Basic dTpw");
+        assertThat(AuthHeaders.of(new RepoCredential.Basic("u", "p"))).containsEntry("Authorization", "Basic dTpw");
     }
 
     @Test

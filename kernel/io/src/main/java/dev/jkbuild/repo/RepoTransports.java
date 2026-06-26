@@ -5,7 +5,6 @@ import dev.jkbuild.http.Http;
 import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.repo.s3.AwsCredentialChain;
 import dev.jkbuild.repo.s3.S3Transport;
-
 import java.net.URI;
 import java.util.Locale;
 
@@ -45,9 +44,9 @@ public final class RepoTransports {
             case "s3" -> S3Transport.forS3(http, url, cfg, new AwsCredentialChain(), System::getenv);
             case "gs" -> S3Transport.forGcs(http, url, cfg, new AwsCredentialChain(), System::getenv);
             case "file" -> new FileTransport();
-            default -> throw new IllegalArgumentException(
-                    "no repository transport for scheme '" + scheme + "' in " + url
-                            + " (azblob arrives in a later slice)");
+            default ->
+                throw new IllegalArgumentException("no repository transport for scheme '" + scheme + "' in " + url
+                        + " (azblob arrives in a later slice)");
         };
     }
 }

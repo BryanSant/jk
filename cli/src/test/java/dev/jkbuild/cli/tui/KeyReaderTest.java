@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
-import org.jline.utils.NonBlocking;
-import org.jline.utils.NonBlockingReader;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.jline.utils.NonBlocking;
+import org.jline.utils.NonBlockingReader;
+import org.junit.jupiter.api.Test;
 
 class KeyReaderTest {
 
@@ -92,12 +91,14 @@ class KeyReaderTest {
     @Test
     void printable_ascii_maps_to_char() {
         var key = KeyReader.read(reader(new byte[] {0x61}));
-        assertThat(key).isInstanceOfSatisfying(KeyReader.Key.Char.class, c -> assertThat(c.c()).isEqualTo('a'));
+        assertThat(key).isInstanceOfSatisfying(KeyReader.Key.Char.class, c -> assertThat(c.c())
+                .isEqualTo('a'));
     }
 
     @Test
     void printable_z_maps_to_char() {
         var key = KeyReader.read(reader(new byte[] {'Z'}));
-        assertThat(key).isInstanceOfSatisfying(KeyReader.Key.Char.class, c -> assertThat(c.c()).isEqualTo('Z'));
+        assertThat(key).isInstanceOfSatisfying(KeyReader.Key.Char.class, c -> assertThat(c.c())
+                .isEqualTo('Z'));
     }
 }

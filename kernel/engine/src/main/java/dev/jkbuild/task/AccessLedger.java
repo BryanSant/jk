@@ -3,7 +3,6 @@ package dev.jkbuild.task;
 
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -82,8 +81,8 @@ public final class AccessLedger {
         if (sb.isEmpty()) return;
         try {
             if (file.getParent() != null) Files.createDirectories(file.getParent());
-            Files.writeString(file, sb.toString(), StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            Files.writeString(
+                    file, sb.toString(), StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException ignored) {
             // Best-effort. A missed touch just means slightly worse LRU
             // signal; nothing breaks.
@@ -169,11 +168,12 @@ public final class AccessLedger {
     /** Atomically replace the ledger with one line per sha, sorted by sha. */
     private void writeAll(Map<String, Entry> folded) throws IOException {
         StringBuilder sb = new StringBuilder();
-        folded.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(e -> sb.append(e.getKey()).append('\t')
-                        .append(e.getValue().latestMillis()).append('\t')
-                        .append(e.getValue().count()).append('\n'));
+        folded.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> sb.append(e.getKey())
+                .append('\t')
+                .append(e.getValue().latestMillis())
+                .append('\t')
+                .append(e.getValue().count())
+                .append('\n'));
         if (file.getParent() != null) Files.createDirectories(file.getParent());
         Path tmp = file.resolveSibling(file.getFileName() + ".compact");
         Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);

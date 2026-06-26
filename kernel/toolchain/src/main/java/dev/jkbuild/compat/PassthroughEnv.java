@@ -2,7 +2,6 @@
 package dev.jkbuild.compat;
 
 import dev.jkbuild.jdk.HostPlatform;
-
 import java.nio.file.Path;
 import java.util.Map;
 
@@ -21,11 +20,7 @@ import java.util.Map;
 public final class PassthroughEnv {
 
     private static final String[] STRIPPED = {
-            "JAVA_TOOL_OPTIONS",
-            "_JAVA_OPTIONS",
-            "KOTLIN_HOME",
-            "MAVEN_OPTS",
-            "GRADLE_OPTS",
+        "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "KOTLIN_HOME", "MAVEN_OPTS", "GRADLE_OPTS",
     };
 
     private PassthroughEnv() {}
@@ -54,5 +49,4 @@ public final class PassthroughEnv {
         }
         return "PATH";
     }
-
 }

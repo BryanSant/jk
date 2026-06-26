@@ -13,7 +13,6 @@ import dev.jkbuild.resolver.pubgrub.PackageSource;
 import dev.jkbuild.resolver.pubgrub.PubGrubSolver;
 import dev.jkbuild.resolver.pubgrub.Term;
 import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -59,8 +58,8 @@ public final class PubGrubResolver implements Resolver {
      * it first. If a new dep's constraint rules it out, PubGrub backtracks to
      * the next available version naturally.
      */
-    public PubGrubResolver(RepoGroup repos, Map<String, String> bomConstraints,
-                            Map<String, String> lockedVersionPrefs) {
+    public PubGrubResolver(
+            RepoGroup repos, Map<String, String> bomConstraints, Map<String, String> lockedVersionPrefs) {
         EffectivePomBuilder builder = new EffectivePomBuilder(repos);
         this.pomBuilder = builder;
         this.source = new MavenPackageSource(repos, builder, bomConstraints, lockedVersionPrefs);
@@ -89,11 +88,9 @@ public final class PubGrubResolver implements Resolver {
         try {
             decisions = new PubGrubSolver(source).solve(ROOT_PKG, ROOT_VERSION, rootTerms);
         } catch (UnsatisfiableException e) {
-            boolean ansi = System.console() != null
-                    && !"dumb".equals(System.getenv("TERM"))
-                    && System.getenv("CI") == null;
-            throw new UnsatisfiableException(
-                    Diagnostics.render(e.rootCause(), rootDepNames, ansi), e.rootCause());
+            boolean ansi =
+                    System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
+            throw new UnsatisfiableException(Diagnostics.render(e.rootCause(), rootDepNames, ansi), e.rootCause());
         }
 
         // Drop the synthetic root from the result and build the per-module dep lists.
@@ -108,8 +105,8 @@ public final class PubGrubResolver implements Resolver {
                 for (Pom.Dep d : pom.dependencies()) {
                     if (d.optional()) continue;
                     String scope = d.scope();
-                    if (scope != null && !scope.isEmpty()
-                            && !scope.equals("compile") && !scope.equals("runtime")) continue;
+                    if (scope != null && !scope.isEmpty() && !scope.equals("compile") && !scope.equals("runtime"))
+                        continue;
                     if (d.version() == null || d.version().isBlank()) continue;
                     if (!decisions.containsKey(d.module())) continue;
                     deps.add(d.module() + "@" + decisions.get(d.module()));
@@ -120,16 +117,16 @@ public final class PubGrubResolver implements Resolver {
 
         Map<String, Resolution.ResolvedModule> out = new TreeMap<>();
         for (Map.Entry<String, String> e : decisions.entrySet()) {
-            out.put(e.getKey(), new Resolution.ResolvedModule(
-                    e.getKey(), e.getValue(),
-                    new ArrayList<>(dependsOn.getOrDefault(e.getKey(), Set.of()))));
+            out.put(
+                    e.getKey(),
+                    new Resolution.ResolvedModule(
+                            e.getKey(), e.getValue(), new ArrayList<>(dependsOn.getOrDefault(e.getKey(), Set.of()))));
         }
         return new Resolution(out);
     }
 
     private static Coordinate toCoord(String module, String version) {
         int colon = module.indexOf(':');
-        return Coordinate.of(
-                module.substring(0, colon), module.substring(colon + 1), version);
+        return Coordinate.of(module.substring(0, colon), module.substring(colon + 1), version);
     }
 }

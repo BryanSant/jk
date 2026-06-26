@@ -8,7 +8,6 @@ import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -68,16 +67,24 @@ public final class DependencyTree {
          * Back-compat 6-arg form (no {@code boldCoord}): the root project coordinate
          * renders with the same {@code group/artifact/version} stylers as any other.
          */
-        public Styling(UnaryOperator<String> rail, UnaryOperator<String> group,
-                       UnaryOperator<String> artifact, UnaryOperator<String> version,
-                       UnaryOperator<String> reference, UnaryOperator<String> scopeBadge) {
+        public Styling(
+                UnaryOperator<String> rail,
+                UnaryOperator<String> group,
+                UnaryOperator<String> artifact,
+                UnaryOperator<String> version,
+                UnaryOperator<String> reference,
+                UnaryOperator<String> scopeBadge) {
             this(rail, group, artifact, version, reference, scopeBadge, UnaryOperator.identity());
         }
 
         public static Styling plain() {
-            return new Styling(UnaryOperator.identity(), UnaryOperator.identity(),
-                    UnaryOperator.identity(), UnaryOperator.identity(),
-                    UnaryOperator.identity(), UnaryOperator.identity());
+            return new Styling(
+                    UnaryOperator.identity(),
+                    UnaryOperator.identity(),
+                    UnaryOperator.identity(),
+                    UnaryOperator.identity(),
+                    UnaryOperator.identity(),
+                    UnaryOperator.identity());
         }
     }
 
@@ -92,12 +99,18 @@ public final class DependencyTree {
     }
 
     /** Back-compat overload — rail-only styling. */
-    public static String render(JkBuild project, Lockfile lock, int maxDepth,
-                                UnaryOperator<String> railStyler) {
-        return render(project, lock, maxDepth, new Styling(
-                railStyler, UnaryOperator.identity(),
-                UnaryOperator.identity(), UnaryOperator.identity(),
-                UnaryOperator.identity(), UnaryOperator.identity()));
+    public static String render(JkBuild project, Lockfile lock, int maxDepth, UnaryOperator<String> railStyler) {
+        return render(
+                project,
+                lock,
+                maxDepth,
+                new Styling(
+                        railStyler,
+                        UnaryOperator.identity(),
+                        UnaryOperator.identity(),
+                        UnaryOperator.identity(),
+                        UnaryOperator.identity(),
+                        UnaryOperator.identity()));
     }
 
     /**
@@ -107,22 +120,21 @@ public final class DependencyTree {
      * connectors ({@code ├─ }, {@code └─ }, {@code │  }, {@code "   "}) are
      * passed through {@link Styling#rail}.
      */
-    public static String render(JkBuild project, Lockfile lock, int maxDepth,
-                                Styling styling) {
+    public static String render(JkBuild project, Lockfile lock, int maxDepth, Styling styling) {
         Map<String, Lockfile.Artifact> byModule = indexByModule(lock);
         StringBuilder out = new StringBuilder();
         // Root project: group:artifact:version, styled like every other line.
         out.append(formatCoord(
-                project.project().group(),
-                project.project().name(),
-                project.project().version(),
-                styling)).append('\n');
+                        project.project().group(),
+                        project.project().name(),
+                        project.project().version(),
+                        styling))
+                .append('\n');
 
         List<String> roots = collectRoots(project);
         Set<String> seen = new HashSet<>();
         for (int i = 0; i < roots.size(); i++) {
-            renderNode(byModule, roots.get(i), 0, maxDepth,
-                    i == roots.size() - 1, "", styling, seen, out);
+            renderNode(byModule, roots.get(i), 0, maxDepth, i == roots.size() - 1, "", styling, seen, out);
         }
         return out.toString();
     }
@@ -143,19 +155,23 @@ public final class DependencyTree {
      * {@code <name>.workspace = true} entries, which point at another module) are
      * shown as a collapsed {@code [workspace]} reference rather than re-expanded.
      */
-    public static String render(JkBuild project, Lockfile lock, Path projectDir,
-                                int maxDepth, Styling styling) {
+    public static String render(JkBuild project, Lockfile lock, Path projectDir, int maxDepth, Styling styling) {
         return render(project, lock, projectDir, maxDepth, styling, false);
     }
 
-    public static String render(JkBuild project, Lockfile lock, Path projectDir,
-                                int maxDepth, Styling styling, boolean flatten) {
+    public static String render(
+            JkBuild project, Lockfile lock, Path projectDir, int maxDepth, Styling styling, boolean flatten) {
         return render(project, lock, projectDir, maxDepth, styling, flatten, null);
     }
 
-    public static String render(JkBuild project, Lockfile lock, Path projectDir,
-                                int maxDepth, Styling styling, boolean flatten,
-                                List<Scope> scopeOrder) {
+    public static String render(
+            JkBuild project,
+            Lockfile lock,
+            Path projectDir,
+            int maxDepth,
+            Styling styling,
+            boolean flatten,
+            List<Scope> scopeOrder) {
         return render(project, lock, projectDir, maxDepth, styling, flatten, scopeOrder, false);
     }
 
@@ -168,15 +184,25 @@ public final class DependencyTree {
      * (regardless of scope) into one tree. When {@code scopeOrder} is non-null, only those
      * scopes are shown, in exactly that order, instead of the default {@link #SCOPE_SECTIONS}.
      */
-    public static String render(JkBuild project, Lockfile lock, Path projectDir,
-                                int maxDepth, Styling styling, boolean flatten,
-                                List<Scope> scopeOrder, boolean stack) {
+    public static String render(
+            JkBuild project,
+            Lockfile lock,
+            Path projectDir,
+            int maxDepth,
+            Styling styling,
+            boolean flatten,
+            List<Scope> scopeOrder,
+            boolean stack) {
         StringBuilder out = new StringBuilder();
         // Root node: a bright-black ● bullet, then the project's group:artifact:version
         // in bold (via boldCoord, so the project stands out as the tree root).
-        out.append(' ').append(styling.rail().apply("●")).append(' ')
-                .append(styling.boldCoord().apply(project.project().group() + ":"
-                        + project.project().name() + ":" + project.project().version()))
+        out.append(' ')
+                .append(styling.rail().apply("●"))
+                .append(' ')
+                .append(styling.boldCoord()
+                        .apply(project.project().group() + ":"
+                                + project.project().name() + ":"
+                                + project.project().version()))
                 .append('\n');
         Set<String> seenModules = new HashSet<>();
         Set<String> seenDirs = new HashSet<>();
@@ -184,14 +210,26 @@ public final class DependencyTree {
             if (flatten) {
                 renderFlatWorkspaceScopes(project, projectDir, styling, scopeOrder, stack, out);
             } else {
-                renderWorkspaceScopes(project, projectDir, maxDepth, styling, scopeOrder,
-                        stack, seenModules, seenDirs, out);
+                renderWorkspaceScopes(
+                        project, projectDir, maxDepth, styling, scopeOrder, stack, seenModules, seenDirs, out);
             }
         } else if (flatten) {
             renderFlatScopes(project, lock, projectDir, styling, scopeOrder, stack, out);
         } else {
-            renderScopeSections(project, lock, projectDir, 0, maxDepth, "", styling,
-                    Map.of(), scopeOrder, stack, seenModules, seenDirs, out);
+            renderScopeSections(
+                    project,
+                    lock,
+                    projectDir,
+                    0,
+                    maxDepth,
+                    "",
+                    styling,
+                    Map.of(),
+                    scopeOrder,
+                    stack,
+                    seenModules,
+                    seenDirs,
+                    out);
         }
         return out.toString();
     }
@@ -227,7 +265,9 @@ public final class DependencyTree {
         for (String m : modules) {
             try {
                 JkBuild b = JkBuildParser.parse(rootDir.resolve(m).normalize().resolve("jk.toml"));
-                byName.put(b.project().name(), b.project().group() + ":" + b.project().name());
+                byName.put(
+                        b.project().name(),
+                        b.project().group() + ":" + b.project().name());
             } catch (Exception ignored) {
                 // unreadable module jk.toml — sibling refs to it fall back to the raw module
             }
@@ -246,8 +286,15 @@ public final class DependencyTree {
      * a {@code [workspace]} reference.
      */
     private static void renderWorkspaceScopes(
-            JkBuild root, Path rootDir, int maxDepth, Styling styling, List<Scope> scopeOrder,
-            boolean stack, Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+            JkBuild root,
+            Path rootDir,
+            int maxDepth,
+            Styling styling,
+            List<Scope> scopeOrder,
+            boolean stack,
+            Set<String> seenModules,
+            Set<String> seenDirs,
+            StringBuilder out) {
 
         List<String> moduleRels = root.workspace().modules();
         Map<String, String> byName = workspaceModulesByName(moduleRels, rootDir);
@@ -265,14 +312,26 @@ public final class DependencyTree {
         if (stack) {
             // One badge row, then each module (with deps in ANY selected scope) shown once
             // with its dependencies blended across all selected scopes.
-            out.append(styling.rail().apply("╰─")).append(badgeRow(sections, styling)).append('\n');
+            out.append(styling.rail().apply("╰─"))
+                    .append(badgeRow(sections, styling))
+                    .append('\n');
             String scopePrefix = styling.rail().apply("   ");
             List<LoadedModule> inAny = modules.stream()
-                    .filter(m -> sections.stream().anyMatch(s -> !m.build().dependencies().of(s).isEmpty()))
+                    .filter(m -> sections.stream()
+                            .anyMatch(s -> !m.build().dependencies().of(s).isEmpty()))
                     .toList();
             for (int mi = 0; mi < inAny.size(); mi++) {
-                renderWorkspaceModuleNode(inAny.get(mi), mi == inAny.size() - 1, sections, maxDepth,
-                        scopePrefix, styling, byName, seenModules, seenDirs, out);
+                renderWorkspaceModuleNode(
+                        inAny.get(mi),
+                        mi == inAny.size() - 1,
+                        sections,
+                        maxDepth,
+                        scopePrefix,
+                        styling,
+                        byName,
+                        seenModules,
+                        seenDirs,
+                        out);
             }
             return;
         }
@@ -281,38 +340,72 @@ public final class DependencyTree {
             Scope s = sections.get(si);
             boolean lastScope = si == sections.size() - 1;
             out.append(styling.rail().apply(lastScope ? "╰─" : "├─"))
-                    .append(styling.scopeBadge().apply(scopeLabel(s))).append('\n');
+                    .append(styling.scopeBadge().apply(scopeLabel(s)))
+                    .append('\n');
             String scopePrefix = styling.rail().apply(lastScope ? "   " : "│  ");
 
             List<LoadedModule> inScope = modules.stream()
-                    .filter(m -> !m.build().dependencies().of(s).isEmpty()).toList();
+                    .filter(m -> !m.build().dependencies().of(s).isEmpty())
+                    .toList();
             for (int mi = 0; mi < inScope.size(); mi++) {
-                renderWorkspaceModuleNode(inScope.get(mi), mi == inScope.size() - 1, List.of(s),
-                        maxDepth, scopePrefix, styling, byName, seenModules, seenDirs, out);
+                renderWorkspaceModuleNode(
+                        inScope.get(mi),
+                        mi == inScope.size() - 1,
+                        List.of(s),
+                        maxDepth,
+                        scopePrefix,
+                        styling,
+                        byName,
+                        seenModules,
+                        seenDirs,
+                        out);
             }
         }
     }
 
     /** A workspace module node: its coordinate, then its deps in {@code scopes} (blended). */
     private static void renderWorkspaceModuleNode(
-            LoadedModule m, boolean lastMod, List<Scope> scopes, int maxDepth, String scopePrefix,
-            Styling styling, Map<String, String> byName,
-            Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+            LoadedModule m,
+            boolean lastMod,
+            List<Scope> scopes,
+            int maxDepth,
+            String scopePrefix,
+            Styling styling,
+            Map<String, String> byName,
+            Set<String> seenModules,
+            Set<String> seenDirs,
+            StringBuilder out) {
 
-        String label = formatCoord(m.build().project().group(),
-                m.build().project().name(), m.build().project().version(), styling);
+        String label = formatCoord(
+                m.build().project().group(),
+                m.build().project().name(),
+                m.build().project().version(),
+                styling);
         String tag = m.lock() == null ? " [not locked]" : "";
-        out.append(scopePrefix).append(styling.rail().apply(lastMod ? "╰─ " : "├─ "))
-                .append(label).append(styling.rail().apply(tag)).append('\n');
+        out.append(scopePrefix)
+                .append(styling.rail().apply(lastMod ? "╰─ " : "├─ "))
+                .append(label)
+                .append(styling.rail().apply(tag))
+                .append('\n');
         String modPrefix = scopePrefix + styling.rail().apply(lastMod ? "   " : "│  ");
-        renderScopeDepList(m.build(), m.lock(), m.dir(), scopes, 1, maxDepth, modPrefix,
-                styling, byName, seenModules, seenDirs, out);
+        renderScopeDepList(
+                m.build(),
+                m.lock(),
+                m.dir(),
+                scopes,
+                1,
+                maxDepth,
+                modPrefix,
+                styling,
+                byName,
+                seenModules,
+                seenDirs,
+                out);
     }
 
     /** Scopes shown as sections, in display order; only non-empty ones render. */
     private static final Scope[] SCOPE_SECTIONS = {
-        Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED,
-        Scope.PROCESSOR, Scope.PLATFORM, Scope.TEST,
+        Scope.EXPORT, Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.PROCESSOR, Scope.PLATFORM, Scope.TEST,
     };
 
     /**
@@ -320,9 +413,19 @@ public final class DependencyTree {
      * its direct dependencies. A scope section only appears when it has ≥1 dep.
      */
     private static void renderScopeSections(
-            JkBuild project, Lockfile lock, Path dir, int depth, int maxDepth,
-            String prefix, Styling styling, Map<String, String> modules, List<Scope> scopeOrder,
-            boolean stack, Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+            JkBuild project,
+            Lockfile lock,
+            Path dir,
+            int depth,
+            int maxDepth,
+            String prefix,
+            Styling styling,
+            Map<String, String> modules,
+            List<Scope> scopeOrder,
+            boolean stack,
+            Set<String> seenModules,
+            Set<String> seenDirs,
+            StringBuilder out) {
 
         List<Scope> sections = new ArrayList<>();
         for (Scope s : sectionOrder(scopeOrder)) {
@@ -332,24 +435,50 @@ public final class DependencyTree {
 
         if (stack) {
             // One badge row, all scopes' deps blended into a single tree.
-            out.append(prefix).append(styling.rail().apply("╰─"))
-                    .append(badgeRow(sections, styling)).append('\n');
+            out.append(prefix)
+                    .append(styling.rail().apply("╰─"))
+                    .append(badgeRow(sections, styling))
+                    .append('\n');
             String scopePrefix = prefix + styling.rail().apply("   ");
-            renderScopeDepList(project, lock, dir, sections, depth, maxDepth, scopePrefix,
-                    styling, modules, seenModules, seenDirs, out);
+            renderScopeDepList(
+                    project,
+                    lock,
+                    dir,
+                    sections,
+                    depth,
+                    maxDepth,
+                    scopePrefix,
+                    styling,
+                    modules,
+                    seenModules,
+                    seenDirs,
+                    out);
             return;
         }
         for (int si = 0; si < sections.size(); si++) {
             Scope s = sections.get(si);
             boolean lastScope = si == sections.size() - 1;
             // Scope header: ├─/╰─ then the badge (no trailing space — badge abuts).
-            out.append(prefix).append(styling.rail().apply(lastScope ? "╰─" : "├─"))
-                    .append(styling.scopeBadge().apply(scopeLabel(s))).append('\n');
+            out.append(prefix)
+                    .append(styling.rail().apply(lastScope ? "╰─" : "├─"))
+                    .append(styling.scopeBadge().apply(scopeLabel(s)))
+                    .append('\n');
             // 4-wide continuation (matching a standard tree node) so the deps nest a
             // space further in than the 3-char scope connector — aligning under the badge.
             String scopePrefix = prefix + styling.rail().apply(lastScope ? "   " : "│  ");
-            renderScopeDepList(project, lock, dir, List.of(s), depth, maxDepth, scopePrefix,
-                    styling, modules, seenModules, seenDirs, out);
+            renderScopeDepList(
+                    project,
+                    lock,
+                    dir,
+                    List.of(s),
+                    depth,
+                    maxDepth,
+                    scopePrefix,
+                    styling,
+                    modules,
+                    seenModules,
+                    seenDirs,
+                    out);
         }
     }
 
@@ -359,18 +488,42 @@ public final class DependencyTree {
      * this is one section's deps; with several it blends them (the {@code --stack} view).
      */
     private static void renderScopeDepList(
-            JkBuild project, Lockfile lock, Path dir, List<Scope> scopes, int depth, int maxDepth,
-            String prefix, Styling styling, Map<String, String> modules,
-            Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+            JkBuild project,
+            Lockfile lock,
+            Path dir,
+            List<Scope> scopes,
+            int depth,
+            int maxDepth,
+            String prefix,
+            Styling styling,
+            Map<String, String> modules,
+            Set<String> seenModules,
+            Set<String> seenDirs,
+            StringBuilder out) {
 
         Map<String, Lockfile.Artifact> byModule = lock == null ? Map.of() : indexByModule(lock);
         Map<String, Dependency> composite = compositeDeps(project);
         List<String> mods = scopes.stream()
                 .flatMap(s -> project.dependencies().of(s).stream())
-                .map(Dependency::module).distinct().sorted().toList();
+                .map(Dependency::module)
+                .distinct()
+                .sorted()
+                .toList();
         for (int di = 0; di < mods.size(); di++) {
-            renderDep(mods.get(di), composite, byModule, dir, depth, maxDepth,
-                    di == mods.size() - 1, prefix, styling, modules, seenModules, seenDirs, out);
+            renderDep(
+                    mods.get(di),
+                    composite,
+                    byModule,
+                    dir,
+                    depth,
+                    maxDepth,
+                    di == mods.size() - 1,
+                    prefix,
+                    styling,
+                    modules,
+                    seenModules,
+                    seenDirs,
+                    out);
         }
     }
 
@@ -414,8 +567,13 @@ public final class DependencyTree {
 
     /** Single-project flatten: each scope lists its full transitive dep closure, flat + sorted. */
     private static void renderFlatScopes(
-            JkBuild project, Lockfile lock, Path dir, Styling styling,
-            List<Scope> scopeOrder, boolean stack, StringBuilder out) {
+            JkBuild project,
+            Lockfile lock,
+            Path dir,
+            Styling styling,
+            List<Scope> scopeOrder,
+            boolean stack,
+            StringBuilder out) {
 
         Map<String, Lockfile.Artifact> byModule = lock == null ? Map.of() : indexByModule(lock);
         Map<String, Dependency> composite = compositeDeps(project);
@@ -443,15 +601,14 @@ public final class DependencyTree {
             for (String m : directModules(project, s)) {
                 collectFlat(m, composite, byModule, Map.of(), visited, collected);
             }
-            renderFlatSection(styling.scopeBadge().apply(scopeLabel(s)),
-                    si == sections.size() - 1, collected, "", styling, out);
+            renderFlatSection(
+                    styling.scopeBadge().apply(scopeLabel(s)), si == sections.size() - 1, collected, "", styling, out);
         }
     }
 
     /** Workspace-root flatten: each scope is the union of every module's closure for that scope. */
     private static void renderFlatWorkspaceScopes(
-            JkBuild root, Path rootDir, Styling styling, List<Scope> scopeOrder, boolean stack,
-            StringBuilder out) {
+            JkBuild root, Path rootDir, Styling styling, List<Scope> scopeOrder, boolean stack, StringBuilder out) {
 
         Map<String, String> byName = workspaceModulesByName(root.workspace().modules(), rootDir);
         List<LoadedModule> modules = loadModules(root.workspace().modules(), rootDir);
@@ -468,8 +625,7 @@ public final class DependencyTree {
             Map<String, FlatDep> collected = new TreeMap<>();
             Set<String> visited = new HashSet<>();
             for (LoadedModule m : modules) {
-                Map<String, Lockfile.Artifact> byModule =
-                        m.lock() == null ? Map.of() : indexByModule(m.lock());
+                Map<String, Lockfile.Artifact> byModule = m.lock() == null ? Map.of() : indexByModule(m.lock());
                 Map<String, Dependency> composite = compositeDeps(m.build());
                 for (Scope s : sections) {
                     for (String dep : directModules(m.build(), s)) {
@@ -486,40 +642,50 @@ public final class DependencyTree {
             Set<String> visited = new HashSet<>();
             for (LoadedModule m : modules) {
                 if (m.build().dependencies().of(s).isEmpty()) continue;
-                Map<String, Lockfile.Artifact> byModule =
-                        m.lock() == null ? Map.of() : indexByModule(m.lock());
+                Map<String, Lockfile.Artifact> byModule = m.lock() == null ? Map.of() : indexByModule(m.lock());
                 Map<String, Dependency> composite = compositeDeps(m.build());
                 for (String dep : directModules(m.build(), s)) {
                     collectFlat(dep, composite, byModule, byName, visited, collected);
                 }
             }
-            renderFlatSection(styling.scopeBadge().apply(scopeLabel(s)),
-                    si == sections.size() - 1, collected, "", styling, out);
+            renderFlatSection(
+                    styling.scopeBadge().apply(scopeLabel(s)), si == sections.size() - 1, collected, "", styling, out);
         }
     }
 
     /** Emit a header badge (a single scope or a stacked badge row) then a flat, sorted dep list. */
     private static void renderFlatSection(
-            String headerBadge, boolean last, Map<String, FlatDep> collected,
-            String prefix, Styling styling, StringBuilder out) {
+            String headerBadge,
+            boolean last,
+            Map<String, FlatDep> collected,
+            String prefix,
+            Styling styling,
+            StringBuilder out) {
 
-        out.append(prefix).append(styling.rail().apply(last ? "╰─" : "├─"))
-                .append(headerBadge).append('\n');
+        out.append(prefix)
+                .append(styling.rail().apply(last ? "╰─" : "├─"))
+                .append(headerBadge)
+                .append('\n');
         String scopePrefix = prefix + styling.rail().apply(last ? "   " : "│  ");
         List<FlatDep> deps = new ArrayList<>(collected.values());
         for (int i = 0; i < deps.size(); i++) {
             FlatDep d = deps.get(i);
-            out.append(scopePrefix).append(styling.rail().apply(i == deps.size() - 1 ? "╰─ " : "├─ "))
+            out.append(scopePrefix)
+                    .append(styling.rail().apply(i == deps.size() - 1 ? "╰─ " : "├─ "))
                     .append(coordVersioned(d.module(), d.version(), styling))
-                    .append(styling.rail().apply(d.tag())).append('\n');
+                    .append(styling.rail().apply(d.tag()))
+                    .append('\n');
         }
     }
 
     /** Walk a dependency and its transitive closure, accumulating distinct coords into {@code out}. */
     private static void collectFlat(
-            String module, Map<String, Dependency> composite,
-            Map<String, Lockfile.Artifact> byModule, Map<String, String> byName,
-            Set<String> visited, Map<String, FlatDep> out) {
+            String module,
+            Map<String, Dependency> composite,
+            Map<String, Lockfile.Artifact> byModule,
+            Map<String, String> byName,
+            Set<String> visited,
+            Map<String, FlatDep> out) {
 
         if (module.startsWith("workspace:")) {
             String name = module.substring("workspace:".length());
@@ -559,7 +725,10 @@ public final class DependencyTree {
     /** A project's direct dep modules in one scope, distinct + sorted. */
     private static List<String> directModules(JkBuild project, Scope scope) {
         return project.dependencies().of(scope).stream()
-                .map(Dependency::module).distinct().sorted().toList();
+                .map(Dependency::module)
+                .distinct()
+                .sorted()
+                .toList();
     }
 
     /** {@code group:artifact:version} when a version is known, else {@code group:artifact}. */
@@ -574,9 +743,19 @@ public final class DependencyTree {
 
     /** Render one direct dependency, dispatching on its kind (maven / workspace / path / branch-git). */
     private static void renderDep(
-            String module, Map<String, Dependency> composite, Map<String, Lockfile.Artifact> byModule,
-            Path dir, int depth, int maxDepth, boolean isLast, String prefix, Styling styling,
-            Map<String, String> modules, Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+            String module,
+            Map<String, Dependency> composite,
+            Map<String, Lockfile.Artifact> byModule,
+            Path dir,
+            int depth,
+            int maxDepth,
+            boolean isLast,
+            String prefix,
+            Styling styling,
+            Map<String, String> modules,
+            Set<String> seenModules,
+            Set<String> seenDirs,
+            StringBuilder out) {
 
         if (module.startsWith("workspace:")) {
             // Workspace sibling (a `<name>.workspace = true` dep) — already shown
@@ -585,23 +764,27 @@ public final class DependencyTree {
             // reference it (no recursion).
             String name = module.substring("workspace:".length());
             String coord = modules.getOrDefault(name, module);
-            out.append(prefix).append(styling.rail().apply(isLast ? "╰─ " : "├─ "))
+            out.append(prefix)
+                    .append(styling.rail().apply(isLast ? "╰─ " : "├─ "))
                     .append(coordLabel(coord, styling))
-                    .append(styling.rail().apply(" [workspace]")).append('\n');
+                    .append(styling.rail().apply(" [workspace]"))
+                    .append('\n');
             return;
         }
         Dependency comp = composite.get(module);
         if (comp == null) {
             renderNode(byModule, module, depth, maxDepth, isLast, prefix, styling, seenModules, out);
         } else if (comp.isPath()) {
-            renderPathNode(comp, module, dir, depth, maxDepth, isLast, prefix, styling,
-                    modules, seenModules, seenDirs, out);
+            renderPathNode(
+                    comp, module, dir, depth, maxDepth, isLast, prefix, styling, modules, seenModules, seenDirs, out);
         } else {
             // branch git dep — annotate (no recursion; needs a clone).
             String ref = ((GitRefSpec.Branch) comp.gitSource().ref()).name();
-            out.append(prefix).append(styling.rail().apply(isLast ? "╰─ " : "├─ "))
+            out.append(prefix)
+                    .append(styling.rail().apply(isLast ? "╰─ " : "├─ "))
                     .append(coordLabel(module, styling))
-                    .append(styling.rail().apply(" [git: " + ref + "]")).append('\n');
+                    .append(styling.rail().apply(" [git: " + ref + "]"))
+                    .append('\n');
         }
     }
 
@@ -613,12 +796,23 @@ public final class DependencyTree {
 
     /** A path dep node, recursing into the target's own tree (its jk.toml + jk.lock). */
     private static void renderPathNode(
-            Dependency dep, String module, Path consumerDir, int depth, int maxDepth,
-            boolean isLast, String prefix, Styling styling, Map<String, String> modules,
-            Set<String> seenModules, Set<String> seenDirs, StringBuilder out) {
+            Dependency dep,
+            String module,
+            Path consumerDir,
+            int depth,
+            int maxDepth,
+            boolean isLast,
+            String prefix,
+            Styling styling,
+            Map<String, String> modules,
+            Set<String> seenModules,
+            Set<String> seenDirs,
+            StringBuilder out) {
 
         String connector = isLast ? "╰─ " : "├─ ";
-        Path targetDir = consumerDir == null ? null : consumerDir.resolve(dep.pathSource()).normalize();
+        Path targetDir = consumerDir == null
+                ? null
+                : consumerDir.resolve(dep.pathSource()).normalize();
         boolean cycle = targetDir != null && !seenDirs.add(targetDir.toString());
         Path lockPath = targetDir == null ? null : targetDir.resolve("jk.lock");
         boolean built = lockPath != null && Files.isRegularFile(lockPath);
@@ -626,13 +820,17 @@ public final class DependencyTree {
 
         if (cycle) {
             // Back-reference to a path dir already expanded — dim the whole row.
-            out.append(prefix).append(styling.reference().apply(connector + module + tag + " ⎋")).append('\n');
+            out.append(prefix)
+                    .append(styling.reference().apply(connector + module + tag + " ⎋"))
+                    .append('\n');
             return;
         }
 
-        out.append(prefix).append(styling.rail().apply(connector))
+        out.append(prefix)
+                .append(styling.rail().apply(connector))
                 .append(coordLabel(module, styling))
-                .append(styling.rail().apply(tag)).append('\n');
+                .append(styling.rail().apply(tag))
+                .append('\n');
 
         if (targetDir == null || !built || depth >= maxDepth) return;
         JkBuild target;
@@ -644,8 +842,20 @@ public final class DependencyTree {
             return; // unreadable target — stop descending
         }
         String childPrefix = prefix + styling.rail().apply(isLast ? "   " : "│  ");
-        renderScopeSections(target, targetLock, targetDir, depth + 1, maxDepth, childPrefix,
-                styling, modules, null, false, seenModules, seenDirs, out);
+        renderScopeSections(
+                target,
+                targetLock,
+                targetDir,
+                depth + 1,
+                maxDepth,
+                childPrefix,
+                styling,
+                modules,
+                null,
+                false,
+                seenModules,
+                seenDirs,
+                out);
     }
 
     /** {@code group:artifact} styled (no version — composite deps carry none here). */
@@ -683,34 +893,39 @@ public final class DependencyTree {
         if (!seen.add(module)) {
             // Already shown higher up — dim the WHOLE row (connector + coord + ⎋)
             // so it reads as a back-reference, not a fresh expansion.
-            out.append(prefix).append(styling.reference().apply(connector + coord + " ⎋")).append('\n');
+            out.append(prefix)
+                    .append(styling.reference().apply(connector + coord + " ⎋"))
+                    .append('\n');
             return;
         }
 
         String label = pkg != null
                 ? formatCoord(groupId, artifactId, pkg.version(), styling)
                 // No version available — "group:artifact (missing)", marker unstyled.
-                : styling.group().apply(groupId) + ":"
-                        + styling.artifact().apply(artifactId) + MISSING_SUFFIX;
+                : styling.group().apply(groupId) + ":" + styling.artifact().apply(artifactId) + MISSING_SUFFIX;
 
-        out.append(prefix).append(styling.rail().apply(connector))
-                .append(label).append('\n');
+        out.append(prefix).append(styling.rail().apply(connector)).append(label).append('\n');
 
         if (pkg == null || depth >= maxDepth) return;
 
         String childPrefix = prefix + styling.rail().apply(isLast ? "   " : "│  ");
-        List<String> children = pkg.deps().stream()
-                .map(DependencyTree::stripVersion)
-                .sorted()
-                .toList();
+        List<String> children =
+                pkg.deps().stream().map(DependencyTree::stripVersion).sorted().toList();
         for (int i = 0; i < children.size(); i++) {
-            renderNode(byModule, children.get(i), depth + 1, maxDepth,
-                    i == children.size() - 1, childPrefix, styling, seen, out);
+            renderNode(
+                    byModule,
+                    children.get(i),
+                    depth + 1,
+                    maxDepth,
+                    i == children.size() - 1,
+                    childPrefix,
+                    styling,
+                    seen,
+                    out);
         }
     }
 
-    private static String formatCoord(String group, String artifact, String version,
-                                      Styling styling) {
+    private static String formatCoord(String group, String artifact, String version, Styling styling) {
         return styling.group().apply(group)
                 + ":" + styling.artifact().apply(artifact)
                 + ":" + styling.version().apply(version);

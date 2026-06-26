@@ -1,15 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.publish.testkit.GpgTestFixture;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -18,8 +14,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class PublishCommandTest {
 
@@ -32,7 +30,8 @@ class PublishCommandTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/", exchange -> {
             if ("PUT".equals(exchange.getRequestMethod())) {
-                received.put(exchange.getRequestURI().getPath(),
+                received.put(
+                        exchange.getRequestURI().getPath(),
                         exchange.getRequestBody().readAllBytes());
                 exchange.sendResponseHeaders(201, -1);
             } else {
@@ -45,29 +44,31 @@ class PublishCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void publishes_jar_pom_sources_and_checksums(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
-        writeSource(tempDir.resolve("src/main/java/com/example/Widget.java"),
+        writeSource(
+                tempDir.resolve("src/main/java/com/example/Widget.java"),
                 "package com.example; public class Widget {}");
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString());
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
         assertThat(exit).isEqualTo(0);
 
         String prefix = "/repo/com/example/widget/1.0.0/widget-1.0.0";
         // Main jar, POM, sources jar — each with four checksum files.
-        assertThat(received).containsKeys(
-                prefix + ".jar",
-                prefix + ".jar.sha256",
-                prefix + ".pom",
-                prefix + ".pom.sha256",
-                prefix + "-sources.jar",
-                prefix + "-sources.jar.sha256");
+        assertThat(received)
+                .containsKeys(
+                        prefix + ".jar",
+                        prefix + ".jar.sha256",
+                        prefix + ".pom",
+                        prefix + ".pom.sha256",
+                        prefix + "-sources.jar",
+                        prefix + "-sources.jar.sha256");
         String pom = new String(received.get(prefix + ".pom"), StandardCharsets.UTF_8);
         assertThat(pom).contains("<artifactId>widget</artifactId>");
         assertThat(pom).contains("<version>1.0.0</version>");
@@ -84,9 +85,7 @@ class PublishCommandTest {
                 """);
         writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString());
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
         assertThat(exit).isEqualTo(65); // EX_DATAERR
         assertThat(received).isEmpty();
     }
@@ -102,11 +101,8 @@ class PublishCommandTest {
                 """);
         writeJar(tempDir.resolve("target/widget-1.0.0-SNAPSHOT.jar"));
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--allow-snapshot",
-                "--no-sources");
+        int exit = run(
+                "publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--allow-snapshot", "--no-sources");
         assertThat(exit).isEqualTo(0);
     }
 
@@ -115,10 +111,7 @@ class PublishCommandTest {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--no-sources");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--no-sources");
         assertThat(exit).isEqualTo(0);
         assertThat(received.keySet()).noneMatch(k -> k.contains("-sources.jar"));
     }
@@ -126,9 +119,7 @@ class PublishCommandTest {
     @Test
     void missing_jar_returns_no_input(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString());
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
         assertThat(exit).isEqualTo(66);
     }
 
@@ -140,13 +131,18 @@ class PublishCommandTest {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
+        int exit = run(
+                "publish",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
                 "--no-sources",
                 "--sign",
-                "--key-file", key.secretKeyFile().toString(),
-                "--key-passphrase", "pass");
+                "--key-file",
+                key.secretKeyFile().toString(),
+                "--key-passphrase",
+                "pass");
         assertThat(exit).isEqualTo(0);
 
         String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
@@ -159,11 +155,7 @@ class PublishCommandTest {
     void sign_without_key_file_errors(@TempDir Path tempDir) throws Exception {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--no-sources",
-                "--sign");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--no-sources", "--sign");
         // CommandLine propagates the runtime error as a non-zero exit.
         assertThat(exit).isNotZero();
     }
@@ -173,10 +165,7 @@ class PublishCommandTest {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--dry-run");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--dry-run");
         assertThat(exit).isEqualTo(0);
         assertThat(received).isEmpty();
     }
@@ -186,11 +175,7 @@ class PublishCommandTest {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--no-sources",
-                "--slsa");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--no-sources", "--slsa");
         assertThat(exit).isEqualTo(0);
 
         String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
@@ -206,19 +191,16 @@ class PublishCommandTest {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--no-sources",
-                "--sbom");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--no-sources", "--sbom");
         assertThat(exit).isEqualTo(0);
 
         String stem = "/repo/com/example/widget/1.0.0/widget-1.0.0";
-        assertThat(received).containsKeys(
-                stem + "-cyclonedx.json",
-                stem + "-cyclonedx.json.sha256",
-                stem + "-spdx.json",
-                stem + "-spdx.json.sha256");
+        assertThat(received)
+                .containsKeys(
+                        stem + "-cyclonedx.json",
+                        stem + "-cyclonedx.json.sha256",
+                        stem + "-spdx.json",
+                        stem + "-spdx.json.sha256");
         assertThat(new String(received.get(stem + "-cyclonedx.json"), StandardCharsets.UTF_8))
                 .contains("\"bomFormat\":\"CycloneDX\"")
                 .contains("pkg:maven/com.example/widget@1.0.0");
@@ -235,11 +217,7 @@ class PublishCommandTest {
         writeJkBuild(tempDir);
         writeJar(tempDir.resolve("target/widget-1.0.0.jar"));
 
-        int exit = run("publish",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--sigstore",
-                "--dry-run");
+        int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString(), "--sigstore", "--dry-run");
         assertThat(exit).isEqualTo(0);
         assertThat(received).isEmpty();
     }
@@ -273,7 +251,7 @@ class PublishCommandTest {
         int exit = run("publish", "-C", tempDir.toString(), "--repo-url", base.toString());
 
         assertThat(exit).isNotEqualTo(0);
-        assertThat(received).isEmpty();   // rejected before any upload
+        assertThat(received).isEmpty(); // rejected before any upload
     }
 
     private static void writeJar(Path path) throws IOException {

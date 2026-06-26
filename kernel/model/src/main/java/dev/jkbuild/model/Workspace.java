@@ -12,9 +12,7 @@ import java.util.Objects;
  * of shared external dep declarations inherited by modules via
  * {@code <name>.workspace = true}.
  */
-public record Workspace(
-        List<String> modules,
-        Map<String, WorkspaceDependency> dependencies) {
+public record Workspace(List<String> modules, Map<String, WorkspaceDependency> dependencies) {
 
     public Workspace {
         Objects.requireNonNull(modules, "modules");
@@ -39,11 +37,7 @@ public record Workspace(
      * {@code <name>.workspace = true}.
      */
     public record WorkspaceDependency(
-            String group,
-            String artifact,
-            VersionSelector version,
-            GitSource gitSource,
-            String pathSource) {
+            String group, String artifact, VersionSelector version, GitSource gitSource, String pathSource) {
 
         public WorkspaceDependency {
             Objects.requireNonNull(group, "group");
@@ -54,9 +48,7 @@ public record Workspace(
             if (artifact.isBlank()) {
                 throw new IllegalArgumentException("workspace dependency artifact must not be blank");
             }
-            int sourceCount = (version != null ? 1 : 0)
-                    + (gitSource != null ? 1 : 0)
-                    + (pathSource != null ? 1 : 0);
+            int sourceCount = (version != null ? 1 : 0) + (gitSource != null ? 1 : 0) + (pathSource != null ? 1 : 0);
             if (sourceCount != 1) {
                 throw new IllegalArgumentException(
                         "workspace dependency must set exactly one of `version`, `git`, or `path`");

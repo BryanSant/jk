@@ -3,14 +3,6 @@ package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.terminal.Attributes;
-import org.jline.terminal.Terminal;
-import org.jline.terminal.TerminalBuilder;
-import org.jline.utils.AttributedString;
-import org.jline.utils.AttributedStringBuilder;
-import org.jline.utils.AttributedStyle;
-import org.jline.utils.NonBlockingReader;
-
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -19,6 +11,13 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+import org.jline.utils.AttributedString;
+import org.jline.utils.AttributedStringBuilder;
+import org.jline.utils.AttributedStyle;
+import org.jline.utils.NonBlockingReader;
 
 /**
  * Wizard orchestrator. Sets up raw mode + a shutdown hook + a SIGINT handler,
@@ -314,7 +313,8 @@ public final class Wizard {
         // └ hook one line below the interactive content; gets erased on commit
         // and re-emitted (with the next step's content above it) on each step.
         // Cyan matches the active rail above it.
-        writer.println(Rail.closer("", Theme.active().dim(), Rail.StepState.ACTIVE).toAnsi(terminal));
+        writer.println(
+                Rail.closer("", Theme.active().dim(), Rail.StepState.ACTIVE).toAnsi(terminal));
         return 1 + interactive.size() + 1;
     }
 
@@ -387,8 +387,8 @@ public final class Wizard {
     private static List<AttributedString> summarize(WizardStep step, Map<String, Object> answers) {
         var answerStyle = Theme.active().settled().italic();
         return switch (step) {
-            case WizardStep.InputStep is -> List.of(
-                    answerLine(answers.getOrDefault(is.key(), "").toString(), answerStyle));
+            case WizardStep.InputStep is ->
+                List.of(answerLine(answers.getOrDefault(is.key(), "").toString(), answerStyle));
             case WizardStep.RadioStep rs -> List.of(answerLine(labelFor(rs, answers), answerStyle));
             case WizardStep.MultiSelectStep ms -> {
                 @SuppressWarnings("unchecked")
@@ -410,9 +410,10 @@ public final class Wizard {
                 }
                 yield labels;
             }
-            case WizardStep.OutputStep os -> os.render().apply(Answers.of(answers)).stream()
-                    .map(s -> plain(s, Theme.active().dim()))
-                    .toList();
+            case WizardStep.OutputStep os ->
+                os.render().apply(Answers.of(answers)).stream()
+                        .map(s -> plain(s, Theme.active().dim()))
+                        .toList();
         };
     }
 
@@ -568,17 +569,20 @@ public final class Wizard {
                 case KeyReader.Key.Down d -> moveFocus(1, size, rs.orientation() == Orientation.VERTICAL);
                 case KeyReader.Key.Left l -> moveFocus(-1, size, rs.orientation() == Orientation.HORIZONTAL);
                 case KeyReader.Key.Right r -> moveFocus(1, size, rs.orientation() == Orientation.HORIZONTAL);
-                case KeyReader.Key.Backspace b when onCustom -> {
+                case KeyReader.Key.Backspace b
+                when onCustom -> {
                     if (input.length() > 0) input.deleteCharAt(input.length() - 1);
                     error = "";
                     yield false;
                 }
-                case KeyReader.Key.Space s when onCustom -> {
+                case KeyReader.Key.Space s
+                when onCustom -> {
                     input.append(' ');
                     error = "";
                     yield false;
                 }
-                case KeyReader.Key.Char(char c) when onCustom -> {
+                case KeyReader.Key.Char(char c)
+                when onCustom -> {
                     input.append(c);
                     error = "";
                     yield false;
@@ -605,7 +609,8 @@ public final class Wizard {
                 // On the free-form row, Space / chars / Backspace edit the
                 // buffer instead of toggling — the row is "checked" whenever
                 // it holds text, so there's nothing to toggle.
-                case KeyReader.Key.Backspace b when onCustom -> {
+                case KeyReader.Key.Backspace b
+                when onCustom -> {
                     if (input.length() > 0) input.deleteCharAt(input.length() - 1);
                     yield false;
                 }
@@ -709,10 +714,17 @@ public final class Wizard {
                 for (var i = 0; i < choices.size(); i++) {
                     var c = choices.get(i);
                     var isFocused = i == focus;
-                    sb.append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
-                            isFocused ? Theme.active().completedStep() : Theme.active().dim());
+                    sb.append(
+                            isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
+                            isFocused
+                                    ? Theme.active().completedStep()
+                                    : Theme.active().dim());
                     sb.append(" ");
-                    sb.append(c.label(), isFocused ? Theme.active().focused() : Theme.active().dim());
+                    sb.append(
+                            c.label(),
+                            isFocused
+                                    ? Theme.active().focused()
+                                    : Theme.active().dim());
                     appendHint(sb, c.hintFor(snapshot));
                     if (i < choices.size() - 1) {
                         sb.append("  ");
@@ -724,18 +736,28 @@ public final class Wizard {
                     var c = choices.get(i);
                     var isFocused = i == focus;
                     var sb = new AttributedStringBuilder()
-                            .append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
-                                    isFocused ? Theme.active().completedStep() : Theme.active().dim())
+                            .append(
+                                    isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
+                                    isFocused
+                                            ? Theme.active().completedStep()
+                                            : Theme.active().dim())
                             .append(" ")
-                            .append(c.label(), isFocused ? Theme.active().focused() : Theme.active().dim());
+                            .append(
+                                    c.label(),
+                                    isFocused
+                                            ? Theme.active().focused()
+                                            : Theme.active().dim());
                     appendHint(sb, c.hintFor(snapshot));
                     lines.add(sb.toAttributedString());
                 }
                 if (rs.hasCustomOption()) {
                     var isFocused = focus == choices.size();
                     var sb = new AttributedStringBuilder()
-                            .append(isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
-                                    isFocused ? Theme.active().completedStep() : Theme.active().dim())
+                            .append(
+                                    isFocused ? Rail.RADIO_ON : Rail.RADIO_OFF,
+                                    isFocused
+                                            ? Theme.active().completedStep()
+                                            : Theme.active().dim())
                             .append(" ");
                     appendCustomField(sb, isFocused, rs.customPlaceholder());
                     lines.add(sb.toAttributedString());
@@ -754,7 +776,9 @@ public final class Wizard {
             if (input.length() == 0) {
                 sb.append(placeholder, Theme.active().dim().italic());
             } else {
-                sb.append(input.toString(), focused ? Theme.active().focused() : Theme.active().dim());
+                sb.append(
+                        input.toString(),
+                        focused ? Theme.active().focused() : Theme.active().dim());
             }
         }
 
@@ -782,8 +806,12 @@ public final class Wizard {
                     var glyph = isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF;
                     var glyphStyle = isChecked
                             ? Theme.active().completedStep()
-                            : (isFocused ? Theme.active().activeStep() : Theme.active().dim());
-                    var labelStyle = isFocused ? Theme.active().focused() : Theme.active().dim();
+                            : (isFocused
+                                    ? Theme.active().activeStep()
+                                    : Theme.active().dim());
+                    var labelStyle = isFocused
+                            ? Theme.active().focused()
+                            : Theme.active().dim();
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
                             .append(" ");
@@ -797,11 +825,13 @@ public final class Wizard {
                 }
                 if (ms.hasCustomOption()) {
                     var isFocused = focus == ms.choices().size();
-                    var isChecked = input.length() > 0;  // checked while it holds text
+                    var isChecked = input.length() > 0; // checked while it holds text
                     var glyph = isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF;
                     var glyphStyle = isChecked
                             ? Theme.active().completedStep()
-                            : (isFocused ? Theme.active().activeStep() : Theme.active().dim());
+                            : (isFocused
+                                    ? Theme.active().activeStep()
+                                    : Theme.active().dim());
                     var sb = new AttributedStringBuilder()
                             .append(glyph, glyphStyle)
                             .append(" ");
@@ -816,8 +846,12 @@ public final class Wizard {
                     var isChecked = selected.contains(c.id());
                     var glyphStyle = isChecked
                             ? Theme.active().completedStep()
-                            : (isFocused ? Theme.active().activeStep() : Theme.active().dim());
-                    var labelStyle = isFocused ? Theme.active().focused() : Theme.active().dim();
+                            : (isFocused
+                                    ? Theme.active().activeStep()
+                                    : Theme.active().dim());
+                    var labelStyle = isFocused
+                            ? Theme.active().focused()
+                            : Theme.active().dim();
                     sb.append(isChecked ? Rail.CHECKBOX_ON : Rail.CHECKBOX_OFF, glyphStyle);
                     sb.append(" ");
                     sb.append(c.label(), labelStyle);

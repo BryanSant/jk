@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class NewJdkOptionsTest {
 
@@ -98,7 +97,7 @@ class NewJdkOptionsTest {
     private static void makeJdkFixture(Path home, String version) throws IOException {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
-        Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+        Files.writeString(
+                home.resolve("release"), "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
     }
 }

@@ -6,12 +6,12 @@ import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
+import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkCatalogClient;
+import dev.jkbuild.jdk.JdkGarbage;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkInstaller;
-import dev.jkbuild.jdk.IntellijJdkDir;
-import dev.jkbuild.jdk.JdkGarbage;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.jdk.StableJdkPointer;
@@ -20,12 +20,8 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
-import java.io.BufferedReader;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -53,22 +49,40 @@ import java.util.Optional;
  */
 public final class JdkUpdateCommand implements CliCommand {
 
-    @Override public String name() { return "update"; }
-    @Override public List<String> aliases() { return List.of("upgrade"); }
-    @Override public String description() { return "Update a Java Development Kit"; }
-
-    @Override public List<Opt> options() {
-        return List.of(
-                Opt.flag("Skip the confirmation prompt.", "-y", "--yes"),
-                Opt.value("<dir>", "Override the install root. Default: the jk JDK directory.", "--jdks-dir").hide(),
-                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url").hide(),
-                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file").hide());
+    @Override
+    public String name() {
+        return "update";
     }
 
-    @Override public List<Param> parameters() {
-        return List.of(Param.of("spec", Arity.ZERO_OR_ONE,
+    @Override
+    public List<String> aliases() {
+        return List.of("upgrade");
+    }
+
+    @Override
+    public String description() {
+        return "Update a Java Development Kit";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.flag("Skip the confirmation prompt.", "-y", "--yes"),
+                Opt.value("<dir>", "Override the install root. Default: the jk JDK directory.", "--jdks-dir")
+                        .hide(),
+                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url")
+                        .hide(),
+                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file")
+                        .hide());
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of(
+                "spec",
+                Arity.ZERO_OR_ONE,
                 "The vendor/version of JDK you'd like to update\n"
-                + "  (ex: 25, lts, latest, temurin-25, openjdk-26)"));
+                        + "  (ex: 25, lts, latest, temurin-25, openjdk-26)"));
     }
 
     /** A planned update: the installed JDK being superseded and the feed entry replacing it. */
@@ -97,15 +111,17 @@ public final class JdkUpdateCommand implements CliCommand {
         if (dev.jkbuild.jdk.JdkKeywords.isKeyword(spec)) {
             var kw = dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, registry.managedHits(null));
             spec = kw.map(h -> {
-                Integer m = dev.jkbuild.jdk.JdkKeywords.leadingMajor(h.version());
-                return m != null ? String.valueOf(m) : JdkRegistry.identifierFor(h.home());
-            }).orElse(spec);
+                        Integer m = dev.jkbuild.jdk.JdkKeywords.leadingMajor(h.version());
+                        return m != null ? String.valueOf(m) : JdkRegistry.identifierFor(h.home());
+                    })
+                    .orElse(spec);
         }
         List<JdkHit> managed = registry.managedHits(spec);
         if (managed.isEmpty()) {
-            System.out.println(spec == null || spec.isBlank()
-                    ? "(no jk-managed JDKs installed)"
-                    : "(no jk-managed JDK matches `" + spec + "`)");
+            System.out.println(
+                    spec == null || spec.isBlank()
+                            ? "(no jk-managed JDKs installed)"
+                            : "(no jk-managed JDK matches `" + spec + "`)");
             return 0;
         }
 
@@ -136,7 +152,8 @@ public final class JdkUpdateCommand implements CliCommand {
         for (String id : noTarget) {
             System.out.println(Theme.colorize("•", Theme.active().darkGray())
                     + " " + Theme.colorize(id, Theme.active().cyan())
-                    + Theme.colorize(" — no update available in the feed", Theme.active().normalGray()));
+                    + Theme.colorize(
+                            " — no update available in the feed", Theme.active().normalGray()));
         }
 
         if (updates.isEmpty()) {
@@ -185,20 +202,21 @@ public final class JdkUpdateCommand implements CliCommand {
                 if (!oldId.equals(newJdk.identifier())) {
                     // Defer-delete the superseded patch: a running JVM may still
                     // hold it open (Windows can't unlink an in-use dir).
-                    new JdkGarbage(registry.jdksRoot())
-                            .enqueue(IntellijJdkDir.installDirOf(u.old.home()));
+                    new JdkGarbage(registry.jdksRoot()).enqueue(IntellijJdkDir.installDirOf(u.old.home()));
                 }
                 if (currentDefault.isPresent() && currentDefault.get().equals(oldId)) {
                     defaults.set(newJdk);
                 }
                 System.out.println(Theme.colorize("✓", Theme.active().completedStep())
                         + " Updated " + Theme.colorize(oldId, Theme.active().cyan())
-                        + " → " + Theme.colorize(newJdk.identifier(), Theme.active().cyan()));
+                        + " → "
+                        + Theme.colorize(newJdk.identifier(), Theme.active().cyan()));
                 updated++;
             } catch (IOException | InterruptedException e) {
                 if (e instanceof InterruptedException) Thread.currentThread().interrupt();
                 System.out.println(Theme.colorize("✗", Theme.active().error())
-                        + " Failed to update " + Theme.colorize(oldId, Theme.active().warning())
+                        + " Failed to update "
+                        + Theme.colorize(oldId, Theme.active().warning())
                         + ": " + e.getMessage());
                 failed++;
             }
@@ -207,8 +225,7 @@ public final class JdkUpdateCommand implements CliCommand {
         // Reap anything just enqueued (and any survivors from prior runs).
         new JdkGarbage(registry.jdksRoot()).drain();
 
-        System.out.println(updated + " updated"
-                + (failed > 0 ? ", " + failed + " failed" : ""));
+        System.out.println(updated + " updated" + (failed > 0 ? ", " + failed + " failed" : ""));
         return failed == 0;
     }
 
@@ -222,8 +239,7 @@ public final class JdkUpdateCommand implements CliCommand {
         if (q.major().isEmpty() || q.hints().isEmpty()) return;
         String pointer = q.hints().get(0) + "-" + q.major().get();
         try {
-            new StableJdkPointer(registry.jdksRoot())
-                    .ensure(pointer, IntellijJdkDir.installDirOf(jdk.home()));
+            new StableJdkPointer(registry.jdksRoot()).ensure(pointer, IntellijJdkDir.installDirOf(jdk.home()));
         } catch (IOException ignored) {
             // Pointer is a convenience; the update itself already succeeded.
         }
@@ -238,8 +254,7 @@ public final class JdkUpdateCommand implements CliCommand {
         String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
         long total = entry.archiveSize();
         InstalledJdk installed;
-        try (dev.jkbuild.cli.tui.JdkDownloadBar pb =
-                     dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+        try (dev.jkbuild.cli.tui.JdkDownloadBar pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
             installed = installer.install(entry, bytes -> pb.update(bytes, total));
             pb.finish();
         }
@@ -286,15 +301,19 @@ public final class JdkUpdateCommand implements CliCommand {
     // --- confirmation -------------------------------------------------------
 
     private boolean confirm(List<Update> updates) {
-        System.out.println("\nThe following " + updates.size() + " JDK"
-                + (updates.size() == 1 ? "" : "s") + " will be updated:");
+        System.out.println(
+                "\nThe following " + updates.size() + " JDK" + (updates.size() == 1 ? "" : "s") + " will be updated:");
         for (Update u : updates) {
             System.out.println("   "
-                    + Theme.colorize(JdkRegistry.identifierFor(u.old.home()), Theme.active().cyan())
-                    + " → " + Theme.colorize(u.target.installFolderName(), Theme.active().focused()));
+                    + Theme.colorize(
+                            JdkRegistry.identifierFor(u.old.home()),
+                            Theme.active().cyan())
+                    + " → "
+                    + Theme.colorize(
+                            u.target.installFolderName(), Theme.active().focused()));
         }
-        return dev.jkbuild.cli.tui.Confirm.of(
-                Theme.colorize("‼", Theme.active().warning()) + " Proceed?", true).ask();
+        return dev.jkbuild.cli.tui.Confirm.of(Theme.colorize("‼", Theme.active().warning()) + " Proceed?", true)
+                .ask();
     }
 
     // --- shared mechanics (mirrors JdkEnsureCommand) ------------------------
@@ -310,10 +329,12 @@ public final class JdkUpdateCommand implements CliCommand {
     private JdkCatalog fetchCatalog() throws IOException, InterruptedException {
         boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
         JdkCatalogClient client = (feedUrl != null
-                ? new JdkCatalogClient(new Http(), feedUrl,
-                        cacheFile != null ? cacheFile : ephemeralCachePath(),
-                        Duration.ZERO)
-                : new JdkCatalogClient())
+                        ? new JdkCatalogClient(
+                                new Http(),
+                                feedUrl,
+                                cacheFile != null ? cacheFile : ephemeralCachePath(),
+                                Duration.ZERO)
+                        : new JdkCatalogClient())
                 .onWarning(System.err::println);
         return client.fetch(refresh);
     }

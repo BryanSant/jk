@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,7 +29,10 @@ public final class JdkToolUninstaller {
     private static final long TIMEOUT_SECONDS = 30;
 
     /** Outcome label used by the caller for the "✓ … via <tool>" line. */
-    public enum Outcome { HANDLED_BY_TOOL, FALL_THROUGH }
+    public enum Outcome {
+        HANDLED_BY_TOOL,
+        FALL_THROUGH
+    }
 
     private JdkToolUninstaller() {}
 
@@ -62,9 +64,12 @@ public final class JdkToolUninstaller {
             // source the init explicitly so this works under cron / non-login
             // shells too. SDKMAN's uninstall is non-interactive when given
             // both candidate and version.
-            case "sdkman" -> List.of("bash", "-c",
-                    "source \"$HOME/.sdkman/bin/sdkman-init.sh\" && "
-                            + "sdk uninstall java " + shellQuote(identifier));
+            case "sdkman" ->
+                List.of(
+                        "bash",
+                        "-c",
+                        "source \"$HOME/.sdkman/bin/sdkman-init.sh\" && " + "sdk uninstall java "
+                                + shellQuote(identifier));
             case "mise" -> List.of("mise", "uninstall", "--yes", "java@" + identifier);
             case "jbang" -> List.of("jbang", "jdk", "uninstall", identifier);
             // jenv tracks JDKs but doesn't own their files — `remove` just

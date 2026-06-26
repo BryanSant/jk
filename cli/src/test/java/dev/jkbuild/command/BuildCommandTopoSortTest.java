@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * {@link BuildCommand#topoSortModules} ordering, with focus on the
@@ -39,9 +38,7 @@ class BuildCommandTopoSortTest {
 
         List<Path> sorted = BuildCommand.topoSortModules(modules);
 
-        assertThat(sorted.indexOf(Path.of("a")))
-                .as("a builds before b")
-                .isLessThan(sorted.indexOf(Path.of("b")));
+        assertThat(sorted.indexOf(Path.of("a"))).as("a builds before b").isLessThan(sorted.indexOf(Path.of("b")));
         assertThat(sorted).containsExactlyInAnyOrder(Path.of("a"), Path.of("b"));
     }
 

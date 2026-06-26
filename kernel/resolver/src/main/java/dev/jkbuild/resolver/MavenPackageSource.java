@@ -11,7 +11,6 @@ import dev.jkbuild.resolver.pubgrub.PackageSource;
 import dev.jkbuild.resolver.pubgrub.Term;
 import dev.jkbuild.resolver.pubgrub.VersionSet;
 import dev.jkbuild.util.JkThreads;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -57,6 +56,7 @@ public final class MavenPackageSource implements PackageSource {
     private final Map<String, String> bomConstraints;
     /** Locked versions from a prior lock file — preferred but NOT hard-pinned. */
     private final Map<String, String> lockedVersionPrefs;
+
     private final Map<String, List<String>> versionCache = new ConcurrentHashMap<>();
     private final Map<String, List<Term>> depsCache = new ConcurrentHashMap<>();
     private final Semaphore prefetchSlots = new Semaphore(PREFETCH_PERMITS);
@@ -69,10 +69,7 @@ public final class MavenPackageSource implements PackageSource {
         this(repos, pomBuilder, Map.of());
     }
 
-    public MavenPackageSource(
-            RepoGroup repos,
-            EffectivePomBuilder pomBuilder,
-            Map<String, String> bomConstraints) {
+    public MavenPackageSource(RepoGroup repos, EffectivePomBuilder pomBuilder, Map<String, String> bomConstraints) {
         this(repos, pomBuilder, bomConstraints, Map.of());
     }
 
@@ -133,8 +130,7 @@ public final class MavenPackageSource implements PackageSource {
     }
 
     @Override
-    public List<Term> dependencies(String pkg, String version)
-            throws IOException, InterruptedException {
+    public List<Term> dependencies(String pkg, String version) throws IOException, InterruptedException {
         String key = pkg + "@" + version;
         List<Term> cached = depsCache.get(key);
         if (cached != null) return cached;

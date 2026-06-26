@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class SpinnerProgressBarTest {
 
@@ -38,9 +37,9 @@ class SpinnerProgressBarTest {
     void advancing_fill_repaints_the_whole_glyph_row() {
         var buf = new ByteArrayOutputStream();
         try (var pb = SpinnerProgressBar.show(stream(buf))) {
-            pb.update(50, "step");   // 20 filled (out of 40)
+            pb.update(50, "step"); // 20 filled (out of 40)
             buf.reset();
-            pb.update(60, "step");   // 24 filled
+            pb.update(60, "step"); // 24 filled
         }
         String diff = stripAnsi(buf.toString(StandardCharsets.UTF_8));
         // The moving gradient re-colors every filled glyph when the frontier
@@ -55,9 +54,9 @@ class SpinnerProgressBarTest {
     void unchanged_fill_does_not_repaint_the_glyph_row() {
         var buf = new ByteArrayOutputStream();
         try (var pb = SpinnerProgressBar.show(stream(buf))) {
-            pb.update(60, "step");   // round(60 * 40 / 100) = 24 filled
+            pb.update(60, "step"); // round(60 * 40 / 100) = 24 filled
             buf.reset();
-            pb.update(61, "step");   // round(61 * 40 / 100) = 24 filled (unchanged)
+            pb.update(61, "step"); // round(61 * 40 / 100) = 24 filled (unchanged)
         }
         String diff = stripAnsi(buf.toString(StandardCharsets.UTF_8));
         // No fill change → no glyphs redrawn (only the OSC progress update).
@@ -78,7 +77,7 @@ class SpinnerProgressBarTest {
         // 2.5% → 1 filled glyph: it must be the bright-magenta end, not the indigo start.
         var buf = new ByteArrayOutputStream();
         try (var pb = SpinnerProgressBar.show(stream(buf))) {
-            pb.update(2, "x");   // round(2 * 40 / 100) = 1 filled
+            pb.update(2, "x"); // round(2 * 40 / 100) = 1 filled
         }
         var colors = filledGlyphColors(buf.toString(StandardCharsets.UTF_8));
         assertThat(colors).containsExactly("38;2;224;64;251");
@@ -167,8 +166,7 @@ class SpinnerProgressBarTest {
         // Clear (state 0) appears once we close out of the bar.
         assertThat(all).contains("\033]9;4;0\007");
         // And it precedes the cursor-restore on the close path.
-        assertThat(all.indexOf("\033]9;4;0\007"))
-                .isLessThan(all.indexOf("\033[?25h"));
+        assertThat(all.indexOf("\033]9;4;0\007")).isLessThan(all.indexOf("\033[?25h"));
     }
 
     @Test
@@ -178,8 +176,8 @@ class SpinnerProgressBarTest {
         // Jk Dark indigo #3F51B5 → bright-magenta #E040FB.
         String first = colors[0].toAnsi();
         String last = colors[19].toAnsi();
-        assertThat(first).isEqualTo("38;2;63;81;181");      // indigo start
-        assertThat(last).isEqualTo("38;2;224;64;251");      // bright-magenta end
+        assertThat(first).isEqualTo("38;2;63;81;181"); // indigo start
+        assertThat(last).isEqualTo("38;2;224;64;251"); // bright-magenta end
     }
 
     private static PrintStream stream(ByteArrayOutputStream buf) {
@@ -199,8 +197,7 @@ class SpinnerProgressBarTest {
     /** In-order truecolor SGRs of each filled (▰) glyph in {@code raw}. */
     private static java.util.List<String> filledGlyphColors(String raw) {
         var out = new java.util.ArrayList<String>();
-        var m = java.util.regex.Pattern
-                .compile("\033\\[(38;2;\\d+;\\d+;\\d+)m▰")
+        var m = java.util.regex.Pattern.compile("\033\\[(38;2;\\d+;\\d+;\\d+)m▰")
                 .matcher(raw);
         while (m.find()) out.add(m.group(1));
         return out;

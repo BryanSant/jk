@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver.pubgrub;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
 
 class TermTest {
 
@@ -70,7 +70,6 @@ class TermTest {
     void intersecting_across_packages_throws() {
         Term a = Term.positive("a", VersionSet.exact("1.0"));
         Term b = Term.positive("b", VersionSet.exact("1.0"));
-        assertThatThrownBy(() -> a.intersect(b))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> a.intersect(b)).isInstanceOf(IllegalArgumentException.class);
     }
 }

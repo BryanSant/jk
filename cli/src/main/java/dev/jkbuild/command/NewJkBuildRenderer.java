@@ -2,7 +2,6 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.library.LibraryCatalog;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -51,7 +50,8 @@ public final class NewJkBuildRenderer {
         sb.append("jdk      = \"").append(inputs.jdk()).append("\"\n");
         switch (inputs.lang()) {
             case JAVA -> sb.append("java     = ").append(inputs.javaRelease()).append('\n');
-            case KOTLIN -> sb.append("kotlin   = \"").append(DEFAULT_KOTLIN_VERSION).append("\"\n");
+            case KOTLIN ->
+                sb.append("kotlin   = \"").append(DEFAULT_KOTLIN_VERSION).append("\"\n");
         }
         if (inputs.main().isPresent()) {
             sb.append("main     = \"").append(inputs.main().get()).append("\"\n");
@@ -65,8 +65,8 @@ public final class NewJkBuildRenderer {
         if (inputs.layout() != null && !inputs.layout().isBlank() && !"auto".equalsIgnoreCase(inputs.layout())) {
             sb.append("layout   = \"").append(inputs.layout().toLowerCase()).append("\"\n");
         }
-        inputs.kotlinModuleName().ifPresent(m ->
-                sb.append("module   = \"").append(m).append("\"\n"));
+        inputs.kotlinModuleName()
+                .ifPresent(m -> sb.append("module   = \"").append(m).append("\"\n"));
 
         var picks = resolvePicks(inputs.deps());
         if (picks.isEmpty()) return sb.toString();
@@ -124,8 +124,7 @@ public final class NewJkBuildRenderer {
             if (entries == null) continue;
             for (var e : entries) {
                 String shortName = e.coord().substring(e.coord().indexOf(':') + 1);
-                byScope.computeIfAbsent(e.scope(), _ -> new LinkedHashMap<>())
-                        .putIfAbsent(shortName, e);
+                byScope.computeIfAbsent(e.scope(), _ -> new LinkedHashMap<>()).putIfAbsent(shortName, e);
             }
         }
         Map<String, List<NewScaffolder.CuratedEntry>> out = new LinkedHashMap<>();

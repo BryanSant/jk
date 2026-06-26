@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import dev.jkbuild.cache.Cas;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.jkbuild.cache.Cas;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class LruEvictorTest {
 
@@ -69,8 +68,12 @@ class LruEvictorTest {
         long budget = Files.size(olderMtime);
         LruEvictor.evictDownTo(cas, budget, Set.of(), ledger, false);
 
-        assertThat(Files.exists(olderMtime)).as("recently-touched should survive").isTrue();
-        assertThat(Files.exists(newerMtime)).as("never-touched should be evicted").isFalse();
+        assertThat(Files.exists(olderMtime))
+                .as("recently-touched should survive")
+                .isTrue();
+        assertThat(Files.exists(newerMtime))
+                .as("never-touched should be evicted")
+                .isFalse();
     }
 
     @Test
@@ -94,8 +97,7 @@ class LruEvictorTest {
         Path obj = cas.put("payload".getBytes());
         Files.setLastModifiedTime(obj, FileTime.fromMillis(System.currentTimeMillis() - 60_000));
 
-        var report = LruEvictor.evictDownTo(cas, 0L,
-                Set.of(), new AccessLedger(tempDir.resolve(".access.log")), true);
+        var report = LruEvictor.evictDownTo(cas, 0L, Set.of(), new AccessLedger(tempDir.resolve(".access.log")), true);
 
         assertThat(report.deleted()).isEqualTo(1);
         assertThat(Files.exists(obj)).as("dry-run should not delete").isTrue();

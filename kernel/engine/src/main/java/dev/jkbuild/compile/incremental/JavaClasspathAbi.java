@@ -2,8 +2,6 @@
 package dev.jkbuild.compile.incremental;
 
 import dev.jkbuild.cache.Cas;
-
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -42,10 +40,9 @@ public final class JavaClasspathAbi {
         return all;
     }
 
-    private static Map<String, DepFacts> snapshotEntry(Path entry, Cas cas, Path cacheDir)
-            throws IOException {
+    private static Map<String, DepFacts> snapshotEntry(Path entry, Cas cas, Path cacheDir) throws IOException {
         if (!Files.exists(entry)) return Map.of();
-        if (Files.isDirectory(entry)) return scanDir(entry);   // mutable content → never cache
+        if (Files.isDirectory(entry)) return scanDir(entry); // mutable content → never cache
         // A jar under the CAS is content-addressed (its path encodes its bytes), so
         // its snapshot is immutable and cacheable; anything else is scanned fresh.
         var cas256 = cas.hashFromPath(entry);
@@ -55,7 +52,9 @@ public final class JavaClasspathAbi {
         if (Files.isRegularFile(cacheFile)) {
             try {
                 return readDepFacts(Files.readAllBytes(cacheFile));
-            } catch (RuntimeException ignored) { /* corrupt → recompute */ }
+            } catch (RuntimeException ignored) {
+                /* corrupt → recompute */
+            }
         }
         Map<String, DepFacts> snapshot = scanJar(entry);
         Files.createDirectories(cacheDir);
@@ -88,8 +87,7 @@ public final class JavaClasspathAbi {
                 if (!p.toString().endsWith(".class")) continue;
                 String rel = dir.relativize(p).toString().replace(File.separatorChar, '/');
                 if (rel.endsWith("module-info.class")) continue;
-                out.put(rel.substring(0, rel.length() - ".class".length()),
-                        factsOf(Files.readAllBytes(p)));
+                out.put(rel.substring(0, rel.length() - ".class".length()), factsOf(Files.readAllBytes(p)));
             }
         }
         return out;
@@ -105,17 +103,19 @@ public final class JavaClasspathAbi {
     public static String writeDepFacts(Map<String, DepFacts> map) {
         StringBuilder sb = new StringBuilder(map.size() * 80);
         for (Map.Entry<String, DepFacts> e : map.entrySet()) {
-            sb.append(e.getKey()).append('\t')
-              .append(e.getValue().abi()).append('\t')
-              .append(e.getValue().constants() ? '1' : '0').append('\n');
+            sb.append(e.getKey())
+                    .append('\t')
+                    .append(e.getValue().abi())
+                    .append('\t')
+                    .append(e.getValue().constants() ? '1' : '0')
+                    .append('\n');
         }
         return sb.toString();
     }
 
     public static Map<String, DepFacts> readDepFacts(byte[] bytes) throws IOException {
         Map<String, DepFacts> out = new TreeMap<>();
-        try (BufferedReader br = new BufferedReader(
-                new StringReader(new String(bytes, StandardCharsets.UTF_8)))) {
+        try (BufferedReader br = new BufferedReader(new StringReader(new String(bytes, StandardCharsets.UTF_8)))) {
             String line;
             while ((line = br.readLine()) != null) {
                 line = line.strip();

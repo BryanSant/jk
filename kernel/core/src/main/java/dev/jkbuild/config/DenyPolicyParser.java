@@ -2,17 +2,16 @@
 package dev.jkbuild.config;
 
 import dev.jkbuild.model.DenyPolicy;
-import org.tomlj.Toml;
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import org.tomlj.Toml;
+import org.tomlj.TomlArray;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * Parses the {@code [deny]} block from a {@code jk.toml} into a
@@ -68,8 +67,8 @@ public final class DenyPolicyParser {
             case "deny" -> DenyPolicy.YankedPolicy.DENY;
             case "warn" -> DenyPolicy.YankedPolicy.WARN;
             case "allow" -> DenyPolicy.YankedPolicy.ALLOW;
-            default -> throw new JkBuildParseException(
-                    "deny.yanked must be `deny`, `warn`, or `allow` (got: " + raw + ")");
+            default ->
+                throw new JkBuildParseException("deny.yanked must be `deny`, `warn`, or `allow` (got: " + raw + ")");
         };
     }
 }

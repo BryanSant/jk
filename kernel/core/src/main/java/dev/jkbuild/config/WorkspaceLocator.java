@@ -2,7 +2,6 @@
 package dev.jkbuild.config;
 
 import dev.jkbuild.model.JkBuild;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,7 +40,7 @@ public final class WorkspaceLocator {
         Path candidate = normalized;
         for (int depth = 0; depth < MAX_DEPTH; depth++) {
             Path parent = candidate.getParent();
-            if (parent == null) break;   // reached filesystem root
+            if (parent == null) break; // reached filesystem root
             Path rootJkToml = parent.resolve("jk.toml");
             if (Files.exists(rootJkToml)) {
                 try {
@@ -66,7 +65,7 @@ public final class WorkspaceLocator {
         Path candidate = normalized;
         for (int depth = 0; depth < MAX_DEPTH; depth++) {
             Path parent = candidate.getParent();
-            if (parent == null) break;   // reached filesystem root
+            if (parent == null) break; // reached filesystem root
             Path rootJkToml = parent.resolve("jk.toml");
             if (Files.exists(rootJkToml)) {
                 JkBuild root;

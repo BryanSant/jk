@@ -1,14 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
+import dev.jkbuild.cli.Jk;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -17,8 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class LibraryUpdateCommandTest {
 
@@ -32,9 +30,7 @@ class LibraryUpdateCommandTest {
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/libraries.toml", exchange -> {
             int code = status.get();
-            byte[] payload = body.get() == null
-                    ? new byte[0]
-                    : body.get().getBytes(StandardCharsets.UTF_8);
+            byte[] payload = body.get() == null ? new byte[0] : body.get().getBytes(StandardCharsets.UTF_8);
             if (code == 200) {
                 exchange.sendResponseHeaders(200, payload.length);
                 exchange.getResponseBody().write(payload);
@@ -48,7 +44,9 @@ class LibraryUpdateCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void update_writes_payload_to_cache(@TempDir Path tempDir) throws Exception {

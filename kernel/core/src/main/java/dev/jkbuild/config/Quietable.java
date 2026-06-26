@@ -20,10 +20,20 @@ import java.nio.charset.StandardCharsets;
 public final class Quietable {
 
     /** Sentinel PrintStream that discards everything written to it. */
-    private static final PrintStream SINK = new PrintStream(new OutputStream() {
-        @Override public void write(int b) { /* drop */ }
-        @Override public void write(byte[] b, int off, int len) { /* drop */ }
-    }, false, StandardCharsets.UTF_8);
+    private static final PrintStream SINK = new PrintStream(
+            new OutputStream() {
+                @Override
+                public void write(int b) {
+                    /* drop */
+                }
+
+                @Override
+                public void write(byte[] b, int off, int len) {
+                    /* drop */
+                }
+            },
+            false,
+            StandardCharsets.UTF_8);
 
     private static volatile boolean applied = false;
 

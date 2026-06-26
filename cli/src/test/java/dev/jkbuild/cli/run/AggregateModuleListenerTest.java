@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseStatus;
-import org.junit.jupiter.api.Test;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /** Two sequential modules feed one aggregate view: counts sum, rows merge. */
 class AggregateModuleListenerTest {
@@ -21,8 +20,8 @@ class AggregateModuleListenerTest {
     @Test
     void modules_accumulate_into_one_bar_and_merged_phase_list() {
         var buf = new ByteArrayOutputStream();
-        CommandManager view = CommandManager.goal(
-                new PrintStream(buf, true, StandardCharsets.UTF_8), "Building", false);
+        CommandManager view =
+                CommandManager.goal(new PrintStream(buf, true, StandardCharsets.UTF_8), "Building", false);
         var agg = new AggregateContext(view);
 
         // Module A: one phase, scope 10, runs to completion.
@@ -40,8 +39,11 @@ class AggregateModuleListenerTest {
         b.progress("test", 5, new GoalView("build", 5, 10, 1, 0, false));
 
         // Aggregate now: numerator = 10 (A) + 5 (B), denominator = 10 + 10 = 20 → 75%.
-        String all = String.join("\n",
-                view.renderGoalLines(120, 0).stream().map(AggregateModuleListenerTest::strip).toList());
+        String all = String.join(
+                "\n",
+                view.renderGoalLines(120, 0).stream()
+                        .map(AggregateModuleListenerTest::strip)
+                        .toList());
         assertThat(all).contains("75%");
         // The phase list renders only the active row: module B's running Test
         // shows (tagged by module); module A's finished Compile is not listed.
@@ -52,10 +54,10 @@ class AggregateModuleListenerTest {
     @Test
     void concurrent_modules_sum_into_the_bar_and_each_shows_a_tree_row() {
         var buf = new ByteArrayOutputStream();
-        CommandManager view = CommandManager.goal(
-                new PrintStream(buf, true, StandardCharsets.UTF_8), "Building", false);
+        CommandManager view =
+                CommandManager.goal(new PrintStream(buf, true, StandardCharsets.UTF_8), "Building", false);
         var agg = new AggregateContext(view);
-        agg.calibrate(20);   // two modules, slice 10 each
+        agg.calibrate(20); // two modules, slice 10 each
 
         // Both modules running at the same time (neither finished), each half-done.
         var a = new AggregateModuleListener(agg, "g:api", List.of(phase("compile", "Compile")), 10);
@@ -70,8 +72,11 @@ class AggregateModuleListenerTest {
 
         // Aggregate = 5 (A) + 5 (B) of 20 → 50%, and both running rows render as a
         // tree (├─ for the first active module, ╰─ to close).
-        String all = String.join("\n",
-                view.renderGoalLines(120, 0).stream().map(AggregateModuleListenerTest::strip).toList());
+        String all = String.join(
+                "\n",
+                view.renderGoalLines(120, 0).stream()
+                        .map(AggregateModuleListenerTest::strip)
+                        .toList());
         assertThat(all).contains("50%");
         assertThat(all).contains("g:api › Compile").contains("g:web › Test");
         assertThat(all).contains("├─").contains("╰─");
@@ -82,8 +87,8 @@ class AggregateModuleListenerTest {
     }
 
     private static dev.jkbuild.run.GoalResult result(boolean ok) {
-        return new dev.jkbuild.run.GoalResult("build", ok, Duration.ZERO,
-                List.of(), List.of(), List.of(), false, false);
+        return new dev.jkbuild.run.GoalResult(
+                "build", ok, Duration.ZERO, List.of(), List.of(), List.of(), false, false);
     }
 
     private static String strip(String s) {

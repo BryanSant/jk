@@ -4,57 +4,56 @@ package dev.jkbuild.cli;
 import dev.jkbuild.cli.args.ArgParser;
 import dev.jkbuild.cli.args.ParseException;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.command.AddCommand;
-import dev.jkbuild.command.AuthCommand;
 import dev.jkbuild.command.ActivateCommand;
+import dev.jkbuild.command.AddCommand;
 import dev.jkbuild.command.AuditCommand;
+import dev.jkbuild.command.AuthCommand;
 import dev.jkbuild.command.BuildCommand;
 import dev.jkbuild.command.CacheCommand;
+import dev.jkbuild.command.CleanCommand;
 import dev.jkbuild.command.CompileCommand;
+import dev.jkbuild.command.DeactivateCommand;
+import dev.jkbuild.command.DenyCommand;
+import dev.jkbuild.command.DoctorCommand;
+import dev.jkbuild.command.ExplainCommand;
 import dev.jkbuild.command.ExportCommand;
 import dev.jkbuild.command.FormatCommand;
 import dev.jkbuild.command.GradleCommand;
+import dev.jkbuild.command.HookEnvCommand;
 import dev.jkbuild.command.IdeaCommand;
 import dev.jkbuild.command.ImageCommand;
 import dev.jkbuild.command.ImportCommand;
 import dev.jkbuild.command.InitCommand;
 import dev.jkbuild.command.InstallCommand;
 import dev.jkbuild.command.JdkCommand;
+import dev.jkbuild.command.LibraryCommand;
+import dev.jkbuild.command.LockCommand;
 import dev.jkbuild.command.MvnCommand;
 import dev.jkbuild.command.NativeCommand;
 import dev.jkbuild.command.NewCommand;
 import dev.jkbuild.command.PublishCommand;
-import dev.jkbuild.command.RunCommand;
-import dev.jkbuild.command.TestCommand;
-import dev.jkbuild.command.ToolCommand;
-import dev.jkbuild.command.CleanCommand;
-import dev.jkbuild.command.LibraryCommand;
-import dev.jkbuild.command.DeactivateCommand;
-import dev.jkbuild.command.DenyCommand;
-import dev.jkbuild.command.DoctorCommand;
-import dev.jkbuild.command.VerifyBuildCommand;
-import dev.jkbuild.command.ExplainCommand;
-import dev.jkbuild.command.HookEnvCommand;
-import dev.jkbuild.command.LockCommand;
 import dev.jkbuild.command.RemoveCommand;
 import dev.jkbuild.command.RepoCommand;
+import dev.jkbuild.command.RunCommand;
 import dev.jkbuild.command.ShellCommand;
 import dev.jkbuild.command.SyncCommand;
+import dev.jkbuild.command.TestCommand;
+import dev.jkbuild.command.ToolCommand;
 import dev.jkbuild.command.TreeCommand;
 import dev.jkbuild.command.UpdateCommand;
+import dev.jkbuild.command.VerifyBuildCommand;
 import dev.jkbuild.command.WhyCommand;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
-import dev.jkbuild.worker.WorkerJarNotFoundException;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Command;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
+import dev.jkbuild.worker.WorkerJarNotFoundException;
 import java.util.ArrayList;
-import java.util.LinkedHashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -207,10 +206,25 @@ public final class CommandDispatch {
         List<Opt> opts = new ArrayList<>(cmd.options());
         opts.addAll(GlobalOptions.globalOpts());
         return new Command() {
-            @Override public String name() { return cmd.name(); }
-            @Override public String description() { return cmd.description(); }
-            @Override public List<Opt> options() { return opts; }
-            @Override public List<Param> parameters() { return cmd.parameters(); }
+            @Override
+            public String name() {
+                return cmd.name();
+            }
+
+            @Override
+            public String description() {
+                return cmd.description();
+            }
+
+            @Override
+            public List<Opt> options() {
+                return opts;
+            }
+
+            @Override
+            public List<Param> parameters() {
+                return cmd.parameters();
+            }
         };
     }
 
@@ -222,10 +236,10 @@ public final class CommandDispatch {
     private static void printWorkerJarError(WorkerJarNotFoundException e, boolean ansi) {
         Theme t = Theme.active();
         String label = HelpRenderer.paint("‼ Error:", t.errorLabel(), ansi);
-        String jar   = HelpRenderer.paint(e.artifactId() + ".jar", t.warning(), ansi);
-        String sha   = HelpRenderer.paint(e.sha(), t.cyan(), ansi);
-        String path  = HelpRenderer.paint(e.path().toString(), t.path(), ansi);
-        String jk    = ansi ? Ansi.sgr(t.helpHint()) + "jk" + Ansi.RESET : "jk";
+        String jar = HelpRenderer.paint(e.artifactId() + ".jar", t.warning(), ansi);
+        String sha = HelpRenderer.paint(e.sha(), t.cyan(), ansi);
+        String path = HelpRenderer.paint(e.path().toString(), t.path(), ansi);
+        String jk = ansi ? Ansi.sgr(t.helpHint()) + "jk" + Ansi.RESET : "jk";
         System.err.println(label + " " + jar + " is not in the CAS.");
         System.err.println("  Expected sha256: " + sha);
         System.err.println("  Expected path:   " + path);
@@ -234,13 +248,16 @@ public final class CommandDispatch {
 
     private static void printError(String qualified, CliCommand cmd, ParseException e, boolean ansi) {
         String label = HelpRenderer.paint("error:", Theme.active().errorLabel(), ansi);
-        String message = switch (e.kind()) {
-            case UNKNOWN_OPTION -> "unrecognized option '"
-                    + HelpRenderer.paint(e.token(), Theme.active().highlight(), ansi) + "'";
-            case MISSING_REQUIRED -> "missing required argument "
-                    + HelpRenderer.paint(e.token(), Theme.active().highlight(), ansi);
-            default -> e.getMessage();
-        };
+        String message =
+                switch (e.kind()) {
+                    case UNKNOWN_OPTION ->
+                        "unrecognized option '"
+                                + HelpRenderer.paint(e.token(), Theme.active().highlight(), ansi) + "'";
+                    case MISSING_REQUIRED ->
+                        "missing required argument "
+                                + HelpRenderer.paint(e.token(), Theme.active().highlight(), ansi);
+                    default -> e.getMessage();
+                };
         System.err.println(label + " " + message);
         System.err.println();
         System.err.println(usageLine(cmd, qualified, ansi));
@@ -297,7 +314,7 @@ public final class CommandDispatch {
         while (i < args.size()) {
             String a = args.get(i);
             if (a.equals("--")) return i + 1 < args.size() ? i + 1 : -1;
-            if (!a.startsWith("-") || a.equals("-")) return i;   // first positional = verb
+            if (!a.startsWith("-") || a.equals("-")) return i; // first positional = verb
             String name = a.contains("=") ? a.substring(0, a.indexOf('=')) : a;
             i += (valueGlobals.contains(name) && !a.contains("=")) ? 2 : 1;
         }

@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import dev.jkbuild.compile.CompileRequest;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.compile.CompileRequest;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ActionKeyTest {
 
@@ -86,7 +85,7 @@ class ActionKeyTest {
         String qb = ActionKey.qualifiedTaskId("compile-main", b);
 
         assertThat(qa).startsWith("compile-main@");
-        assertThat(qa).isNotEqualTo(qb);                 // different modules → no pointer collision
+        assertThat(qa).isNotEqualTo(qb); // different modules → no pointer collision
         assertThat(qa).isEqualTo(ActionKey.qualifiedTaskId("compile-main", a)); // stable
         // compile-main vs compile-test in the same module stay distinct too.
         assertThat(qa).isNotEqualTo(ActionKey.qualifiedTaskId("compile-test", a));

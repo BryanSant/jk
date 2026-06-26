@@ -10,7 +10,6 @@ import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,7 +40,9 @@ public final class CompositeLocator {
      * @param missing         coords whose jar isn't built yet (clear, like WorkspaceClasspath)
      */
     public record Located(List<Path> jars, List<Path> externalDepJars, List<String> missing) {
-        public boolean isEmpty() { return jars.isEmpty() && externalDepJars.isEmpty(); }
+        public boolean isEmpty() {
+            return jars.isEmpty() && externalDepJars.isEmpty();
+        }
     }
 
     private CompositeLocator() {}
@@ -68,7 +69,8 @@ public final class CompositeLocator {
         BuildGraph.Result graph = BuildGraph.resolve(consumerDir, consumer, gitRoot);
         if (graph.hasErrors()) return List.of();
         // coord (group:artifact) → (source project coord → its locked version)
-        java.util.LinkedHashMap<String, java.util.LinkedHashMap<String, String>> byCoord = new java.util.LinkedHashMap<>();
+        java.util.LinkedHashMap<String, java.util.LinkedHashMap<String, String>> byCoord =
+                new java.util.LinkedHashMap<>();
         for (BuildGraph.BuildUnit u : graph.topoOrder()) {
             Path lock = u.dir().resolve("jk.lock");
             if (!Files.isRegularFile(lock)) continue;
@@ -87,8 +89,13 @@ public final class CompositeLocator {
         return out;
     }
 
-    public static Located locate(Path consumerDir, JkBuild consumer, Set<Scope> depScopes,
-                                 Set<Scope> externalCpScopes, Cas cas, Path gitRoot)
+    public static Located locate(
+            Path consumerDir,
+            JkBuild consumer,
+            Set<Scope> depScopes,
+            Set<Scope> externalCpScopes,
+            Cas cas,
+            Path gitRoot)
             throws IOException, InterruptedException {
         LinkedHashSet<Path> jars = new LinkedHashSet<>();
         LinkedHashSet<Path> externalDepJars = new LinkedHashSet<>();
@@ -98,16 +105,22 @@ public final class CompositeLocator {
 
         // Seed from the consumer's composite deps declared in the requested scopes.
         for (Dependency dep : compositeDepsIn(consumer, depScopes)) {
-            walk(consumerDir, dep, externalCpScopes, gitRoot, resolver,
-                    visited, jars, externalDepJars, missing);
+            walk(consumerDir, dep, externalCpScopes, gitRoot, resolver, visited, jars, externalDepJars, missing);
         }
         return new Located(new ArrayList<>(jars), new ArrayList<>(externalDepJars), missing);
     }
 
-    private static void walk(Path fromDir, Dependency dep, Set<Scope> externalCpScopes, Path gitRoot,
-                             ClasspathResolver resolver, LinkedHashSet<Path> visited,
-                             LinkedHashSet<Path> jars, LinkedHashSet<Path> externalDepJars,
-                             List<String> missing) throws IOException, InterruptedException {
+    private static void walk(
+            Path fromDir,
+            Dependency dep,
+            Set<Scope> externalCpScopes,
+            Path gitRoot,
+            ClasspathResolver resolver,
+            LinkedHashSet<Path> visited,
+            LinkedHashSet<Path> jars,
+            LinkedHashSet<Path> externalDepJars,
+            List<String> missing)
+            throws IOException, InterruptedException {
         Path targetDir = BuildGraph.targetDir(fromDir, dep, gitRoot);
         Path key = canonical(targetDir);
         if (!visited.add(key)) return;
@@ -140,8 +153,7 @@ public final class CompositeLocator {
 
         // Only MAIN composite deps propagate transitively (cf. WorkspaceClasspath).
         for (Dependency child : compositeDepsIn(target, Set.of(Scope.MAIN))) {
-            walk(targetDir, child, externalCpScopes, gitRoot, resolver,
-                    visited, jars, externalDepJars, missing);
+            walk(targetDir, child, externalCpScopes, gitRoot, resolver, visited, jars, externalDepJars, missing);
         }
     }
 

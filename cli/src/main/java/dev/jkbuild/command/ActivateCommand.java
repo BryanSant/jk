@@ -9,8 +9,6 @@ import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Param;
-import org.jline.terminal.Terminal;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -18,19 +16,29 @@ import java.nio.file.Path;
 import java.nio.file.StandardOpenOption;
 import java.util.List;
 import java.util.Optional;
+import org.jline.terminal.Terminal;
 
 /**
  * {@code jk activate [<shell>]} — wire jk into the user's shell.
  */
 public final class ActivateCommand implements CliCommand {
 
-    @Override public String name() { return "activate"; }
-    @Override public String description() { return "Print shell integration (bash, zsh, fish, pwsh)"; }
+    @Override
+    public String name() {
+        return "activate";
+    }
 
-    @Override public List<Param> parameters() {
-        return List.of(Param.of("shell", Arity.ZERO_OR_ONE,
-                "Target shell: bash, zsh, fish, pwsh.\n"
-                        + "Omit to launch the interactive installer."));
+    @Override
+    public String description() {
+        return "Print shell integration (bash, zsh, fish, pwsh)";
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of(
+                "shell",
+                Arity.ZERO_OR_ONE,
+                "Target shell: bash, zsh, fish, pwsh.\n" + "Omit to launch the interactive installer."));
     }
 
     @Override
@@ -55,11 +63,13 @@ public final class ActivateCommand implements CliCommand {
     private int runInstaller() throws IOException {
         var shell = Shell.detect();
         if (shell.isEmpty()) {
-            System.err.println("jk activate: couldn't detect your shell from $SHELL (value: `" + System.getenv("SHELL") + "`). Pass an explicit shell, e.g. `jk activate zsh`.");
+            System.err.println("jk activate: couldn't detect your shell from $SHELL (value: `" + System.getenv("SHELL")
+                    + "`). Pass an explicit shell, e.g. `jk activate zsh`.");
             return 64;
         }
         if (!isInteractiveTerminal()) {
-            System.err.println("jk activate: stdin is not a TTY — pass a shell (e.g. `jk activate " + shell.get().name() + "`) to print the integration script instead.");
+            System.err.println("jk activate: stdin is not a TTY — pass a shell (e.g. `jk activate "
+                    + shell.get().name() + "`) to print the integration script instead.");
             return 64;
         }
         return runWizard(shell.get());
@@ -74,8 +84,9 @@ public final class ActivateCommand implements CliCommand {
         if (Files.exists(rcFile)) {
             String existing = Files.readString(rcFile, StandardCharsets.UTF_8);
             if (existing.contains(activationLine)) {
-                System.out.println(Theme.colorize("✓", Theme.active().completedStep())
-                        + " jk activation is already wired up in " + Theme.colorize(rcDisplay, Theme.active().focused()));
+                System.out.println(
+                        Theme.colorize("✓", Theme.active().completedStep()) + " jk activation is already wired up in "
+                                + Theme.colorize(rcDisplay, Theme.active().focused()));
                 return 0;
             }
         }
@@ -83,30 +94,43 @@ public final class ActivateCommand implements CliCommand {
         Wizard wizard = Wizard.builder()
                 .title("Jk - Activate Shell Integration")
                 .step(WizardStep.RadioStep.horizontal("modify", "Allow Jk to modify your " + rcDisplay + " file?")
-                        .choice("yes", "Yes").choice("no", "No").defaultChoice("yes").build())
+                        .choice("yes", "Yes")
+                        .choice("no", "No")
+                        .defaultChoice("yes")
+                        .build())
                 .build();
 
         Terminal terminal;
-        try { terminal = Wizard.openTerminal(); }
-        catch (IOException e) { throw new IOException("failed to open terminal: " + e.getMessage(), e); }
+        try {
+            terminal = Wizard.openTerminal();
+        } catch (IOException e) {
+            throw new IOException("failed to open terminal: " + e.getMessage(), e);
+        }
         Optional<Answers> result;
-        try (terminal) { result = wizard.run(terminal); }
+        try (terminal) {
+            result = wizard.run(terminal);
+        }
         if (result.isEmpty() || "no".equals(result.get().get("modify"))) {
-            System.out.println("Skipped — paste this into your " + rcDisplay + " when you're ready:\n  " + activationLine);
+            System.out.println(
+                    "Skipped — paste this into your " + rcDisplay + " when you're ready:\n  " + activationLine);
             return 0;
         }
         appendActivationLine(rcFile, activationLine);
-        System.out.println(Theme.colorize("✓", Theme.active().completedStep())
-                + " appended jk activation to " + Theme.colorize(rcDisplay, Theme.active().focused()));
+        System.out.println(Theme.colorize("✓", Theme.active().completedStep()) + " appended jk activation to "
+                + Theme.colorize(rcDisplay, Theme.active().focused()));
         System.out.println("Open a new shell (or " + sourceHint(shell, rcDisplay) + ") to pick up the change.");
         return 0;
     }
 
     private static void appendActivationLine(Path rcFile, String line) throws IOException {
         if (rcFile.getParent() != null) Files.createDirectories(rcFile.getParent());
-        String block = "\n# Added by `jk activate` — keep this at the end of the file so jk's\n# JAVA_HOME / PATH overrides land after any other tool's edits.\n" + line + "\n";
+        String block =
+                "\n# Added by `jk activate` — keep this at the end of the file so jk's\n# JAVA_HOME / PATH overrides land after any other tool's edits.\n"
+                        + line + "\n";
         if (Files.exists(rcFile)) Files.writeString(rcFile, block, StandardCharsets.UTF_8, StandardOpenOption.APPEND);
-        else Files.writeString(rcFile, block, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+        else
+            Files.writeString(
+                    rcFile, block, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.WRITE);
     }
 
     private static String sourceHint(Shell shell, String rcDisplay) {
@@ -117,7 +141,9 @@ public final class ActivateCommand implements CliCommand {
         };
     }
 
-    private static Path home() { return Path.of(System.getProperty("user.home")); }
+    private static Path home() {
+        return Path.of(System.getProperty("user.home"));
+    }
 
     private static boolean isInteractiveTerminal() {
         return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
@@ -132,9 +158,11 @@ public final class ActivateCommand implements CliCommand {
             var cmd = info.command();
             if (cmd.isPresent()) {
                 var path = Path.of(cmd.get());
-                if (path.getFileName() != null && path.getFileName().toString().contains("jk")) return path.toAbsolutePath().toString();
+                if (path.getFileName() != null && path.getFileName().toString().contains("jk"))
+                    return path.toAbsolutePath().toString();
             }
-        } catch (RuntimeException ignored) {}
+        } catch (RuntimeException ignored) {
+        }
         return argv0 != null && argv0.startsWith("/") ? argv0 : "jk";
     }
 }

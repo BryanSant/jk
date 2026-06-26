@@ -41,7 +41,9 @@ public record JkConfig(
         Optional<Path> directory) {
 
     public enum ColorChoice {
-        AUTO, ALWAYS, NEVER;
+        AUTO,
+        ALWAYS,
+        NEVER;
 
         public static Optional<ColorChoice> parse(String s) {
             if (s == null || s.isBlank()) return Optional.empty();
@@ -67,8 +69,14 @@ public record JkConfig(
 
     /** Empty config — every setting unset. Used as the seed before layers merge. */
     public static JkConfig empty() {
-        return new JkConfig(Optional.empty(), Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty(),
+        return new JkConfig(
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
                 Optional.empty());
     }
 
@@ -90,13 +98,31 @@ public record JkConfig(
     }
 
     /** Convenience: color with a fallback when empty. */
-    public ColorChoice colorOr(ColorChoice fallback) { return color.orElse(fallback); }
-    public boolean offlineOr(boolean fallback) { return offline.orElse(fallback); }
+    public ColorChoice colorOr(ColorChoice fallback) {
+        return color.orElse(fallback);
+    }
+
+    public boolean offlineOr(boolean fallback) {
+        return offline.orElse(fallback);
+    }
     /** Re-run build outputs (compile/test/package), honoring cached deps. */
-    public boolean rerunOr(boolean fallback) { return rerun.orElse(fallback); }
+    public boolean rerunOr(boolean fallback) {
+        return rerun.orElse(fallback);
+    }
     /** Re-validate dependencies against their remotes (re-download if changed). */
-    public boolean refreshOr(boolean fallback) { return refresh.orElse(fallback); }
-    public boolean noProgressOr(boolean fallback) { return noProgress.orElse(fallback); }
-    public boolean quietOr(boolean fallback) { return quiet.orElse(fallback); }
-    public boolean verboseOr(boolean fallback) { return verbose.orElse(fallback); }
+    public boolean refreshOr(boolean fallback) {
+        return refresh.orElse(fallback);
+    }
+
+    public boolean noProgressOr(boolean fallback) {
+        return noProgress.orElse(fallback);
+    }
+
+    public boolean quietOr(boolean fallback) {
+        return quiet.orElse(fallback);
+    }
+
+    public boolean verboseOr(boolean fallback) {
+        return verbose.orElse(fallback);
+    }
 }

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
-import dev.jkbuild.model.GitVersion;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.model.GitVersion;
 import java.time.Instant;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * The load-bearing test for git-source version derivation: the derived
@@ -30,15 +29,15 @@ class GitVersionOrderingTest {
 
     @Test
     void pseudo_sits_between_the_base_tag_and_the_next_release() {
-        String pseudo = GitVersion.pseudo(Optional.of("v1.2.3"), LATER, SHA);   // 1.2.3-<ts>-<sha>
+        String pseudo = GitVersion.pseudo(Optional.of("v1.2.3"), LATER, SHA); // 1.2.3-<ts>-<sha>
         assertOrder("1.2.3", pseudo);
         assertOrder(pseudo, "1.2.4");
     }
 
     @Test
     void pseudo_sorts_below_the_next_releases_pre_releases() {
-        String pseudo = GitVersion.pseudo(Optional.of("v1.2.3"), LATER, SHA);   // core 1.2.3
-        assertOrder(pseudo, "1.2.4-rc1");   // lower core → below any 1.2.4 pre-release
+        String pseudo = GitVersion.pseudo(Optional.of("v1.2.3"), LATER, SHA); // core 1.2.3
+        assertOrder(pseudo, "1.2.4-rc1"); // lower core → below any 1.2.4 pre-release
     }
 
     @Test
@@ -57,7 +56,7 @@ class GitVersionOrderingTest {
 
     @Test
     void no_tag_pseudo_sorts_below_first_release() {
-        String pseudo = GitVersion.pseudo(Optional.empty(), LATER, SHA);   // 0.0.0-<ts>-<sha>
+        String pseudo = GitVersion.pseudo(Optional.empty(), LATER, SHA); // 0.0.0-<ts>-<sha>
         assertOrder(pseudo, "0.0.1");
         assertOrder(pseudo, "0.1.0");
     }

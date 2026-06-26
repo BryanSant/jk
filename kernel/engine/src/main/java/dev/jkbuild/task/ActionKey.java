@@ -4,7 +4,6 @@ package dev.jkbuild.task;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.KotlincRequest;
 import dev.jkbuild.util.Hashing;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -32,8 +31,7 @@ public final class ActionKey {
 
     private ActionKey() {}
 
-    public static String forJavac(String taskId, CompileRequest request, String jkVersion)
-            throws IOException {
+    public static String forJavac(String taskId, CompileRequest request, String jkVersion) throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append("task:").append(taskId).append('\n');
         sb.append("jk:").append(jkVersion).append('\n');
@@ -48,8 +46,10 @@ public final class ActionKey {
         List<Path> sortedSources = new ArrayList<>(request.sources());
         sortedSources.sort(Comparator.comparing(Path::toString));
         for (Path src : sortedSources) {
-            sb.append("source:").append(src.toAbsolutePath().normalize())
-                    .append(':').append(Hashing.sha256Hex(Files.readAllBytes(src)))
+            sb.append("source:")
+                    .append(src.toAbsolutePath().normalize())
+                    .append(':')
+                    .append(Hashing.sha256Hex(Files.readAllBytes(src)))
                     .append('\n');
         }
 
@@ -78,8 +78,7 @@ public final class ActionKey {
      * Build Tools API closure — whose CAS paths encode the compiler version, so
      * a compiler bump invalidates the key).
      */
-    public static String forKotlinc(String taskId, KotlincRequest request, String jkVersion)
-            throws IOException {
+    public static String forKotlinc(String taskId, KotlincRequest request, String jkVersion) throws IOException {
         StringBuilder sb = new StringBuilder();
         sb.append("task:").append(taskId).append('\n');
         sb.append("jk:").append(jkVersion).append('\n');
@@ -92,8 +91,10 @@ public final class ActionKey {
         List<Path> sortedSources = new ArrayList<>(request.sources());
         sortedSources.sort(Comparator.comparing(Path::toString));
         for (Path src : sortedSources) {
-            sb.append("source:").append(src.toAbsolutePath().normalize())
-                    .append(':').append(Hashing.sha256Hex(Files.readAllBytes(src)))
+            sb.append("source:")
+                    .append(src.toAbsolutePath().normalize())
+                    .append(':')
+                    .append(Hashing.sha256Hex(Files.readAllBytes(src)))
                     .append('\n');
         }
 
@@ -128,8 +129,7 @@ public final class ActionKey {
     public static Map<String, String> snapshotInputs(CompileRequest request) throws IOException {
         Map<String, String> result = new LinkedHashMap<>();
         for (Path src : request.sources()) {
-            result.put(src.toAbsolutePath().normalize().toString(),
-                    Hashing.sha256Hex(Files.readAllBytes(src)));
+            result.put(src.toAbsolutePath().normalize().toString(), Hashing.sha256Hex(Files.readAllBytes(src)));
         }
         for (Path cp : request.classpath()) {
             // For classpath jars we record the path; the CAS layout encodes content.

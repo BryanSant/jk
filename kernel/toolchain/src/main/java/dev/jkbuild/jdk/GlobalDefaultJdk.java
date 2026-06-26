@@ -3,7 +3,6 @@ package dev.jkbuild.jdk;
 
 import dev.jkbuild.config.TomlValues;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystemException;
@@ -58,8 +57,7 @@ public final class GlobalDefaultJdk {
     private final Path defaultGraalSymlink;
     private final Path configFile;
 
-    public GlobalDefaultJdk(Path defaultSymlink, Path currentSymlink,
-                            Path defaultGraalSymlink, Path configFile) {
+    public GlobalDefaultJdk(Path defaultSymlink, Path currentSymlink, Path defaultGraalSymlink, Path configFile) {
         this.defaultSymlink = defaultSymlink;
         this.currentSymlink = currentSymlink;
         this.defaultGraalSymlink = defaultGraalSymlink;
@@ -68,8 +66,7 @@ public final class GlobalDefaultJdk {
 
     /** Back-compat: derive the default-graal symlink as a sibling of the default. */
     public GlobalDefaultJdk(Path defaultSymlink, Path currentSymlink, Path configFile) {
-        this(defaultSymlink, currentSymlink,
-                defaultSymlink.resolveSibling("default-graal-jdk"), configFile);
+        this(defaultSymlink, currentSymlink, defaultSymlink.resolveSibling("default-graal-jdk"), configFile);
     }
 
     public static GlobalDefaultJdk current() {
@@ -227,8 +224,7 @@ public final class GlobalDefaultJdk {
      * {@link TomlValues} coercion.
      */
     private Optional<String> readKey(String key) {
-        return TomlValues.parse(configFile)
-                .flatMap(toml -> TomlValues.optString(toml, key));
+        return TomlValues.parse(configFile).flatMap(toml -> TomlValues.optString(toml, key));
     }
 
     private void writeSymlink(Path symlink, Path target) throws IOException {

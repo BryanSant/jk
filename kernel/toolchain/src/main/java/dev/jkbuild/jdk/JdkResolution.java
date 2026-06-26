@@ -37,21 +37,36 @@ import java.util.function.Function;
 public final class JdkResolution {
 
     public enum Tier {
-        SWITCH, JK_ENV, JDK_VERSION_FILE, LOCKFILE, PROJECT_TOML, JAVA_RELEASE_FLOOR,
-        CURRENT, DEFAULT, JAVA_HOME, GRAALVM_HOME, PATH, NONE
+        SWITCH,
+        JK_ENV,
+        JDK_VERSION_FILE,
+        LOCKFILE,
+        PROJECT_TOML,
+        JAVA_RELEASE_FLOOR,
+        CURRENT,
+        DEFAULT,
+        JAVA_HOME,
+        GRAALVM_HOME,
+        PATH,
+        NONE
     }
 
     /** Resolution inputs. Nullable fields mean "tier not applicable". */
-    public record Request(Path projectDir, String switchSpec, String envSpec,
-                          String lockJdkId, String projectJdkSpec, int projectJavaRelease,
-                          Function<String, String> env) {
+    public record Request(
+            Path projectDir,
+            String switchSpec,
+            String envSpec,
+            String lockJdkId,
+            String projectJdkSpec,
+            int projectJavaRelease,
+            Function<String, String> env) {
         public Request {
             if (env == null) env = k -> null;
         }
     }
 
-    public record Resolved(Optional<InstalledJdk> jdk, Tier tier, String specUsed,
-                           boolean wouldInstall, String installSpec) {
+    public record Resolved(
+            Optional<InstalledJdk> jdk, Tier tier, String specUsed, boolean wouldInstall, String installSpec) {
 
         static Resolved found(InstalledJdk jdk, Tier tier, String spec) {
             return new Resolved(Optional.of(jdk), tier, spec, false, null);
@@ -71,8 +86,7 @@ public final class JdkResolution {
      * and the ambient {@code JAVA_HOME}/{@code GRAALVM_HOME}/{@code PATH} are
      * valid last-resort tiers (a build must find <em>some</em> JDK).
      */
-    public static Resolved resolve(Request req, JdkRegistry registry,
-                                   GlobalDefaultJdk defaults, int latestLtsMajor) {
+    public static Resolved resolve(Request req, JdkRegistry registry, GlobalDefaultJdk defaults, int latestLtsMajor) {
         return walk(req, registry, defaults, latestLtsMajor, true, true);
     }
 
@@ -87,8 +101,13 @@ public final class JdkResolution {
         return walk(req, registry, defaults, JdkLts.OFFLINE_LATEST_LTS, false, false);
     }
 
-    private static Resolved walk(Request req, JdkRegistry reg, GlobalDefaultJdk defaults,
-                                 int latestLtsMajor, boolean canInstall, boolean envFallback) {
+    private static Resolved walk(
+            Request req,
+            JdkRegistry reg,
+            GlobalDefaultJdk defaults,
+            int latestLtsMajor,
+            boolean canInstall,
+            boolean envFallback) {
         Resolved r;
         if ((r = named(req.switchSpec(), Tier.SWITCH, reg, canInstall)) != null) return r;
         if ((r = named(req.envSpec(), Tier.JK_ENV, reg, canInstall)) != null) return r;
@@ -100,7 +119,8 @@ public final class JdkResolution {
         // requested language level is newer than the latest LTS — then we need a
         // JDK at least that new (e.g. java = 26 when the latest LTS is 25).
         if ((req.projectJdkSpec() == null || req.projectJdkSpec().isBlank())
-                && latestLtsMajor > 0 && req.projectJavaRelease() > latestLtsMajor) {
+                && latestLtsMajor > 0
+                && req.projectJavaRelease() > latestLtsMajor) {
             if ((r = named(">=" + req.projectJavaRelease(), Tier.JAVA_RELEASE_FLOOR, reg, canInstall)) != null) {
                 return r;
             }

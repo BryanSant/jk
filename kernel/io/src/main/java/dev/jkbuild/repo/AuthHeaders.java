@@ -2,7 +2,6 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.credential.RepoCredential;
-
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
@@ -20,8 +19,8 @@ public final class AuthHeaders {
     public static Map<String, String> of(RepoCredential cred) {
         return switch (cred) {
             case RepoCredential.Anonymous ignored -> Map.of();
-            case RepoCredential.Basic b -> Map.of("Authorization", "Basic " + base64(
-                    b.username() + ":" + b.password()));
+            case RepoCredential.Basic b ->
+                Map.of("Authorization", "Basic " + base64(b.username() + ":" + b.password()));
             case RepoCredential.Bearer b -> Map.of("Authorization", "Bearer " + b.token());
         };
     }

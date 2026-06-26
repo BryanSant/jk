@@ -275,6 +275,7 @@ public interface Theme {
     /** Holds the active theme; defaults to a {@link JkDarkTheme} singleton. */
     final class Holder {
         private Holder() {}
+
         private static volatile Theme active = new JkDarkTheme();
     }
 

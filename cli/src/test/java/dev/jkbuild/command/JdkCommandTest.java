@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -22,8 +18,10 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.IntSupplier;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JdkCommandTest {
 
@@ -49,39 +47,68 @@ class JdkCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void install_downloads_and_extracts(@TempDir Path tempDir) throws Exception {
         Path jdksDir = tempDir.resolve("jdks");
-        byte[] archive = buildTarGz(tempDir, "jdk-21.0.5+11", Map.of(
-                "bin/java", "#!/fake/java",
-                "release", "JAVA_VERSION=21.0.5\n"));
+        byte[] archive = buildTarGz(
+                tempDir,
+                "jdk-21.0.5+11",
+                Map.of(
+                        "bin/java", "#!/fake/java",
+                        "release", "JAVA_VERSION=21.0.5\n"));
         served.put("/archives/jdk.tar.gz", archive);
 
-        served.put("/feed/jdks.json", feedJson(archive.length, Hashing.sha256Hex(archive),
-                base.resolve("/archives/jdk.tar.gz").toString()).getBytes(StandardCharsets.UTF_8));
+        served.put(
+                "/feed/jdks.json",
+                feedJson(
+                                archive.length,
+                                Hashing.sha256Hex(archive),
+                                base.resolve("/archives/jdk.tar.gz").toString())
+                        .getBytes(StandardCharsets.UTF_8));
 
-        int exit = run("jdk", "install", "temurin-21",
-                "--jdks-dir", jdksDir.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString());
+        int exit = run(
+                "jdk",
+                "install",
+                "temurin-21",
+                "--jdks-dir",
+                jdksDir.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(jdksDir.resolve("temurin-21.0.5").resolve("bin").resolve("java")).exists();
+        assertThat(jdksDir.resolve("temurin-21.0.5").resolve("bin").resolve("java"))
+                .exists();
     }
 
     @Test
     void install_native_downloads_oracle_graalvm(@TempDir Path tempDir) throws Exception {
         Path jdksDir = tempDir.resolve("jdks");
-        byte[] archive = buildTarGz(tempDir, "graalvm-jdk-25", Map.of(
-                "bin/java", "#!/fake/java",
-                "release", "JAVA_VERSION=25\nIMPLEMENTOR=\"Oracle Corporation\"\nGRAALVM_VERSION=\"25\"\n"));
+        byte[] archive = buildTarGz(
+                tempDir,
+                "graalvm-jdk-25",
+                Map.of(
+                        "bin/java", "#!/fake/java",
+                        "release", "JAVA_VERSION=25\nIMPLEMENTOR=\"Oracle Corporation\"\nGRAALVM_VERSION=\"25\"\n"));
         served.put("/archives/graal.tar.gz", archive);
-        served.put("/feed/jdks.json", graalFeedJson(archive.length, Hashing.sha256Hex(archive),
-                base.resolve("/archives/graal.tar.gz").toString()).getBytes(StandardCharsets.UTF_8));
+        served.put(
+                "/feed/jdks.json",
+                graalFeedJson(
+                                archive.length,
+                                Hashing.sha256Hex(archive),
+                                base.resolve("/archives/graal.tar.gz").toString())
+                        .getBytes(StandardCharsets.UTF_8));
 
-        int exit = run("jdk", "install", "native",
-                "--jdks-dir", jdksDir.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString());
+        int exit = run(
+                "jdk",
+                "install",
+                "native",
+                "--jdks-dir",
+                jdksDir.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
         // jk owns the on-disk name: <vendor>-<version> via jbPrefix (here version == major).
         assertThat(jdksDir.resolve("graalvm-25").resolve("bin").resolve("java")).exists();
@@ -93,8 +120,7 @@ class JdkCommandTest {
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
         makeJdkInstall(jdks.resolve("temurin-23"));
 
-        String stdout = captureStdout(() -> run("jdk", "list",
-                "--jdks-dir", jdks.toString()));
+        String stdout = captureStdout(() -> run("jdk", "list", "--jdks-dir", jdks.toString()));
         // Default is offline / installed-only. Grouped by major desc: 23 first, then 21.0.5.
         int idx23 = stdout.indexOf("temurin-23");
         int idx21 = stdout.indexOf("temurin-21.0.5");
@@ -110,12 +136,19 @@ class JdkCommandTest {
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
 
         byte[] dummyArchive = "stub".getBytes(StandardCharsets.UTF_8);
-        served.put("/feed/jdks.json", multiEntryFeedJson(dummyArchive.length,
-                Hashing.sha256Hex(dummyArchive), base.toString()).getBytes(StandardCharsets.UTF_8));
+        served.put(
+                "/feed/jdks.json",
+                multiEntryFeedJson(dummyArchive.length, Hashing.sha256Hex(dummyArchive), base.toString())
+                        .getBytes(StandardCharsets.UTF_8));
 
-        String stdout = captureStdout(() -> run("jdk", "list", "--all",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString()));
+        String stdout = captureStdout(() -> run(
+                "jdk",
+                "list",
+                "--all",
+                "--jdks-dir",
+                jdks.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString()));
 
         // --all surfaces catalog rows alongside installed rows. Higher major
         // (catalog-only) appears first; installed row follows.
@@ -136,12 +169,18 @@ class JdkCommandTest {
         // not show available-only rows from it — the network shouldn't
         // even be hit. Serve a feed anyway to prove the command ignores it.
         byte[] dummyArchive = "stub".getBytes(StandardCharsets.UTF_8);
-        served.put("/feed/jdks.json", multiEntryFeedJson(dummyArchive.length,
-                Hashing.sha256Hex(dummyArchive), base.toString()).getBytes(StandardCharsets.UTF_8));
+        served.put(
+                "/feed/jdks.json",
+                multiEntryFeedJson(dummyArchive.length, Hashing.sha256Hex(dummyArchive), base.toString())
+                        .getBytes(StandardCharsets.UTF_8));
 
-        String stdout = captureStdout(() -> run("jdk", "list",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString()));
+        String stdout = captureStdout(() -> run(
+                "jdk",
+                "list",
+                "--jdks-dir",
+                jdks.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString()));
 
         assertThat(stdout).contains("temurin-21.0.5");
         assertThat(stdout).contains("installed");
@@ -153,13 +192,10 @@ class JdkCommandTest {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
 
-        int exit = run("jdk", "pin", "temurin-21.0.5",
-                "-C", tempDir.toString(),
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "pin", "temurin-21.0.5", "-C", tempDir.toString(), "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
         // pin normalizes any spec down to <vendor>-<major>; jk floats the patch.
-        assertThat(Files.readString(tempDir.resolve(".jdk-version")).trim())
-                .isEqualTo("temurin-21");
+        assertThat(Files.readString(tempDir.resolve(".jdk-version")).trim()).isEqualTo("temurin-21");
     }
 
     @Test
@@ -170,8 +206,7 @@ class JdkCommandTest {
 
         // The new contract requires `<source>/<spec>`; `--yes` skips the
         // interactive confirmation prompt.
-        int exit = run("jdk", "uninstall", "jk/temurin-21.0.5", "--yes",
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "uninstall", "jk/temurin-21.0.5", "--yes", "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(victim).doesNotExist();
     }
@@ -183,8 +218,7 @@ class JdkCommandTest {
         makeJdkInstall(victim);
         // No <source> prefix: jk resolves the spec across every source. The
         // confirmation prompt (skipped here via --yes) names the resolved source.
-        int exit = run("jdk", "uninstall", "temurin-21.0.5", "--yes",
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "uninstall", "temurin-21.0.5", "--yes", "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(victim).doesNotExist();
     }
@@ -193,8 +227,7 @@ class JdkCommandTest {
     void uninstall_reports_no_match_for_unknown_bare_spec(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
-        int exit = run("jdk", "uninstall", "corretto-25.0.3", "--yes",
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "uninstall", "corretto-25.0.3", "--yes", "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(1); // matched nothing
     }
 
@@ -203,8 +236,7 @@ class JdkCommandTest {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
         // Bare major is now a valid spec: jk/21 resolves to temurin-21.0.5.
-        int exit = run("jdk", "uninstall", "jk/21", "--yes",
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "uninstall", "jk/21", "--yes", "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
     }
 
@@ -212,8 +244,7 @@ class JdkCommandTest {
     void uninstall_rejects_unknown_source(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
-        int exit = run("jdk", "uninstall", "nosuch/temurin-21.0.5", "--yes",
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "uninstall", "nosuch/temurin-21.0.5", "--yes", "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(64);
     }
 
@@ -223,8 +254,7 @@ class JdkCommandTest {
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
         // `system` would route to a JDK owned by the OS package manager;
         // jk can't safely remove those.
-        int exit = run("jdk", "uninstall", "system/openjdk-21", "--yes",
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "uninstall", "system/openjdk-21", "--yes", "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(64);
     }
 
@@ -234,16 +264,20 @@ class JdkCommandTest {
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
         // `intellij` = a JDK an IDE registered in jdk.table.xml; removal must go
         // through the IDE, not jk. Refused before any registry lookup.
-        int exit = run("jdk", "uninstall", "intellij/graalvm-ce-24.0.2", "--yes",
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "uninstall", "intellij/graalvm-ce-24.0.2", "--yes", "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(64);
     }
 
     @Test
     void pin_unknown_jdk_errors(@TempDir Path tempDir) {
-        int exit = run("jdk", "pin", "nothing-installed",
-                "-C", tempDir.toString(),
-                "--jdks-dir", tempDir.resolve("jdks").toString());
+        int exit = run(
+                "jdk",
+                "pin",
+                "nothing-installed",
+                "-C",
+                tempDir.toString(),
+                "--jdks-dir",
+                tempDir.resolve("jdks").toString());
         assertThat(exit).isEqualTo(1);
     }
 
@@ -259,9 +293,7 @@ class JdkCommandTest {
         System.setOut(new PrintStream(out));
         int exit;
         try {
-            exit = run("jdk", "home",
-                    "-C", tempDir.toString(),
-                    "--jdks-dir", jdks.toString());
+            exit = run("jdk", "home", "-C", tempDir.toString(), "--jdks-dir", jdks.toString());
         } finally {
             System.setOut(origOut);
         }
@@ -275,9 +307,13 @@ class JdkCommandTest {
 
     @Test
     void home_errors_when_no_pinned_jdk(@TempDir Path tempDir) {
-        int exit = run("jdk", "home",
-                "-C", tempDir.toString(),
-                "--jdks-dir", tempDir.resolve("jdks").toString());
+        int exit = run(
+                "jdk",
+                "home",
+                "-C",
+                tempDir.toString(),
+                "--jdks-dir",
+                tempDir.resolve("jdks").toString());
         assertThat(exit).isEqualTo(2);
     }
 
@@ -287,10 +323,8 @@ class JdkCommandTest {
         Files.writeString(rc, "# user content\n");
         Path bin = tempDir.resolve(".local/bin");
 
-        int exit = run("jdk", "update-shell",
-                "--shell", "bash",
-                "--home", tempDir.toString(),
-                "--bin-dir", bin.toString());
+        int exit = run(
+                "jdk", "update-shell", "--shell", "bash", "--home", tempDir.toString(), "--bin-dir", bin.toString());
         assertThat(exit).isEqualTo(0);
 
         String body = Files.readString(rc);
@@ -301,10 +335,15 @@ class JdkCommandTest {
 
     @Test
     void update_shell_writes_zshenv_not_zshrc(@TempDir Path tempDir) throws IOException {
-        int exit = run("jdk", "update-shell",
-                "--shell", "zsh",
-                "--home", tempDir.toString(),
-                "--bin-dir", tempDir.resolve(".local/bin").toString());
+        int exit = run(
+                "jdk",
+                "update-shell",
+                "--shell",
+                "zsh",
+                "--home",
+                tempDir.toString(),
+                "--bin-dir",
+                tempDir.resolve(".local/bin").toString());
         assertThat(exit).isEqualTo(0);
         assertThat(tempDir.resolve(".zshenv")).exists();
         assertThat(tempDir.resolve(".zshrc")).doesNotExist();
@@ -313,41 +352,31 @@ class JdkCommandTest {
     @Test
     void update_shell_uses_fish_add_path_for_fish(@TempDir Path tempDir) throws IOException {
         Path bin = tempDir.resolve(".local/bin");
-        int exit = run("jdk", "update-shell",
-                "--shell", "fish",
-                "--home", tempDir.toString(),
-                "--bin-dir", bin.toString());
+        int exit = run(
+                "jdk", "update-shell", "--shell", "fish", "--home", tempDir.toString(), "--bin-dir", bin.toString());
         assertThat(exit).isEqualTo(0);
         Path fishConf = tempDir.resolve(".config/fish/conf.d/jk.fish");
         assertThat(fishConf).exists();
-        assertThat(Files.readString(fishConf))
-                .contains("fish_add_path \"" + bin + "\"");
+        assertThat(Files.readString(fishConf)).contains("fish_add_path \"" + bin + "\"");
     }
 
     @Test
     void update_shell_is_idempotent(@TempDir Path tempDir) throws IOException {
         Path bin = tempDir.resolve(".local/bin");
-        int first = run("jdk", "update-shell",
-                "--shell", "bash",
-                "--home", tempDir.toString(),
-                "--bin-dir", bin.toString());
+        int first = run(
+                "jdk", "update-shell", "--shell", "bash", "--home", tempDir.toString(), "--bin-dir", bin.toString());
         assertThat(first).isEqualTo(0);
         String afterFirst = Files.readString(tempDir.resolve(".bashrc"));
 
-        int second = run("jdk", "update-shell",
-                "--shell", "bash",
-                "--home", tempDir.toString(),
-                "--bin-dir", bin.toString());
+        int second = run(
+                "jdk", "update-shell", "--shell", "bash", "--home", tempDir.toString(), "--bin-dir", bin.toString());
         assertThat(second).isEqualTo(0);
-        assertThat(Files.readString(tempDir.resolve(".bashrc")))
-                .isEqualTo(afterFirst);  // unchanged
+        assertThat(Files.readString(tempDir.resolve(".bashrc"))).isEqualTo(afterFirst); // unchanged
     }
 
     @Test
     void update_shell_unknown_shell_returns_usage_error(@TempDir Path tempDir) {
-        int exit = run("jdk", "update-shell",
-                "--shell", "tcsh",
-                "--home", tempDir.toString());
+        int exit = run("jdk", "update-shell", "--shell", "tcsh", "--home", tempDir.toString());
         assertThat(exit).isEqualTo(64);
     }
 
@@ -356,8 +385,7 @@ class JdkCommandTest {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
 
-        String stdout = captureStdout(() -> run("jdks", "list",
-                "--jdks-dir", jdks.toString()));
+        String stdout = captureStdout(() -> run("jdks", "list", "--jdks-dir", jdks.toString()));
         assertThat(stdout).contains("temurin-21.0.5");
     }
 
@@ -377,8 +405,7 @@ class JdkCommandTest {
         Path victim = jdks.resolve("temurin-21.0.5");
         makeJdkInstall(victim);
 
-        int exit = run("jdk", "remove", "jk/temurin-21.0.5", "--yes",
-                "--jdks-dir", jdks.toString());
+        int exit = run("jdk", "remove", "jk/temurin-21.0.5", "--yes", "--jdks-dir", jdks.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(victim).doesNotExist();
     }
@@ -393,12 +420,15 @@ class JdkCommandTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream origOut = System.out;
         System.setOut(new PrintStream(out));
-        try { body.getAsInt(); } finally { System.setOut(origOut); }
+        try {
+            body.getAsInt();
+        } finally {
+            System.setOut(origOut);
+        }
         return out.toString(StandardCharsets.UTF_8);
     }
 
-    private static byte[] buildTarGz(Path tempDir, String topLevelDir,
-                                      Map<String, String> entries) throws Exception {
+    private static byte[] buildTarGz(Path tempDir, String topLevelDir, Map<String, String> entries) throws Exception {
         Path workdir = tempDir.resolve("fixture-" + System.nanoTime());
         Path root = workdir.resolve(topLevelDir);
         Files.createDirectories(root);
@@ -408,17 +438,16 @@ class JdkCommandTest {
             Files.writeString(target, entry.getValue());
         }
         Path archivePath = workdir.resolve("archive.tar.gz");
-        ProcessBuilder pb = new ProcessBuilder("tar", "czf", archivePath.toString(),
-                "-C", workdir.toString(), topLevelDir);
+        ProcessBuilder pb =
+                new ProcessBuilder("tar", "czf", archivePath.toString(), "-C", workdir.toString(), topLevelDir);
         pb.redirectErrorStream(true);
         Process p = pb.start();
         if (p.waitFor() != 0) {
-            throw new RuntimeException("tar fixture build failed: "
-                    + new String(p.getInputStream().readAllBytes()));
+            throw new RuntimeException(
+                    "tar fixture build failed: " + new String(p.getInputStream().readAllBytes()));
         }
         return Files.readAllBytes(archivePath);
     }
-
 
     private static void makeJdkInstall(Path home) throws IOException {
         Files.createDirectories(home.resolve("bin"));
@@ -428,8 +457,8 @@ class JdkCommandTest {
         var m = java.util.regex.Pattern.compile("(\\d+(?:\\.\\d+){0,2})")
                 .matcher(home.getFileName().toString());
         String version = m.find() ? m.group(1) : "21";
-        Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+        Files.writeString(
+                home.resolve("release"), "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
     }
 
     private static String feedJson(long size, String sha256, String url) {
@@ -461,8 +490,7 @@ class JdkCommandTest {
                     }
                   ]
                 }
-                """
-                .replace("OS", HostPlatform.currentOs())
+                """.replace("OS", HostPlatform.currentOs())
                 .replace("ARCH", HostPlatform.currentArch())
                 .replace("URL", url)
                 .replace("SIZE", Long.toString(size))
@@ -499,8 +527,7 @@ class JdkCommandTest {
                     }
                   ]
                 }
-                """
-                .replace("OS", HostPlatform.currentOs())
+                """.replace("OS", HostPlatform.currentOs())
                 .replace("ARCH", HostPlatform.currentArch())
                 .replace("URL", url)
                 .replace("SIZE", Long.toString(size))
@@ -510,15 +537,24 @@ class JdkCommandTest {
     /** Feed JSON with a Temurin 25 entry alongside the 21 entry — used by `list`. */
     private static String multiEntryFeedJson(long size, String sha256, String baseUrl) {
         return feedJson(size, sha256, baseUrl + "/dummy.tar.gz")
-                .replaceFirst("\"jdks\": \\[\\s*", "\"jdks\": [\n"
-                        + entryJson("Eclipse", "Temurin", "temurin-25", 25, "25.0.1",
-                                false, size, sha256, baseUrl)
-                        + ",\n");
+                .replaceFirst(
+                        "\"jdks\": \\[\\s*",
+                        "\"jdks\": [\n"
+                                + entryJson(
+                                        "Eclipse", "Temurin", "temurin-25", 25, "25.0.1", false, size, sha256, baseUrl)
+                                + ",\n");
     }
 
-    private static String entryJson(String vendor, String product,
-                                    String suggestedSdkName, int major, String version,
-                                    boolean preview, long size, String sha256, String baseUrl) {
+    private static String entryJson(
+            String vendor,
+            String product,
+            String suggestedSdkName,
+            int major,
+            String version,
+            boolean preview,
+            long size,
+            String sha256,
+            String baseUrl) {
         return """
                 {
                   "vendor": "VENDOR",
@@ -544,8 +580,7 @@ class JdkCommandTest {
                     }
                   ]
                 }
-                """
-                .replace("VENDOR", vendor)
+                """.replace("VENDOR", vendor)
                 .replace("PRODUCT", product)
                 .replace("SDK_NAME", suggestedSdkName)
                 .replace("VERSION_SUFFIX", version)

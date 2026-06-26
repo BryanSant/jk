@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -19,8 +16,10 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CacheSyncTest {
 
@@ -73,8 +72,8 @@ class CacheSyncTest {
         cas.put(jar);
         registerJar("com.foo", "leaf", "1.0", jar);
 
-        CacheSync.Report report = new CacheSync(cas, new Http())
-                .sync(lockOf(pkg("com.foo:leaf", "1.0", "sha256:" + hex)));
+        CacheSync.Report report =
+                new CacheSync(cas, new Http()).sync(lockOf(pkg("com.foo:leaf", "1.0", "sha256:" + hex)));
 
         assertThat(report.upToDate()).isEqualTo(1);
         assertThat(report.fetched()).isZero();
@@ -90,10 +89,7 @@ class CacheSyncTest {
         CacheSync.Report report = newSync(tempDir).sync(lock);
 
         assertThat(report.fetched()).isZero();
-        assertThat(report.errors())
-                .singleElement()
-                .asString()
-                .contains("checksum mismatch");
+        assertThat(report.errors()).singleElement().asString().contains("checksum mismatch");
     }
 
     @Test
@@ -111,14 +107,13 @@ class CacheSyncTest {
     }
 
     private void registerJar(String group, String artifact, String version, byte[] bytes) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".jar";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".jar";
         served.put(path, bytes);
     }
 
     private Lockfile lockOf(Lockfile.Artifact... packages) {
-        return new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
-                Lockfile.RESOLUTION_ALGORITHM, List.of(packages));
+        return new Lockfile(Lockfile.CURRENT_VERSION, "jk test", Lockfile.RESOLUTION_ALGORITHM, List.of(packages));
     }
 
     private Lockfile.Artifact pkg(String module, String version, String checksum) {

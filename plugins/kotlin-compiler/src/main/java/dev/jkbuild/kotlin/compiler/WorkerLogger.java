@@ -17,31 +17,38 @@ final class WorkerLogger implements KotlinLogger {
         this.proto = proto;
     }
 
-    @Override public boolean isDebugEnabled() {
+    @Override
+    public boolean isDebugEnabled() {
         return false;
     }
 
-    @Override public void error(String msg, Throwable throwable) {
+    @Override
+    public void error(String msg, Throwable throwable) {
         proto.diagnostic("ERROR", withThrowable(msg, throwable));
     }
 
-    @Override public void warn(String msg, Throwable throwable) {
+    @Override
+    public void warn(String msg, Throwable throwable) {
         proto.diagnostic("WARNING", withThrowable(msg, throwable));
     }
 
-    @Override public void warn(String msg) {
+    @Override
+    public void warn(String msg) {
         proto.diagnostic("WARNING", msg);
     }
 
-    @Override public void info(String msg) {
+    @Override
+    public void info(String msg) {
         proto.diagnostic("INFO", msg);
     }
 
-    @Override public void debug(String msg) {
+    @Override
+    public void debug(String msg) {
         // dropped — see isDebugEnabled()
     }
 
-    @Override public void lifecycle(String msg) {
+    @Override
+    public void lifecycle(String msg) {
         proto.diagnostic("INFO", msg);
     }
 

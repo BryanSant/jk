@@ -1,18 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.transform.OutputKeys;
-import javax.xml.transform.Transformer;
-import javax.xml.transform.TransformerFactory;
-import javax.xml.transform.dom.DOMSource;
-import javax.xml.transform.stream.StreamResult;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -24,6 +12,17 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.stream.Stream;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.transform.OutputKeys;
+import javax.xml.transform.Transformer;
+import javax.xml.transform.TransformerFactory;
+import javax.xml.transform.dom.DOMSource;
+import javax.xml.transform.stream.StreamResult;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
 
 /**
  * Writes {@code <jdk>} entries into the JetBrains IDEs' global SDK tables
@@ -74,9 +73,7 @@ public final class IntellijSdkRegistrar {
     /** Registrar backed by the host's real IDE config directories. */
     public static IntellijSdkRegistrar shared() {
         return new IntellijSdkRegistrar(IntellijJdkTable.defaultVendorRoots(
-                System::getenv,
-                System.getProperty("os.name", ""),
-                System.getProperty("user.home", "")));
+                System::getenv, System.getProperty("os.name", ""), System.getProperty("user.home", "")));
     }
 
     /**

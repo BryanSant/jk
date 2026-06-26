@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.model;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class GitVersionTest {
 
@@ -22,7 +21,7 @@ class GitVersionTest {
         assertThat(GitVersion.fromTag("widgets-1.2.3")).isEqualTo("1.2.3");
         assertThat(GitVersion.fromTag("1.2.3-rc1")).isEqualTo("1.2.3-rc1");
         assertThat(GitVersion.fromTag("v1.2.3+build.5")).isEqualTo("1.2.3+build.5");
-        assertThat(GitVersion.fromTag("v01.02.03")).isEqualTo("1.2.3");   // leading zeros normalized
+        assertThat(GitVersion.fromTag("v01.02.03")).isEqualTo("1.2.3"); // leading zeros normalized
         assertThat(GitVersion.fromTag("r6.1.0")).isEqualTo("6.1.0");
         assertThat(GitVersion.fromTag("r6.1.11")).isEqualTo("6.1.11");
     }
@@ -43,8 +42,7 @@ class GitVersionTest {
 
     @Test
     void pseudo_attaches_timestamp_and_sha_to_the_nearest_tag() {
-        assertThat(GitVersion.pseudo(Optional.of("v1.2.3"), T, SHA))
-                .isEqualTo("1.2.3-20260601.134752-3f2a9c1b4d5e");
+        assertThat(GitVersion.pseudo(Optional.of("v1.2.3"), T, SHA)).isEqualTo("1.2.3-20260601.134752-3f2a9c1b4d5e");
     }
 
     @Test
@@ -55,7 +53,6 @@ class GitVersionTest {
 
     @Test
     void pseudo_without_tag_uses_zero() {
-        assertThat(GitVersion.pseudo(Optional.empty(), T, SHA))
-                .isEqualTo("0.0.0-20260601.134752-3f2a9c1b4d5e");
+        assertThat(GitVersion.pseudo(Optional.empty(), T, SHA)).isEqualTo("0.0.0-20260601.134752-3f2a9c1b4d5e");
     }
 }

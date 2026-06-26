@@ -4,7 +4,6 @@ package dev.jkbuild.worker;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
-
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,9 +18,8 @@ class WorkerProcessTest {
 
     private static List<String> cmd(String... extra) {
         String javaExe = System.getProperty("java.home") + "/bin/java";
-        List<String> c = new ArrayList<>(List.of(
-                javaExe, "-cp", System.getProperty("java.class.path"),
-                "dev.jkbuild.worker.EchoWorkerMain"));
+        List<String> c = new ArrayList<>(
+                List.of(javaExe, "-cp", System.getProperty("java.class.path"), "dev.jkbuild.worker.EchoWorkerMain"));
         c.addAll(List.of(extra));
         return c;
     }
@@ -31,9 +29,7 @@ class WorkerProcessTest {
         var events = new ArrayList<String>();
         var chatter = new ArrayList<String>();
 
-        int exit = WorkerProcess.run(cmd("oneshot"), "##T:",
-                json -> events.add(Ndjson.str(json, "e")),
-                chatter::add);
+        int exit = WorkerProcess.run(cmd("oneshot"), "##T:", json -> events.add(Ndjson.str(json, "e")), chatter::add);
 
         assertThat(exit).isZero();
         assertThat(events).containsExactly("a", "b");
@@ -43,8 +39,7 @@ class WorkerProcessTest {
     @Test
     void run_drops_passthrough_when_sink_is_null() throws Exception {
         var events = new ArrayList<String>();
-        int exit = WorkerProcess.run(cmd("oneshot"), "##T:",
-                json -> events.add(Ndjson.str(json, "e")), null);
+        int exit = WorkerProcess.run(cmd("oneshot"), "##T:", json -> events.add(Ndjson.str(json, "e")), null);
         assertThat(exit).isZero();
         assertThat(events).containsExactly("a", "b");
     }
@@ -55,20 +50,24 @@ class WorkerProcessTest {
         var ran = new ArrayList<String>();
         var chatter = new ArrayList<String>();
 
-        int exit = WorkerProcess.converse(cmd(), "##T:", (json, convo) -> {
-            String event = Ndjson.str(json, "e");
-            if ("ready".equals(event)) {
-                String next = queue.pollFirst();
-                if (next != null) {
-                    convo.send("RUN " + next);
-                } else {
-                    convo.send("DONE");
-                    convo.closeInput();
-                }
-            } else if ("ran".equals(event)) {
-                ran.add(Ndjson.str(json, "what"));
-            }
-        }, chatter::add);
+        int exit = WorkerProcess.converse(
+                cmd(),
+                "##T:",
+                (json, convo) -> {
+                    String event = Ndjson.str(json, "e");
+                    if ("ready".equals(event)) {
+                        String next = queue.pollFirst();
+                        if (next != null) {
+                            convo.send("RUN " + next);
+                        } else {
+                            convo.send("DONE");
+                            convo.closeInput();
+                        }
+                    } else if ("ran".equals(event)) {
+                        ran.add(Ndjson.str(json, "what"));
+                    }
+                },
+                chatter::add);
 
         assertThat(exit).isZero();
         assertThat(ran).containsExactly("alpha", "beta", "gamma");
@@ -79,14 +78,18 @@ class WorkerProcessTest {
     void converse_exits_cleanly_when_queue_is_empty_immediately() throws Exception {
         // First ready → empty queue → DONE/closeInput, no RUN ever sent.
         var ran = new ArrayList<String>();
-        int exit = WorkerProcess.converse(cmd(), "##T:", (json, convo) -> {
-            if ("ready".equals(Ndjson.str(json, "e"))) {
-                convo.send("DONE");
-                convo.closeInput();
-            } else if ("ran".equals(Ndjson.str(json, "e"))) {
-                ran.add(Ndjson.str(json, "what"));
-            }
-        }, null);
+        int exit = WorkerProcess.converse(
+                cmd(),
+                "##T:",
+                (json, convo) -> {
+                    if ("ready".equals(Ndjson.str(json, "e"))) {
+                        convo.send("DONE");
+                        convo.closeInput();
+                    } else if ("ran".equals(Ndjson.str(json, "e"))) {
+                        ran.add(Ndjson.str(json, "what"));
+                    }
+                },
+                null);
         assertThat(exit).isZero();
         assertThat(ran).isEmpty();
     }

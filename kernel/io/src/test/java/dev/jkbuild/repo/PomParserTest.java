@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
 
 class PomParserTest {
 
@@ -168,8 +168,7 @@ class PomParserTest {
                   <version>1.0</version>
                 </project>
                 """;
-        assertThatThrownBy(() -> PomParser.parse(malicious))
-                .isInstanceOf(PomParseException.class);
+        assertThatThrownBy(() -> PomParser.parse(malicious)).isInstanceOf(PomParseException.class);
     }
 
     @Test

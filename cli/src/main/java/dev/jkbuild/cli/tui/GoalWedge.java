@@ -3,9 +3,8 @@ package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.utils.AttributedStyle;
-
 import java.util.Locale;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Shared chrome for the build goal line and its settled result lines, so the live
@@ -50,7 +49,7 @@ public final class GoalWedge {
         boolean isCheck = Glyphs.CHECK.equals(glyph);
         if (nerdfont) {
             var chipStyle = isCheck ? t.goalSuccessChip() : t.goalChip();
-            var capColor  = isCheck ? t.goalChipColor()   : t.planBadgeColor();
+            var capColor = isCheck ? t.goalChipColor() : t.planBadgeColor();
             return chip(glyph, verb, chipStyle) + cap(capColor, true) + " " + message;
         }
         return Theme.colorize(glyph + " " + verb, t.focused()) + " " + message;
@@ -62,8 +61,8 @@ public final class GoalWedge {
         int i = coord.indexOf(':');
         return i < 0
                 ? Theme.colorize(coord, t.coordGroup())
-                : Theme.colorize(coord.substring(0, i), t.coordGroup())
-                        + ":" + Theme.colorize(coord.substring(i + 1), t.coordName());
+                : Theme.colorize(coord.substring(0, i), t.coordGroup()) + ":"
+                        + Theme.colorize(coord.substring(i + 1), t.coordName());
     }
 
     /**
@@ -73,11 +72,11 @@ public final class GoalWedge {
      */
     public static String failureLine(String name, boolean nerdfont, String tail) {
         Theme t = Theme.active();
-        String verb = Theme.colorize("Failed", t.error())
-                + (name.isEmpty() ? "" : " to " + name.toLowerCase(Locale.ROOT));
+        String verb =
+                Theme.colorize("Failed", t.error()) + (name.isEmpty() ? "" : " to " + name.toLowerCase(Locale.ROOT));
         if (nerdfont) {
-            return chip(Glyphs.CROSS, name, t.goalFailureChip())
-                    + cap(t.goalFailColor(), true) + " " + verb + " " + tail;
+            return chip(Glyphs.CROSS, name, t.goalFailureChip()) + cap(t.goalFailColor(), true) + " " + verb + " "
+                    + tail;
         }
         String head = Theme.colorize(Glyphs.CROSS + (name.isEmpty() ? "" : " " + name), t.error());
         return head + " " + verb + " " + tail;
@@ -93,8 +92,8 @@ public final class GoalWedge {
         Theme t = Theme.active();
         String verb = Theme.colorize("Canceled", t.error()) + " by user";
         if (nerdfont) {
-            return chip(Glyphs.CROSS, name, t.goalFailureChip())
-                    + cap(t.goalFailColor(), true) + " " + verb + " " + tail;
+            return chip(Glyphs.CROSS, name, t.goalFailureChip()) + cap(t.goalFailColor(), true) + " " + verb + " "
+                    + tail;
         }
         String head = Theme.colorize(Glyphs.CROSS + (name.isEmpty() ? "" : " " + name), t.error());
         return head + " " + verb + " " + tail;

@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.test.runner;
 
-import org.junit.platform.engine.TestExecutionResult;
-import org.junit.platform.engine.reporting.ReportEntry;
-import org.junit.platform.launcher.TestExecutionListener;
-import org.junit.platform.launcher.TestIdentifier;
-import org.junit.platform.launcher.TestPlan;
-
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import org.junit.platform.engine.TestExecutionResult;
+import org.junit.platform.engine.reporting.ReportEntry;
+import org.junit.platform.launcher.TestExecutionListener;
+import org.junit.platform.launcher.TestIdentifier;
+import org.junit.platform.launcher.TestPlan;
 
 /**
  * {@link TestExecutionListener} that translates JUnit Platform callbacks
@@ -83,7 +82,7 @@ final class StreamingListener implements TestExecutionListener {
         var payload = new LinkedHashMap<String, Object>();
         payload.put("id", id.getUniqueId());
         payload.put("status", result.getStatus().name());
-        payload.put("type", id.getType().name());  // parent counts FINISHED[type=TEST] for totals
+        payload.put("type", id.getType().name()); // parent counts FINISHED[type=TEST] for totals
         payload.put("display", id.getDisplayName());
         payload.put("duration_ms", durationMs);
         result.getThrowable().ifPresent(t -> payload.put("throwable", flatten(t)));

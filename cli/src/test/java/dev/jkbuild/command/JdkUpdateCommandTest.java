@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -26,8 +22,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.IntSupplier;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /** Integration tests for {@code jk jdk update [spec]}. */
 class JdkUpdateCommandTest {
@@ -54,7 +52,9 @@ class JdkUpdateCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void updates_to_latest_point_release_and_removes_old(@TempDir Path tempDir) throws Exception {
@@ -62,11 +62,18 @@ class JdkUpdateCommandTest {
         makeJdkInstall(jdks.resolve("temurin-25.0.2"), "25.0.2", "Eclipse Adoptium");
         serveFeed(tempDir, vendorEntry("Eclipse", "Temurin", "temurin", 25, "25.0.3"));
 
-        int exit = run("jdk", "update", "25", "--yes",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString());
+        int exit = run(
+                "jdk",
+                "update",
+                "25",
+                "--yes",
+                "--jdks-dir",
+                jdks.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java")).exists();
+        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java"))
+                .exists();
         assertThat(jdks.resolve("temurin-25.0.2")).doesNotExist();
     }
 
@@ -75,16 +82,25 @@ class JdkUpdateCommandTest {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-25.0.2"), "25.0.2", "Eclipse Adoptium");
         makeJdkInstall(jdks.resolve("corretto-25.0.1"), "25.0.1", "Amazon.com Inc.");
-        serveFeed(tempDir,
+        serveFeed(
+                tempDir,
                 vendorEntry("Eclipse", "Temurin", "temurin", 25, "25.0.3"),
                 vendorEntry("Amazon", "Corretto", "corretto", 25, "25.0.3"));
 
-        int exit = run("jdk", "update", "25", "--yes",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString());
+        int exit = run(
+                "jdk",
+                "update",
+                "25",
+                "--yes",
+                "--jdks-dir",
+                jdks.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java")).exists();
-        assertThat(jdks.resolve("corretto-25.0.3").resolve("bin").resolve("java")).exists();
+        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java"))
+                .exists();
+        assertThat(jdks.resolve("corretto-25.0.3").resolve("bin").resolve("java"))
+                .exists();
         assertThat(jdks.resolve("temurin-25.0.2")).doesNotExist();
         assertThat(jdks.resolve("corretto-25.0.1")).doesNotExist();
     }
@@ -94,18 +110,27 @@ class JdkUpdateCommandTest {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-25.0.2"), "25.0.2", "Eclipse Adoptium");
         makeJdkInstall(jdks.resolve("corretto-25.0.1"), "25.0.1", "Amazon.com Inc.");
-        serveFeed(tempDir,
+        serveFeed(
+                tempDir,
                 vendorEntry("Eclipse", "Temurin", "temurin", 25, "25.0.3"),
                 vendorEntry("Amazon", "Corretto", "corretto", 25, "25.0.3"));
 
-        int exit = run("jdk", "update", "temurin", "--yes",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString());
+        int exit = run(
+                "jdk",
+                "update",
+                "temurin",
+                "--yes",
+                "--jdks-dir",
+                jdks.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java")).exists();
+        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java"))
+                .exists();
         assertThat(jdks.resolve("temurin-25.0.2")).doesNotExist();
         // Corretto untouched.
-        assertThat(jdks.resolve("corretto-25.0.1").resolve("bin").resolve("java")).exists();
+        assertThat(jdks.resolve("corretto-25.0.1").resolve("bin").resolve("java"))
+                .exists();
         assertThat(jdks.resolve("corretto-25.0.3")).doesNotExist();
     }
 
@@ -114,15 +139,23 @@ class JdkUpdateCommandTest {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-25.0.2"), "25.0.2", "Eclipse Adoptium");
         // Feed has a newer point release AND a newer major — only the point release applies.
-        serveFeed(tempDir,
+        serveFeed(
+                tempDir,
                 vendorEntry("Eclipse", "Temurin", "temurin", 25, "25.0.3"),
                 vendorEntry("Eclipse", "Temurin", "temurin", 26, "26.0.1"));
 
-        int exit = run("jdk", "update", "25", "--yes",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString());
+        int exit = run(
+                "jdk",
+                "update",
+                "25",
+                "--yes",
+                "--jdks-dir",
+                jdks.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java")).exists();
+        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java"))
+                .exists();
         assertThat(jdks.resolve("temurin-26.0.1")).doesNotExist();
     }
 
@@ -132,18 +165,23 @@ class JdkUpdateCommandTest {
         makeJdkInstall(jdks.resolve("temurin-25.0.3"), "25.0.3", "Eclipse Adoptium");
         serveFeed(tempDir, vendorEntry("Eclipse", "Temurin", "temurin", 25, "25.0.3"));
 
-        String stdout = captureStdout(() -> run("jdk", "update", "--yes",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString()));
+        String stdout = captureStdout(() -> run(
+                "jdk",
+                "update",
+                "--yes",
+                "--jdks-dir",
+                jdks.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString()));
         assertThat(stdout).contains("up to date");
-        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java")).exists();
+        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java"))
+                .exists();
     }
 
     @Test
     void no_managed_jdks_is_a_noop(@TempDir Path tempDir) {
         Path jdks = tempDir.resolve("jdks");
-        String stdout = captureStdout(() -> run("jdk", "update", "--yes",
-                "--jdks-dir", jdks.toString()));
+        String stdout = captureStdout(() -> run("jdk", "update", "--yes", "--jdks-dir", jdks.toString()));
         assertThat(stdout).contains("no jk-managed JDKs installed");
     }
 
@@ -153,11 +191,19 @@ class JdkUpdateCommandTest {
         makeJdkInstall(jdks.resolve("temurin-25.0.2"), "25.0.2", "Eclipse Adoptium");
         serveFeed(tempDir, vendorEntry("Eclipse", "Temurin", "temurin", 25, "25.0.3"));
 
-        String stdout = withStdin("n\n", () -> captureStdout(() -> run("jdk", "update", "25",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString())));
+        String stdout = withStdin(
+                "n\n",
+                () -> captureStdout(() -> run(
+                        "jdk",
+                        "update",
+                        "25",
+                        "--jdks-dir",
+                        jdks.toString(),
+                        "--feed-url",
+                        base.resolve("/feed/jdks.json").toString())));
         assertThat(stdout).contains("Aborted");
-        assertThat(jdks.resolve("temurin-25.0.2").resolve("bin").resolve("java")).exists();
+        assertThat(jdks.resolve("temurin-25.0.2").resolve("bin").resolve("java"))
+                .exists();
         assertThat(jdks.resolve("temurin-25.0.3")).doesNotExist();
     }
 
@@ -167,11 +213,18 @@ class JdkUpdateCommandTest {
         makeJdkInstall(jdks.resolve("temurin-25.0.2"), "25.0.2", "Eclipse Adoptium");
         serveFeed(tempDir, vendorEntry("Eclipse", "Temurin", "temurin", 25, "25.0.3"));
 
-        int exit = run("jdk", "upgrade", "25", "--yes",
-                "--jdks-dir", jdks.toString(),
-                "--feed-url", base.resolve("/feed/jdks.json").toString());
+        int exit = run(
+                "jdk",
+                "upgrade",
+                "25",
+                "--yes",
+                "--jdks-dir",
+                jdks.toString(),
+                "--feed-url",
+                base.resolve("/feed/jdks.json").toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java")).exists();
+        assertThat(jdks.resolve("temurin-25.0.3").resolve("bin").resolve("java"))
+                .exists();
     }
 
     // --- fixtures -----------------------------------------------------------
@@ -179,12 +232,16 @@ class JdkUpdateCommandTest {
     private void serveFeed(Path tempDir, EntrySpec... specs) throws Exception {
         List<String> entries = new ArrayList<>();
         for (EntrySpec s : specs) {
-            byte[] archive = buildTarGz(tempDir, s.installFolder(), Map.of(
-                    "bin/java", "#!/fake/java",
-                    "release", "JAVA_VERSION=\"" + s.version() + "\"\n"));
+            byte[] archive = buildTarGz(
+                    tempDir,
+                    s.installFolder(),
+                    Map.of("bin/java", "#!/fake/java", "release", "JAVA_VERSION=\"" + s.version() + "\"\n"));
             String archivePath = "/archives/" + s.installFolder() + ".tar.gz";
             served.put(archivePath, archive);
-            entries.add(entryJson(s, archive.length, Hashing.sha256Hex(archive),
+            entries.add(entryJson(
+                    s,
+                    archive.length,
+                    Hashing.sha256Hex(archive),
                     base.resolve(archivePath).toString()));
         }
         String feed = "{\n  \"jdks\": [\n" + String.join(",\n", entries) + "\n  ]\n}";
@@ -192,11 +249,12 @@ class JdkUpdateCommandTest {
     }
 
     private record EntrySpec(String vendor, String product, String sdkPrefix, int major, String version) {
-        String installFolder() { return sdkPrefix + "-" + version; }
+        String installFolder() {
+            return sdkPrefix + "-" + version;
+        }
     }
 
-    private static EntrySpec vendorEntry(String vendor, String product, String sdkPrefix,
-                                         int major, String version) {
+    private static EntrySpec vendorEntry(String vendor, String product, String sdkPrefix, int major, String version) {
         return new EntrySpec(vendor, product, sdkPrefix, major, version);
     }
 
@@ -225,8 +283,7 @@ class JdkUpdateCommandTest {
                     }
                   ]
                 }
-                """
-                .replace("VENDOR", s.vendor())
+                """.replace("VENDOR", s.vendor())
                 .replace("PRODUCT", s.product())
                 .replace("PREFIX", s.sdkPrefix())
                 .replace("FOLDER", s.installFolder())
@@ -239,8 +296,7 @@ class JdkUpdateCommandTest {
                 .replace("SHA", sha256);
     }
 
-    private static byte[] buildTarGz(Path tempDir, String topLevelDir,
-                                     Map<String, String> entries) throws Exception {
+    private static byte[] buildTarGz(Path tempDir, String topLevelDir, Map<String, String> entries) throws Exception {
         Path workdir = tempDir.resolve("fixture-" + System.nanoTime());
         Path root = workdir.resolve(topLevelDir);
         Files.createDirectories(root);
@@ -250,13 +306,13 @@ class JdkUpdateCommandTest {
             Files.writeString(target, entry.getValue());
         }
         Path archivePath = workdir.resolve("archive.tar.gz");
-        ProcessBuilder pb = new ProcessBuilder("tar", "czf", archivePath.toString(),
-                "-C", workdir.toString(), topLevelDir);
+        ProcessBuilder pb =
+                new ProcessBuilder("tar", "czf", archivePath.toString(), "-C", workdir.toString(), topLevelDir);
         pb.redirectErrorStream(true);
         Process p = pb.start();
         if (p.waitFor() != 0) {
-            throw new RuntimeException("tar fixture build failed: "
-                    + new String(p.getInputStream().readAllBytes()));
+            throw new RuntimeException(
+                    "tar fixture build failed: " + new String(p.getInputStream().readAllBytes()));
         }
         return Files.readAllBytes(archivePath);
     }
@@ -264,8 +320,8 @@ class JdkUpdateCommandTest {
     private static void makeJdkInstall(Path home, String version, String implementor) throws IOException {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
-        Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"" + implementor + "\"\n");
+        Files.writeString(
+                home.resolve("release"), "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"" + implementor + "\"\n");
     }
 
     private static int run(String... args) {
@@ -276,13 +332,21 @@ class JdkUpdateCommandTest {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         PrintStream origOut = System.out;
         System.setOut(new PrintStream(out));
-        try { body.getAsInt(); } finally { System.setOut(origOut); }
+        try {
+            body.getAsInt();
+        } finally {
+            System.setOut(origOut);
+        }
         return out.toString(StandardCharsets.UTF_8);
     }
 
     private static <T> T withStdin(String input, java.util.function.Supplier<T> body) {
         InputStream origIn = System.in;
         System.setIn(new ByteArrayInputStream(input.getBytes(StandardCharsets.UTF_8)));
-        try { return body.get(); } finally { System.setIn(origIn); }
+        try {
+            return body.get();
+        } finally {
+            System.setIn(origIn);
+        }
     }
 }

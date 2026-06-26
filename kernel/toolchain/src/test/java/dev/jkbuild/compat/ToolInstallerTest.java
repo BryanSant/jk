@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compat;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -20,9 +18,10 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ToolInstallerTest {
 
@@ -48,21 +47,24 @@ class ToolInstallerTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void installs_zip_and_flattens_top_level_dir(@TempDir Path tempDir) throws Exception {
-        byte[] zip = buildZip("apache-maven-3.9.9", Map.of(
-                "bin/mvn", "#!/bin/sh\necho mvn\n",
-                "conf/settings.xml", "<settings/>\n"));
+        byte[] zip = buildZip(
+                "apache-maven-3.9.9",
+                Map.of(
+                        "bin/mvn", "#!/bin/sh\necho mvn\n",
+                        "conf/settings.xml", "<settings/>\n"));
         served.put("/maven.zip", zip);
 
         ToolRegistry registry = new ToolRegistry(tempDir.resolve("tools"));
         ToolInstaller installer = new ToolInstaller(new Http(), registry);
 
         ToolDistribution dist = new ToolDistribution(
-                BuildTool.MAVEN, "3.9.9",
-                base.resolve("/maven.zip"), "zip", Hashing.sha256Hex(zip));
+                BuildTool.MAVEN, "3.9.9", base.resolve("/maven.zip"), "zip", Hashing.sha256Hex(zip));
 
         InstalledTool installed = installer.install(dist);
         assertThat(installed.home()).isEqualTo(tempDir.resolve("tools/maven/3.9.9"));
@@ -76,11 +78,9 @@ class ToolInstallerTest {
         byte[] zip = buildZip("gradle-9.5.1", Map.of("bin/gradle", "#!/bin/sh\n"));
         served.put("/gradle.zip", zip);
 
-        ToolInstaller installer = new ToolInstaller(new Http(),
-                new ToolRegistry(tempDir.resolve("tools")));
-        ToolDistribution dist = new ToolDistribution(
-                BuildTool.GRADLE, "9.5.1",
-                base.resolve("/gradle.zip"), "zip", null);
+        ToolInstaller installer = new ToolInstaller(new Http(), new ToolRegistry(tempDir.resolve("tools")));
+        ToolDistribution dist =
+                new ToolDistribution(BuildTool.GRADLE, "9.5.1", base.resolve("/gradle.zip"), "zip", null);
 
         InstalledTool installed = installer.install(dist);
         Path bin = installed.binary();
@@ -96,11 +96,9 @@ class ToolInstallerTest {
         byte[] zip = buildZip("apache-maven-3.9.9", Map.of("bin/mvn", "#!/bin/sh\n"));
         served.put("/maven.zip", zip);
 
-        ToolInstaller installer = new ToolInstaller(new Http(),
-                new ToolRegistry(tempDir.resolve("tools")));
-        ToolDistribution dist = new ToolDistribution(
-                BuildTool.MAVEN, "3.9.9",
-                base.resolve("/maven.zip"), "zip", "deadbeef");
+        ToolInstaller installer = new ToolInstaller(new Http(), new ToolRegistry(tempDir.resolve("tools")));
+        ToolDistribution dist =
+                new ToolDistribution(BuildTool.MAVEN, "3.9.9", base.resolve("/maven.zip"), "zip", "deadbeef");
 
         assertThatThrownBy(() -> installer.install(dist))
                 .isInstanceOf(IOException.class)
@@ -113,11 +111,9 @@ class ToolInstallerTest {
         byte[] zip = buildZip("apache-maven-3.9.9", Map.of("bin/mvn", "#!/bin/sh\n"));
         served.put("/maven.zip", zip);
 
-        ToolInstaller installer = new ToolInstaller(new Http(),
-                new ToolRegistry(tempDir.resolve("tools")));
+        ToolInstaller installer = new ToolInstaller(new Http(), new ToolRegistry(tempDir.resolve("tools")));
         ToolDistribution dist = new ToolDistribution(
-                BuildTool.MAVEN, "3.9.9",
-                base.resolve("/maven.zip"), "zip", Hashing.sha256Hex(zip));
+                BuildTool.MAVEN, "3.9.9", base.resolve("/maven.zip"), "zip", Hashing.sha256Hex(zip));
 
         InstalledTool first = installer.install(dist);
         InstalledTool second = installer.install(dist);

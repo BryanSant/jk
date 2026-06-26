@@ -4,7 +4,6 @@ package dev.jkbuild.repo;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.Hashing;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpResponse;
@@ -66,8 +65,7 @@ public final class MavenMetadataCache {
      * cache within the TTL, otherwise revalidated with a conditional GET.
      * Throws {@link MavenRepo.ArtifactNotFoundException} on a 404 (no such coordinate here).
      */
-    public byte[] fetch(URI uri, RepoCredential credential)
-            throws IOException, InterruptedException {
+    public byte[] fetch(URI uri, RepoCredential credential) throws IOException, InterruptedException {
         Path body = dir.resolve(Hashing.sha256Hex(uri.toString()));
         Path meta = body.resolveSibling(body.getFileName() + ".h");
 
@@ -80,7 +78,7 @@ public final class MavenMetadataCache {
             HttpResponse<byte[]> resp = http.get(uri, headers);
             int status = resp.statusCode();
             if (status == 304 && Files.isRegularFile(body)) {
-                touch(body);                       // revalidated: restart the TTL
+                touch(body); // revalidated: restart the TTL
                 return Files.readAllBytes(body);
             }
             if (status == 200) {
@@ -97,10 +95,10 @@ public final class MavenMetadataCache {
             }
             throw new IOException("HTTP " + status + " fetching " + uri);
         } catch (MavenRepo.ArtifactNotFoundException notFound) {
-            throw notFound;                        // a real miss, not a transport hiccup
+            throw notFound; // a real miss, not a transport hiccup
         } catch (IOException networkError) {
             if (Files.isRegularFile(body)) {
-                return Files.readAllBytes(body);   // offline / unreachable: stale-but-usable
+                return Files.readAllBytes(body); // offline / unreachable: stale-but-usable
             }
             throw networkError;
         }
@@ -135,8 +133,7 @@ public final class MavenMetadataCache {
         Path tmp = Files.createTempFile(dir, ".meta-", ".tmp");
         try {
             Files.write(tmp, data);
-            Files.move(tmp, target,
-                    StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            Files.move(tmp, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException | RuntimeException e) {
             Files.deleteIfExists(tmp);
             throw e;

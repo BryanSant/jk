@@ -2,7 +2,6 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.credential.RepoCredential;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -25,12 +24,11 @@ public final class FileTransport implements RepoTransport {
     }
 
     @Override
-    public int put(URI uri, byte[] body, String contentType, RepoCredential ignored)
-            throws IOException {
+    public int put(URI uri, byte[] body, String contentType, RepoCredential ignored) throws IOException {
         Path path = Path.of(uri);
         Path parent = path.getParent();
         if (parent != null) Files.createDirectories(parent);
         Files.write(path, body);
-        return 201;   // created — mirrors a successful HTTP PUT
+        return 201; // created — mirrors a successful HTTP PUT
     }
 }

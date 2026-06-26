@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class GlobalDefaultJdkTest {
 
@@ -28,8 +27,7 @@ class GlobalDefaultJdkTest {
         // current-jdk mirrors default on set().
         assertThat(Files.isSymbolicLink(currentSymlink)).isTrue();
         assertThat(Files.readSymbolicLink(currentSymlink)).isEqualTo(jdkHome);
-        assertThat(Files.readString(configFile))
-                .contains("default-jdk = \"temurin-21.0.5\"");
+        assertThat(Files.readString(configFile)).contains("default-jdk = \"temurin-21.0.5\"");
     }
 
     @Test
@@ -40,8 +38,10 @@ class GlobalDefaultJdkTest {
         Path graalHome = Files.createDirectories(tempDir.resolve("jdks/graalvm-25.0.3"));
 
         GlobalDefaultJdk gdj = new GlobalDefaultJdk(
-                data.resolve("default-jdk"), data.resolve("current-jdk"),
-                data.resolve("default-graal-jdk"), configFile);
+                data.resolve("default-jdk"),
+                data.resolve("current-jdk"),
+                data.resolve("default-graal-jdk"),
+                configFile);
         gdj.set(new InstalledJdk("temurin-25.0.3", javaHome));
         gdj.setGraal(new InstalledJdk("graalvm-25.0.3", graalHome));
 
@@ -123,8 +123,7 @@ class GlobalDefaultJdkTest {
                 default-jdk = "temurin-17"
                 """, StandardCharsets.UTF_8);
 
-        new GlobalDefaultJdk(defaultSymlink, currentSymlink, configFile)
-                .set(new InstalledJdk("temurin-21", jdkHome));
+        new GlobalDefaultJdk(defaultSymlink, currentSymlink, configFile).set(new InstalledJdk("temurin-21", jdkHome));
 
         String contents = Files.readString(configFile);
         assertThat(contents).contains("# user config");

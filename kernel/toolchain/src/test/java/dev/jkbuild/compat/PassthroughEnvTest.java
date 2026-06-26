@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compat;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class PassthroughEnvTest {
 
@@ -25,8 +24,8 @@ class PassthroughEnvTest {
 
         PassthroughEnv.apply(env, null);
 
-        assertThat(env).doesNotContainKeys(
-                "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "MAVEN_OPTS", "GRADLE_OPTS", "KOTLIN_HOME");
+        assertThat(env)
+                .doesNotContainKeys("JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "MAVEN_OPTS", "GRADLE_OPTS", "KOTLIN_HOME");
         assertThat(env).containsEntry("PATH", "/usr/bin:/bin");
         assertThat(env).containsEntry("HOME", "/home/alice");
     }

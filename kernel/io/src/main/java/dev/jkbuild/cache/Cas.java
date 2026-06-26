@@ -2,7 +2,6 @@
 package dev.jkbuild.cache;
 
 import dev.jkbuild.util.Hashing;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;

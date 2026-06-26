@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.BuildGraph;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.util.JkThreads;
-
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.AggregateContext;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.cli.tui.GoalWedge;
-import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
@@ -20,16 +16,17 @@ import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.test.JUnitLauncher;
-import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
-import java.io.IOException;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.runtime.BuildGraph;
+import dev.jkbuild.runtime.BuildPipeline;
+import dev.jkbuild.test.JUnitLauncher;
+import dev.jkbuild.util.JkDirs;
+import dev.jkbuild.util.JkThreads;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -64,14 +61,25 @@ import java.util.Set;
  */
 public final class BuildCommand implements CliCommand {
 
-    @Override public String name() { return "build"; }
-    @Override public String description() { return "Compile, test, and package the project"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "build";
+    }
+
+    @Override
+    public String description() {
+        return "Compile, test, and package the project";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<name>", "Apply a build profile. Default: auto (ci on CI).", "--profile"),
                 Opt.value("<N>", "Test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
+                        .hide(),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"),
                 Opt.flag("Build modules one at a time (rich serial view).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
@@ -94,8 +102,8 @@ public final class BuildCommand implements CliCommand {
     // line. GoalKeys are name-keyed, so these match BuildPipeline's by name.
 
     private static final GoalKey<String> BUILD_OUTCOME = GoalKey.of("build-outcome", String.class);
-    private static final GoalKey<Path>   JAR_PATH      = GoalKey.of("jar-path",      Path.class);
-    private static final GoalKey<BuildLayout> LAYOUT   = GoalKey.of("layout",        BuildLayout.class);
+    private static final GoalKey<Path> JAR_PATH = GoalKey.of("jar-path", Path.class);
+    private static final GoalKey<BuildLayout> LAYOUT = GoalKey.of("layout", BuildLayout.class);
     private static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
             GoalKey.of("test-result", JUnitLauncher.Result.class);
 
@@ -150,7 +158,7 @@ public final class BuildCommand implements CliCommand {
         } catch (java.io.IOException e) {
             // Workspace discovery failed — fall through to single-project build.
         }
-        applyMemoryPlan(1);   // single project: one module, tests fork `workers` JVMs
+        applyMemoryPlan(1); // single project: one module, tests fork `workers` JVMs
         int dep = buildCompositeDeps(startDir, peek);
         if (dep != 0) return dep;
         return runForDir(startDir);
@@ -188,9 +196,10 @@ public final class BuildCommand implements CliCommand {
         while (!remaining.isEmpty()) {
             List<BuildGraph.BuildUnit> ready = remaining.stream()
                     .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
-                            .filter(unitDirs::contains).allMatch(done::contains))
+                            .filter(unitDirs::contains)
+                            .allMatch(done::contains))
                     .toList();
-            if (ready.isEmpty()) break;   // defensive: a cycle would otherwise spin
+            if (ready.isEmpty()) break; // defensive: a cycle would otherwise spin
             max = Math.max(max, ready.size());
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
             remaining.removeAll(ready);
@@ -255,8 +264,7 @@ public final class BuildCommand implements CliCommand {
     private static Set<Path> forecastDirty(BuildGraph.Result graph, Path cache) {
         try {
             dev.jkbuild.cache.Cas cas = new dev.jkbuild.cache.Cas(cache);
-            dev.jkbuild.task.ActionCache ac =
-                    new dev.jkbuild.task.ActionCache(cas, cache.resolve("actions"));
+            dev.jkbuild.task.ActionCache ac = new dev.jkbuild.task.ActionCache(cas, cache.resolve("actions"));
             Set<Path> dirty = new java.util.HashSet<>();
             for (BuildPlanForecast.Module m : BuildPlanForecast.of(graph, cas, ac, cache)) {
                 if (m.dirty()) dirty.add(m.unit().dir());
@@ -281,12 +289,12 @@ public final class BuildCommand implements CliCommand {
         while (!remaining.isEmpty()) {
             List<BuildGraph.BuildUnit> ready = remaining.stream()
                     .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
-                            .filter(unitDirs::contains).allMatch(done::contains))
+                            .filter(unitDirs::contains)
+                            .allMatch(done::contains))
                     .toList();
             List<java.util.concurrent.CompletableFuture<UnitOutcome>> futures = new ArrayList<>();
             for (BuildGraph.BuildUnit u : ready) {
-                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(
-                        () -> buildUnit(u), JkThreads.io()));
+                futures.add(java.util.concurrent.CompletableFuture.supplyAsync(() -> buildUnit(u), JkThreads.io()));
             }
             for (java.util.concurrent.CompletableFuture<UnitOutcome> f : futures) {
                 UnitOutcome o = f.join();
@@ -299,8 +307,8 @@ public final class BuildCommand implements CliCommand {
             for (BuildGraph.BuildUnit u : ready) done.add(u.dir());
             remaining.removeAll(ready);
         }
-        System.out.println(GoalWedge.chipLine(dev.jkbuild.cli.tui.Glyphs.CHECK, "Build",
-                GlobalConfig.nerdfont(), modulesTail(total, start)));
+        System.out.println(GoalWedge.chipLine(
+                dev.jkbuild.cli.tui.Glyphs.CHECK, "Build", GlobalConfig.nerdfont(), modulesTail(total, start)));
         return 0;
     }
 
@@ -313,8 +321,13 @@ public final class BuildCommand implements CliCommand {
      * completes — so concurrent logs never interleave. On a non-interactive
      * terminal nothing animates; the same blocks + lines print append-only.
      */
-    private int runGraphLive(List<BuildGraph.BuildUnit> units, Map<Path, Set<Path>> edges,
-                             Set<Path> dirtyDirs, Path cache, GoalConsole.Mode mode) throws Exception {
+    private int runGraphLive(
+            List<BuildGraph.BuildUnit> units,
+            Map<Path, Set<Path>> edges,
+            Set<Path> dirtyDirs,
+            Path cache,
+            GoalConsole.Mode mode)
+            throws Exception {
         Set<Path> unitDirs = new java.util.HashSet<>();
         for (BuildGraph.BuildUnit u : units) unitDirs.add(u.dir());
         boolean animate = mode == GoalConsole.Mode.AUTO && GoalConsole.isInteractiveTerminal();
@@ -332,14 +345,15 @@ public final class BuildCommand implements CliCommand {
         Map<Path, PreparedModule> prepared = new LinkedHashMap<>();
         long totalWeight = 0;
         for (BuildGraph.BuildUnit u : units) {
-            PreparedModule pm = prepareModule(u.dir(), u.isDependency() || buildOpts.skipTests,
-                    dirtyDirs.contains(u.dir()));
+            PreparedModule pm =
+                    prepareModule(u.dir(), u.isDependency() || buildOpts.skipTests, dirtyDirs.contains(u.dir()));
             if (pm == null) {
                 view.finishGoalFailure(noTomlTail(u.dir().toString(), start));
                 return 2;
             }
-            pm.goal().addListener(
-                    new dev.jkbuild.runtime.PhaseTimingsRecorder(pm.dir().toString(), timingSamples));
+            pm.goal()
+                    .addListener(new dev.jkbuild.runtime.PhaseTimingsRecorder(
+                            pm.dir().toString(), timingSamples));
             prepared.put(u.dir(), pm);
             totalWeight += pm.barWeight();
         }
@@ -353,20 +367,28 @@ public final class BuildCommand implements CliCommand {
         for (var e : prepared.entrySet()) {
             int tw = e.getValue().goal().phases().stream()
                     .filter(p -> p.name().equals("run-tests"))
-                    .mapToInt(dev.jkbuild.run.Phase::estimateWeight).sum();
+                    .mapToInt(dev.jkbuild.run.Phase::estimateWeight)
+                    .sum();
             costs.add(new dev.jkbuild.runtime.EffortWeights.ModuleCost(
-                    e.getKey(), edges.getOrDefault(e.getKey(), Set.of()), (int) e.getValue().barWeight(), tw));
+                    e.getKey(),
+                    edges.getOrDefault(e.getKey(), Set.of()),
+                    (int) e.getValue().barWeight(),
+                    tw));
         }
         int etaWorkers = workers != null && workers > 0 ? workers : 1;
-        int concurrency = dev.jkbuild.worker.HeapPlan.requestedJvms(maxReadyWidth(units, edges),
-                etaWorkers, parallelTests, Runtime.getRuntime().availableProcessors());
+        int concurrency = dev.jkbuild.worker.HeapPlan.requestedJvms(
+                maxReadyWidth(units, edges),
+                etaWorkers,
+                parallelTests,
+                Runtime.getRuntime().availableProcessors());
         // Countdown only when this project has useful learned timings; otherwise leave the
         // estimate at 0 so the clock counts elapsed time up from 0s.
         boolean usefulTimings = dev.jkbuild.runtime.PhaseTimings.load(cache)
                 .hasTimingsFor(prepared.keySet().stream().map(Path::toString).toList());
-        view.setEtaEstimate(usefulTimings
-                ? dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, false, parallelTests)
-                : 0);
+        view.setEtaEstimate(
+                usefulTimings
+                        ? dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, false, parallelTests)
+                        : 0);
 
         Set<Path> done = java.util.concurrent.ConcurrentHashMap.newKeySet();
         List<BuildGraph.BuildUnit> remaining = new ArrayList<>(units);
@@ -377,7 +399,8 @@ public final class BuildCommand implements CliCommand {
         while (!remaining.isEmpty()) {
             List<BuildGraph.BuildUnit> ready = remaining.stream()
                     .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
-                            .filter(unitDirs::contains).allMatch(done::contains))
+                            .filter(unitDirs::contains)
+                            .allMatch(done::contains))
                     .toList();
             List<java.util.concurrent.CompletableFuture<UnitOutcome>> futures = new ArrayList<>();
             for (BuildGraph.BuildUnit u : ready) {
@@ -397,7 +420,7 @@ public final class BuildCommand implements CliCommand {
                 // last so the user sees the outcome without scrolling.
                 List<String> above = snapshot(deferredOutput);
                 for (GoalResult.Diagnostic d : agg.lastErrors()) {
-                    if ("test-failure".equals(d.code())) continue;  // already printed by run-tests
+                    if ("test-failure".equals(d.code())) continue; // already printed by run-tests
                     above.add(ConsoleSpec.renderError(d));
                 }
                 view.finishGoalFailure(failureTail(failure.coord(), start), above);
@@ -410,8 +433,7 @@ public final class BuildCommand implements CliCommand {
         // learned ledger (EWMA) so the next build's bar is time-accurate. Failed
         // builds don't record — their phase times are abnormal.
         dev.jkbuild.runtime.PhaseTimings.record(
-                cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA,
-                System.currentTimeMillis());
+                cache, timingSamples, dev.jkbuild.runtime.PhaseTimings.DEFAULT_ALPHA, System.currentTimeMillis());
         view.finishGoalSuccess(
                 dirtyDirs.isEmpty() ? upToDateTail("all modules", start) : modulesTail(total, start),
                 snapshot(deferredOutput));
@@ -426,20 +448,27 @@ public final class BuildCommand implements CliCommand {
      * concurrent logs never interleave with the live view); otherwise (pipes /
      * {@code --quiet}) the buffered block + line print append-only, atomically.
      */
-    private UnitOutcome buildUnitLive(BuildGraph.BuildUnit unit, PreparedModule pm, AggregateContext agg,
-                                      CommandManager view, java.util.concurrent.atomic.AtomicInteger completed,
-                                      int total, List<String> deferredOutput) {
+    private UnitOutcome buildUnitLive(
+            BuildGraph.BuildUnit unit,
+            PreparedModule pm,
+            AggregateContext agg,
+            CommandManager view,
+            java.util.concurrent.atomic.AtomicInteger completed,
+            int total,
+            List<String> deferredOutput) {
         List<String> buf = java.util.Collections.synchronizedList(new ArrayList<>());
         long t0 = System.nanoTime();
         boolean ok;
         int exit;
         try {
-            GoalResult result = GoalConsole.runGoalIntoBuffered(
-                    pm.goal(), pm.cache(), unit.coord(), agg, pm.barWeight(), buf);
+            GoalResult result =
+                    GoalConsole.runGoalIntoBuffered(pm.goal(), pm.cache(), unit.coord(), agg, pm.barWeight(), buf);
             ok = result.success();
             exit = ok ? 0 : exitCodeFor(pm.goal());
         } catch (RuntimeException e) {
-            synchronized (buf) { buf.add("  ✗ " + (e.getMessage() == null ? e.toString() : e.getMessage())); }
+            synchronized (buf) {
+                buf.add("  ✗ " + (e.getMessage() == null ? e.toString() : e.getMessage()));
+            }
             ok = false;
             exit = 1;
         }
@@ -453,7 +482,9 @@ public final class BuildCommand implements CliCommand {
             }
         } else {
             StringBuilder block = new StringBuilder();
-            synchronized (buf) { for (String l : buf) block.append(l).append('\n'); }
+            synchronized (buf) {
+                for (String l : buf) block.append(l).append('\n');
+            }
             block.append(completion);
             view.writeAbove(block.toString());
         }
@@ -472,7 +503,12 @@ public final class BuildCommand implements CliCommand {
     private UnitOutcome buildUnit(BuildGraph.BuildUnit unit) {
         PreparedModule pm = prepareModule(unit.dir(), unit.isDependency() || buildOpts.skipTests);
         if (pm == null) {
-            return new UnitOutcome(unit.coord(), false, 2, 0, List.of("no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(unit.dir())));
+            return new UnitOutcome(
+                    unit.coord(),
+                    false,
+                    2,
+                    0,
+                    List.of("no jk.toml in " + dev.jkbuild.cli.PathDisplay.styledRaw(unit.dir())));
         }
         long t0 = System.nanoTime();
         try {
@@ -481,7 +517,11 @@ public final class BuildCommand implements CliCommand {
             int exit = b.result().success() ? 0 : exitCodeFor(pm.goal());
             return new UnitOutcome(unit.coord(), b.result().success(), exit, ms, b.output());
         } catch (RuntimeException e) {
-            return new UnitOutcome(unit.coord(), false, 1, (System.nanoTime() - t0) / 1_000_000,
+            return new UnitOutcome(
+                    unit.coord(),
+                    false,
+                    1,
+                    (System.nanoTime() - t0) / 1_000_000,
                     List.of("  ✗ " + (e.getMessage() == null ? e.toString() : e.getMessage())));
         }
     }
@@ -516,17 +556,20 @@ public final class BuildCommand implements CliCommand {
         String mark = Theme.colorize(ok ? "✓" : "✗", ok ? th.success() : th.error());
         String num = String.format("%0" + Integer.toString(total).length() + "d", index);
         StringBuilder sb = new StringBuilder();
-        sb.append(mark).append(' ')
+        sb.append(mark)
+                .append(' ')
                 .append(Theme.colorize("[", th.darkGray()))
-                .append(num).append(" of ").append(total)
+                .append(num)
+                .append(" of ")
+                .append(total)
                 .append(Theme.colorize("]", th.darkGray()))
                 .append(' ');
         if (ok) {
             sb.append(Theme.colorize(coord, th.plainWhite().crossedOut()))
-                    .append(' ').append(ConsoleSpec.took(java.time.Duration.ofMillis(millis)));
+                    .append(' ')
+                    .append(ConsoleSpec.took(java.time.Duration.ofMillis(millis)));
         } else {
-            sb.append(CommandManager.coloredModule(coord))
-                    .append(' ').append(Theme.colorize("— failed", th.error()));
+            sb.append(CommandManager.coloredModule(coord)).append(' ').append(Theme.colorize("— failed", th.error()));
         }
         return sb.toString();
     }
@@ -557,7 +600,7 @@ public final class BuildCommand implements CliCommand {
             System.out.println("(workspace declares no modules)");
             return 0;
         }
-        applyMemoryPlan(1);   // --no-parallel: modules build serially (peak = 1 module)
+        applyMemoryPlan(1); // --no-parallel: modules build serially (peak = 1 module)
         // Build any composite (path / branch-git) dependency units the workspace
         // (or its modules) declare, before the modules that consume them.
         int dep = buildCompositeDeps(workspaceRoot, root);
@@ -571,12 +614,12 @@ public final class BuildCommand implements CliCommand {
             for (int i = 0; i < sorted.size(); i++) {
                 Path moduleDir = sorted.get(i);
                 System.out.println();
-                System.out.println("══ " + workspaceRoot.relativize(moduleDir)
-                        + " (" + (i + 1) + "/" + sorted.size() + ") ══");
+                System.out.println(
+                        "══ " + workspaceRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") ══");
                 int exit = runForDir(moduleDir);
                 if (exit != 0) {
-                    System.err.println("jk build: " + workspaceRoot.relativize(moduleDir)
-                            + " failed (exit " + exit + ")");
+                    System.err.println(
+                            "jk build: " + workspaceRoot.relativize(moduleDir) + " failed (exit " + exit + ")");
                     return exit;
                 }
             }
@@ -603,13 +646,13 @@ public final class BuildCommand implements CliCommand {
                 try {
                     pm = prepareModule(moduleDir);
                 } catch (Exception e) {
-                    view.finishFailure(Theme.colorize("Build failed", Theme.active().error())
-                            + " " + elapsedSince(buildStart));
+                    view.finishFailure(
+                            Theme.colorize("Build failed", Theme.active().error()) + " " + elapsedSince(buildStart));
                     throw e;
                 }
                 if (pm == null) {
-                    view.finishFailure("No jk.toml in "
-                            + workspaceRoot.relativize(moduleDir) + " " + elapsedSince(buildStart));
+                    view.finishFailure(
+                            "No jk.toml in " + workspaceRoot.relativize(moduleDir) + " " + elapsedSince(buildStart));
                     return 2;
                 }
                 total += pm.barWeight();
@@ -619,9 +662,9 @@ public final class BuildCommand implements CliCommand {
             // Countdown only with useful learned timings; otherwise count up from 0s.
             Path etaCache = cacheDir != null ? cacheDir : JkDirs.cache();
             boolean usefulTimings = dev.jkbuild.runtime.PhaseTimings.load(etaCache)
-                    .hasTimingsFor(prepared.keySet().stream().map(Path::toString).toList());
-            view.setEtaEstimate(usefulTimings
-                    ? (long) total * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT : 0);
+                    .hasTimingsFor(
+                            prepared.keySet().stream().map(Path::toString).toList());
+            view.setEtaEstimate(usefulTimings ? (long) total * dev.jkbuild.runtime.EffortWeights.MS_PER_WEIGHT : 0);
 
             for (Path moduleDir : sorted) {
                 String module = workspaceRoot.relativize(moduleDir).toString();
@@ -673,10 +716,10 @@ public final class BuildCommand implements CliCommand {
      */
     static List<Path> topoSortModules(Map<Path, JkBuild> modulesByDir) {
         Map<String, Path> dirByCoord = new HashMap<>();
-        Map<String, Path> dirByName  = new HashMap<>(); // for workspace: references
+        Map<String, Path> dirByName = new HashMap<>(); // for workspace: references
         for (var e : modulesByDir.entrySet()) {
-            String coord = e.getValue().project().group()
-                    + ":" + e.getValue().project().name();
+            String coord = e.getValue().project().group() + ":"
+                    + e.getValue().project().name();
             dirByCoord.put(coord, e.getKey());
             dirByName.put(e.getValue().project().name(), e.getKey());
         }
@@ -795,7 +838,10 @@ public final class BuildCommand implements CliCommand {
      * aggregate bar honest from the start. Set from {@link #forecastDirty}.
      */
     private PreparedModule prepareModule(Path dir, boolean skipTests, boolean forceRebuild) {
-        try { dir = dir.toRealPath(); } catch (java.io.IOException ignored) {}
+        try {
+            dir = dir.toRealPath();
+        } catch (java.io.IOException ignored) {
+        }
         Path cache = cacheDir != null ? cacheDir : JkDirs.cache();
         Path buildFile = dir.resolve("jk.toml");
         if (!Files.exists(buildFile)) return null;
@@ -803,11 +849,19 @@ public final class BuildCommand implements CliCommand {
         int workerCount = workers != null && workers > 0 ? workers : 1;
         // Lexical pre-discovery so the run-tests phase's scope is known before
         // any phase runs — see TestCommand.estimateTestCount.
-        int estimatedTestCount = skipTests ? 0
-                : TestCommand.estimateTestCount(dir.resolve("src/test/java"));
+        int estimatedTestCount = skipTests ? 0 : TestCommand.estimateTestCount(dir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                dir, cache, buildFile, lockFile, dir,
-                workerCount, estimatedTestCount, profileName, jdksDir, skipTests, global.verbose);
+                dir,
+                cache,
+                buildFile,
+                lockFile,
+                dir,
+                workerCount,
+                estimatedTestCount,
+                profileName,
+                jdksDir,
+                skipTests,
+                global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs, forceRebuild);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
@@ -815,8 +869,7 @@ public final class BuildCommand implements CliCommand {
         // these into the calibrated total, and the same value is the module's slice
         // of the aggregate bar (see AggregateModuleListener). Computing it once
         // keeps the slice byte-for-byte equal to what was summed into `total`.
-        return new PreparedModule(dir, buildTarget(buildFile, dir), cache, goal,
-                goal.estimatedTotalWeight());
+        return new PreparedModule(dir, buildTarget(buildFile, dir), cache, goal, goal.estimatedTotalWeight());
     }
 
     /** Run an already-built module goal and map its result to an exit code. */
@@ -830,10 +883,8 @@ public final class BuildCommand implements CliCommand {
         } else {
             // chip = true → settle through the goal chip (" ✓ Build ▶ Build successful …"),
             // matching the workspace path. onSuccess/onFailure return the tail after the verb.
-            ConsoleSpec spec = new ConsoleSpec("Build",
-                    r -> projectTail(goal),
-                    r -> GoalWedge.coord(pm.target()),
-                    true);
+            ConsoleSpec spec =
+                    new ConsoleSpec("Build", r -> projectTail(goal), r -> GoalWedge.coord(pm.target()), true);
             result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
 
@@ -841,8 +892,8 @@ public final class BuildCommand implements CliCommand {
             // Cache settings are user-global only; resolve() reads ~/.jk/config.toml
             // (a project jk.toml's [cache] is intentionally ignored).
             var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
-            dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
-                    dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, pm.cache(), exe));
+            dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
+                    .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, pm.cache(), exe));
             return 0;
         }
         // Test failures get exit 4; other failures exit 1.
@@ -855,8 +906,7 @@ public final class BuildCommand implements CliCommand {
      * A workspace module's goal, built and ready to run, paired with its pre-scan
      * bar weight — the module's slice of the calibrated aggregate total.
      */
-    private record PreparedModule(Path dir, String target, Path cache, Goal goal,
-                                  long barWeight) {}
+    private record PreparedModule(Path dir, String target, Path cache, Goal goal, long barWeight) {}
 
     // ---- success summary -----------------------------------------------
 
@@ -888,8 +938,9 @@ public final class BuildCommand implements CliCommand {
 
     /** Success tail {@code Build successful for N modules took T} (work done) — N bold-white. */
     private static String modulesTail(int total, long start) {
-        return buildOk() + " for " + Theme.colorize(String.valueOf(total), Theme.active().focused())
-                + " module" + (total == 1 ? "" : "s") + " " + elapsedSince(start);
+        return buildOk() + " for "
+                + Theme.colorize(String.valueOf(total), Theme.active().focused()) + " module" + (total == 1 ? "" : "s")
+                + " " + elapsedSince(start);
     }
 
     /** Success tail {@code Build successful, <scope> up to date took T} — when nothing was rebuilt. */
@@ -918,10 +969,13 @@ public final class BuildCommand implements CliCommand {
     static String builtArtifact(Goal goal) {
         BuildLayout layout = goal.get(LAYOUT).orElse(null);
         if (layout == null) return "";
-        Path art = firstExisting(layout.nativeBinary(), layout.nativeLibrary(),
-                layout.shadowJar(), layout.mainJar());
-        return art == null ? "" : ". Built " + Theme.colorize(
-                relForDisplay(layout.moduleRoot(), art), Theme.active().path());
+        Path art = firstExisting(layout.nativeBinary(), layout.nativeLibrary(), layout.shadowJar(), layout.mainJar());
+        return art == null
+                ? ""
+                : ". Built "
+                        + Theme.colorize(
+                                relForDisplay(layout.moduleRoot(), art),
+                                Theme.active().path());
     }
 
     private static Path firstExisting(Path... paths) {
@@ -955,5 +1009,4 @@ public final class BuildCommand implements CliCommand {
                 + ": Failure at " + Theme.colorize(module, Theme.active().cyan())
                 + " " + elapsedSince(buildStart);
     }
-
 }

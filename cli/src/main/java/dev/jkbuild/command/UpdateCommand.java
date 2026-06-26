@@ -1,31 +1,26 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.RepoGroupBuilder;
-
-import dev.jkbuild.runtime.GitSourceResolution;
-
-import dev.jkbuild.runtime.CompileToolchain;
-
-import dev.jkbuild.cli.Jk;
-
-import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.cli.PathDisplay;
-
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.Jk;
+import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
-import dev.jkbuild.git.GitFetcher;
-import dev.jkbuild.model.Dependency;
-import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
+import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.WorkspaceMerge;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
 import dev.jkbuild.run.Goal;
@@ -34,11 +29,10 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
-import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.GitSourceResolution;
+import dev.jkbuild.runtime.RepoGroupBuilder;
 import dev.jkbuild.util.JkDirs;
-
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -80,15 +74,18 @@ public final class UpdateCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<coord>@<ver>",
-                        "Pin one coord@ver (not yet implemented).", "--precise"),
+                Opt.value("<coord>@<ver>", "Pin one coord@ver (not yet implemented).", "--precise"),
                 Opt.value("<a,b,...>", "Activate listed features beyond defaults.", "--features")
                         .splitOn(","),
                 Opt.flag("Don't activate the project's defaults.", "--no-default-features"),
                 Opt.flag("Re-fetch branch git dep tips now.", "--git"),
-                Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
-                Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
-                        "--cache-dir").hide());
+                Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url")
+                        .hide(),
+                Opt.value(
+                                "<dir>",
+                                "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                                "--cache-dir")
+                        .hide());
     }
 
     private static final GoalKey<JkBuild> EFFECTIVE = GoalKey.of("effective-build", JkBuild.class);
@@ -149,8 +146,7 @@ public final class UpdateCommand implements CliCommand {
             for (Map.Entry<Path, JkBuild> entry : modules.entrySet()) {
                 Path moduleDir = entry.getKey();
                 JkBuild rawModule = entry.getValue();
-                JkBuild effectiveModule = WorkspaceMerge.applyToModule(
-                        effectiveRoot, rawModule, modules.values());
+                JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
                 int moduleResult = updateSingleProject(moduleDir, effectiveModule, cache);
                 if (moduleResult != 0) return moduleResult;
             }
@@ -200,10 +196,9 @@ public final class UpdateCommand implements CliCommand {
                         // new commit" path — no tag-rewrite check; see
                         // docs/git-source-deps.md).
                         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                                eff, baseRepos, cas,
-                                CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
-                        Lockfile lock = new LockOrchestrator(prep.repos()).lock(
-                                prep.project(), Jk.VERSION, features, !noDefaultFeatures);
+                                eff, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), Jk.VERSION);
+                        Lockfile lock = new LockOrchestrator(prep.repos())
+                                .lock(prep.project(), Jk.VERSION, features, !noDefaultFeatures);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         ctx.put(LOCKFILE, lock);
                     } catch (Exception e) {
@@ -234,7 +229,9 @@ public final class UpdateCommand implements CliCommand {
         if (!result.success()) {
             String failed = result.phases().stream()
                     .filter(p -> p.status() == PhaseStatus.FAIL)
-                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+                    .map(GoalResult.PhaseReport::name)
+                    .findFirst()
+                    .orElse("?");
             return failed.equals("resolve") ? 6 : 2;
         }
 
@@ -259,7 +256,8 @@ public final class UpdateCommand implements CliCommand {
     private int refreshGitBranches(Path dir, JkBuild root, Path cache) throws Exception {
         List<JkBuild> builds = new java.util.ArrayList<>();
         builds.add(root);
-        if (root.isWorkspaceRoot()) builds.addAll(WorkspaceLoader.loadModules(dir, root).values());
+        if (root.isWorkspaceRoot())
+            builds.addAll(WorkspaceLoader.loadModules(dir, root).values());
 
         GitFetcher fetcher = new GitFetcher(cache.resolve("git"));
         java.util.Set<String> seen = new java.util.LinkedHashSet<>();
@@ -267,7 +265,8 @@ public final class UpdateCommand implements CliCommand {
         for (JkBuild b : builds) {
             for (List<Dependency> deps : b.dependencies().byScope().values()) {
                 for (Dependency d : deps) {
-                    if (d.isGit() && d.gitSource().ref() instanceof GitRefSpec.Branch
+                    if (d.isGit()
+                            && d.gitSource().ref() instanceof GitRefSpec.Branch
                             && seen.add(d.module() + "@" + d.gitSource().canonicalUrl())) {
                         fetcher.invalidateBranchTip(d.gitSource());
                         n++;
@@ -276,10 +275,11 @@ public final class UpdateCommand implements CliCommand {
             }
         }
         if (!global.outputIsJson()) {
-            System.out.println(n == 0
-                    ? "No branch git dependencies to refresh."
-                    : "Marked " + n + " branch git dependenc" + (n == 1 ? "y" : "ies")
-                            + " for re-fetch on the next build.");
+            System.out.println(
+                    n == 0
+                            ? "No branch git dependencies to refresh."
+                            : "Marked " + n + " branch git dependenc" + (n == 1 ? "y" : "ies")
+                                    + " for re-fetch on the next build.");
         }
         return 0;
     }

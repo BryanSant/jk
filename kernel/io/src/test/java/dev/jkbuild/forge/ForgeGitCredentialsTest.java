@@ -1,16 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.forge;
 
-import dev.jkbuild.forge.ForgeAuth;
-import dev.jkbuild.forge.ForgeKind;
-import dev.jkbuild.forge.TokenStore;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ForgeGitCredentialsTest {
 
@@ -26,7 +22,7 @@ class ForgeGitCredentialsTest {
         var forge = forgeWith(dir, "github.com", "ghp_tok");
         var creds = ForgeGitCredentials.credentials("https://github.com/acme/widgets", forge);
         assertThat(creds).hasValueSatisfying(up -> {
-            assertThat(up[0]).isEqualTo("ghp_tok");   // username = token
+            assertThat(up[0]).isEqualTo("ghp_tok"); // username = token
             assertThat(up[1]).isEqualTo("");
         });
     }
@@ -57,7 +53,7 @@ class ForgeGitCredentialsTest {
 
     @Test
     void no_stored_token_is_anonymous(@TempDir Path dir) {
-        var forge = forgeWith(dir, "github.com", null);   // nothing stored
+        var forge = forgeWith(dir, "github.com", null); // nothing stored
         assertThat(ForgeGitCredentials.credentials("https://github.com/acme/widgets", forge))
                 .isEmpty();
     }

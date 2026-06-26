@@ -7,7 +7,6 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseStatus;
-
 import java.time.Duration;
 import java.util.List;
 
@@ -69,7 +68,7 @@ public final class AggregateModuleListener implements GoalListener {
         this.module = module;
         this.phases = phases;
         this.slice = slice;
-        this.knownDenominator = slice;   // the goal's initial denominator == its pre-scan estimate
+        this.knownDenominator = slice; // the goal's initial denominator == its pre-scan estimate
     }
 
     @Override
@@ -106,15 +105,16 @@ public final class AggregateModuleListener implements GoalListener {
             emit(ConsoleSpec.compilerWarning(phase, message));
         } else {
             emit(ProgressBarListener.renderDiagnostic(
-                    "⚠ Warning", dev.jkbuild.cli.theme.Theme.active().warning().bold(),
-                    phase, code, message));
+                    "⚠ Warning", dev.jkbuild.cli.theme.Theme.active().warning().bold(), phase, code, message));
         }
     }
 
     /** Buffer (parallel) or write-above-now (serial), per {@link #bufferOutputInto}. */
     private void emit(String line) {
         if (outBuffer != null) {
-            synchronized (outBuffer) { outBuffer.add(line); }
+            synchronized (outBuffer) {
+                outBuffer.add(line);
+            }
         } else {
             cm.writeAbove(line);
         }

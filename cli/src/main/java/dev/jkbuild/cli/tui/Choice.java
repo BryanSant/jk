@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
-import org.jline.utils.AttributedString;
-
 import java.util.function.Function;
+import org.jline.utils.AttributedString;
 
 /**
  * One option in a radio or multi-select step.
@@ -48,14 +47,13 @@ public record Choice(
     }
 
     /** Rich-label factory — caller supplies focused/unfocused renderings. */
-    public static Choice rich(String id, String fallbackLabel,
-                              Function<Boolean, AttributedString> richLabelFn) {
+    public static Choice rich(String id, String fallbackLabel, Function<Boolean, AttributedString> richLabelFn) {
         return new Choice(id, fallbackLabel, "", null, richLabelFn);
     }
 
     /** Rich-label factory with a hint suffix. */
-    public static Choice rich(String id, String fallbackLabel, String hint,
-                              Function<Boolean, AttributedString> richLabelFn) {
+    public static Choice rich(
+            String id, String fallbackLabel, String hint, Function<Boolean, AttributedString> richLabelFn) {
         return new Choice(id, fallbackLabel, hint, null, richLabelFn);
     }
 

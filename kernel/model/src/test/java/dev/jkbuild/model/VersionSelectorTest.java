@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.model;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 class VersionSelectorTest {
 
@@ -63,11 +63,8 @@ class VersionSelectorTest {
 
     @Test
     void parseFloating_honors_other_decorations() {
-        assertThat(VersionSelector.parseFloating("~2.18.2"))
-                .isInstanceOf(VersionSelector.Tilde.class);
-        assertThat(VersionSelector.parseFloating(">=2.18,<3"))
-                .isInstanceOf(VersionSelector.Range.class);
-        assertThat(VersionSelector.parseFloating("latest"))
-                .isInstanceOf(VersionSelector.Latest.class);
+        assertThat(VersionSelector.parseFloating("~2.18.2")).isInstanceOf(VersionSelector.Tilde.class);
+        assertThat(VersionSelector.parseFloating(">=2.18,<3")).isInstanceOf(VersionSelector.Range.class);
+        assertThat(VersionSelector.parseFloating("latest")).isInstanceOf(VersionSelector.Latest.class);
     }
 }

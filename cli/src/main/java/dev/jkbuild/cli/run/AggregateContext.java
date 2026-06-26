@@ -3,7 +3,6 @@ package dev.jkbuild.cli.run;
 
 import dev.jkbuild.cli.tui.CommandManager;
 import dev.jkbuild.run.GoalResult;
-
 import java.util.List;
 
 /**
@@ -30,7 +29,7 @@ public final class AggregateContext {
 
     private final CommandManager cm;
     private long completedBase;
-    private long total;            // fixed aggregate denominator, 0 until calibrated
+    private long total; // fixed aggregate denominator, 0 until calibrated
     // Calibrated path: each still-running module's current contribution to its
     // slice. The aggregate numerator is completedBase + Σ(these), so modules
     // building concurrently sum into the bar instead of clobbering one another
@@ -111,7 +110,11 @@ public final class AggregateContext {
     }
 
     /** Errors from the most recently failed module goal. */
-    public List<GoalResult.Diagnostic> lastErrors() { return lastErrors; }
+    public List<GoalResult.Diagnostic> lastErrors() {
+        return lastErrors;
+    }
 
-    public void notifyErrors(List<GoalResult.Diagnostic> errors) { this.lastErrors = errors; }
+    public void notifyErrors(List<GoalResult.Diagnostic> errors) {
+        this.lastErrors = errors;
+    }
 }

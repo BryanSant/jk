@@ -3,7 +3,6 @@ package dev.jkbuild.model;
 
 import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -41,8 +40,7 @@ public record Profiles(Map<String, Profile> byName) {
 
     private Profile resolveInternal(String name, Set<String> visiting) {
         if (!visiting.add(name)) {
-            throw new IllegalStateException(
-                    "cycle in profile inheritance at `" + name + "` (chain: " + visiting + ")");
+            throw new IllegalStateException("cycle in profile inheritance at `" + name + "` (chain: " + visiting + ")");
         }
         Profile current = byName.get(name);
         if (current.inherits() == null) {
@@ -59,8 +57,9 @@ public record Profiles(Map<String, Profile> byName) {
     /** Picks the auto-selected profile name based on env, or {@code null}. */
     public static String autoSelect(Map<String, String> env) {
         return env.getOrDefault("CI", "").equalsIgnoreCase("true")
-                || env.containsKey("GITHUB_ACTIONS")
-                || env.containsKey("GITLAB_CI")
-                ? "ci" : null;
+                        || env.containsKey("GITHUB_ACTIONS")
+                        || env.containsKey("GITLAB_CI")
+                ? "ci"
+                : null;
     }
 }

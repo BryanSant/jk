@@ -7,12 +7,7 @@ import java.util.Objects;
  * Maven coordinate: {@code groupId:artifactId:version[:classifier@type]}.
  * Type defaults to {@code jar}; classifier defaults to absent.
  */
-public record Coordinate(
-        String group,
-        String artifact,
-        String version,
-        String classifier,
-        String type) {
+public record Coordinate(String group, String artifact, String version, String classifier, String type) {
 
     public Coordinate {
         Objects.requireNonNull(group, "group");

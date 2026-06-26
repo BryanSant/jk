@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class FreshnessStampTest {
 
@@ -18,7 +17,8 @@ class FreshnessStampTest {
     void absent_stamp_is_not_fresh(@TempDir Path tempDir) throws IOException {
         Path classes = tempDir.resolve("classes");
         Files.createDirectories(classes);
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(), List.of())).isFalse();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(), List.of()))
+                .isFalse();
     }
 
     @Test
@@ -35,7 +35,8 @@ class FreshnessStampTest {
         Files.setLastModifiedTime(src, FileTime.fromMillis(System.currentTimeMillis() - 1000));
         Files.setLastModifiedTime(jar, FileTime.fromMillis(System.currentTimeMillis() - 1000));
 
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of(jar))).isTrue();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of(jar)))
+                .isTrue();
     }
 
     @Test
@@ -47,12 +48,12 @@ class FreshnessStampTest {
         // Bump mtime forward; the stat will now exceed the stamp time.
         Files.setLastModifiedTime(src, FileTime.fromMillis(System.currentTimeMillis() + 5_000));
 
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of())).isFalse();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of()))
+                .isFalse();
     }
 
     @Test
-    void input_modified_in_the_same_millisecond_as_the_stamp_is_not_fresh(@TempDir Path tempDir)
-            throws IOException {
+    void input_modified_in_the_same_millisecond_as_the_stamp_is_not_fresh(@TempDir Path tempDir) throws IOException {
         // Regression: a build that finishes writing its stamp in the same
         // millisecond a source is edited must NOT be treated as fresh — it has
         // to fall through to the content-hashing action cache. (This is the
@@ -62,10 +63,13 @@ class FreshnessStampTest {
         Path src = writeFile(tempDir.resolve("A.java"), "class A {}");
         FreshnessStamp.write(classes, FreshnessStamp.JAVA_STAMP, "compile-main", "key123", List.of(src), List.of());
 
-        long stampMillis = FreshnessStamp.read(classes, FreshnessStamp.JAVA_STAMP).orElseThrow().stampMillis();
+        long stampMillis = FreshnessStamp.read(classes, FreshnessStamp.JAVA_STAMP)
+                .orElseThrow()
+                .stampMillis();
         Files.setLastModifiedTime(src, FileTime.fromMillis(stampMillis));
 
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of())).isFalse();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of()))
+                .isFalse();
     }
 
     @Test
@@ -81,7 +85,8 @@ class FreshnessStampTest {
 
         // Source set composition changed → not fresh, even though both files
         // are older than the stamp.
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(a, b), List.of())).isFalse();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(a, b), List.of()))
+                .isFalse();
     }
 
     @Test
@@ -94,7 +99,8 @@ class FreshnessStampTest {
 
         // Caller passes a smaller source list — stamp said it covered two.
         Files.setLastModifiedTime(a, FileTime.fromMillis(System.currentTimeMillis() - 1000));
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(a), List.of())).isFalse();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(a), List.of()))
+                .isFalse();
     }
 
     @Test
@@ -105,7 +111,8 @@ class FreshnessStampTest {
         FreshnessStamp.write(classes, FreshnessStamp.JAVA_STAMP, "compile-main", "key123", List.of(src), List.of());
 
         Files.delete(src);
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of())).isFalse();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of()))
+                .isFalse();
     }
 
     @Test
@@ -120,7 +127,8 @@ class FreshnessStampTest {
         Files.delete(classes.resolve(FreshnessStamp.JAVA_STAMP));
         Files.delete(classes);
 
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of())).isFalse();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of()))
+                .isFalse();
     }
 
     @Test
@@ -135,7 +143,8 @@ class FreshnessStampTest {
         Files.setLastModifiedTime(src, FileTime.fromMillis(System.currentTimeMillis() - 1000));
         Files.setLastModifiedTime(jar, FileTime.fromMillis(System.currentTimeMillis() + 5_000));
 
-        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of(jar))).isFalse();
+        assertThat(FreshnessStamp.isFresh(classes, FreshnessStamp.JAVA_STAMP, List.of(src), List.of(jar)))
+                .isFalse();
     }
 
     private static Path writeFile(Path file, String body) throws IOException {

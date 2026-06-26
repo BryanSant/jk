@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -29,7 +28,9 @@ public final class JenvProbe implements LocalToolProbe {
     }
 
     @Override
-    public String name() { return "jenv"; }
+    public String name() {
+        return "jenv";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {
@@ -39,7 +40,11 @@ public final class JenvProbe implements LocalToolProbe {
         try (Stream<Path> entries = Files.list(versionsDir)) {
             return entries.filter(Files::isDirectory)
                     .map(path -> {
-                        try { return path.toRealPath(); } catch (IOException e) { return path; }
+                        try {
+                            return path.toRealPath();
+                        } catch (IOException e) {
+                            return path;
+                        }
                     })
                     .filter(path -> ToolHealth.isHealthy(spec, path))
                     .findFirst()

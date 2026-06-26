@@ -50,8 +50,7 @@ public class PubGrubSolver {
         // the parent decision positively and the child requirement negatively.
         for (Term dep : rootDeps) {
             addIncompatibility(new Incompatibility(
-                    List.of(rootTerm, dep.invert()),
-                    new Incompatibility.Cause.Dependency(rootTerm, dep)));
+                    List.of(rootTerm, dep.invert()), new Incompatibility.Cause.Dependency(rootTerm, dep)));
         }
 
         // Decide the root up-front. It isn't fetched from the package source —
@@ -119,17 +118,13 @@ public class PubGrubSolver {
                 return;
             }
 
-            Incompatibility prior =
-                    ((PartialSolution.Assignment.Derivation) step.mostRecent).cause();
+            Incompatibility prior = ((PartialSolution.Assignment.Derivation) step.mostRecent).cause();
             current = resolveIncompatibilities(current, prior, step.mostRecentTerm);
         }
     }
 
     /** Located the most-recent assignment that satisfies any term in {@code inco}. */
-    private record ResolutionStep(
-            Term mostRecentTerm,
-            PartialSolution.Assignment mostRecent,
-            int previousLevel) {}
+    private record ResolutionStep(Term mostRecentTerm, PartialSolution.Assignment mostRecent, int previousLevel) {}
 
     private ResolutionStep computeResolutionStep(Incompatibility inco) {
         PartialSolution.Assignment mostRecent = null;
@@ -165,8 +160,7 @@ public class PubGrubSolver {
                 return a;
             }
         }
-        throw new IllegalStateException(
-                "term not actually satisfied: " + term + " in " + solution.assignments());
+        throw new IllegalStateException("term not actually satisfied: " + term + " in " + solution.assignments());
     }
 
     /**
@@ -175,8 +169,7 @@ public class PubGrubSolver {
      * the remaining terms, and record the derivation in the new
      * incompatibility's cause.
      */
-    private Incompatibility resolveIncompatibilities(
-            Incompatibility a, Incompatibility b, Term pivot) {
+    private Incompatibility resolveIncompatibilities(Incompatibility a, Incompatibility b, Term pivot) {
         LinkedHashMap<String, Term> merged = new LinkedHashMap<>();
         for (Incompatibility source : List.of(a, b)) {
             for (Term term : source.terms()) {
@@ -198,8 +191,7 @@ public class PubGrubSolver {
 
     private boolean isFailure(Incompatibility inco) {
         if (inco.terms().isEmpty()) return true;
-        return inco.terms().size() == 1
-                && inco.terms().getFirst().pkg().equals(rootPkg);
+        return inco.terms().size() == 1 && inco.terms().getFirst().pkg().equals(rootPkg);
     }
 
     // --- decisions ---------------------------------------------------------
@@ -255,8 +247,7 @@ public class PubGrubSolver {
         return null; // all packages decided
     }
 
-    private String chooseVersion(String pkg, VersionSet allowed)
-            throws IOException, InterruptedException {
+    private String chooseVersion(String pkg, VersionSet allowed) throws IOException, InterruptedException {
         // versions() is highest-first. Prefer the highest stable version that
         // satisfies the constraint; only fall back to a pre-release when no
         // stable version does (e.g. an explicit `=2.4.0-RC2` pin, a BOM pin, or

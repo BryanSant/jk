@@ -2,7 +2,6 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.util.Hashing;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -66,11 +65,7 @@ public final class TestStamp {
      * @param extraInputs    toolchain / runner / forked-worker identity tokens
      */
     public static String computeKey(
-            List<Path> testSources,
-            Path mainClasses,
-            Path lockFile,
-            List<Path> runtimeCp,
-            List<String> extraInputs) {
+            List<Path> testSources, Path mainClasses, Path lockFile, List<Path> runtimeCp, List<String> extraInputs) {
         try {
             MessageDigest md = MessageDigest.getInstance("SHA-256");
             feed(md, FORMAT_VERSION);
@@ -80,8 +75,7 @@ public final class TestStamp {
             sortedSources.sort(Comparator.comparing(Path::toString));
             for (Path src : sortedSources) {
                 if (!Files.isRegularFile(src)) continue; // generated / deleted
-                feed(md, "src:" + src.toAbsolutePath().normalize()
-                        + ":" + Hashing.sha256Hex(Files.readAllBytes(src)));
+                feed(md, "src:" + src.toAbsolutePath().normalize() + ":" + Hashing.sha256Hex(Files.readAllBytes(src)));
             }
 
             // The module's own compiled main output — a main-only change busts the

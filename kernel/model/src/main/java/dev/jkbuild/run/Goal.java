@@ -2,7 +2,6 @@
 package dev.jkbuild.run;
 
 import dev.jkbuild.util.JkThreads;
-
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -87,6 +86,7 @@ public final class Goal {
      * right end-of-goal rendering.
      */
     private final AtomicBoolean userRequestedCancel = new AtomicBoolean(false);
+
     private final Map<String, PhaseStatus> statuses = new ConcurrentHashMap<>();
     private final List<GoalResult.Diagnostic> warnings = Collections.synchronizedList(new ArrayList<>());
     private final List<GoalResult.Diagnostic> errors = Collections.synchronizedList(new ArrayList<>());
@@ -103,9 +103,17 @@ public final class Goal {
         validate(this.phases);
     }
 
-    public String name() { return name; }
-    public boolean interactive() { return interactive; }
-    public List<Phase> phases() { return phases; }
+    public String name() {
+        return name;
+    }
+
+    public boolean interactive() {
+        return interactive;
+    }
+
+    public List<Phase> phases() {
+        return phases;
+    }
 
     public void addListener(GoalListener listener) {
         listeners.add(Objects.requireNonNull(listener));
@@ -118,8 +126,8 @@ public final class Goal {
     }
 
     public GoalView snapshot() {
-        return new GoalView(name, numerator.sum(), denominator.sum(),
-                phases.size(), phasesComplete.get(), cancelled.get());
+        return new GoalView(
+                name, numerator.sum(), denominator.sum(), phases.size(), phasesComplete.get(), cancelled.get());
     }
 
     /**
@@ -225,9 +233,8 @@ public final class Goal {
             reports.add(new GoalResult.PhaseReport(p.name(), PhaseStatus.CANCELLED, Duration.ZERO));
         }
 
-        boolean success = !cancelled.get() && phases.stream()
-                .map(p -> statuses.get(p.name()))
-                .allMatch(s -> s == PhaseStatus.SUCCESS);
+        boolean success = !cancelled.get()
+                && phases.stream().map(p -> statuses.get(p.name())).allMatch(s -> s == PhaseStatus.SUCCESS);
 
         // Sort reports back into declaration order so the printed summary
         // matches the user's mental model of the build pipeline.
@@ -237,10 +244,14 @@ public final class Goal {
         orderedReports.sort(Comparator.comparingInt(r -> declOrder.getOrDefault(r.name(), Integer.MAX_VALUE)));
 
         GoalResult result = new GoalResult(
-                name, success,
+                name,
+                success,
                 Duration.between(goalStart, Instant.now()),
-                orderedReports, warnings, errors,
-                cancelled.get(), userRequestedCancel.get());
+                orderedReports,
+                warnings,
+                errors,
+                cancelled.get(),
+                userRequestedCancel.get());
         emit(l -> l.goalFinish(result));
         return result;
     }
@@ -259,12 +270,20 @@ public final class Goal {
             t.setDaemon(true);
             return t;
         });
-        ticker.scheduleAtFixedRate(() -> {
-            long now = System.nanoTime();
-            for (DefaultPhaseContext c : ticking) {
-                try { c.tick(now); } catch (RuntimeException ignored) { /* never break the ticker */ }
-            }
-        }, INTERP_TICK_MS, INTERP_TICK_MS, TimeUnit.MILLISECONDS);
+        ticker.scheduleAtFixedRate(
+                () -> {
+                    long now = System.nanoTime();
+                    for (DefaultPhaseContext c : ticking) {
+                        try {
+                            c.tick(now);
+                        } catch (RuntimeException ignored) {
+                            /* never break the ticker */
+                        }
+                    }
+                },
+                INTERP_TICK_MS,
+                INTERP_TICK_MS,
+                TimeUnit.MILLISECONDS);
         return ticker;
     }
 
@@ -274,8 +293,7 @@ public final class Goal {
      * true when every phase in the level succeeded; false on the first
      * fail (triggers cooperative cancellation).
      */
-    private boolean runLevel(List<Phase> ready, Map<String, Integer> initialScope,
-                             Map<String, Integer> weights) {
+    private boolean runLevel(List<Phase> ready, Map<String, Integer> initialScope, Map<String, Integer> weights) {
         List<CompletableFuture<PhaseStatus>> futures = new ArrayList<>();
         for (Phase p : ready) {
             int scope = initialScope.getOrDefault(p.name(), 0);
@@ -322,8 +340,7 @@ public final class Goal {
         long startNanos = System.nanoTime();
         long expectedNanos = phase.interpolated() ? (long) weight * INTERP_NANOS_PER_WEIGHT : 0;
         DefaultPhaseContext ctx = new DefaultPhaseContext(
-                phase.name(), this, initialScope, weight, phase.hasExplicitWeight(),
-                expectedNanos, startNanos);
+                phase.name(), this, initialScope, weight, phase.hasExplicitWeight(), expectedNanos, startNanos);
         boolean ticked = ctx.interpolating();
         if (ticked) ticking.add(ctx);
         try {
@@ -355,10 +372,11 @@ public final class Goal {
             // told us exactly what went wrong. We only synthesise a
             // generic diagnostic when nothing else was reported.
             boolean cancel = cancelled.get();
-            boolean phaseAlreadyReported = !cancel && errors.stream()
-                    .anyMatch(d -> phase.name().equals(d.phase()));
+            boolean phaseAlreadyReported =
+                    !cancel && errors.stream().anyMatch(d -> phase.name().equals(d.phase()));
             if (!phaseAlreadyReported) {
-                errors.add(new GoalResult.Diagnostic(phase.name(),
+                errors.add(new GoalResult.Diagnostic(
+                        phase.name(),
                         cancel ? "cancelled" : "exception",
                         t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage()));
             }
@@ -392,13 +410,33 @@ public final class Goal {
         }
     }
 
-    LongAdder numeratorRef() { return numerator; }
-    LongAdder denominatorRef() { return denominator; }
-    AtomicInteger phasesCompleteRef() { return phasesComplete; }
-    AtomicBoolean cancelledRef() { return cancelled; }
-    List<GoalResult.Diagnostic> warningsRef() { return warnings; }
-    List<GoalResult.Diagnostic> errorsRef() { return errors; }
-    ConcurrentHashMap<String, Object> stateRef() { return state; }
+    LongAdder numeratorRef() {
+        return numerator;
+    }
+
+    LongAdder denominatorRef() {
+        return denominator;
+    }
+
+    AtomicInteger phasesCompleteRef() {
+        return phasesComplete;
+    }
+
+    AtomicBoolean cancelledRef() {
+        return cancelled;
+    }
+
+    List<GoalResult.Diagnostic> warningsRef() {
+        return warnings;
+    }
+
+    List<GoalResult.Diagnostic> errorsRef() {
+        return errors;
+    }
+
+    ConcurrentHashMap<String, Object> stateRef() {
+        return state;
+    }
 
     /**
      * Read a phase-stashed value after {@link #run} has returned.
@@ -428,8 +466,7 @@ public final class Goal {
         for (Phase p : phases) {
             for (String req : p.requires()) {
                 if (!known.contains(req)) {
-                    throw new IllegalArgumentException(
-                            "phase '" + p.name() + "' requires unknown '" + req + "'");
+                    throw new IllegalArgumentException("phase '" + p.name() + "' requires unknown '" + req + "'");
                 }
             }
         }
@@ -492,7 +529,10 @@ public final class Goal {
          * Listeners still get every event; only the default
          * progress-bar consumer respects this flag.
          */
-        public Builder interactive(boolean v) { this.interactive = v; return this; }
+        public Builder interactive(boolean v) {
+            this.interactive = v;
+            return this;
+        }
 
         public Builder addPhase(Phase phase) {
             phases.add(phase);

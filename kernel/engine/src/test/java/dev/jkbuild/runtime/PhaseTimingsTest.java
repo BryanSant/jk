@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
+
+import java.nio.file.Path;
+import java.util.List;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /** The learned per-phase timing ledger: cold fallback, EWMA, TOML round-trip, GC. */
 class PhaseTimingsTest {
 
     private static final long DAY = 86_400_000L;
-    private static final long NOW = 1_700_000_000_000L;   // a fixed "now" for determinism
+    private static final long NOW = 1_700_000_000_000L; // a fixed "now" for determinism
 
     private static void record(Path cache, long now, PhaseTimings.Sample... s) {
         PhaseTimings.clearMemo();
@@ -40,14 +38,14 @@ class PhaseTimingsTest {
         record(cache, NOW + 1, new PhaseTimings.Sample("/m/io", "compile-java", 200.0));
         var v = PhaseTimings.load(cache).perUnit("/m/io", "compile-java");
         assertThat(v).isPresent();
-        assertThat(v.getAsDouble()).isCloseTo(140.0, within(1e-6));   // 0.4*200 + 0.6*100
+        assertThat(v.getAsDouble()).isCloseTo(140.0, within(1e-6)); // 0.4*200 + 0.6*100
     }
 
     @Test
     void survives_a_toml_round_trip_with_pathy_keys(@TempDir Path cache) {
         String dir = "/home/me/src/oss/jk/kernel/engine";
         record(cache, NOW, new PhaseTimings.Sample(dir, "run-tests", 31.4));
-        PhaseTimings.clearMemo();   // force a real re-read from disk
+        PhaseTimings.clearMemo(); // force a real re-read from disk
         var v = PhaseTimings.load(cache).perUnit(dir, "run-tests");
         assertThat(v).isPresent();
         assertThat(v.getAsDouble()).isCloseTo(31.4, within(1e-3));
@@ -80,14 +78,14 @@ class PhaseTimingsTest {
     @Test
     void prune_evicts_entries_older_than_the_max_age(@TempDir Path cache) {
         record(cache, NOW - 3 * 365 * DAY, new PhaseTimings.Sample("/m/stale", "run-tests", 10.0)); // 3y old
-        record(cache, NOW - 10 * DAY, new PhaseTimings.Sample("/m/fresh", "run-tests", 20.0));       // 10d old
+        record(cache, NOW - 10 * DAY, new PhaseTimings.Sample("/m/fresh", "run-tests", 20.0)); // 10d old
 
-        var limits = new PhaseTimings.Limits(100L * 1024 * 1024, 730 * DAY);   // 100MB / 2y
+        var limits = new PhaseTimings.Limits(100L * 1024 * 1024, 730 * DAY); // 100MB / 2y
         var report = PhaseTimings.prune(cache, limits, NOW, false);
 
         assertThat(report.evictedByAge()).isEqualTo(1);
         PhaseTimings t = PhaseTimings.load(cache);
-        assertThat(t.perUnit("/m/stale", "run-tests")).isEmpty();   // aged out
+        assertThat(t.perUnit("/m/stale", "run-tests")).isEmpty(); // aged out
         assertThat(t.perUnit("/m/fresh", "run-tests")).hasValue(20.0);
     }
 
@@ -104,8 +102,8 @@ class PhaseTimingsTest {
         assertThat(report.kept()).isLessThan(30);
         assertThat(report.finalBytes()).isLessThanOrEqualTo(400L);
         PhaseTimings t = PhaseTimings.load(cache);
-        assertThat(t.perUnit("/m/mod0", "run-tests")).isEmpty();        // oldest dropped
-        assertThat(t.perUnit("/m/mod29", "run-tests")).hasValue(5.0);   // newest kept
+        assertThat(t.perUnit("/m/mod0", "run-tests")).isEmpty(); // oldest dropped
+        assertThat(t.perUnit("/m/mod29", "run-tests")).hasValue(5.0); // newest kept
     }
 
     @Test
@@ -131,9 +129,8 @@ class PhaseTimingsTest {
         assertThat(fromCfg.maxAgeMillis()).isEqualTo(365 * DAY);
 
         // Env wins over config.
-        var fromEnv = PhaseTimings.Limits.resolve(cfg,
-                k -> "JK_TIMINGS_MAX_SIZE_MB".equals(k) ? "10" : null);
+        var fromEnv = PhaseTimings.Limits.resolve(cfg, k -> "JK_TIMINGS_MAX_SIZE_MB".equals(k) ? "10" : null);
         assertThat(fromEnv.maxBytes()).isEqualTo(10L * 1024 * 1024);
-        assertThat(fromEnv.maxAgeMillis()).isEqualTo(365 * DAY);   // age still from config
+        assertThat(fromEnv.maxAgeMillis()).isEqualTo(365 * DAY); // age still from config
     }
 }

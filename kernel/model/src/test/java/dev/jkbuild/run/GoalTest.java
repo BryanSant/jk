@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.run;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class GoalTest {
 
@@ -56,9 +54,16 @@ class GoalTest {
     void estimated_total_weight_sums_phase_estimates_without_running() {
         AtomicInteger ran = new AtomicInteger();
         var goal = Goal.builder("estimate")
-                .addPhase(Phase.builder("a").scope(3).execute(ctx -> ran.incrementAndGet()).build())
-                .addPhase(Phase.builder("b").scope(() -> 7).execute(ctx -> ran.incrementAndGet()).build())
-                .addPhase(Phase.builder("c").execute(ctx -> ran.incrementAndGet()).build()) // default scope 1
+                .addPhase(Phase.builder("a")
+                        .scope(3)
+                        .execute(ctx -> ran.incrementAndGet())
+                        .build())
+                .addPhase(Phase.builder("b")
+                        .scope(() -> 7)
+                        .execute(ctx -> ran.incrementAndGet())
+                        .build())
+                .addPhase(
+                        Phase.builder("c").execute(ctx -> ran.incrementAndGet()).build()) // default scope 1
                 .build();
 
         // No explicit weights → weight tracks scope, so the total is unchanged.
@@ -80,26 +85,31 @@ class GoalTest {
         AtomicInteger maxNumOverDen = new AtomicInteger(0);
         var goal = Goal.builder("interleaved")
                 .addListener(new GoalListener() {
-                    @Override public void progress(String phase, int delta, GoalView view) {
+                    @Override
+                    public void progress(String phase, int delta, GoalView view) {
                         if (view.numerator() > view.denominator()) {
-                            maxNumOverDen.updateAndGet(prev -> Math.max(prev,
-                                    (int) (view.numerator() - view.denominator())));
+                            maxNumOverDen.updateAndGet(
+                                    prev -> Math.max(prev, (int) (view.numerator() - view.denominator())));
                         }
                     }
-                    @Override public void scopeUpdate(String phase, int delta, GoalView view) {
+
+                    @Override
+                    public void scopeUpdate(String phase, int delta, GoalView view) {
                         if (view.numerator() > view.denominator()) {
-                            maxNumOverDen.updateAndGet(prev -> Math.max(prev,
-                                    (int) (view.numerator() - view.denominator())));
+                            maxNumOverDen.updateAndGet(
+                                    prev -> Math.max(prev, (int) (view.numerator() - view.denominator())));
                         }
                     }
                 })
-                .addPhase(Phase.builder("loop").scope(0)
+                .addPhase(Phase.builder("loop")
+                        .scope(0)
                         .execute(ctx -> {
                             for (int i = 0; i < 100; i++) {
                                 ctx.updateScope(1);
                                 ctx.progress(1);
                             }
-                        }).build())
+                        })
+                        .build())
                 .build();
 
         var result = goal.run();
@@ -114,12 +124,14 @@ class GoalTest {
         var listener = new RecordingListener();
         var goal = Goal.builder("growing")
                 .addListener(listener)
-                .addPhase(Phase.builder("expand").scope(2)
+                .addPhase(Phase.builder("expand")
+                        .scope(2)
                         .execute(ctx -> {
                             ctx.progress(1);
-                            ctx.updateScope(5);   // denominator climbs from 2 → 7
+                            ctx.updateScope(5); // denominator climbs from 2 → 7
                             ctx.progress(4);
-                        }).build())
+                        })
+                        .build())
                 .build();
 
         var result = goal.run();
@@ -134,11 +146,17 @@ class GoalTest {
     void dag_respects_requires_ordering() {
         List<String> order = new ArrayList<>();
         var goal = Goal.builder("dag")
-                .addPhase(Phase.builder("setup").execute(ctx -> order.add("setup")).build())
-                .addPhase(Phase.builder("middle").requires("setup")
-                        .execute(ctx -> order.add("middle")).build())
-                .addPhase(Phase.builder("end").requires("middle")
-                        .execute(ctx -> order.add("end")).build())
+                .addPhase(Phase.builder("setup")
+                        .execute(ctx -> order.add("setup"))
+                        .build())
+                .addPhase(Phase.builder("middle")
+                        .requires("setup")
+                        .execute(ctx -> order.add("middle"))
+                        .build())
+                .addPhase(Phase.builder("end")
+                        .requires("middle")
+                        .execute(ctx -> order.add("end"))
+                        .build())
                 .build();
 
         goal.run();
@@ -150,16 +168,20 @@ class GoalTest {
         CountDownLatch sawBothRunning = new CountDownLatch(2);
         CountDownLatch release = new CountDownLatch(1);
         var goal = Goal.builder("parallel")
-                .addPhase(Phase.builder("a").kind(PhaseKind.IO)
+                .addPhase(Phase.builder("a")
+                        .kind(PhaseKind.IO)
                         .execute(ctx -> {
                             sawBothRunning.countDown();
                             release.await();
-                        }).build())
-                .addPhase(Phase.builder("b").kind(PhaseKind.IO)
+                        })
+                        .build())
+                .addPhase(Phase.builder("b")
+                        .kind(PhaseKind.IO)
                         .execute(ctx -> {
                             sawBothRunning.countDown();
                             release.await();
-                        }).build())
+                        })
+                        .build())
                 .build();
 
         Thread runner = new Thread(goal::run);
@@ -176,10 +198,16 @@ class GoalTest {
         var ran = new AtomicInteger();
         var goal = Goal.builder("fail")
                 .addPhase(Phase.builder("ok").execute(ctx -> {}).build())
-                .addPhase(Phase.builder("boom").requires("ok")
-                        .execute(ctx -> { throw new RuntimeException("intentional"); }).build())
-                .addPhase(Phase.builder("downstream").requires("boom")
-                        .execute(ctx -> ran.incrementAndGet()).build())
+                .addPhase(Phase.builder("boom")
+                        .requires("ok")
+                        .execute(ctx -> {
+                            throw new RuntimeException("intentional");
+                        })
+                        .build())
+                .addPhase(Phase.builder("downstream")
+                        .requires("boom")
+                        .execute(ctx -> ran.incrementAndGet())
+                        .build())
                 .build();
 
         var result = goal.run();
@@ -199,7 +227,8 @@ class GoalTest {
                         .execute(ctx -> {
                             ctx.warn("dep.unverified", "no checksum for X");
                             ctx.warn("dep.unverified", "no checksum for Y");
-                        }).build())
+                        })
+                        .build())
                 .build();
         var result = goal.run();
         assertThat(result.success()).isTrue();
@@ -209,9 +238,9 @@ class GoalTest {
     @Test
     void duplicate_phase_names_are_rejected() {
         assertThatThrownBy(() -> Goal.builder("dup")
-                .addPhase(Phase.builder("x").execute(ctx -> {}).build())
-                .addPhase(Phase.builder("x").execute(ctx -> {}).build())
-                .build())
+                        .addPhase(Phase.builder("x").execute(ctx -> {}).build())
+                        .addPhase(Phase.builder("x").execute(ctx -> {}).build())
+                        .build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("duplicate");
     }
@@ -219,8 +248,11 @@ class GoalTest {
     @Test
     void unknown_requires_is_rejected() {
         assertThatThrownBy(() -> Goal.builder("bad")
-                .addPhase(Phase.builder("x").requires("nope").execute(ctx -> {}).build())
-                .build())
+                        .addPhase(Phase.builder("x")
+                                .requires("nope")
+                                .execute(ctx -> {})
+                                .build())
+                        .build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("unknown");
     }
@@ -228,9 +260,15 @@ class GoalTest {
     @Test
     void cycle_is_rejected() {
         assertThatThrownBy(() -> Goal.builder("loop")
-                .addPhase(Phase.builder("a").requires("b").execute(ctx -> {}).build())
-                .addPhase(Phase.builder("b").requires("a").execute(ctx -> {}).build())
-                .build())
+                        .addPhase(Phase.builder("a")
+                                .requires("b")
+                                .execute(ctx -> {})
+                                .build())
+                        .addPhase(Phase.builder("b")
+                                .requires("a")
+                                .execute(ctx -> {})
+                                .build())
+                        .build())
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("cycle");
     }
@@ -242,15 +280,19 @@ class GoalTest {
         List<String> consumed = new ArrayList<>();
 
         var goal = Goal.builder("flow")
-                .addPhase(Phase.builder("producer").execute(ctx -> {
-                    ctx.put(NAME, "widget");
-                    ctx.put(COUNT, 42);
-                }).build())
-                .addPhase(Phase.builder("consumer").requires("producer")
+                .addPhase(Phase.builder("producer")
+                        .execute(ctx -> {
+                            ctx.put(NAME, "widget");
+                            ctx.put(COUNT, 42);
+                        })
+                        .build())
+                .addPhase(Phase.builder("consumer")
+                        .requires("producer")
                         .execute(ctx -> {
                             consumed.add(ctx.require(NAME));
                             consumed.add(String.valueOf((int) ctx.require(COUNT)));
-                        }).build())
+                        })
+                        .build())
                 .build();
 
         var result = goal.run();
@@ -264,7 +306,9 @@ class GoalTest {
     void require_throws_when_key_missing() {
         GoalKey<String> MISSING = GoalKey.of("missing", String.class);
         var goal = Goal.builder("oops")
-                .addPhase(Phase.builder("reader").execute(ctx -> ctx.require(MISSING)).build())
+                .addPhase(Phase.builder("reader")
+                        .execute(ctx -> ctx.require(MISSING))
+                        .build())
                 .build();
         var result = goal.run();
         assertThat(result.success()).isFalse();
@@ -277,14 +321,16 @@ class GoalTest {
         CountDownLatch started = new CountDownLatch(1);
         CountDownLatch sawCancelled = new CountDownLatch(1);
         var goal = Goal.builder("cancellable")
-                .addPhase(Phase.builder("worker").kind(PhaseKind.IO)
+                .addPhase(Phase.builder("worker")
+                        .kind(PhaseKind.IO)
                         .execute(ctx -> {
                             started.countDown();
                             while (!ctx.cancelled()) {
                                 Thread.sleep(10);
                             }
                             sawCancelled.countDown();
-                        }).build())
+                        })
+                        .build())
                 .build();
 
         Thread runner = new Thread(goal::run);
@@ -303,16 +349,23 @@ class GoalTest {
         final List<String> errors = new ArrayList<>();
         volatile GoalResult finalResult;
 
-        @Override public void scopeUpdate(String phase, int delta, GoalView view) {
+        @Override
+        public void scopeUpdate(String phase, int delta, GoalView view) {
             scopeUpdates.add(delta);
         }
-        @Override public void warn(String phase, String code, String message) {
+
+        @Override
+        public void warn(String phase, String code, String message) {
             warnings.add(code + ":" + message);
         }
-        @Override public void error(String phase, String code, String message) {
+
+        @Override
+        public void error(String phase, String code, String message) {
             errors.add(code + ":" + message);
         }
-        @Override public void goalFinish(GoalResult result) {
+
+        @Override
+        public void goalFinish(GoalResult result) {
             finalResult = result;
         }
     }

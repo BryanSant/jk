@@ -26,10 +26,21 @@ public final class Checksums {
                 digestHex(data, "SHA-512"));
     }
 
-    public static String md5Hex(byte[] data) { return digestHex(data, "MD5"); }
-    public static String sha1Hex(byte[] data) { return digestHex(data, "SHA-1"); }
-    public static String sha256Hex(byte[] data) { return digestHex(data, "SHA-256"); }
-    public static String sha512Hex(byte[] data) { return digestHex(data, "SHA-512"); }
+    public static String md5Hex(byte[] data) {
+        return digestHex(data, "MD5");
+    }
+
+    public static String sha1Hex(byte[] data) {
+        return digestHex(data, "SHA-1");
+    }
+
+    public static String sha256Hex(byte[] data) {
+        return digestHex(data, "SHA-256");
+    }
+
+    public static String sha512Hex(byte[] data) {
+        return digestHex(data, "SHA-512");
+    }
 
     private static String digestHex(byte[] data, String algorithm) {
         try {

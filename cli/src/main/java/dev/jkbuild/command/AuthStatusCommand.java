@@ -10,7 +10,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
@@ -18,14 +17,25 @@ import java.util.Optional;
 /** {@code jk auth status} — report which forges jk is authenticated with. */
 public final class AuthStatusCommand implements CliCommand {
 
-    @Override public String name() { return "status"; }
-    @Override public String description() { return "Show which forges jk is authenticated with"; }
+    @Override
+    public String name() {
+        return "status";
+    }
+
+    @Override
+    public String description() {
+        return "Show which forges jk is authenticated with";
+    }
 
     @Override
     public List<Opt> options() {
         return List.of(
                 Opt.value("<HOST>", "Forge host (required for Gitea/Forgejo)", "--host"),
-                Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/credentials.", "--credentials-dir").hide());
+                Opt.value(
+                                "<dir>",
+                                "Override the credentials directory. Default: ~/.jk/credentials.",
+                                "--credentials-dir")
+                        .hide());
     }
 
     @Override
@@ -39,21 +49,24 @@ public final class AuthStatusCommand implements CliCommand {
         String host = in.value("host").orElse(null);
         Path credentialsDir = in.value("credentials-dir").map(Path::of).orElse(null);
 
-        List<ForgeKind> kinds = (provider != null)
-                ? List.of(AuthCommand.requireKind(provider))
-                : List.of(ForgeKind.values());
+        List<ForgeKind> kinds =
+                (provider != null) ? List.of(AuthCommand.requireKind(provider)) : List.of(ForgeKind.values());
         ForgeAuth auth = AuthCommand.authFor(credentialsDir);
         boolean anyAuthenticated = false;
 
         for (ForgeKind kind : kinds) {
             if (host == null && kind.defaultHost().isEmpty()) {
-                System.out.println(label(kind, "(pass --host to check)")); continue;
+                System.out.println(label(kind, "(pass --host to check)"));
+                continue;
             }
             String resolvedHost = ForgeAuth.resolveHost(kind, host);
             Optional<ResolvedToken> token = auth.resolveSilently(kind, resolvedHost);
             if (token.isPresent()) {
                 anyAuthenticated = true;
-                System.out.println(label(kind, resolvedHost + " — authenticated (" + describe(token.get().source()) + ")"));
+                System.out.println(label(
+                        kind,
+                        resolvedHost + " — authenticated ("
+                                + describe(token.get().source()) + ")"));
             } else {
                 System.out.println(label(kind, resolvedHost + " — not authenticated"));
             }
@@ -67,9 +80,12 @@ public final class AuthStatusCommand implements CliCommand {
 
     private static String describe(TokenSource source) {
         return switch (source) {
-            case JK_ENV -> "from JK_…_TOKEN env var"; case NATIVE_ENV -> "from native env var";
-            case NATIVE_CLI -> "via native CLI"; case STORE -> "jk login";
-            case DEVICE_FLOW -> "device flow"; case PAT -> "token";
+            case JK_ENV -> "from JK_…_TOKEN env var";
+            case NATIVE_ENV -> "from native env var";
+            case NATIVE_CLI -> "via native CLI";
+            case STORE -> "jk login";
+            case DEVICE_FLOW -> "device flow";
+            case PAT -> "token";
         };
     }
 }

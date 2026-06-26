@@ -29,8 +29,8 @@ public final class EchoWorkerMain {
     private EchoWorkerMain() {}
 
     public static void main(String[] args) throws IOException {
-        PrintStream out = new PrintStream(
-                new FileOutputStream(FileDescriptor.out), /* autoFlush */ true, StandardCharsets.UTF_8);
+        PrintStream out =
+                new PrintStream(new FileOutputStream(FileDescriptor.out), /* autoFlush */ true, StandardCharsets.UTF_8);
 
         if (args.length > 0 && args[0].equals("oneshot")) {
             out.println("plain chatter");
@@ -42,8 +42,7 @@ public final class EchoWorkerMain {
         // pull mode
         out.println("plain chatter line");
         out.println("##T:{\"e\":\"ready\"}");
-        try (BufferedReader in = new BufferedReader(
-                new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
             String line;
             while ((line = in.readLine()) != null) {
                 if (line.equals("DONE")) break;

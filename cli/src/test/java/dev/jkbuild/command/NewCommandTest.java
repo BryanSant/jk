@@ -1,30 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
 import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class NewCommandTest {
 
     @Test
     void flag_mode_writes_files(@TempDir Path tempDir) throws IOException {
-        int exit = Jk.execute(
-                "new", "--group", "com.example", "--name", "widget", "--jdk", "25", tempDir.toString());
+        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget", "--jdk", "25", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         Path buildFile = tempDir.resolve("jk.toml");
@@ -46,8 +41,16 @@ class NewCommandTest {
 
     @Test
     void explicit_vendor_spec_is_preserved_in_jk_toml(@TempDir Path tempDir) throws IOException {
-        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
-                "--jdk", "corretto-25", "--no-module", tempDir.toString());
+        int exit = Jk.execute(
+                "new",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
+                "--jdk",
+                "corretto-25",
+                "--no-module",
+                tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
@@ -59,10 +62,11 @@ class NewCommandTest {
 
     @Test
     void bare_major_jdk_flag_writes_a_bare_pin(@TempDir Path tempDir) throws IOException {
-        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
-                "--jdk", "21", "--no-module", tempDir.toString());
+        int exit = Jk.execute(
+                "new", "--group", "com.example", "--name", "widget", "--jdk", "21", "--no-module", tempDir.toString());
         assertThat(exit).isEqualTo(0);
-        assertThat(JkBuildParser.parse(tempDir.resolve("jk.toml")).project().jdk()).isEqualTo("21");
+        assertThat(JkBuildParser.parse(tempDir.resolve("jk.toml")).project().jdk())
+                .isEqualTo("21");
     }
 
     @Test
@@ -70,13 +74,22 @@ class NewCommandTest {
         // A native project's build JDK follows the normal rules (here an explicit
         // bare major); the GraalVM is never chosen here — it's resolved into
         // jk.lock when project.native is set — so no `graal` lands in jk.toml.
-        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
-                "--native", "--jdk", "21", "--no-module", tempDir.toString());
+        int exit = Jk.execute(
+                "new",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
+                "--native",
+                "--jdk",
+                "21",
+                "--no-module",
+                tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
-        assertThat(parsed.project().jdk()).isEqualTo("21");        // not forced to a GraalVM
-        assertThat(parsed.project().graal()).isNull();             // graal stays out of jk.toml
+        assertThat(parsed.project().jdk()).isEqualTo("21"); // not forced to a GraalVM
+        assertThat(parsed.project().graal()).isNull(); // graal stays out of jk.toml
         assertThat(parsed.project().nativeMode()).isEqualTo(JkBuild.NativeMode.ALWAYS);
 
         String toml = Files.readString(tempDir.resolve("jk.toml"));
@@ -91,8 +104,16 @@ class NewCommandTest {
         System.setErr(new PrintStream(captured, true, StandardCharsets.UTF_8));
         int exit;
         try {
-            exit = Jk.execute("new", "--group", "com.example", "--name", "widget",
-                    "--jdk", "25.0.3", "--no-module", tempDir.toString());
+            exit = Jk.execute(
+                    "new",
+                    "--group",
+                    "com.example",
+                    "--name",
+                    "widget",
+                    "--jdk",
+                    "25.0.3",
+                    "--no-module",
+                    tempDir.toString());
         } finally {
             System.setErr(prevErr);
         }
@@ -131,10 +152,13 @@ class NewCommandTest {
         // --executable and the generated Main FQCN is derived from the group.
         int exit = Jk.execute(
                 "new",
-                "--group", "com.example",
-                "--name", "widget",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
                 "--shadow",
-                "--layout", "traditional",
+                "--layout",
+                "traditional",
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
@@ -147,10 +171,13 @@ class NewCommandTest {
     void executable_writes_derived_main_field(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute(
                 "new",
-                "--group", "com.example",
-                "--name", "widget",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
                 "--executable",
-                "--layout", "traditional",
+                "--layout",
+                "traditional",
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
@@ -164,12 +191,7 @@ class NewCommandTest {
         // Default (simple) layout still packages Main under the group:
         // src/<group>/Main.java with `package <group>;`. The jk.toml main field
         // must therefore be the FQCN, not the bare class name.
-        int exit = Jk.execute(
-                "new",
-                "--group", "com.example",
-                "--name", "widget",
-                "--executable",
-                tempDir.toString());
+        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget", "--executable", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         Path main = tempDir.resolve("src/com/example/Main.java");
@@ -183,11 +205,7 @@ class NewCommandTest {
 
     @Test
     void library_when_no_main(@TempDir Path tempDir) throws IOException {
-        int exit = Jk.execute(
-                "new",
-                "--group", "com.example",
-                "--name", "widget",
-                tempDir.toString());
+        int exit = Jk.execute("new", "--group", "com.example", "--name", "widget", tempDir.toString());
         assertThat(exit).isEqualTo(0);
 
         JkBuild parsed = JkBuildParser.parse(tempDir.resolve("jk.toml"));
@@ -199,9 +217,12 @@ class NewCommandTest {
     void kotlin_lang_writes_kt_sample(@TempDir Path tempDir) throws IOException {
         int exit = Jk.execute(
                 "new",
-                "--group", "com.example",
-                "--name", "widget",
-                "--lang", "kotlin",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
+                "--lang",
+                "kotlin",
                 "--executable",
                 tempDir.toString());
         assertThat(exit).isEqualTo(0);
@@ -214,7 +235,8 @@ class NewCommandTest {
 
     @Test
     void wizard_preset_name_is_empty_when_no_positional() {
-        assertThat(NewCommand.wizardPresetName(null, Path.of("/home/bob/myapp"))).isEmpty();
+        assertThat(NewCommand.wizardPresetName(null, Path.of("/home/bob/myapp")))
+                .isEmpty();
     }
 
     @Test
@@ -247,15 +269,13 @@ class NewCommandTest {
 
     @Test
     void resolve_target_with_relative_arg_resolves_against_cwd() {
-        assertThat(NewCommand.resolveTarget(
-                Path.of("widget"), Path.of("/home/bob"), "widget"))
+        assertThat(NewCommand.resolveTarget(Path.of("widget"), Path.of("/home/bob"), "widget"))
                 .isEqualTo(Path.of("/home/bob/widget"));
     }
 
     @Test
     void resolve_target_with_absolute_arg_uses_it_as_is() {
-        assertThat(NewCommand.resolveTarget(
-                Path.of("/tmp/foo/widget"), Path.of("/home/bob"), "widget"))
+        assertThat(NewCommand.resolveTarget(Path.of("/tmp/foo/widget"), Path.of("/home/bob"), "widget"))
                 .isEqualTo(Path.of("/tmp/foo/widget"));
     }
 

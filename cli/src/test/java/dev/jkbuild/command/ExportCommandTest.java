@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.cli.Jk;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * End-to-end coverage for {@code jk export <gradle|maven|idea>}: the in-process
@@ -47,8 +46,7 @@ class ExportCommandTest {
         assertThat(build).contains("mainClass = \"com.example.Main\"");
         assertThat(build).contains("languageVersion = JavaLanguageVersion.of(21)");
         assertThat(build).contains("implementation(\"com.google.guava:guava:33.0.0-jre\")");
-        assertThat(Files.readString(tmp.resolve("settings.gradle.kts")))
-                .contains("foojay-resolver-convention");
+        assertThat(Files.readString(tmp.resolve("settings.gradle.kts"))).contains("foojay-resolver-convention");
     }
 
     @Test
@@ -76,9 +74,11 @@ class ExportCommandTest {
     void overwrite_guard_blocks_then_force_allows(@TempDir Path tmp) throws IOException {
         writeApp(tmp);
 
-        assertThat(Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()})).isEqualTo(0);
+        assertThat(Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()}))
+                .isEqualTo(0);
         // Second run without --force must refuse.
-        assertThat(Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()})).isNotEqualTo(0);
+        assertThat(Jk.execute(new String[] {"export", "maven", "-C", tmp.toString()}))
+                .isNotEqualTo(0);
         // With --force it overwrites.
         assertThat(Jk.execute(new String[] {"export", "maven", "--force", "-C", tmp.toString()}))
                 .isEqualTo(0);
@@ -161,8 +161,7 @@ class ExportCommandTest {
         int exit = Jk.execute(new String[] {"export", "gradle", "-C", tmp.toString()});
         assertThat(exit).isEqualTo(0);
 
-        assertThat(Files.readString(tmp.resolve("settings.gradle.kts")))
-                .contains("include(\":mod-a\")");
+        assertThat(Files.readString(tmp.resolve("settings.gradle.kts"))).contains("include(\":mod-a\")");
         assertThat(modA.resolve("build.gradle.kts")).exists();
     }
 }

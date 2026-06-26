@@ -69,15 +69,41 @@ public final class JkDirs {
         return new JkDirs(env, userHome);
     }
 
-    public static Path home()           { return current().homeDir(); }
-    public static Path userConfigFile() { return current().userConfigFilePath(); }
-    public static Path cache()          { return current().cacheDir(); }
-    public static Path state()          { return current().stateDir(); }
-    public static Path data()           { return current().dataDir(); }
-    public static Path binDir()         { return current().binDirectory(); }
-    public static Path tmp()            { return current().tmpDir(); }
-    public static Path libexec()        { return current().libexecDir(); }
-    public static Path jdks()           { return current().jdksDir(); }
+    public static Path home() {
+        return current().homeDir();
+    }
+
+    public static Path userConfigFile() {
+        return current().userConfigFilePath();
+    }
+
+    public static Path cache() {
+        return current().cacheDir();
+    }
+
+    public static Path state() {
+        return current().stateDir();
+    }
+
+    public static Path data() {
+        return current().dataDir();
+    }
+
+    public static Path binDir() {
+        return current().binDirectory();
+    }
+
+    public static Path tmp() {
+        return current().tmpDir();
+    }
+
+    public static Path libexec() {
+        return current().libexecDir();
+    }
+
+    public static Path jdks() {
+        return current().jdksDir();
+    }
 
     /**
      * The root of jk's on-disk tree. {@code JK_HOME} overrides; otherwise

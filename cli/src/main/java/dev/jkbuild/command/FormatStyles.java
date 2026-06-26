@@ -2,7 +2,6 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.model.JkBuild;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -77,16 +76,16 @@ final class FormatStyles {
         if (name == null || name.isBlank()) return null;
         Resolved pair = ALIASES.get(name.trim().toLowerCase(java.util.Locale.ROOT));
         if (pair == null) {
-            throw new IllegalArgumentException(source + " = \"" + name
-                    + "\" is not a known style preset (" + String.join(", ", ALIASES.keySet()) + ")");
+            throw new IllegalArgumentException(source + " = \"" + name + "\" is not a known style preset ("
+                    + String.join(", ", ALIASES.keySet()) + ")");
         }
         return pair;
     }
 
     private static void validate(String style, List<String> allowed, String lang) {
         if (!allowed.contains(style)) {
-            throw new IllegalArgumentException("unknown " + lang + " format style \"" + style
-                    + "\" — choose one of " + String.join(", ", allowed));
+            throw new IllegalArgumentException("unknown " + lang + " format style \"" + style + "\" — choose one of "
+                    + String.join(", ", allowed));
         }
     }
 
@@ -94,6 +93,6 @@ final class FormatStyles {
         for (String v : vals) {
             if (v != null && !v.isBlank()) return v;
         }
-        return null;   // unreachable: the last arg is always a non-null default
+        return null; // unreachable: the last arg is always a non-null default
     }
 }

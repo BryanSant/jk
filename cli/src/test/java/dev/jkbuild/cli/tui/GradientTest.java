@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.theme.Gradient;
 import dev.jkbuild.cli.theme.JkDarkTheme;
 import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class GradientTest {
 
@@ -25,10 +25,11 @@ class GradientTest {
         assertThat(g.at(0.0)).isEqualTo(ORANGE);
         assertThat(g.at(1.0)).isEqualTo(MAGENTA);
         // Midpoint is the rounded average of each channel.
-        assertThat(g.at(0.5)).isEqualTo(new Rgb(
-                Math.round((0xff + 0xe6) / 2f),
-                Math.round((0x8b + 0x00) / 2f),
-                Math.round((0x1a + 0xff) / 2f)));
+        assertThat(g.at(0.5))
+                .isEqualTo(new Rgb(
+                        Math.round((0xff + 0xe6) / 2f),
+                        Math.round((0x8b + 0x00) / 2f),
+                        Math.round((0x1a + 0xff) / 2f)));
     }
 
     @Test
@@ -47,8 +48,7 @@ class GradientTest {
 
     @Test
     void title_runs_bright_blue_to_accent() {
-        assertThat(Theme.active().titleGradient())
-                .isEqualTo(new Gradient(JkDarkTheme.BRIGHT_BLUE, JkDarkTheme.ACCENT));
+        assertThat(Theme.active().titleGradient()).isEqualTo(new Gradient(JkDarkTheme.BRIGHT_BLUE, JkDarkTheme.ACCENT));
     }
 
     @Test

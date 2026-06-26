@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
-import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.cli.theme.Theme;
-
+import dev.jkbuild.config.WorkspaceLocator;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -73,8 +72,9 @@ public final class PathDisplay {
     /** The deepest ancestor of {@code abs} among the working dir, workspace root, and git root. */
     private static Path closestAnchor(Path abs, Path workingDir) {
         Path best = null;
-        for (Path anchor : new Path[] { cwd(workingDir), workspaceRoot(abs), gitRoot(abs) }) {
-            if (anchor != null && abs.startsWith(anchor)
+        for (Path anchor : new Path[] {cwd(workingDir), workspaceRoot(abs), gitRoot(abs)}) {
+            if (anchor != null
+                    && abs.startsWith(anchor)
                     && (best == null || anchor.getNameCount() > best.getNameCount())) {
                 best = anchor;
             }

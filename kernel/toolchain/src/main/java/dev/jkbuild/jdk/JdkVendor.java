@@ -34,30 +34,30 @@ import java.util.Properties;
 public enum JdkVendor {
 
     //                  vendor               product         jbPrefix         sdkman      foojay
-    TEMURIN            ("Eclipse",           "Temurin",      "temurin",       "tem",      "temurin"),
-    ADOPT_OPENJDK      ("AdoptOpenJDK",      "OpenJDK",      null,            "adpt",     "aoj"),
-    ORACLE_OPENJDK     ("Oracle",            "OpenJDK",      "openjdk",       "open",     "oracle_open_jdk"),
-    ORACLE_GRAALVM     ("Oracle",            "GraalVM",      "graalvm",       "graal",    "graalvm"),
-    GRAALVM_CE         ("GraalVM Community", "GraalVM CE",   "graalvm-ce",    "graalce",  "graalvm_ce"),
-    CORRETTO           ("Amazon",            "Corretto",     "corretto",      "amzn",     "corretto"),
-    ZULU               ("Azul",              "Zulu",         "zulu",          "zulu",     "zulu"),
-    ZULU_PRIME         ("Azul",              "Zulu Prime",   null,            "zing",     "zulu_prime"),
-    LIBERICA           ("BellSoft",          "Liberica",     "liberica",      "librca",   "liberica"),
-    SAPMACHINE         ("SAP",               "SapMachine",   "sapmachine",    "sapmchn",  "sap_machine"),
-    SEMERU             ("IBM",               "Semeru",       "semeru",        "sem",      "semeru"),
-    MICROSOFT          ("Microsoft",         "OpenJDK",      "microsoft",     "ms",       "microsoft"),
-    DRAGONWELL         ("Alibaba",           "Dragonwell",   "dragonwell",    null,       "dragonwell"),
-    JBR                ("JetBrains",         "Runtime",      "jbr",           null,       "jetbrains"),
-    REDHAT             ("Red Hat",           "OpenJDK",      null,            null,       "redhat"),
-    MANDREL            ("Red Hat",           "Mandrel",      null,            null,       "mandrel"),
-    KONA               ("Tencent",           "Kona",         null,            null,       "kona"),
-    BISHENG            ("Huawei",            "Bisheng",      null,            null,       "bisheng"),
-    OJDKBUILD          ("ojdkbuild",         "OpenJDK",      null,            null,       "ojdk_build"),
-    OPENLOGIC          ("OpenLogic",         "OpenJDK",      null,            null,       "openlogic"),
-    DEBIAN             ("Debian",            "OpenJDK",      null,            null,       "debian"),
-    UBUNTU             ("Ubuntu",            "OpenJDK",      null,            null,       "ubuntu"),
-    HOMEBREW           ("Homebrew",          "OpenJDK",      null,            null,       "homebrew"),
-    UNKNOWN            ("Unknown",           "OpenJDK",      null,            null,       null);
+    TEMURIN("Eclipse", "Temurin", "temurin", "tem", "temurin"),
+    ADOPT_OPENJDK("AdoptOpenJDK", "OpenJDK", null, "adpt", "aoj"),
+    ORACLE_OPENJDK("Oracle", "OpenJDK", "openjdk", "open", "oracle_open_jdk"),
+    ORACLE_GRAALVM("Oracle", "GraalVM", "graalvm", "graal", "graalvm"),
+    GRAALVM_CE("GraalVM Community", "GraalVM CE", "graalvm-ce", "graalce", "graalvm_ce"),
+    CORRETTO("Amazon", "Corretto", "corretto", "amzn", "corretto"),
+    ZULU("Azul", "Zulu", "zulu", "zulu", "zulu"),
+    ZULU_PRIME("Azul", "Zulu Prime", null, "zing", "zulu_prime"),
+    LIBERICA("BellSoft", "Liberica", "liberica", "librca", "liberica"),
+    SAPMACHINE("SAP", "SapMachine", "sapmachine", "sapmchn", "sap_machine"),
+    SEMERU("IBM", "Semeru", "semeru", "sem", "semeru"),
+    MICROSOFT("Microsoft", "OpenJDK", "microsoft", "ms", "microsoft"),
+    DRAGONWELL("Alibaba", "Dragonwell", "dragonwell", null, "dragonwell"),
+    JBR("JetBrains", "Runtime", "jbr", null, "jetbrains"),
+    REDHAT("Red Hat", "OpenJDK", null, null, "redhat"),
+    MANDREL("Red Hat", "Mandrel", null, null, "mandrel"),
+    KONA("Tencent", "Kona", null, null, "kona"),
+    BISHENG("Huawei", "Bisheng", null, null, "bisheng"),
+    OJDKBUILD("ojdkbuild", "OpenJDK", null, null, "ojdk_build"),
+    OPENLOGIC("OpenLogic", "OpenJDK", null, null, "openlogic"),
+    DEBIAN("Debian", "OpenJDK", null, null, "debian"),
+    UBUNTU("Ubuntu", "OpenJDK", null, null, "ubuntu"),
+    HOMEBREW("Homebrew", "OpenJDK", null, null, "homebrew"),
+    UNKNOWN("Unknown", "OpenJDK", null, null, null);
 
     private final String vendor;
     private final String product;
@@ -74,10 +74,14 @@ public enum JdkVendor {
     }
 
     /** JetBrains feed {@code vendor} field (e.g. {@code "Eclipse"}, {@code "Oracle"}). */
-    public String vendor() { return vendor; }
+    public String vendor() {
+        return vendor;
+    }
 
     /** JetBrains feed {@code product} field (e.g. {@code "Temurin"}, {@code "GraalVM"}). */
-    public String product() { return product; }
+    public String product() {
+        return product;
+    }
 
     /** Vendor + product, joined for display (e.g. {@code "Eclipse Temurin"}). */
     public String displayName() {
@@ -94,17 +98,23 @@ public enum JdkVendor {
      * isn't in the JetBrains feed. The full identifier for a specific
      * install is {@code jbPrefix + "-" + version} (e.g. {@code "temurin-21.0.5"}).
      */
-    public Optional<String> jbPrefix() { return Optional.ofNullable(jbPrefix); }
+    public Optional<String> jbPrefix() {
+        return Optional.ofNullable(jbPrefix);
+    }
 
     /**
      * SDKMAN candidate suffix, or empty when this vendor isn't on SDKMAN.
      * The full identifier is {@code version + "-" + sdkmanSuffix}
      * (e.g. {@code "21.0.5-tem"}).
      */
-    public Optional<String> sdkmanSuffix() { return Optional.ofNullable(sdkmanSuffix); }
+    public Optional<String> sdkmanSuffix() {
+        return Optional.ofNullable(sdkmanSuffix);
+    }
 
     /** foojay Disco API {@code distro} name, or empty when not represented there. */
-    public Optional<String> foojayDistro() { return Optional.ofNullable(foojayDistro); }
+    public Optional<String> foojayDistro() {
+        return Optional.ofNullable(foojayDistro);
+    }
 
     /** {@code jbPrefix + "-" + version}, e.g. {@code "corretto-26.0.1"}; empty when no prefix. */
     public Optional<String> jbIdentifier(String version) {
@@ -121,12 +131,10 @@ public enum JdkVendor {
      * Eclipse Temurin, then BellSoft Liberica, Oracle OpenJDK, Amazon Corretto.
      * Any vendor not listed sorts after all listed ones (see {@link #preferenceRank}).
      */
-    public static final List<JdkVendor> PREFERENCE =
-            List.of(TEMURIN, LIBERICA, ORACLE_OPENJDK, CORRETTO);
+    public static final List<JdkVendor> PREFERENCE = List.of(TEMURIN, LIBERICA, ORACLE_OPENJDK, CORRETTO);
 
     /** GraalVM-flavour preference for the native / graal chain: Oracle GraalVM, then GraalVM CE. */
-    public static final List<JdkVendor> GRAAL_PREFERENCE =
-            List.of(ORACLE_GRAALVM, GRAALVM_CE);
+    public static final List<JdkVendor> GRAAL_PREFERENCE = List.of(ORACLE_GRAALVM, GRAALVM_CE);
 
     /** Lower is more preferred. Listed vendors get their index; others sort after, by enum order. */
     public int preferenceRank() {
@@ -156,9 +164,7 @@ public enum JdkVendor {
     public static JdkVendor fromFeed(String vendor, String product) {
         if (vendor == null || product == null) return UNKNOWN;
         for (JdkVendor v : values()) {
-            if (v != UNKNOWN
-                    && v.vendor.equalsIgnoreCase(vendor)
-                    && v.product.equalsIgnoreCase(product)) {
+            if (v != UNKNOWN && v.vendor.equalsIgnoreCase(vendor) && v.product.equalsIgnoreCase(product)) {
                 return v;
             }
         }

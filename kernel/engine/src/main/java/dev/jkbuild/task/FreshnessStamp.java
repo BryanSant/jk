@@ -78,8 +78,8 @@ public final class FreshnessStamp {
      * recorded source + classpath sets match the current inputs and no
      * input has been touched since the stamp was written.
      */
-    public static boolean isFresh(Path outputDir, String stampName,
-            List<Path> sources, List<Path> classpath) throws IOException {
+    public static boolean isFresh(Path outputDir, String stampName, List<Path> sources, List<Path> classpath)
+            throws IOException {
         Optional<Stamp> read = read(outputDir, stampName);
         if (read.isEmpty()) return false;
         Stamp stamp = read.get();
@@ -129,12 +129,8 @@ public final class FreshnessStamp {
      * (either fresh or cache-restored) so the next build can short-circuit.
      */
     public static void write(
-            Path outputDir,
-            String stampName,
-            String taskId,
-            String actionKey,
-            List<Path> sources,
-            List<Path> classpath) throws IOException {
+            Path outputDir, String stampName, String taskId, String actionKey, List<Path> sources, List<Path> classpath)
+            throws IOException {
         Files.createDirectories(outputDir);
         long stampMillis = System.currentTimeMillis();
         StringBuilder sb = new StringBuilder();
@@ -166,7 +162,8 @@ public final class FreshnessStamp {
             } else if (line.startsWith("KEY ")) {
                 actionKey = line.substring("KEY ".length()).trim();
             } else if (line.startsWith("STAMP_MILLIS ")) {
-                stampMillis = Long.parseLong(line.substring("STAMP_MILLIS ".length()).trim());
+                stampMillis =
+                        Long.parseLong(line.substring("STAMP_MILLIS ".length()).trim());
             } else if (line.startsWith("SOURCE ")) {
                 sources.add(Path.of(line.substring("SOURCE ".length()).trim()));
             } else if (line.startsWith("CP ")) {
@@ -177,12 +174,7 @@ public final class FreshnessStamp {
         return Optional.of(new Stamp(taskId, actionKey, stampMillis, sources, classpath));
     }
 
-    public record Stamp(
-            String taskId,
-            String actionKey,
-            long stampMillis,
-            List<Path> sources,
-            List<Path> classpath) {
+    public record Stamp(String taskId, String actionKey, long stampMillis, List<Path> sources, List<Path> classpath) {
         public Stamp {
             Objects.requireNonNull(taskId, "taskId");
             Objects.requireNonNull(actionKey, "actionKey");

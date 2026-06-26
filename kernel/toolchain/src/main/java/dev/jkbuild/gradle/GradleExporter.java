@@ -7,7 +7,6 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,9 +25,9 @@ import java.util.Map;
 public final class GradleExporter {
 
     // Plugin versions baked into generated builds — bump as upstreams release.
-    private static final String FOOJAY  = "0.9.0";    // org.gradle.toolchains.foojay-resolver-convention
-    private static final String SHADOW  = "8.3.6";    // com.gradleup.shadow
-    private static final String NATIVE  = "0.10.3";   // org.graalvm.buildtools.native
+    private static final String FOOJAY = "0.9.0"; // org.gradle.toolchains.foojay-resolver-convention
+    private static final String SHADOW = "8.3.6"; // com.gradleup.shadow
+    private static final String NATIVE = "0.10.3"; // org.graalvm.buildtools.native
 
     /** {@code settings} = settings.gradle.kts; {@code buildFiles} maps a project-relative dir ("" = root) to its build.gradle.kts. */
     public record Result(String settings, Map<String, String> buildFiles, ImportReport report) {}
@@ -41,8 +40,7 @@ public final class GradleExporter {
     }
 
     /** Workspace export with auto layout for every project. */
-    public static Result export(JkBuild root, Map<String, JkBuild> modulesByRelPath,
-                                Map<String, String> locked) {
+    public static Result export(JkBuild root, Map<String, JkBuild> modulesByRelPath, Map<String, String> locked) {
         return export(root, modulesByRelPath, Map.of(), locked);
     }
 
@@ -54,9 +52,11 @@ public final class GradleExporter {
      * layout emits a matching {@code sourceSets} block (callers resolve {@code AUTO}
      * against the directory tree). Missing entries default to {@code AUTO}.
      */
-    public static Result export(JkBuild root, Map<String, JkBuild> modulesByRelPath,
-                                Map<String, JkBuild.Layout> layoutByRelPath,
-                                Map<String, String> locked) {
+    public static Result export(
+            JkBuild root,
+            Map<String, JkBuild> modulesByRelPath,
+            Map<String, JkBuild.Layout> layoutByRelPath,
+            Map<String, String> locked) {
         if (locked == null) locked = Map.of();
         if (layoutByRelPath == null) layoutByRelPath = Map.of();
         ImportReport.Builder report = ImportReport.builder();
@@ -65,11 +65,12 @@ public final class GradleExporter {
         String settings = renderSettings(root, modulesByRelPath.keySet());
         buildFiles.put("", renderBuild(root, layoutOf(layoutByRelPath, ""), locked, report));
         for (Map.Entry<String, JkBuild> e : modulesByRelPath.entrySet()) {
-            buildFiles.put(e.getKey(),
-                    renderBuild(e.getValue(), layoutOf(layoutByRelPath, e.getKey()), locked, report));
+            buildFiles.put(
+                    e.getKey(), renderBuild(e.getValue(), layoutOf(layoutByRelPath, e.getKey()), locked, report));
             // includeBuild lives in the root settings.gradle.kts and is root-relative;
             // a module's own path dep can't be expressed there automatically.
-            for (java.util.List<Dependency> list : e.getValue().dependencies().byScope().values()) {
+            for (java.util.List<Dependency> list :
+                    e.getValue().dependencies().byScope().values()) {
                 for (Dependency d : list) {
                     if (d.isPath()) {
                         report.warning("module `" + e.getKey() + "` has a path dep `" + d.module()
@@ -91,7 +92,9 @@ public final class GradleExporter {
         StringBuilder sb = new StringBuilder();
         sb.append("plugins {\n");
         sb.append("    // Auto-provisions JDK toolchains via the foojay Disco API (jk's `project.jdk`).\n");
-        sb.append("    id(\"org.gradle.toolchains.foojay-resolver-convention\") version \"").append(FOOJAY).append("\"\n");
+        sb.append("    id(\"org.gradle.toolchains.foojay-resolver-convention\") version \"")
+                .append(FOOJAY)
+                .append("\"\n");
         sb.append("}\n\n");
         sb.append("rootProject.name = \"").append(kEsc(root.project().name())).append("\"\n");
 
@@ -120,8 +123,8 @@ public final class GradleExporter {
         return sb.toString();
     }
 
-    private static String renderBuild(JkBuild jk, JkBuild.Layout layout,
-                                      Map<String, String> locked, ImportReport.Builder report) {
+    private static String renderBuild(
+            JkBuild jk, JkBuild.Layout layout, Map<String, String> locked, ImportReport.Builder report) {
         JkBuild.Project p = jk.project();
         boolean kotlin = p.kotlin() != null;
         boolean app = p.main() != null && !p.main().isBlank();
@@ -133,11 +136,18 @@ public final class GradleExporter {
         sb.append("    java\n");
         if (kotlin) {
             sb.append("    kotlin(\"jvm\") version \"")
-                    .append(kEsc(extractVersion(p.kotlin(), "kotlin", report))).append("\"\n");
+                    .append(kEsc(extractVersion(p.kotlin(), "kotlin", report)))
+                    .append("\"\n");
         }
         if (app) sb.append("    application\n");
-        if (shadow) sb.append("    id(\"com.gradleup.shadow\") version \"").append(SHADOW).append("\"\n");
-        if (nativeImg) sb.append("    id(\"org.graalvm.buildtools.native\") version \"").append(NATIVE).append("\"\n");
+        if (shadow)
+            sb.append("    id(\"com.gradleup.shadow\") version \"")
+                    .append(SHADOW)
+                    .append("\"\n");
+        if (nativeImg)
+            sb.append("    id(\"org.graalvm.buildtools.native\") version \"")
+                    .append(NATIVE)
+                    .append("\"\n");
         sb.append("}\n\n");
 
         sb.append("group = \"").append(kEsc(p.group())).append("\"\n");
@@ -148,7 +158,9 @@ public final class GradleExporter {
         appendToolchain(sb, p);
         appendSourceSets(sb, layout, kotlin);
         if (app) {
-            sb.append("\napplication {\n    mainClass = \"").append(kEsc(p.main())).append("\"\n}\n");
+            sb.append("\napplication {\n    mainClass = \"")
+                    .append(kEsc(p.main()))
+                    .append("\"\n}\n");
         }
         appendManifest(sb, jk.manifest());
         warnDropped(jk, report);
@@ -165,22 +177,24 @@ public final class GradleExporter {
         sb.append("}\n\n");
     }
 
-    private static void appendDependencies(StringBuilder sb, JkBuild jk,
-                                           Map<String, String> locked, ImportReport.Builder report) {
+    private static void appendDependencies(
+            StringBuilder sb, JkBuild jk, Map<String, String> locked, ImportReport.Builder report) {
         // jk scope → Gradle configuration (inverse of GradleImporter.mapConfiguration).
         record Pair(Scope scope, String config) {}
         Pair[] order = {
-                new Pair(Scope.EXPORT, "api"),
-                new Pair(Scope.MAIN, "implementation"),
-                new Pair(Scope.PROVIDED, "compileOnly"),
-                new Pair(Scope.RUNTIME, "runtimeOnly"),
-                new Pair(Scope.PROCESSOR, "annotationProcessor"),
-                new Pair(Scope.TEST, "testImplementation"),
+            new Pair(Scope.EXPORT, "api"),
+            new Pair(Scope.MAIN, "implementation"),
+            new Pair(Scope.PROVIDED, "compileOnly"),
+            new Pair(Scope.RUNTIME, "runtimeOnly"),
+            new Pair(Scope.PROCESSOR, "annotationProcessor"),
+            new Pair(Scope.TEST, "testImplementation"),
         };
         sb.append("dependencies {\n");
         for (Dependency d : jk.dependencies().of(Scope.PLATFORM)) {
             if (warnIfUnmappable(d, report)) continue;
-            sb.append("    implementation(platform(\"").append(kEsc(gav(d, locked, report))).append("\"))\n");
+            sb.append("    implementation(platform(\"")
+                    .append(kEsc(gav(d, locked, report)))
+                    .append("\"))\n");
         }
         for (Pair pr : order) {
             for (Dependency d : jk.dependencies().of(pr.scope())) {
@@ -188,13 +202,19 @@ public final class GradleExporter {
                     // Composite build: depend by coordinate (no version); the
                     // `includeBuild(...)` in settings.gradle.kts substitutes the
                     // local source build for this module. jk's includeBuild analog.
-                    sb.append("    ").append(pr.config()).append("(\"")
-                            .append(kEsc(d.module())).append("\")\n");
+                    sb.append("    ")
+                            .append(pr.config())
+                            .append("(\"")
+                            .append(kEsc(d.module()))
+                            .append("\")\n");
                     continue;
                 }
                 if (warnIfUnmappable(d, report)) continue;
-                sb.append("    ").append(pr.config()).append("(\"")
-                        .append(kEsc(gav(d, locked, report))).append("\")\n");
+                sb.append("    ")
+                        .append(pr.config())
+                        .append("(\"")
+                        .append(kEsc(gav(d, locked, report)))
+                        .append("\")\n");
             }
         }
         sb.append("}\n");
@@ -226,7 +246,8 @@ public final class GradleExporter {
         int major = p.jdkMajor() > 0 ? p.jdkMajor() : p.javaRelease();
         if (major <= 0) return;
         sb.append("\njava {\n    toolchain {\n        languageVersion = JavaLanguageVersion.of(")
-                .append(major).append(")\n    }\n}\n");
+                .append(major)
+                .append(")\n    }\n}\n");
     }
 
     private static void appendManifest(StringBuilder sb, Map<String, String> manifest) {
@@ -234,8 +255,11 @@ public final class GradleExporter {
         sb.append("\ntasks.jar {\n    manifest {\n        attributes(mapOf(\n");
         int i = 0;
         for (Map.Entry<String, String> e : manifest.entrySet()) {
-            sb.append("            \"").append(kEsc(e.getKey())).append("\" to \"")
-                    .append(kEsc(e.getValue())).append('"');
+            sb.append("            \"")
+                    .append(kEsc(e.getKey()))
+                    .append("\" to \"")
+                    .append(kEsc(e.getValue()))
+                    .append('"');
             sb.append(++i < manifest.size() ? ",\n" : "\n");
         }
         sb.append("        ))\n    }\n}\n");
@@ -275,13 +299,12 @@ public final class GradleExporter {
         return switch (v) {
             case VersionSelector.Exact e -> e.version();
             case VersionSelector.Caret c -> {
-                report.warning("`" + module + "` declared `^" + c.version()
-                        + "`; pinned to `" + c.version() + "` (no jk.lock to resolve against).");
+                report.warning("`" + module + "` declared `^" + c.version() + "`; pinned to `" + c.version()
+                        + "` (no jk.lock to resolve against).");
                 yield c.version();
             }
             case VersionSelector.Tilde t -> {
-                report.warning("`" + module + "` declared `~" + t.version()
-                        + "`; pinned to `" + t.version() + "`.");
+                report.warning("`" + module + "` declared `~" + t.version() + "`; pinned to `" + t.version() + "`.");
                 yield t.version();
             }
             case VersionSelector.Range r -> {

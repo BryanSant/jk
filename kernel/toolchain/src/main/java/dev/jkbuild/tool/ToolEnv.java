@@ -2,7 +2,6 @@
 package dev.jkbuild.tool;
 
 import dev.jkbuild.model.Coordinate;
-
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -16,11 +15,7 @@ import java.util.Objects;
  * for both {@code jk install} (persistent launcher) and {@code jk exec}
  * (one-shot ephemeral exec).
  */
-public record ToolEnv(
-        String binName,
-        Coordinate primary,
-        String mainClass,
-        List<Path> classpath) {
+public record ToolEnv(String binName, Coordinate primary, String mainClass, List<Path> classpath) {
 
     public ToolEnv {
         Objects.requireNonNull(binName, "binName");

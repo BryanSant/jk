@@ -2,7 +2,6 @@
 package dev.jkbuild.forge;
 
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -53,8 +52,12 @@ public final class TokenStore {
         try {
             Files.createDirectories(dir);
             trySetOwnerOnly(dir, "rwx------");
-            Files.writeString(file, token, StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
+            Files.writeString(
+                    file,
+                    token,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE);
             trySetOwnerOnly(file, "rw-------");
         } catch (IOException e) {
@@ -84,9 +87,8 @@ public final class TokenStore {
     }
 
     private static void trySetOwnerOnly(Path path, String perms) {
-        PosixFileAttributeView view =
-                Files.getFileAttributeView(path, PosixFileAttributeView.class);
-        if (view == null) return;   // non-POSIX (Windows) — nothing to tighten
+        PosixFileAttributeView view = Files.getFileAttributeView(path, PosixFileAttributeView.class);
+        if (view == null) return; // non-POSIX (Windows) — nothing to tighten
         try {
             Files.setPosixFilePermissions(path, PosixFilePermissions.fromString(perms));
         } catch (IOException ignored) {

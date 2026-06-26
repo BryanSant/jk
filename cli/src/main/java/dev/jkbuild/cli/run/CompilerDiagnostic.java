@@ -3,7 +3,6 @@ package dev.jkbuild.cli.run;
 
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.theme.Theme;
-
 import java.nio.file.Path;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -26,8 +25,8 @@ public final class CompilerDiagnostic {
     private CompilerDiagnostic() {}
 
     /** {@code <path ending in .java/.kt/.kts>:<line>[:<col>]:<rest>}. */
-    private static final Pattern HEADER = Pattern.compile(
-            "^(?<file>.+?\\.(?:java|kt|kts)):(?<line>\\d+)(?::(?<col>\\d+))?:(?<rest>.*)$");
+    private static final Pattern HEADER =
+            Pattern.compile("^(?<file>.+?\\.(?:java|kt|kts)):(?<line>\\d+)(?::(?<col>\\d+))?:(?<rest>.*)$");
 
     /** A caret line: optional indent, a single {@code ^}, optional trailing space. */
     private static final Pattern CARET = Pattern.compile("^(\\s*)\\^\\s*$");
@@ -51,13 +50,14 @@ public final class CompilerDiagnostic {
                 lang = languageOf(header.group("file"));
                 out.append(header(header));
             } else if (CARET.matcher(line).matches()) {
-                out.append(line);   // the highlighted char was emitted on the line above
+                out.append(line); // the highlighted char was emitted on the line above
             } else if (i + 1 < lines.length && CARET.matcher(lines[i + 1]).matches()) {
                 out.append(sourceWithCaret(line, lines[i + 1], lang));
             } else {
                 Matcher kv = KEY_VALUE.matcher(line);
                 if (kv.matches()) {
-                    out.append(kv.group(1)).append(kv.group(2))
+                    out.append(kv.group(1))
+                            .append(kv.group(2))
                             .append(Theme.colorize(kv.group(3), Theme.active().cyan()));
                 } else {
                     out.append(line);
@@ -72,7 +72,8 @@ public final class CompilerDiagnostic {
         String rel = PathDisplay.of(Path.of(h.group("file")));
         StringBuilder sb = new StringBuilder()
                 .append(Theme.colorize(rel, th.path()))
-                .append(':').append(Theme.colorize(h.group("line"), th.cyan()));
+                .append(':')
+                .append(Theme.colorize(h.group("line"), th.cyan()));
         if (h.group("col") != null) {
             sb.append(':').append(Theme.colorize(h.group("col"), th.cyan()));
         }

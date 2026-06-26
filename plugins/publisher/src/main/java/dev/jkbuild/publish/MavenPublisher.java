@@ -6,7 +6,6 @@ import dev.jkbuild.http.Http;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.repo.RepoTransport;
 import dev.jkbuild.repo.RepoTransports;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -42,9 +41,11 @@ public final class MavenPublisher {
 
     /** Convenience for HTTP Basic auth; a blank username means anonymous. */
     public MavenPublisher(URI repoBase, String username, String password) {
-        this(repoBase, (username == null || username.isEmpty())
-                ? RepoCredential.ANONYMOUS
-                : new RepoCredential.Basic(username, password == null ? "" : password));
+        this(
+                repoBase,
+                (username == null || username.isEmpty())
+                        ? RepoCredential.ANONYMOUS
+                        : new RepoCredential.Basic(username, password == null ? "" : password));
     }
 
     /**
@@ -54,13 +55,12 @@ public final class MavenPublisher {
      * than a constructor so {@code (URI, null, null)} stays unambiguous against
      * the Basic-auth constructor.
      */
-    public static MavenPublisher withObjectStore(URI repoBase, RepoCredential credential,
-                                                 dev.jkbuild.model.ObjectStoreConfig objectStore) {
+    public static MavenPublisher withObjectStore(
+            URI repoBase, RepoCredential credential, dev.jkbuild.model.ObjectStoreConfig objectStore) {
         return new MavenPublisher(repoBase, credential, objectStore);
     }
 
-    private MavenPublisher(URI repoBase, RepoCredential credential,
-                           dev.jkbuild.model.ObjectStoreConfig objectStore) {
+    private MavenPublisher(URI repoBase, RepoCredential credential, dev.jkbuild.model.ObjectStoreConfig objectStore) {
         this.repoBase = normalize(Objects.requireNonNull(repoBase, "repoBase"));
         this.credential = Objects.requireNonNull(credential, "credential");
         this.transport = RepoTransports.forUrl(this.repoBase, new Http(), objectStore);
@@ -74,7 +74,10 @@ public final class MavenPublisher {
     }
 
     public record Result(Map<String, Integer> statusByPath) {
-        public Result { statusByPath = Map.copyOf(statusByPath); }
+        public Result {
+            statusByPath = Map.copyOf(statusByPath);
+        }
+
         public boolean allOk() {
             return statusByPath.values().stream().allMatch(s -> s >= 200 && s < 300);
         }
@@ -128,13 +131,12 @@ public final class MavenPublisher {
         return new Result(results);
     }
 
-    private void putWithChecksums(String relPath, byte[] body, String contentType,
-                                  Map<String, Integer> results)
+    private void putWithChecksums(String relPath, byte[] body, String contentType, Map<String, Integer> results)
             throws IOException, InterruptedException {
         put(relPath, body, contentType, results);
         Checksums.Set sums = Checksums.of(body);
-        put(relPath + ".md5",    sums.md5().getBytes(StandardCharsets.US_ASCII),    "text/plain", results);
-        put(relPath + ".sha1",   sums.sha1().getBytes(StandardCharsets.US_ASCII),   "text/plain", results);
+        put(relPath + ".md5", sums.md5().getBytes(StandardCharsets.US_ASCII), "text/plain", results);
+        put(relPath + ".sha1", sums.sha1().getBytes(StandardCharsets.US_ASCII), "text/plain", results);
         put(relPath + ".sha256", sums.sha256().getBytes(StandardCharsets.US_ASCII), "text/plain", results);
         put(relPath + ".sha512", sums.sha512().getBytes(StandardCharsets.US_ASCII), "text/plain", results);
     }

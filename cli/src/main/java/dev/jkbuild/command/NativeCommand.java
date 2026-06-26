@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.BuildPipeline;
-
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
@@ -14,13 +12,13 @@ import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.runtime.BuildPipeline;
+import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,18 +42,32 @@ import java.util.Optional;
  */
 public final class NativeCommand implements CliCommand {
 
-    @Override public String name() { return "native"; }
-    @Override public String description() { return "Build a native binary with GraalVM"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "native";
+    }
+
+    @Override
+    public String description() {
+        return "Build a native binary with GraalVM";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<class>", "Main class. Default: jk.toml image.main-class.", "--main"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
+                        .hide(),
                 Opt.flag("Install Oracle GraalVM if native-image is missing.", "--yes", "-y"),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"));
     }
-    @Override public List<dev.jkbuild.model.command.Param> parameters() {
-        return List.of(dev.jkbuild.model.command.Param.of("native-image-args",
+
+    @Override
+    public List<dev.jkbuild.model.command.Param> parameters() {
+        return List.of(dev.jkbuild.model.command.Param.of(
+                "native-image-args",
                 dev.jkbuild.model.command.Arity.ZERO_OR_MORE,
                 "Extra arguments forwarded to\nnative-image (after --)."));
     }
@@ -103,8 +115,8 @@ public final class NativeCommand implements CliCommand {
             Path wsRoot = rootOpt.get();
             JkBuild rootBuild = JkBuildParser.parse(wsRoot.resolve("jk.toml"));
             if (rootBuild.isWorkspaceRoot()) {
-                System.err.println("jk native: building from workspace root "
-                        + wsRoot.getFileName() + " (module: " + startDir.getFileName() + ")");
+                System.err.println("jk native: building from workspace root " + wsRoot.getFileName() + " (module: "
+                        + startDir.getFileName() + ")");
                 return runWorkspaceNative(wsRoot, rootBuild, cache);
             }
         }
@@ -151,13 +163,12 @@ public final class NativeCommand implements CliCommand {
                 Path moduleDir = sorted.get(i);
                 JkBuild module = modulesByDir.get(moduleDir);
                 System.out.println();
-                System.out.println("══ " + wsRoot.relativize(moduleDir)
-                        + " (" + (i + 1) + "/" + sorted.size() + ") ══");
+                System.out.println(
+                        "══ " + wsRoot.relativize(moduleDir) + " (" + (i + 1) + "/" + sorted.size() + ") ══");
                 int exit = runPreparedNative(
                         prepareNativeModule(moduleDir, module, cache, graalHomes.get(moduleDir)), null);
                 if (exit != 0) {
-                    System.err.println("jk native: " + wsRoot.relativize(moduleDir)
-                            + " failed (exit " + exit + ")");
+                    System.err.println("jk native: " + wsRoot.relativize(moduleDir) + " failed (exit " + exit + ")");
                     return exit;
                 }
             }
@@ -181,8 +192,8 @@ public final class NativeCommand implements CliCommand {
             List<PreparedNativeModule> prepared = new ArrayList<>(sorted.size());
             long total = 0;
             for (Path moduleDir : sorted) {
-                PreparedNativeModule pm = prepareNativeModule(
-                        moduleDir, modulesByDir.get(moduleDir), cache, graalHomes.get(moduleDir));
+                PreparedNativeModule pm =
+                        prepareNativeModule(moduleDir, modulesByDir.get(moduleDir), cache, graalHomes.get(moduleDir));
                 total += pm.barWeight();
                 prepared.add(pm);
             }
@@ -194,13 +205,11 @@ public final class NativeCommand implements CliCommand {
                 try {
                     exit = runPreparedNative(pm, agg);
                 } catch (Exception e) {
-                    view.finishGoalFailure(GoalWedge.coord(moduleName)
-                            + " " + BuildCommand.elapsedSince(buildStart));
+                    view.finishGoalFailure(GoalWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
                     throw e;
                 }
                 if (exit != 0) {
-                    view.finishGoalFailure(GoalWedge.coord(moduleName)
-                            + " " + BuildCommand.elapsedSince(buildStart));
+                    view.finishGoalFailure(GoalWedge.coord(moduleName) + " " + BuildCommand.elapsedSince(buildStart));
                     for (GoalResult.Diagnostic d : agg.lastErrors()) {
                         System.err.println(ConsoleSpec.renderError(d));
                     }
@@ -216,10 +225,9 @@ public final class NativeCommand implements CliCommand {
                 .count();
         String elapsed = " " + BuildCommand.elapsedSince(buildStart);
         String summary = built + " module" + (built == 1 ? "" : "s") + " built"
-                + (nativeCount > 0 ? ", " + nativeCount + " native artifact"
-                        + (nativeCount == 1 ? "" : "s") : "");
-        view.finishGoalSuccess(Theme.colorize("Native build successful", Theme.active().success())
-                + ", " + summary + elapsed);
+                + (nativeCount > 0 ? ", " + nativeCount + " native artifact" + (nativeCount == 1 ? "" : "s") : "");
+        view.finishGoalSuccess(
+                Theme.colorize("Native build successful", Theme.active().success()) + ", " + summary + elapsed);
         return 0;
     }
 
@@ -230,24 +238,37 @@ public final class NativeCommand implements CliCommand {
      * {@link Goal#estimatedTotalWeight()} — including the native phase's weight —
      * to calibrate the shared progress bar before any module runs.
      */
-    private PreparedNativeModule prepareNativeModule(Path moduleDir, JkBuild module, Path cache,
-                                                     Path graalHome) {
+    private PreparedNativeModule prepareNativeModule(Path moduleDir, JkBuild module, Path cache, Path graalHome) {
         boolean eligible = isNativeEligible(module);
         Path buildFile = moduleDir.resolve("jk.toml");
         Path lockFile = moduleDir.resolve("jk.lock");
         int estimatedTests = TestCommand.estimateTestCount(moduleDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                moduleDir, cache, buildFile, lockFile, moduleDir,
-                1, estimatedTests, null, jdksDir, buildOpts.skipTests, global.verbose);
+                moduleDir,
+                cache,
+                buildFile,
+                lockFile,
+                moduleDir,
+                1,
+                estimatedTests,
+                null,
+                jdksDir,
+                buildOpts.skipTests,
+                global.verbose);
         Goal.Builder goalBuilder = BuildPipeline.coreBuilder(inputs);
         if (eligible) {
             String resolvedMain = resolveMain(buildFile);
-            goalBuilder.addPhase(BuildPipeline.nativePhase(
-                    moduleDir, cache, lockFile, jdksDir, graalHome, resolvedMain, extra));
+            goalBuilder.addPhase(
+                    BuildPipeline.nativePhase(moduleDir, cache, lockFile, jdksDir, graalHome, resolvedMain, extra));
         }
         Goal goal = goalBuilder.build();
-        return new PreparedNativeModule(moduleDir, BuildCommand.buildTarget(buildFile, moduleDir),
-                cache, goal, goal.estimatedTotalWeight(), eligible);
+        return new PreparedNativeModule(
+                moduleDir,
+                BuildCommand.buildTarget(buildFile, moduleDir),
+                cache,
+                goal,
+                goal.estimatedTotalWeight(),
+                eligible);
     }
 
     /**
@@ -262,9 +283,11 @@ public final class NativeCommand implements CliCommand {
             result = GoalConsole.runGoalInto(pm.goal(), pm.cache(), pm.target(), agg, pm.barWeight());
         } else {
             String verb = pm.eligible() ? "Native build successful" : "Build successful";
-            ConsoleSpec spec = new ConsoleSpec("Build",
+            ConsoleSpec spec = new ConsoleSpec(
+                    "Build",
                     r -> Theme.colorize(verb, Theme.active().success()) + BuildCommand.builtArtifact(pm.goal()),
-                    r -> GoalWedge.coord(pm.target()), true);
+                    r -> GoalWedge.coord(pm.target()),
+                    true);
             result = GoalConsole.runGoal(pm.goal(), GoalConsole.modeFor(global), pm.cache(), spec, pm.target());
         }
         return result.success() ? 0 : 1;
@@ -275,13 +298,12 @@ public final class NativeCommand implements CliCommand {
      * bar weight (its slice of the calibrated aggregate total) and whether it
      * carries the native-image tail.
      */
-    private record PreparedNativeModule(Path dir, String target, Path cache, Goal goal,
-                                        long barWeight, boolean eligible) {}
+    private record PreparedNativeModule(
+            Path dir, String target, Path cache, Goal goal, long barWeight, boolean eligible) {}
 
     // --- single-project (unchanged behaviour) --------------------------------
 
-    private int runSingleProject(Path projectDir, Path buildFile, Path cache)
-            throws IOException, InterruptedException {
+    private int runSingleProject(Path projectDir, Path buildFile, Path cache) throws IOException, InterruptedException {
         // Native builds are opt-in: require native = true (ALWAYS). Absent or
         // native = false → not eligible, even for an explicit `jk native`.
         JkBuild build = JkBuildParser.parse(buildFile);
@@ -303,16 +325,26 @@ public final class NativeCommand implements CliCommand {
 
         int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                projectDir, cache, buildFile, lockFile, projectDir,
-                1, estimatedTestCount, null, jdksDir, buildOpts.skipTests, global.verbose);
+                projectDir,
+                cache,
+                buildFile,
+                lockFile,
+                projectDir,
+                1,
+                estimatedTestCount,
+                null,
+                jdksDir,
+                buildOpts.skipTests,
+                global.verbose);
 
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
-        builder.addPhase(BuildPipeline.nativePhase(
-                projectDir, cache, lockFile, jdksDir, graalHome.get(), resolvedMain, extra));
+        builder.addPhase(
+                BuildPipeline.nativePhase(projectDir, cache, lockFile, jdksDir, graalHome.get(), resolvedMain, extra));
         Goal goal = builder.build();
 
         String coord = BuildCommand.buildTarget(buildFile, projectDir);
-        ConsoleSpec spec = new ConsoleSpec("Build",
+        ConsoleSpec spec = new ConsoleSpec(
+                "Build",
                 r -> Theme.colorize("Native build successful", Theme.active().success())
                         + BuildCommand.builtArtifact(goal),
                 r -> GoalWedge.coord(coord),
@@ -348,12 +380,14 @@ public final class NativeCommand implements CliCommand {
         try {
             String fromNative = JkBuildParser.parse(buildFile).nativeConfig().mainClass();
             if (fromNative != null && !fromNative.isBlank()) return fromNative;
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         // [image].main-class — backward compat (OCI image section was used historically).
         try {
             String fromImage = ImageConfigParser.parse(buildFile).mainClass();
             if (fromImage != null && !fromImage.isBlank()) return fromImage;
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
         // Fall back to [project].main — handled inside nativePhase.
         return null;
     }

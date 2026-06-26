@@ -4,8 +4,8 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.cli.tui.Glyphs;
+import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.cli.tui.Spinner;
 import dev.jkbuild.config.GlobalConfig;
 import dev.jkbuild.config.JkBuildParser;
@@ -16,7 +16,6 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.task.CacheGc;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -86,8 +85,8 @@ public final class CleanCommand implements CliCommand {
                     // Keep final artifacts (jars, native binaries) in target/; remove
                     // build intermediates by their known subdirectory names.
                     Path target = projectDir.resolve("target");
-                    for (String sub : List.of("classes", "kotlin", "resources",
-                            "generated", "tmp", "test-results", "reports")) {
+                    for (String sub :
+                            List.of("classes", "kotlin", "resources", "generated", "tmp", "test-results", "reports")) {
                         deleteRecursively(target.resolve(sub), stats);
                     }
                 }
@@ -104,12 +103,11 @@ public final class CleanCommand implements CliCommand {
             System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Clean", nerdfont, "Nothing to remove"));
         } else {
             String removed = Theme.colorize("Removed", Theme.active().focused());
-            String stats_  = String.format("%,d file%s, %s total",
-                    stats[0], stats[0] == 1 ? "" : "s",
-                    CacheCommand.fmtBytes(stats[1]));
-            String inTime  = ConsoleSpec.took(Duration.ofMillis(elapsedMs));
-            System.out.println(GoalWedge.chipLine(Glyphs.CHECK, "Clean", nerdfont,
-                    removed + " " + stats_ + " " + inTime));
+            String stats_ = String.format(
+                    "%,d file%s, %s total", stats[0], stats[0] == 1 ? "" : "s", CacheCommand.fmtBytes(stats[1]));
+            String inTime = ConsoleSpec.took(Duration.ofMillis(elapsedMs));
+            System.out.println(
+                    GoalWedge.chipLine(Glyphs.CHECK, "Clean", nerdfont, removed + " " + stats_ + " " + inTime));
         }
 
         if (gcCache) {
@@ -129,10 +127,15 @@ public final class CleanCommand implements CliCommand {
             System.out.println(check + " Cache GC: nothing idle past 90 days");
         } else {
             String gc = Theme.colorize("Cache GC", Theme.active().focused());
-            System.out.printf("%s %s: purged %,d blob%s (%s), %,d repo link%s%n",
-                    check, gc, report.purgedBlobs(), report.purgedBlobs() == 1 ? "" : "s",
+            System.out.printf(
+                    "%s %s: purged %,d blob%s (%s), %,d repo link%s%n",
+                    check,
+                    gc,
+                    report.purgedBlobs(),
+                    report.purgedBlobs() == 1 ? "" : "s",
                     CacheCommand.fmtBytes(report.freedBytes()),
-                    report.repoLinksRemoved(), report.repoLinksRemoved() == 1 ? "" : "s");
+                    report.repoLinksRemoved(),
+                    report.repoLinksRemoved() == 1 ? "" : "s");
         }
     }
 
@@ -154,7 +157,8 @@ public final class CleanCommand implements CliCommand {
                     if (Files.isDirectory(moduleDir)) dirs.add(moduleDir);
                 }
             }
-        } catch (IOException | RuntimeException ignored) {}
+        } catch (IOException | RuntimeException ignored) {
+        }
         return dirs;
     }
 
@@ -183,5 +187,4 @@ public final class CleanCommand implements CliCommand {
             });
         }
     }
-
 }

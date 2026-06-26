@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The test-skip freshness key: it must stay stable when nothing changed, and
@@ -33,10 +32,10 @@ class TestStampTest {
         Path lock = write(dir.resolve("jk.lock"), "version = 1");
         Path sibJar = write(dir.resolve("dep/target/dep.jar"), "DEPBYTES");
 
-        String k1 = TestStamp.computeKey(List.of(testSrc), mainClasses, lock,
-                List.of(sibJar), List.of("jk:1.0", "runner:abc"));
-        String k2 = TestStamp.computeKey(List.of(testSrc), mainClasses, lock,
-                List.of(sibJar), List.of("jk:1.0", "runner:abc"));
+        String k1 = TestStamp.computeKey(
+                List.of(testSrc), mainClasses, lock, List.of(sibJar), List.of("jk:1.0", "runner:abc"));
+        String k2 = TestStamp.computeKey(
+                List.of(testSrc), mainClasses, lock, List.of(sibJar), List.of("jk:1.0", "runner:abc"));
         assertThat(k1).isNotNull().isEqualTo(k2);
     }
 
@@ -48,7 +47,7 @@ class TestStampTest {
         Path lock = write(dir.resolve("jk.lock"), "v=1");
 
         String before = TestStamp.computeKey(List.of(testSrc), mainClasses, lock, List.of(), List.of());
-        Files.writeString(mainClass, "BBBB");   // main code changed; test source untouched
+        Files.writeString(mainClass, "BBBB"); // main code changed; test source untouched
         String after = TestStamp.computeKey(List.of(testSrc), mainClasses, lock, List.of(), List.of());
 
         assertThat(after).isNotEqualTo(before);
@@ -89,12 +88,12 @@ class TestStampTest {
         assertThat(TestStamp.computeKey(List.of(testSrc), mainClasses, lock, List.of(), List.of("jk:1.0")))
                 .isNotEqualTo(base);
 
-        Files.writeString(testSrc, "class FooTest {}");           // restore
-        Files.writeString(lock, "v=2");                            // dep set changed
+        Files.writeString(testSrc, "class FooTest {}"); // restore
+        Files.writeString(lock, "v=2"); // dep set changed
         assertThat(TestStamp.computeKey(List.of(testSrc), mainClasses, lock, List.of(), List.of("jk:1.0")))
                 .isNotEqualTo(base);
 
-        Files.writeString(lock, "v=1");                            // restore
+        Files.writeString(lock, "v=1"); // restore
         assertThat(TestStamp.computeKey(List.of(testSrc), mainClasses, lock, List.of(), List.of("jk:2.0")))
                 .as("a toolchain/runner identity change retests")
                 .isNotEqualTo(base);

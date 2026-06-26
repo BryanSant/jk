@@ -3,7 +3,6 @@ package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.repo.JkMavenLocalRepo;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -45,8 +44,7 @@ public final class CacheGc {
     public static Report run(Path cacheRoot, boolean dryRun) throws IOException {
         Cas cas = new Cas(cacheRoot);
         Path shaRoot = cacheRoot.resolve("sha256");
-        Set<String> reachable = CacheRoots.collect(
-                cas, cacheRoot.resolve("actions"), cacheRoot.resolve("tools"));
+        Set<String> reachable = CacheRoots.collect(cas, cacheRoot.resolve("actions"), cacheRoot.resolve("tools"));
 
         Path logFile = cacheRoot.resolve(AccessLedger.FILE_NAME);
         AccessLedger ledger = new AccessLedger(logFile);
@@ -68,7 +66,9 @@ public final class CacheGc {
                     if (reachable.contains(hex)) continue; // marked — always kept
 
                     AccessLedger.Entry e = access.get(hex);
-                    long last = e != null ? e.latestMillis() : Files.getLastModifiedTime(file).toMillis();
+                    long last = e != null
+                            ? e.latestMillis()
+                            : Files.getLastModifiedTime(file).toMillis();
                     if (now - last < maxAgeMillis) continue; // still warm
 
                     long size = Files.size(file);

@@ -2,7 +2,6 @@
 package dev.jkbuild.resolver.pubgrub;
 
 import dev.jkbuild.resolver.Versions;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -27,9 +26,7 @@ public final class InMemoryPackageSource implements PackageSource {
     private final Map<String, List<String>> versionsByPackage;
     private final Map<String, List<Term>> depsByCoord;
 
-    private InMemoryPackageSource(
-            Map<String, List<String>> versionsByPackage,
-            Map<String, List<Term>> depsByCoord) {
+    private InMemoryPackageSource(Map<String, List<String>> versionsByPackage, Map<String, List<Term>> depsByCoord) {
         this.versionsByPackage = Map.copyOf(versionsByPackage);
         this.depsByCoord = Map.copyOf(depsByCoord);
     }
@@ -84,6 +81,7 @@ public final class InMemoryPackageSource implements PackageSource {
 
     public static final class Deps {
         private final List<Term> entries = new ArrayList<>();
+
         public Deps require(String pkg, VersionSet versions) {
             entries.add(Term.positive(pkg, versions));
             return this;

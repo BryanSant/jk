@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * {@link PathDisplay} renders paths relative to the closest of {working dir,
@@ -30,7 +29,8 @@ class PathDisplayTest {
     @Test
     void sibling_of_working_dir_anchors_on_workspace_root_not_dotdot(@TempDir Path tmp) throws IOException {
         // Workspace root with two modules; run from one, reference a file in the other.
-        Files.writeString(tmp.resolve("jk.toml"),
+        Files.writeString(
+                tmp.resolve("jk.toml"),
                 "[project]\ngroup = \"x\"\nname = \"root\"\nversion = \"1\"\n[workspace]\nmodules = [\"app\", \"lib\"]\n");
         Path app = Files.createDirectories(tmp.resolve("app"));
         Path libFile = tmp.resolve("lib/src/Util.java");
@@ -41,7 +41,8 @@ class PathDisplayTest {
 
     @Test
     void prefers_working_dir_over_workspace_root_when_deeper(@TempDir Path tmp) throws IOException {
-        Files.writeString(tmp.resolve("jk.toml"),
+        Files.writeString(
+                tmp.resolve("jk.toml"),
                 "[project]\ngroup = \"x\"\nname = \"root\"\nversion = \"1\"\n[workspace]\nmodules = [\"app\"]\n");
         Path app = Files.createDirectories(tmp.resolve("app"));
         Path file = app.resolve("src/Main.java");

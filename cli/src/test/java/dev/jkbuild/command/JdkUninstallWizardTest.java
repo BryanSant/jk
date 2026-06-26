@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkVendor;
-import org.junit.jupiter.api.Test;
-
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class JdkUninstallWizardTest {
 
     @Test
     void rich_label_format_matches_source_slash_identifier_with_vendor_trailer() {
-        JdkHit hit = new JdkHit(Path.of("/home/u/.jdks/temurin-26.0.1"),
-                "26.0.1", JdkVendor.TEMURIN, "intellij");
+        JdkHit hit = new JdkHit(Path.of("/home/u/.jdks/temurin-26.0.1"), "26.0.1", JdkVendor.TEMURIN, "intellij");
 
         // Both focused and unfocused renderings produce the same text; the
         // visual difference is bold-vs-plain on source + identifier.
@@ -31,8 +29,7 @@ class JdkUninstallWizardTest {
 
     @Test
     void rich_label_omits_trailer_when_vendor_unknown() {
-        JdkHit hit = new JdkHit(Path.of("/opt/custom-jdk-x"),
-                "21", JdkVendor.UNKNOWN, "system");
+        JdkHit hit = new JdkHit(Path.of("/opt/custom-jdk-x"), "21", JdkVendor.UNKNOWN, "system");
 
         var rich = JdkUninstallWizard.richLabel(hit, "custom-jdk-x", true);
         assertThat(rich.toString()).isEqualTo("system/custom-jdk-x");
@@ -40,8 +37,7 @@ class JdkUninstallWizardTest {
 
     @Test
     void choice_id_is_source_slash_identifier() {
-        JdkHit hit = new JdkHit(Path.of("/home/u/.jdks/temurin-26.0.1"),
-                "26.0.1", JdkVendor.TEMURIN, "intellij");
+        JdkHit hit = new JdkHit(Path.of("/home/u/.jdks/temurin-26.0.1"), "26.0.1", JdkVendor.TEMURIN, "intellij");
         assertThat(JdkUninstallWizard.choiceIdFor(hit)).isEqualTo("intellij/temurin-26.0.1");
     }
 }

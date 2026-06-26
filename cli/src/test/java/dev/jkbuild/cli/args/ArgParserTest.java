@@ -10,7 +10,6 @@ import dev.jkbuild.model.command.Command;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -19,10 +18,25 @@ class ArgParserTest {
     /** A command exposing one of each option/param shape the parser must handle. */
     private static Command cmd(List<Opt> opts, List<Param> params) {
         return new Command() {
-            @Override public String name() { return "demo"; }
-            @Override public String description() { return "demo"; }
-            @Override public List<Opt> options() { return opts; }
-            @Override public List<Param> parameters() { return params; }
+            @Override
+            public String name() {
+                return "demo";
+            }
+
+            @Override
+            public String description() {
+                return "demo";
+            }
+
+            @Override
+            public List<Opt> options() {
+                return opts;
+            }
+
+            @Override
+            public List<Param> parameters() {
+                return params;
+            }
         };
     }
 
@@ -39,9 +53,7 @@ class ArgParserTest {
 
     @Test
     void booleanFlag_longAndShortAndBundled() throws Exception {
-        Command c = cmd(List.of(
-                Opt.flag("quiet", "-q", "--quiet"),
-                Opt.flag("verbose", "-v", "--verbose")), List.of());
+        Command c = cmd(List.of(Opt.flag("quiet", "-q", "--quiet"), Opt.flag("verbose", "-v", "--verbose")), List.of());
         assertThat(parse(c, "--quiet").isSet("quiet")).isTrue();
         assertThat(parse(c, "-q").isSet("quiet")).isTrue();
         Invocation bundled = parse(c, "-qv");
@@ -81,7 +93,8 @@ class ArgParserTest {
     @Test
     void singleValueOption_lastWins() throws Exception {
         Command c = cmd(List.of(Opt.value("<name>", "profile", "--profile")), List.of());
-        assertThat(parse(c, "--profile", "a", "--profile", "b").value("profile")).contains("b");
+        assertThat(parse(c, "--profile", "a", "--profile", "b").value("profile"))
+                .contains("b");
     }
 
     @Test
@@ -93,8 +106,8 @@ class ArgParserTest {
 
     @Test
     void doubleDashEndsOptionParsing() throws Exception {
-        Command c = cmd(List.of(Opt.flag("quiet", "--quiet")),
-                List.of(Param.of("args", Arity.ZERO_OR_MORE, "passthrough")));
+        Command c = cmd(
+                List.of(Opt.flag("quiet", "--quiet")), List.of(Param.of("args", Arity.ZERO_OR_MORE, "passthrough")));
         Invocation in = parse(c, "--", "--quiet", "-x", "foo");
         assertThat(in.isSet("quiet")).isFalse();
         assertThat(in.positionals()).containsExactly("--quiet", "-x", "foo");
@@ -103,10 +116,8 @@ class ArgParserTest {
     @Test
     void positionals_arityValidation() {
         Command oneRequired = cmd(List.of(), List.of(Param.of("coord", Arity.ONE, "the coord")));
-        assertThatThrownBy(() -> parse(oneRequired))
-                .isInstanceOf(ParseException.class);
-        ParseException tooMany = catchThrowableOfType(
-                () -> parse(oneRequired, "a", "b"), ParseException.class);
+        assertThatThrownBy(() -> parse(oneRequired)).isInstanceOf(ParseException.class);
+        ParseException tooMany = catchThrowableOfType(() -> parse(oneRequired, "a", "b"), ParseException.class);
         assertThat(tooMany.kind()).isEqualTo(ParseException.Kind.TOO_MANY_ARGS);
     }
 

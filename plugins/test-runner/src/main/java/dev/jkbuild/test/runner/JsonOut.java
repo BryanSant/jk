@@ -2,7 +2,6 @@
 package dev.jkbuild.test.runner;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
-
 import java.util.List;
 import java.util.Map;
 

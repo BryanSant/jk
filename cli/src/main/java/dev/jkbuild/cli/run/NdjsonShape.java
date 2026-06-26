@@ -5,7 +5,6 @@ import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.PhaseStatus;
-
 import java.time.Duration;
 import java.time.Instant;
 
@@ -81,10 +80,15 @@ final class NdjsonShape {
      * common diagnostic shape.
      */
     static String error(String phase, String code, String msg, String test, String exceptionClass) {
-        StringBuilder sb = new StringBuilder("{\"ts\":").append(nowMillis())
+        StringBuilder sb = new StringBuilder("{\"ts\":")
+                .append(nowMillis())
                 .append(",\"type\":\"error\"")
-                .append(",\"phase\":").append(js(phase)).append(",\"code\":").append(js(code))
-                .append(",\"message\":").append(js(msg));
+                .append(",\"phase\":")
+                .append(js(phase))
+                .append(",\"code\":")
+                .append(js(code))
+                .append(",\"message\":")
+                .append(js(msg));
         if (!test.isEmpty()) sb.append(",\"test\":").append(js(test));
         if (!exceptionClass.isEmpty()) sb.append(",\"exceptionClass\":").append(js(exceptionClass));
         return sb.append("}").toString();

@@ -4,7 +4,6 @@ package dev.jkbuild.cli.run;
 import dev.jkbuild.cli.run.SyntaxHighlight.Role;
 import dev.jkbuild.cli.run.SyntaxHighlight.Rule;
 import dev.jkbuild.cli.theme.Theme;
-
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -37,8 +36,8 @@ public final class StackTraceHighlight {
     // --- stack-frame: at com.foo.Bar.method(Bar.java:42) -----------------
 
     /** Anchored detector for an {@code at …(…)} frame line (Prism's stack-frame pattern). */
-    private static final Pattern FRAME = Pattern.compile(
-            "^[\\t ]*at (?:[\\w$./]|@[\\w$.+-]*/)+(?:<init>)?\\([^()]*\\)");
+    private static final Pattern FRAME =
+            Pattern.compile("^[\\t ]*at (?:[\\w$./]|@[\\w$.+-]*/)+(?:<init>)?\\([^()]*\\)");
 
     private static final List<Rule> FRAME_RULES = List.of(
             // the leading 'at' verb
@@ -59,18 +58,14 @@ public final class StackTraceHighlight {
 
     // --- more: ... 42 more / ... 3 common frames omitted -----------------
 
-    private static final Pattern MORE = Pattern.compile(
-            "^[\\t ]*\\.{3} \\d+ [a-z]+(?: [a-z]+)*\\s*$");
+    private static final Pattern MORE = Pattern.compile("^[\\t ]*\\.{3} \\d+ [a-z]+(?: [a-z]+)*\\s*$");
 
-    private static final List<Rule> MORE_RULES = List.of(
-            Rule.of("\\.{3}", Role.PUNCTUATION),
-            Rule.of("\\d+", Role.NUMBER),
-            Rule.of("[a-z]+", Role.KEYWORD));
+    private static final List<Rule> MORE_RULES =
+            List.of(Rule.of("\\.{3}", Role.PUNCTUATION), Rule.of("\\d+", Role.NUMBER), Rule.of("[a-z]+", Role.KEYWORD));
 
     // --- summary: [Caused by: ]com.foo.MyException: message --------------
 
-    private static final Pattern SUMMARY = Pattern.compile(
-            "^(?<indent>[\\t ]*)"
+    private static final Pattern SUMMARY = Pattern.compile("^(?<indent>[\\t ]*)"
             + "(?<prefix>Caused by:|Suppressed:|Exception in thread \"[^\"]*\")?"
             + "(?<sp>[\\t ]*)"
             + "(?<fqcn>[\\w$]+(?:\\.[\\w$]+)*)"
@@ -106,22 +101,22 @@ public final class StackTraceHighlight {
 
     private static String summary(Matcher s) {
         StringBuilder out = new StringBuilder();
-        out.append(s.group("indent"));                       // plain
+        out.append(s.group("indent")); // plain
         String prefix = s.group("prefix");
         if (prefix != null) out.append(col(prefix, Role.KEYWORD));
-        out.append(s.group("sp"));                            // plain
+        out.append(s.group("sp")); // plain
         String fqcn = s.group("fqcn");
         int dot = fqcn.lastIndexOf('.');
         if (dot >= 0) {
-            out.append(col(fqcn.substring(0, dot + 1), Role.NAMESPACE));   // package incl. trailing '.'
-            out.append(col(fqcn.substring(dot + 1), Role.TYPE));          // simple class name
+            out.append(col(fqcn.substring(0, dot + 1), Role.NAMESPACE)); // package incl. trailing '.'
+            out.append(col(fqcn.substring(dot + 1), Role.TYPE)); // simple class name
         } else {
             out.append(col(fqcn, Role.TYPE));
         }
         String rest = s.group("rest");
         if (rest != null) {
             out.append(col(":", Role.PUNCTUATION));
-            if (rest.length() > 1) out.append(col(rest.substring(1), Role.STRING));   // the message
+            if (rest.length() > 1) out.append(col(rest.substring(1), Role.STRING)); // the message
         }
         return out.toString();
     }

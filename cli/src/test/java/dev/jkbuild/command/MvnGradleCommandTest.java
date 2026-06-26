@@ -1,16 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledOnOs;
-import org.junit.jupiter.api.condition.OS;
-import org.junit.jupiter.api.io.TempDir;
-
+import dev.jkbuild.cli.Jk;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -22,8 +16,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Exercises {@link MvnCommand} and {@link GradleCommand} end-to-end against a
@@ -56,7 +54,9 @@ class MvnGradleCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void mvn_passthrough_installs_and_forwards_args(@TempDir Path tempDir) throws Exception {
@@ -65,21 +65,28 @@ class MvnGradleCommandTest {
         Path argsLog = tempDir.resolve("argv.log");
         Path envLog = tempDir.resolve("env.log");
 
-        served.put("/apache-maven-3.9.9-bin.zip",
-                recordingZip("apache-maven-3.9.9", "mvn", argsLog, envLog));
-        Files.writeString(projectDir.resolve(".mvn/wrapper/maven-wrapper.properties"),
+        served.put("/apache-maven-3.9.9-bin.zip", recordingZip("apache-maven-3.9.9", "mvn", argsLog, envLog));
+        Files.writeString(
+                projectDir.resolve(".mvn/wrapper/maven-wrapper.properties"),
                 "distributionUrl=" + base.resolve("/apache-maven-3.9.9-bin.zip") + "\n");
 
-        int exit = run("mvn",
-                "-C", projectDir.toString(),
-                "--tools-dir", tempDir.resolve("tools").toString(), "--no-discover",
-                "--jdks-dir", tempDir.resolve("jdks").toString(),
-                "clean", "install", "-DskipTests=true", "-X");
+        int exit = run(
+                "mvn",
+                "-C",
+                projectDir.toString(),
+                "--tools-dir",
+                tempDir.resolve("tools").toString(),
+                "--no-discover",
+                "--jdks-dir",
+                tempDir.resolve("jdks").toString(),
+                "clean",
+                "install",
+                "-DskipTests=true",
+                "-X");
         assertThat(exit).isEqualTo(0);
 
         assertThat(tempDir.resolve("tools/maven/3.9.9/bin/mvn")).exists();
-        assertThat(Files.readString(argsLog).trim())
-                .isEqualTo("clean install -DskipTests=true -X");
+        assertThat(Files.readString(argsLog).trim()).isEqualTo("clean install -DskipTests=true -X");
 
         String env = Files.readString(envLog);
         assertThat(env).doesNotContain("MAVEN_OPTS=");
@@ -93,16 +100,22 @@ class MvnGradleCommandTest {
         Path argsLog = tempDir.resolve("argv.log");
         Path envLog = tempDir.resolve("env.log");
 
-        served.put("/gradle-9.5.1-bin.zip",
-                recordingZip("gradle-9.5.1", "gradle", argsLog, envLog));
-        Files.writeString(projectDir.resolve("gradle/wrapper/gradle-wrapper.properties"),
+        served.put("/gradle-9.5.1-bin.zip", recordingZip("gradle-9.5.1", "gradle", argsLog, envLog));
+        Files.writeString(
+                projectDir.resolve("gradle/wrapper/gradle-wrapper.properties"),
                 "distributionUrl=" + base.resolve("/gradle-9.5.1-bin.zip") + "\n");
 
-        int exit = run("gradle",
-                "-C", projectDir.toString(),
-                "--tools-dir", tempDir.resolve("tools").toString(), "--no-discover",
-                "--jdks-dir", tempDir.resolve("jdks").toString(),
-                "build", "--no-daemon");
+        int exit = run(
+                "gradle",
+                "-C",
+                projectDir.toString(),
+                "--tools-dir",
+                tempDir.resolve("tools").toString(),
+                "--no-discover",
+                "--jdks-dir",
+                tempDir.resolve("jdks").toString(),
+                "build",
+                "--no-daemon");
         assertThat(exit).isEqualTo(0);
 
         assertThat(tempDir.resolve("tools/gradle/9.5.1/bin/gradle")).exists();
@@ -116,28 +129,40 @@ class MvnGradleCommandTest {
         Path argsLog = tempDir.resolve("argv.log");
         Path envLog = tempDir.resolve("env.log");
 
-        served.put("/apache-maven-3.9.9-bin.zip",
-                recordingZip("apache-maven-3.9.9", "mvn", argsLog, envLog));
-        Files.writeString(projectDir.resolve(".mvn/wrapper/maven-wrapper.properties"),
+        served.put("/apache-maven-3.9.9-bin.zip", recordingZip("apache-maven-3.9.9", "mvn", argsLog, envLog));
+        Files.writeString(
+                projectDir.resolve(".mvn/wrapper/maven-wrapper.properties"),
                 "distributionUrl=" + base.resolve("/apache-maven-3.9.9-bin.zip") + "\n");
 
-        run("mvn", "-C", projectDir.toString(),
-                "--tools-dir", tempDir.resolve("tools").toString(), "--no-discover",
-                "--jdks-dir", tempDir.resolve("jdks").toString(),
+        run(
+                "mvn",
+                "-C",
+                projectDir.toString(),
+                "--tools-dir",
+                tempDir.resolve("tools").toString(),
+                "--no-discover",
+                "--jdks-dir",
+                tempDir.resolve("jdks").toString(),
                 "first");
-        long firstMtime = Files.getLastModifiedTime(
-                tempDir.resolve("tools/maven/3.9.9/bin/mvn")).toMillis();
+        long firstMtime = Files.getLastModifiedTime(tempDir.resolve("tools/maven/3.9.9/bin/mvn"))
+                .toMillis();
 
         // Drop the served archive; second invocation must not need it.
         served.clear();
-        int exit = run("mvn", "-C", projectDir.toString(),
-                "--tools-dir", tempDir.resolve("tools").toString(), "--no-discover",
-                "--jdks-dir", tempDir.resolve("jdks").toString(),
+        int exit = run(
+                "mvn",
+                "-C",
+                projectDir.toString(),
+                "--tools-dir",
+                tempDir.resolve("tools").toString(),
+                "--no-discover",
+                "--jdks-dir",
+                tempDir.resolve("jdks").toString(),
                 "second");
         assertThat(exit).isEqualTo(0);
 
-        long secondMtime = Files.getLastModifiedTime(
-                tempDir.resolve("tools/maven/3.9.9/bin/mvn")).toMillis();
+        long secondMtime = Files.getLastModifiedTime(tempDir.resolve("tools/maven/3.9.9/bin/mvn"))
+                .toMillis();
         assertThat(secondMtime).isEqualTo(firstMtime);
         assertThat(Files.readString(argsLog).trim()).isEqualTo("second");
     }
@@ -150,8 +175,7 @@ class MvnGradleCommandTest {
      * A zip carrying a single shell launcher that writes its argv to one file
      * and its env to another. Used as a synthetic mvn/gradle distribution.
      */
-    private static byte[] recordingZip(String topDir, String binaryName,
-                                       Path argsLog, Path envLog) throws IOException {
+    private static byte[] recordingZip(String topDir, String binaryName, Path argsLog, Path envLog) throws IOException {
         String script = "#!/usr/bin/env bash\n"
                 + "echo \"$@\" > " + shellQuote(argsLog.toString()) + "\n"
                 + "env > " + shellQuote(envLog.toString()) + "\n"

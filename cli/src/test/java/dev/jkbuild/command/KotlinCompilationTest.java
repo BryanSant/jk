@@ -1,17 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.jar.JarFile;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * End-to-end tests for Kotlin support in jk check / jk build. No network —
@@ -23,7 +21,7 @@ class KotlinCompilationTest {
     @Test
     void check_passes_for_pure_kotlin_project(@TempDir Path tempDir) throws IOException {
         run("new", "--lang", "kotlin", tempDir.toString());
-        ScaffoldTestSupport.writeEmptyLock(tempDir);   // jk new no longer locks; check needs a lock
+        ScaffoldTestSupport.writeEmptyLock(tempDir); // jk new no longer locks; check needs a lock
         Path src = tempDir.resolve("src/main/kotlin/example/Hello.kt");
         Files.createDirectories(src.getParent());
         Files.writeString(src, """
@@ -32,9 +30,7 @@ class KotlinCompilationTest {
                 fun greet(): String = "hi from kotlin"
                 """);
 
-        int exit = run("check",
-                "-C", tempDir.toString(),
-                "--cache-dir", SharedTestCache.arg());
+        int exit = run("check", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
     }
 
@@ -49,9 +45,7 @@ class KotlinCompilationTest {
                 fun greet(): String = "hi"
                 """);
 
-        int exit = run("build",
-                "-C", tempDir.toString(),
-                "--cache-dir", SharedTestCache.arg());
+        int exit = run("build", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
 
         Path jar = tempDir.resolve("target/widget-0.1.0.jar");
@@ -74,16 +68,18 @@ class KotlinCompilationTest {
                 """);
         Path cache = tempDir.resolve("cache");
 
-        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
+                .isEqualTo(0);
         Path ktClass = tempDir.resolve("target/classes/main/example/HelloKt.class");
         Path stamp = tempDir.resolve("target/classes/main/.kstamp");
-        assertThat(stamp).exists();                  // freshness stamp written
+        assertThat(stamp).exists(); // freshness stamp written
         assertThat(ktClass).exists();
         long firstMtime = Files.getLastModifiedTime(ktClass).toMillis();
 
         // A no-change rebuild must hit the freshness stamp and NOT re-invoke
         // kotlinc — the output .class is left exactly as the first build wrote it.
-        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
+                .isEqualTo(0);
         assertThat(Files.getLastModifiedTime(ktClass).toMillis()).isEqualTo(firstMtime);
     }
 
@@ -99,7 +95,8 @@ class KotlinCompilationTest {
                 """);
         Path cache = tempDir.resolve("cache");
 
-        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
+                .isEqualTo(0);
         Path ktClass = tempDir.resolve("target/classes/main/example/HelloKt.class");
         long firstMtime = Files.getLastModifiedTime(ktClass).toMillis();
 
@@ -113,21 +110,20 @@ class KotlinCompilationTest {
                 """);
         Files.setLastModifiedTime(src, java.nio.file.attribute.FileTime.fromMillis(firstMtime + 5_000));
 
-        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(run("build", "-C", tempDir.toString(), "--cache-dir", cache.toString()))
+                .isEqualTo(0);
         assertThat(Files.getLastModifiedTime(ktClass).toMillis()).isNotEqualTo(firstMtime);
     }
 
     @Test
     void check_fails_on_kotlin_syntax_error(@TempDir Path tempDir) throws IOException {
         run("new", "--lang", "kotlin", tempDir.toString());
-        ScaffoldTestSupport.writeEmptyLock(tempDir);   // jk new no longer locks; check needs a lock
+        ScaffoldTestSupport.writeEmptyLock(tempDir); // jk new no longer locks; check needs a lock
         Path src = tempDir.resolve("src/main/kotlin/Broken.kt");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "fun broken( = oops");
 
-        int exit = run("check",
-                "-C", tempDir.toString(),
-                "--cache-dir", SharedTestCache.arg());
+        int exit = run("check", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(1);
     }
 
@@ -154,9 +150,7 @@ class KotlinCompilationTest {
                 fun greet(): String = Hub.banner()
                 """);
 
-        int exit = run("build",
-                "-C", tempDir.toString(),
-                "--cache-dir", SharedTestCache.arg());
+        int exit = run("build", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
 
         try (JarFile jf = new JarFile(tempDir.resolve("target/mixed-0.1.0.jar").toFile())) {
@@ -189,9 +183,7 @@ class KotlinCompilationTest {
                 }
                 """);
 
-        int exit = run("build",
-                "-C", tempDir.toString(),
-                "--cache-dir", SharedTestCache.arg());
+        int exit = run("build", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
 
         try (JarFile jf = new JarFile(tempDir.resolve("target/mixed-0.1.0.jar").toFile())) {
@@ -205,7 +197,7 @@ class KotlinCompilationTest {
         // jk check → CompileCommand, which also compiles Kotlin-first so Java can
         // reference Kotlin within the module.
         run("new", "--name", "mixed", "--lang", "kotlin", "--layout", "traditional", tempDir.toString());
-        ScaffoldTestSupport.writeEmptyLock(tempDir);   // jk new no longer locks; check needs a lock
+        ScaffoldTestSupport.writeEmptyLock(tempDir); // jk new no longer locks; check needs a lock
         Path toml = tempDir.resolve("jk.toml");
         Files.writeString(toml, Files.readString(toml).replace("[project]\n", "[project]\njava = 25\n"));
         Path ktSrc = tempDir.resolve("src/main/kotlin/example/Greeter.kt");
@@ -224,9 +216,7 @@ class KotlinCompilationTest {
                 }
                 """);
 
-        int exit = run("check",
-                "-C", tempDir.toString(),
-                "--cache-dir", SharedTestCache.arg());
+        int exit = run("check", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
     }
 

@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.WorkspaceMerge;
-import org.junit.jupiter.api.Test;
-
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * Sanity-checks the workspace's {@code jk.toml} files. Failing here means
@@ -33,7 +32,10 @@ class SelfHostingTomlTest {
         // cwd. From there, walk up looking for jk.toml with [workspace].
         try {
             Path classPath = Path.of(SelfHostingTomlTest.class
-                    .getProtectionDomain().getCodeSource().getLocation().toURI());
+                    .getProtectionDomain()
+                    .getCodeSource()
+                    .getLocation()
+                    .toURI());
             Path candidate = classPath.toAbsolutePath().normalize();
             for (int i = 0; i < 12 && candidate != null; i++) {
                 Path manifest = candidate.resolve("jk.toml");
@@ -61,9 +63,16 @@ class SelfHostingTomlTest {
         assertThat(root.project().group()).isEqualTo("dev.jkbuild");
         assertThat(root.project().name()).isEqualTo("jk");
         assertThat(root.isWorkspaceRoot()).isTrue();
-        assertThat(root.workspace().modules()).containsExactly(
-                "kernel/model", "plugin-api", "kernel/core", "kernel/io",
-                "kernel/resolver", "kernel/toolchain", "kernel/engine", "cli");
+        assertThat(root.workspace().modules())
+                .containsExactly(
+                        "kernel/model",
+                        "plugin-api",
+                        "kernel/core",
+                        "kernel/io",
+                        "kernel/resolver",
+                        "kernel/toolchain",
+                        "kernel/engine",
+                        "cli");
     }
 
     @Test
@@ -89,11 +98,9 @@ class SelfHostingTomlTest {
         // explicitly (no `.workspace = true` shorthand) so module builds
         // can resolve lock-time + classpath without needing the parser
         // to apply WorkspaceMerge.
-        List<String> mainModules = cli.dependencies().of(Scope.MAIN).stream()
-                .map(d -> d.module()).toList();
-        assertThat(mainModules).contains(
-                "dev.jkbuild:jk-core",
-                "dev.jkbuild:jk-engine");
+        List<String> mainModules =
+                cli.dependencies().of(Scope.MAIN).stream().map(d -> d.module()).toList();
+        assertThat(mainModules).contains("dev.jkbuild:jk-core", "dev.jkbuild:jk-engine");
 
         // Confirm the workspace-root merge still rewrites/dedupes the
         // module coords cleanly when invoked from the root.
@@ -101,7 +108,8 @@ class SelfHostingTomlTest {
         JkBuild merged = WorkspaceMerge.merge(
                 root, WorkspaceLoader.loadModules(REPO, root).values());
         List<String> mergedRootMain = merged.dependencies().of(Scope.MAIN).stream()
-                .map(d -> d.module()).toList();
+                .map(d -> d.module())
+                .toList();
         // jk-engine is a workspace-internal dep and is filtered by WorkspaceMerge;
         // verify an external dep that survives the merge.
         assertThat(mergedRootMain).contains("org.jline:jline-terminal-ffm");

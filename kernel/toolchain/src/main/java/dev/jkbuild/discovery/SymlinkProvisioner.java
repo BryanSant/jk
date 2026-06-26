@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.HostPlatform;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -76,12 +75,15 @@ public final class SymlinkProvisioner {
         }
         if (Files.isDirectory(path)) {
             try (var stream = Files.walk(path)) {
-                stream.sorted(Comparator.reverseOrder())
-                        .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) {} });
+                stream.sorted(Comparator.reverseOrder()).forEach(p -> {
+                    try {
+                        Files.deleteIfExists(p);
+                    } catch (IOException ignored) {
+                    }
+                });
             }
             return;
         }
         Files.deleteIfExists(path);
     }
-
 }

@@ -59,6 +59,9 @@ public final class JdkLts {
      * concrete major from the JetBrains feed.
      */
     public static OptionalInt latestLtsIn(Collection<Integer> majors) {
-        return majors.stream().mapToInt(Integer::intValue).filter(JdkLts::isLtsMajor).max();
+        return majors.stream()
+                .mapToInt(Integer::intValue)
+                .filter(JdkLts::isLtsMajor)
+                .max();
     }
 }

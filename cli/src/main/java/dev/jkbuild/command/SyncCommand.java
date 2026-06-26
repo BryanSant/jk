@@ -1,39 +1,33 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.LockFlow;
-
-import dev.jkbuild.runtime.JdkEnsure;
-
-import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.cli.theme.Coords;
-
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceLoader;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.resolver.CacheSync;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
-import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.runtime.JdkEnsure;
+import dev.jkbuild.runtime.LockFlow;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 /**
  * {@code jk sync} — bring the local toolchain + dependency cache in line with
@@ -74,29 +68,29 @@ public final class SyncCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
-                        "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.",
-                        "--jdks-dir").hide(),
-                Opt.value("<url>", "Override declared repos with a single URL (for tests).",
-                        "--repo-url").hide(),
+                Opt.value(
+                                "<dir>",
+                                "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                                "--cache-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir")
+                        .hide(),
+                Opt.value("<url>", "Override declared repos with a single URL (for tests).", "--repo-url")
+                        .hide(),
                 Opt.flag("Prepare for an offline build.", "--offline-prepare"),
                 Opt.flag("Also download sources JARs when available.", "--sources"));
     }
 
     /** Cross-phase keys. Lifted out so each phase reads/writes through the same handle. */
     private static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
+
     private static final GoalKey<JkBuild> BUILD = GoalKey.of("build", JkBuild.class);
-    private static final GoalKey<JdkEnsure.Outcome> JDK_OUTCOME =
-            GoalKey.of("jdk-outcome", JdkEnsure.Outcome.class);
-    private static final GoalKey<CacheSync.Report> CAS_REPORT =
-            GoalKey.of("cas-report", CacheSync.Report.class);
+    private static final GoalKey<JdkEnsure.Outcome> JDK_OUTCOME = GoalKey.of("jdk-outcome", JdkEnsure.Outcome.class);
+    private static final GoalKey<CacheSync.Report> CAS_REPORT = GoalKey.of("cas-report", CacheSync.Report.class);
     private static final GoalKey<dev.jkbuild.runtime.JkWorkerSync.Result> WORKER_REPORT =
             GoalKey.of("worker-report", dev.jkbuild.runtime.JkWorkerSync.Result.class);
-    private static final GoalKey<Integer> WORKSPACE_MODULES =
-            GoalKey.of("workspace-modules", Integer.class);
-    private static final GoalKey<Boolean> LOCKFILE_CREATED =
-            GoalKey.of("lockfile-created", Boolean.class);
+    private static final GoalKey<Integer> WORKSPACE_MODULES = GoalKey.of("workspace-modules", Integer.class);
+    private static final GoalKey<Boolean> LOCKFILE_CREATED = GoalKey.of("lockfile-created", Boolean.class);
 
     @Override
     public int run(Invocation in) throws Exception {
@@ -118,15 +112,16 @@ public final class SyncCommand implements CliCommand {
                     ctx.label("parse jk.lock");
                     if (!Files.exists(lockFile)) {
                         ctx.label("resolve deps");
-                        var result = LockFlow.run(
-                                dir, cache, List.of(), false, repoUrl);
+                        var result = LockFlow.run(dir, cache, List.of(), false, repoUrl);
                         if (result.workspaceModuleCount() > 0) {
                             ctx.put(WORKSPACE_MODULES, result.workspaceModuleCount());
                         }
                         if (result.status() != 0) {
-                            ctx.error("lock", result.error() != null
-                                    ? result.error()
-                                    : "lockfile resolution failed (exit " + result.status() + ")");
+                            ctx.error(
+                                    "lock",
+                                    result.error() != null
+                                            ? result.error()
+                                            : "lockfile resolution failed (exit " + result.status() + ")");
                             throw new RuntimeException("lock-flow failed");
                         }
                         ctx.put(LOCKFILE, result.lockfile());
@@ -136,9 +131,15 @@ public final class SyncCommand implements CliCommand {
                         ctx.label("jk.toml changed — updating lock");
                         Lockfile existing = LockfileReader.read(lockFile);
                         Lockfile updated = dev.jkbuild.runtime.AutoLock.maybeReLock(
-                                dir, existing, lockFile, cache, repoUrl,
+                                dir,
+                                existing,
+                                lockFile,
+                                cache,
+                                repoUrl,
                                 dev.jkbuild.util.JkVersion.VERSION,
-                                List.of(), true, dev.jkbuild.resolver.ResolveObserver.NOOP);
+                                List.of(),
+                                true,
+                                dev.jkbuild.resolver.ResolveObserver.NOOP);
                         ctx.put(LOCKFILE, updated != null ? updated : existing);
                         var build = parseBuildIfPresent(dir);
                         if (build != null) ctx.put(BUILD, build);
@@ -160,12 +161,10 @@ public final class SyncCommand implements CliCommand {
                     Lockfile lock = ctx.require(LOCKFILE);
                     JkBuild build = ctx.get(BUILD).orElse(null);
                     try {
-                        var outcome = JdkEnsure.ensure(dir, jdksDir, build, lock,
-                                m -> ctx.warn("jdk", m));
+                        var outcome = JdkEnsure.ensure(dir, jdksDir, build, lock, m -> ctx.warn("jdk", m));
                         ctx.put(JDK_OUTCOME, outcome);
                     } catch (Exception e) {
-                        ctx.error("jdk", e.getMessage() == null
-                                ? e.getClass().getSimpleName() : e.getMessage());
+                        ctx.error("jdk", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
                         throw e;
                     }
                     ctx.progress(1);
@@ -175,7 +174,7 @@ public final class SyncCommand implements CliCommand {
         Phase syncCas = Phase.builder("sync-cas")
                 .kind(PhaseKind.IO)
                 .requires("parse-lock")
-                .scope(0)                 // grown once parse-lock fills lockfile
+                .scope(0) // grown once parse-lock fills lockfile
                 .execute(ctx -> {
                     Lockfile lock = ctx.require(LOCKFILE);
                     int packages = lock.artifacts().size();
@@ -189,17 +188,24 @@ public final class SyncCommand implements CliCommand {
                     // The TUI bar advances as individual deps land; the
                     // event log records them ordered by completion.
                     var observer = new CacheSync.ProgressObserver() {
-                        @Override public void fetched(Lockfile.Artifact pkg) {
+                        @Override
+                        public void fetched(Lockfile.Artifact pkg) {
                             ctx.label("fetched " + Coords.module(pkg.name(), pkg.version()));
                             ctx.progress(1);
                         }
-                        @Override public void upToDate(Lockfile.Artifact pkg) {
+
+                        @Override
+                        public void upToDate(Lockfile.Artifact pkg) {
                             ctx.progress(1);
                         }
-                        @Override public void skipped(Lockfile.Artifact pkg) {
+
+                        @Override
+                        public void skipped(Lockfile.Artifact pkg) {
                             ctx.progress(1);
                         }
-                        @Override public void failed(Lockfile.Artifact pkg, String error) {
+
+                        @Override
+                        public void failed(Lockfile.Artifact pkg, String error) {
                             ctx.error("dep", Coords.module(pkg.name(), pkg.version()) + " — " + error);
                             ctx.progress(1);
                         }
@@ -224,12 +230,15 @@ public final class SyncCommand implements CliCommand {
                     ctx.label("sync jk workers");
                     Cas cas = new Cas(cache);
                     try {
-                        var report = dev.jkbuild.runtime.JkWorkerSync.ensureInCas(cas,
-                                new dev.jkbuild.runtime.JkWorkerSync.Observer() {
-                                    @Override public void fetched(String artifact) {
+                        var report = dev.jkbuild.runtime.JkWorkerSync.ensureInCas(
+                                cas, new dev.jkbuild.runtime.JkWorkerSync.Observer() {
+                                    @Override
+                                    public void fetched(String artifact) {
                                         ctx.label("fetched " + artifact);
                                     }
-                                    @Override public void missing(String artifact, String detail) {
+
+                                    @Override
+                                    public void missing(String artifact, String detail) {
                                         // Empty code → ProgressBarListener omits [phase/code] brackets.
                                         ctx.warn("", artifact + " " + detail + ".");
                                     }
@@ -250,11 +259,9 @@ public final class SyncCommand implements CliCommand {
                     ctx.label("stamp reachability manifest");
                     try {
                         Lockfile lock = ctx.require(LOCKFILE);
-                        dev.jkbuild.task.SyncManifest.write(
-                                cache.resolve("actions"), lockFile, lock);
+                        dev.jkbuild.task.SyncManifest.write(cache.resolve("actions"), lockFile, lock);
                     } catch (IOException e) {
-                        ctx.warn("manifest",
-                                "could not stamp reachability manifest: " + e.getMessage());
+                        ctx.warn("manifest", "could not stamp reachability manifest: " + e.getMessage());
                     }
                     ctx.progress(1);
                 })
@@ -276,8 +283,7 @@ public final class SyncCommand implements CliCommand {
                     dev.jkbuild.repo.RepoGroup repos = build != null
                             ? dev.jkbuild.runtime.RepoGroupBuilder.buildFor(build, repoUrl, cas)
                             : dev.jkbuild.runtime.RepoGroupBuilder.buildFor(
-                                dev.jkbuild.config.JkBuildParser.parse(dir.resolve("jk.toml")),
-                                repoUrl, cas);
+                                    dev.jkbuild.config.JkBuildParser.parse(dir.resolve("jk.toml")), repoUrl, cas);
                     for (var pe : pluginEntries) {
                         ctx.label("sync " + pe.coordinate());
                         String hex = pe.sha256Hex();
@@ -316,18 +322,26 @@ public final class SyncCommand implements CliCommand {
                     if (!sources) return; // opt-in only
                     Lockfile lock = ctx.require(LOCKFILE);
                     long withSrc = lock.artifacts().stream()
-                            .filter(p -> p.sourcesChecksum() != null).count();
+                            .filter(p -> p.sourcesChecksum() != null)
+                            .count();
                     if (withSrc == 0) return;
                     ctx.updateScope((int) withSrc);
                     ctx.label("sync sources");
                     Cas cas = new Cas(cache);
                     var observer = new dev.jkbuild.resolver.CacheSync.ProgressObserver() {
-                        @Override public void fetched(Lockfile.Artifact pkg) {
+                        @Override
+                        public void fetched(Lockfile.Artifact pkg) {
                             ctx.label("fetched sources " + pkg.name() + ":" + pkg.version());
                             ctx.progress(1);
                         }
-                        @Override public void upToDate(Lockfile.Artifact pkg) { ctx.progress(1); }
-                        @Override public void failed(Lockfile.Artifact pkg, String error) {
+
+                        @Override
+                        public void upToDate(Lockfile.Artifact pkg) {
+                            ctx.progress(1);
+                        }
+
+                        @Override
+                        public void failed(Lockfile.Artifact pkg, String error) {
                             ctx.warn("sources", pkg.name() + ":" + pkg.version() + " — " + error);
                             ctx.progress(1);
                         }
@@ -359,8 +373,8 @@ public final class SyncCommand implements CliCommand {
             // settings are user-global only; resolve() reads ~/.jk/config.toml
             // (a project jk.toml's [cache] is intentionally ignored).
             var cacheConfig = dev.jkbuild.config.JkCacheConfig.resolve();
-            dev.jkbuild.task.CachePruneScheduler.resolveJkExe().ifPresent(exe ->
-                    dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
+            dev.jkbuild.task.CachePruneScheduler.resolveJkExe()
+                    .ifPresent(exe -> dev.jkbuild.task.CachePruneScheduler.maybeRun(cacheConfig, cache, exe));
             // Cascade: sync each module's lock file for workspace roots.
             cascadeSyncModules(dir, cache);
             return 0;
@@ -402,8 +416,8 @@ public final class SyncCommand implements CliCommand {
             Path moduleLock = moduleDir.resolve("jk.lock");
             if (!Files.exists(moduleLock)) {
                 if (!global.outputIsJson()) {
-                    System.err.println("jk sync: " + dir.relativize(moduleDir)
-                            + "/jk.lock not found — run `jk lock` first");
+                    System.err.println(
+                            "jk sync: " + dir.relativize(moduleDir) + "/jk.lock not found — run `jk lock` first");
                 }
                 continue;
             }
@@ -418,8 +432,7 @@ public final class SyncCommand implements CliCommand {
                             + report.skipped() + " skipped");
                 }
             } catch (Exception e) {
-                System.err.println("jk sync: " + dir.relativize(moduleDir)
-                        + ": sync failed — " + e.getMessage());
+                System.err.println("jk sync: " + dir.relativize(moduleDir) + ": sync failed — " + e.getMessage());
             }
         }
     }
@@ -431,25 +444,24 @@ public final class SyncCommand implements CliCommand {
      */
     private void printSuccessSummary(Goal goal, Path lockFile) {
         if (global.outputIsJson()) return;
-        goal.get(WORKSPACE_MODULES).ifPresent(n ->
-                System.out.println("Workspace: " + n + " module" + (n == 1 ? "" : "s")));
+        goal.get(WORKSPACE_MODULES)
+                .ifPresent(n -> System.out.println("Workspace: " + n + " module" + (n == 1 ? "" : "s")));
         boolean created = goal.get(LOCKFILE_CREATED).orElse(false);
         goal.get(LOCKFILE).ifPresent(lock -> {
             if (created) {
                 int n = lock.artifacts().size();
-                System.out.println("Created " + dev.jkbuild.cli.PathDisplay.styledRaw(lockFile) + " (" + n
-                        + " package" + (n == 1 ? "" : "s") + ")");
+                System.out.println("Created " + dev.jkbuild.cli.PathDisplay.styledRaw(lockFile) + " (" + n + " package"
+                        + (n == 1 ? "" : "s") + ")");
             }
         });
         goal.get(JDK_OUTCOME).ifPresent(SyncCommand::printJdkSummary);
-        goal.get(CAS_REPORT).ifPresent(r ->
-                System.out.println(r.fetched() + " fetched, "
-                        + r.upToDate() + " up-to-date, "
-                        + r.skipped() + " skipped"));
+        goal.get(CAS_REPORT)
+                .ifPresent(r -> System.out.println(
+                        r.fetched() + " fetched, " + r.upToDate() + " up-to-date, " + r.skipped() + " skipped"));
         goal.get(WORKER_REPORT).ifPresent(r -> {
             if (r.fetched() > 0 || r.missing() > 0) {
-                System.out.println("Workers: " + r.present() + " present, "
-                        + r.fetched() + " fetched, " + r.missing() + " missing");
+                System.out.println("Workers: " + r.present() + " present, " + r.fetched() + " fetched, " + r.missing()
+                        + " missing");
             }
         });
     }
@@ -462,12 +474,10 @@ public final class SyncCommand implements CliCommand {
         var jdk = outcome.jdk().get();
         switch (outcome.source()) {
             case ALREADY_PINNED, LOCKFILE_INSTALL ->
-                    System.out.println("JDK: " + jdk.identifier() + " (already installed)");
+                System.out.println("JDK: " + jdk.identifier() + " (already installed)");
             case INSTALLED ->
-                    System.out.println("JDK: installed " + jdk.identifier()
-                            + (outcome.specUsed() != null
-                                    ? " (from spec " + outcome.specUsed() + ")"
-                                    : ""));
+                System.out.println("JDK: installed " + jdk.identifier()
+                        + (outcome.specUsed() != null ? " (from spec " + outcome.specUsed() + ")" : ""));
         }
     }
 

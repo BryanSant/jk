@@ -30,23 +30,20 @@ public record ImageConfig(
         ports = ports == null ? List.of() : List.copyOf(ports);
         env = env == null ? Map.of() : Map.copyOf(env);
         labels = labels == null ? Map.of() : Map.copyOf(labels);
-        platforms = (platforms == null || platforms.isEmpty())
-                ? List.of("linux/amd64") : List.copyOf(platforms);
+        platforms = (platforms == null || platforms.isEmpty()) ? List.of("linux/amd64") : List.copyOf(platforms);
         // user, registry, tag, mainClass may be null
     }
 
     public static ImageConfig defaults() {
-        return new ImageConfig(DEFAULT_BASE, "nonroot", List.of(),
-                Map.of(), Map.of(), null, null, List.of("linux/amd64"), null);
+        return new ImageConfig(
+                DEFAULT_BASE, "nonroot", List.of(), Map.of(), Map.of(), null, null, List.of("linux/amd64"), null);
     }
 
     /** Resolve the final {@code <registry>/<image>:<tag>} target. */
     public String targetReference(String artifact, String version) {
         Objects.requireNonNull(artifact, "artifact");
         Objects.requireNonNull(version, "version");
-        String image = (registry != null && !registry.isBlank())
-                ? registry + "/" + artifact
-                : artifact;
+        String image = (registry != null && !registry.isBlank()) ? registry + "/" + artifact : artifact;
         String t = (tag != null && !tag.isBlank()) ? tag : version;
         return image + ":" + t;
     }

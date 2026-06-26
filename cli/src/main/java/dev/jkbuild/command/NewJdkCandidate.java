@@ -4,7 +4,6 @@ package dev.jkbuild.command;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.jdk.JdkVendor;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
@@ -60,27 +59,71 @@ public sealed interface NewJdkCandidate {
     /** Adapter over an installed JDK. */
     record Installed(NewJdkOptions.Option option, JdkVendor resolvedVendor) implements NewJdkCandidate {
 
-        @Override public String id() { return option.id(); }
-        @Override public JdkVendor vendor() { return resolvedVendor; }
-        @Override public int major() { return option.major(); }
-        @Override public boolean installed() { return true; }
-        @Override public String vendorLabel() {
+        @Override
+        public String id() {
+            return option.id();
+        }
+
+        @Override
+        public JdkVendor vendor() {
+            return resolvedVendor;
+        }
+
+        @Override
+        public int major() {
+            return option.major();
+        }
+
+        @Override
+        public boolean installed() {
+            return true;
+        }
+
+        @Override
+        public String vendorLabel() {
             return resolvedVendor == JdkVendor.UNKNOWN
                     ? option.id()
                     : resolvedVendor.vendor() + " " + resolvedVendor.product();
         }
-        @Override public String label() { return "JDK " + major() + " - " + vendorLabel(); }
+
+        @Override
+        public String label() {
+            return "JDK " + major() + " - " + vendorLabel();
+        }
     }
 
     /** Adapter over a catalog entry we'd install on selection. */
     record Installable(JdkCatalog.Entry entry) implements NewJdkCandidate {
 
-        @Override public String id() { return entry.installFolderName(); }
-        @Override public JdkVendor vendor() { return vendorByLabel(entry.vendor(), entry.product()); }
-        @Override public int major() { return entry.majorVersion(); }
-        @Override public boolean installed() { return false; }
-        @Override public String vendorLabel() { return entry.vendor() + " " + entry.product(); }
-        @Override public String label() { return "JDK " + major() + " - " + vendorLabel(); }
+        @Override
+        public String id() {
+            return entry.installFolderName();
+        }
+
+        @Override
+        public JdkVendor vendor() {
+            return vendorByLabel(entry.vendor(), entry.product());
+        }
+
+        @Override
+        public int major() {
+            return entry.majorVersion();
+        }
+
+        @Override
+        public boolean installed() {
+            return false;
+        }
+
+        @Override
+        public String vendorLabel() {
+            return entry.vendor() + " " + entry.product();
+        }
+
+        @Override
+        public String label() {
+            return "JDK " + major() + " - " + vendorLabel();
+        }
     }
 
     /** Convenience: is this candidate a GraalVM build (Oracle or CE)? */
@@ -177,8 +220,8 @@ public sealed interface NewJdkCandidate {
             return all.stream()
                     .filter(NewJdkCandidate::isGraalvm)
                     .filter(c -> c.major() == latestLtsMajor)
-                    .sorted(Comparator
-                            .comparing(NewJdkCandidate::installed).reversed()
+                    .sorted(Comparator.comparing(NewJdkCandidate::installed)
+                            .reversed()
                             .thenComparing(NewJdkCandidate::label))
                     .toList();
         }

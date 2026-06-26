@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.gradle;
 
-import org.tomlj.Toml;
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,6 +9,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.tomlj.Toml;
+import org.tomlj.TomlArray;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * Reads a Gradle version catalog ({@code gradle/libs.versions.toml}) and
@@ -128,8 +127,8 @@ public final class GradleVersionCatalog {
 
     // --- parsing helpers ----------------------------------------------------
 
-    private static void flattenLibraries(TomlTable table, String prefix,
-                                         Map<String, String> versions, Map<String, String> out) {
+    private static void flattenLibraries(
+            TomlTable table, String prefix, Map<String, String> versions, Map<String, String> out) {
         for (String key : table.keySet()) {
             String path = prefix.isEmpty() ? accessor(key) : prefix + "." + accessor(key);
             Object value = table.get(key);

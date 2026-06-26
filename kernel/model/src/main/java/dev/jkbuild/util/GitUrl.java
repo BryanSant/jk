@@ -62,8 +62,7 @@ public final class GitUrl {
         String expanded = expand(input);
         String normalized = normalizeScpForm(expanded);
         URI uri = URI.create(normalized);
-        String scheme = uri.getScheme() == null
-                ? "https" : uri.getScheme().toLowerCase(Locale.ROOT);
+        String scheme = uri.getScheme() == null ? "https" : uri.getScheme().toLowerCase(Locale.ROOT);
         String host = uri.getHost() == null ? "" : uri.getHost().toLowerCase(Locale.ROOT);
         int port = uri.getPort();
         if (defaultPort(scheme) == port) port = -1;

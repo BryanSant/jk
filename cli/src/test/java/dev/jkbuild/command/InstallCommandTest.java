@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.cli.Jk;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.DisabledOnOs;
 import org.junit.jupiter.api.condition.OS;
 import org.junit.jupiter.api.io.TempDir;
-
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class InstallCommandTest {
 
@@ -54,10 +52,16 @@ class InstallCommandTest {
 
     @Test
     void no_args_with_no_jk_toml_returns_usage_error(@TempDir Path tempDir) {
-        int exit = Jk.execute("install", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--state-dir", tempDir.resolve("state").toString(),
-                "--bin-dir", tempDir.resolve("bin").toString());
+        int exit = Jk.execute(
+                "install",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.resolve("state").toString(),
+                "--bin-dir",
+                tempDir.resolve("bin").toString());
         assertThat(exit).isEqualTo(64);
     }
 
@@ -77,26 +81,38 @@ class InstallCommandTest {
 
         Path bin = tempDir.resolve("bin");
         Path cache = tempDir.resolve("cache");
-        int exit = Jk.execute("install", "-C", tempDir.toString(),
-                "--cache-dir", cache.toString(),
-                "--state-dir", tempDir.resolve("state").toString(),
-                "--bin-dir", bin.toString(),
-                "--libexec-dir", tempDir.resolve("libexec").toString());
+        int exit = Jk.execute(
+                "install",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                cache.toString(),
+                "--state-dir",
+                tempDir.resolve("state").toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--libexec-dir",
+                tempDir.resolve("libexec").toString());
         // A library is not a usage error any more — it cache-installs.
         assertThat(exit).isEqualTo(0);
         assertThat(bin.resolve("lib-only")).doesNotExist(); // no launcher
         // The m2 local repo mirrors the local install so other projects can resolve it.
-        assertThat(cache.resolve("repo/com/example/lib-only/0.1.0/lib-only-0.1.0.jar")).exists();
+        assertThat(cache.resolve("repo/com/example/lib-only/0.1.0/lib-only-0.1.0.jar"))
+                .exists();
     }
 
     @Test
     @DisabledOnOs(OS.WINDOWS) // POSIX launcher only.
     void application_install_writes_libexec_layout_and_launcher(@TempDir Path tempDir) throws Exception {
-        Jk.execute("new",
-                "--group", "com.example",
-                "--name", "widget",
+        Jk.execute(
+                "new",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
                 "--executable",
-                "--layout", "traditional",
+                "--layout",
+                "traditional",
                 tempDir.toString());
         Path src = tempDir.resolve("src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());
@@ -109,12 +125,18 @@ class InstallCommandTest {
 
         Path bin = tempDir.resolve("bin");
         Path libexec = tempDir.resolve("libexec");
-        int exit = Jk.execute("install",
-                "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--state-dir", tempDir.resolve("state").toString(),
-                "--bin-dir", bin.toString(),
-                "--libexec-dir", libexec.toString());
+        int exit = Jk.execute(
+                "install",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.resolve("state").toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--libexec-dir",
+                libexec.toString());
         assertThat(exit).isEqualTo(0);
 
         Path launcher = bin.resolve("widget");
@@ -142,12 +164,20 @@ class InstallCommandTest {
         Files.writeString(src, "package com.example; public final class Lib {}\n");
 
         Path m2 = tempDir.resolve("m2");
-        int exit = Jk.execute("install", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--state-dir", tempDir.resolve("state").toString(),
-                "--bin-dir", tempDir.resolve("bin").toString(),
-                "--libexec-dir", tempDir.resolve("libexec").toString(),
-                "--m2-dir", m2.toString());
+        int exit = Jk.execute(
+                "install",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.resolve("state").toString(),
+                "--bin-dir",
+                tempDir.resolve("bin").toString(),
+                "--libexec-dir",
+                tempDir.resolve("libexec").toString(),
+                "--m2-dir",
+                m2.toString());
         assertThat(exit).isEqualTo(0);
 
         Path repo = m2.resolve("repository/com/example/lib-only/0.1.0");

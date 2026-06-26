@@ -2,7 +2,6 @@
 package dev.jkbuild.test;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
-
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.file.Files;
@@ -28,9 +27,14 @@ import java.util.Map;
  */
 public final class XmlTestReport {
 
-    private record Entry(String className, String displayName, long durationMs,
-                         String failureType, String failureMessage, String failureStack,
-                         String skipReason) {}
+    private record Entry(
+            String className,
+            String displayName,
+            long durationMs,
+            String failureType,
+            String failureMessage,
+            String failureStack,
+            String skipReason) {}
 
     private final List<Entry> entries = new ArrayList<>();
     private final String timestamp;
@@ -39,8 +43,11 @@ public final class XmlTestReport {
     public XmlTestReport() {
         this.timestamp = DateTimeFormatter.ISO_INSTANT.format(Instant.now());
         String host;
-        try { host = InetAddress.getLocalHost().getHostName(); }
-        catch (Exception ignored) { host = "localhost"; }
+        try {
+            host = InetAddress.getLocalHost().getHostName();
+        } catch (Exception ignored) {
+            host = "localhost";
+        }
         this.hostname = host;
     }
 
@@ -49,17 +56,15 @@ public final class XmlTestReport {
      * {@code throwableJson} is the raw nested JSON object from the protocol
      * event's {@code throwable} field — {@code null} for a passing test.
      */
-    public synchronized void recordFinished(String uniqueId, String display,
-                                            long durationMs, String throwableJson) {
+    public synchronized void recordFinished(String uniqueId, String display, long durationMs, String throwableJson) {
         String className = classNameFrom(uniqueId);
         String failureType = null, failureMessage = null, failureStack = null;
         if (throwableJson != null) {
-            failureType    = Ndjson.str(throwableJson, "class");
+            failureType = Ndjson.str(throwableJson, "class");
             failureMessage = Ndjson.str(throwableJson, "message");
-            failureStack   = Ndjson.str(throwableJson, "stack");
+            failureStack = Ndjson.str(throwableJson, "stack");
         }
-        entries.add(new Entry(className, display, durationMs,
-                failureType, failureMessage, failureStack, null));
+        entries.add(new Entry(className, display, durationMs, failureType, failureMessage, failureStack, null));
     }
 
     /**
@@ -68,8 +73,7 @@ public final class XmlTestReport {
      */
     public synchronized void recordSkipped(String uniqueId, String display, String reason) {
         String className = classNameFrom(uniqueId);
-        entries.add(new Entry(className, display, 0,
-                null, null, null, reason != null ? reason : ""));
+        entries.add(new Entry(className, display, 0, null, null, null, reason != null ? reason : ""));
     }
 
     /**
@@ -96,8 +100,8 @@ public final class XmlTestReport {
         long totalMs = 0;
         for (Entry e : classEntries) {
             totalMs += e.durationMs();
-            if (e.failureType() != null)  failures++;
-            if (e.skipReason()  != null)  skipped++;
+            if (e.failureType() != null) failures++;
+            if (e.skipReason() != null) skipped++;
         }
 
         var sb = new StringBuilder();
@@ -115,7 +119,9 @@ public final class XmlTestReport {
         for (Entry e : classEntries) {
             sb.append("  <testcase name=\"").append(esc(e.displayName())).append('"');
             sb.append(" classname=\"").append(esc(e.className())).append('"');
-            sb.append(" time=\"").append(String.format("%.3f", e.durationMs() / 1000.0)).append('"');
+            sb.append(" time=\"")
+                    .append(String.format("%.3f", e.durationMs() / 1000.0))
+                    .append('"');
             if (e.skipReason() != null) {
                 sb.append(">\n    <skipped");
                 if (!e.skipReason().isEmpty())
@@ -126,8 +132,7 @@ public final class XmlTestReport {
                 if (e.failureMessage() != null && !e.failureMessage().isEmpty())
                     sb.append(" message=\"").append(esc(e.failureMessage())).append('"');
                 sb.append(" type=\"").append(esc(e.failureType())).append('"').append('>');
-                if (e.failureStack() != null && !e.failureStack().isEmpty())
-                    sb.append(cdata(e.failureStack()));
+                if (e.failureStack() != null && !e.failureStack().isEmpty()) sb.append(cdata(e.failureStack()));
                 sb.append("</failure>\n  </testcase>\n");
             } else {
                 sb.append("/>\n");
@@ -156,10 +161,7 @@ public final class XmlTestReport {
 
     private static String esc(String s) {
         if (s == null) return "";
-        return s.replace("&", "&amp;")
-                .replace("<", "&lt;")
-                .replace(">", "&gt;")
-                .replace("\"", "&quot;");
+        return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\"", "&quot;");
     }
 
     private static String cdata(String s) {

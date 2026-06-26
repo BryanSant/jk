@@ -70,19 +70,62 @@ public record KotlincRequest(
         private Path snapshotDir;
         private List<String> extraArgs = List.of();
 
-        public Builder sources(List<Path> v) { this.sources = v; return this; }
-        public Builder classpath(List<Path> v) { this.classpath = v; return this; }
-        public Builder outputDir(Path v) { this.outputDir = v; return this; }
-        public Builder jvmTarget(int v) { this.jvmTarget = v; return this; }
-        public Builder workerClasspath(List<Path> v) { this.workerClasspath = v; return this; }
-        public Builder javaHome(Path v) { this.javaHome = v; return this; }
-        public Builder workingDir(Path v) { this.workingDir = v; return this; }
-        public Builder snapshotDir(Path v) { this.snapshotDir = v; return this; }
-        public Builder extraArgs(List<String> v) { this.extraArgs = v; return this; }
+        public Builder sources(List<Path> v) {
+            this.sources = v;
+            return this;
+        }
+
+        public Builder classpath(List<Path> v) {
+            this.classpath = v;
+            return this;
+        }
+
+        public Builder outputDir(Path v) {
+            this.outputDir = v;
+            return this;
+        }
+
+        public Builder jvmTarget(int v) {
+            this.jvmTarget = v;
+            return this;
+        }
+
+        public Builder workerClasspath(List<Path> v) {
+            this.workerClasspath = v;
+            return this;
+        }
+
+        public Builder javaHome(Path v) {
+            this.javaHome = v;
+            return this;
+        }
+
+        public Builder workingDir(Path v) {
+            this.workingDir = v;
+            return this;
+        }
+
+        public Builder snapshotDir(Path v) {
+            this.snapshotDir = v;
+            return this;
+        }
+
+        public Builder extraArgs(List<String> v) {
+            this.extraArgs = v;
+            return this;
+        }
 
         public KotlincRequest build() {
-            return new KotlincRequest(sources, classpath, outputDir, jvmTarget,
-                    workerClasspath, javaHome, workingDir, snapshotDir, extraArgs);
+            return new KotlincRequest(
+                    sources,
+                    classpath,
+                    outputDir,
+                    jvmTarget,
+                    workerClasspath,
+                    javaHome,
+                    workingDir,
+                    snapshotDir,
+                    extraArgs);
         }
     }
 }

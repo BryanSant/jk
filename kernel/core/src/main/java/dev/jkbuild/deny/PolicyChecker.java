@@ -3,7 +3,6 @@ package dev.jkbuild.deny;
 
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.DenyPolicy;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -34,7 +33,9 @@ public final class PolicyChecker {
             String host = hostOf(url);
             for (String denied : policy.deniedSources()) {
                 if (hostMatches(host, denied)) {
-                    out.add(new Violation(pkg.name(), pkg.version(),
+                    out.add(new Violation(
+                            pkg.name(),
+                            pkg.version(),
                             "source `" + host + "` matches denylisted host `" + denied + "`"));
                     break;
                 }

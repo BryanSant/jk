@@ -28,22 +28,23 @@ import java.util.zip.GZIPInputStream;
 public final class Http {
 
     private static final Duration[] BACKOFFS = {
-            Duration.ofMillis(100),
-            Duration.ofMillis(200),
-            Duration.ofMillis(400),
-            Duration.ofMillis(800),
-            Duration.ofMillis(1600),
+        Duration.ofMillis(100),
+        Duration.ofMillis(200),
+        Duration.ofMillis(400),
+        Duration.ofMillis(800),
+        Duration.ofMillis(1600),
     };
 
     private final HttpClient client;
     private final Duration[] backoffs;
 
     public Http() {
-        this(HttpClient.newBuilder()
-                .version(HttpClient.Version.HTTP_2)
-                .followRedirects(HttpClient.Redirect.NORMAL)
-                .connectTimeout(Duration.ofSeconds(10))
-                .build(),
+        this(
+                HttpClient.newBuilder()
+                        .version(HttpClient.Version.HTTP_2)
+                        .followRedirects(HttpClient.Redirect.NORMAL)
+                        .connectTimeout(Duration.ofSeconds(10))
+                        .build(),
                 BACKOFFS);
     }
 
@@ -62,12 +63,9 @@ public final class Http {
      * ({@code If-Modified-Since}, {@code If-None-Match}). 304 responses
      * are returned to the caller as-is.
      */
-    public HttpResponse<byte[]> get(URI uri, Map<String, String> headers)
-            throws IOException, InterruptedException {
+    public HttpResponse<byte[]> get(URI uri, Map<String, String> headers) throws IOException, InterruptedException {
         checkOffline(uri);
-        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
-                .GET()
-                .timeout(Duration.ofSeconds(60));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri).GET().timeout(Duration.ofSeconds(60));
         for (Map.Entry<String, String> e : headers.entrySet()) {
             builder.header(e.getKey(), e.getValue());
         }
@@ -101,8 +99,8 @@ public final class Http {
         if (lastIo != null) {
             throw new IOException("GET " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
         }
-        throw new IOException("GET " + uri + " returned " + lastStatus
-                + " after " + (backoffs.length + 1) + " attempts");
+        throw new IOException(
+                "GET " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
     }
 
     /**
@@ -129,9 +127,7 @@ public final class Http {
     public HttpResponse<InputStream> getStream(URI uri, Map<String, String> headers)
             throws IOException, InterruptedException {
         checkOffline(uri);
-        HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
-                .GET()
-                .timeout(Duration.ofMinutes(15));
+        HttpRequest.Builder builder = HttpRequest.newBuilder(uri).GET().timeout(Duration.ofMinutes(15));
         for (Map.Entry<String, String> e : headers.entrySet()) {
             builder.header(e.getKey(), e.getValue());
         }
@@ -161,11 +157,10 @@ public final class Http {
             }
         }
         if (lastIo != null) {
-            throw new IOException("GET " + uri + " failed after "
-                    + (backoffs.length + 1) + " attempts", lastIo);
+            throw new IOException("GET " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
         }
-        throw new IOException("GET " + uri + " returned " + lastStatus
-                + " after " + (backoffs.length + 1) + " attempts");
+        throw new IOException(
+                "GET " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
     }
 
     /**
@@ -180,8 +175,7 @@ public final class Http {
      * loop needs the body, not an exception. The form values ride the wire
      * URL-encoded; callers must use https URIs for anything sensitive.
      */
-    public HttpResponse<byte[]> postForm(URI uri, Map<String, String> form)
-            throws IOException, InterruptedException {
+    public HttpResponse<byte[]> postForm(URI uri, Map<String, String> form) throws IOException, InterruptedException {
         checkOffline(uri);
         HttpRequest request = HttpRequest.newBuilder(uri)
                 .POST(HttpRequest.BodyPublishers.ofString(urlEncode(form)))
@@ -208,11 +202,10 @@ public final class Http {
             }
         }
         if (lastIo != null) {
-            throw new IOException("POST " + uri + " failed after "
-                    + (backoffs.length + 1) + " attempts", lastIo);
+            throw new IOException("POST " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
         }
-        throw new IOException("POST " + uri + " returned " + lastStatus
-                + " after " + (backoffs.length + 1) + " attempts");
+        throw new IOException(
+                "POST " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
     }
 
     private static String urlEncode(Map<String, String> form) {
@@ -220,8 +213,8 @@ public final class Http {
         for (Map.Entry<String, String> e : form.entrySet()) {
             if (sb.length() > 0) sb.append('&');
             sb.append(URLEncoder.encode(e.getKey(), StandardCharsets.UTF_8))
-              .append('=')
-              .append(URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8));
+                    .append('=')
+                    .append(URLEncoder.encode(e.getValue(), StandardCharsets.UTF_8));
         }
         return sb.toString();
     }
@@ -239,7 +232,7 @@ public final class Http {
         checkOffline(uri);
         HttpRequest.Builder builder = HttpRequest.newBuilder(uri)
                 .PUT(HttpRequest.BodyPublishers.ofByteArray(body))
-                .timeout(Duration.ofMinutes(15));   // large artifacts on slow links
+                .timeout(Duration.ofMinutes(15)); // large artifacts on slow links
         for (Map.Entry<String, String> e : headers.entrySet()) {
             builder.header(e.getKey(), e.getValue());
         }
@@ -252,8 +245,7 @@ public final class Http {
                 Thread.sleep(jittered(backoffs[attempt - 1]));
             }
             try {
-                HttpResponse<byte[]> response =
-                        client.send(request, HttpResponse.BodyHandlers.ofByteArray());
+                HttpResponse<byte[]> response = client.send(request, HttpResponse.BodyHandlers.ofByteArray());
                 int status = response.statusCode();
                 if (status < 500) {
                     return response;
@@ -264,11 +256,10 @@ public final class Http {
             }
         }
         if (lastIo != null) {
-            throw new IOException("PUT " + uri + " failed after "
-                    + (backoffs.length + 1) + " attempts", lastIo);
+            throw new IOException("PUT " + uri + " failed after " + (backoffs.length + 1) + " attempts", lastIo);
         }
-        throw new IOException("PUT " + uri + " returned " + lastStatus
-                + " after " + (backoffs.length + 1) + " attempts");
+        throw new IOException(
+                "PUT " + uri + " returned " + lastStatus + " after " + (backoffs.length + 1) + " attempts");
     }
 
     private static long jittered(Duration base) {
@@ -326,7 +317,8 @@ public final class Http {
     }
 
     private static boolean isGzipped(HttpResponse.ResponseInfo info) {
-        return info.headers().firstValue("Content-Encoding")
+        return info.headers()
+                .firstValue("Content-Encoding")
                 .map(v -> v.trim().equalsIgnoreCase("gzip"))
                 .orElse(false);
     }

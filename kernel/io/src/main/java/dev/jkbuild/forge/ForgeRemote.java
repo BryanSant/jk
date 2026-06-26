@@ -7,5 +7,4 @@ package dev.jkbuild.forge;
  * {@code ~/.ssh/config} alias has been resolved (so it's a value
  * {@link ForgeKind#inferFromHost} recognised).
  */
-public record ForgeRemote(ForgeKind kind, String host) {
-}
+public record ForgeRemote(ForgeKind kind, String host) {}

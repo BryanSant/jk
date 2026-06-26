@@ -3,14 +3,13 @@ package dev.jkbuild.cli.tui;
 
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.terminal.Attributes;
-import org.jline.terminal.Terminal;
-import org.jline.utils.NonBlockingReader;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Terminal;
+import org.jline.utils.NonBlockingReader;
 
 /**
  * A single-line yes/no confirmation, styled like {@link Wizard} and driven by a
@@ -43,9 +42,7 @@ public final class Confirm {
 
     /** True on most terminals; false when stdin is piped/redirected, dumb, or under CI. */
     public static boolean isInteractiveTerminal() {
-        return System.console() != null
-                && !"dumb".equals(System.getenv("TERM"))
-                && System.getenv("CI") == null;
+        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
     }
 
     /**
@@ -87,10 +84,10 @@ public final class Confirm {
                     // Overwrite the "[Y/n] " hint in place with the colored
                     // answer: step back over the hint, print green Yes / red No,
                     // clear the leftover, and end the line (raw mode → explicit CRLF).
-                    String answer = Theme.colorize(result ? "Yes" : "No",
+                    String answer = Theme.colorize(
+                            result ? "Yes" : "No",
                             result ? Theme.active().success() : Theme.active().error());
-                    System.out.print(Ansi.cursorBack(HINT_WIDTH) + answer
-                            + Ansi.ERASE_LINE_TO_END + "\r\n");
+                    System.out.print(Ansi.cursorBack(HINT_WIDTH) + answer + Ansi.ERASE_LINE_TO_END + "\r\n");
                     System.out.flush();
                     return result;
                 }
@@ -103,11 +100,12 @@ public final class Confirm {
     /** A key → decision, or {@code null} for keys that don't resolve the prompt. */
     private Boolean interpret(KeyReader.Key key) {
         return switch (key) {
-            case KeyReader.Key.Char c -> switch (Character.toLowerCase(c.c())) {
-                case 'y' -> Boolean.TRUE;
-                case 'n' -> Boolean.FALSE;
-                default -> null;
-            };
+            case KeyReader.Key.Char c ->
+                switch (Character.toLowerCase(c.c())) {
+                    case 'y' -> Boolean.TRUE;
+                    case 'n' -> Boolean.FALSE;
+                    default -> null;
+                };
             case KeyReader.Key.Enter ignored -> defaultYes;
             case KeyReader.Key.CtrlC ignored -> Boolean.FALSE;
             case KeyReader.Key.Escape ignored -> Boolean.FALSE;
@@ -120,8 +118,7 @@ public final class Confirm {
         System.out.print(promptText());
         System.out.flush();
         try {
-            BufferedReader reader = new BufferedReader(
-                    new InputStreamReader(System.in, StandardCharsets.UTF_8));
+            BufferedReader reader = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8));
             String line = reader.readLine();
             if (line == null) return false; // EOF / non-interactive → decline
             String t = line.trim();
@@ -141,7 +138,6 @@ public final class Confirm {
         var dim = Theme.active().darkGray();
         String y = defaultYes ? "Y" : "y";
         String n = defaultYes ? "n" : "N";
-        return Theme.colorize("[", dim) + y + Theme.colorize("/", dim)
-                + n + Theme.colorize("]", dim);
+        return Theme.colorize("[", dim) + y + Theme.colorize("/", dim) + n + Theme.colorize("]", dim);
     }
 }

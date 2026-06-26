@@ -18,12 +18,13 @@ import java.util.Objects;
  * </ul>
  */
 public record DenyPolicy(
-        List<String> deniedSources,
-        List<String> deniedLicenses,
-        List<String> allowedLicenses,
-        YankedPolicy yanked) {
+        List<String> deniedSources, List<String> deniedLicenses, List<String> allowedLicenses, YankedPolicy yanked) {
 
-    public enum YankedPolicy { DENY, WARN, ALLOW }
+    public enum YankedPolicy {
+        DENY,
+        WARN,
+        ALLOW
+    }
 
     public DenyPolicy {
         deniedSources = deniedSources == null ? List.of() : List.copyOf(deniedSources);

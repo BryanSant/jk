@@ -2,11 +2,10 @@
 package dev.jkbuild.jdk;
 
 import dev.jkbuild.discovery.JkProbe;
-import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.discovery.LocalToolProbe;
 import dev.jkbuild.discovery.Probes;
+import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.JkThreads;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -101,13 +100,15 @@ public final class JdkRegistry {
         // Dispatch all probes at once.
         List<CompletableFuture<List<JdkHit>>> futures = new ArrayList<>(probes.size());
         for (LocalToolProbe probe : probes) {
-            futures.add(CompletableFuture.supplyAsync(() -> {
-                try {
-                    return probe.discoverAllJdks();
-                } catch (IOException e) {
-                    return List.<JdkHit>of();
-                }
-            }, JkThreads.io()));
+            futures.add(CompletableFuture.supplyAsync(
+                    () -> {
+                        try {
+                            return probe.discoverAllJdks();
+                        } catch (IOException e) {
+                            return List.<JdkHit>of();
+                        }
+                    },
+                    JkThreads.io()));
         }
         // Walk the futures in probe-chain order so dedup picks the same
         // "winner" every run regardless of which future finished first.
@@ -236,8 +237,7 @@ public final class JdkRegistry {
      * "natural precedence" pick.
      */
     public Optional<InstalledJdk> findBySpec(String spec) {
-        return findHitBySpec(spec)
-                .map(hit -> new InstalledJdk(identifierFor(hit.home()), hit.home()));
+        return findHitBySpec(spec).map(hit -> new InstalledJdk(identifierFor(hit.home()), hit.home()));
     }
 
     /**
@@ -260,8 +260,7 @@ public final class JdkRegistry {
      * owns. Returned in probe-chain order.
      */
     public List<JdkHit> managedHits(String spec) {
-        JdkSelector.FlexibleQuery query =
-                (spec == null || spec.isBlank()) ? null : JdkSelector.parseFlexible(spec);
+        JdkSelector.FlexibleQuery query = (spec == null || spec.isBlank()) ? null : JdkSelector.parseFlexible(spec);
         List<JdkHit> out = new ArrayList<>();
         for (JdkHit hit : listHits()) {
             if (!"jk".equals(hit.source())) continue;
@@ -283,8 +282,7 @@ public final class JdkRegistry {
         JdkSelector.FlexibleQuery query = JdkSelector.parseFlexible(spec);
         List<JdkHit> matches = new ArrayList<>();
         for (JdkHit hit : listHits()) {
-            if (sourceFilter != null && !sourceFilter.isEmpty()
-                    && !sourceFilter.equals(hit.source())) {
+            if (sourceFilter != null && !sourceFilter.isEmpty() && !sourceFilter.equals(hit.source())) {
                 continue;
             }
             if (matchesSpec(hit, query)) matches.add(hit);
@@ -293,15 +291,15 @@ public final class JdkRegistry {
         if (query.lowerBound().isPresent()) {
             // Range (">=21"): the LOWEST installed major satisfying the bound
             // wins; ties break on vendor preference, then newest version.
-            matches.sort(Comparator
-                    .comparingInt((JdkHit h) -> {
+            matches.sort(Comparator.comparingInt((JdkHit h) -> {
                         Integer m = majorOf(h.version());
                         return m == null ? Integer.MAX_VALUE : m;
                     })
-                    .thenComparingInt(h -> h.vendor() == null
-                            ? Integer.MAX_VALUE : h.vendor().preferenceRank())
-                    .thenComparing(h -> h.version() == null
-                            ? "" : JdkSelector.versionKey(h.version()), Comparator.reverseOrder()));
+                    .thenComparingInt(h ->
+                            h.vendor() == null ? Integer.MAX_VALUE : h.vendor().preferenceRank())
+                    .thenComparing(
+                            h -> h.version() == null ? "" : JdkSelector.versionKey(h.version()),
+                            Comparator.reverseOrder()));
             return Optional.of(matches.getFirst());
         }
         // Non-range: first match in probe-chain order (unchanged behaviour).
@@ -353,7 +351,10 @@ public final class JdkRegistry {
                 String haystack = hintHaystack(hit.vendor());
                 boolean all = true;
                 for (String hint : hints) {
-                    if (!haystack.contains(hint.toLowerCase(java.util.Locale.ROOT))) { all = false; break; }
+                    if (!haystack.contains(hint.toLowerCase(java.util.Locale.ROOT))) {
+                        all = false;
+                        break;
+                    }
                 }
                 if (!all) continue;
             }
@@ -373,7 +374,8 @@ public final class JdkRegistry {
         if (query.exactVersion().isPresent()) {
             if (hit.version() == null) return false;
             String exact = query.exactVersion().get();
-            if (!hit.version().equals(exact) && !hit.version().startsWith(exact + ".")
+            if (!hit.version().equals(exact)
+                    && !hit.version().startsWith(exact + ".")
                     && !hit.version().startsWith(exact + "-")
                     && !hit.version().startsWith(exact + "+")) {
                 return false;
@@ -393,17 +395,23 @@ public final class JdkRegistry {
         int end = 0;
         while (end < version.length() && Character.isDigit(version.charAt(end))) end++;
         if (end == 0) return null;
-        try { return Integer.parseInt(version.substring(0, end)); }
-        catch (NumberFormatException e) { return null; }
+        try {
+            return Integer.parseInt(version.substring(0, end));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static String hintHaystack(JdkVendor v) {
         StringBuilder sb = new StringBuilder();
         sb.append(v.vendor().toLowerCase(java.util.Locale.ROOT)).append(' ');
         sb.append(v.product().toLowerCase(java.util.Locale.ROOT)).append(' ');
-        v.jbPrefix().ifPresent(p -> sb.append(p.toLowerCase(java.util.Locale.ROOT)).append(' '));
-        v.sdkmanSuffix().ifPresent(s -> sb.append(s.toLowerCase(java.util.Locale.ROOT)).append(' '));
-        v.foojayDistro().ifPresent(f -> sb.append(f.toLowerCase(java.util.Locale.ROOT)).append(' '));
+        v.jbPrefix()
+                .ifPresent(p -> sb.append(p.toLowerCase(java.util.Locale.ROOT)).append(' '));
+        v.sdkmanSuffix()
+                .ifPresent(s -> sb.append(s.toLowerCase(java.util.Locale.ROOT)).append(' '));
+        v.foojayDistro()
+                .ifPresent(f -> sb.append(f.toLowerCase(java.util.Locale.ROOT)).append(' '));
         return sb.toString();
     }
 
@@ -447,7 +455,10 @@ public final class JdkRegistry {
         if (!Files.exists(root)) return;
         try (Stream<Path> stream = Files.walk(root)) {
             stream.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                }
             });
         }
     }

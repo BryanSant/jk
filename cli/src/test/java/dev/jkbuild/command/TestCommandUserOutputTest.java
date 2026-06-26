@@ -1,14 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.PhaseContext;
 import dev.jkbuild.test.TestProgressListener;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -18,8 +15,10 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Verifies the verbose gate on test-process stdout/stderr forwarding
@@ -45,36 +44,31 @@ class TestCommandUserOutputTest {
     @Test
     void user_output_is_suppressed_when_verbose_is_false() {
         var ctx = new RecordingContext();
-        TestProgressListener listener =
-                TestCommand.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ false);
+        TestProgressListener listener = TestCommand.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ false);
 
         listener.onUserOutput(0, "hello from a passing test");
 
         // Neither forwarded to the context nor leaked to the stream.
         assertThat(ctx.outputs).isEmpty();
-        assertThat(captured.toString(StandardCharsets.UTF_8))
-                .doesNotContain("hello from a passing test");
+        assertThat(captured.toString(StandardCharsets.UTF_8)).doesNotContain("hello from a passing test");
     }
 
     @Test
     void user_output_is_forwarded_through_the_context_when_verbose_is_true() {
         var ctx = new RecordingContext();
-        TestProgressListener listener =
-                TestCommand.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ true);
+        TestProgressListener listener = TestCommand.bridgeListener(ctx, /* workerCount */ 1, /* verbose */ true);
 
         listener.onUserOutput(0, "hello from a passing test");
 
         // Routed via PhaseContext.output — never touches System.out directly.
         assertThat(ctx.outputs).containsExactly("hello from a passing test");
-        assertThat(captured.toString(StandardCharsets.UTF_8))
-                .doesNotContain("hello from a passing test");
+        assertThat(captured.toString(StandardCharsets.UTF_8)).doesNotContain("hello from a passing test");
     }
 
     @Test
     void worker_prefix_appears_in_parallel_mode() {
         var ctx = new RecordingContext();
-        TestProgressListener listener =
-                TestCommand.bridgeListener(ctx, /* workerCount */ 4, /* verbose */ true);
+        TestProgressListener listener = TestCommand.bridgeListener(ctx, /* workerCount */ 4, /* verbose */ true);
 
         listener.onUserOutput(2, "from worker two");
 
@@ -100,8 +94,7 @@ class TestCommandUserOutputTest {
         var ctx = new RecordingContext();
         TestProgressListener listener = TestCommand.bridgeListener(ctx, 1, false);
 
-        listener.onTestFinished("id", "ClassA.method", "PASSED",
-                /* isTest */ true, /* wasStatic */ true, 5L, 0);
+        listener.onTestFinished("id", "ClassA.method", "PASSED", /* isTest */ true, /* wasStatic */ true, 5L, 0);
 
         assertThat(ctx.progressTicks).containsExactly(1);
         assertThat(ctx.labels).containsExactly("ClassA.method");
@@ -115,8 +108,8 @@ class TestCommandUserOutputTest {
         var ctx = new RecordingContext();
         TestProgressListener listener = TestCommand.bridgeListener(ctx, 1, false);
 
-        listener.onTestFinished("id", "ClassA.parameterized[1]", "PASSED",
-                /* isTest */ true, /* wasStatic */ false, 5L, 0);
+        listener.onTestFinished(
+                "id", "ClassA.parameterized[1]", "PASSED", /* isTest */ true, /* wasStatic */ false, 5L, 0);
 
         assertThat(ctx.progressTicks).isEmpty();
         assertThat(ctx.labels).containsExactly("ClassA.parameterized[1]");
@@ -127,8 +120,7 @@ class TestCommandUserOutputTest {
         var ctx = new RecordingContext();
         TestProgressListener listener = TestCommand.bridgeListener(ctx, 1, false);
 
-        listener.onTestSkipped("id", "ClassA.disabled",
-                "@Disabled", /* isTest */ true, /* wasStatic */ true, 0);
+        listener.onTestSkipped("id", "ClassA.disabled", "@Disabled", /* isTest */ true, /* wasStatic */ true, 0);
 
         assertThat(ctx.progressTicks).containsExactly(1);
     }
@@ -138,8 +130,8 @@ class TestCommandUserOutputTest {
         var ctx = new RecordingContext();
         TestProgressListener listener = TestCommand.bridgeListener(ctx, 1, false);
 
-        listener.onTestSkipped("id", "ClassA.parameterized[3]",
-                "assumption failed", /* isTest */ true, /* wasStatic */ false, 0);
+        listener.onTestSkipped(
+                "id", "ClassA.parameterized[3]", "assumption failed", /* isTest */ true, /* wasStatic */ false, 0);
 
         assertThat(ctx.progressTicks).isEmpty();
     }
@@ -149,8 +141,7 @@ class TestCommandUserOutputTest {
         var ctx = new RecordingContext();
         TestProgressListener listener = TestCommand.bridgeListener(ctx, 1, false);
 
-        listener.onFailure("id", "ClassA.brokenTest",
-                "java.lang.AssertionError", "expected 5 got 4", 0);
+        listener.onFailure("id", "ClassA.brokenTest", "java.lang.AssertionError", "expected 5 got 4", 0);
 
         assertThat(ctx.errors).hasSize(1);
         // "test-failure" (not "test") so human listeners can suppress the inline
@@ -218,18 +209,55 @@ class TestCommandUserOutputTest {
 
         record Diag(String code, String message, String test, String exceptionClass) {}
 
-        @Override public void progress(int delta) { progressTicks.add(delta); }
-        @Override public void updateScope(int additionalScope) { scopeAdded += additionalScope; }
-        @Override public void label(String description) { labels.add(description); }
-        @Override public void output(String line) { outputs.add(line); }
-        @Override public void warn(String code, String message) {}
-        @Override public void error(String code, String message) { errors.add(new Diag(code, message, "", "")); }
-        @Override public void error(String code, String message, String test, String exClass) {
+        @Override
+        public void progress(int delta) {
+            progressTicks.add(delta);
+        }
+
+        @Override
+        public void updateScope(int additionalScope) {
+            scopeAdded += additionalScope;
+        }
+
+        @Override
+        public void label(String description) {
+            labels.add(description);
+        }
+
+        @Override
+        public void output(String line) {
+            outputs.add(line);
+        }
+
+        @Override
+        public void warn(String code, String message) {}
+
+        @Override
+        public void error(String code, String message) {
+            errors.add(new Diag(code, message, "", ""));
+        }
+
+        @Override
+        public void error(String code, String message, String test, String exClass) {
             errors.add(new Diag(code, message, test, exClass));
         }
-        @Override public boolean cancelled() { return false; }
-        @Override public <T> void put(GoalKey<T> key, T value) {}
-        @Override public <T> Optional<T> get(GoalKey<T> key) { return Optional.empty(); }
-        @Override public <T> T require(GoalKey<T> key) { throw new IllegalStateException(); }
+
+        @Override
+        public boolean cancelled() {
+            return false;
+        }
+
+        @Override
+        public <T> void put(GoalKey<T> key, T value) {}
+
+        @Override
+        public <T> Optional<T> get(GoalKey<T> key) {
+            return Optional.empty();
+        }
+
+        @Override
+        public <T> T require(GoalKey<T> key) {
+            throw new IllegalStateException();
+        }
     }
 }

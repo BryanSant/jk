@@ -5,7 +5,6 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.worker.WorkerJar;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -42,8 +41,8 @@ public final class KotlinWorkerSetup {
      */
     public static Prepared prepare(RepoGroup repos, Cas cas, String kotlinVersion)
             throws IOException, InterruptedException {
-        String version = (kotlinVersion == null || kotlinVersion.isBlank())
-                ? KotlinResolver.DEFAULT_VERSION : kotlinVersion;
+        String version =
+                (kotlinVersion == null || kotlinVersion.isBlank()) ? KotlinResolver.DEFAULT_VERSION : kotlinVersion;
         List<Path> closure = KotlinBtaResolver.resolveClasspath(repos, cas, version);
         Path stdlib = KotlinBtaResolver.resolveStdlib(repos, cas, version);
 

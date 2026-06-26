@@ -2,7 +2,6 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.util.Hashing;
-
 import java.nio.file.Path;
 import java.time.Duration;
 

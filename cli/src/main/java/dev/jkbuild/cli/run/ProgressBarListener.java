@@ -9,14 +9,13 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseStatus;
-import org.jline.utils.AttributedStyle;
-
 import java.io.PrintStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Combined spinner + progress bar listener.
@@ -47,11 +46,11 @@ public final class ProgressBarListener implements GoalListener {
     private static final long FRAME_MS = 120L;
 
     private static final char FILLED = '▰';
-    private static final char EMPTY  = '▱';
+    private static final char EMPTY = '▱';
 
-    private static final String HIDE_CURSOR    = Ansi.HIDE_CURSOR;
-    private static final String SHOW_CURSOR    = Ansi.SHOW_CURSOR;
-    private static final String OSC_CLEAR        = Ansi.TASKBAR_CLEAR;
+    private static final String HIDE_CURSOR = Ansi.HIDE_CURSOR;
+    private static final String SHOW_CURSOR = Ansi.SHOW_CURSOR;
+    private static final String OSC_CLEAR = Ansi.TASKBAR_CLEAR;
 
     private final PrintStream out;
     private final PrintStream err;
@@ -67,12 +66,12 @@ public final class ProgressBarListener implements GoalListener {
 
     // Rendering state — all access under synchronized(this).
     private int spinFrame = 0;
-    private long currentNumerator   = 0;
+    private long currentNumerator = 0;
     private long currentDenominator = 0;
-    private String currentPhase     = "";
-    private String goalDisplayName  = "";
-    private int lastStepMsgLen      = 0;
-    private boolean drawn           = false;
+    private String currentPhase = "";
+    private String goalDisplayName = "";
+    private int lastStepMsgLen = 0;
+    private boolean drawn = false;
 
     public ProgressBarListener(PrintStream out, PrintStream err, List<Phase> phases) {
         this.out = out;
@@ -89,8 +88,8 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void goalStart(GoalView view) {
-        goalDisplayName  = capitalizeFirst(view.goalName());
-        currentNumerator   = view.numerator();
+        goalDisplayName = capitalizeFirst(view.goalName());
+        currentNumerator = view.numerator();
         currentDenominator = view.denominator();
         if (silent) return;
         out.print(HIDE_CURSOR);
@@ -120,7 +119,7 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void progress(String phase, int delta, GoalView view) {
-        currentNumerator   = view.numerator();
+        currentNumerator = view.numerator();
         currentDenominator = view.denominator();
         if (!silent) {
             out.print(Ansi.taskbarProgress(Math.min(99, view.percent())));
@@ -130,7 +129,7 @@ public final class ProgressBarListener implements GoalListener {
 
     @Override
     public synchronized void scopeUpdate(String phase, int delta, GoalView view) {
-        currentNumerator   = view.numerator();
+        currentNumerator = view.numerator();
         currentDenominator = view.denominator();
     }
 
@@ -153,8 +152,8 @@ public final class ProgressBarListener implements GoalListener {
         if (ConsoleSpec.isCompilerCode(code)) {
             writeAboveInternal(ConsoleSpec.compilerWarning(phase, message));
         } else {
-            writeAboveInternal(renderDiagnostic("⚠ Warning", Theme.active().warning().bold(),
-                    phase, code, message));
+            writeAboveInternal(
+                    renderDiagnostic("⚠ Warning", Theme.active().warning().bold(), phase, code, message));
         }
     }
 
@@ -169,8 +168,8 @@ public final class ProgressBarListener implements GoalListener {
         if ("verbatim".equals(code) || ConsoleSpec.isCompilerCode(code)) {
             writeAboveInternal(ConsoleSpec.renderError(phase, code, message));
         } else {
-            writeAboveInternal(renderDiagnostic("✗ Error", Theme.active().error().bold(),
-                    phase, code, message));
+            writeAboveInternal(
+                    renderDiagnostic("✗ Error", Theme.active().error().bold(), phase, code, message));
         }
     }
 
@@ -212,15 +211,15 @@ public final class ProgressBarListener implements GoalListener {
 
     /** Full-line render. Must be called under {@code synchronized(this)}. */
     private void renderLine() {
-        long num  = currentNumerator;
-        long den  = currentDenominator;
+        long num = currentNumerator;
+        long den = currentDenominator;
         // Cap at 99 % while the goal is still running — only goalFinish
         // (success) transitions to 100 %, at which point the bar is wiped
         // and the command's own success line takes its place.
         double fraction = den <= 0 ? 0.0 : Math.min(0.99, (double) num / den);
-        int pct  = (int) Math.round(fraction * 100);
+        int pct = (int) Math.round(fraction * 100);
         int segs = (int) Math.round(fraction * BAR_SEGS);
-        String phase   = currentPhase;
+        String phase = currentPhase;
         String stepMsg = activeLabels.getOrDefault(phase, "");
 
         out.print("\r");
@@ -276,14 +275,13 @@ public final class ProgressBarListener implements GoalListener {
     }
 
     private void renderFailed() {
-        long num  = currentNumerator;
-        long den  = currentDenominator;
-        int pct   = den <= 0 ? 0 : (int) Math.round((double) num / den * 100);
-        int segs  = (int) Math.round(pct * BAR_SEGS / 100.0);
-        String phase        = currentPhase;
+        long num = currentNumerator;
+        long den = currentDenominator;
+        int pct = den <= 0 ? 0 : (int) Math.round((double) num / den * 100);
+        int segs = (int) Math.round(pct * BAR_SEGS / 100.0);
+        String phase = currentPhase;
         String phaseDisplay = phaseLabels.getOrDefault(phase, phase);
-        String stepMsg      = activeLabels.getOrDefault(phase,
-                phaseLabels.getOrDefault(phase, phase));
+        String stepMsg = activeLabels.getOrDefault(phase, phaseLabels.getOrDefault(phase, phase));
 
         out.print("\r");
 
@@ -338,10 +336,10 @@ public final class ProgressBarListener implements GoalListener {
     private void renderCanceled() {
         long num = currentNumerator;
         long den = currentDenominator;
-        int pct  = den <= 0 ? 0 : (int) Math.round((double) num / den * 100);
-        String phase        = currentPhase;
+        int pct = den <= 0 ? 0 : (int) Math.round((double) num / den * 100);
+        String phase = currentPhase;
         String phaseDisplay = phaseLabels.getOrDefault(phase, phase);
-        String stepMsg      = activeLabels.getOrDefault(phase, "");
+        String stepMsg = activeLabels.getOrDefault(phase, "");
         AttributedStyle redStyle = Theme.active().error();
 
         out.print("\r");
@@ -358,12 +356,14 @@ public final class ProgressBarListener implements GoalListener {
         out.print(Theme.colorize(pctStr, percentStyle(pct)));
         out.print(Theme.colorize("]", Theme.active().darkGray()));
         out.print(" ");
-        out.print(Theme.colorize(num + " of " + (den <= 0 ? "—" : den), Theme.active().normalGray()));
+        out.print(Theme.colorize(
+                num + " of " + (den <= 0 ? "—" : den), Theme.active().normalGray()));
         out.print(" ");
         AttributedStyle strike = Theme.active().dim().crossedOut();
         out.print(Theme.colorize("›", Theme.active().darkGray()));
         out.print(" ");
-        out.print(Theme.colorize(goalDisplayName, Theme.active().warning().bold().crossedOut()));
+        out.print(
+                Theme.colorize(goalDisplayName, Theme.active().warning().bold().crossedOut()));
         out.print(" ");
         out.print(Theme.colorize("›", Theme.active().darkGray().crossedOut()));
         out.print(" ");
@@ -380,19 +380,19 @@ public final class ProgressBarListener implements GoalListener {
 
     /** Shared with {@link AggregateModuleListener} so workspace + single-project render alike. */
     static String renderDiagnostic(
-            String prefix, AttributedStyle prefixStyle,
-            String phase, String code, String message) {
+            String prefix, AttributedStyle prefixStyle, String phase, String code, String message) {
         String summary = message == null ? "" : message;
-        String detail  = null;
+        String detail = null;
         int sep = summary.indexOf(" — ");
         if (sep >= 0) {
-            detail  = capitalize(summary.substring(sep + 3));
+            detail = capitalize(summary.substring(sep + 3));
             summary = summary.substring(0, sep);
         }
         // Only capitalize when the summary looks like a sentence start (first char
         // is a plain letter not followed by a hyphen — artifact names like
         // "jk-audit-runner" should stay lowercase).
-        if (!summary.isEmpty() && Character.isLowerCase(summary.charAt(0))
+        if (!summary.isEmpty()
+                && Character.isLowerCase(summary.charAt(0))
                 && (summary.length() < 2 || summary.charAt(1) != '-')) {
             summary = capitalize(summary);
         }
@@ -417,8 +417,7 @@ public final class ProgressBarListener implements GoalListener {
     private static String capitalize(String s) {
         if (s == null || s.isEmpty()) return s == null ? "" : s;
         char first = s.charAt(0);
-        return Character.isLowerCase(first)
-                ? Character.toUpperCase(first) + s.substring(1) : s;
+        return Character.isLowerCase(first) ? Character.toUpperCase(first) + s.substring(1) : s;
     }
 
     private static AttributedStyle[] buildGradient(int n, Gradient gradient) {

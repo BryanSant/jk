@@ -2,7 +2,6 @@
 package dev.jkbuild.config;
 
 import dev.jkbuild.model.JkBuild;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,16 +43,14 @@ public final class WorkspaceLoader {
             // user fixes the manifest rather than discovers it at build
             // time when paths quietly diverge.
             if (moduleBuild.isWorkspaceRoot()) {
-                throw new JkBuildParseException(
-                        "workspaces cannot be nested — `" + module
-                                + "` declares its own `[workspace]` block "
-                                + "while being a module of `" + workspaceRoot + "`.");
+                throw new JkBuildParseException("workspaces cannot be nested — `" + module
+                        + "` declares its own `[workspace]` block "
+                        + "while being a module of `" + workspaceRoot + "`.");
             }
             modules.put(moduleDir, moduleBuild);
         }
         if (!bad.isEmpty()) {
-            throw new JkBuildParseException(
-                    "workspace modules missing jk.toml: " + bad);
+            throw new JkBuildParseException("workspace modules missing jk.toml: " + bad);
         }
         checkArtifactCollisions(root, modules);
         return modules;
@@ -94,13 +91,12 @@ public final class WorkspaceLoader {
                 Path previous = claimed.get(key);
                 String prevLabel = previous == null ? "<workspace root>" : previous.toString();
                 String thisLabel = e.dir == null ? "<workspace root>" : e.dir.toString();
-                throw new JkBuildParseException(
-                        "workspace artifact collision: `" + key + ".jar` would be "
-                                + "produced by both `" + prevLabel + "` and `" + thisLabel
-                                + "`. Final artifacts share <workspaceRoot>/target/, so two "
-                                + "modules can't emit the same `<artifact>-<version>.jar`. "
-                                + "Differentiate via the modules' [project].artifact or "
-                                + "[project].version.");
+                throw new JkBuildParseException("workspace artifact collision: `" + key + ".jar` would be "
+                        + "produced by both `" + prevLabel + "` and `" + thisLabel
+                        + "`. Final artifacts share <workspaceRoot>/target/, so two "
+                        + "modules can't emit the same `<artifact>-<version>.jar`. "
+                        + "Differentiate via the modules' [project].artifact or "
+                        + "[project].version.");
             }
             claimed.put(key, e.dir);
         }

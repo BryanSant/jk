@@ -3,7 +3,6 @@ package dev.jkbuild.jdk;
 
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.PathUtil;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -45,11 +44,15 @@ public final class JdkGarbage {
     /** Record {@code dir} for later deletion. No-op if it's not under the JDK root. */
     public void enqueue(Path dir) {
         Path abs = canonical(dir);
-        if (!abs.startsWith(canonicalRoot())) return;   // never queue anything outside ~/.jk/jdks
+        if (!abs.startsWith(canonicalRoot())) return; // never queue anything outside ~/.jk/jdks
         try {
             Files.createDirectories(jdksRoot);
-            Files.writeString(queueFile(), abs + System.lineSeparator(),
-                    StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            Files.writeString(
+                    queueFile(),
+                    abs + System.lineSeparator(),
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.APPEND);
         } catch (IOException ignored) {
             // Best-effort; a missed enqueue just leaves a stale dir behind.
         }
@@ -71,11 +74,11 @@ public final class JdkGarbage {
             String trimmed = line.trim();
             if (trimmed.isEmpty()) continue;
             Path dir = canonical(Path.of(trimmed));
-            if (!dir.startsWith(root)) continue;          // defensive: never wander outside ~/.jk/jdks
+            if (!dir.startsWith(root)) continue; // defensive: never wander outside ~/.jk/jdks
             if (!Files.exists(dir, java.nio.file.LinkOption.NOFOLLOW_LINKS)) continue; // already gone
             deleteRecursively(dir);
             if (Files.exists(dir, java.nio.file.LinkOption.NOFOLLOW_LINKS)) {
-                survivors.add(trimmed);                    // still locked — try again next run
+                survivors.add(trimmed); // still locked — try again next run
             }
         }
         try {

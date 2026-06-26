@@ -1,22 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JkCacheConfigTest {
 
     @Test
     void missing_file_yields_defaults() throws IOException {
-        assertThat(JkCacheConfig.fromToml(Path.of("/no/such/file")))
-                .isEqualTo(JkCacheConfig.DEFAULTS);
+        assertThat(JkCacheConfig.fromToml(Path.of("/no/such/file"))).isEqualTo(JkCacheConfig.DEFAULTS);
     }
 
     @Test
@@ -79,7 +77,7 @@ class JkCacheConfigTest {
                 "JK_RECORD_TTL_DAYS", "7");
 
         JkCacheConfig c = JkCacheConfig.resolve(toml, env::get);
-        assertThat(c.autoPrune()).isFalse();          // env wins over file
+        assertThat(c.autoPrune()).isFalse(); // env wins over file
         assertThat(c.maxSizeGb()).hasValue(100);
         assertThat(c.pruneIntervalDays()).isEqualTo(1);
         assertThat(c.recordTtlDays()).isEqualTo(7);
@@ -97,8 +95,7 @@ class JkCacheConfigTest {
         assertThat(c.pruneIntervalDays()).isEqualTo(JkCacheConfig.DEFAULTS.pruneIntervalDays());
 
         // env can supply max-size even when the file omits it entirely.
-        JkCacheConfig c2 = JkCacheConfig.resolve(tempDir.resolve("none.toml"),
-                Map.of("JK_MAX_SIZE_GB", "50")::get);
+        JkCacheConfig c2 = JkCacheConfig.resolve(tempDir.resolve("none.toml"), Map.of("JK_MAX_SIZE_GB", "50")::get);
         assertThat(c2.maxSizeGb()).hasValue(50);
 
         // Garbage env value is ignored — falls through to the file/default.

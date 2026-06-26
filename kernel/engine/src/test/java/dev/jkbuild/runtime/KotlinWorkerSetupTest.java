@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.worker.WorkerJarNotFoundException;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Worker-jar location: system-property override → CAS-by-SHA → clear error.
@@ -60,8 +58,7 @@ class KotlinWorkerSetupTest {
     }
 
     private static String expectedHash() throws IOException {
-        try (InputStream in = KotlinWorkerSetup.class
-                .getResourceAsStream("/META-INF/jk-kotlin-compiler-sha256.txt")) {
+        try (InputStream in = KotlinWorkerSetup.class.getResourceAsStream("/META-INF/jk-kotlin-compiler-sha256.txt")) {
             assertThat(in).as("worker-sha resource present").isNotNull();
             return new String(in.readAllBytes(), StandardCharsets.UTF_8).trim();
         }

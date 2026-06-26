@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.CompileRequest;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import javax.tools.ToolProvider;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -16,9 +14,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import javax.tools.ToolProvider;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Annotation-processor-aware incremental compilation (slice 3b) end-to-end through
@@ -38,8 +36,7 @@ class JavaApIncrementalCompileTest {
      * then takes the incremental tier on a subsequent body edit — without going stale.
      */
     @Test
-    void isolating_processor_detected_then_incrementally_compiles_via_worker(@TempDir Path dir)
-            throws Exception {
+    void isolating_processor_detected_then_incrementally_compiles_via_worker(@TempDir Path dir) throws Exception {
         Path worker = workerJar();
         Path procDir = isolatingProcessor(dir);
         Project p = new Project(dir, worker, procDir);
@@ -59,7 +56,8 @@ class JavaApIncrementalCompileTest {
         assertThat(b2.success()).isTrue();
         assertThat(p.classFile("app/WidgetGen.class")).isRegularFile();
         assertThat(p.classFile("app/Widget.class")).isRegularFile();
-        assertThat(Files.isRegularFile(p.stateDir.resolve("java-incremental.txt"))).isTrue();
+        assertThat(Files.isRegularFile(p.stateDir.resolve("java-incremental.txt")))
+                .isTrue();
         assertThat(p.apFlags()).contains("isolating=true");
 
         // A non-class sentinel distinguishes the tiers: the incremental tier restores the
@@ -72,7 +70,9 @@ class JavaApIncrementalCompileTest {
         p.write("app/Widget.java", widget("three"));
         JavaIncrementalCompile.Result b3 = p.build();
         assertThat(b3.success()).isTrue();
-        assertThat(Files.exists(sentinel)).as("incremental tier restores (wipes) the output dir").isFalse();
+        assertThat(Files.exists(sentinel))
+                .as("incremental tier restores (wipes) the output dir")
+                .isFalse();
         // Never stale: the generated class is still present and Widget reflects the v3 edit.
         assertThat(p.classFile("app/WidgetGen.class")).isRegularFile();
         assertThat(p.invokeGreet()).isEqualTo("three");
@@ -84,18 +84,17 @@ class JavaApIncrementalCompileTest {
      * rebuilds instead of risking a stale aggregate from a subset recompile.
      */
     @Test
-    void aggregating_processor_is_classified_non_isolating_and_stays_full(@TempDir Path dir)
-            throws Exception {
+    void aggregating_processor_is_classified_non_isolating_and_stays_full(@TempDir Path dir) throws Exception {
         Path worker = workerJar();
         Path procDir = aggregatingProcessor(dir);
         Project p = new Project(dir, worker, procDir);
 
         p.write("app/Alpha.java", "package app; @reg.Reg public class Alpha {}");
         p.write("app/Beta.java", "package app; @reg.Reg public class Beta {}");
-        p.build();                                   // build 1: detect (subprocess javac)
+        p.build(); // build 1: detect (subprocess javac)
 
         p.write("app/Alpha.java", "package app; @reg.Reg public class Alpha { int v; }");
-        p.build();                                   // build 2: worker full → arity-2 provenance
+        p.build(); // build 2: worker full → arity-2 provenance
         assertThat(p.classFile("app/Registry.class")).isRegularFile();
         assertThat(p.apFlags()).contains("isolating=false");
 
@@ -104,15 +103,18 @@ class JavaApIncrementalCompileTest {
         Files.writeString(sentinel, "x");
         p.write("app/Beta.java", "package app; @reg.Reg public class Beta { int v; }");
         p.build();
-        assertThat(Files.exists(sentinel)).as("aggregating project stays on full rebuilds").isTrue();
-        assertThat(p.classFile("app/Registry.class")).isRegularFile();   // correct aggregate
+        assertThat(Files.exists(sentinel))
+                .as("aggregating project stays on full rebuilds")
+                .isTrue();
+        assertThat(p.classFile("app/Registry.class")).isRegularFile(); // correct aggregate
     }
 
     // ---- harness ----------------------------------------------------------
 
     private static Path workerJar() {
         String prop = System.getProperty("jk.java.worker.jar");
-        assumeTrue(prop != null && Files.isRegularFile(Path.of(prop)),
+        assumeTrue(
+                prop != null && Files.isRegularFile(Path.of(prop)),
                 "jk.java.worker.jar must point at the built worker jar");
         return Path.of(prop);
     }
@@ -168,7 +170,7 @@ class JavaApIncrementalCompileTest {
             }
             CompileRequest req = CompileRequest.builder()
                     .sources(sources)
-                    .classpath(List.of(procDir))   // so @Gen/@Reg resolve
+                    .classpath(List.of(procDir)) // so @Gen/@Reg resolve
                     .outputDir(out)
                     .release(21)
                     // The processor path makes javac run the AP (modern javac won't
@@ -178,15 +180,15 @@ class JavaApIncrementalCompileTest {
                     .javaHome(Path.of(System.getProperty("java.home")))
                     .build();
             var ap = new JavaIncrementalCompile.ApSetup(() -> workerJar, genSrc);
-            JavaIncrementalCompile.Result r = JavaIncrementalCompile.run(
-                    "compile-main", req, "jk-test", true, cas, actionCache, stateDir, ap);
+            JavaIncrementalCompile.Result r =
+                    JavaIncrementalCompile.run("compile-main", req, "jk-test", true, cas, actionCache, stateDir, ap);
             assertThat(r.success()).as("compile succeeded: %s", r.diagnostics()).isTrue();
             return r;
         }
 
         String invokeGreet() throws Exception {
-            try (URLClassLoader cl = new URLClassLoader(new URL[]{out.toUri().toURL()},
-                    getClass().getClassLoader())) {
+            try (URLClassLoader cl = new URLClassLoader(
+                    new URL[] {out.toUri().toURL()}, getClass().getClassLoader())) {
                 Class<?> c = Class.forName("app.Widget", true, cl);
                 Object w = c.getDeclaredConstructor().newInstance();
                 return (String) c.getMethod("greet").invoke(w);
@@ -199,14 +201,16 @@ class JavaApIncrementalCompileTest {
     /** Isolating: one {@code <Type>Gen} per annotated type, originating from that type. */
     private static Path isolatingProcessor(Path dir) throws IOException {
         Path procDir = dir.resolve("proc-iso");
-        compile(procDir, Map.of(
-                "gen.Gen", """
+        compile(
+                procDir,
+                Map.of(
+                        "gen.Gen", """
                         package gen;
                         import java.lang.annotation.*;
                         @Retention(RetentionPolicy.SOURCE) @Target(ElementType.TYPE)
                         public @interface Gen {}
                         """,
-                "gen.GenProc", """
+                        "gen.GenProc", """
                         package gen;
                         import javax.annotation.processing.*;
                         import javax.lang.model.SourceVersion;
@@ -240,14 +244,16 @@ class JavaApIncrementalCompileTest {
     /** Aggregating: one {@code app.Registry} originating from ALL annotated types. */
     private static Path aggregatingProcessor(Path dir) throws IOException {
         Path procDir = dir.resolve("proc-agg");
-        compile(procDir, Map.of(
-                "reg.Reg", """
+        compile(
+                procDir,
+                Map.of(
+                        "reg.Reg", """
                         package reg;
                         import java.lang.annotation.*;
                         @Retention(RetentionPolicy.SOURCE) @Target(ElementType.TYPE)
                         public @interface Reg {}
                         """,
-                "reg.RegProc", """
+                        "reg.RegProc", """
                         package reg;
                         import javax.annotation.processing.*;
                         import javax.lang.model.SourceVersion;

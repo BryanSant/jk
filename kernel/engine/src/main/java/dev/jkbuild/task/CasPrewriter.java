@@ -3,7 +3,6 @@ package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.util.Hashing;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -96,8 +95,7 @@ public final class CasPrewriter implements AutoCloseable {
                 if (!Files.isRegularFile(file)) continue;
                 if (FreshnessStamp.isStampFile(file.getFileName().toString())) continue;
 
-                String relPath = outputDir.relativize(file).toString()
-                        .replace(File.separatorChar, '/');
+                String relPath = outputDir.relativize(file).toString().replace(File.separatorChar, '/');
                 long size = Files.size(file);
                 long mtime = Files.getLastModifiedTime(file).toMillis();
 
@@ -173,5 +171,6 @@ public final class CasPrewriter implements AutoCloseable {
     }
 
     private record Snapshot(long size, long mtime) {}
+
     private record Processed(String hex, long size, long mtime) {}
 }

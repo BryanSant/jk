@@ -2,7 +2,6 @@
 package dev.jkbuild.config;
 
 import dev.jkbuild.util.JkDirs;
-
 import java.nio.file.Path;
 
 /**
@@ -55,8 +54,7 @@ public final class GlobalConfig {
 
     /** As {@link #nerdfont(Path)} but with an explicit env value — for tests. */
     static boolean nerdfont(Path configFile, String envValue) {
-        return EnvValues.parseBool(envValue)
-                .orElseGet(() -> booleanFromGlobal(configFile, "nerdfont", true));
+        return EnvValues.parseBool(envValue).orElseGet(() -> booleanFromGlobal(configFile, "nerdfont", true));
     }
 
     /** Read a boolean from the {@code [global]} table, falling back leniently. */

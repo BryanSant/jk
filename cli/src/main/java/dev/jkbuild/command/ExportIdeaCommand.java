@@ -4,7 +4,6 @@ package dev.jkbuild.command;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
 import java.util.List;
 
 /**
@@ -16,9 +15,20 @@ public final class ExportIdeaCommand implements CliCommand {
 
     private final IdeaCommand delegate = new IdeaCommand();
 
-    @Override public String name() { return "idea"; }
-    @Override public String description() { return "Generate IntelliJ IDEA project files (alias of `jk idea`)"; }
-    @Override public List<Opt> options() { return delegate.options(); }
+    @Override
+    public String name() {
+        return "idea";
+    }
+
+    @Override
+    public String description() {
+        return "Generate IntelliJ IDEA project files (alias of `jk idea`)";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return delegate.options();
+    }
 
     @Override
     public int run(Invocation in) throws Exception {

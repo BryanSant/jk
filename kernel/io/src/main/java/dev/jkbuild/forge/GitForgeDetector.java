@@ -2,12 +2,10 @@
 package dev.jkbuild.forge;
 
 import dev.jkbuild.util.GitUrl;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.regex.Matcher;
@@ -30,14 +28,11 @@ import java.util.regex.Pattern;
 public final class GitForgeDetector {
 
     // [remote "origin"]  — section with a quoted subsection.
-    private static final Pattern SECTION =
-            Pattern.compile("^\\[(\\S+)(?:\\s+\"([^\"]*)\")?\\]$");
+    private static final Pattern SECTION = Pattern.compile("^\\[(\\S+)(?:\\s+\"([^\"]*)\")?\\]$");
     // key = value
-    private static final Pattern KEY_VALUE =
-            Pattern.compile("^(\\w[\\w-]*)\\s*=\\s*(.*)$");
+    private static final Pattern KEY_VALUE = Pattern.compile("^(\\w[\\w-]*)\\s*=\\s*(.*)$");
     // ssh_config keyword + value, e.g. "HostName github.com" (also "key=value").
-    private static final Pattern SSH_LINE =
-            Pattern.compile("^(\\S+)[\\s=]+(.+)$");
+    private static final Pattern SSH_LINE = Pattern.compile("^(\\S+)[\\s=]+(.+)$");
 
     private GitForgeDetector() {}
 
@@ -58,8 +53,7 @@ public final class GitForgeDetector {
         if (host.isEmpty()) return Optional.empty();
 
         String realHost = resolveSshAlias(host.get(), sshConfig).orElse(host.get());
-        return ForgeKind.inferFromHost(realHost)
-                .map(kind -> new ForgeRemote(kind, realHost));
+        return ForgeKind.inferFromHost(realHost).map(kind -> new ForgeRemote(kind, realHost));
     }
 
     // -- git remote ------------------------------------------------------
@@ -78,7 +72,7 @@ public final class GitForgeDetector {
                 Matcher sm = SECTION.matcher(line);
                 if (sm.matches()) {
                     section = sm.group(1).toLowerCase(Locale.ROOT);
-                    subsection = sm.group(2);   // case-sensitive per git
+                    subsection = sm.group(2); // case-sensitive per git
                     continue;
                 }
                 if (!"remote".equals(section) || !"origin".equals(subsection)) continue;
@@ -120,7 +114,9 @@ public final class GitForgeDetector {
             for (String raw : Files.readAllLines(dotGitFile)) {
                 String line = raw.trim();
                 if (line.startsWith("gitdir:")) {
-                    Path gitDir = dotGitFile.getParent().resolve(line.substring("gitdir:".length()).trim());
+                    Path gitDir = dotGitFile
+                            .getParent()
+                            .resolve(line.substring("gitdir:".length()).trim());
                     Path config = gitDir.normalize().resolve("config");
                     return Files.isRegularFile(config) ? config : null;
                 }
@@ -140,9 +136,7 @@ public final class GitForgeDetector {
             // so URI.getHost() works uniformly across remote URL shapes.
             URI uri = URI.create(GitUrl.canonicalize(remoteUrl));
             String host = uri.getHost();
-            return (host == null || host.isBlank())
-                    ? Optional.empty()
-                    : Optional.of(host.toLowerCase(Locale.ROOT));
+            return (host == null || host.isBlank()) ? Optional.empty() : Optional.of(host.toLowerCase(Locale.ROOT));
         } catch (RuntimeException e) {
             return Optional.empty();
         }
@@ -171,15 +165,13 @@ public final class GitForgeDetector {
                 if (keyword.equals("host")) {
                     inMatchingBlock = false;
                     for (String pattern : value.split("\\s+")) {
-                        if (pattern.equalsIgnoreCase(host)) {   // exact alias, no globs
+                        if (pattern.equalsIgnoreCase(host)) { // exact alias, no globs
                             inMatchingBlock = true;
                             break;
                         }
                     }
                 } else if (inMatchingBlock && keyword.equals("hostname")) {
-                    return value.isBlank()
-                            ? Optional.empty()
-                            : Optional.of(value.toLowerCase(Locale.ROOT));
+                    return value.isBlank() ? Optional.empty() : Optional.of(value.toLowerCase(Locale.ROOT));
                 }
             }
         } catch (IOException ignored) {

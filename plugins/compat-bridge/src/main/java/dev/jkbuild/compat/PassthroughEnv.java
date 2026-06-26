@@ -20,11 +20,7 @@ import java.util.Map;
 public final class PassthroughEnv {
 
     private static final String[] STRIPPED = {
-            "JAVA_TOOL_OPTIONS",
-            "_JAVA_OPTIONS",
-            "KOTLIN_HOME",
-            "MAVEN_OPTS",
-            "GRADLE_OPTS",
+        "JAVA_TOOL_OPTIONS", "_JAVA_OPTIONS", "KOTLIN_HOME", "MAVEN_OPTS", "GRADLE_OPTS",
     };
 
     private PassthroughEnv() {}
@@ -40,7 +36,8 @@ public final class PassthroughEnv {
             String binDir = javaHome.resolve("bin").toAbsolutePath().toString();
             String pathKey = pathKey(env);
             String existing = env.getOrDefault(pathKey, "");
-            String separator = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win") ? ";" : ":";
+            String separator =
+                    System.getProperty("os.name", "").toLowerCase(Locale.ROOT).contains("win") ? ";" : ":";
             env.put(pathKey, existing.isEmpty() ? binDir : binDir + separator + existing);
         }
     }
@@ -53,5 +50,4 @@ public final class PassthroughEnv {
         }
         return "PATH";
     }
-
 }

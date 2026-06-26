@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.jar.Attributes;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ToolHealthTest {
 
@@ -29,7 +27,8 @@ class ToolHealthTest {
 
         assertThat(ToolHealth.isHealthy(ToolSpec.jdk("21.0.5", "tem"), home)).isTrue();
         assertThat(ToolHealth.isHealthy(ToolSpec.jdk("21.0.6", "tem"), home)).isFalse();
-        assertThat(ToolHealth.isHealthy(ToolSpec.jdk("21.0.5", "graalce"), home)).isFalse();
+        assertThat(ToolHealth.isHealthy(ToolSpec.jdk("21.0.5", "graalce"), home))
+                .isFalse();
     }
 
     @Test
@@ -79,9 +78,9 @@ class ToolHealthTest {
         Path home = root.resolve("jdk-" + version);
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/bin/sh\n");
-        Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\n"
-                        + "IMPLEMENTOR=\"" + implementor + "\"\n");
+        Files.writeString(
+                home.resolve("release"),
+                "JAVA_VERSION=\"" + version + "\"\n" + "IMPLEMENTOR=\"" + implementor + "\"\n");
         return home;
     }
 

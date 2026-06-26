@@ -3,7 +3,6 @@ package dev.jkbuild.cli;
 
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
 import java.nio.file.Path;
 import java.util.List;
 
@@ -25,10 +24,12 @@ public final class GlobalOptions {
     public boolean rerun;
     /** {@code --refresh}: re-validate deps against their remotes (re-download if changed). */
     public boolean refresh;
+
     public boolean noProgress;
 
     /** {@code --jdk <spec>} / {@code --graal <spec>}: the top JDK / GraalVM resolution tier. */
     public String jdk;
+
     public String graal;
 
     public String output;
@@ -46,6 +47,7 @@ public final class GlobalOptions {
         }
         return resolved != null && resolved.equalsIgnoreCase("json");
     }
+
     public Path configFile;
     public boolean noConfig;
     public Path directory;
@@ -65,6 +67,7 @@ public final class GlobalOptions {
         }
         return raw.toAbsolutePath().normalize();
     }
+
     public boolean help;
     public boolean version;
 
@@ -103,9 +106,15 @@ public final class GlobalOptions {
         g.configFile = in.value("config-file").map(Path::of).orElse(null);
         g.noConfig = in.isSet("no-config");
         g.directory = in.value("directory").map(Path::of).orElse(null);
-        g.maxRamPercent = in.value("max-ram-percent").map(s -> {
-            try { return Double.valueOf(s.trim()); } catch (NumberFormatException e) { return null; }
-        }).orElse(null);
+        g.maxRamPercent = in.value("max-ram-percent")
+                .map(s -> {
+                    try {
+                        return Double.valueOf(s.trim());
+                    } catch (NumberFormatException e) {
+                        return null;
+                    }
+                })
+                .orElse(null);
         g.jvmArgs = in.values("jvm-arg");
         g.jdk = in.value("jdk").orElse(null);
         g.graal = in.value("graal").orElse(null);
@@ -151,7 +160,8 @@ public final class GlobalOptions {
                 Opt.flag("Skip jk.toml discovery; use defaults", "--no-config"),
                 Opt.value("<DIR>", "Change to this directory before running", "-C", "--directory"),
                 Opt.value("<PCT>", "Worker-JVM max heap as % of RAM", "--max-ram-percent"),
-                Opt.value("<ARG>", "Extra worker-JVM flag (repeatable)", "--jvm-arg").repeat(),
+                Opt.value("<ARG>", "Extra worker-JVM flag (repeatable)", "--jvm-arg")
+                        .repeat(),
                 Opt.value("<spec>", "JDK for this run; overrides project pins", "--jdk"),
                 Opt.value("<spec>", "GraalVM for jk native / GRAALVM_HOME", "--graal"),
                 Opt.flag("Show this help message and exit", "-h", "--help"),

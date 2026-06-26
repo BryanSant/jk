@@ -5,7 +5,6 @@ import dev.sigstore.KeylessSigner;
 import dev.sigstore.KeylessSignerException;
 import dev.sigstore.bundle.Bundle;
 import dev.sigstore.trustroot.SigstoreConfigurationException;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -33,13 +32,11 @@ public final class KeylessSigstoreSigner implements SigstoreSigner, AutoCloseabl
     /** Initialise a signer using the public Sigstore defaults. */
     public static KeylessSigstoreSigner sigstorePublic() throws IOException {
         try {
-            KeylessSigner signer = KeylessSigner.builder()
-                    .sigstorePublicDefaults()
-                    .build();
+            KeylessSigner signer =
+                    KeylessSigner.builder().sigstorePublicDefaults().build();
             return new KeylessSigstoreSigner(signer);
         } catch (GeneralSecurityException | SigstoreConfigurationException | RuntimeException e) {
-            throw new IOException("failed to initialise Sigstore keyless signer: "
-                    + e.getMessage(), e);
+            throw new IOException("failed to initialise Sigstore keyless signer: " + e.getMessage(), e);
         }
     }
 

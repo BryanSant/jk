@@ -49,15 +49,18 @@ public final class NewGroupGuess {
             "duck.com",
             "pm.me");
 
-    private static final Pattern EMAIL_LINE = Pattern.compile(
-            "^\\s*email\\s*=\\s*(.+?)\\s*$", Pattern.CASE_INSENSITIVE);
+    private static final Pattern EMAIL_LINE =
+            Pattern.compile("^\\s*email\\s*=\\s*(.+?)\\s*$", Pattern.CASE_INSENSITIVE);
 
     private NewGroupGuess() {}
 
     /** Convenience entry point that uses the real cwd and {@code $HOME}. */
     public static String guess() {
-        return guess(Path.of(".").toAbsolutePath().normalize(),
-                Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null));
+        return guess(
+                Path.of(".").toAbsolutePath().normalize(),
+                Optional.ofNullable(System.getProperty("user.home"))
+                        .map(Path::of)
+                        .orElse(null));
     }
 
     /** Package-private for unit testing: caller supplies cwd + home. */
@@ -72,8 +75,7 @@ public final class NewGroupGuess {
         String localPart = email.substring(0, at).toLowerCase(Locale.ROOT);
         String domain = email.substring(at + 1).toLowerCase(Locale.ROOT);
 
-        if (domain.equals("github.com") || domain.equals("github.io")
-                || domain.equals("users.noreply.github.com")) {
+        if (domain.equals("github.com") || domain.equals("github.io") || domain.equals("users.noreply.github.com")) {
             String user = stripNoreplyPrefix(localPart);
             if (user.isEmpty()) return FALLBACK;
             return "io.github." + sanitizeIdentifier(user);

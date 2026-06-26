@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.config.JkBuildParser;
+import dev.jkbuild.layout.BuildLayout;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * {@link BuildPipeline#siblingMainJars} — the lookup the {@code embed-sha} phase
@@ -53,7 +51,8 @@ class EmbedShaResolutionTest {
         Map<String, Path> jars = BuildPipeline.siblingMainJars(root.resolve("host"));
 
         Path libDir = root.resolve("lib");
-        Path expected = BuildLayout.of(libDir, JkBuildParser.parse(libDir.resolve("jk.toml"))).mainJar();
+        Path expected = BuildLayout.of(libDir, JkBuildParser.parse(libDir.resolve("jk.toml")))
+                .mainJar();
         assertThat(jars).containsEntry("lib", expected);
         assertThat(jars).containsEntry("dev.jkbuild:lib", expected);
         // The jar need not exist on disk — resolution is path-only.

@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.publish;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class SlsaProvenanceTest {
 
@@ -42,18 +41,14 @@ class SlsaProvenanceTest {
     @Test
     void escapes_special_characters_in_values() {
         var subject = new SlsaProvenance.Subject("a\"b\\c.jar", "0");
-        var ctx = new SlsaProvenance.BuildContext(
-                "x", "y", null,
-                Instant.EPOCH, Instant.EPOCH, Map.of(), Map.of());
+        var ctx = new SlsaProvenance.BuildContext("x", "y", null, Instant.EPOCH, Instant.EPOCH, Map.of(), Map.of());
         String json = new String(SlsaProvenance.generate(List.of(subject), ctx), StandardCharsets.UTF_8);
         assertThat(json).contains("\"name\":\"a\\\"b\\\\c.jar\"");
     }
 
     @Test
     void rejects_empty_subject_list() {
-        var ctx = new SlsaProvenance.BuildContext(
-                "x", "y", "i", Instant.EPOCH, Instant.EPOCH, Map.of(), Map.of());
-        assertThatThrownBy(() -> SlsaProvenance.generate(List.of(), ctx))
-                .isInstanceOf(IllegalArgumentException.class);
+        var ctx = new SlsaProvenance.BuildContext("x", "y", "i", Instant.EPOCH, Instant.EPOCH, Map.of(), Map.of());
+        assertThatThrownBy(() -> SlsaProvenance.generate(List.of(), ctx)).isInstanceOf(IllegalArgumentException.class);
     }
 }

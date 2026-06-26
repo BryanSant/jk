@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JdkAccessLedgerTest {
 
@@ -58,8 +57,7 @@ class JdkAccessLedgerTest {
         JdkAccessLedger ledger = new JdkAccessLedger(file);
 
         var ordered = ledger.mostRecentFirst();
-        assertThat(ordered).extracting(JdkAccessLedger.Entry::identifier)
-                .containsExactly("new", "medium", "old");
+        assertThat(ordered).extracting(JdkAccessLedger.Entry::identifier).containsExactly("new", "medium", "old");
     }
 
     @Test
@@ -95,6 +93,7 @@ class JdkAccessLedgerTest {
         assertThat(after).isLessThan(1L * 1024 * 1024);
         // Compacted body has exactly one line per identifier.
         assertThat(Files.readString(file).split("\n"))
-                .filteredOn(line -> !line.isEmpty()).hasSize(2);
+                .filteredOn(line -> !line.isEmpty())
+                .hasSize(2);
     }
 }

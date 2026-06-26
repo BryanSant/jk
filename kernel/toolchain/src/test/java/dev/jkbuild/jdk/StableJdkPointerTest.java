@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class StableJdkPointerTest {
 
@@ -58,8 +57,7 @@ class StableJdkPointerTest {
     }
 
     @Test
-    void no_op_and_preserves_install_when_name_equals_install_dir(@TempDir Path tmp)
-            throws IOException {
+    void no_op_and_preserves_install_when_name_equals_install_dir(@TempDir Path tmp) throws IOException {
         // Vendor-level installs (e.g. graalvm-jdk-25) name the install dir the
         // same as the stable pointer — ensure() must not delete it.
         Path jdks = tmp.resolve("jdks");

@@ -27,8 +27,7 @@ public final class ZshShell implements Shell {
 
     @Override
     public String activateScript(String jkExe) {
-        return ShellResources.load("zsh.sh")
-                .replace("__JK_EXE__", PosixQuote.quote(jkExe));
+        return ShellResources.load("zsh.sh").replace("__JK_EXE__", PosixQuote.quote(jkExe));
     }
 
     @Override

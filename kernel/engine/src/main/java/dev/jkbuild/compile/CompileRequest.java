@@ -40,14 +40,19 @@ public record CompileRequest(
     }
 
     /** Back-compat constructor (no annotation-processor path). */
-    public CompileRequest(List<Path> sources, List<Path> classpath, Path outputDir,
-                          int release, List<String> extraOptions, Path javaHome) {
+    public CompileRequest(
+            List<Path> sources,
+            List<Path> classpath,
+            Path outputDir,
+            int release,
+            List<String> extraOptions,
+            Path javaHome) {
         this(sources, classpath, outputDir, release, extraOptions, javaHome, List.of());
     }
 
     /** Back-compat constructor (no explicit javaHome — strategy picks one). */
-    public CompileRequest(List<Path> sources, List<Path> classpath, Path outputDir,
-                          int release, List<String> extraOptions) {
+    public CompileRequest(
+            List<Path> sources, List<Path> classpath, Path outputDir, int release, List<String> extraOptions) {
         this(sources, classpath, outputDir, release, extraOptions, null, List.of());
     }
 
@@ -68,13 +73,40 @@ public record CompileRequest(
         private Path javaHome;
         private List<Path> processorPath = List.of();
 
-        public Builder sources(List<Path> sources) { this.sources = sources; return this; }
-        public Builder classpath(List<Path> classpath) { this.classpath = classpath; return this; }
-        public Builder outputDir(Path outputDir) { this.outputDir = outputDir; return this; }
-        public Builder release(int release) { this.release = release; return this; }
-        public Builder extraOptions(List<String> extraOptions) { this.extraOptions = extraOptions; return this; }
-        public Builder javaHome(Path javaHome) { this.javaHome = javaHome; return this; }
-        public Builder processorPath(List<Path> processorPath) { this.processorPath = processorPath; return this; }
+        public Builder sources(List<Path> sources) {
+            this.sources = sources;
+            return this;
+        }
+
+        public Builder classpath(List<Path> classpath) {
+            this.classpath = classpath;
+            return this;
+        }
+
+        public Builder outputDir(Path outputDir) {
+            this.outputDir = outputDir;
+            return this;
+        }
+
+        public Builder release(int release) {
+            this.release = release;
+            return this;
+        }
+
+        public Builder extraOptions(List<String> extraOptions) {
+            this.extraOptions = extraOptions;
+            return this;
+        }
+
+        public Builder javaHome(Path javaHome) {
+            this.javaHome = javaHome;
+            return this;
+        }
+
+        public Builder processorPath(List<Path> processorPath) {
+            this.processorPath = processorPath;
+            return this;
+        }
 
         public CompileRequest build() {
             return new CompileRequest(sources, classpath, outputDir, release, extraOptions, javaHome, processorPath);

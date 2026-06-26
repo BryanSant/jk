@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class NewScaffolderTest {
 
@@ -44,7 +43,7 @@ class NewScaffolderTest {
         assertThat(body).doesNotContain("public static void main");
         assertThat(body).contains("void main()");
         assertThat(body).contains("IO.println(");
-        assertThat(body).contains("new Calc()");   // Main references the sample Calc
+        assertThat(body).contains("new Calc()"); // Main references the sample Calc
     }
 
     @Test
@@ -121,9 +120,17 @@ class NewScaffolderTest {
 
     @Test
     void deps_render_in_name_as_key_subtables(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget",
-                Optional.empty(), false, false,
-                List.of("commons-io", "guava"), 25, false, Optional.empty());
+        var inputs = inputs(
+                tempDir,
+                NewInputs.Language.JAVA,
+                "widget",
+                Optional.empty(),
+                false,
+                false,
+                List.of("commons-io", "guava"),
+                25,
+                false,
+                Optional.empty());
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
@@ -137,9 +144,17 @@ class NewScaffolderTest {
 
     @Test
     void lombok_adds_processor_and_provided_blocks(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget",
-                Optional.empty(), false, false,
-                List.of("lombok"), 25, false, Optional.empty());
+        var inputs = inputs(
+                tempDir,
+                NewInputs.Language.JAVA,
+                "widget",
+                Optional.empty(),
+                false,
+                false,
+                List.of("lombok"),
+                25,
+                false,
+                Optional.empty());
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
@@ -151,9 +166,17 @@ class NewScaffolderTest {
 
     @Test
     void jspecify_renders_into_main_scope(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.JAVA, "widget",
-                Optional.empty(), false, false,
-                List.of("jspecify"), 25, false, Optional.empty());
+        var inputs = inputs(
+                tempDir,
+                NewInputs.Language.JAVA,
+                "widget",
+                Optional.empty(),
+                false,
+                false,
+                List.of("jspecify"),
+                25,
+                false,
+                Optional.empty());
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
@@ -163,9 +186,17 @@ class NewScaffolderTest {
 
     @Test
     void kotest_renders_into_test_scope(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.KOTLIN, "widget",
-                Optional.empty(), false, false,
-                List.of("kotest"), 25, false, Optional.empty());
+        var inputs = inputs(
+                tempDir,
+                NewInputs.Language.KOTLIN,
+                "widget",
+                Optional.empty(),
+                false,
+                false,
+                List.of("kotest"),
+                25,
+                false,
+                Optional.empty());
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
@@ -173,11 +204,19 @@ class NewScaffolderTest {
         assertThat(build).contains("kotest-runner-junit6 = \"latest\"");
     }
 
-        @Test
+    @Test
     void kotlin_compact_and_module_emit_project_fields(@TempDir Path tempDir) throws IOException {
-        var inputs = inputs(tempDir, NewInputs.Language.KOTLIN, "widget",
-                Optional.of("MainKt"), false, false,
-                List.of(), 25, true, Optional.of("widget-core"));
+        var inputs = inputs(
+                tempDir,
+                NewInputs.Language.KOTLIN,
+                "widget",
+                Optional.of("MainKt"),
+                false,
+                false,
+                List.of(),
+                25,
+                true,
+                Optional.of("widget-core"));
         NewScaffolder.write(inputs);
 
         var build = Files.readString(tempDir.resolve("jk.toml"));
@@ -187,32 +226,64 @@ class NewScaffolderTest {
 
     @Test
     void shadow_only_set_when_true(@TempDir Path tempDir) throws IOException {
-        var off = inputs(tempDir, NewInputs.Language.JAVA, "widget",
-                Optional.of("com.example.Main"), false, false,
-                List.of(), 25, false, Optional.empty());
+        var off = inputs(
+                tempDir,
+                NewInputs.Language.JAVA,
+                "widget",
+                Optional.of("com.example.Main"),
+                false,
+                false,
+                List.of(),
+                25,
+                false,
+                Optional.empty());
         NewScaffolder.write(off);
         assertThat(Files.readString(tempDir.resolve("jk.toml"))).doesNotContain("shadow");
 
         var sub = Files.createDirectories(tempDir.resolve("on"));
-        var on = inputs(sub, NewInputs.Language.JAVA, "widget",
-                Optional.of("com.example.Main"), true, false,
-                List.of(), 25, false, Optional.empty());
+        var on = inputs(
+                sub,
+                NewInputs.Language.JAVA,
+                "widget",
+                Optional.of("com.example.Main"),
+                true,
+                false,
+                List.of(),
+                25,
+                false,
+                Optional.empty());
         NewScaffolder.write(on);
         assertThat(Files.readString(sub.resolve("jk.toml"))).contains("shadow   = true");
     }
 
     @Test
     void native_only_set_when_true(@TempDir Path tempDir) throws IOException {
-        var off = inputs(tempDir, NewInputs.Language.JAVA, "widget",
-                Optional.empty(), false, false,
-                List.of(), 25, false, Optional.empty());
+        var off = inputs(
+                tempDir,
+                NewInputs.Language.JAVA,
+                "widget",
+                Optional.empty(),
+                false,
+                false,
+                List.of(),
+                25,
+                false,
+                Optional.empty());
         NewScaffolder.write(off);
         assertThat(Files.readString(tempDir.resolve("jk.toml"))).doesNotContain("native");
 
         var sub = Files.createDirectories(tempDir.resolve("on"));
-        var on = inputs(sub, NewInputs.Language.JAVA, "widget",
-                Optional.empty(), false, true,
-                List.of(), 25, false, Optional.empty());
+        var on = inputs(
+                sub,
+                NewInputs.Language.JAVA,
+                "widget",
+                Optional.empty(),
+                false,
+                true,
+                List.of(),
+                25,
+                false,
+                Optional.empty());
         NewScaffolder.write(on);
         assertThat(Files.readString(sub.resolve("jk.toml"))).contains("native   = true");
     }
@@ -255,7 +326,7 @@ class NewScaffolderTest {
         assertThat(gitignore).exists();
         String body = Files.readString(gitignore);
         assertThat(body).contains("target/");
-        
+
         assertThat(body).contains(".jk/");
     }
 
@@ -273,20 +344,38 @@ class NewScaffolderTest {
 
     private static NewInputs library(Path dir, NewInputs.Language lang, boolean sample, int major) {
         return new NewInputs(
-                "com.example", "widget", String.valueOf(major), major,
+                "com.example",
+                "widget",
+                String.valueOf(major),
+                major,
                 Optional.empty(),
-                Optional.empty(), false, false,
-                lang, null, Optional.empty(),
-                List.of(), sample, dir);
+                Optional.empty(),
+                false,
+                false,
+                lang,
+                null,
+                Optional.empty(),
+                List.of(),
+                sample,
+                dir);
     }
 
     private static NewInputs runnable(Path dir, NewInputs.Language lang, String main, int major, boolean simple) {
         return new NewInputs(
-                "com.example", "widget", String.valueOf(major), major,
+                "com.example",
+                "widget",
+                String.valueOf(major),
+                major,
                 Optional.empty(),
-                Optional.of(main), false, false,
-                lang, simple ? "simple" : null, Optional.empty(),
-                List.of(), true, dir);
+                Optional.of(main),
+                false,
+                false,
+                lang,
+                simple ? "simple" : null,
+                Optional.empty(),
+                List.of(),
+                true,
+                dir);
     }
 
     private static NewInputs inputs(
@@ -301,10 +390,19 @@ class NewScaffolderTest {
             boolean simple,
             Optional<String> kotlinModule) {
         return new NewInputs(
-                "com.example", name, String.valueOf(major), major,
+                "com.example",
+                name,
+                String.valueOf(major),
+                major,
                 Optional.empty(),
-                main, shadow, nativeImage,
-                lang, simple ? "simple" : null, kotlinModule,
-                deps, false, dir);
+                main,
+                shadow,
+                nativeImage,
+                lang,
+                simple ? "simple" : null,
+                kotlinModule,
+                deps,
+                false,
+                dir);
     }
 }

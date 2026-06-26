@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JkConfigLoaderTest {
 
@@ -27,25 +26,25 @@ class JkConfigLoaderTest {
         JkConfig base = new JkConfig(
                 Optional.of(JkConfig.ColorChoice.NEVER),
                 Optional.of(true),
-                Optional.empty(),   // rerun
-                Optional.empty(),   // refresh
-                Optional.empty(),   // noProgress
+                Optional.empty(), // rerun
+                Optional.empty(), // refresh
+                Optional.empty(), // noProgress
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty());
         JkConfig over = new JkConfig(
                 Optional.of(JkConfig.ColorChoice.ALWAYS),
                 Optional.empty(),
-                Optional.empty(),   // rerun
-                Optional.empty(),   // refresh
-                Optional.of(true),  // noProgress — over sets it
+                Optional.empty(), // rerun
+                Optional.empty(), // refresh
+                Optional.of(true), // noProgress — over sets it
                 Optional.empty(),
                 Optional.empty(),
                 Optional.empty());
         JkConfig merged = base.mergedWith(over);
         assertThat(merged.color()).hasValue(JkConfig.ColorChoice.ALWAYS); // over wins
-        assertThat(merged.offline()).hasValue(true);                      // base passes through
-        assertThat(merged.noProgress()).hasValue(true);                   // over sets it
+        assertThat(merged.offline()).hasValue(true); // base passes through
+        assertThat(merged.noProgress()).hasValue(true); // over sets it
     }
 
     @Test

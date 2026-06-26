@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.model;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class FeaturesTest {
 
@@ -43,15 +42,12 @@ class FeaturesTest {
         Feature postgres = new Feature("postgres", List.of("postgresql"), List.of());
         Feature jackson = new Feature("jackson", List.of("jackson-databind"), List.of());
 
-        Features features = new Features(
-                Map.of("full", full, "postgres", postgres, "jackson", jackson),
-                List.of());
+        Features features = new Features(Map.of("full", full, "postgres", postgres, "jackson", jackson), List.of());
 
         Set<String> activated = features.activate(Set.of("full"), false);
         assertThat(activated).containsExactlyInAnyOrder("full", "postgres", "jackson");
 
-        assertThat(features.requestedDepNames(activated))
-                .containsExactlyInAnyOrder("postgresql", "jackson-databind");
+        assertThat(features.requestedDepNames(activated)).containsExactlyInAnyOrder("postgresql", "jackson-databind");
     }
 
     @Test

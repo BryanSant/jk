@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cache;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CasTest {
 
@@ -34,8 +33,7 @@ class CasTest {
 
         // Same key and bytes as the buffered put() — streaming must not change the hash.
         assertThat(stored.path()).isEqualTo(cas.put(payload));
-        assertThat(stored.sha256())
-                .isEqualTo("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
+        assertThat(stored.sha256()).isEqualTo("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
         assertThat(stored.size()).isEqualTo(payload.length);
         assertThat(Files.readAllBytes(stored.path())).isEqualTo(payload);
     }
@@ -59,7 +57,9 @@ class CasTest {
         Cas cas = new Cas(tempDir);
         // 'hello world' SHA-256 = b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9
         Path p = cas.pathFor("b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9");
-        assertThat(p).isEqualTo(tempDir.resolve("sha256/b9/4d/27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"));
+        assertThat(p)
+                .isEqualTo(
+                        tempDir.resolve("sha256/b9/4d/27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9"));
     }
 
     @Test

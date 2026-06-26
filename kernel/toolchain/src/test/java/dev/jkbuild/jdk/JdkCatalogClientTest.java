@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.http.Http;
-
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -18,8 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JdkCatalogClientTest {
 
@@ -45,38 +42,39 @@ class JdkCatalogClientTest {
             exchange.close();
         });
         server.start();
-        feed = URI.create("http://127.0.0.1:" + server.getAddress().getPort()
-                + "/feed/jdks.json");
+        feed = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/feed/jdks.json");
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void parses_json_feed(@TempDir Path tempDir) throws Exception {
-        JdkCatalogClient client = new JdkCatalogClient(
-                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
+        JdkCatalogClient client = new JdkCatalogClient(new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
         JdkCatalog catalog = client.fetch();
 
         assertThat(catalog.entries())
-                .extracting(JdkCatalog.Entry::vendor, JdkCatalog.Entry::product,
-                        JdkCatalog.Entry::version, JdkCatalog.Entry::os,
-                        JdkCatalog.Entry::arch, JdkCatalog.Entry::installFolderName,
+                .extracting(
+                        JdkCatalog.Entry::vendor,
+                        JdkCatalog.Entry::product,
+                        JdkCatalog.Entry::version,
+                        JdkCatalog.Entry::os,
+                        JdkCatalog.Entry::arch,
+                        JdkCatalog.Entry::installFolderName,
                         JdkCatalog.Entry::javaHomeSubpath)
                 .containsExactly(
                         org.assertj.core.api.Assertions.tuple(
-                                "Eclipse", "Temurin", "21.0.5", "linux", "x86_64",
-                                "temurin-21.0.5", ""),
+                                "Eclipse", "Temurin", "21.0.5", "linux", "x86_64", "temurin-21.0.5", ""),
                         org.assertj.core.api.Assertions.tuple(
-                                "Eclipse", "Temurin", "21.0.5", "macOS", "aarch64",
-                                "temurin-21.0.5", "Contents/Home"));
+                                "Eclipse", "Temurin", "21.0.5", "macOS", "aarch64", "temurin-21.0.5", "Contents/Home"));
     }
 
     @Test
     void cache_hit_within_ttl_skips_network(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("jdks.json");
-        JdkCatalogClient client = new JdkCatalogClient(
-                new Http(), feed, cache, Duration.ofHours(24));
+        JdkCatalogClient client = new JdkCatalogClient(new Http(), feed, cache, Duration.ofHours(24));
         client.fetch();
         int after1 = hits.get();
         client.fetch();
@@ -86,8 +84,7 @@ class JdkCatalogClientTest {
     @Test
     void second_fetch_after_ttl_revalidates_with_if_modified_since(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("jdks.json");
-        JdkCatalogClient client = new JdkCatalogClient(
-                new Http(), feed, cache, Duration.ZERO);
+        JdkCatalogClient client = new JdkCatalogClient(new Http(), feed, cache, Duration.ZERO);
         client.fetch();
         int after1 = hits.get();
         // Second call hits the server (TTL=0); server returns 304.
@@ -100,23 +97,21 @@ class JdkCatalogClientTest {
     void first_class_fetch_keeps_only_lts_and_latest_majors(@TempDir Path tempDir) throws Exception {
         // Feed spans below-floor (11), interim non-LTS (19), LTS (21), latest (26).
         jsonBody = multiMajorFeed().getBytes(StandardCharsets.UTF_8);
-        JdkCatalogClient client = new JdkCatalogClient(
-                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
+        JdkCatalogClient client = new JdkCatalogClient(new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
 
         assertThat(client.fetch().entries())
                 .extracting(JdkCatalog.Entry::majorVersion)
-                .containsExactlyInAnyOrder(21, 26);   // 11 below floor, 19 not LTS/latest
+                .containsExactlyInAnyOrder(21, 26); // 11 below floor, 19 not LTS/latest
     }
 
     @Test
     void all_supported_fetch_keeps_every_major_at_or_above_the_floor(@TempDir Path tempDir) throws Exception {
         jsonBody = multiMajorFeed().getBytes(StandardCharsets.UTF_8);
-        JdkCatalogClient client = new JdkCatalogClient(
-                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
+        JdkCatalogClient client = new JdkCatalogClient(new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
 
         assertThat(client.fetch(false, /* firstClassOnly = */ false).entries())
                 .extracting(JdkCatalog.Entry::majorVersion)
-                .containsExactlyInAnyOrder(19, 21, 26)  // 11 still dropped (below 17)
+                .containsExactlyInAnyOrder(19, 21, 26) // 11 still dropped (below 17)
                 .doesNotContain(11);
     }
 
@@ -126,17 +121,18 @@ class JdkCatalogClientTest {
         // latest-major slot must go to 26 (and 27 must be dropped), not the
         // other way around.
         jsonBody = ("{\n  \"jdks\": [\n"
-                + String.join(",\n",
-                        jdkBlock(21, "21.0.5"),         // LTS
-                        jdkBlock(26, "26.0.1"),         // newest GA
-                        previewBlock(27, "27-ea+22"))   // early access only
-                + "\n  ]\n}\n").getBytes(StandardCharsets.UTF_8);
-        JdkCatalogClient client = new JdkCatalogClient(
-                new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
+                        + String.join(
+                                ",\n",
+                                jdkBlock(21, "21.0.5"), // LTS
+                                jdkBlock(26, "26.0.1"), // newest GA
+                                previewBlock(27, "27-ea+22")) // early access only
+                        + "\n  ]\n}\n")
+                .getBytes(StandardCharsets.UTF_8);
+        JdkCatalogClient client = new JdkCatalogClient(new Http(), feed, tempDir.resolve("jdks.json"), Duration.ZERO);
 
         assertThat(client.fetch().entries())
                 .extracting(JdkCatalog.Entry::majorVersion)
-                .containsExactlyInAnyOrder(21, 26)   // 26 kept as latest GA; 27 EA dropped
+                .containsExactlyInAnyOrder(21, 26) // 26 kept as latest GA; 27 EA dropped
                 .doesNotContain(27);
     }
 
@@ -148,17 +144,16 @@ class JdkCatalogClientTest {
         // Stop the server so the next fetch fails on the wire.
         server.stop(0);
 
-        JdkCatalogClient client = new JdkCatalogClient(
-                new Http(), feed, cache, Duration.ZERO);
+        JdkCatalogClient client = new JdkCatalogClient(new Http(), feed, cache, Duration.ZERO);
         JdkCatalog catalog = client.fetch();
         assertThat(catalog.entries()).isNotEmpty();
     }
 
-
     /** A feed with one Temurin entry per major in {11, 19, 21, 26}. */
     private static String multiMajorFeed() {
         return "{\n  \"jdks\": [\n"
-                + String.join(",\n",
+                + String.join(
+                        ",\n",
                         jdkBlock(11, "11.0.25"),
                         jdkBlock(19, "19.0.2"),
                         jdkBlock(21, "21.0.5"),
@@ -168,9 +163,10 @@ class JdkCatalogClientTest {
 
     /** A preview/early-access JDK block (carries {@code "preview": true}). */
     private static String previewBlock(int major, String version) {
-        return jdkBlock(major, version).replaceFirst(
-                "\"jdk_version_major\": " + major + ",",
-                "\"jdk_version_major\": " + major + ",\n      \"preview\": true,");
+        return jdkBlock(major, version)
+                .replaceFirst(
+                        "\"jdk_version_major\": " + major + ",",
+                        "\"jdk_version_major\": " + major + ",\n      \"preview\": true,");
     }
 
     private static String jdkBlock(int major, String version) {

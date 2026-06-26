@@ -14,7 +14,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
 import java.io.IOException;
 import java.lang.ProcessBuilder.Redirect;
 import java.nio.charset.StandardCharsets;
@@ -29,8 +28,15 @@ import java.util.function.Function;
  */
 public final class AuthLoginCommand implements CliCommand {
 
-    @Override public String name() { return "login"; }
-    @Override public String description() { return "Log in to a git forge and store a token"; }
+    @Override
+    public String name() {
+        return "login";
+    }
+
+    @Override
+    public String description() {
+        return "Log in to a git forge and store a token";
+    }
 
     @Override
     public List<Opt> options() {
@@ -38,13 +44,20 @@ public final class AuthLoginCommand implements CliCommand {
                 Opt.value("<HOST>", "Forge host (required for Gitea/Forgejo)", "--host"),
                 Opt.flag("Read a PAT/app password from stdin (no device flow)", "--with-token"),
                 Opt.value("<SCOPE>", "OAuth scope; device flow only (per-provider default)", "--scope"),
-                Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/credentials.", "--credentials-dir").hide());
+                Opt.value(
+                                "<dir>",
+                                "Override the credentials directory. Default: ~/.jk/credentials.",
+                                "--credentials-dir")
+                        .hide());
     }
 
     @Override
     public List<Param> parameters() {
-        return List.of(Param.of("provider", Arity.ZERO_OR_ONE,
-                "github | gitlab | gitea (forgejo/codeberg) | bitbucket.\nOmit to auto-detect from this repo's git remote."));
+        return List.of(
+                Param.of(
+                        "provider",
+                        Arity.ZERO_OR_ONE,
+                        "github | gitlab | gitea (forgejo/codeberg) | bitbucket.\nOmit to auto-detect from this repo's git remote."));
     }
 
     private String scope;
@@ -63,7 +76,8 @@ public final class AuthLoginCommand implements CliCommand {
         try {
             target = AuthCommand.resolveTarget(provider, host, global.workingDir());
         } catch (IllegalArgumentException e) {
-            System.err.println("error: " + e.getMessage()); return 2;
+            System.err.println("error: " + e.getMessage());
+            return 2;
         }
         ForgeKind kind = target.kind();
         ForgeAuth auth = AuthCommand.authFor(credentialsDir);
@@ -71,16 +85,19 @@ public final class AuthLoginCommand implements CliCommand {
         try {
             resolvedHost = ForgeAuth.resolveHost(kind, target.host());
         } catch (AuthException e) {
-            System.err.println("error: " + e.getMessage()); return 2;
+            System.err.println("error: " + e.getMessage());
+            return 2;
         }
 
         try {
             String token = withToken ? readTokenFromStdin() : runDeviceFlow(kind, resolvedHost);
             auth.store(kind, resolvedHost, token);
         } catch (AuthException e) {
-            System.err.println("error: " + e.getMessage()); return 1;
+            System.err.println("error: " + e.getMessage());
+            return 1;
         } catch (IOException e) {
-            System.err.println("error: could not read token from stdin: " + e.getMessage()); return 1;
+            System.err.println("error: could not read token from stdin: " + e.getMessage());
+            return 1;
         }
 
         if (!global.quiet) System.out.println("Logged in to " + kind.displayName() + " (" + resolvedHost + ").");
@@ -94,53 +111,67 @@ public final class AuthLoginCommand implements CliCommand {
     }
 
     private String runDeviceFlow(ForgeKind kind, String resolvedHost) {
-        if (!kind.supportsDeviceFlow()) throw new AuthException(kind.displayName()
-                + " has no device flow — log in with: jk auth login " + kind.id()
-                + " --with-token  (paste a token / app password).");
-        ForgeAuthConfig forgeConfig = ForgeAuthConfig.discover(
-                global.workingDir(), global.noConfig, Optional.ofNullable(global.configFile));
-        String clientId = oauthClientId(kind, resolvedHost, System::getenv, forgeConfig).orElse(null);
-        if (clientId == null) throw new AuthException("No OAuth client configured for " + kind.displayName()
-                + ". Set " + kind.oauthClientIdEnvVar() + ", add [forge." + kind.id()
-                + "] client-id to your jk.toml, or use --with-token.");
+        if (!kind.supportsDeviceFlow())
+            throw new AuthException(kind.displayName()
+                    + " has no device flow — log in with: jk auth login " + kind.id()
+                    + " --with-token  (paste a token / app password).");
+        ForgeAuthConfig forgeConfig =
+                ForgeAuthConfig.discover(global.workingDir(), global.noConfig, Optional.ofNullable(global.configFile));
+        String clientId =
+                oauthClientId(kind, resolvedHost, System::getenv, forgeConfig).orElse(null);
+        if (clientId == null)
+            throw new AuthException("No OAuth client configured for " + kind.displayName()
+                    + ". Set " + kind.oauthClientIdEnvVar() + ", add [forge." + kind.id()
+                    + "] client-id to your jk.toml, or use --with-token.");
         String requestedScope = (scope != null && !scope.isBlank()) ? scope.strip() : defaultScope(kind);
         DeviceFlow flow = DeviceFlow.forHost(new Http(), kind, resolvedHost, clientId, requestedScope);
         return flow.run(this::prompt);
     }
 
     private void prompt(DeviceCode dc) {
-        String url = (dc.verificationUriComplete() != null && !dc.verificationUriComplete().isBlank())
-                ? dc.verificationUriComplete() : dc.verificationUri();
+        String url = (dc.verificationUriComplete() != null
+                        && !dc.verificationUriComplete().isBlank())
+                ? dc.verificationUriComplete()
+                : dc.verificationUri();
         System.out.println("\n  First copy your one-time code: " + dc.userCode());
         System.out.println("  Then open:                     " + dc.verificationUri());
         System.out.println("\n  Waiting for authorization…");
         openBrowser(url);
     }
 
-    static Optional<String> oauthClientId(ForgeKind kind, String host,
-                                           Function<String, String> env, ForgeAuthConfig config) {
+    static Optional<String> oauthClientId(
+            ForgeKind kind, String host, Function<String, String> env, ForgeAuthConfig config) {
         String fromEnv = env.apply(kind.oauthClientIdEnvVar());
         if (fromEnv != null && !fromEnv.isBlank()) return Optional.of(fromEnv.strip());
         Optional<String> fromConfig = config.oauthClientId(kind.id(), host);
         if (fromConfig.isPresent()) return fromConfig;
-        boolean isDefaultHost = kind.defaultHost().map(dh -> dh.equalsIgnoreCase(host)).orElse(false);
+        boolean isDefaultHost =
+                kind.defaultHost().map(dh -> dh.equalsIgnoreCase(host)).orElse(false);
         return isDefaultHost ? kind.defaultOAuthClientId() : Optional.empty();
     }
 
     private static String defaultScope(ForgeKind kind) {
         return switch (kind) {
-            case GITHUB -> "read:packages"; case GITLAB -> "read_api";
-            case GITEA -> "read:package";   case BITBUCKET -> "";
+            case GITHUB -> "read:packages";
+            case GITLAB -> "read_api";
+            case GITEA -> "read:package";
+            case BITBUCKET -> "";
         };
     }
 
     private static void openBrowser(String url) {
         String os = System.getProperty("os.name", "").toLowerCase(Locale.ROOT);
-        List<String> cmd = os.contains("mac") ? List.of("open", url)
-                : os.contains("win") ? List.of("rundll32", "url.dll,FileProtocolHandler", url)
-                : List.of("xdg-open", url);
+        List<String> cmd = os.contains("mac")
+                ? List.of("open", url)
+                : os.contains("win")
+                        ? List.of("rundll32", "url.dll,FileProtocolHandler", url)
+                        : List.of("xdg-open", url);
         try {
-            new ProcessBuilder(cmd).redirectOutput(Redirect.DISCARD).redirectError(Redirect.DISCARD).start();
-        } catch (IOException ignored) {}
+            new ProcessBuilder(cmd)
+                    .redirectOutput(Redirect.DISCARD)
+                    .redirectError(Redirect.DISCARD)
+                    .start();
+        } catch (IOException ignored) {
+        }
     }
 }

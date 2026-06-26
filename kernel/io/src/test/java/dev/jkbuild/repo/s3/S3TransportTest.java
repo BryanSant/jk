@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo.s3;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -15,8 +13,9 @@ import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class S3TransportTest {
 
@@ -36,7 +35,10 @@ class S3TransportTest {
     }
 
     private S3Transport signed() {
-        return new S3Transport(new Http(), endpoint, "us-east-1",
+        return new S3Transport(
+                new Http(),
+                endpoint,
+                "us-east-1",
                 Optional.of(new AwsCredentials("AKIDEXAMPLE", "secret", null, "us-east-1")),
                 () -> Instant.parse("2015-08-30T12:36:00Z"));
     }
@@ -55,8 +57,8 @@ class S3TransportTest {
             ex.close();
         });
 
-        Optional<byte[]> body = signed().fetch(
-                URI.create("s3://my-bucket/maven/g/a/1/a-1.jar"), RepoCredential.ANONYMOUS);
+        Optional<byte[]> body =
+                signed().fetch(URI.create("s3://my-bucket/maven/g/a/1/a-1.jar"), RepoCredential.ANONYMOUS);
 
         assertThat(body).isPresent();
         assertThat(new String(body.get(), StandardCharsets.UTF_8)).isEqualTo("jar");
@@ -89,8 +91,11 @@ class S3TransportTest {
         });
 
         byte[] payload = {1, 2, 3};
-        int status = signed().put(URI.create("s3://my-bucket/up.jar"), payload,
-                "application/java-archive", RepoCredential.ANONYMOUS);
+        int status = signed().put(
+                        URI.create("s3://my-bucket/up.jar"),
+                        payload,
+                        "application/java-archive",
+                        RepoCredential.ANONYMOUS);
 
         assertThat(status).isEqualTo(200);
         assertThat(seenBody.get()).isEqualTo(payload);
@@ -108,13 +113,18 @@ class S3TransportTest {
             ex.close();
         });
         // HMAC keys via the AWS env chain; AWS_ENDPOINT_URL points at our server.
-        var chain = new AwsCredentialChain(k -> switch (k) {
-            case "AWS_ACCESS_KEY_ID" -> "GOOGAK";
-            case "AWS_SECRET_ACCESS_KEY" -> "googsk";
-            default -> null;
-        }, java.nio.file.Path.of("/nonexistent"));
-        var gcs = S3Transport.forGcs(new Http(), URI.create("gs://gcs-bucket/maven/x.jar"),
-                chain, k -> "AWS_ENDPOINT_URL".equals(k) ? endpoint.toString() : null);
+        var chain = new AwsCredentialChain(
+                k -> switch (k) {
+                    case "AWS_ACCESS_KEY_ID" -> "GOOGAK";
+                    case "AWS_SECRET_ACCESS_KEY" -> "googsk";
+                    default -> null;
+                },
+                java.nio.file.Path.of("/nonexistent"));
+        var gcs = S3Transport.forGcs(
+                new Http(),
+                URI.create("gs://gcs-bucket/maven/x.jar"),
+                chain,
+                k -> "AWS_ENDPOINT_URL".equals(k) ? endpoint.toString() : null);
 
         var body = gcs.fetch(URI.create("gs://gcs-bucket/maven/x.jar"), RepoCredential.ANONYMOUS);
         assertThat(body).isPresent();
@@ -133,17 +143,14 @@ class S3TransportTest {
             ex.close();
         });
 
-        var cfg = new dev.jkbuild.model.ObjectStoreConfig(
-                "eu-central-1", endpoint.toString(), "CFGAK", "cfgsk", null);
+        var cfg = new dev.jkbuild.model.ObjectStoreConfig("eu-central-1", endpoint.toString(), "CFGAK", "cfgsk", null);
         // Empty chain + empty env: config must supply region/endpoint/creds.
         var chain = new AwsCredentialChain(k -> null, java.nio.file.Path.of("/nonexistent"));
-        S3Transport t = S3Transport.forS3(new Http(), URI.create("s3://cfg-bucket/x.jar"),
-                cfg, chain, k -> null);
+        S3Transport t = S3Transport.forS3(new Http(), URI.create("s3://cfg-bucket/x.jar"), cfg, chain, k -> null);
 
-        assertThat(t.fetch(URI.create("s3://cfg-bucket/x.jar"), RepoCredential.ANONYMOUS)).isPresent();
-        assertThat(auth.get())
-                .contains("Credential=CFGAK/")
-                .contains("/eu-central-1/s3/aws4_request");
+        assertThat(t.fetch(URI.create("s3://cfg-bucket/x.jar"), RepoCredential.ANONYMOUS))
+                .isPresent();
+        assertThat(auth.get()).contains("Credential=CFGAK/").contains("/eu-central-1/s3/aws4_request");
     }
 
     @Test
@@ -156,9 +163,9 @@ class S3TransportTest {
             ex.close();
         });
 
-        S3Transport anon = new S3Transport(new Http(), endpoint, "us-east-1",
-                Optional.empty(), () -> Instant.parse("2015-08-30T12:36:00Z"));
+        S3Transport anon = new S3Transport(
+                new Http(), endpoint, "us-east-1", Optional.empty(), () -> Instant.parse("2015-08-30T12:36:00Z"));
         anon.fetch(URI.create("s3://public/x.jar"), RepoCredential.ANONYMOUS);
-        assertThat(auth.get()).isNull();   // no Authorization header on unsigned requests
+        assertThat(auth.get()).isNull(); // no Authorization header on unsigned requests
     }
 }

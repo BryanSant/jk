@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import javax.xml.stream.XMLInputFactory;
-import javax.xml.stream.XMLStreamConstants;
-import javax.xml.stream.XMLStreamException;
-import javax.xml.stream.XMLStreamReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -15,6 +11,10 @@ import java.util.Locale;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Stream;
+import javax.xml.stream.XMLInputFactory;
+import javax.xml.stream.XMLStreamConstants;
+import javax.xml.stream.XMLStreamException;
+import javax.xml.stream.XMLStreamReader;
 
 /**
  * Read-only view of the JDKs an IDE has registered in its {@code jdk.table.xml}.
@@ -39,9 +39,7 @@ import java.util.stream.Stream;
 public final class IntellijJdkTable {
 
     private static final IntellijJdkTable SHARED = new IntellijJdkTable(
-            defaultVendorRoots(System::getenv,
-                    System.getProperty("os.name", ""),
-                    System.getProperty("user.home", "")),
+            defaultVendorRoots(System::getenv, System.getProperty("os.name", ""), System.getProperty("user.home", "")),
             System.getProperty("user.home", ""));
 
     /** Process-wide instance backed by the host's real IDE config directories. */
@@ -97,9 +95,7 @@ public final class IntellijJdkTable {
                     : home.resolve("AppData").resolve("Roaming");
         } else {
             String xdg = env.apply("XDG_CONFIG_HOME");
-            base = (xdg != null && !xdg.isBlank())
-                    ? Path.of(xdg)
-                    : home.resolve(".config");
+            base = (xdg != null && !xdg.isBlank()) ? Path.of(xdg) : home.resolve(".config");
         }
         return List.of(base.resolve("JetBrains"), base.resolve("Google"));
     }
@@ -128,8 +124,7 @@ public final class IntellijJdkTable {
         try (InputStream in = Files.newInputStream(table)) {
             XMLStreamReader r = factory.createXMLStreamReader(in);
             while (r.hasNext()) {
-                if (r.next() == XMLStreamConstants.START_ELEMENT
-                        && "homePath".equals(r.getLocalName())) {
+                if (r.next() == XMLStreamConstants.START_ELEMENT && "homePath".equals(r.getLocalName())) {
                     String value = r.getAttributeValue(null, "value");
                     if (value != null && !value.isBlank()) {
                         out.add(canonicalize(value));

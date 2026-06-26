@@ -13,10 +13,7 @@ import java.util.function.Predicate;
  * mutable builder reachable from a static factory ({@code .of(...)}).
  */
 public sealed interface WizardStep
-        permits WizardStep.InputStep,
-                WizardStep.RadioStep,
-                WizardStep.MultiSelectStep,
-                WizardStep.OutputStep {
+        permits WizardStep.InputStep, WizardStep.RadioStep, WizardStep.MultiSelectStep, WizardStep.OutputStep {
 
     String key();
 
@@ -219,8 +216,8 @@ public sealed interface WizardStep
                 var resolved = defaultChoice.isEmpty() && !choices.isEmpty()
                         ? choices.getFirst().id()
                         : defaultChoice;
-                return new RadioStep(key, prompt, choices, choicesFn, resolved, orientation,
-                        customPlaceholder, shouldRun);
+                return new RadioStep(
+                        key, prompt, choices, choicesFn, resolved, orientation, customPlaceholder, shouldRun);
             }
         }
     }
@@ -322,8 +319,7 @@ public sealed interface WizardStep
             }
 
             public MultiSelectStep build() {
-                return new MultiSelectStep(key, prompt, choices, defaults, orientation,
-                        customPlaceholder, shouldRun);
+                return new MultiSelectStep(key, prompt, choices, defaults, orientation, customPlaceholder, shouldRun);
             }
         }
     }

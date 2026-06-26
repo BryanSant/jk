@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CacheGcTest {
 
@@ -82,8 +81,8 @@ class CacheGcTest {
         seed(cache, "keep", Coordinate.of("com.example", "widget", "1.0"));
         String hex = Hashing.sha256Hex("keep".getBytes(StandardCharsets.UTF_8));
         long now = System.currentTimeMillis();
-        Files.writeString(cache.resolve(".access.log"),
-                hex + "\t" + (now - 1000) + "\t1\n" + hex + "\t" + now + "\t1\n");
+        Files.writeString(
+                cache.resolve(".access.log"), hex + "\t" + (now - 1000) + "\t1\n" + hex + "\t" + now + "\t1\n");
 
         CacheGc.run(cache, false);
 

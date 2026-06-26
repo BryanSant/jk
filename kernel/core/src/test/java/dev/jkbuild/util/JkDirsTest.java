@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.util;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class JkDirsTest {
 

@@ -20,12 +20,19 @@ public final class Phase {
     private final PhaseKind kind;
     private final List<String> requires;
     private final IntSupplier scope;
-    private final IntSupplier weight;   // null → weight tracks scope (legacy behaviour)
+    private final IntSupplier weight; // null → weight tracks scope (legacy behaviour)
     private final boolean interpolated;
     private final Body body;
 
-    Phase(String name, String label, PhaseKind kind, List<String> requires,
-          IntSupplier scope, IntSupplier weight, boolean interpolated, Body body) {
+    Phase(
+            String name,
+            String label,
+            PhaseKind kind,
+            List<String> requires,
+            IntSupplier scope,
+            IntSupplier weight,
+            boolean interpolated,
+            Body body) {
         this.name = Objects.requireNonNull(name);
         this.label = label != null ? label : name;
         this.kind = Objects.requireNonNull(kind);
@@ -36,21 +43,35 @@ public final class Phase {
         this.body = Objects.requireNonNull(body);
     }
 
-    public String name() { return name; }
+    public String name() {
+        return name;
+    }
     /** Display label shown in the TUI progress bar. Defaults to {@link #name()}. */
-    public String label() { return label; }
-    public PhaseKind kind() { return kind; }
-    public List<String> requires() { return requires; }
+    public String label() {
+        return label;
+    }
+
+    public PhaseKind kind() {
+        return kind;
+    }
+
+    public List<String> requires() {
+        return requires;
+    }
 
     /**
      * Internal unit count — how granularly this phase ticks (sources, artifacts,
      * tests). Drives the within-phase fraction, <em>not</em> the share of the bar
      * the phase occupies; see {@link #estimateWeight}.
      */
-    public int estimateScope() { return Math.max(0, scope.getAsInt()); }
+    public int estimateScope() {
+        return Math.max(0, scope.getAsInt());
+    }
 
     /** True when a {@link Builder#weight} was set, so the phase self-weights. */
-    public boolean hasExplicitWeight() { return weight != null; }
+    public boolean hasExplicitWeight() {
+        return weight != null;
+    }
 
     /**
      * The phase's share of the progress bar — a time-proportional cost, not a
@@ -71,16 +92,22 @@ public final class Phase {
      * (per-artifact, per-test, per-stage) must leave this off, or a too-short
      * time estimate would race the bar ahead and then stall.
      */
-    public boolean interpolated() { return interpolated; }
+    public boolean interpolated() {
+        return interpolated;
+    }
 
-    public boolean async() { return kind != PhaseKind.SYNC; }
+    public boolean async() {
+        return kind != PhaseKind.SYNC;
+    }
 
     /** Phase body — runs on whatever thread the scheduler dispatched it on. */
     public void execute(PhaseContext ctx) throws Exception {
         body.run(ctx);
     }
 
-    public static Builder builder(String name) { return new Builder(name); }
+    public static Builder builder(String name) {
+        return new Builder(name);
+    }
 
     /** Functional shape of {@link Phase#execute}; {@code Exception} → fail. */
     @FunctionalInterface
@@ -94,7 +121,7 @@ public final class Phase {
         private PhaseKind kind = PhaseKind.SYNC;
         private final List<String> requires = new ArrayList<>();
         private IntSupplier scope = () -> 1;
-        private IntSupplier weight = null;   // null → weight tracks scope
+        private IntSupplier weight = null; // null → weight tracks scope
         private boolean interpolated = false;
         private Body body = ctx -> {};
 
@@ -103,9 +130,15 @@ public final class Phase {
         }
 
         /** Override the TUI display label (defaults to the phase name). */
-        public Builder label(String label) { this.label = label; return this; }
+        public Builder label(String label) {
+            this.label = label;
+            return this;
+        }
 
-        public Builder kind(PhaseKind kind) { this.kind = kind; return this; }
+        public Builder kind(PhaseKind kind) {
+            this.kind = kind;
+            return this;
+        }
 
         /** Run after the named phase(s) finish successfully. */
         public Builder requires(String... names) {
@@ -118,10 +151,16 @@ public final class Phase {
          * starts. Use {@link PhaseContext#updateScope} during execution
          * if it turns out the estimate was low.
          */
-        public Builder scope(IntSupplier supplier) { this.scope = supplier; return this; }
+        public Builder scope(IntSupplier supplier) {
+            this.scope = supplier;
+            return this;
+        }
 
         /** Fixed scope — equivalent to {@code scope(() -> n)}. */
-        public Builder scope(int n) { this.scope = () -> n; return this; }
+        public Builder scope(int n) {
+            this.scope = () -> n;
+            return this;
+        }
 
         /**
          * Set the phase's share of the progress bar — a time-proportional cost,
@@ -131,18 +170,30 @@ public final class Phase {
          * expected duration so the bar paces by time, not by raw counts. When
          * unset, the weight tracks the scope (legacy behaviour).
          */
-        public Builder weight(IntSupplier supplier) { this.weight = supplier; return this; }
+        public Builder weight(IntSupplier supplier) {
+            this.weight = supplier;
+            return this;
+        }
 
         /** Fixed weight — equivalent to {@code weight(() -> n)}. */
-        public Builder weight(int n) { this.weight = () -> n; return this; }
+        public Builder weight(int n) {
+            this.weight = () -> n;
+            return this;
+        }
 
         /**
          * Ease this phase's bar slice forward over elapsed time while it runs.
          * For opaque phases only — see {@link Phase#interpolated()}.
          */
-        public Builder interpolated() { this.interpolated = true; return this; }
+        public Builder interpolated() {
+            this.interpolated = true;
+            return this;
+        }
 
-        public Builder execute(Body body) { this.body = body; return this; }
+        public Builder execute(Body body) {
+            this.body = body;
+            return this;
+        }
 
         public Phase build() {
             return new Phase(name, label, kind, requires, scope, weight, interpolated, body);

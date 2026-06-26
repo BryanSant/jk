@@ -4,7 +4,6 @@ package dev.jkbuild.repo;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Linking;
 import dev.jkbuild.util.Hashing;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -69,7 +68,9 @@ public final class JkMavenLocalRepo {
 
     /** A cached module and the versions present locally. */
     public record Module(String group, String artifact, List<String> versions) {
-        public String moduleKey() { return group + ":" + artifact; }
+        public String moduleKey() {
+            return group + ":" + artifact;
+        }
     }
 
     /**
@@ -126,8 +127,7 @@ public final class JkMavenLocalRepo {
         // Group artifact files by their version directory (the file's parent).
         Map<Path, Boolean> versionDirs = new java.util.TreeMap<>();
         try (Stream<Path> walk = Files.walk(root)) {
-            walk.filter(Files::isRegularFile)
-                    .forEach(p -> versionDirs.put(p.getParent(), Boolean.TRUE));
+            walk.filter(Files::isRegularFile).forEach(p -> versionDirs.put(p.getParent(), Boolean.TRUE));
         } catch (IOException e) {
             return List.of();
         }

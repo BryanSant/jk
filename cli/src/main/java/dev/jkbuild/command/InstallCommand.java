@@ -1,18 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.runtime.CompositeLocator;
-import dev.jkbuild.compile.ClasspathResolver;
-
-import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.cli.PathDisplay;
-import dev.jkbuild.cli.theme.Coords;
-
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Linking;
+import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Coords;
+import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
@@ -21,12 +16,16 @@ import dev.jkbuild.http.Http;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.GitRefSpec;
-import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.model.GitSource;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 import dev.jkbuild.publish.PublishablePom;
 import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
@@ -37,20 +36,17 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.runtime.BuildPipeline;
+import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.CompositeLocator;
 import dev.jkbuild.tool.AppLauncher;
+import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
 import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.GitUrl;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.model.command.Arity;
-import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
-import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.model.command.Param;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -93,25 +89,43 @@ import java.util.Set;
  */
 public final class InstallCommand implements CliCommand {
 
-    @Override public String name() { return "install"; }
-    @Override public String description() { return "Install the current project or a specified target"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "install";
+    }
+
+    @Override
+    public String description() {
+        return "Install the current project or a specified target";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<group>", "Maven groupId for a local file install.", "--group"),
                 Opt.value("<name>", "Maven artifactId for a local file install.", "--name"),
                 Opt.value("<ver>", "Version for a local file install.", "--ver"),
                 Opt.value("<name>", "Launcher name in $JK_BIN_DIR. Default: artifact id.", "--bin"),
                 Opt.value("<class>", "Override the Main-Class to exec.", "--main"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the tool state directory.", "--state-dir").hide(),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the tool state directory.", "--state-dir")
+                        .hide(),
                 Opt.value("<dir>", "Override the bin directory.", "--bin-dir").hide(),
-                Opt.value("<dir>", "Override the libexec directory.", "--libexec-dir").hide(),
-                Opt.value("<dir>", "Override the local Maven repo root (~/.m2) for m2install.", "--m2-dir").hide(),
-                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url").hide(),
+                Opt.value("<dir>", "Override the libexec directory.", "--libexec-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the local Maven repo root (~/.m2) for m2install.", "--m2-dir")
+                        .hide(),
+                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
+                        .hide(),
                 Opt.flag("Skip compiling and running tests.", "--skip-tests"));
     }
-    @Override public List<Param> parameters() {
-        return List.of(Param.of("source", Arity.ZERO_OR_ONE,
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of(
+                "source",
+                Arity.ZERO_OR_ONE,
                 "Maven coord, git URL, or local file path. Omit to\ninstall the current jk.toml project."));
     }
 
@@ -202,7 +216,8 @@ public final class InstallCommand implements CliCommand {
         if (isJar) {
             try {
                 detected = JarManifest.coordinateFrom(filePath);
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+            }
         }
 
         String group = coalesce(groupFlag, detected.map(Coordinate::group).orElse(null));
@@ -214,13 +229,13 @@ public final class InstallCommand implements CliCommand {
                 System.err.println("jk install: --group, --name, and --ver are required for non-JAR files");
             } else {
                 StringBuilder msg = new StringBuilder("jk install: could not detect");
-                if (group == null)    msg.append(" group");
+                if (group == null) msg.append(" group");
                 if (artifact == null) msg.append(" name");
-                if (version == null)  msg.append(" version");
+                if (version == null) msg.append(" version");
                 msg.append(" from JAR metadata");
-                if (group == null)    msg.append("; supply --group");
+                if (group == null) msg.append("; supply --group");
                 if (artifact == null) msg.append("; supply --name");
-                if (version == null)  msg.append("; supply --ver");
+                if (version == null) msg.append("; supply --ver");
                 System.err.println(msg.toString());
             }
             return 64;
@@ -236,9 +251,7 @@ public final class InstallCommand implements CliCommand {
         new JkMavenLocalRepo(cache).materialize(MavenLayout.artifactPath(coord), cas.pathFor(sha256));
 
         if (!global.outputIsJson()) {
-            System.out.println("Installed "
-                    + dev.jkbuild.cli.theme.Coords.gav(coord)
-                    + " to the local cache");
+            System.out.println("Installed " + dev.jkbuild.cli.theme.Coords.gav(coord) + " to the local cache");
         }
         return 0;
     }
@@ -291,8 +304,7 @@ public final class InstallCommand implements CliCommand {
                 .execute(ctx -> {
                     ctx.label("write launcher to " + binDir);
                     Path javaHome = CompileToolchain.runningJavaHome();
-                    Path launcher = ToolLauncher.install(
-                            envsRoot, binDir, javaHome, ctx.require(TOOL_ENV));
+                    Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, ctx.require(TOOL_ENV));
                     ctx.put(LAUNCHER, launcher);
                     ctx.progress(1);
                 })
@@ -306,8 +318,8 @@ public final class InstallCommand implements CliCommand {
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
         if (!result.success()) return failureExit(result, "jk install", cacheDir);
 
-        announceInstall(Coords.gav(goal.get(PRIMARY).orElseThrow()),
-                goal.get(LAUNCHER).orElseThrow(), binDir);
+        announceInstall(
+                Coords.gav(goal.get(PRIMARY).orElseThrow()), goal.get(LAUNCHER).orElseThrow(), binDir);
         return 0;
     }
 
@@ -337,8 +349,7 @@ public final class InstallCommand implements CliCommand {
                     }
                     Path checkout = fetched.checkoutPath();
                     if (!Files.exists(checkout.resolve("jk.toml"))) {
-                        ctx.error("no-jk-toml",
-                                expanded + " has no jk.toml at " + refStr);
+                        ctx.error("no-jk-toml", expanded + " has no jk.toml at " + refStr);
                         throw new RuntimeException("no jk.toml in checkout");
                     }
                     ctx.put(CHECKOUT, checkout);
@@ -349,12 +360,9 @@ public final class InstallCommand implements CliCommand {
 
         // After fetch, hand off to the same project-install pipeline used by
         // mode 1, but with the checkout dir instead of the user's CWD.
-        Goal fetchGoal = Goal.builder("install-git-fetch")
-                .addPhase(fetch)
-                .build();
+        Goal fetchGoal = Goal.builder("install-git-fetch").addPhase(fetch).build();
 
-        GoalResult fetchResult = GoalConsole.run(
-                fetchGoal, GoalConsole.modeFor(global), cacheDir);
+        GoalResult fetchResult = GoalConsole.run(fetchGoal, GoalConsole.modeFor(global), cacheDir);
         if (!fetchResult.success()) {
             for (GoalResult.Diagnostic d : fetchResult.errors()) {
                 if ("no-jk-toml".equals(d.code())) return 70;
@@ -365,8 +373,8 @@ public final class InstallCommand implements CliCommand {
         Path checkout = fetchGoal.get(CHECKOUT).orElseThrow();
         String sha = fetchGoal.get(FETCHED_SHA).orElseThrow();
         if (!global.outputIsJson()) {
-            System.out.println("Fetched " + expanded + " @ " + refStr
-                    + " (" + sha.substring(0, Math.min(7, sha.length())) + ")");
+            System.out.println(
+                    "Fetched " + expanded + " @ " + refStr + " (" + sha.substring(0, Math.min(7, sha.length())) + ")");
         }
 
         return runProjectInstallGoal(checkout, "install-git");
@@ -374,23 +382,19 @@ public final class InstallCommand implements CliCommand {
 
     /** Try the user's ref as a tag first, then a branch. */
     private static GitFetcher.Fetched fetchTagOrBranch(
-            GitFetcher fetcher, String expanded, String canonical, String refStr,
-            boolean refresh) throws IOException {
+            GitFetcher fetcher, String expanded, String canonical, String refStr, boolean refresh) throws IOException {
         IOException tagFailure;
         try {
-            GitSource asTag = new GitSource(
-                    canonical, expanded, new GitRefSpec.Tag(refStr), null, true, false);
+            GitSource asTag = new GitSource(canonical, expanded, new GitRefSpec.Tag(refStr), null, true, false);
             return fetcher.fetch(asTag, refresh);
         } catch (IOException e) {
             tagFailure = e;
         }
         try {
-            GitSource asBranch = new GitSource(
-                    canonical, expanded, new GitRefSpec.Branch(refStr), null, true, false);
+            GitSource asBranch = new GitSource(canonical, expanded, new GitRefSpec.Branch(refStr), null, true, false);
             return fetcher.fetch(asBranch, refresh);
         } catch (IOException branchFailure) {
-            IOException wrapped = new IOException(
-                    "ref `" + refStr + "` not found as tag or branch in " + expanded);
+            IOException wrapped = new IOException("ref `" + refStr + "` not found as tag or branch in " + expanded);
             wrapped.addSuppressed(tagFailure);
             wrapped.addSuppressed(branchFailure);
             throw wrapped;
@@ -434,8 +438,17 @@ public final class InstallCommand implements CliCommand {
         Path lockFile = projectDir.resolve("jk.lock");
         int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                projectDir, cacheDir, projectDir.resolve("jk.toml"), lockFile, projectDir,
-                1, estimatedTestCount, null, null, buildOpts.skipTests, global.verbose);
+                projectDir,
+                cacheDir,
+                projectDir.resolve("jk.toml"),
+                lockFile,
+                projectDir,
+                1,
+                estimatedTestCount,
+                null,
+                null,
+                buildOpts.skipTests,
+                global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
 
@@ -447,8 +460,8 @@ public final class InstallCommand implements CliCommand {
             java.util.Optional<Path> graalHome =
                     new dev.jkbuild.cli.GraalResolver(null, false).resolve(projectDir, pj.graal());
             if (graalHome.isEmpty()) return 1; // GraalResolver already printed why
-            builder.addPhase(BuildPipeline.nativePhase(
-                    projectDir, cacheDir, lockFile, null, graalHome.get(), null, List.of()));
+            builder.addPhase(
+                    BuildPipeline.nativePhase(projectDir, cacheDir, lockFile, null, graalHome.get(), null, List.of()));
         }
 
         // cache-install reads the freshly-built jar; make-install must wait for
@@ -493,8 +506,7 @@ public final class InstallCommand implements CliCommand {
                     }
                     ctx.label("make install to " + binDir);
                     try {
-                        Path launcher = makeInstallApp(projectDir, project, layout, cacheDir,
-                                binDir, libexecDir);
+                        Path launcher = makeInstallApp(projectDir, project, layout, cacheDir, binDir, libexecDir);
                         ctx.put(LAUNCHER, launcher);
                     } catch (IOException e) {
                         ctx.error("make-install", e.getMessage());
@@ -504,10 +516,7 @@ public final class InstallCommand implements CliCommand {
                 })
                 .build();
 
-        Goal goal = builder
-                .addPhase(cacheInstall)
-                .addPhase(makeInstall)
-                .build();
+        Goal goal = builder.addPhase(cacheInstall).addPhase(makeInstall).build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
         if (!result.success()) {
@@ -516,8 +525,8 @@ public final class InstallCommand implements CliCommand {
             return failureExit(result, "jk install", cacheDir);
         }
 
-        announceProjectInstall(Coords.gav(goal.get(PRIMARY).orElseThrow()),
-                goal.get(LAUNCHER).orElse(null), binDir);
+        announceProjectInstall(
+                Coords.gav(goal.get(PRIMARY).orElseThrow()), goal.get(LAUNCHER).orElse(null), binDir);
         return 0;
     }
 
@@ -528,8 +537,7 @@ public final class InstallCommand implements CliCommand {
      * {@code m2install} is set, also materialise jar+pom into
      * {@code ~/.m2/repository}.
      */
-    private void cacheInstallArtifact(JkBuild project, BuildLayout layout, Path cacheDir)
-            throws IOException {
+    private void cacheInstallArtifact(JkBuild project, BuildLayout layout, Path cacheDir) throws IOException {
         var p = project.project();
         Coordinate coord = Coordinate.of(p.group(), p.name(), p.version());
         Cas cas = new Cas(cacheDir);
@@ -566,8 +574,9 @@ public final class InstallCommand implements CliCommand {
      * launcher whose classpath lists exactly those jars. Returns the launcher
      * (or the binary) path.
      */
-    private Path makeInstallApp(Path projectDir, JkBuild project, BuildLayout layout,
-                                Path cacheDir, Path binDir, Path libexecDir) throws IOException {
+    private Path makeInstallApp(
+            Path projectDir, JkBuild project, BuildLayout layout, Path cacheDir, Path binDir, Path libexecDir)
+            throws IOException {
         var p = project.project();
         String bin = binName != null && !binName.isBlank() ? binName : p.name();
         String mainCls = mainClass != null && !mainClass.isBlank() ? mainClass : p.main();
@@ -603,9 +612,10 @@ public final class InstallCommand implements CliCommand {
             Lockfile lock = LockfileReader.read(lockFile);
             for (Lockfile.Artifact pkg : lock.artifacts()) {
                 if (pkg.checksum() == null) continue;
-                if (!pkg.inAnyScope(ClasspathResolver.RUNTIME)) continue;   // EXPORT + MAIN + RUNTIME
+                if (!pkg.inAnyScope(ClasspathResolver.RUNTIME)) continue; // EXPORT + MAIN + RUNTIME
                 String hex = pkg.checksum().startsWith("sha256:")
-                        ? pkg.checksum().substring("sha256:".length()) : pkg.checksum();
+                        ? pkg.checksum().substring("sha256:".length())
+                        : pkg.checksum();
                 Path blob = cas.pathFor(hex);
                 if (!Files.exists(blob)) continue;
                 String artifactId = pkg.name().substring(pkg.name().indexOf(':') + 1);
@@ -615,8 +625,7 @@ public final class InstallCommand implements CliCommand {
             }
         }
         // Workspace sibling jars (built locally) also belong on the classpath.
-        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project,
-                ClasspathResolver.RUNTIME);
+        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUNTIME);
         for (Path sib : siblings.jars()) {
             Path dest = libexecDir.resolve(sib.getFileName().toString());
             Linking.linkOrCopy(sib, dest);
@@ -626,8 +635,12 @@ public final class InstallCommand implements CliCommand {
         // runtime external deps into libexec so the installed app is self-contained.
         try {
             CompositeLocator.Located composite = CompositeLocator.locate(
-                    projectDir, project, ClasspathResolver.RUNTIME,
-                    ClasspathResolver.RUNTIME, new Cas(cacheDir), cacheDir.resolve("git"));
+                    projectDir,
+                    project,
+                    ClasspathResolver.RUNTIME,
+                    ClasspathResolver.RUNTIME,
+                    new Cas(cacheDir),
+                    cacheDir.resolve("git"));
             List<Path> compositeJars = new ArrayList<>(composite.jars());
             compositeJars.addAll(composite.externalDepJars());
             for (Path j : compositeJars) {
@@ -732,11 +745,15 @@ public final class InstallCommand implements CliCommand {
 
     private static boolean looksLikeGitUrl(String input) {
         return input.startsWith("git@")
-                || input.startsWith("http://") || input.startsWith("https://")
-                || input.startsWith("ssh://") || input.startsWith("git://")
+                || input.startsWith("http://")
+                || input.startsWith("https://")
+                || input.startsWith("ssh://")
+                || input.startsWith("git://")
                 || input.startsWith("file://")
-                || input.startsWith("gh:") || input.startsWith("gl:")
-                || input.startsWith("bb:") || input.startsWith("sr:");
+                || input.startsWith("gh:")
+                || input.startsWith("gl:")
+                || input.startsWith("bb:")
+                || input.startsWith("sr:");
     }
 
     /** {@code <url>} or {@code <url>@<ref>} or {@code <url>#<ref>}. */
@@ -753,10 +770,7 @@ public final class InstallCommand implements CliCommand {
         int at = input.lastIndexOf('@');
         if (at > 0) {
             String suffix = input.substring(at + 1);
-            if (!suffix.isEmpty()
-                    && suffix.indexOf('/') < 0
-                    && suffix.indexOf(':') < 0
-                    && suffix.indexOf('@') < 0) {
+            if (!suffix.isEmpty() && suffix.indexOf('/') < 0 && suffix.indexOf(':') < 0 && suffix.indexOf('@') < 0) {
                 return new UrlAndRef(input.substring(0, at), suffix);
             }
         }

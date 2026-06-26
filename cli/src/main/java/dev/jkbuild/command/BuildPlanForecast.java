@@ -22,7 +22,6 @@ import dev.jkbuild.task.FreshnessStamp;
 import dev.jkbuild.task.JavaIncrementalCompile;
 import dev.jkbuild.task.TestStamp;
 import dev.jkbuild.util.JkVersion;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -61,21 +60,34 @@ final class BuildPlanForecast {
     private BuildPlanForecast() {}
 
     /** Per-phase verdict. CACHED = restored from cache; the rest do real work. */
-    enum Status { CACHED, FULL, PARTIAL, RUN }
+    enum Status {
+        CACHED,
+        FULL,
+        PARTIAL,
+        RUN
+    }
 
     /**
      * One phase of a module's build. {@code text} is the right-hand detail after
      * the status glyph; {@code key} is the 8-char action key when known (cached).
      */
     record Phase(String name, Status status, String text, String key) {
-        boolean cached() { return status == Status.CACHED; }
+        boolean cached() {
+            return status == Status.CACHED;
+        }
     }
 
     /** A module's forecast: its build unit and the ordered phases that apply to it. */
-    record Module(BuildGraph.BuildUnit unit, List<Phase> phases,
-                  int sourceCount, int testCount,
-                  boolean producesJar, boolean producesImage) {
-        boolean dirty() { return phases.stream().anyMatch(p -> !p.cached()); }
+    record Module(
+            BuildGraph.BuildUnit unit,
+            List<Phase> phases,
+            int sourceCount,
+            int testCount,
+            boolean producesJar,
+            boolean producesImage) {
+        boolean dirty() {
+            return phases.stream().anyMatch(p -> !p.cached());
+        }
     }
 
     /** Forecast every module in {@code graph}, in topological (dependency) order. */
@@ -87,7 +99,10 @@ final class BuildPlanForecast {
         for (BuildGraph.BuildUnit u : graph.topoOrder()) {
             boolean depDirty = false;
             for (Path dep : graph.edges().getOrDefault(u.dir(), Set.of())) {
-                if (dirty.contains(dep)) { depDirty = true; break; }
+                if (dirty.contains(dep)) {
+                    depDirty = true;
+                    break;
+                }
             }
             Module m = forecastModule(u, depDirty, cas, actionCache, cache);
             // A module's consumed output changes — and so seeds downstream dirtiness —
@@ -100,9 +115,11 @@ final class BuildPlanForecast {
             // reporting "cached". The build then reruns those phases and the live bar,
             // having reserved nothing for them, backslides. Seeding on package too keeps
             // the forecast pessimistic (safe) for the consumer.
-            if (m.phases().stream().anyMatch(p -> !p.cached() && (
-                    p.name().startsWith("compile-main") || p.name().startsWith("compile-kotlin")
-                            || p.name().startsWith("package-jar")))
+            if (m.phases().stream()
+                            .anyMatch(p -> !p.cached()
+                                    && (p.name().startsWith("compile-main")
+                                            || p.name().startsWith("compile-kotlin")
+                                            || p.name().startsWith("package-jar")))
                     || depDirty) {
                 dirty.add(u.dir());
             }
@@ -111,8 +128,8 @@ final class BuildPlanForecast {
         return out;
     }
 
-    private static Module forecastModule(BuildGraph.BuildUnit u, boolean depDirty,
-                                         Cas cas, ActionCache actionCache, Path cache) {
+    private static Module forecastModule(
+            BuildGraph.BuildUnit u, boolean depDirty, Cas cas, ActionCache actionCache, Path cache) {
         JkBuild project = u.manifest();
         Path dir = u.dir();
         List<Phase> phases = new ArrayList<>();
@@ -143,10 +160,16 @@ final class BuildPlanForecast {
                 List<Path> cp = BuildPipeline.mainCompileClasspath(lock, resolver, sib);
                 Path out = layout.classesDir();
                 CompileRequest req = CompileRequest.builder()
-                        .sources(mainSrc).classpath(cp).outputDir(out).release(release)
-                        .extraOptions(javacArgs).processorPath(processorCp).build();
+                        .sources(mainSrc)
+                        .classpath(cp)
+                        .outputDir(out)
+                        .release(release)
+                        .extraOptions(javacArgs)
+                        .processorPath(processorCp)
+                        .build();
                 String taskId = ActionKey.qualifiedTaskId("compile-main", out);
-                Path stateDir = cache.resolve("actions").resolve("incremental-java").resolve(taskId);
+                Path stateDir =
+                        cache.resolve("actions").resolve("incremental-java").resolve(taskId);
                 var pred = JavaIncrementalCompile.predict(taskId, req, JkVersion.VERSION, actionCache, stateDir);
                 phases.add(compilePhase("compile-main", pred, depDirty));
                 if (!phases.get(phases.size() - 1).cached()) compileDirty = true;
@@ -157,9 +180,14 @@ final class BuildPlanForecast {
             if (!ktSrc.isEmpty()) {
                 boolean fresh = !depDirty
                         && FreshnessStamp.looksFresh(layout.kotlinClassesDir(), FreshnessStamp.KOTLIN_STAMP, ktSrc);
-                phases.add(fresh
-                        ? new Phase("compile-kotlin", Status.CACHED, "", null)
-                        : new Phase("compile-kotlin", Status.FULL, "full compile · " + count(ktSrc.size(), "source"), null));
+                phases.add(
+                        fresh
+                                ? new Phase("compile-kotlin", Status.CACHED, "", null)
+                                : new Phase(
+                                        "compile-kotlin",
+                                        Status.FULL,
+                                        "full compile · " + count(ktSrc.size(), "source"),
+                                        null));
                 if (!fresh) compileDirty = true;
             }
 
@@ -167,7 +195,8 @@ final class BuildPlanForecast {
             try {
                 var img = ImageConfigParser.parse(dir.resolve("jk.toml"));
                 producesImage = img.base() != null || img.registry() != null;
-            } catch (Exception ignored) {}
+            } catch (Exception ignored) {
+            }
 
             // ---- compile-test ----
             Path javaTestDir = compact ? dir.resolve("test") : dir.resolve("src/test/java");
@@ -179,8 +208,7 @@ final class BuildPlanForecast {
             if (haveTests) {
                 int testSrcCount = javaTest.size() + ktTest.size();
                 if (compileDirty) {
-                    phases.add(new Phase("compile-test", Status.RUN,
-                            "recompile · main changed", null));
+                    phases.add(new Phase("compile-test", Status.RUN, "recompile · main changed", null));
                     testDirty = true;
                 } else if (!javaTest.isEmpty()) {
                     List<Path> baseCp = new ArrayList<>();
@@ -193,10 +221,16 @@ final class BuildPlanForecast {
                     // hashes the same `pp:` lines. Omitting it here would compute a
                     // different key, miss the cache, and falsely forecast a rebuild.
                     CompileRequest req = CompileRequest.builder()
-                            .sources(javaTest).classpath(baseCp).outputDir(testOut).release(release)
-                            .extraOptions(javacArgs).processorPath(processorCp).build();
+                            .sources(javaTest)
+                            .classpath(baseCp)
+                            .outputDir(testOut)
+                            .release(release)
+                            .extraOptions(javacArgs)
+                            .processorPath(processorCp)
+                            .build();
                     String taskId = ActionKey.qualifiedTaskId("compile-test", testOut);
-                    Path stateDir = cache.resolve("actions").resolve("incremental-java").resolve(taskId);
+                    Path stateDir =
+                            cache.resolve("actions").resolve("incremental-java").resolve(taskId);
                     var pred = JavaIncrementalCompile.predict(taskId, req, JkVersion.VERSION, actionCache, stateDir);
                     Phase p = compilePhase("compile-test", pred, false);
                     phases.add(p);
@@ -218,12 +252,17 @@ final class BuildPlanForecast {
                     List<Path> testRt = testRuntimeClasspath(dir, project, lock, resolver);
                     List<Path> testSrc = new ArrayList<>(javaTest);
                     testSrc.addAll(ktTest);
-                    String stampKey = TestStamp.computeKey(testSrc, layout.classesDir(), lockFile, testRt,
+                    String stampKey = TestStamp.computeKey(
+                            testSrc,
+                            layout.classesDir(),
+                            lockFile,
+                            testRt,
                             BuildPipeline.testStampExtras(dir, project));
                     boolean hit = stampKey != null && present(actionCache, stampKey);
-                    phases.add(hit
-                            ? new Phase("run-tests", Status.CACHED, "· " + tests, null)
-                            : new Phase("run-tests", Status.RUN, "run tests · " + tests, null));
+                    phases.add(
+                            hit
+                                    ? new Phase("run-tests", Status.CACHED, "· " + tests, null)
+                                    : new Phase("run-tests", Status.RUN, "run tests · " + tests, null));
                 }
             }
 
@@ -239,25 +278,30 @@ final class BuildPlanForecast {
                         "classes:" + ClasspathFingerprint.entry(layout.classesDir()),
                         "main:" + (mainClass == null ? "" : mainClass),
                         "manifest:" + project.manifest());
-                String pkgKey = ActionKey.forArtifact(
-                        ActionKey.qualifiedTaskId("package-jar", jar), JkVersion.VERSION, tokens);
+                String pkgKey =
+                        ActionKey.forArtifact(ActionKey.qualifiedTaskId("package-jar", jar), JkVersion.VERSION, tokens);
                 boolean hit = present(actionCache, pkgKey);
-                phases.add(hit
-                        ? new Phase("package-jar", Status.CACHED, "", key8(pkgKey))
-                        : new Phase("package-jar", Status.RUN, "repackage", null));
+                phases.add(
+                        hit
+                                ? new Phase("package-jar", Status.CACHED, "", key8(pkgKey))
+                                : new Phase("package-jar", Status.RUN, "repackage", null));
             }
 
             // ---- package-shadow (fat jar) — only when configured ----
             if (project.project().shadow() && !(mainSrc.isEmpty() && ktSrc.isEmpty())) {
                 boolean fresh = !compileDirty && Files.isRegularFile(layout.shadowJar());
-                phases.add(fresh
-                        ? new Phase("package-shadow", Status.CACHED, "", null)
-                        : new Phase("package-shadow", Status.RUN, "repackage", null));
+                phases.add(
+                        fresh
+                                ? new Phase("package-shadow", Status.CACHED, "", null)
+                                : new Phase("package-shadow", Status.RUN, "repackage", null));
             }
         } catch (Exception e) {
             // Degrade gracefully — never crash explain over one unparseable module.
-            phases.add(new Phase("compile-main", Status.RUN,
-                    "could not predict (" + e.getClass().getSimpleName() + ")", null));
+            phases.add(new Phase(
+                    "compile-main",
+                    Status.RUN,
+                    "could not predict (" + e.getClass().getSimpleName() + ")",
+                    null));
         }
         return new Module(u, phases, sourceCount, testCount, producesJar, producesImage);
     }
@@ -265,20 +309,20 @@ final class BuildPlanForecast {
     /** Map a {@link JavaIncrementalCompile.Prediction} to a phase, honoring upstream dirtiness. */
     private static Phase compilePhase(String name, JavaIncrementalCompile.Prediction pred, boolean depDirty) {
         return switch (pred.outcome()) {
-            case CACHE_HIT -> depDirty
-                    ? new Phase(name, Status.RUN, "recompile · dependency changed", null)
-                    : new Phase(name, Status.CACHED, "", key8(pred.actionKey()));
-            case INCREMENTAL -> new Phase(name, Status.PARTIAL,
-                    "compile · " + count(pred.sourceCount(), "source"), null);
-            case FULL -> new Phase(name, Status.FULL,
-                    "full compile · " + count(pred.sourceCount(), "source"), null);
+            case CACHE_HIT ->
+                depDirty
+                        ? new Phase(name, Status.RUN, "recompile · dependency changed", null)
+                        : new Phase(name, Status.CACHED, "", key8(pred.actionKey()));
+            case INCREMENTAL ->
+                new Phase(name, Status.PARTIAL, "compile · " + count(pred.sourceCount(), "source"), null);
+            case FULL -> new Phase(name, Status.FULL, "full compile · " + count(pred.sourceCount(), "source"), null);
         };
     }
 
     // --- the build's test classpaths, mirrored (best-effort; misses fail safe) ---
 
-    private static List<Path> testCompileClasspath(Path dir, JkBuild project, Lockfile lock,
-                                                   ClasspathResolver resolver) throws java.io.IOException {
+    private static List<Path> testCompileClasspath(Path dir, JkBuild project, Lockfile lock, ClasspathResolver resolver)
+            throws java.io.IOException {
         WorkspaceClasspath.Result sib =
                 WorkspaceClasspath.resolve(dir, project, Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST));
         List<Path> cp = new ArrayList<>(resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
@@ -286,15 +330,16 @@ final class BuildPlanForecast {
         for (Path sl : sib.siblingLockfiles()) {
             try {
                 Lockfile s = LockfileReader.read(sl);
-                for (Path p : resolver.classpathFor(s, ClasspathResolver.COMPILE_MAIN))
-                    if (!cp.contains(p)) cp.add(p);
-            } catch (Exception ignored) { /* best-effort */ }
+                for (Path p : resolver.classpathFor(s, ClasspathResolver.COMPILE_MAIN)) if (!cp.contains(p)) cp.add(p);
+            } catch (Exception ignored) {
+                /* best-effort */
+            }
         }
         return cp;
     }
 
-    private static List<Path> testRuntimeClasspath(Path dir, JkBuild project, Lockfile lock,
-                                                   ClasspathResolver resolver) throws java.io.IOException {
+    private static List<Path> testRuntimeClasspath(Path dir, JkBuild project, Lockfile lock, ClasspathResolver resolver)
+            throws java.io.IOException {
         WorkspaceClasspath.Result sib =
                 WorkspaceClasspath.resolve(dir, project, Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST));
         List<Path> cp = new ArrayList<>(resolver.classpathFor(lock, ClasspathResolver.TEST));
@@ -302,9 +347,10 @@ final class BuildPlanForecast {
         for (Path sl : sib.siblingLockfiles()) {
             try {
                 Lockfile s = LockfileReader.read(sl);
-                for (Path p : resolver.classpathFor(s, ClasspathResolver.RUNTIME))
-                    if (!cp.contains(p)) cp.add(p);
-            } catch (Exception ignored) { /* best-effort */ }
+                for (Path p : resolver.classpathFor(s, ClasspathResolver.RUNTIME)) if (!cp.contains(p)) cp.add(p);
+            } catch (Exception ignored) {
+                /* best-effort */
+            }
         }
         return cp;
     }

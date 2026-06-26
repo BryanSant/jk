@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,7 +40,9 @@ public final class MiseProbe implements LocalToolProbe {
     }
 
     @Override
-    public String name() { return "mise"; }
+    public String name() {
+        return "mise";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {
@@ -52,7 +53,11 @@ public final class MiseProbe implements LocalToolProbe {
                     // Skip mise's `latest` symlink so we don't double-report.
                     .filter(p -> !"latest".equals(p.getFileName().toString()))
                     .map(path -> {
-                        try { return path.toRealPath(); } catch (IOException e) { return path; }
+                        try {
+                            return path.toRealPath();
+                        } catch (IOException e) {
+                            return path;
+                        }
                     })
                     .filter(path -> ToolHealth.isHealthy(spec, path))
                     .findFirst()

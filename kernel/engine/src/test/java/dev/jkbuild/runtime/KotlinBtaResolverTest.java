@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import dev.jkbuild.cache.Cas;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Deterministic coverage of the resolved-closure cache (the warm-build fast
@@ -45,7 +43,8 @@ class KotlinBtaResolverTest {
     @Test
     void absent_cache_file_is_a_miss(@TempDir Path dir) throws IOException {
         Cas cas = new Cas(dir.resolve("cache"));
-        assertThat(KotlinBtaResolver.readCachedClosure(dir.resolve("nope.shas"), cas)).isNull();
+        assertThat(KotlinBtaResolver.readCachedClosure(dir.resolve("nope.shas"), cas))
+                .isNull();
     }
 
     @Test
@@ -82,8 +81,7 @@ class KotlinBtaResolverTest {
         }
         // At or above the floor: accepted (incl. pre-release and future majors).
         for (String ok : List.of("2.4.0", "2.4.20", "2.5.0", "2.4.0-RC2", "3.0.0")) {
-            assertThatCode(() -> KotlinBtaResolver.requireSupportedVersion(ok))
-                    .doesNotThrowAnyException();
+            assertThatCode(() -> KotlinBtaResolver.requireSupportedVersion(ok)).doesNotThrowAnyException();
         }
     }
 

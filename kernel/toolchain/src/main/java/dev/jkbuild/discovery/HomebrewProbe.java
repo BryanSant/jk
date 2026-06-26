@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,10 +30,7 @@ public final class HomebrewProbe implements LocalToolProbe {
     private final String osName;
 
     public HomebrewProbe() {
-        this(List.of(
-                Path.of("/opt/homebrew/Cellar"),
-                Path.of("/usr/local/Cellar")),
-                System.getProperty("os.name", ""));
+        this(List.of(Path.of("/opt/homebrew/Cellar"), Path.of("/usr/local/Cellar")), System.getProperty("os.name", ""));
     }
 
     HomebrewProbe(List<Path> cellars, String osName) {
@@ -43,7 +39,9 @@ public final class HomebrewProbe implements LocalToolProbe {
     }
 
     @Override
-    public String name() { return "homebrew"; }
+    public String name() {
+        return "homebrew";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {
@@ -58,8 +56,7 @@ public final class HomebrewProbe implements LocalToolProbe {
                             .flatMap(v -> candidateHomes(spec, v).stream())
                             .filter(home -> ToolHealth.isHealthy(spec, home))
                             .findFirst()
-                            .map(home -> new DiscoveredTool(home, spec.version(),
-                                    name() + ":" + formula));
+                            .map(home -> new DiscoveredTool(home, spec.version(), name() + ":" + formula));
                     if (hit.isPresent()) return hit;
                 }
             }
@@ -87,8 +84,11 @@ public final class HomebrewProbe implements LocalToolProbe {
         //   libexec/openjdk.jdk/Contents/Home   (openjdk on macOS)
         //   .                                   (rare; some formulae)
         return List.of(
-                cellarVersionDir.resolve("libexec").resolve("openjdk.jdk")
-                        .resolve("Contents").resolve("Home"),
+                cellarVersionDir
+                        .resolve("libexec")
+                        .resolve("openjdk.jdk")
+                        .resolve("Contents")
+                        .resolve("Home"),
                 cellarVersionDir.resolve("libexec"),
                 cellarVersionDir);
     }
@@ -115,8 +115,11 @@ public final class HomebrewProbe implements LocalToolProbe {
     private void collectFormulaInstalls(Path formulaDir, List<JdkHit> out) {
         try (Stream<Path> versionDirs = Files.list(formulaDir)) {
             versionDirs.filter(Files::isDirectory).forEach(versionDir -> {
-                Path macHome = versionDir.resolve("libexec").resolve("openjdk.jdk")
-                        .resolve("Contents").resolve("Home");
+                Path macHome = versionDir
+                        .resolve("libexec")
+                        .resolve("openjdk.jdk")
+                        .resolve("Contents")
+                        .resolve("Home");
                 Path candidate = Files.isDirectory(macHome) ? macHome : versionDir.resolve("libexec");
                 ProbeSupport.discoverJdk(candidate, name()).ifPresent(out::add);
             });

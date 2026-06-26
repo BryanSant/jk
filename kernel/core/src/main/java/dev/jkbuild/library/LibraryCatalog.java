@@ -2,10 +2,6 @@
 package dev.jkbuild.library;
 
 import dev.jkbuild.util.JkDirs;
-import org.tomlj.Toml;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
@@ -20,6 +16,9 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import org.tomlj.Toml;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * Curated mapping of short names to {@code group:artifact} pairs.
@@ -201,11 +200,14 @@ public final class LibraryCatalog {
         if (parts.isEmpty()) return List.of();
         List<String> hits = new ArrayList<>();
         for (String name : names()) {
-            if (name.equalsIgnoreCase(unknownName)) continue;   // not a "suggestion"
+            if (name.equalsIgnoreCase(unknownName)) continue; // not a "suggestion"
             String lower = name.toLowerCase(java.util.Locale.ROOT);
             boolean allMatch = true;
             for (String p : parts) {
-                if (!lower.contains(p)) { allMatch = false; break; }
+                if (!lower.contains(p)) {
+                    allMatch = false;
+                    break;
+                }
             }
             if (allMatch) {
                 hits.add(name);
@@ -242,13 +244,12 @@ public final class LibraryCatalog {
             String text = new String(in.readAllBytes(), StandardCharsets.UTF_8);
             return new Layer("bundled", parseTable(text, BUNDLED_RESOURCE));
         } catch (IOException e) {
-            throw new UncheckedIOException(
-                    "failed to load bundled library catalog from " + BUNDLED_RESOURCE, e);
+            throw new UncheckedIOException("failed to load bundled library catalog from " + BUNDLED_RESOURCE, e);
         }
     }
 
-    private static Optional<Layer> loadFileLayer(Path file, String layerName,
-                                                 java.util.function.Consumer<String> warn) {
+    private static Optional<Layer> loadFileLayer(
+            Path file, String layerName, java.util.function.Consumer<String> warn) {
         if (!Files.isRegularFile(file)) return Optional.empty();
         try {
             String text = Files.readString(file, StandardCharsets.UTF_8);
@@ -257,8 +258,7 @@ public final class LibraryCatalog {
             // Fail soft: a malformed user/downloaded layer should warn, not
             // break every jk invocation. Hand the message to the caller's sink
             // (the CLI routes it to stderr) and skip the layer.
-            warn.accept("warning: ignoring library catalog layer at "
-                    + file + " — " + e.getMessage());
+            warn.accept("warning: ignoring library catalog layer at " + file + " — " + e.getMessage());
             return Optional.empty();
         }
     }
@@ -267,13 +267,12 @@ public final class LibraryCatalog {
     static Map<String, Module> parseTable(String toml, String displayPath) {
         TomlParseResult result = Toml.parse(toml);
         if (result.hasErrors()) {
-            throw new IllegalStateException(displayPath
-                    + " has invalid TOML: " + result.errors().getFirst().getMessage());
+            throw new IllegalStateException(displayPath + " has invalid TOML: "
+                    + result.errors().getFirst().getMessage());
         }
         TomlTable table = result.getTable("libraries");
         if (table == null) {
-            throw new IllegalStateException(displayPath
-                    + " is missing the required [libraries] table");
+            throw new IllegalStateException(displayPath + " is missing the required [libraries] table");
         }
         return parseLibrariesTable(table, displayPath);
     }
@@ -287,13 +286,13 @@ public final class LibraryCatalog {
         for (String name : table.keySet()) {
             Object raw = table.get(name);
             if (!(raw instanceof String coord)) {
-                throw new IllegalStateException(displayPath + ".libraries." + name
-                        + " must be a string of the form \"group:artifact\"");
+                throw new IllegalStateException(
+                        displayPath + ".libraries." + name + " must be a string of the form \"group:artifact\"");
             }
             int sep = coord.indexOf(':');
             if (sep <= 0 || sep == coord.length() - 1) {
-                throw new IllegalStateException(displayPath + ".libraries." + name
-                        + " must be \"group:artifact\" — got: " + coord);
+                throw new IllegalStateException(
+                        displayPath + ".libraries." + name + " must be \"group:artifact\" — got: " + coord);
             }
             if (coord.indexOf(':', sep + 1) >= 0) {
                 throw new IllegalStateException(displayPath + ".libraries." + name

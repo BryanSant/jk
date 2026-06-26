@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.lock;
 
-import dev.jkbuild.model.Scope;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import dev.jkbuild.model.Scope;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /**
  * Round-trip the optional {@code pinned-by} field on {@link Lockfile.Artifact}.

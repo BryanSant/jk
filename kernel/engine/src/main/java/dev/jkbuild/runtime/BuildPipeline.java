@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-
-
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.compile.CompileRequest;
@@ -31,7 +29,6 @@ import dev.jkbuild.task.ActionKey;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.worker.WorkerJar;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -60,36 +57,46 @@ public final class BuildPipeline {
     private BuildPipeline() {}
 
     // ---- shared cross-phase keys ---------------------------------------
-    public static final GoalKey<JkBuild>   PROJECT       = GoalKey.of("project",        JkBuild.class);
-    public static final GoalKey<Lockfile>  LOCKFILE      = GoalKey.of("lockfile",       Lockfile.class);
-    public static final GoalKey<Path>      JAVA_HOME     = GoalKey.of("java-home",      Path.class);
-    public static final GoalKey<Integer>   RELEASE       = GoalKey.of("release",        Integer.class);
+    public static final GoalKey<JkBuild> PROJECT = GoalKey.of("project", JkBuild.class);
+    public static final GoalKey<Lockfile> LOCKFILE = GoalKey.of("lockfile", Lockfile.class);
+    public static final GoalKey<Path> JAVA_HOME = GoalKey.of("java-home", Path.class);
+    public static final GoalKey<Integer> RELEASE = GoalKey.of("release", Integer.class);
+
     @SuppressWarnings("rawtypes")
-    public static final GoalKey<List> CLASSPATH       = GoalKey.of("classpath",      List.class);
+    public static final GoalKey<List> CLASSPATH = GoalKey.of("classpath", List.class);
+
     @SuppressWarnings("rawtypes")
-    public static final GoalKey<List> JAVA_SOURCES    = GoalKey.of("java-sources",   List.class);
+    public static final GoalKey<List> JAVA_SOURCES = GoalKey.of("java-sources", List.class);
+
     @SuppressWarnings("rawtypes")
-    public static final GoalKey<List> KOTLIN_SOURCES  = GoalKey.of("kotlin-sources", List.class);
+    public static final GoalKey<List> KOTLIN_SOURCES = GoalKey.of("kotlin-sources", List.class);
+
     @SuppressWarnings("rawtypes")
-    public static final GoalKey<List> JAVAC_ARGS      = GoalKey.of("javac-args",     List.class);
+    public static final GoalKey<List> JAVAC_ARGS = GoalKey.of("javac-args", List.class);
+
     @SuppressWarnings("rawtypes")
-    public static final GoalKey<List> PROCESSOR_CP    = GoalKey.of("processor-cp",   List.class);
+    public static final GoalKey<List> PROCESSOR_CP = GoalKey.of("processor-cp", List.class);
+
     @SuppressWarnings("rawtypes")
-    public static final GoalKey<List> COMPILE_TEST_CP = GoalKey.of("cp-test",        List.class);
+    public static final GoalKey<List> COMPILE_TEST_CP = GoalKey.of("cp-test", List.class);
+
     @SuppressWarnings("rawtypes")
-    public static final GoalKey<List> TEST_RUNTIME_CP = GoalKey.of("cp-runtime",     List.class);
-    public static final GoalKey<String>    ACTION_KEY    = GoalKey.of("action-key",     String.class);
+    public static final GoalKey<List> TEST_RUNTIME_CP = GoalKey.of("cp-runtime", List.class);
+
+    public static final GoalKey<String> ACTION_KEY = GoalKey.of("action-key", String.class);
+
     @SuppressWarnings("rawtypes")
-    public static final GoalKey<List> TEST_SOURCES     = GoalKey.of("test-sources",   List.class);
-    public static final GoalKey<String>    BUILD_OUTCOME = GoalKey.of("build-outcome",  String.class);
-    public static final GoalKey<String>    KOTLIN_OUTCOME = GoalKey.of("kotlin-outcome", String.class);
-    public static final GoalKey<Path>      JAR_PATH      = GoalKey.of("jar-path",       Path.class);
-    public static final GoalKey<Path>      MAIN_CLASSES  = GoalKey.of("main-classes",   Path.class);
-    public static final GoalKey<Path>      TEST_CLASSES  = GoalKey.of("test-classes",   Path.class);
-    public static final GoalKey<BuildLayout> LAYOUT      = GoalKey.of("layout",         BuildLayout.class);
+    public static final GoalKey<List> TEST_SOURCES = GoalKey.of("test-sources", List.class);
+
+    public static final GoalKey<String> BUILD_OUTCOME = GoalKey.of("build-outcome", String.class);
+    public static final GoalKey<String> KOTLIN_OUTCOME = GoalKey.of("kotlin-outcome", String.class);
+    public static final GoalKey<Path> JAR_PATH = GoalKey.of("jar-path", Path.class);
+    public static final GoalKey<Path> MAIN_CLASSES = GoalKey.of("main-classes", Path.class);
+    public static final GoalKey<Path> TEST_CLASSES = GoalKey.of("test-classes", Path.class);
+    public static final GoalKey<BuildLayout> LAYOUT = GoalKey.of("layout", BuildLayout.class);
     public static final GoalKey<JUnitLauncher.Result> TEST_RESULT =
             GoalKey.of("test-result", JUnitLauncher.Result.class);
-    public static final GoalKey<Boolean>   NO_TEST_SOURCES = GoalKey.of("no-test-sources", Boolean.class);
+    public static final GoalKey<Boolean> NO_TEST_SOURCES = GoalKey.of("no-test-sources", Boolean.class);
 
     /**
      * Process-wide gate that serializes the {@code run-tests} phase across
@@ -98,12 +105,14 @@ public final class BuildPipeline {
      * at a time by default; {@link #setParallelTests} lifts the gate for users who
      * opt into true parallel test execution ({@code --parallel-tests}).
      */
-    private static final java.util.concurrent.Semaphore TEST_GATE =
-            new java.util.concurrent.Semaphore(1);
+    private static final java.util.concurrent.Semaphore TEST_GATE = new java.util.concurrent.Semaphore(1);
+
     private static volatile boolean parallelTests = false;
 
     /** Allow concurrent {@code run-tests} phases (opt-in; default serialized). */
-    public static void setParallelTests(boolean enabled) { parallelTests = enabled; }
+    public static void setParallelTests(boolean enabled) {
+        parallelTests = enabled;
+    }
 
     /** Everything a build needs that isn't carried through the goal's state. */
     public record Inputs(
@@ -122,19 +131,62 @@ public final class BuildPipeline {
             boolean compileOnly) {
 
         /** Back-compat: a full build (not test-only, not compile-only). */
-        public Inputs(Path dir, Path cache, Path buildFile, Path lockFile, Path lockDir,
-                      int workerCount, int estimatedTestCount, String profileName, Path jdksDir,
-                      boolean skipTests, boolean verbose) {
-            this(dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount,
-                    profileName, jdksDir, skipTests, verbose, false, false);
+        public Inputs(
+                Path dir,
+                Path cache,
+                Path buildFile,
+                Path lockFile,
+                Path lockDir,
+                int workerCount,
+                int estimatedTestCount,
+                String profileName,
+                Path jdksDir,
+                boolean skipTests,
+                boolean verbose) {
+            this(
+                    dir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockDir,
+                    workerCount,
+                    estimatedTestCount,
+                    profileName,
+                    jdksDir,
+                    skipTests,
+                    verbose,
+                    false,
+                    false);
         }
 
         /** A test-only or full build (not compile-only). */
-        public Inputs(Path dir, Path cache, Path buildFile, Path lockFile, Path lockDir,
-                      int workerCount, int estimatedTestCount, String profileName, Path jdksDir,
-                      boolean skipTests, boolean verbose, boolean testOnly) {
-            this(dir, cache, buildFile, lockFile, lockDir, workerCount, estimatedTestCount,
-                    profileName, jdksDir, skipTests, verbose, testOnly, false);
+        public Inputs(
+                Path dir,
+                Path cache,
+                Path buildFile,
+                Path lockFile,
+                Path lockDir,
+                int workerCount,
+                int estimatedTestCount,
+                String profileName,
+                Path jdksDir,
+                boolean skipTests,
+                boolean verbose,
+                boolean testOnly) {
+            this(
+                    dir,
+                    cache,
+                    buildFile,
+                    lockFile,
+                    lockDir,
+                    workerCount,
+                    estimatedTestCount,
+                    profileName,
+                    jdksDir,
+                    skipTests,
+                    verbose,
+                    testOnly,
+                    false);
         }
     }
 
@@ -148,24 +200,24 @@ public final class BuildPipeline {
     // heavyweights — compile, test-run, test-compile — own the bulk. Phases that
     // report fine-grained progress (sync per-artifact, run-tests per-test) advance
     // smoothly within their slice; opaque ones (javac) fill theirs on completion.
-    static final int W_PARSE        = 4;
-    static final int W_SYNC         = 6;
-    static final int W_JDK          = 3;
-    static final int W_COMPILE      = 30;
-    static final int W_COMPILE_KT   = 30;
-    static final int W_ASSEMBLE     = 2;
-    static final int W_RESOURCES    = 1;
+    static final int W_PARSE = 4;
+    static final int W_SYNC = 6;
+    static final int W_JDK = 3;
+    static final int W_COMPILE = 30;
+    static final int W_COMPILE_KT = 30;
+    static final int W_ASSEMBLE = 2;
+    static final int W_RESOURCES = 1;
     static final int W_COMPILE_TEST = 12;
-    static final int W_RUN_TESTS    = 30;
-    static final int W_PACKAGE      = 5;
-    static final int W_STAMP        = 1;
-    static final int W_SHADOW       = 10;   // fat/shadow jar (vs 5 for a plain jar)
+    static final int W_RUN_TESTS = 30;
+    static final int W_PACKAGE = 5;
+    static final int W_STAMP = 1;
+    static final int W_SHADOW = 10; // fat/shadow jar (vs 5 for a plain jar)
     // A fully-cached module's whole always-run tail (parse + resources + stamps +
     // assemble) collapses to this single touch: it only re-parses the build file and
     // re-checks stamps (~30 ms), so reserving the full static tail (~10 weight ≈ 1.5 s)
     // per cached module piled up phantom wall-clock in the workspace estimate.
     static final int W_CACHED_TOUCH = 1;
-    static final int W_NATIVE       = 90;   // native-image build ≈ 9 steps × 10
+    static final int W_NATIVE = 90; // native-image build ≈ 9 steps × 10
 
     /**
      * Assemble the goal builder with the core build phases (parse → sync → jdk →
@@ -225,9 +277,8 @@ public final class BuildPipeline {
         // classes. The terminal phase downstream steps wait on is the assembler
         // when mixed, else whichever single compiler ran.
         final boolean mixed = useJava && useKotlin;
-        final boolean kotlinModule = useKotlin;   // effectively-final copy for lambdas
-        String mainCompile = mixed ? "assemble-classes"
-                : (useKotlin ? "compile-kotlin" : "compile-java");
+        final boolean kotlinModule = useKotlin; // effectively-final copy for lambdas
+        String mainCompile = mixed ? "assemble-classes" : (useKotlin ? "compile-kotlin" : "compile-java");
 
         // Predict each phase's bar weight from the work it will actually do this
         // run (skipped/cached phases collapse to ~1; real work dominates). Computed
@@ -238,8 +289,8 @@ public final class BuildPipeline {
         final java.util.function.Supplier<EffortWeights.Plan> plan = () -> {
             EffortWeights.Plan p = planRef.get();
             if (p == null) {
-                planRef.compareAndSet(null,
-                        EffortWeights.predict(in, cas, compact, mixedWithJava, kotlinModule, forceRebuild));
+                planRef.compareAndSet(
+                        null, EffortWeights.predict(in, cas, compact, mixedWithJava, kotlinModule, forceRebuild));
                 p = planRef.get();
             }
             return p;
@@ -263,8 +314,13 @@ public final class BuildPipeline {
                 .weight(() -> plan.get().fullyCached() ? W_CACHED_TOUCH : W_PARSE)
                 .scope(() -> {
                     if (Files.exists(in.lockFile())) {
-                        try { return LockfileReader.read(in.lockFile()).artifacts().size() + 5; }
-                        catch (Exception ignored) {}
+                        try {
+                            return LockfileReader.read(in.lockFile())
+                                            .artifacts()
+                                            .size()
+                                    + 5;
+                        } catch (Exception ignored) {
+                        }
                     }
                     return 10;
                 })
@@ -291,8 +347,7 @@ public final class BuildPipeline {
                             throw new RuntimeException("dependency resolution failed");
                         }
                         if (result.status() != 0) {
-                            ctx.error("lock", result.error() != null
-                                    ? result.error() : "dependency resolution failed");
+                            ctx.error("lock", result.error() != null ? result.error() : "dependency resolution failed");
                             throw new RuntimeException("lock failed");
                         }
                         ctx.put(LOCKFILE, result.lockfile());
@@ -300,9 +355,15 @@ public final class BuildPipeline {
                         ctx.label("jk.toml changed — updating lock");
                         Lockfile existing = LockfileReader.read(in.lockFile());
                         Lockfile updated = AutoLock.maybeReLock(
-                                in.dir(), existing, in.lockFile(), in.cache(), null,
+                                in.dir(),
+                                existing,
+                                in.lockFile(),
+                                in.cache(),
+                                null,
                                 dev.jkbuild.util.JkVersion.VERSION,
-                                List.of(), true, dev.jkbuild.resolver.ResolveObserver.NOOP);
+                                List.of(),
+                                true,
+                                dev.jkbuild.resolver.ResolveObserver.NOOP);
                         ctx.put(LOCKFILE, updated != null ? updated : existing);
                     } else {
                         ctx.put(LOCKFILE, LockfileReader.read(in.lockFile()));
@@ -327,8 +388,14 @@ public final class BuildPipeline {
 
                     // Composite source deps (`path` + branch-git): build from source
                     // and inject onto the main compile classpath (jk's includeBuild).
-                    List<String> mainComposite = addCompositeDeps(in.dir(), project, cas, in.cache(),
-                            Set.of(Scope.EXPORT, Scope.MAIN), ClasspathResolver.COMPILE_MAIN, mainCp);
+                    List<String> mainComposite = addCompositeDeps(
+                            in.dir(),
+                            project,
+                            cas,
+                            in.cache(),
+                            Set.of(Scope.EXPORT, Scope.MAIN),
+                            ClasspathResolver.COMPILE_MAIN,
+                            mainCp);
                     if (!mainComposite.isEmpty()) {
                         for (String e : mainComposite) ctx.error("composite", e);
                         throw new RuntimeException("composite dependency build failed");
@@ -339,23 +406,22 @@ public final class BuildPipeline {
                     // Default lint (deprecation/unchecked) unless [build] lint = false;
                     // the profile's own javac args win (appended after). Shared by the
                     // main- and test-compile phases (both read JAVAC_ARGS).
-                    ctx.put(JAVAC_ARGS, dev.jkbuild.compile.JavacLint.effectiveArgs(
-                            project.build().lint(),
-                            profile == null ? List.of() : profile.javacArgs()));
+                    ctx.put(
+                            JAVAC_ARGS,
+                            dev.jkbuild.compile.JavacLint.effectiveArgs(
+                                    project.build().lint(), profile == null ? List.of() : profile.javacArgs()));
                     ctx.put(CLASSPATH, mainCp);
 
                     // Annotation processors live in their own scope (kept off the
                     // compile classpath); javac discovers them via -processorpath.
-                    ctx.put(PROCESSOR_CP,
-                            new ArrayList<>(resolver.classpathFor(lock, Set.of(Scope.PROCESSOR))));
+                    ctx.put(PROCESSOR_CP, new ArrayList<>(resolver.classpathFor(lock, Set.of(Scope.PROCESSOR))));
 
                     WorkspaceClasspath.Result testSiblings =
                             WorkspaceClasspath.resolve(in.dir(), project, Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST));
-                    List<Path> compileTestCp = new ArrayList<>(
-                            resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
+                    List<Path> compileTestCp =
+                            new ArrayList<>(resolver.classpathFor(lock, ClasspathResolver.COMPILE_TEST));
                     compileTestCp.addAll(testSiblings.jars());
-                    List<Path> testRuntimeCp = new ArrayList<>(
-                            resolver.classpathFor(lock, ClasspathResolver.TEST));
+                    List<Path> testRuntimeCp = new ArrayList<>(resolver.classpathFor(lock, ClasspathResolver.TEST));
                     testRuntimeCp.addAll(testSiblings.jars());
                     // A sibling's own external deps (e.g. resolver's maven-artifact) must
                     // also reach the test classpath, or tests exercising sibling code hit
@@ -369,13 +435,27 @@ public final class BuildPipeline {
                             for (Path p : resolver.classpathFor(sl, ClasspathResolver.RUNTIME)) {
                                 if (!testRuntimeCp.contains(p)) testRuntimeCp.add(p);
                             }
-                        } catch (Exception ignored) { /* best-effort */ }
+                        } catch (Exception ignored) {
+                            /* best-effort */
+                        }
                     }
                     // Composite deps on the test classpaths too (compile + runtime scopes).
-                    List<String> testComposite = addCompositeDeps(in.dir(), project, cas, in.cache(),
-                            Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST), ClasspathResolver.COMPILE_TEST, compileTestCp);
-                    addCompositeDeps(in.dir(), project, cas, in.cache(),
-                            Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST), ClasspathResolver.RUNTIME, testRuntimeCp);
+                    List<String> testComposite = addCompositeDeps(
+                            in.dir(),
+                            project,
+                            cas,
+                            in.cache(),
+                            Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST),
+                            ClasspathResolver.COMPILE_TEST,
+                            compileTestCp);
+                    addCompositeDeps(
+                            in.dir(),
+                            project,
+                            cas,
+                            in.cache(),
+                            Set.of(Scope.EXPORT, Scope.MAIN, Scope.TEST),
+                            ClasspathResolver.RUNTIME,
+                            testRuntimeCp);
                     if (!testComposite.isEmpty()) {
                         for (String e : testComposite) ctx.error("composite", e);
                         throw new RuntimeException("composite dependency build failed");
@@ -413,21 +493,35 @@ public final class BuildPipeline {
                 .requires("parse-build")
                 .weight(() -> plan.get().sync())
                 .scope(() -> {
-                    try { return LockfileReader.read(in.lockFile()).artifacts().size(); }
-                    catch (Exception ignored) { return 10; }
+                    try {
+                        return LockfileReader.read(in.lockFile()).artifacts().size();
+                    } catch (Exception ignored) {
+                        return 10;
+                    }
                 })
                 .execute(ctx -> {
                     Lockfile lock = ctx.require(LOCKFILE);
                     // Scope is already counted up front by estimateScope() (artifact
                     // count); progress(1)-per-artifact below fills it.
                     var observer = new CacheSync.ProgressObserver() {
-                        @Override public void fetched(Lockfile.Artifact pkg) {
+                        @Override
+                        public void fetched(Lockfile.Artifact pkg) {
                             ctx.label("fetched " + pkg.name());
                             ctx.progress(1);
                         }
-                        @Override public void upToDate(Lockfile.Artifact pkg) { ctx.progress(1); }
-                        @Override public void skipped(Lockfile.Artifact pkg)  { ctx.progress(1); }
-                        @Override public void failed(Lockfile.Artifact pkg, String err) {
+
+                        @Override
+                        public void upToDate(Lockfile.Artifact pkg) {
+                            ctx.progress(1);
+                        }
+
+                        @Override
+                        public void skipped(Lockfile.Artifact pkg) {
+                            ctx.progress(1);
+                        }
+
+                        @Override
+                        public void failed(Lockfile.Artifact pkg, String err) {
                             ctx.error("dep", pkg.name() + " — " + err);
                             ctx.progress(1);
                         }
@@ -450,11 +544,9 @@ public final class BuildPipeline {
                     Lockfile lock = ctx.require(LOCKFILE);
                     JkBuild project = ctx.require(PROJECT);
                     try {
-                        JdkEnsure.ensure(in.dir(), in.jdksDir(), project, lock,
-                                m -> ctx.warn("jdk", m));
+                        JdkEnsure.ensure(in.dir(), in.jdksDir(), project, lock, m -> ctx.warn("jdk", m));
                     } catch (Exception e) {
-                        ctx.error("jdk", e.getMessage() == null
-                                ? e.getClass().getSimpleName() : e.getMessage());
+                        ctx.error("jdk", e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage());
                         throw e;
                     }
                     ctx.progress(1);
@@ -465,9 +557,10 @@ public final class BuildPipeline {
         Phase compileJava = Phase.builder("compile-java")
                 .label("Compiling")
                 .kind(PhaseKind.CPU)
-                .requires(mixed
-                        ? new String[]{"parse-build", "sync-deps", "ensure-jdk", "compile-kotlin"}
-                        : new String[]{"parse-build", "sync-deps", "ensure-jdk"})
+                .requires(
+                        mixed
+                                ? new String[] {"parse-build", "sync-deps", "ensure-jdk", "compile-kotlin"}
+                                : new String[] {"parse-build", "sync-deps", "ensure-jdk"})
                 // Scope counts sources (granularity); weight is the bar share. javac
                 // is opaque — one progress(sources.size()) on completion — so ease the
                 // slice forward over time while it runs instead of sitting flat.
@@ -518,9 +611,10 @@ public final class BuildPipeline {
                         stampInputs = new ArrayList<>(classpath);
                         stampInputs.addAll(processorCp);
                     }
-                    if (!rerun && dev.jkbuild.task.FreshnessStamp.isFresh(
-                            javaOut, dev.jkbuild.task.FreshnessStamp.JAVA_STAMP, sources, stampInputs)) {
-                        ctx.reweight(EffortWeights.SKIP);   // nothing to compile this run
+                    if (!rerun
+                            && dev.jkbuild.task.FreshnessStamp.isFresh(
+                                    javaOut, dev.jkbuild.task.FreshnessStamp.JAVA_STAMP, sources, stampInputs)) {
+                        ctx.reweight(EffortWeights.SKIP); // nothing to compile this run
                         ctx.label("up to date");
                         ctx.put(BUILD_OUTCOME, "up-to-date");
                         ctx.progress(sources.size());
@@ -529,14 +623,19 @@ public final class BuildPipeline {
                     @SuppressWarnings("unchecked")
                     List<String> javacArgs = (List<String>) ctx.require(JAVAC_ARGS);
                     CompileRequest request = CompileRequest.builder()
-                            .sources(sources).classpath(classpath)
-                            .outputDir(javaOut).release(ctx.require(RELEASE))
-                            .extraOptions(javacArgs).javaHome(ctx.require(JAVA_HOME))
+                            .sources(sources)
+                            .classpath(classpath)
+                            .outputDir(javaOut)
+                            .release(ctx.require(RELEASE))
+                            .extraOptions(javacArgs)
+                            .javaHome(ctx.require(JAVA_HOME))
                             .processorPath(processorCp)
                             .build();
                     String taskId = ActionKey.qualifiedTaskId("compile-main", javaOut);
-                    Path javaStateDir = in.cache().resolve("actions")
-                            .resolve("incremental-java").resolve(taskId);
+                    Path javaStateDir = in.cache()
+                            .resolve("actions")
+                            .resolve("incremental-java")
+                            .resolve(taskId);
                     // Reweight the bar slice now that the real request is known: a CAS
                     // action-cache hit means a cheap hard-link restore (3), not a full
                     // javac (ceil(sources × 0.1)). Uses the exact key
@@ -544,12 +643,14 @@ public final class BuildPipeline {
                     // actually happens — no goal-start reconstruction divergence.
                     if (!rerun) {
                         try {
-                            boolean restores = actionCache.lookup(
-                                    ActionKey.forJavac(taskId, request, dev.jkbuild.util.JkVersion.VERSION))
+                            boolean restores = actionCache
+                                    .lookup(ActionKey.forJavac(taskId, request, dev.jkbuild.util.JkVersion.VERSION))
                                     .isPresent();
-                            ctx.reweight(restores ? EffortWeights.RESTORE
-                                    : EffortWeights.compileWeight(sources.size()));
-                        } catch (Exception ignored) { /* keep the up-front estimate */ }
+                            ctx.reweight(
+                                    restores ? EffortWeights.RESTORE : EffortWeights.compileWeight(sources.size()));
+                        } catch (Exception ignored) {
+                            /* keep the up-front estimate */
+                        }
                     }
                     // With processors declared, hand the incremental compiler an AP setup:
                     // a *lazy* worker-jar resolver + a stable generated-sources dir. The
@@ -564,22 +665,31 @@ public final class BuildPipeline {
                     if (!processorCp.isEmpty()) {
                         Path genDir = ctx.require(LAYOUT).generatedSourcesDir("annotations");
                         Files.createDirectories(genDir);
-                        ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(() -> {
-                            try {
-                                return WorkerJar.JAVA_COMPILER.locate(cas);
-                            } catch (RuntimeException e) {
-                                ctx.warn("javac", "java-compiler worker unavailable ("
-                                        + e.getMessage() + "); compiling with plain javac"
-                                        + " (no incremental annotation-processing provenance)");
-                                return null;
-                            }
-                        }, genDir);
+                        ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(
+                                () -> {
+                                    try {
+                                        return WorkerJar.JAVA_COMPILER.locate(cas);
+                                    } catch (RuntimeException e) {
+                                        ctx.warn(
+                                                "javac",
+                                                "java-compiler worker unavailable ("
+                                                        + e.getMessage() + "); compiling with plain javac"
+                                                        + " (no incremental annotation-processing provenance)");
+                                        return null;
+                                    }
+                                },
+                                genDir);
                     }
                     ctx.label("compiling " + sources.size() + " sources");
-                    dev.jkbuild.task.JavaIncrementalCompile.Result r =
-                            dev.jkbuild.task.JavaIncrementalCompile.run(
-                                    taskId, request, dev.jkbuild.util.JkVersion.VERSION,
-                                    !rerun, cas, actionCache, javaStateDir, ap);
+                    dev.jkbuild.task.JavaIncrementalCompile.Result r = dev.jkbuild.task.JavaIncrementalCompile.run(
+                            taskId,
+                            request,
+                            dev.jkbuild.util.JkVersion.VERSION,
+                            !rerun,
+                            cas,
+                            actionCache,
+                            javaStateDir,
+                            ap);
                     ctx.put(ACTION_KEY, r.actionKey());
                     // Forward every javac diagnostic to the terminal, by severity:
                     // errors fail the build, warnings/notes (e.g. deprecation) are
@@ -589,10 +699,8 @@ public final class BuildPipeline {
                         if (d.severity() == CompileResult.Severity.ERROR) ctx.error("javac", d.describe());
                         else ctx.warn("javac", d.describe());
                     }
-                    if (!r.success())
-                        throw new RuntimeException("javac reported errors");
-                    if (r.cacheHit())
-                        ctx.label("cache hit " + r.actionKey().substring(0, 8));
+                    if (!r.success()) throw new RuntimeException("javac reported errors");
+                    if (r.cacheHit()) ctx.label("cache hit " + r.actionKey().substring(0, 8));
                     ctx.put(BUILD_OUTCOME, r.outcome());
                     ctx.progress(sources.size());
                 })
@@ -624,7 +732,7 @@ public final class BuildPipeline {
                 })
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
-                    Files.createDirectories(classes);   // compile-java may be skipped
+                    Files.createDirectories(classes); // compile-java may be skipped
                     List<Path> ktSources = kotlinSources(ctx);
                     if (ktSources.isEmpty()) {
                         ctx.label("no Kotlin sources");
@@ -645,9 +753,10 @@ public final class BuildPipeline {
                     List<Path> freshInputs = new ArrayList<>(ktSources);
                     if (mixedWithJava) freshInputs.addAll(javaSources(ctx));
                     boolean rerun = dev.jkbuild.config.ActiveConfig.get().rerunOr(false);
-                    if (!rerun && dev.jkbuild.task.FreshnessStamp.isFresh(
-                            classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP, freshInputs, classpath)) {
-                        ctx.reweight(EffortWeights.SKIP);   // nothing to compile this run
+                    if (!rerun
+                            && dev.jkbuild.task.FreshnessStamp.isFresh(
+                                    classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP, freshInputs, classpath)) {
+                        ctx.reweight(EffortWeights.SKIP); // nothing to compile this run
                         ctx.label("up to date");
                         ctx.put(KOTLIN_OUTCOME, "up-to-date");
                         ctx.progress(ktSources.size());
@@ -660,13 +769,27 @@ public final class BuildPipeline {
                     // dir with javac's output (it would delete the .class files).
                     Path ktOut = ctx.require(LAYOUT).kotlinClassesDir();
                     String taskId = ActionKey.qualifiedTaskId("compile-kotlin", classes);
-                    Path workingDir = in.cache().resolve("actions").resolve("incremental-kotlin")
+                    Path workingDir = in.cache()
+                            .resolve("actions")
+                            .resolve("incremental-kotlin")
                             .resolve(taskId);
                     // Mixed module: Kotlin reads the Java declarations from source
                     // (analysis only — it emits no Java bytecode; javac does next).
                     dev.jkbuild.task.KotlinCompile.Result kr = compileKotlinSources(
-                            ctx, in, cas, actionCache, ktSources, classpath, ktOut, taskId, workingDir,
-                            mixedWithJava ? (compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java")) : null);
+                            ctx,
+                            in,
+                            cas,
+                            actionCache,
+                            ktSources,
+                            classpath,
+                            ktOut,
+                            taskId,
+                            workingDir,
+                            mixedWithJava
+                                    ? (compact
+                                            ? in.dir().resolve("src")
+                                            : in.dir().resolve("src/main/java"))
+                                    : null);
                     if (!kr.success()) {
                         ctx.error("kotlinc", kr.output());
                         throw new RuntimeException("kotlinc reported errors");
@@ -690,7 +813,10 @@ public final class BuildPipeline {
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Path resMain = in.dir().resolve("src/main/resources");
-                    if (!Files.exists(resMain)) { ctx.label("no resources"); return; }
+                    if (!Files.exists(resMain)) {
+                        ctx.label("no resources");
+                        return;
+                    }
                     ctx.label("copy resources");
                     copyResources(resMain, classes);
                     ctx.progress(1);
@@ -703,10 +829,11 @@ public final class BuildPipeline {
                 .kind(PhaseKind.CPU)
                 .requires(mainCompile, "sync-deps")
                 .weight(() -> plan.get().compileTest())
-                .interpolated()   // opaque javac/kotlinc call — ease it over time
+                .interpolated() // opaque javac/kotlinc call — ease it over time
                 .scope(1)
                 .execute(ctx -> {
-                    Path javaTestSrc = compact ? in.dir().resolve("test") : in.dir().resolve("src/test/java");
+                    Path javaTestSrc =
+                            compact ? in.dir().resolve("test") : in.dir().resolve("src/test/java");
                     List<Path> javaTest = CompileSupport.collectJavaSources(javaTestSrc);
                     List<Path> ktTest = CompileSupport.collectKotlinTestSources(in.dir(), compact);
                     if (javaTest.isEmpty() && ktTest.isEmpty()) {
@@ -731,17 +858,25 @@ public final class BuildPipeline {
                     // Kotlin test sources first, so Java tests can reference Kotlin
                     // test types (mirrors the main mixed-module ordering). In a mixed
                     // test module each language gets its own output dir, merged below.
-                    Path ktTestOut = mixedTest
-                            ? ctx.require(LAYOUT).kotlinTestClassesDir()
-                            : testClasses;
+                    Path ktTestOut = mixedTest ? ctx.require(LAYOUT).kotlinTestClassesDir() : testClasses;
                     if (!ktTest.isEmpty()) {
                         ctx.label("compiling " + ktTest.size() + " Kotlin test sources");
                         String ktTaskId = ActionKey.qualifiedTaskId("compile-test-kotlin", testClasses);
-                        Path ktWorkingDir = in.cache().resolve("actions")
-                                .resolve("incremental-kotlin").resolve(ktTaskId);
+                        Path ktWorkingDir = in.cache()
+                                .resolve("actions")
+                                .resolve("incremental-kotlin")
+                                .resolve(ktTaskId);
                         dev.jkbuild.task.KotlinCompile.Result kr = compileKotlinSources(
-                                ctx, in, cas, actionCache, ktTest, baseCp, ktTestOut,
-                                ktTaskId, ktWorkingDir, mixedTest ? javaTestSrc : null);
+                                ctx,
+                                in,
+                                cas,
+                                actionCache,
+                                ktTest,
+                                baseCp,
+                                ktTestOut,
+                                ktTaskId,
+                                ktWorkingDir,
+                                mixedTest ? javaTestSrc : null);
                         if (!kr.success()) {
                             ctx.error("kotlinc", kr.output());
                             throw new RuntimeException("test kotlinc reported errors");
@@ -750,7 +885,7 @@ public final class BuildPipeline {
 
                     // Java test sources, against the Kotlin test output in a mixed module.
                     if (!javaTest.isEmpty()) {
-                        Path javaTestOut = testClasses;  // javac always writes to java/test/
+                        Path javaTestOut = testClasses; // javac always writes to java/test/
                         List<Path> javaCp = baseCp;
                         if (mixedTest) {
                             javaCp = new ArrayList<>(baseCp);
@@ -767,21 +902,34 @@ public final class BuildPipeline {
                         if (!processorCp.isEmpty()) {
                             Path genDir = ctx.require(LAYOUT).generatedSourcesDir("annotations", "test");
                             Files.createDirectories(genDir);
-                            ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(() -> {
-                                try {
-                                    return WorkerJar.JAVA_COMPILER.locate(cas);
-                                } catch (RuntimeException e) {
-                                    ctx.warn("javac", "java-compiler worker unavailable ("
-                                            + e.getMessage() + "); compiling tests with plain javac"
-                                            + " (no incremental annotation-processing provenance)");
-                                    return null;
-                                }
-                            }, genDir);
+                            ap = new dev.jkbuild.task.JavaIncrementalCompile.ApSetup(
+                                    () -> {
+                                        try {
+                                            return WorkerJar.JAVA_COMPILER.locate(cas);
+                                        } catch (RuntimeException e) {
+                                            ctx.warn(
+                                                    "javac",
+                                                    "java-compiler worker unavailable ("
+                                                            + e.getMessage() + "); compiling tests with plain javac"
+                                                            + " (no incremental annotation-processing provenance)");
+                                            return null;
+                                        }
+                                    },
+                                    genDir);
                         }
                         boolean ok = TestSupport.compileWithCache(
-                                ctx, "compile-test", javaTestSrc, javaTestOut, javaCp,
-                                processorCp, ctx.require(RELEASE), javacArgs, ctx.require(JAVA_HOME),
-                                ap, cas, in.cache());
+                                ctx,
+                                "compile-test",
+                                javaTestSrc,
+                                javaTestOut,
+                                javaCp,
+                                processorCp,
+                                ctx.require(RELEASE),
+                                javacArgs,
+                                ctx.require(JAVA_HOME),
+                                ap,
+                                cas,
+                                in.cache());
                         if (!ok) throw new RuntimeException("test compile failed");
                     }
 
@@ -811,8 +959,7 @@ public final class BuildPipeline {
                     List<Path> testRtCp = (List<Path>) ctx.require(TEST_RUNTIME_CP);
                     Path testClassesForStamp = ctx.require(TEST_CLASSES);
                     @SuppressWarnings("unchecked")
-                    List<Path> testSrcs = ctx.get(TEST_SOURCES)
-                            .orElse(java.util.List.of());
+                    List<Path> testSrcs = ctx.get(TEST_SOURCES).orElse(java.util.List.of());
                     // Worker jars handed to the test JVM ([build.test-worker-jars]) —
                     // worker-forking tests' behavior depends on their content, so resolve
                     // them up front so they also feed the freshness key below.
@@ -824,8 +971,7 @@ public final class BuildPipeline {
                     // runtime classpath (sibling modules included), the lock, and the
                     // toolchain/runner/worker identity. Unchanged → skip the runner.
                     String stampKey = dev.jkbuild.task.TestStamp.computeKey(
-                            testSrcs, ctx.require(MAIN_CLASSES), in.lockFile(), testRtCp,
-                            testStampExtras(workerJars));
+                            testSrcs, ctx.require(MAIN_CLASSES), in.lockFile(), testRtCp, testStampExtras(workerJars));
                     String testTaskId = ActionKey.qualifiedTaskId("run-tests", testClassesForStamp);
                     // --rerun forces a real test run, matching the compile/package
                     // freshness checks above (which all guard on !rerun). Without
@@ -838,7 +984,9 @@ public final class BuildPipeline {
                     // skips the runner, mirroring how the compile cache survives clean.
                     // stampKey is null only when computeKey failed open (unreadable
                     // input) — treat that as "not cached" and run the tests.
-                    if (!rerun && stampKey != null && actionCache.lookup(stampKey).isPresent()) {
+                    if (!rerun
+                            && stampKey != null
+                            && actionCache.lookup(stampKey).isPresent()) {
                         ctx.reweight(EffortWeights.SKIP);
                         ctx.label("tests up-to-date");
                         return; // skip — nothing changed since last green run
@@ -856,29 +1004,38 @@ public final class BuildPipeline {
                     // up-front estimate, so a correctly-forecast phase reweights to the
                     // same value (a no-op) and the countdown stays steady.
                     ctx.reweight(EffortWeights.learned(
-                            PhaseTimings.load(in.cache()), in.dir().toString(),
-                            "run-tests", in.estimatedTestCount(),
+                            PhaseTimings.load(in.cache()),
+                            in.dir().toString(),
+                            "run-tests",
+                            in.estimatedTestCount(),
                             EffortWeights.runTestsWeight(in.estimatedTestCount())));
                     List<Path> runtimeCp = new ArrayList<>();
                     runtimeCp.add(ctx.require(MAIN_CLASSES));
                     runtimeCp.addAll(testRtCp);
                     // Kotlin output (main or test) needs the stdlib at runtime.
-                    if (kotlinModule || !CompileSupport.collectKotlinTestSources(in.dir(), compact).isEmpty()) {
+                    if (kotlinModule
+                            || !CompileSupport.collectKotlinTestSources(in.dir(), compact)
+                                    .isEmpty()) {
                         runtimeCp.add(kotlinStdlib(ctx, cas));
                     }
 
-                    TestProgressListener listener =
-                            TestSupport.bridgeListener(ctx, in.workerCount(), in.verbose());
+                    TestProgressListener listener = TestSupport.bridgeListener(ctx, in.workerCount(), in.verbose());
                     JUnitLauncher.Result result;
                     // Serialize test execution across concurrently-built units unless the
                     // user opted into parallel tests — shared ports/locks/fixtures.
                     boolean gated = !parallelTests;
                     if (gated) TEST_GATE.acquireUninterruptibly();
                     try {
-                        result = new JUnitLauncher().run(
-                                ctx.require(JAVA_HOME), ctx.require(TEST_CLASSES),
-                                runtimeCp, in.cache(), in.workerCount(), workerJars, listener,
-                                ctx.require(LAYOUT).testResultsDir());
+                        result = new JUnitLauncher()
+                                .run(
+                                        ctx.require(JAVA_HOME),
+                                        ctx.require(TEST_CLASSES),
+                                        runtimeCp,
+                                        in.cache(),
+                                        in.workerCount(),
+                                        workerJars,
+                                        listener,
+                                        ctx.require(LAYOUT).testResultsDir());
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                         ctx.error("test", "interrupted");
@@ -896,8 +1053,8 @@ public final class BuildPipeline {
                         // Surface each failure (name + stack trace) above the bar —
                         // not just the count — like Maven/Gradle.
                         for (String line : TestSupport.renderFailures(result)) ctx.output(line);
-                        throw new RuntimeException(result.failed() + " test failure"
-                                + (result.failed() == 1 ? "" : "s"));
+                        throw new RuntimeException(
+                                result.failed() + " test failure" + (result.failed() == 1 ? "" : "s"));
                     }
                     // All tests passed — record a CAS marker keyed by the content key so a
                     // later build skips the runner when inputs are unchanged. It lives in the
@@ -906,8 +1063,7 @@ public final class BuildPipeline {
                     // same, and the marker is found. Output-less — the key's presence is the
                     // result. (Skip if the key failed open — nothing to key the marker on.)
                     if (stampKey != null) {
-                        actionCache.storeWithOutputs(testTaskId, stampKey,
-                                java.util.Map.of(), java.util.Map.of());
+                        actionCache.storeWithOutputs(testTaskId, stampKey, java.util.Map.of(), java.util.Map.of());
                     }
                 })
                 .build();
@@ -916,9 +1072,10 @@ public final class BuildPipeline {
         Phase packageJar = Phase.builder("package-jar")
                 .label("Packaging")
                 .kind(PhaseKind.CPU)
-                .requires(in.skipTests()
-                        ? new String[]{"copy-resources", "embed-sha"}
-                        : new String[]{"copy-resources", "embed-sha", "run-tests"})
+                .requires(
+                        in.skipTests()
+                                ? new String[] {"copy-resources", "embed-sha"}
+                                : new String[] {"copy-resources", "embed-sha", "run-tests"})
                 .weight(() -> plan.get().pkg())
                 .scope(1)
                 .execute(ctx -> {
@@ -943,12 +1100,9 @@ public final class BuildPipeline {
                         return;
                     }
                     ctx.label("package " + jarPath.getFileName());
-                    JarPackager.JarRequest jarRequest =
-                            JarPackager.JarRequest.of(classes, jarPath);
-                    if (mainClass != null && !mainClass.isBlank())
-                        jarRequest = jarRequest.withMainClass(mainClass);
-                    if (!project.manifest().isEmpty())
-                        jarRequest = jarRequest.withAttributes(project.manifest());
+                    JarPackager.JarRequest jarRequest = JarPackager.JarRequest.of(classes, jarPath);
+                    if (mainClass != null && !mainClass.isBlank()) jarRequest = jarRequest.withMainClass(mainClass);
+                    if (!project.manifest().isEmpty()) jarRequest = jarRequest.withAttributes(project.manifest());
                     new JarPackager().packageJar(jarRequest);
                     storePackaged(in.cache(), pkgTask, pkgKey, tokens, jarPath.getParent(), List.of(jarPath));
                     ctx.put(JAR_PATH, jarPath);
@@ -970,19 +1124,23 @@ public final class BuildPipeline {
                     }
                     ctx.label("write freshness stamp");
                     Path classes = ctx.require(MAIN_CLASSES);
-                    Path javaOut = classes;  // javac always writes to java/main/
+                    Path javaOut = classes; // javac always writes to java/main/
                     @SuppressWarnings("unchecked")
                     List<Path> sources = (List<Path>) ctx.require(JAVA_SOURCES);
                     @SuppressWarnings("unchecked")
                     List<Path> classpath = (List<Path>) ctx.require(CLASSPATH);
-                    if (mixed) {   // match compile-java's freshness inputs
+                    if (mixed) { // match compile-java's freshness inputs
                         classpath = new ArrayList<>(classpath);
                         classpath.add(ctx.require(LAYOUT).kotlinClassesDir());
                     }
                     String actionKey = ctx.get(ACTION_KEY).orElse("");
                     dev.jkbuild.task.FreshnessStamp.write(
-                            javaOut, dev.jkbuild.task.FreshnessStamp.JAVA_STAMP,
-                            "compile-main", actionKey, sources, classpath);
+                            javaOut,
+                            dev.jkbuild.task.FreshnessStamp.JAVA_STAMP,
+                            "compile-main",
+                            actionKey,
+                            sources,
+                            classpath);
                     ctx.progress(1);
                 })
                 .build();
@@ -1010,8 +1168,12 @@ public final class BuildPipeline {
                     List<Path> freshInputs = new ArrayList<>(kotlinSources(ctx));
                     if (mixedWithJava) freshInputs.addAll(javaSources(ctx));
                     dev.jkbuild.task.FreshnessStamp.write(
-                            classes, dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP,
-                            "compile-kotlin", "", freshInputs, classpath);
+                            classes,
+                            dev.jkbuild.task.FreshnessStamp.KOTLIN_STAMP,
+                            "compile-kotlin",
+                            "",
+                            freshInputs,
+                            classpath);
                     ctx.progress(1);
                 })
                 .build();
@@ -1031,7 +1193,7 @@ public final class BuildPipeline {
                     String kOutcome = ctx.get(KOTLIN_OUTCOME).orElse("");
                     boolean settled = (jOutcome.equals("up-to-date") || jOutcome.equals("no-sources"))
                             && (kOutcome.equals("up-to-date") || kOutcome.equals("no-sources"));
-                    if (settled) {   // both unchanged → classes already holds both
+                    if (settled) { // both unchanged → classes already holds both
                         ctx.label("up to date");
                         ctx.progress(1);
                         return;
@@ -1066,7 +1228,11 @@ public final class BuildPipeline {
                 .scope(1)
                 .execute(ctx -> {
                     Map<String, String> embed = ctx.require(PROJECT).build().embedSha();
-                    if (embed.isEmpty()) { ctx.label("none"); ctx.progress(1); return; }
+                    if (embed.isEmpty()) {
+                        ctx.label("none");
+                        ctx.progress(1);
+                        return;
+                    }
                     Path classes = ctx.require(MAIN_CLASSES);
                     Map<String, Path> jarByModule = siblingMainJars(in.dir());
                     Path metaInf = classes.resolve("META-INF");
@@ -1074,8 +1240,8 @@ public final class BuildPipeline {
                     int written = 0;
                     int skipped = 0;
                     for (Map.Entry<String, String> e : embed.entrySet()) {
-                        String key = e.getKey();        // sha-resource basename, e.g. jk-kotlin-compiler
-                        String module = e.getValue();   // workspace module name
+                        String key = e.getKey(); // sha-resource basename, e.g. jk-kotlin-compiler
+                        String module = e.getValue(); // workspace module name
                         Path jar = jarByModule.get(module);
                         boolean built = jar != null && Files.exists(jar);
                         var worker = dev.jkbuild.worker.WorkerJar.byArtifactId(key);
@@ -1088,32 +1254,33 @@ public final class BuildPipeline {
                             // RUNNING jk's worker identity — the sha this jk was paired with.
                             sha = worker.get().expectedShaOrNull();
                             if (sha == null) {
-                                ctx.error("embed-sha", "worker '" + key + "' is known but its sha "
-                                        + "resource isn't bundled in this jk build — rebuild jk so its "
-                                        + "image includes META-INF/" + key + "-sha256.txt");
+                                ctx.error(
+                                        "embed-sha",
+                                        "worker '" + key + "' is known but its sha "
+                                                + "resource isn't bundled in this jk build — rebuild jk so its "
+                                                + "image includes META-INF/" + key + "-sha256.txt");
                                 throw new RuntimeException("embed-sha: missing worker sha for '" + key + "'");
                             }
                         } else if (jar != null) {
-                            skipped++; continue;  // declared module, not built in this (scoped) run
+                            skipped++;
+                            continue; // declared module, not built in this (scoped) run
                         } else {
-                            ctx.error("embed-sha", "'" + module
-                                    + "' is not a workspace module or a known worker");
+                            ctx.error("embed-sha", "'" + module + "' is not a workspace module or a known worker");
                             throw new RuntimeException("embed-sha: unknown '" + module + "'");
                         }
                         Files.writeString(metaInf.resolve(key + "-sha256.txt"), sha);
                         written++;
                     }
-                    ctx.label(skipped == 0
-                            ? "embedded " + written + " SHA" + (written == 1 ? "" : "s")
-                            : "embedded " + written + ", skipped " + skipped + " unbuilt");
+                    ctx.label(
+                            skipped == 0
+                                    ? "embedded " + written + " SHA" + (written == 1 ? "" : "s")
+                                    : "embedded " + written + ", skipped " + skipped + " unbuilt");
                     ctx.progress(1);
                 })
                 .build();
 
-        Goal.Builder b = Goal.builder("build")
-                .addPhase(parseBuild)
-                .addPhase(syncDeps)
-                .addPhase(ensureJdk);
+        Goal.Builder b =
+                Goal.builder("build").addPhase(parseBuild).addPhase(syncDeps).addPhase(ensureJdk);
         // Workspace root with no sources: validate jk.toml + sync deps, nothing more.
         if (workspaceNoSources) return b;
         if (useJava) {
@@ -1173,7 +1340,8 @@ public final class BuildPipeline {
             if (project.project().shadow()) {
                 b.addPhase(shadowPhase(in.cache(), in.lockFile()));
             }
-        } catch (Exception ignored) {}
+        } catch (Exception ignored) {
+        }
     }
 
     // ---- tail phases ----------------------------------------------------
@@ -1194,8 +1362,7 @@ public final class BuildPipeline {
                     List<Path> depJars = new ArrayList<>();
                     if (Files.exists(lockFile)) {
                         ClasspathResolver resolver = new ClasspathResolver(new Cas(cache));
-                        depJars.addAll(resolver.classpathFor(
-                                LockfileReader.read(lockFile), ClasspathResolver.RUNTIME));
+                        depJars.addAll(resolver.classpathFor(LockfileReader.read(lockFile), ClasspathResolver.RUNTIME));
                         // Workspace siblings are filtered out of the lockfile by
                         // WorkspaceMerge, but a fat jar must bundle them (and their
                         // own transitive external deps) or it can't run standalone —
@@ -1211,11 +1378,19 @@ public final class BuildPipeline {
                                         LockfileReader.read(sibLock), ClasspathResolver.RUNTIME)) {
                                     if (!depJars.contains(p)) depJars.add(p);
                                 }
-                            } catch (Exception ignored) { /* best-effort */ }
+                            } catch (Exception ignored) {
+                                /* best-effort */
+                            }
                         }
                         // Composite (path + branch-git) deps must be bundled into the fat jar too.
-                        addCompositeDeps(layout.moduleRoot(), project, new Cas(cache), cache,
-                                Set.of(Scope.EXPORT, Scope.MAIN), ClasspathResolver.RUNTIME, depJars);
+                        addCompositeDeps(
+                                layout.moduleRoot(),
+                                project,
+                                new Cas(cache),
+                                cache,
+                                Set.of(Scope.EXPORT, Scope.MAIN),
+                                ClasspathResolver.RUNTIME,
+                                depJars);
                     }
                     // Packaging cache: the fat jar is a pure function of the main
                     // classes, the bundled dependency jars' content, the main-class,
@@ -1223,7 +1398,10 @@ public final class BuildPipeline {
                     List<String> tokens = List.of(
                             "classes:" + dev.jkbuild.task.ClasspathFingerprint.entry(classes),
                             "deps:" + dev.jkbuild.task.ClasspathFingerprint.of(depJars),
-                            "main:" + (project.project().main() == null ? "" : project.project().main()),
+                            "main:"
+                                    + (project.project().main() == null
+                                            ? ""
+                                            : project.project().main()),
                             "manifest:" + project.manifest());
                     String shTask = ActionKey.qualifiedTaskId("package-shadow", shadowJar);
                     String shKey = ActionKey.forArtifact(shTask, dev.jkbuild.util.JkVersion.VERSION, tokens);
@@ -1233,9 +1411,14 @@ public final class BuildPipeline {
                         return;
                     }
                     ctx.label("package " + shadowJar.getFileName());
-                    new ShadowPackager().packageShadow(new ShadowPackager.ShadowRequest(
-                            classes, depJars, shadowJar,
-                            project.project().main(), project.manifest(), 0L));
+                    new ShadowPackager()
+                            .packageShadow(new ShadowPackager.ShadowRequest(
+                                    classes,
+                                    depJars,
+                                    shadowJar,
+                                    project.project().main(),
+                                    project.manifest(),
+                                    0L));
                     storePackaged(cache, shTask, shKey, tokens, shadowJar.getParent(), List.of(shadowJar));
                     ctx.progress(1);
                 })
@@ -1254,25 +1437,35 @@ public final class BuildPipeline {
      * (its {@code bin/native-image} is used); when {@code null} the phase falls
      * back to the project JDK / {@code $GRAALVM_HOME} / {@code PATH} search.
      */
-    public static Phase nativePhase(Path dir, Path cache, Path lockFile, Path jdksDir,
-                                    Path graalHome, String mainOverride, List<String> extraArgs) {
+    public static Phase nativePhase(
+            Path dir,
+            Path cache,
+            Path lockFile,
+            Path jdksDir,
+            Path graalHome,
+            String mainOverride,
+            List<String> extraArgs) {
         List<String> extra = extraArgs == null ? List.of() : extraArgs;
         return Phase.builder("native-image")
                 .label("Native")
                 .kind(PhaseKind.IO)
                 .requires("package-jar")
                 .weight(() -> EffortWeights.nativeWeight(dir))
-                .scope(10)  // preamble(1) + 8 native-image stages + done(1)
+                .scope(10) // preamble(1) + 8 native-image stages + done(1)
                 .execute(ctx -> {
                     // Fail-fast: verify native-image is available before compilation
                     // has already run and the user has waited for potentially minutes.
-                    Path javaHomeEarly = graalHome != null ? graalHome
+                    Path javaHomeEarly = graalHome != null
+                            ? graalHome
                             : dev.jkbuild.jdk.JdkResolver.forProject(dir, jdksDir)
                                     .map(dev.jkbuild.jdk.InstalledJdk::home)
                                     .orElseGet(CompileToolchain::runningJavaHome);
-                    if (dev.jkbuild.tool.NativeImageDriver.resolve(javaHomeEarly).isEmpty()) {
-                        ctx.error("native", dev.jkbuild.tool.NativeImageDriver
-                                .notFoundError(javaHomeEarly).getMessage());
+                    if (dev.jkbuild.tool.NativeImageDriver.resolve(javaHomeEarly)
+                            .isEmpty()) {
+                        ctx.error(
+                                "native",
+                                dev.jkbuild.tool.NativeImageDriver.notFoundError(javaHomeEarly)
+                                        .getMessage());
                         throw new RuntimeException("native-image not found");
                     }
 
@@ -1288,8 +1481,9 @@ public final class BuildPipeline {
                     // A resolvable main → executable; none → shared library (--shared).
                     String mainClass = (mainOverride != null && !mainOverride.isBlank())
                             ? mainOverride
-                            : (nativeCfg.mainClass() != null ? nativeCfg.mainClass()
-                            : project.project().main());
+                            : (nativeCfg.mainClass() != null
+                                    ? nativeCfg.mainClass()
+                                    : project.project().main());
                     boolean shared = (mainClass == null || mainClass.isBlank());
                     if (shared) mainClass = null;
                     // Output path: [native].name overrides the artifact-derived name.
@@ -1298,8 +1492,7 @@ public final class BuildPipeline {
                     Path out;
                     if (nativeCfg.name() != null) {
                         String nm = nativeCfg.name();
-                        out = layout.moduleTargetDir().resolve(
-                                shared && !nm.startsWith("lib") ? "lib" + nm : nm);
+                        out = layout.moduleTargetDir().resolve(shared && !nm.startsWith("lib") ? "lib" + nm : nm);
                     } else {
                         out = shared ? layout.nativeLibrary() : layout.nativeBinary();
                     }
@@ -1329,23 +1522,31 @@ public final class BuildPipeline {
                         for (java.nio.file.Path sibLock : siblings.siblingLockfiles()) {
                             try {
                                 Lockfile sibLockfile = LockfileReader.read(sibLock);
-                                for (Path p : cpResolver.classpathFor(sibLockfile,
-                                        ClasspathResolver.RUNTIME)) {
+                                for (Path p : cpResolver.classpathFor(sibLockfile, ClasspathResolver.RUNTIME)) {
                                     if (!classpath.contains(p)) classpath.add(p);
                                 }
-                            } catch (Exception ignored) {}
+                            } catch (Exception ignored) {
+                            }
                         }
                         // Composite (path + branch-git) deps: native-image must see their classes.
-                        addCompositeDeps(dir, project, new Cas(cache), cache,
-                                Set.of(Scope.EXPORT, Scope.MAIN), ClasspathResolver.RUNTIME, classpath);
-                    } catch (Exception ignored) {}
+                        addCompositeDeps(
+                                dir,
+                                project,
+                                new Cas(cache),
+                                cache,
+                                Set.of(Scope.EXPORT, Scope.MAIN),
+                                ClasspathResolver.RUNTIME,
+                                classpath);
+                    } catch (Exception ignored) {
+                    }
 
                     // Packaging cache (executable only): the binary is a pure function of
                     // the runtime classpath, the build args, the main class, and the GraalVM
                     // toolchain. Shared libraries (+ generated C headers) aren't cached yet.
                     Path releaseFile = javaHome.resolve("release");
                     String graalTok = Files.isRegularFile(releaseFile)
-                            ? dev.jkbuild.util.Hashing.sha256Hex(releaseFile) : javaHome.toString();
+                            ? dev.jkbuild.util.Hashing.sha256Hex(releaseFile)
+                            : javaHome.toString();
                     List<String> nativeTokens = List.of(
                             "cp:" + dev.jkbuild.task.ClasspathFingerprint.of(classpath),
                             "args:" + String.join(" ", allArgs),
@@ -1375,8 +1576,7 @@ public final class BuildPipeline {
                     // is the only tick — the bar jumps to 1/10, which is acceptable.
                     java.util.concurrent.atomic.AtomicBoolean preambleDone =
                             new java.util.concurrent.atomic.AtomicBoolean(false);
-                    dev.jkbuild.tool.NativeImageDriver.ProgressListener listener =
-                            (current, total, label) -> {
+                    dev.jkbuild.tool.NativeImageDriver.ProgressListener listener = (current, total, label) -> {
                         if (preambleDone.compareAndSet(false, true)) {
                             ctx.progress(1); // preamble done (output before [1/N])
                         }
@@ -1425,20 +1625,24 @@ public final class BuildPipeline {
         boolean any = false;
         for (Scope s : Scope.values()) {
             for (dev.jkbuild.model.Dependency d : project.dependencies().of(s)) {
-                if (BuildGraph.isComposite(d)) { any = true; break; }
+                if (BuildGraph.isComposite(d)) {
+                    any = true;
+                    break;
+                }
             }
             if (any) break;
         }
         if (!any) return;
         try {
-            for (CompositeLocator.VersionConflict c
-                    : CompositeLocator.conflicts(dir, project, cache.resolve("git"))) {
+            for (CompositeLocator.VersionConflict c : CompositeLocator.conflicts(dir, project, cache.resolve("git"))) {
                 String detail = c.versionBySource().entrySet().stream()
                         .map(e -> e.getKey() + " → " + e.getValue())
                         .collect(java.util.stream.Collectors.joining(", "));
-                ctx.warn("composite-version", "version conflict on `" + c.coord()
-                        + "` across composite dependencies (" + detail
-                        + "); both versions are on the classpath");
+                ctx.warn(
+                        "composite-version",
+                        "version conflict on `" + c.coord()
+                                + "` across composite dependencies (" + detail
+                                + "); both versions are on the classpath");
             }
         } catch (Exception ignored) {
             // Diagnostic only — never fail a build over conflict detection.
@@ -1468,17 +1672,25 @@ public final class BuildPipeline {
                 for (Path p : resolver.classpathFor(sl, ClasspathResolver.COMPILE_MAIN)) {
                     if (!cp.contains(p)) cp.add(p);
                 }
-            } catch (Exception ignored) { /* best-effort: a sibling's lock may be absent */ }
+            } catch (Exception ignored) {
+                /* best-effort: a sibling's lock may be absent */
+            }
         }
         return cp;
     }
 
-    private static List<String> addCompositeDeps(Path consumerDir, JkBuild project, Cas cas, Path cache,
-            Set<Scope> depScopes, Set<Scope> externalCpScopes, List<Path> cp) {
+    private static List<String> addCompositeDeps(
+            Path consumerDir,
+            JkBuild project,
+            Cas cas,
+            Path cache,
+            Set<Scope> depScopes,
+            Set<Scope> externalCpScopes,
+            List<Path> cp) {
         try {
             CompositeLocator.Located r = CompositeLocator.locate(
                     consumerDir, project, depScopes, externalCpScopes, cas, cache.resolve("git"));
-            for (Path j : r.jars())            if (!cp.contains(j)) cp.add(j);
+            for (Path j : r.jars()) if (!cp.contains(j)) cp.add(j);
             for (Path j : r.externalDepJars()) if (!cp.contains(j)) cp.add(j);
             return r.missing();
         } catch (InterruptedException e) {
@@ -1500,15 +1712,21 @@ public final class BuildPipeline {
      *     so a mixed module's Kotlin can read Java declarations from source
      */
     private static dev.jkbuild.task.KotlinCompile.Result compileKotlinSources(
-            PhaseContext ctx, Inputs in, Cas cas, ActionCache actionCache,
-            List<Path> sources, List<Path> classpath, Path outputDir,
-            String taskId, Path workingDir, Path javaSourceRoot) throws IOException {
-        String kotlinVersion = CompileToolchain.kotlinVersionFor(
-                ctx.require(LOCKFILE), ctx.require(PROJECT));
+            PhaseContext ctx,
+            Inputs in,
+            Cas cas,
+            ActionCache actionCache,
+            List<Path> sources,
+            List<Path> classpath,
+            Path outputDir,
+            String taskId,
+            Path workingDir,
+            Path javaSourceRoot)
+            throws IOException {
+        String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
         KotlinWorkerSetup.Prepared kt;
         try {
-            dev.jkbuild.repo.RepoGroup repos =
-                    RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
+            dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
             kt = KotlinWorkerSetup.prepare(repos, cas, kotlinVersion);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -1525,7 +1743,8 @@ public final class BuildPipeline {
         }
         Files.createDirectories(outputDir);
         KotlincRequest req = KotlincRequest.builder()
-                .sources(sources).classpath(compileCp)
+                .sources(sources)
+                .classpath(compileCp)
                 .outputDir(outputDir)
                 .jvmTarget(CompileSupport.kotlinJvmTarget(ctx.require(RELEASE)))
                 .workerClasspath(kt.workerClasspath())
@@ -1539,10 +1758,13 @@ public final class BuildPipeline {
         // full kotlinc. Same forKotlinc key KotlinCompile.run looks up.
         if (!rerun) {
             try {
-                boolean restores = actionCache.lookup(
-                        ActionKey.forKotlinc(taskId, req, dev.jkbuild.util.JkVersion.VERSION)).isPresent();
+                boolean restores = actionCache
+                        .lookup(ActionKey.forKotlinc(taskId, req, dev.jkbuild.util.JkVersion.VERSION))
+                        .isPresent();
                 ctx.reweight(restores ? EffortWeights.RESTORE : EffortWeights.compileWeight(sources.size()));
-            } catch (Exception ignored) { /* keep the up-front estimate */ }
+            } catch (Exception ignored) {
+                /* keep the up-front estimate */
+            }
         }
         return dev.jkbuild.task.KotlinCompile.run(
                 taskId, req, dev.jkbuild.util.JkVersion.VERSION, !rerun, cas, actionCache);
@@ -1555,11 +1777,9 @@ public final class BuildPipeline {
      * still needs {@code kotlin.jvm.internal.*} etc. when the code runs.
      */
     private static Path kotlinStdlib(PhaseContext ctx, Cas cas) throws IOException {
-        String kotlinVersion = CompileToolchain.kotlinVersionFor(
-                ctx.require(LOCKFILE), ctx.require(PROJECT));
+        String kotlinVersion = CompileToolchain.kotlinVersionFor(ctx.require(LOCKFILE), ctx.require(PROJECT));
         try {
-            dev.jkbuild.repo.RepoGroup repos =
-                    RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
+            dev.jkbuild.repo.RepoGroup repos = RepoGroupBuilder.buildFor(ctx.require(PROJECT), null, cas);
             return KotlinWorkerSetup.prepare(repos, cas, kotlinVersion).stdlib();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -1573,7 +1793,7 @@ public final class BuildPipeline {
             for (Path source : (Iterable<Path>) stream::iterator) {
                 if (Files.isDirectory(source)) continue;
                 Path relative = resourceDir.relativize(source);
-                Path target   = classesDir.resolve(relative);
+                Path target = classesDir.resolve(relative);
                 Files.createDirectories(target.getParent());
                 Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
             }
@@ -1598,8 +1818,11 @@ public final class BuildPipeline {
             Path manifest = dir.resolve("jk.toml");
             if (!Files.exists(manifest)) continue;
             JkBuild sib;
-            try { sib = JkBuildParser.parse(manifest); }
-            catch (RuntimeException ignored) { continue; }
+            try {
+                sib = JkBuildParser.parse(manifest);
+            } catch (RuntimeException ignored) {
+                continue;
+            }
             BuildLayout layout = BuildLayout.of(dir, sib);
             // A shadow (fat) worker runs from its -all.jar — that's the artifact
             // that bundles plugin-api/PluginWorkerMain and the worker's deps; a
@@ -1625,15 +1848,15 @@ public final class BuildPipeline {
     }
 
     /** Record a freshly-produced packaging artifact so a later build can skip it. */
-    private static void storePackaged(Path cacheRoot, String taskId, String key, List<String> tokens,
-                                      Path baseDir, List<Path> artifacts) throws IOException {
+    private static void storePackaged(
+            Path cacheRoot, String taskId, String key, List<String> tokens, Path baseDir, List<Path> artifacts)
+            throws IOException {
         if (dev.jkbuild.config.ActiveConfig.get().rerunOr(false)) return;
         new ActionCache(new Cas(cacheRoot), cacheRoot.resolve("actions"))
                 .storeArtifacts(taskId, key, Map.of("inputs", String.join(";", tokens)), baseDir, artifacts);
     }
 
-    private static Map<String, String> workerJarProps(Path moduleDir, List<String> modules)
-            throws IOException {
+    private static Map<String, String> workerJarProps(Path moduleDir, List<String> modules) throws IOException {
         Map<String, String> props = new LinkedHashMap<>();
         if (modules.isEmpty()) return props;
         Map<String, Path> jarByModule = siblingMainJars(moduleDir);

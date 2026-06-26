@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
-import dev.jkbuild.credential.RepoCredential;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.credential.RepoCredential;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class FileTransportTest {
 
@@ -36,8 +35,8 @@ class FileTransportTest {
     @Test
     void put_writes_creating_parent_dirs(@TempDir Path dir) throws Exception {
         Path target = dir.resolve("repo/g/a/1/a-1.jar");
-        int status = transport.put(target.toUri(), new byte[]{1, 2, 3}, "application/java-archive",
-                RepoCredential.ANONYMOUS);
+        int status = transport.put(
+                target.toUri(), new byte[] {1, 2, 3}, "application/java-archive", RepoCredential.ANONYMOUS);
         assertThat(status).isEqualTo(201);
         assertThat(Files.readAllBytes(target)).containsExactly(1, 2, 3);
     }

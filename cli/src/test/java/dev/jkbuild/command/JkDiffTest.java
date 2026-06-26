@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class JkDiffTest {
 
@@ -81,9 +80,7 @@ class JkDiffTest {
         // the original pre-activation JAVA_HOME — not the previous project's
         // JAVA_HOME — so deactivating later restores correctly.
         var prior = new JkDiff(Map.of("JAVA_HOME", "/usr/lib/jvm/system"));
-        var target = new JkEnv.Target(
-                Optional.of(Path.of("/another-project")),
-                Map.of("JAVA_HOME", "/opt/jdk-25"));
+        var target = new JkEnv.Target(Optional.of(Path.of("/another-project")), Map.of("JAVA_HOME", "/opt/jdk-25"));
         var snapshot = (JkDiff.EnvSnapshot) k -> "/opt/jdk-21"; // not what we want — would shadow
         var next = prior.next(target, snapshot);
         assertThat(next.previousValue("JAVA_HOME")).isEqualTo("/usr/lib/jvm/system");
@@ -92,9 +89,7 @@ class JkDiffTest {
     @Test
     void next_records_unset_sentinel_for_keys_not_in_environment() {
         var prior = JkDiff.empty();
-        var target = new JkEnv.Target(
-                Optional.of(Path.of("/project")),
-                Map.of("GRAALVM_HOME", "/opt/graalvm"));
+        var target = new JkEnv.Target(Optional.of(Path.of("/project")), Map.of("GRAALVM_HOME", "/opt/graalvm"));
         var snapshot = (JkDiff.EnvSnapshot) k -> null; // nothing set in env
         var next = prior.next(target, snapshot);
         assertThat(next.wasUnset("GRAALVM_HOME")).isTrue();

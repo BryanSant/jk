@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import dev.jkbuild.credential.RepoCredential;
-import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.GitRefSpec;
-import dev.jkbuild.model.Scope;
-import dev.jkbuild.model.VersionSelector;
-import dev.jkbuild.library.LibraryCatalog;
-import org.junit.jupiter.api.Test;
-
-import java.util.Map;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import dev.jkbuild.credential.RepoCredential;
+import dev.jkbuild.library.LibraryCatalog;
+import dev.jkbuild.model.GitRefSpec;
+import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.model.Scope;
+import dev.jkbuild.model.VersionSelector;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
 
 class JkBuildParserTest {
 
@@ -56,8 +55,7 @@ class JkBuildParserTest {
                 [build]
                 order-after = ["kotlin-compiler", "dev.jkbuild:git-client"]
                 """);
-        assertThat(parsed.build().orderAfter())
-                .containsExactly("kotlin-compiler", "dev.jkbuild:git-client");
+        assertThat(parsed.build().orderAfter()).containsExactly("kotlin-compiler", "dev.jkbuild:git-client");
     }
 
     @Test
@@ -86,13 +84,12 @@ class JkBuildParserTest {
                 .containsEntry("jk-kotlin-compiler", "kotlin-compiler")
                 .containsEntry("jk-git-client", "git-client");
         // embed-sha sources are build-order prerequisites, merged with explicit order-after
-        assertThat(parsed.build().allOrderAfter())
-                .contains("plain-dep", "kotlin-compiler", "git-client");
+        assertThat(parsed.build().allOrderAfter()).contains("plain-dep", "kotlin-compiler", "git-client");
     }
 
     @Test
     void build_lint_defaults_on_and_can_be_disabled() {
-        assertThat(JkBuildParser.parse(PROJECT).build().lint()).isTrue();   // absent → on
+        assertThat(JkBuildParser.parse(PROJECT).build().lint()).isTrue(); // absent → on
         JkBuild off = JkBuildParser.parse(PROJECT + """
 
                 [build]
@@ -108,11 +105,9 @@ class JkBuildParserTest {
                 [build]
                 test-worker-jars = ["publisher", "compat-bridge"]
                 """);
-        assertThat(parsed.build().testWorkerJars())
-                .containsExactly("publisher", "compat-bridge");
+        assertThat(parsed.build().testWorkerJars()).containsExactly("publisher", "compat-bridge");
         // test-worker-jars modules must build first → they're order-after prerequisites
-        assertThat(parsed.build().allOrderAfter())
-                .contains("publisher", "compat-bridge");
+        assertThat(parsed.build().allOrderAfter()).contains("publisher", "compat-bridge");
     }
 
     @Test
@@ -232,7 +227,8 @@ class JkBuildParserTest {
 
     @Test
     void parses_graal_spec_variants() {
-        assertThat(JkBuildParser.parse(graal("\"graalvm-25\"")).project().graal()).isEqualTo("graalvm-25");
+        assertThat(JkBuildParser.parse(graal("\"graalvm-25\"")).project().graal())
+                .isEqualTo("graalvm-25");
         assertThat(JkBuildParser.parse(graal("25")).project().graal()).isEqualTo("25");
         assertThat(JkBuildParser.parse(graal("\"native\"")).project().graal()).isEqualTo("native");
         // Absent → null (the common case).
@@ -492,7 +488,8 @@ class JkBuildParserTest {
                 fork = { group = "com.acme", name = "widgets", \
                          git = "https://github.com/me/widgets", branch = "main", fetch = "48h" }
                 """);
-        assertThat(parsed.dependencies().of(Scope.MAIN).getFirst().gitSource().fetch()).isEqualTo("48h");
+        assertThat(parsed.dependencies().of(Scope.MAIN).getFirst().gitSource().fetch())
+                .isEqualTo("48h");
     }
 
     @Test
@@ -512,8 +509,8 @@ class JkBuildParserTest {
                 """);
         var src = parsed.dependencies().of(Scope.MAIN).getFirst().gitSource();
         assertThat(src.overrideGroup()).isEqualTo("com.acme");
-        assertThat(src.overrideArtifact()).isEqualTo("codec");   // defaults to the dep name
-        assertThat(src.overrideVersion()).isNull();              // version still derived from the tag
+        assertThat(src.overrideArtifact()).isEqualTo("codec"); // defaults to the dep name
+        assertThat(src.overrideVersion()).isNull(); // version still derived from the tag
     }
 
     @Test
@@ -672,11 +669,10 @@ class JkBuildParserTest {
                 central = "https://repo.maven.apache.org/maven2/"
                 internal = { url = "https://nexus.example/repository/maven-releases/" }
                 """);
-        assertThat(parsed.repositories())
-                .extracting(r -> r.name())
-                .containsExactlyInAnyOrder("central", "internal");
+        assertThat(parsed.repositories()).extracting(r -> r.name()).containsExactlyInAnyOrder("central", "internal");
         // No inline credential on either repo.
-        assertThat(parsed.repositories()).allSatisfy(r -> assertThat(r.credential()).isEmpty());
+        assertThat(parsed.repositories())
+                .allSatisfy(r -> assertThat(r.credential()).isEmpty());
     }
 
     @Test
@@ -692,10 +688,16 @@ class JkBuildParserTest {
                 password = "s3cr3t"
                 """);
 
-        var ghp = parsed.repositories().stream().filter(r -> r.name().equals("ghp")).findFirst().orElseThrow();
+        var ghp = parsed.repositories().stream()
+                .filter(r -> r.name().equals("ghp"))
+                .findFirst()
+                .orElseThrow();
         assertThat(ghp.credential()).contains(new RepoCredential.Bearer("ghp_literaltoken"));
 
-        var nexus = parsed.repositories().stream().filter(r -> r.name().equals("nexus")).findFirst().orElseThrow();
+        var nexus = parsed.repositories().stream()
+                .filter(r -> r.name().equals("nexus"))
+                .findFirst()
+                .orElseThrow();
         assertThat(nexus.credential()).contains(new RepoCredential.Basic("deployer", "s3cr3t"));
     }
 
@@ -752,8 +754,7 @@ class JkBuildParserTest {
                 url = "https://nexus.example/repo/"
                 token = "${PATH}"
                 """);
-        assertThat(parsed.repositories().get(0).credential())
-                .contains(new RepoCredential.Bearer(path));
+        assertThat(parsed.repositories().get(0).credential()).contains(new RepoCredential.Bearer(path));
     }
 
     @Test
@@ -813,10 +814,8 @@ class JkBuildParserTest {
         var deps = parsed.dependencies().of(Scope.MAIN);
         assertThat(deps).hasSize(1);
         assertThat(deps.getFirst().library()).isEqualTo("jackson-databind");
-        assertThat(deps.getFirst().module())
-                .isEqualTo("tools.jackson.core:jackson-databind");
-        assertThat(deps.getFirst().version())
-                .isInstanceOf(VersionSelector.Caret.class);
+        assertThat(deps.getFirst().module()).isEqualTo("tools.jackson.core:jackson-databind");
+        assertThat(deps.getFirst().version()).isInstanceOf(VersionSelector.Caret.class);
     }
 
     @Test
@@ -940,10 +939,14 @@ class JkBuildParserTest {
                 jackson-databind = { group = "com.fasterxml.jackson.core", version = "2.18.2" }
                 """);
         var deps = parsed.dependencies().of(dev.jkbuild.model.Scope.MAIN);
-        assertThat(deps).filteredOn(d -> d.library().equals("guava"))
-                .singleElement().satisfies(d -> assertThat(d.optional()).isTrue());
-        assertThat(deps).filteredOn(d -> d.library().equals("jackson-databind"))
-                .singleElement().satisfies(d -> assertThat(d.optional()).isFalse());
+        assertThat(deps)
+                .filteredOn(d -> d.library().equals("guava"))
+                .singleElement()
+                .satisfies(d -> assertThat(d.optional()).isTrue());
+        assertThat(deps)
+                .filteredOn(d -> d.library().equals("jackson-databind"))
+                .singleElement()
+                .satisfies(d -> assertThat(d.optional()).isFalse());
     }
 
     @Test
@@ -958,8 +961,7 @@ class JkBuildParserTest {
                 deps = ["postgres-jdbc", "hikari"]
                 """);
         assertThat(parsed.features().defaults()).containsExactly("postgres");
-        assertThat(parsed.features().byName().get("postgres").deps())
-                .containsExactly("postgres-jdbc", "hikari");
+        assertThat(parsed.features().byName().get("postgres").deps()).containsExactly("postgres-jdbc", "hikari");
     }
 
     // --- application / m2install -------------------------------------------
@@ -977,8 +979,7 @@ class JkBuildParserTest {
 
     @Test
     void explicit_application_false_overrides_main_default() {
-        JkBuild parsed = JkBuildParser.parse(PROJECT
-                + "main = \"com.example.Main\"\napplication = false\n");
+        JkBuild parsed = JkBuildParser.parse(PROJECT + "main = \"com.example.Main\"\napplication = false\n");
         assertThat(parsed.project().isApplication()).isFalse();
     }
 
@@ -991,6 +992,7 @@ class JkBuildParserTest {
     @Test
     void m2install_parsed_default_false() {
         assertThat(JkBuildParser.parse(PROJECT).project().m2install()).isFalse();
-        assertThat(JkBuildParser.parse(PROJECT + "m2install = true\n").project().m2install()).isTrue();
+        assertThat(JkBuildParser.parse(PROJECT + "m2install = true\n").project().m2install())
+                .isTrue();
     }
 }

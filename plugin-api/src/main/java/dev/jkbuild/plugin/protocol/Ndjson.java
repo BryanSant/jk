@@ -47,12 +47,15 @@ public final class Ndjson {
             if (c == '\\' && i + 1 < json.length()) {
                 char n = json.charAt(++i);
                 switch (n) {
-                    case '"'  -> sb.append('"');
+                    case '"' -> sb.append('"');
                     case '\\' -> sb.append('\\');
-                    case 'n'  -> sb.append('\n');
-                    case 'r'  -> sb.append('\r');
-                    case 't'  -> sb.append('\t');
-                    default   -> { sb.append('\\'); sb.append(n); }
+                    case 'n' -> sb.append('\n');
+                    case 'r' -> sb.append('\r');
+                    case 't' -> sb.append('\t');
+                    default -> {
+                        sb.append('\\');
+                        sb.append(n);
+                    }
                 }
             } else if (c == '"') {
                 break;
@@ -148,10 +151,13 @@ public final class Ndjson {
                     if (c == '\\' && i + 1 < content.length()) {
                         char n = content.charAt(++i);
                         switch (n) {
-                            case '"'  -> sb.append('"');
+                            case '"' -> sb.append('"');
                             case '\\' -> sb.append('\\');
-                            case 'n'  -> sb.append('\n');
-                            default   -> { sb.append('\\'); sb.append(n); }
+                            case 'n' -> sb.append('\n');
+                            default -> {
+                                sb.append('\\');
+                                sb.append(n);
+                            }
                         }
                     } else {
                         sb.append(c);
@@ -225,7 +231,7 @@ public final class Ndjson {
         for (int i = 0; i < s.length(); i++) {
             char c = s.charAt(i);
             switch (c) {
-                case '"'  -> b.append("\\\"");
+                case '"' -> b.append("\\\"");
                 case '\\' -> b.append("\\\\");
                 case '\n' -> b.append("\\n");
                 case '\r' -> b.append("\\r");

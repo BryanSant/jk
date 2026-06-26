@@ -5,10 +5,6 @@ import dev.jkbuild.plugin.Plugin;
 import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
-import javax.annotation.processing.Processor;
-
-import java.io.File;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
@@ -19,6 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.ServiceLoader;
 import java.util.Set;
+import javax.annotation.processing.Processor;
 
 /**
  * Child-JVM entry point that runs {@link InProcessJavac} under the project's JDK
@@ -64,12 +61,11 @@ public final class JavaCompilerWorker implements Plugin {
         List<Processor> processors = loadProcessors(spec.processorPath);
 
         InProcessJavac.Result r = InProcessJavac.compile(
-                spec.sources, spec.classpath, spec.classOutput, spec.sourceOutput,
-                spec.release, spec.args, processors);
+                spec.sources, spec.classpath, spec.classOutput, spec.sourceOutput, spec.release, spec.args, processors);
 
         for (InProcessJavac.Diag d : r.diagnostics()) {
-            out.emit("{\"t\":\"diag\",\"sev\":" + Ndjson.quote(d.kind())
-                    + ",\"msg\":" + Ndjson.quote(d.message()) + "}");
+            out.emit("{\"t\":\"diag\",\"sev\":" + Ndjson.quote(d.kind()) + ",\"msg\":" + Ndjson.quote(d.message())
+                    + "}");
         }
         for (Map.Entry<Path, Set<Path>> e : r.generated().entrySet()) {
             StringBuilder src = new StringBuilder("[");
@@ -80,8 +76,7 @@ public final class JavaCompilerWorker implements Plugin {
                 first = false;
             }
             src.append(']');
-            out.emit("{\"t\":\"prov\",\"gen\":" + Ndjson.quote(e.getKey().toString())
-                    + ",\"src\":" + src + "}");
+            out.emit("{\"t\":\"prov\",\"gen\":" + Ndjson.quote(e.getKey().toString()) + ",\"src\":" + src + "}");
         }
         out.emit("{\"t\":\"result\",\"status\":\"" + (r.success() ? "OK" : "ERROR") + "\"}");
         return r.success() ? 0 : 1;
@@ -104,8 +99,14 @@ public final class JavaCompilerWorker implements Plugin {
         return processors;
     }
 
-    private record Spec(Path classOutput, Path sourceOutput, int release, List<Path> sources,
-                        List<Path> classpath, List<Path> processorPath, List<String> args) {
+    private record Spec(
+            Path classOutput,
+            Path sourceOutput,
+            int release,
+            List<Path> sources,
+            List<Path> classpath,
+            List<Path> processorPath,
+            List<String> args) {
         static Spec parse(Path file) throws java.io.IOException {
             Path classOutput = null;
             Path sourceOutput = null;
@@ -138,5 +139,4 @@ public final class JavaCompilerWorker implements Plugin {
             return new Spec(classOutput, sourceOutput, release, sources, classpath, processorPath, args);
         }
     }
-
 }

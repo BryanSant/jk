@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.Phase;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The build goal composes only the language steps a project opts into. Java and
@@ -43,9 +42,14 @@ class BuildPipelineKotlinPhaseTest {
 
     @Test
     void jdk_plus_java_plus_kotlin_enables_both(@TempDir Path dir) throws Exception {
-        writeManifest(dir, "group=\"com.example\"\nname=\"b\"\nversion=\"0.1.0\"\njdk=25\njava=25\nkotlin=\"2.3.21\"\n");
+        writeManifest(
+                dir, "group=\"com.example\"\nname=\"b\"\nversion=\"0.1.0\"\njdk=25\njava=25\nkotlin=\"2.3.21\"\n");
         assertThat(phaseNames(dir))
-                .contains("compile-java", "compile-kotlin", "write-stamp", "write-stamp-kotlin",
+                .contains(
+                        "compile-java",
+                        "compile-kotlin",
+                        "write-stamp",
+                        "write-stamp-kotlin",
                         // mixed modules add the assembler that merges both outputs
                         "assemble-classes");
     }
@@ -96,8 +100,17 @@ class BuildPipelineKotlinPhaseTest {
 
     private static List<String> phaseNames(Path dir) {
         BuildPipeline.Inputs in = new BuildPipeline.Inputs(
-                dir, dir.resolve("cache"), dir.resolve("jk.toml"), dir.resolve("jk.lock"), dir,
-                1, 0, null, null, true, false);
+                dir,
+                dir.resolve("cache"),
+                dir.resolve("jk.toml"),
+                dir.resolve("jk.lock"),
+                dir,
+                1,
+                0,
+                null,
+                null,
+                true,
+                false);
         Goal goal = BuildPipeline.coreBuilder(in).build();
         return goal.phases().stream().map(Phase::name).toList();
     }

@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.publish;
 
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
-
 import java.util.List;
 import java.util.Objects;
 
@@ -32,27 +31,29 @@ public final class PublishablePom {
     public record Pom(String xml) {}
 
     public record Metadata(
-            String name,
-            String description,
-            String url,
-            List<License> licenses,
-            List<Developer> developers,
-            Scm scm) {
+            String name, String description, String url, List<License> licenses, List<Developer> developers, Scm scm) {
         public Metadata {
             licenses = licenses == null ? List.of() : List.copyOf(licenses);
             developers = developers == null ? List.of() : List.copyOf(developers);
         }
+
         public static Metadata empty() {
             return new Metadata(null, null, null, List.of(), List.of(), null);
         }
     }
 
     public record License(String name, String url) {
-        public License { Objects.requireNonNull(name, "name"); }
+        public License {
+            Objects.requireNonNull(name, "name");
+        }
     }
+
     public record Developer(String id, String name, String email) {
-        public Developer { Objects.requireNonNull(id, "id"); }
+        public Developer {
+            Objects.requireNonNull(id, "id");
+        }
     }
+
     public record Scm(String url, String connection, String developerConnection) {}
 
     private PublishablePom() {}
@@ -75,7 +76,8 @@ public final class PublishablePom {
         sb.append("  <version>").append(escape(p.version())).append("</version>\n");
         sb.append("  <packaging>jar</packaging>\n");
 
-        if (meta.name() != null) sb.append("  <name>").append(escape(meta.name())).append("</name>\n");
+        if (meta.name() != null)
+            sb.append("  <name>").append(escape(meta.name())).append("</name>\n");
         // Metadata wins over project.description; fall back to the project's
         // description so `jk publish` carries the manifest's description into
         // the POM without forcing every caller to thread it through Metadata.
@@ -135,7 +137,8 @@ public final class PublishablePom {
             sb.append("    <connection>").append(escape(scm.connection())).append("</connection>\n");
         }
         if (scm.developerConnection() != null) {
-            sb.append("    <developerConnection>").append(escape(scm.developerConnection()))
+            sb.append("    <developerConnection>")
+                    .append(escape(scm.developerConnection()))
                     .append("</developerConnection>\n");
         }
         sb.append("  </scm>\n");
@@ -148,7 +151,9 @@ public final class PublishablePom {
             sb.append("      <dependency>\n");
             sb.append("        <groupId>").append(escape(d.group())).append("</groupId>\n");
             sb.append("        <artifactId>").append(escape(d.name())).append("</artifactId>\n");
-            sb.append("        <version>").append(escape(versionOf(d.version()))).append("</version>\n");
+            sb.append("        <version>")
+                    .append(escape(versionOf(d.version())))
+                    .append("</version>\n");
             sb.append("        <type>pom</type>\n");
             sb.append("        <scope>import</scope>\n");
             sb.append("      </dependency>\n");
@@ -160,7 +165,10 @@ public final class PublishablePom {
         Scope[] order = {Scope.MAIN, Scope.RUNTIME, Scope.PROVIDED, Scope.TEST};
         boolean any = false;
         for (Scope s : order) {
-            if (!jkBuild.dependencies().of(s).isEmpty()) { any = true; break; }
+            if (!jkBuild.dependencies().of(s).isEmpty()) {
+                any = true;
+                break;
+            }
         }
         if (!any) return;
 
@@ -177,7 +185,9 @@ public final class PublishablePom {
                 sb.append("    <dependency>\n");
                 sb.append("      <groupId>").append(escape(d.group())).append("</groupId>\n");
                 sb.append("      <artifactId>").append(escape(d.name())).append("</artifactId>\n");
-                sb.append("      <version>").append(escape(versionOf(d.version()))).append("</version>\n");
+                sb.append("      <version>")
+                        .append(escape(versionOf(d.version())))
+                        .append("</version>\n");
                 if (mavenScope != null) {
                     sb.append("      <scope>").append(mavenScope).append("</scope>\n");
                 }
@@ -189,7 +199,7 @@ public final class PublishablePom {
 
     private static String mavenScope(Scope s) {
         return switch (s) {
-            case EXPORT, MAIN -> null;  // compile scope (Maven default — transitive to consumers)
+            case EXPORT, MAIN -> null; // compile scope (Maven default — transitive to consumers)
             case RUNTIME -> "runtime";
             case PROVIDED -> "provided";
             case TEST -> "test";

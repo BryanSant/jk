@@ -13,7 +13,6 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.util.JkThreads;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -54,8 +53,8 @@ final class CompositeBuild {
      * on success, else an exit code (errors already printed). A no-op when no
      * composite deps exist.
      */
-    static int buildDependencies(Path entryDir, JkBuild entry, Path cache, Path jdksDir,
-                                 String profileName, GlobalOptions global)
+    static int buildDependencies(
+            Path entryDir, JkBuild entry, Path cache, Path jdksDir, String profileName, GlobalOptions global)
             throws IOException, InterruptedException {
         BuildGraph.Result graph = BuildGraph.resolve(entryDir, entry, cache.resolve("git"));
         if (graph.hasErrors()) {
@@ -63,7 +62,8 @@ final class CompositeBuild {
             return 2;
         }
         List<BuildGraph.BuildUnit> deps = graph.topoOrder().stream()
-                .filter(BuildGraph.BuildUnit::isDependency).toList();
+                .filter(BuildGraph.BuildUnit::isDependency)
+                .toList();
         if (deps.isEmpty()) return 0;
 
         Set<Path> depDirs = deps.stream().map(BuildGraph.BuildUnit::dir).collect(Collectors.toSet());
@@ -81,7 +81,8 @@ final class CompositeBuild {
         while (!remaining.isEmpty()) {
             List<BuildGraph.BuildUnit> ready = remaining.stream()
                     .filter(u -> edges.getOrDefault(u.dir(), Set.of()).stream()
-                            .filter(depDirs::contains).allMatch(done::contains))
+                            .filter(depDirs::contains)
+                            .allMatch(done::contains))
                     .toList();
             // Acyclic (BuildGraph guarantees it), so `ready` is never empty here.
             List<CompletableFuture<UnitResult>> futures = new ArrayList<>();
@@ -118,15 +119,20 @@ final class CompositeBuild {
                 BuildGraph.BuildUnit u = deps.get(i);
                 Path jar = BuildLayout.of(u.dir(), u.manifest()).mainJar();
                 String sha = Files.isRegularFile(jar) ? sha256(jar) : "";
-                json.append("  {\"coord\": ").append(Ndjson.quote(u.coord()))
-                        .append(", \"origin\": ").append(Ndjson.quote(u.origin().name()))
-                        .append(", \"dir\": ").append(Ndjson.quote(u.dir().toString()))
-                        .append(", \"jarSha256\": ").append(Ndjson.quote(sha))
-                        .append("}").append(i < deps.size() - 1 ? "," : "").append("\n");
+                json.append("  {\"coord\": ")
+                        .append(Ndjson.quote(u.coord()))
+                        .append(", \"origin\": ")
+                        .append(Ndjson.quote(u.origin().name()))
+                        .append(", \"dir\": ")
+                        .append(Ndjson.quote(u.dir().toString()))
+                        .append(", \"jarSha256\": ")
+                        .append(Ndjson.quote(sha))
+                        .append("}")
+                        .append(i < deps.size() - 1 ? "," : "")
+                        .append("\n");
             }
             json.append("]\n");
-            Files.writeString(target.resolve("jk-composite-audit.json"), json.toString(),
-                    StandardCharsets.UTF_8);
+            Files.writeString(target.resolve("jk-composite-audit.json"), json.toString(), StandardCharsets.UTF_8);
         } catch (Exception ignored) {
             // Provenance is best-effort; never fail a build over it.
         }
@@ -148,19 +154,29 @@ final class CompositeBuild {
     private record UnitResult(BuildGraph.BuildUnit unit, boolean success, long millis, String outcome) {}
 
     /** Build one dependency unit (compile-only) silently via the real pipeline. */
-    private static UnitResult buildOne(BuildGraph.BuildUnit u, Path cache, Path jdksDir,
-                                       String profileName, GlobalOptions global) {
+    private static UnitResult buildOne(
+            BuildGraph.BuildUnit u, Path cache, Path jdksDir, String profileName, GlobalOptions global) {
         Path dir = u.dir();
         try {
             BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                    dir, cache, dir.resolve("jk.toml"), dir.resolve("jk.lock"), dir,
-                    1, 0, profileName, jdksDir, true /* skipTests */, global.verbose);
+                    dir,
+                    cache,
+                    dir.resolve("jk.toml"),
+                    dir.resolve("jk.lock"),
+                    dir,
+                    1,
+                    0,
+                    profileName,
+                    jdksDir,
+                    true /* skipTests */,
+                    global.verbose);
             Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
             BuildPipeline.appendDeclaredTails(builder, inputs);
             Goal goal = builder.build();
             GoalResult r = GoalConsole.runGoalSilently(goal, cache);
             String outcome = goal.get(BuildPipeline.BUILD_OUTCOME).orElse("");
-            return new UnitResult(u, r.success(), r.duration() == null ? 0 : r.duration().toMillis(), outcome);
+            return new UnitResult(
+                    u, r.success(), r.duration() == null ? 0 : r.duration().toMillis(), outcome);
         } catch (Exception e) {
             return new UnitResult(u, false, 0, e.getMessage() == null ? "build error" : e.getMessage());
         }
@@ -172,12 +188,12 @@ final class CompositeBuild {
         synchronized (PRINT_LOCK) {
             if (ur.success) {
                 String detail = "up-to-date".equals(ur.outcome) || "no-sources".equals(ur.outcome)
-                        ? "up to date" : ur.millis + "ms";
-                System.out.println("  " + Theme.colorize("✓", t.success())
-                        + " " + ur.unit.coord() + " (" + detail + ")");
+                        ? "up to date"
+                        : ur.millis + "ms";
+                System.out.println(
+                        "  " + Theme.colorize("✓", t.success()) + " " + ur.unit.coord() + " (" + detail + ")");
             } else {
-                System.out.println("  " + Theme.colorize("✗", t.error())
-                        + " " + ur.unit.coord() + " — " + ur.outcome);
+                System.out.println("  " + Theme.colorize("✗", t.error()) + " " + ur.unit.coord() + " — " + ur.outcome);
             }
         }
     }

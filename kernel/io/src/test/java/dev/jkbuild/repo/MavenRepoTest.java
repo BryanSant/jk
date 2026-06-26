@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.ActiveConfig;
@@ -8,11 +11,6 @@ import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -20,9 +18,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MavenRepoTest {
 
@@ -44,8 +43,14 @@ class MavenRepoTest {
 
     private static void goOffline() {
         ActiveConfig.install(new JkConfig(
-                Optional.empty(), Optional.of(true), Optional.empty(), Optional.empty(),
-                Optional.empty(), Optional.empty(), Optional.empty(), Optional.empty()));
+                Optional.empty(),
+                Optional.of(true),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty(),
+                Optional.empty()));
     }
 
     @Test
@@ -85,8 +90,7 @@ class MavenRepoTest {
     void translates_404_to_typed_exception(@TempDir Path tempDir) {
         // No handler registered → 404 from the SimpleHttpServer fallback.
         MavenRepo repo = new MavenRepo("test", base, new Http(), new Cas(tempDir));
-        assertThatThrownBy(() ->
-                repo.fetchArtifact(Coordinate.of("com.example", "missing", "9.9.9")))
+        assertThatThrownBy(() -> repo.fetchArtifact(Coordinate.of("com.example", "missing", "9.9.9")))
                 .isInstanceOf(MavenRepo.ArtifactNotFoundException.class);
     }
 
@@ -152,10 +156,8 @@ class MavenRepoTest {
         Cas cas = new Cas(tempDir);
         JkMavenLocalRepo localRepo = new JkMavenLocalRepo(tempDir);
         Path blob = cas.put("jar-bytes".getBytes(StandardCharsets.UTF_8));
-        localRepo.materialize(
-                MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "1.0")), blob);
-        localRepo.materialize(
-                MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "2.0")), blob);
+        localRepo.materialize(MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "1.0")), blob);
+        localRepo.materialize(MavenLayout.artifactPath(Coordinate.of("com.example", "widget", "2.0")), blob);
         goOffline();
 
         MavenRepo repo = new MavenRepo("test", base, new Http(), cas, localRepo);
@@ -170,8 +172,7 @@ class MavenRepoTest {
         // cache speaks java.net.http directly and throws "invalid URI scheme file"
         // on a file:// URI, so it must not be engaged for such repos.
         Path repoDir = tempDir.resolve("repo");
-        Path metaFile = repoDir.resolve(
-                MavenLayout.metadataPath(Coordinate.of("com.example", "widget", "0")));
+        Path metaFile = repoDir.resolve(MavenLayout.metadataPath(Coordinate.of("com.example", "widget", "0")));
         Files.createDirectories(metaFile.getParent());
         Files.writeString(metaFile, """
                 <metadata><groupId>com.example</groupId><artifactId>widget</artifactId>

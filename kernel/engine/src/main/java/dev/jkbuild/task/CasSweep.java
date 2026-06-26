@@ -3,7 +3,6 @@ package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.repo.JkMavenLocalRepo;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -82,7 +81,7 @@ public final class CasSweep {
                 }
 
                 long mtime = Files.getLastModifiedTime(file).toMillis();
-                if (mtime > sweepStartMillis) continue;            // concurrent write
+                if (mtime > sweepStartMillis) continue; // concurrent write
                 if (sweepStartMillis - mtime < minAgeMillis) continue; // grace period
 
                 long size = Files.size(file);

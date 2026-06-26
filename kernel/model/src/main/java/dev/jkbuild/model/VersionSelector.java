@@ -77,8 +77,6 @@ public sealed interface VersionSelector {
         if (trimmed.startsWith("=")) {
             return new Exact(spec, trimmed.substring(1).trim());
         }
-        return bareIsCaret
-                ? new Caret(spec, trimmed)
-                : new Exact(spec, trimmed);
+        return bareIsCaret ? new Caret(spec, trimmed) : new Exact(spec, trimmed);
     }
 }

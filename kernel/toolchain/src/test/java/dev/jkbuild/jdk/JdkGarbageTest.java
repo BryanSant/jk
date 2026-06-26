@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JdkGarbageTest {
 
@@ -32,7 +31,7 @@ class JdkGarbageTest {
 
         g.drain();
         assertThat(old).doesNotExist();
-        assertThat(jdks.resolve(".to-be-removed")).doesNotExist();   // nothing left → queue removed
+        assertThat(jdks.resolve(".to-be-removed")).doesNotExist(); // nothing left → queue removed
     }
 
     @Test
@@ -44,7 +43,7 @@ class JdkGarbageTest {
 
         JdkGarbage g = new JdkGarbage(jdks);
         g.enqueue(outside);
-        assertThat(jdks.resolve(".to-be-removed")).doesNotExist();   // refused
+        assertThat(jdks.resolve(".to-be-removed")).doesNotExist(); // refused
         g.drain();
         assertThat(outside).exists();
     }

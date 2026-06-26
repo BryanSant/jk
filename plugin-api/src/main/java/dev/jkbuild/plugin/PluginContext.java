@@ -3,7 +3,6 @@ package dev.jkbuild.plugin;
 
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.run.Phase;
-
 import java.nio.file.Path;
 import java.util.Map;
 

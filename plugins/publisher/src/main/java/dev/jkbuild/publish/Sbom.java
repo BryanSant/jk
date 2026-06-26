@@ -3,7 +3,6 @@ package dev.jkbuild.publish;
 
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.JkBuild;
-
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.UUID;
@@ -55,8 +54,12 @@ public final class Sbom {
         sb.append("]}");
         comma(sb);
         sb.append("\"component\":");
-        appendCdxComponent(sb, project.project().group(), project.project().name(),
-                project.project().version(), null);
+        appendCdxComponent(
+                sb,
+                project.project().group(),
+                project.project().name(),
+                project.project().version(),
+                null);
         sb.append('}');
         comma(sb);
 
@@ -106,17 +109,25 @@ public final class Sbom {
         comma(sb);
 
         sb.append("\"packages\":[");
-        appendSpdxPackage(sb, "SPDXRef-Package-Root",
-                project.project().group(), project.project().name(),
-                project.project().version(), null);
+        appendSpdxPackage(
+                sb,
+                "SPDXRef-Package-Root",
+                project.project().group(),
+                project.project().name(),
+                project.project().version(),
+                null);
         if (lock != null) {
             int i = 0;
             for (Lockfile.Artifact pkg : lock.artifacts()) {
                 String[] ga = splitModule(pkg.name());
                 sb.append(',');
-                appendSpdxPackage(sb,
+                appendSpdxPackage(
+                        sb,
                         "SPDXRef-Package-" + sanitizeId(pkg.name()) + "-" + i++,
-                        ga[0], ga[1], pkg.version(), stripSha256Prefix(pkg.checksum()));
+                        ga[0],
+                        ga[1],
+                        pkg.version(),
+                        stripSha256Prefix(pkg.checksum()));
             }
         }
         sb.append(']');
@@ -128,8 +139,8 @@ public final class Sbom {
 
     // --- helpers ----------------------------------------------------------
 
-    private static void appendCdxComponent(StringBuilder sb, String group, String artifact,
-                                           String version, String sha256Hex) {
+    private static void appendCdxComponent(
+            StringBuilder sb, String group, String artifact, String version, String sha256Hex) {
         String purl = "pkg:maven/" + group + "/" + artifact + "@" + version;
         sb.append('{');
         kv(sb, "type", "library");
@@ -154,8 +165,8 @@ public final class Sbom {
         sb.append('}');
     }
 
-    private static void appendSpdxPackage(StringBuilder sb, String spdxId, String group,
-                                          String artifact, String version, String sha256Hex) {
+    private static void appendSpdxPackage(
+            StringBuilder sb, String spdxId, String group, String artifact, String version, String sha256Hex) {
         sb.append('{');
         kv(sb, "SPDXID", spdxId);
         comma(sb);
@@ -214,7 +225,9 @@ public final class Sbom {
         appendJsonString(sb, value);
     }
 
-    private static void comma(StringBuilder sb) { sb.append(','); }
+    private static void comma(StringBuilder sb) {
+        sb.append(',');
+    }
 
     private static void appendJsonString(StringBuilder sb, String s) {
         sb.append('"');
@@ -236,5 +249,4 @@ public final class Sbom {
         }
         sb.append('"');
     }
-
 }

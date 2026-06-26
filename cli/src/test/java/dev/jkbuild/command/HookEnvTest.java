@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class HookEnvTest {
 
@@ -23,9 +22,11 @@ class HookEnvTest {
     @Test
     void entering_a_project_exports_target_vars_and_stores_diff() {
         var sh = new BashShell();
-        var target = new JkEnv.Target(Optional.of(Path.of("/proj")), Map.of(
-                "JAVA_HOME", "/opt/jdk-25",
-                "PATH", "/opt/jdk-25/bin:/usr/bin"));
+        var target = new JkEnv.Target(
+                Optional.of(Path.of("/proj")),
+                Map.of(
+                        "JAVA_HOME", "/opt/jdk-25",
+                        "PATH", "/opt/jdk-25/bin:/usr/bin"));
         var out = new StringBuilder();
         // Before activation: only PATH is set in the env, JAVA_HOME is unset.
         JkDiff.EnvSnapshot snap = k -> "PATH".equals(k) ? "/usr/bin" : null;
@@ -41,9 +42,7 @@ class HookEnvTest {
     void leaving_a_project_restores_originals() {
         var sh = new BashShell();
         // Prior diff: jk previously set JAVA_HOME (was unset before) and PATH (was /usr/bin).
-        var prior = new JkDiff(orderedMap(
-                "JAVA_HOME", JkDiff.UNSET_SENTINEL,
-                "PATH", "/usr/bin"));
+        var prior = new JkDiff(orderedMap("JAVA_HOME", JkDiff.UNSET_SENTINEL, "PATH", "/usr/bin"));
         var out = new StringBuilder();
         // Target.empty() = no project here.
         HookEnvCommand.emit(sh, JkEnv.Target.empty(), prior, k -> null, out);
@@ -65,9 +64,11 @@ class HookEnvTest {
                 "JAVA_HOME", "/sys/jdk",
                 "PATH", "/usr/bin"));
         // Now entering project B: new target.
-        var target = new JkEnv.Target(Optional.of(Path.of("/b")), Map.of(
-                "JAVA_HOME", "/opt/jdk-25",
-                "PATH", "/opt/jdk-25/bin:/usr/bin"));
+        var target = new JkEnv.Target(
+                Optional.of(Path.of("/b")),
+                Map.of(
+                        "JAVA_HOME", "/opt/jdk-25",
+                        "PATH", "/opt/jdk-25/bin:/usr/bin"));
         var out = new StringBuilder();
         // Live env has project A's values right now — should NOT overwrite our diff.
         JkDiff.EnvSnapshot snap = k -> switch (k) {
@@ -130,8 +131,10 @@ class HookEnvTest {
     private static <K, V> Map<K, V> orderedMap(Object... kvs) {
         var m = new LinkedHashMap<K, V>();
         for (int i = 0; i < kvs.length; i += 2) {
-            @SuppressWarnings("unchecked") K k = (K) kvs[i];
-            @SuppressWarnings("unchecked") V v = (V) kvs[i + 1];
+            @SuppressWarnings("unchecked")
+            K k = (K) kvs[i];
+            @SuppressWarnings("unchecked")
+            V v = (V) kvs[i + 1];
             m.put(k, v);
         }
         return m;

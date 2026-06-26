@@ -2,7 +2,6 @@
 package dev.jkbuild.tool;
 
 import dev.jkbuild.jdk.HostPlatform;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -57,8 +56,7 @@ public final class NativeImageDriver {
         }
 
         /** An executable image with the given entry point. */
-        public Request(Path javaHome, List<Path> classpath, String mainClass,
-                       Path outputPath, List<String> extraArgs) {
+        public Request(Path javaHome, List<Path> classpath, String mainClass, Path outputPath, List<String> extraArgs) {
             this(javaHome, classpath, mainClass, outputPath, extraArgs, false);
         }
     }
@@ -82,8 +80,7 @@ public final class NativeImageDriver {
     }
 
     /** {@code [N/M] Some label...} — native-image phase header. */
-    private static final Pattern STEP_PATTERN =
-            Pattern.compile("^\\[(\\d+)/(\\d+)]\\s+(.+?)(?:\\s{2,}.*)?$");
+    private static final Pattern STEP_PATTERN = Pattern.compile("^\\[(\\d+)/(\\d+)]\\s+(.+?)(?:\\s{2,}.*)?$");
 
     private NativeImageDriver() {}
 
@@ -103,10 +100,8 @@ public final class NativeImageDriver {
      * <p>{@code listener} may be {@code null} — output still flows to
      * {@code System.out} but no callbacks are invoked.
      */
-    public static int run(Request request, ProgressListener listener)
-            throws IOException, InterruptedException {
-        Path binary = resolve(request.javaHome())
-                .orElseThrow(() -> notFoundError(request.javaHome()));
+    public static int run(Request request, ProgressListener listener) throws IOException, InterruptedException {
+        Path binary = resolve(request.javaHome()).orElseThrow(() -> notFoundError(request.javaHome()));
         List<String> command = buildCommand(binary, request);
 
         Files.createDirectories(request.outputPath().toAbsolutePath().getParent());
@@ -152,42 +147,44 @@ public final class NativeImageDriver {
      * {@code [N/M]} step headers and firing the listener when found.
      * stderr uses the simpler {@link #forwardStream} (no parsing needed).
      */
-    private static Thread forwardStdout(java.io.InputStream in,
-                                        ProgressListener listener) {
-        Thread t = new Thread(() -> {
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(in, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    System.out.println(line);
-                    if (listener != null) {
-                        Matcher m = STEP_PATTERN.matcher(line);
-                        if (m.matches()) {
-                            int current = Integer.parseInt(m.group(1));
-                            int total   = Integer.parseInt(m.group(2));
-                            String label = m.group(3).trim();
-                            listener.onStep(current, total, label);
+    private static Thread forwardStdout(java.io.InputStream in, ProgressListener listener) {
+        Thread t = new Thread(
+                () -> {
+                    try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            System.out.println(line);
+                            if (listener != null) {
+                                Matcher m = STEP_PATTERN.matcher(line);
+                                if (m.matches()) {
+                                    int current = Integer.parseInt(m.group(1));
+                                    int total = Integer.parseInt(m.group(2));
+                                    String label = m.group(3).trim();
+                                    listener.onStep(current, total, label);
+                                }
+                            }
                         }
+                    } catch (IOException ignored) {
                     }
-                }
-            } catch (IOException ignored) {}
-        }, "native-image-stdout");
+                },
+                "native-image-stdout");
         t.setDaemon(true);
         t.start();
         return t;
     }
 
-    private static Thread forwardStream(java.io.InputStream in,
-                                        java.io.PrintStream dest) {
-        Thread t = new Thread(() -> {
-            try (BufferedReader br = new BufferedReader(
-                    new InputStreamReader(in, StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = br.readLine()) != null) {
-                    dest.println(line);
-                }
-            } catch (IOException ignored) {}
-        }, "native-image-stderr");
+    private static Thread forwardStream(java.io.InputStream in, java.io.PrintStream dest) {
+        Thread t = new Thread(
+                () -> {
+                    try (BufferedReader br = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8))) {
+                        String line;
+                        while ((line = br.readLine()) != null) {
+                            dest.println(line);
+                        }
+                    } catch (IOException ignored) {
+                    }
+                },
+                "native-image-stderr");
         t.setDaemon(true);
         t.start();
         return t;
@@ -240,8 +237,7 @@ public final class NativeImageDriver {
     }
 
     public static IOException notFoundError(Path javaHome) {
-        return new IOException(
-                "native-image binary not found.\n"
+        return new IOException("native-image binary not found.\n"
                 + "  Checked: " + (javaHome != null ? javaHome.resolve("bin/native-image") + ", " : "")
                 + "$GRAALVM_HOME/bin/native-image, PATH\n"
                 + "  Install a GraalVM JDK and pin it:\n"

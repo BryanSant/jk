@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * Exercise the source → command-line mapping. We can't safely run the real
@@ -36,7 +35,8 @@ class JdkToolUninstallerTest {
         assertThat(actual).hasSize(3);
         assertThat(actual.get(0)).isEqualTo("bash");
         assertThat(actual.get(1)).isEqualTo("-c");
-        assertThat(actual.get(2)).contains("sdkman-init.sh")
+        assertThat(actual.get(2))
+                .contains("sdkman-init.sh")
                 .contains("sdk uninstall java")
                 .contains("'25.0.3-tem'");
     }
@@ -58,27 +58,22 @@ class JdkToolUninstallerTest {
         // jenv doesn't own JDK files; this command just unregisters the
         // alias. The dir-exists check downstream will trigger FALL_THROUGH
         // so the actual install gets purged too.
-        assertThat(commandFor("jenv", "temurin-21.0.5"))
-                .containsExactly("jenv", "remove", "temurin-21.0.5");
+        assertThat(commandFor("jenv", "temurin-21.0.5")).containsExactly("jenv", "remove", "temurin-21.0.5");
     }
 
     @Test
     void asdf_command() {
-        assertThat(commandFor("asdf", "temurin-21.0.5"))
-                .containsExactly("asdf", "uninstall", "java", "temurin-21.0.5");
+        assertThat(commandFor("asdf", "temurin-21.0.5")).containsExactly("asdf", "uninstall", "java", "temurin-21.0.5");
     }
 
     @Test
     void homebrew_extracts_formula_from_cellar_path() {
         // Home → ...Cellar/openjdk@21/21.0.5/libexec/openjdk.jdk/Contents/Home
-        var home = Path.of("/opt/homebrew/Cellar/openjdk@21/21.0.5"
-                + "/libexec/openjdk.jdk/Contents/Home");
+        var home = Path.of("/opt/homebrew/Cellar/openjdk@21/21.0.5" + "/libexec/openjdk.jdk/Contents/Home");
         var hit = hit(home, "homebrew");
-        var cmd = JdkToolUninstaller.class
-                .getDeclaredMethods();
+        var cmd = JdkToolUninstaller.class.getDeclaredMethods();
         // Use reflection through the package-private commandFor for verification.
-        assertThat(commandFor(hit, "openjdk.jdk"))
-                .containsExactly("brew", "uninstall", "openjdk@21");
+        assertThat(commandFor(hit, "openjdk.jdk")).containsExactly("brew", "uninstall", "openjdk@21");
     }
 
     @Test
@@ -102,8 +97,7 @@ class JdkToolUninstallerTest {
     @SuppressWarnings("unchecked")
     private static java.util.List<String> commandFor(JdkHit hit, String identifier) {
         try {
-            var m = JdkToolUninstaller.class.getDeclaredMethod(
-                    "commandFor", JdkHit.class, String.class);
+            var m = JdkToolUninstaller.class.getDeclaredMethod("commandFor", JdkHit.class, String.class);
             m.setAccessible(true);
             return (java.util.List<String>) m.invoke(null, hit, identifier);
         } catch (ReflectiveOperationException e) {

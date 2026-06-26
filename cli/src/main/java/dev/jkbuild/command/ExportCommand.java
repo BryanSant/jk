@@ -3,7 +3,6 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
-
 import java.util.List;
 
 /**
@@ -21,8 +20,15 @@ import java.util.List;
  */
 public final class ExportCommand implements CliCommand {
 
-    @Override public String name() { return "export"; }
-    @Override public String description() { return "Export a jk project to Gradle, Maven, or IntelliJ IDEA"; }
+    @Override
+    public String name() {
+        return "export";
+    }
+
+    @Override
+    public String description() {
+        return "Export a jk project to Gradle, Maven, or IntelliJ IDEA";
+    }
 
     @Override
     public List<CliCommand> subcommands() {

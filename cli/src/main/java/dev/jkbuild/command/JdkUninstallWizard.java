@@ -1,23 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.tui.Choice;
-import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
-import org.jline.terminal.Terminal;
-import org.jline.utils.AttributedString;
-import org.jline.utils.AttributedStringBuilder;
-
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import org.jline.terminal.Terminal;
+import org.jline.utils.AttributedString;
+import org.jline.utils.AttributedStringBuilder;
 
 /**
  * TUI for {@code jk jdk uninstall} when no argument is supplied.
@@ -48,31 +47,23 @@ final class JdkUninstallWizard {
      * Show the wizard. Empty result means the user cancelled (Esc); a result
      * with an empty list means they committed without checking anything.
      */
-    static Optional<List<JdkHit>> run(
-            List<JdkHit> installed,
-            Optional<String> currentDefault,
-            Terminal terminal) {
+    static Optional<List<JdkHit>> run(List<JdkHit> installed, Optional<String> currentDefault, Terminal terminal) {
         Map<String, JdkHit> byId = new LinkedHashMap<>();
         for (JdkHit hit : installed) {
             byId.put(choiceIdFor(hit), hit);
         }
 
-        WizardStep.MultiSelectStep.Builder victims = WizardStep.MultiSelectStep
-                .vertical(VICTIMS_KEY, "Select the JDKs to uninstall");
+        WizardStep.MultiSelectStep.Builder victims =
+                WizardStep.MultiSelectStep.vertical(VICTIMS_KEY, "Select the JDKs to uninstall");
         for (JdkHit hit : installed) {
             String id = choiceIdFor(hit);
             String identifier = JdkRegistry.identifierFor(hit.home());
             String fallback = richLabel(hit, identifier, false).toString();
-            String hint = currentDefault.isPresent() && currentDefault.get().equals(identifier)
-                    ? "(default)" : "";
-            victims.choice(Choice.rich(id, fallback, hint,
-                    focused -> richLabel(hit, identifier, focused)));
+            String hint = currentDefault.isPresent() && currentDefault.get().equals(identifier) ? "(default)" : "";
+            victims.choice(Choice.rich(id, fallback, hint, focused -> richLabel(hit, identifier, focused)));
         }
 
-        Wizard wizard = Wizard.builder()
-                .title(TITLE)
-                .step(victims.build())
-                .build();
+        Wizard wizard = Wizard.builder().title(TITLE).step(victims.build()).build();
 
         Optional<Answers> outcome = wizard.run(terminal);
         if (outcome.isEmpty()) return Optional.empty();
@@ -96,7 +87,8 @@ final class JdkUninstallWizard {
      * omitted when unknown.
      */
     static AttributedString richLabel(JdkHit hit, String identifier, boolean focused) {
-        var sourceStyle = focused ? Theme.active().warning().bold() : Theme.active().warning();
+        var sourceStyle =
+                focused ? Theme.active().warning().bold() : Theme.active().warning();
         var idStyle = focused ? Theme.active().focused() : Theme.active().plainWhite();
         var sb = new AttributedStringBuilder();
         sb.append(hit.source(), sourceStyle);

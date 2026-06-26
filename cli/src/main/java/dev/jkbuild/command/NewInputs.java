@@ -65,16 +65,41 @@ public record NewInputs(
      * Back-compat constructor: {@code javaRelease} defaults to {@code jdkMajor}.
      */
     public NewInputs(
-            String group, String name, String jdk, int jdkMajor,
-            Optional<String> jdkIdentifier, Optional<String> main, boolean shadow,
-            boolean nativeImage, Language lang, String layout,
-            Optional<String> kotlinModuleName, List<String> deps, boolean sample, Path directory) {
-        this(group, name, jdk, jdkMajor, jdkMajor, jdkIdentifier, main, shadow,
-                nativeImage, lang, layout, kotlinModuleName, deps, sample, directory);
+            String group,
+            String name,
+            String jdk,
+            int jdkMajor,
+            Optional<String> jdkIdentifier,
+            Optional<String> main,
+            boolean shadow,
+            boolean nativeImage,
+            Language lang,
+            String layout,
+            Optional<String> kotlinModuleName,
+            List<String> deps,
+            boolean sample,
+            Path directory) {
+        this(
+                group,
+                name,
+                jdk,
+                jdkMajor,
+                jdkMajor,
+                jdkIdentifier,
+                main,
+                shadow,
+                nativeImage,
+                lang,
+                layout,
+                kotlinModuleName,
+                deps,
+                sample,
+                directory);
     }
 
     public enum Language {
-        JAVA, KOTLIN;
+        JAVA,
+        KOTLIN;
 
         public String hoconValue() {
             return switch (this) {

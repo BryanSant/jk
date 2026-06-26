@@ -31,18 +31,20 @@ public final class PartialSolution {
      * required it; the solver shouldn't pick a version for it).
      */
     private final Set<String> packagesWithPositiveTerm = new HashSet<>();
+
     private final Map<String, String> decisionByPackage = new TreeMap<>();
     private int decisionLevel = 0;
 
     public sealed interface Assignment {
         Term term();
+
         int decisionLevel();
+
         int globalIndex();
 
         record Decision(Term term, int decisionLevel, int globalIndex) implements Assignment {}
 
-        record Derivation(Term term, int decisionLevel, int globalIndex, Incompatibility cause)
-                implements Assignment {}
+        record Derivation(Term term, int decisionLevel, int globalIndex, Incompatibility cause) implements Assignment {}
     }
 
     public void decide(String pkg, String version) {
@@ -135,7 +137,9 @@ public final class PartialSolution {
             register(a.term());
             if (a instanceof Assignment.Decision d
                     && d.term().effectiveVersions() instanceof VersionSet.Range r
-                    && r.min() != null && r.minInclusive() && r.maxInclusive()) {
+                    && r.min() != null
+                    && r.minInclusive()
+                    && r.maxInclusive()) {
                 decisionByPackage.put(d.term().pkg(), r.min());
             }
         }
@@ -176,7 +180,9 @@ public final class PartialSolution {
     }
 
     public enum IncompatibilityRelation {
-        SATISFIED, ALMOST_SATISFIED, INCONCLUSIVE
+        SATISFIED,
+        ALMOST_SATISFIED,
+        INCONCLUSIVE
     }
 
     public record Relation(IncompatibilityRelation kind, Term unsatisfied) {}

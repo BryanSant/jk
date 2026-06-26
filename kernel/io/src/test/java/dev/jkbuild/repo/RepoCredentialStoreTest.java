@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
-import dev.jkbuild.credential.RepoCredential;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import dev.jkbuild.credential.RepoCredential;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class RepoCredentialStoreTest {
 
@@ -23,8 +22,7 @@ class RepoCredentialStoreTest {
         store.write("corp-nexus", new RepoCredential.Basic("deployer", "p@ss w/ space"));
 
         assertThat(store.read("ghp")).contains(new RepoCredential.Bearer("tok-123"));
-        assertThat(store.read("corp-nexus"))
-                .contains(new RepoCredential.Basic("deployer", "p@ss w/ space"));
+        assertThat(store.read("corp-nexus")).contains(new RepoCredential.Basic("deployer", "p@ss w/ space"));
         assertThat(store.read("absent")).isEmpty();
     }
 
@@ -49,10 +47,8 @@ class RepoCredentialStoreTest {
         var store = new RepoCredentialStore(dir);
         store.write("ghp", new RepoCredential.Bearer("tok"));
         Path file = dir.resolve("ghp");
-        PosixFileAttributeView posix =
-                Files.getFileAttributeView(file, PosixFileAttributeView.class);
+        PosixFileAttributeView posix = Files.getFileAttributeView(file, PosixFileAttributeView.class);
         assumeTrue(posix != null, "POSIX-only assertion");
-        assertThat(Files.getPosixFilePermissions(file))
-                .isEqualTo(PosixFilePermissions.fromString("rw-------"));
+        assertThat(Files.getPosixFilePermissions(file)).isEqualTo(PosixFilePermissions.fromString("rw-------"));
     }
 }

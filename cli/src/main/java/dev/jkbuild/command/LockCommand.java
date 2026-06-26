@@ -1,17 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.RepoGroupBuilder;
-
-import dev.jkbuild.runtime.GitSourceResolution;
-
-import dev.jkbuild.runtime.CompileToolchain;
-
-import dev.jkbuild.cli.Jk;
-
-import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.GlobalOptions;
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Coords;
@@ -26,10 +18,14 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.WorkspaceMerge;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
 import dev.jkbuild.resolver.VersionSelectors;
 import dev.jkbuild.resolver.Versions;
+import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
 import dev.jkbuild.resolver.pubgrub.VersionSet;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
@@ -37,18 +33,15 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
 import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.resolver.pubgrub.UnsatisfiableException;
-import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
-import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.GitSourceResolution;
+import dev.jkbuild.runtime.RepoGroupBuilder;
 import dev.jkbuild.util.JkDirs;
-
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -93,9 +86,13 @@ public final class LockCommand implements CliCommand {
                         .splitOn(","),
                 Opt.flag("Don't activate the project's default features.", "--no-default-features"),
                 Opt.flag("Pin sources JARs for all Maven deps too.", "--sources"),
-                Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url").hide(),
-                Opt.value("<dir>", "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
-                        "--cache-dir").hide());
+                Opt.value("<url>", "Override declared repos with a single URL.", "--repo-url")
+                        .hide(),
+                Opt.value(
+                                "<dir>",
+                                "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                                "--cache-dir")
+                        .hide());
     }
 
     private static final GoalKey<JkBuild> EFFECTIVE = GoalKey.of("effective-build", JkBuild.class);
@@ -149,10 +146,8 @@ public final class LockCommand implements CliCommand {
                 JkBuild rawModule = entry.getValue();
                 // Resolve workspace:* placeholders and filter sibling-internal deps
                 // so the module's lock only contains resolvable external coords.
-                JkBuild effectiveModule = WorkspaceMerge.applyToModule(
-                        effectiveRoot, rawModule, modules.values());
-                String moduleLabel = dir.getFileName() + "/"
-                        + dir.relativize(moduleDir);
+                JkBuild effectiveModule = WorkspaceMerge.applyToModule(effectiveRoot, rawModule, modules.values());
+                String moduleLabel = dir.getFileName() + "/" + dir.relativize(moduleDir);
                 int moduleResult = lockSingleProject(moduleDir, effectiveModule, cache, moduleLabel);
                 if (moduleResult != 0) return moduleResult;
             }
@@ -188,8 +183,7 @@ public final class LockCommand implements CliCommand {
      * project directory. {@code effective} is the pre-parsed {@link JkBuild}
      * with any {@code workspace:} placeholders already resolved.
      */
-    private int lockSingleProject(Path dir, JkBuild effective, Path cache, String label)
-            throws Exception {
+    private int lockSingleProject(Path dir, JkBuild effective, Path cache, String label) throws Exception {
         Path lockFile = dir.resolve("jk.lock");
 
         AtomicInteger resolveEstimate = new AtomicInteger(0);
@@ -211,16 +205,22 @@ public final class LockCommand implements CliCommand {
                     // Best case: existing lockfile is accurate (re-runs).
                     try {
                         int n = LockfileReader.read(lockFile).artifacts().size();
-                        if (n > 0) { resolveEstimate.set(n); return n; }
-                    } catch (Exception ignored) {}
+                        if (n > 0) {
+                            resolveEstimate.set(n);
+                            return n;
+                        }
+                    } catch (Exception ignored) {
+                    }
                     // Fallback: declared deps × rough transitive expansion.
                     try {
                         int declared = effective.dependencies().byScope().values().stream()
-                                .mapToInt(List::size).sum();
+                                .mapToInt(List::size)
+                                .sum();
                         int estimate = Math.max(5, declared * 8);
                         resolveEstimate.set(estimate);
                         return estimate;
-                    } catch (Exception ignored) {}
+                    } catch (Exception ignored) {
+                    }
                     resolveEstimate.set(20);
                     return 20;
                 })
@@ -244,8 +244,7 @@ public final class LockCommand implements CliCommand {
                     Map<String, String> lockedShas = Map.of();
                     if (Files.exists(lockFile)) {
                         try {
-                            lockedShas = GitSourceResolution.lockedImmutableShas(
-                                    LockfileReader.read(lockFile));
+                            lockedShas = GitSourceResolution.lockedImmutableShas(LockfileReader.read(lockFile));
                         } catch (Exception ignored) {
                             // Unreadable prior lock → nothing to verify against.
                         }
@@ -253,21 +252,20 @@ public final class LockCommand implements CliCommand {
                     GitSourceResolution.Prepared prep;
                     try {
                         prep = GitSourceResolution.prepare(
-                                eff, baseRepos, cas,
-                                CompileToolchain.resolveJavaHome(dir), Jk.VERSION, lockedShas);
+                                eff, baseRepos, cas, CompileToolchain.resolveJavaHome(dir), Jk.VERSION, lockedShas);
                     } catch (Exception e) {
                         ctx.error("resolve", e.getMessage());
                         throw new RuntimeException(e);
                     }
                     RepoGroup repos = prep.repos();
                     LockOrchestrator orchestrator = new LockOrchestrator(repos);
-                    dev.jkbuild.resolver.ResolveObserver observer =
-                            new dev.jkbuild.resolver.ResolveObserver() {
+                    dev.jkbuild.resolver.ResolveObserver observer = new dev.jkbuild.resolver.ResolveObserver() {
                         @Override
                         public void onTotal(int total) {
                             int delta = total - resolveEstimate.get();
                             if (delta > 0) ctx.updateScope(delta);
                         }
+
                         @Override
                         public void onPackage(String module, String version) {
                             ctx.label("Resolved " + Coords.module(module, version));
@@ -278,8 +276,7 @@ public final class LockCommand implements CliCommand {
                         Lockfile lock = sources
                                 ? orchestrator.lockWithSources(
                                         prep.project(), Jk.VERSION, features, !noDefaultFeatures, observer)
-                                : orchestrator.lock(
-                                        prep.project(), Jk.VERSION, features, !noDefaultFeatures, observer);
+                                : orchestrator.lock(prep.project(), Jk.VERSION, features, !noDefaultFeatures, observer);
                         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
                         String kotlinVersion = resolveKotlinVersion(eff, repos);
                         if (kotlinVersion != null) {
@@ -301,7 +298,8 @@ public final class LockCommand implements CliCommand {
         Phase lockPlugins = Phase.builder("lock-plugins")
                 .kind(PhaseKind.IO)
                 .requires("resolve")
-                .scope(() -> effective.plugins().isEmpty() ? 0 : effective.plugins().size())
+                .scope(() ->
+                        effective.plugins().isEmpty() ? 0 : effective.plugins().size())
                 .execute(ctx -> {
                     var decls = effective.plugins();
                     if (decls.isEmpty()) return;
@@ -318,7 +316,8 @@ public final class LockCommand implements CliCommand {
                                     .orElseThrow(() -> new RuntimeException(
                                             pd.coordinateWithVersion() + " not found in any repo"));
                             entries.add(new Lockfile.PluginEntry(
-                                    pd.coordinate(), pd.version(),
+                                    pd.coordinate(),
+                                    pd.version(),
                                     "sha256:" + fetched.fetched().sha256()));
                         } catch (Exception e) {
                             ctx.error("plugin", pd.coordinate() + " — " + e.getMessage());
@@ -347,19 +346,18 @@ public final class LockCommand implements CliCommand {
                 .addPhase(write)
                 .build();
 
-        ConsoleSpec spec = new ConsoleSpec(label,
+        ConsoleSpec spec = new ConsoleSpec(
+                label,
                 r -> {
                     Lockfile lock = goal.get(LOCKFILE).orElseThrow();
                     int pkgs = lock.artifacts().size();
                     int plgs = lock.plugins().size();
                     long srcs = lock.artifacts().stream()
-                            .filter(p -> p.sourcesChecksum() != null).count();
-                    String depStr = "Resolved " + pkgs + " dependenc"
-                            + (pkgs == 1 ? "y" : "ies");
+                            .filter(p -> p.sourcesChecksum() != null)
+                            .count();
+                    String depStr = "Resolved " + pkgs + " dependenc" + (pkgs == 1 ? "y" : "ies");
                     if (srcs > 0) depStr += ", " + srcs + " with sources";
-                    return plgs > 0
-                            ? depStr + ", " + plgs + " plugin" + (plgs == 1 ? "" : "s")
-                            : depStr;
+                    return plgs > 0 ? depStr + ", " + plgs + " plugin" + (plgs == 1 ? "" : "s") : depStr;
                 },
                 r -> "Failed to resolve dependencies");
 
@@ -367,7 +365,9 @@ public final class LockCommand implements CliCommand {
         if (!result.success()) {
             String failed = result.phases().stream()
                     .filter(p -> p.status() == PhaseStatus.FAIL)
-                    .map(GoalResult.PhaseReport::name).findFirst().orElse("?");
+                    .map(GoalResult.PhaseReport::name)
+                    .findFirst()
+                    .orElse("?");
             return failed.equals("resolve") ? 6 : 2;
         }
         return 0;
@@ -389,8 +389,7 @@ public final class LockCommand implements CliCommand {
             return exact.version();
         }
         VersionSet set = VersionSelectors.toVersionSet(selector);
-        Coordinate coord = Coordinate.of(
-                "org.jetbrains.kotlin", "kotlin-compiler-embeddable", "any");
+        Coordinate coord = Coordinate.of("org.jetbrains.kotlin", "kotlin-compiler-embeddable", "any");
         List<String> available;
         try {
             available = repos.availableVersions(coord);
@@ -432,8 +431,7 @@ public final class LockCommand implements CliCommand {
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             String checksum = pkg.checksum();
             if (checksum == null) continue;
-            String hex = checksum.startsWith("sha256:")
-                    ? checksum.substring("sha256:".length()) : checksum;
+            String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
             if (!cas.contains(hex)) {
                 throw new IllegalStateException("offline: " + pkg.name() + ":" + pkg.version()
                         + " is locked but its artifact isn't cached; run `jk sync` online first");

@@ -4,7 +4,6 @@ package dev.jkbuild.runtime;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Profile;
 import dev.jkbuild.model.Profiles;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,7 +42,7 @@ public final class CompileSupport {
         boolean java = Files.isDirectory(projectDir.resolve("src/main/java")) || anySourceUnder(src, ".java");
         boolean kotlin = Files.isDirectory(projectDir.resolve("src/main/kotlin")) || anySourceUnder(src, ".kt");
         if (!java && !kotlin) {
-            return new Languages(true, false);   // nothing detected — default to Java
+            return new Languages(true, false); // nothing detected — default to Java
         }
         return new Languages(java, kotlin);
     }
@@ -51,17 +50,17 @@ public final class CompileSupport {
     /** True if {@code projectDir} contains any Java or Kotlin source files. */
     static boolean hasSources(Path projectDir) {
         return Files.isDirectory(projectDir.resolve("src/main/java"))
-            || Files.isDirectory(projectDir.resolve("src/main/kotlin"))
-            || anySourceUnder(projectDir.resolve("src"), ".java")
-            || anySourceUnder(projectDir.resolve("src"), ".kt");
+                || Files.isDirectory(projectDir.resolve("src/main/kotlin"))
+                || anySourceUnder(projectDir.resolve("src"), ".java")
+                || anySourceUnder(projectDir.resolve("src"), ".kt");
     }
 
     /** True if any regular file ending in {@code ext} exists anywhere under {@code root}. */
     private static boolean anySourceUnder(Path root, String ext) {
         if (!Files.isDirectory(root)) return false;
         try (Stream<Path> stream = Files.walk(root)) {
-            return stream.anyMatch(p -> Files.isRegularFile(p)
-                    && p.getFileName().toString().endsWith(ext));
+            return stream.anyMatch(
+                    p -> Files.isRegularFile(p) && p.getFileName().toString().endsWith(ext));
         } catch (IOException e) {
             return false;
         }
@@ -87,11 +86,11 @@ public final class CompileSupport {
      */
     public static boolean isSimpleLayout(JkBuild.Project project, Path projectDir) {
         return switch (project.layout()) {
-            case SIMPLE      -> true;
+            case SIMPLE -> true;
             case TRADITIONAL -> false;
-            case AUTO        ->
+            case AUTO ->
                 !anySourceUnder(projectDir.resolve("src/main/kotlin"), ".kt", ".java")
-             && !anySourceUnder(projectDir.resolve("src/main/java"),   ".kt", ".java");
+                        && !anySourceUnder(projectDir.resolve("src/main/java"), ".kt", ".java");
         };
     }
 
@@ -127,8 +126,7 @@ public final class CompileSupport {
      *   <li>Compact layout:  {@code src/}  (all {@code .kt} files)</li>
      * </ul>
      */
-    public static List<Path> collectKotlinSources(Path projectDir, boolean compact)
-            throws IOException {
+    public static List<Path> collectKotlinSources(Path projectDir, boolean compact) throws IOException {
         if (compact) {
             return collectFilesWithExtension(projectDir.resolve("src"), ".kt");
         }
@@ -145,8 +143,7 @@ public final class CompileSupport {
      *   <li>Compact layout:  {@code test/} (all {@code .kt} files)</li>
      * </ul>
      */
-    public static List<Path> collectKotlinTestSources(Path projectDir, boolean compact)
-            throws IOException {
+    public static List<Path> collectKotlinTestSources(Path projectDir, boolean compact) throws IOException {
         if (compact) {
             return collectFilesWithExtension(projectDir.resolve("test"), ".kt");
         }

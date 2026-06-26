@@ -5,7 +5,6 @@ import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.MinimalTar;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.PathUtil;
-
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -57,15 +56,15 @@ public final class ToolInstaller {
         try {
             HttpResponse<byte[]> response = http.get(dist.downloadUri());
             if (response.statusCode() != 200) {
-                throw new IOException(dist.tool().slug() + " download " + dist.downloadUri()
-                        + " returned " + response.statusCode());
+                throw new IOException(
+                        dist.tool().slug() + " download " + dist.downloadUri() + " returned " + response.statusCode());
             }
             byte[] body = response.body();
             if (dist.sha256() != null && !dist.sha256().isEmpty()) {
                 String actual = Hashing.sha256Hex(body);
                 if (!actual.equalsIgnoreCase(dist.sha256())) {
-                    throw new IOException("sha256 mismatch for " + dist.downloadUri()
-                            + " — expected " + dist.sha256() + ", got " + actual);
+                    throw new IOException("sha256 mismatch for " + dist.downloadUri() + " — expected " + dist.sha256()
+                            + ", got " + actual);
                 }
             }
             Files.write(archive, body);
@@ -98,7 +97,7 @@ public final class ToolInstaller {
 
     private static void unzip(Path archive, Path destDir) throws IOException {
         try (InputStream in = Files.newInputStream(archive);
-             ZipInputStream zis = new ZipInputStream(in)) {
+                ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 Path out = destDir.resolve(entry.getName()).normalize();
@@ -117,7 +116,7 @@ public final class ToolInstaller {
 
     private static void extractTarGz(Path archive, Path destDir) throws IOException {
         try (InputStream fis = new BufferedInputStream(Files.newInputStream(archive));
-             GZIPInputStream gz = new GZIPInputStream(fis)) {
+                GZIPInputStream gz = new GZIPInputStream(fis)) {
             MinimalTar.stream(gz, (name, linkName, mode, isDir, isLink, data, size) -> {
                 Path out = destDir.resolve(name).normalize();
                 if (!out.startsWith(destDir)) {

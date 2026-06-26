@@ -8,7 +8,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.mvn.PomExporter;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -25,9 +24,20 @@ import java.util.Map;
  */
 public final class ExportMavenCommand implements CliCommand {
 
-    @Override public String name() { return "maven"; }
-    @Override public List<String> aliases() { return List.of("pom"); }
-    @Override public String description() { return "Generate a Maven pom.xml from jk.toml"; }
+    @Override
+    public String name() {
+        return "maven";
+    }
+
+    @Override
+    public List<String> aliases() {
+        return List.of("pom");
+    }
+
+    @Override
+    public String description() {
+        return "Generate a Maven pom.xml from jk.toml";
+    }
 
     @Override
     public List<Opt> options() {
@@ -50,15 +60,16 @@ public final class ExportMavenCommand implements CliCommand {
 
         ImportReport.Builder combined = ImportReport.builder();
 
-        PomExporter.Result rootResult = PomExporter.export(loaded.root(),
-                ExportSupport.resolveLayout(loaded.rootDir(), loaded.root()), loaded.locked());
+        PomExporter.Result rootResult = PomExporter.export(
+                loaded.root(), ExportSupport.resolveLayout(loaded.rootDir(), loaded.root()), loaded.locked());
         Files.writeString(rootPom, rootResult.xml(), StandardCharsets.UTF_8);
         ExportSupport.wrote(rootPom);
         merge(combined, rootResult.report());
 
         for (Map.Entry<Path, JkBuild> e : loaded.modules().entrySet()) {
             Map<String, String> moduleLocked = ExportSupport.lockedVersions(e.getKey());
-            PomExporter.Result r = PomExporter.export(e.getValue(),
+            PomExporter.Result r = PomExporter.export(
+                    e.getValue(),
                     ExportSupport.resolveLayout(e.getKey(), e.getValue()),
                     moduleLocked.isEmpty() ? loaded.locked() : moduleLocked);
             Path pom = e.getKey().resolve("pom.xml");

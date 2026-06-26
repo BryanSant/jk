@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,21 +18,29 @@ public final class EnvVarProbe implements LocalToolProbe {
 
     private final Function<String, String> env;
 
-    public EnvVarProbe() { this(System::getenv); }
-    EnvVarProbe(Function<String, String> env) { this.env = env; }
+    public EnvVarProbe() {
+        this(System::getenv);
+    }
+
+    EnvVarProbe(Function<String, String> env) {
+        this.env = env;
+    }
 
     @Override
-    public String name() { return "java-home"; }
+    public String name() {
+        return "java-home";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {
-        String[] vars = switch (spec.kind()) {
-            case "java" -> new String[] {"JAVA_HOME"};
-            case "kotlin" -> new String[] {"KOTLIN_HOME"};
-            case "maven" -> new String[] {"M2_HOME", "MAVEN_HOME"};
-            case "gradle" -> new String[] {"GRADLE_HOME"};
-            default -> new String[0];
-        };
+        String[] vars =
+                switch (spec.kind()) {
+                    case "java" -> new String[] {"JAVA_HOME"};
+                    case "kotlin" -> new String[] {"KOTLIN_HOME"};
+                    case "maven" -> new String[] {"M2_HOME", "MAVEN_HOME"};
+                    case "gradle" -> new String[] {"GRADLE_HOME"};
+                    default -> new String[0];
+                };
         for (String var : vars) {
             String value = env.apply(var);
             if (value == null || value.isBlank()) continue;
@@ -54,8 +61,6 @@ public final class EnvVarProbe implements LocalToolProbe {
     public List<JdkHit> discoverAllJdks() {
         String value = env.apply("JAVA_HOME");
         if (value == null || value.isBlank()) return List.of();
-        return ProbeSupport.discoverJdk(Path.of(value), name())
-                .map(List::of)
-                .orElseGet(List::of);
+        return ProbeSupport.discoverJdk(Path.of(value), name()).map(List::of).orElseGet(List::of);
     }
 }

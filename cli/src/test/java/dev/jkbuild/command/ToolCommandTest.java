@@ -1,18 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ToolCommandTest {
 
@@ -25,9 +23,13 @@ class ToolCommandTest {
 
     @Test
     void list_reports_empty_when_nothing_installed(@TempDir Path tempDir) {
-        String stdout = capture(() -> Jk.execute("tool", "list",
-                "--state-dir", tempDir.toString(),
-                "--bin-dir", tempDir.resolve("bin").toString()));
+        String stdout = capture(() -> Jk.execute(
+                "tool",
+                "list",
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                tempDir.resolve("bin").toString()));
         assertThat(stdout).contains("No tools installed");
     }
 
@@ -40,12 +42,11 @@ class ToolCommandTest {
         Files.createDirectories(bin);
         Files.writeString(bin.resolve("widget"), "#!/bin/sh\n");
 
-        String stdout = capture(() -> Jk.execute("tool", "list",
-                "--state-dir", tempDir.toString(),
-                "--bin-dir", bin.toString()));
+        String stdout = capture(
+                () -> Jk.execute("tool", "list", "--state-dir", tempDir.toString(), "--bin-dir", bin.toString()));
         // Sorted alphabetically: alpha first, then widget.
-        assertThat(stdout).containsSubsequence("alpha", "org.foo:alpha:0.1.0",
-                "widget", "com.example:widget-cli:1.0.0");
+        assertThat(stdout)
+                .containsSubsequence("alpha", "org.foo:alpha:0.1.0", "widget", "com.example:widget-cli:1.0.0");
         assertThat(stdout).contains(bin.resolve("widget").toString());
     }
 
@@ -57,9 +58,8 @@ class ToolCommandTest {
         Path launcher = bin.resolve("widget");
         Files.writeString(launcher, "#!/bin/sh\n");
 
-        int exit = Jk.execute("tool", "uninstall", "widget",
-                "--state-dir", tempDir.toString(),
-                "--bin-dir", bin.toString());
+        int exit = Jk.execute(
+                "tool", "uninstall", "widget", "--state-dir", tempDir.toString(), "--bin-dir", bin.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(launcher).doesNotExist();
         assertThat(tempDir.resolve("tools/envs/widget")).doesNotExist();
@@ -67,16 +67,22 @@ class ToolCommandTest {
 
     @Test
     void uninstall_unknown_tool_is_a_noop(@TempDir Path tempDir) {
-        String stdout = capture(() -> Jk.execute("tool", "uninstall", "ghost",
-                "--state-dir", tempDir.toString(),
-                "--bin-dir", tempDir.resolve("bin").toString()));
+        String stdout = capture(() -> Jk.execute(
+                "tool",
+                "uninstall",
+                "ghost",
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                tempDir.resolve("bin").toString()));
         assertThat(stdout).contains("not installed");
     }
 
     private static void writeEnvJson(Path home, String bin, String coord) throws Exception {
         Path envDir = home.resolve("tools/envs/").resolve(bin);
         Files.createDirectories(envDir);
-        Files.writeString(envDir.resolve("env.json"),
+        Files.writeString(
+                envDir.resolve("env.json"),
                 "{\n  \"binName\": \"" + bin + "\",\n  \"primary\": \"" + coord + "\"\n}\n");
     }
 

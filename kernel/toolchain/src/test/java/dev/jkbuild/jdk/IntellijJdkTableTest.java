@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class IntellijJdkTableTest {
 
@@ -17,11 +16,13 @@ class IntellijJdkTableTest {
     void recognizes_a_jdk_registered_in_a_jetbrains_table(@TempDir Path tempDir) throws IOException {
         Path userHome = tempDir.resolve("home");
         Path jdkHome = userHome.resolve(".jdks").resolve("graalvm-ce-24.0.2");
-        Files.createDirectories(jdkHome.resolve("bin"));        // make it canonicalizable
+        Files.createDirectories(jdkHome.resolve("bin")); // make it canonicalizable
 
         Path config = tempDir.resolve("config");
-        Path table = config.resolve("JetBrains").resolve("IntelliJIdea2024.3")
-                .resolve("options").resolve("jdk.table.xml");
+        Path table = config.resolve("JetBrains")
+                .resolve("IntelliJIdea2024.3")
+                .resolve("options")
+                .resolve("jdk.table.xml");
         Files.createDirectories(table.getParent());
         Files.writeString(table, """
                 <application>
@@ -37,8 +38,7 @@ class IntellijJdkTableTest {
                 """);
 
         IntellijJdkTable t = new IntellijJdkTable(
-                List.of(config.resolve("JetBrains"), config.resolve("Google")),
-                userHome.toString());
+                List.of(config.resolve("JetBrains"), config.resolve("Google")), userHome.toString());
 
         assertThat(t.isManaged(jdkHome.toRealPath())).isTrue();
         assertThat(t.isManaged(userHome.resolve(".jdks").resolve("temurin-21").toAbsolutePath()))
@@ -47,8 +47,7 @@ class IntellijJdkTableTest {
 
     @Test
     void empty_when_no_config_dirs_exist(@TempDir Path tempDir) {
-        IntellijJdkTable t = new IntellijJdkTable(
-                List.of(tempDir.resolve("absent")), tempDir.toString());
+        IntellijJdkTable t = new IntellijJdkTable(List.of(tempDir.resolve("absent")), tempDir.toString());
         assertThat(t.isManaged(tempDir.resolve("whatever"))).isFalse();
     }
 

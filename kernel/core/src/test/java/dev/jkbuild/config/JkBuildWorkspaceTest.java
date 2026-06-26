@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.jkbuild.model.JkBuild;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JkBuildWorkspaceTest {
 
@@ -35,8 +34,7 @@ class JkBuildWorkspaceTest {
                 """);
 
         assertThat(parsed.isWorkspaceRoot()).isTrue();
-        assertThat(parsed.workspace().modules())
-                .containsExactly("libs/core", "services/api");
+        assertThat(parsed.workspace().modules()).containsExactly("libs/core", "services/api");
     }
 
     @Test
@@ -51,8 +49,7 @@ class JkBuildWorkspaceTest {
                 members = ["libs/core", "services/api"]
                 """);
 
-        assertThat(parsed.workspace().modules())
-                .containsExactly("libs/core", "services/api");
+        assertThat(parsed.workspace().modules()).containsExactly("libs/core", "services/api");
     }
 
     @Test
@@ -69,8 +66,7 @@ class JkBuildWorkspaceTest {
                 """);
 
         // modules first, then members appended — in declaration order within each.
-        assertThat(parsed.workspace().modules())
-                .containsExactly("a", "b", "c", "d");
+        assertThat(parsed.workspace().modules()).containsExactly("a", "b", "c", "d");
     }
 
     @Test
@@ -110,7 +106,7 @@ class JkBuildWorkspaceTest {
                 [workspace]
                 modules = ["libs/a", "libs/b"]
                 """);
-        for (String name : new String[]{"libs/a", "libs/b"}) {
+        for (String name : new String[] {"libs/a", "libs/b"}) {
             Path moduleDir = tempDir.resolve(name);
             Files.createDirectories(moduleDir);
             Files.writeString(moduleDir.resolve("jk.toml"), """
@@ -157,7 +153,7 @@ class JkBuildWorkspaceTest {
                 """);
         // Two modules both call themselves `widget-0.1.0` — they'd race to
         // write the same jar under <root>/target/.
-        for (String name : new String[]{"libs/a", "libs/b"}) {
+        for (String name : new String[] {"libs/a", "libs/b"}) {
             Path moduleDir = tempDir.resolve(name);
             Files.createDirectories(moduleDir);
             Files.writeString(moduleDir.resolve("jk.toml"), """

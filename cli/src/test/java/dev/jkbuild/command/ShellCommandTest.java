@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ShellCommandTest {
 
@@ -23,9 +21,12 @@ class ShellCommandTest {
         // does not depend on whether a JDK happens to resolve in the environment.
         Path project = tempDir.resolve("project");
         Files.createDirectories(project);
-        int exit = Jk.execute("shell",
-                "-C", project.toString(),
-                "--jdks-dir", tempDir.resolve("jdks").toString());
+        int exit = Jk.execute(
+                "shell",
+                "-C",
+                project.toString(),
+                "--jdks-dir",
+                tempDir.resolve("jdks").toString());
         assertThat(exit).isEqualTo(2);
     }
 }

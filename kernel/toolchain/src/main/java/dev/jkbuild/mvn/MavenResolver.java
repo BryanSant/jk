@@ -3,7 +3,6 @@ package dev.jkbuild.mvn;
 
 import dev.jkbuild.compat.BuildTool;
 import dev.jkbuild.compat.ToolDistribution;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -27,12 +26,10 @@ public final class MavenResolver {
     /** jk's bundled default when no wrapper is present. */
     public static final String DEFAULT_VERSION = "3.9.9";
 
-    private static final String DEFAULT_BASE =
-            "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/";
+    private static final String DEFAULT_BASE = "https://repo.maven.apache.org/maven2/org/apache/maven/apache-maven/";
 
     // apache-maven-<version>-bin.<zip|tar.gz>
-    private static final Pattern FILENAME_VERSION = Pattern.compile(
-            "apache-maven-(?<v>[^/]+)-bin\\.(?:zip|tar\\.gz)$");
+    private static final Pattern FILENAME_VERSION = Pattern.compile("apache-maven-(?<v>[^/]+)-bin\\.(?:zip|tar\\.gz)$");
 
     public ToolDistribution resolve(Path projectDir) throws IOException {
         Path wrapperProps = projectDir.resolve(".mvn/wrapper/maven-wrapper.properties");
@@ -44,8 +41,7 @@ public final class MavenResolver {
     }
 
     public static ToolDistribution defaultDistribution() {
-        URI uri = URI.create(DEFAULT_BASE + DEFAULT_VERSION
-                + "/apache-maven-" + DEFAULT_VERSION + "-bin.zip");
+        URI uri = URI.create(DEFAULT_BASE + DEFAULT_VERSION + "/apache-maven-" + DEFAULT_VERSION + "-bin.zip");
         return new ToolDistribution(BuildTool.MAVEN, DEFAULT_VERSION, uri, "zip");
     }
 
@@ -60,8 +56,8 @@ public final class MavenResolver {
         String archiveType = url.endsWith(".tar.gz") ? "tar.gz" : "zip";
         String version = parseVersion(uri).orElse("wrapper");
         String sha256 = props.getProperty("distributionSha256Sum");
-        return new ToolDistribution(BuildTool.MAVEN, version, uri, archiveType,
-                sha256 == null || sha256.isBlank() ? null : sha256.trim());
+        return new ToolDistribution(
+                BuildTool.MAVEN, version, uri, archiveType, sha256 == null || sha256.isBlank() ? null : sha256.trim());
     }
 
     static Optional<String> parseVersion(URI uri) {

@@ -1,6 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.test.runner;
 
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.Set;
 import org.junit.platform.engine.discovery.ClassNameFilter;
 import org.junit.platform.engine.discovery.DiscoverySelectors;
 import org.junit.platform.launcher.Launcher;
@@ -9,17 +18,6 @@ import org.junit.platform.launcher.TestPlan;
 import org.junit.platform.launcher.core.LauncherDiscoveryRequestBuilder;
 import org.junit.platform.launcher.core.LauncherFactory;
 import org.junit.platform.launcher.listeners.SummaryGeneratingListener;
-
-import dev.jkbuild.plugin.Plugin;
-import dev.jkbuild.plugin.PluginManifest;
-import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Set;
 
 /**
  * Child-JVM entry point for {@code jk test}. Three modes, selected by flags:
@@ -91,8 +89,7 @@ public final class JkRunner implements Plugin {
             e.printStackTrace(System.err);
             return 2;
         } catch (Throwable t) {
-            System.err.println("jk-test-runner: " + t.getClass().getName()
-                    + ": " + t.getMessage());
+            System.err.println("jk-test-runner: " + t.getClass().getName() + ": " + t.getMessage());
             t.printStackTrace(System.err);
             return 2;
         }
@@ -145,10 +142,11 @@ public final class JkRunner implements Plugin {
      * wire shape is identical regardless of which mode invoked it.
      */
     private static void emitDiscovery(
-            Launcher launcher, org.junit.platform.launcher.LauncherDiscoveryRequest request,
+            Launcher launcher,
+            org.junit.platform.launcher.LauncherDiscoveryRequest request,
             StreamingListener listener) {
         TestPlan plan = launcher.discover(request);
-        var counts = new int[]{0, 0}; // [classes, tests]
+        var counts = new int[] {0, 0}; // [classes, tests]
         for (var root : plan.getRoots()) {
             walkAndEmit(plan, root, listener, counts);
         }
@@ -192,8 +190,7 @@ public final class JkRunner implements Plugin {
         var summary = new SummaryGeneratingListener();
 
         try (var session = LauncherFactory.openSession();
-             var stdin = new BufferedReader(
-                     new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
+                var stdin = new BufferedReader(new InputStreamReader(System.in, StandardCharsets.UTF_8))) {
             Launcher launcher = session.getLauncher();
             launcher.registerTestExecutionListeners(streaming, summary);
 
@@ -233,14 +230,8 @@ public final class JkRunner implements Plugin {
         return b;
     }
 
-
     /** Parsed CLI args. */
-    private record Args(
-            Path scanClasspath,
-            String filter,
-            boolean listOnly,
-            boolean pull,
-            int workerId) {
+    private record Args(Path scanClasspath, String filter, boolean listOnly, boolean pull, int workerId) {
 
         static Args parse(String[] argv) {
             Path scan = null;

@@ -2,10 +2,9 @@
 package dev.jkbuild.config;
 
 import dev.jkbuild.layout.BuildLayout;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -40,8 +39,7 @@ public final class WorkspaceClasspath {
      * @param scopes the scopes whose deps should contribute (typically
      *     {@code MAIN} for compile, {@code MAIN}+{@code TEST} for tests)
      */
-    public static Result resolve(Path projectDir, JkBuild project, Set<Scope> scopes)
-            throws IOException {
+    public static Result resolve(Path projectDir, JkBuild project, Set<Scope> scopes) throws IOException {
         // Case 1: project IS the workspace root — add all module jars implicitly.
         // Modules' compiled outputs are always applicable to the root's classpath;
         // no explicit dependency declaration is needed.
@@ -61,10 +59,10 @@ public final class WorkspaceClasspath {
         }
 
         // Build bidirectional index: module-coord and bare-name → sibling dir + jar
-        Map<String, Path>   siblingDirByModule  = new HashMap<>();
-        Map<String, Path>   siblingJarByModule  = new HashMap<>();
-        Map<String, Path>   siblingJarByName    = new HashMap<>();
-        Map<String, String> siblingCoordByName  = new HashMap<>(); // name → full coord
+        Map<String, Path> siblingDirByModule = new HashMap<>();
+        Map<String, Path> siblingJarByModule = new HashMap<>();
+        Map<String, Path> siblingJarByName = new HashMap<>();
+        Map<String, String> siblingCoordByName = new HashMap<>(); // name → full coord
         for (String moduleName : rootManifest.workspace().modules()) {
             Path siblingDir = root.resolve(moduleName);
             Path siblingManifest = siblingDir.resolve("jk.toml");
@@ -75,7 +73,8 @@ public final class WorkspaceClasspath {
             } catch (RuntimeException ignored) {
                 continue;
             }
-            String moduleCoord = sibling.project().group() + ":" + sibling.project().name();
+            String moduleCoord =
+                    sibling.project().group() + ":" + sibling.project().name();
             Path jar = BuildLayout.of(siblingDir, sibling).mainJar();
             siblingDirByModule.put(moduleCoord, siblingDir);
             siblingJarByModule.put(moduleCoord, jar);
@@ -104,8 +103,11 @@ public final class WorkspaceClasspath {
             Path sibToml = sibDir.resolve("jk.toml");
             if (!Files.exists(sibToml)) continue;
             JkBuild sibBuild;
-            try { sibBuild = JkBuildParser.parse(sibToml); }
-            catch (RuntimeException ignored) { continue; }
+            try {
+                sibBuild = JkBuildParser.parse(sibToml);
+            } catch (RuntimeException ignored) {
+                continue;
+            }
             // MAIN and EXPORT propagate transitively: a sibling's exported deps
             // (api semantics) ride along to anything that depends on it, and MAIN
             // deps stay visible down the workspace chain (io→core→model).
@@ -159,8 +161,7 @@ public final class WorkspaceClasspath {
      * When the workspace root itself has source code, all module jars are
      * automatically on its classpath — no explicit dep declaration needed.
      */
-    private static Result resolveForRoot(Path root, JkBuild rootManifest)
-            throws IOException {
+    private static Result resolveForRoot(Path root, JkBuild rootManifest) throws IOException {
         List<Path> jars = new ArrayList<>();
         List<Path> closureJars = new ArrayList<>();
         List<String> missing = new ArrayList<>();
@@ -179,15 +180,17 @@ public final class WorkspaceClasspath {
             if (Files.exists(jar)) {
                 jars.add(jar);
             } else {
-                missing.add(sibling.project().group() + ":" + sibling.project().name()
-                        + " (expected at " + jar + ")");
+                missing.add(sibling.project().group() + ":" + sibling.project().name() + " (expected at " + jar + ")");
             }
         }
         return new Result(jars, missing, List.of(), closureJars);
     }
 
-    public record Result(List<Path> jars, List<String> missingSiblingJars,
-                         List<Path> siblingLockfiles, List<Path> siblingClosureJars) {
+    public record Result(
+            List<Path> jars,
+            List<String> missingSiblingJars,
+            List<Path> siblingLockfiles,
+            List<Path> siblingClosureJars) {
         public Result {
             jars = List.copyOf(jars);
             missingSiblingJars = List.copyOf(missingSiblingJars);

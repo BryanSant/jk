@@ -4,8 +4,8 @@ package dev.jkbuild.jdk;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.JkDirs;
 import java.io.BufferedReader;
-import java.io.StringReader;
 import java.io.IOException;
+import java.io.StringReader;
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -16,7 +16,6 @@ import java.nio.file.attribute.FileTime;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,15 +33,13 @@ import java.util.Objects;
  */
 public final class JdkCatalogClient {
 
-    public static final String DEFAULT_FEED_URL =
-            "https://download.jetbrains.com/jdk/feed/v1/jdks.json";
+    public static final String DEFAULT_FEED_URL = "https://download.jetbrains.com/jdk/feed/v1/jdks.json";
 
     /** 24 h — the feed publishes new GA releases at most a few times a month. */
     public static final Duration DEFAULT_TTL = Duration.ofHours(24);
 
     private static final DateTimeFormatter HTTP_DATE =
-            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'")
-                    .withZone(ZoneId.of("GMT"));
+            DateTimeFormatter.ofPattern("EEE, dd MMM yyyy HH:mm:ss 'GMT'").withZone(ZoneId.of("GMT"));
 
     private final Http http;
     private final URI feedUri;
@@ -106,8 +103,7 @@ public final class JdkCatalogClient {
      * which is what {@code jk jdk list --all} wants: a complete catalogue of
      * installable vendors / products / majors, not just the recommended ones.
      */
-    public JdkCatalog fetch(boolean noCache, boolean firstClassOnly)
-            throws IOException, InterruptedException {
+    public JdkCatalog fetch(boolean noCache, boolean firstClassOnly) throws IOException, InterruptedException {
         byte[] body = loadBody(noCache);
         return parse(body, firstClassOnly);
     }
@@ -122,8 +118,10 @@ public final class JdkCatalogClient {
         }
         try {
             Map<String, String> headers = Files.isRegularFile(cacheFile)
-                    ? Map.of("If-Modified-Since",
-                            HTTP_DATE.format(Files.getLastModifiedTime(cacheFile).toInstant()))
+                    ? Map.of(
+                            "If-Modified-Since",
+                            HTTP_DATE.format(
+                                    Files.getLastModifiedTime(cacheFile).toInstant()))
                     : Map.of();
             HttpResponse<byte[]> response = http.get(feedUri, headers);
             int status = response.statusCode();
@@ -139,8 +137,8 @@ public final class JdkCatalogClient {
             throw new IOException("JDK feed " + feedUri + " returned HTTP " + status);
         } catch (IOException | InterruptedException e) {
             if (Files.isRegularFile(cacheFile)) {
-                warn.accept("jk: warning — JDK feed unreachable, using cached "
-                        + cacheFile + " (" + e.getMessage() + ")");
+                warn.accept(
+                        "jk: warning — JDK feed unreachable, using cached " + cacheFile + " (" + e.getMessage() + ")");
                 return Files.readAllBytes(cacheFile);
             }
             throw e;
@@ -156,9 +154,7 @@ public final class JdkCatalogClient {
         Files.createDirectories(cacheFile.getParent());
         Path tmp = cacheFile.resolveSibling(cacheFile.getFileName() + ".tmp");
         Files.write(tmp, payload);
-        Files.move(tmp, cacheFile,
-                StandardCopyOption.REPLACE_EXISTING,
-                StandardCopyOption.ATOMIC_MOVE);
+        Files.move(tmp, cacheFile, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
     }
 
     /**
@@ -185,8 +181,7 @@ public final class JdkCatalogClient {
         int depth = 0;
         boolean inPackages = false;
 
-        try (BufferedReader br = new BufferedReader(
-                new StringReader(new String(json, StandardCharsets.UTF_8)))) {
+        try (BufferedReader br = new BufferedReader(new StringReader(new String(json, StandardCharsets.UTF_8)))) {
             String line;
             while ((line = br.readLine()) != null) {
                 String t = line.strip();
@@ -203,22 +198,40 @@ public final class JdkCatalogClient {
                     else if (c == '}') {
                         if (depth == 3 && inPackages) {
                             // End of a package entry — emit if complete
-                            if (url != null && !url.isEmpty()
-                                    && installFolderName != null && !installFolderName.isEmpty()) {
+                            if (url != null
+                                    && !url.isEmpty()
+                                    && installFolderName != null
+                                    && !installFolderName.isEmpty()) {
                                 try {
                                     entries.add(new JdkCatalog.Entry(
-                                            vendor, product, suggestedSdkName, majorVersion, version,
-                                            defaultForMajor, preview, List.copyOf(aliases),
-                                            os, arch, packageType, URI.create(url), sha256,
-                                            archiveSize, installFolderName, javaHomeSubpath));
-                                } catch (IllegalArgumentException ignored) { /* bad URL */ }
+                                            vendor,
+                                            product,
+                                            suggestedSdkName,
+                                            majorVersion,
+                                            version,
+                                            defaultForMajor,
+                                            preview,
+                                            List.copyOf(aliases),
+                                            os,
+                                            arch,
+                                            packageType,
+                                            URI.create(url),
+                                            sha256,
+                                            archiveSize,
+                                            installFolderName,
+                                            javaHomeSubpath));
+                                } catch (IllegalArgumentException ignored) {
+                                    /* bad URL */
+                                }
                             }
                             os = arch = packageType = url = sha256 = installFolderName = javaHomeSubpath = null;
                             archiveSize = 0;
                         } else if (depth == 2) {
                             // End of JDK entry
                             vendor = product = suggestedSdkName = version = null;
-                            majorVersion = 0; defaultForMajor = false; preview = false;
+                            majorVersion = 0;
+                            defaultForMajor = false;
+                            preview = false;
                             aliases = new ArrayList<>();
                             inPackages = false;
                         }
@@ -240,31 +253,45 @@ public final class JdkCatalogClient {
                 String key = unquote(t.substring(0, colon).strip());
                 String val = t.substring(colon + 1).strip().replaceAll(",$", "");
                 boolean isArray = val.startsWith("[");
-                boolean isObj   = val.startsWith("{");
+                boolean isObj = val.startsWith("{");
                 if (!isArray && !isObj) val = unquote(val);
 
                 if (depth == 2) {
                     switch (key) {
-                        case "vendor"              -> vendor            = val;
-                        case "product"             -> product           = val;
-                        case "suggested_sdk_name"  -> suggestedSdkName  = val;
-                        case "jdk_version_major"   -> { try { majorVersion = Integer.parseInt(val); } catch (NumberFormatException e2) { majorVersion = 0; } }
-                        case "jdk_version"         -> version           = val;
-                        case "default"             -> defaultForMajor   = "true".equals(val);
-                        case "preview"             -> preview           = "true".equals(val);
-                        case "packages"            -> inPackages        = true;
-                        case "shared_index_aliases"-> { if (isArray && !val.equals("[]")) inAliases = true; }
+                        case "vendor" -> vendor = val;
+                        case "product" -> product = val;
+                        case "suggested_sdk_name" -> suggestedSdkName = val;
+                        case "jdk_version_major" -> {
+                            try {
+                                majorVersion = Integer.parseInt(val);
+                            } catch (NumberFormatException e2) {
+                                majorVersion = 0;
+                            }
+                        }
+                        case "jdk_version" -> version = val;
+                        case "default" -> defaultForMajor = "true".equals(val);
+                        case "preview" -> preview = "true".equals(val);
+                        case "packages" -> inPackages = true;
+                        case "shared_index_aliases" -> {
+                            if (isArray && !val.equals("[]")) inAliases = true;
+                        }
                     }
                 } else if (depth == 3 && inPackages) {
                     switch (key) {
-                        case "os"                          -> os                = val;
-                        case "arch"                        -> arch               = val;
-                        case "package_type"                -> packageType        = val;
-                        case "url"                         -> url                = val;
-                        case "sha256"                      -> sha256             = val;
-                        case "archive_size"                -> { try { archiveSize = Long.parseLong(val); } catch (NumberFormatException e2) { archiveSize = 0; } }
-                        case "install_folder_name"         -> installFolderName  = val;
-                        case "package_to_java_home_prefix" -> javaHomeSubpath    = val;
+                        case "os" -> os = val;
+                        case "arch" -> arch = val;
+                        case "package_type" -> packageType = val;
+                        case "url" -> url = val;
+                        case "sha256" -> sha256 = val;
+                        case "archive_size" -> {
+                            try {
+                                archiveSize = Long.parseLong(val);
+                            } catch (NumberFormatException e2) {
+                                archiveSize = 0;
+                            }
+                        }
+                        case "install_folder_name" -> installFolderName = val;
+                        case "package_to_java_home_prefix" -> javaHomeSubpath = val;
                     }
                 }
             }
@@ -295,13 +322,13 @@ public final class JdkCatalogClient {
      * latest-major slot, and since the wizard and lists hide preview entries,
      * the real latest (26) would silently vanish from both.
      */
-    private static List<JdkCatalog.Entry> filterSupported(
-            List<JdkCatalog.Entry> all, boolean firstClassOnly) {
+    private static List<JdkCatalog.Entry> filterSupported(List<JdkCatalog.Entry> all, boolean firstClassOnly) {
         if (all.isEmpty()) return all;
         int latest = all.stream()
                 .filter(e -> !e.preview())
                 .mapToInt(JdkCatalog.Entry::majorVersion)
-                .max().orElse(0);
+                .max()
+                .orElse(0);
         List<JdkCatalog.Entry> kept = new ArrayList<>(all.size());
         for (JdkCatalog.Entry e : all) {
             boolean keep = firstClassOnly
@@ -311,5 +338,4 @@ public final class JdkCatalogClient {
         }
         return kept;
     }
-
 }

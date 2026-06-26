@@ -7,7 +7,6 @@ import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.EffectivePom;
 import dev.jkbuild.repo.EffectivePomBuilder;
 import dev.jkbuild.repo.Pom;
-
 import java.io.IOException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -76,8 +75,7 @@ public final class NaiveResolver implements Resolver {
 
         Map<String, Resolution.ResolvedModule> out = new TreeMap<>();
         for (Map.Entry<String, Pick> e : picked.entrySet()) {
-            out.put(e.getKey(), new Resolution.ResolvedModule(
-                    e.getKey(), e.getValue().version, e.getValue().deps));
+            out.put(e.getKey(), new Resolution.ResolvedModule(e.getKey(), e.getValue().version, e.getValue().deps));
         }
         return new Resolution(out);
     }
@@ -88,18 +86,16 @@ public final class NaiveResolver implements Resolver {
             case VersionSelector.Exact e -> e.version();
             case VersionSelector.Tilde t -> t.version();
             case VersionSelector.Range r ->
-                    throw new IllegalArgumentException(
-                            "naive resolver cannot resolve ranges yet (use PubGrub): " + r.raw());
+                throw new IllegalArgumentException(
+                        "naive resolver cannot resolve ranges yet (use PubGrub): " + r.raw());
             case VersionSelector.Latest l ->
-                    throw new IllegalArgumentException(
-                            "naive resolver cannot resolve 'latest' yet (use PubGrub)");
+                throw new IllegalArgumentException("naive resolver cannot resolve 'latest' yet (use PubGrub)");
         };
     }
 
     private static Coordinate toCoord(WorkItem item) {
         int colon = item.module.indexOf(':');
-        return Coordinate.of(item.module.substring(0, colon),
-                item.module.substring(colon + 1), item.version);
+        return Coordinate.of(item.module.substring(0, colon), item.module.substring(colon + 1), item.version);
     }
 
     private record WorkItem(String module, String version) {}

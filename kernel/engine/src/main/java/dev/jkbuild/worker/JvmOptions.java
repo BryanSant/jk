@@ -3,14 +3,13 @@ package dev.jkbuild.worker;
 
 import dev.jkbuild.config.EnvValues;
 import dev.jkbuild.config.TomlValues;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * JVM tuning for the worker JVMs jk forks (compilers, test runners, etc.).
@@ -36,10 +35,10 @@ public final class JvmOptions {
     /** Default collector: low-pause, uncommits idle heap. */
     public static final String DEFAULT_GC = "zgc";
 
-    public static final String ENV_MAX_RAM      = "JK_MAX_RAM_PERCENT";
-    public static final String ENV_GC           = "JK_JVM_GC";
+    public static final String ENV_MAX_RAM = "JK_MAX_RAM_PERCENT";
+    public static final String ENV_GC = "JK_JVM_GC";
     public static final String ENV_STRING_DEDUP = "JK_JVM_STRING_DEDUP";
-    public static final String ENV_ARGS         = "JK_JVM_ARGS";
+    public static final String ENV_ARGS = "JK_JVM_ARGS";
 
     /**
      * Resolved (or partially-resolved) tuning. {@code null} scalars mean "fall
@@ -60,8 +59,8 @@ public final class JvmOptions {
         args.addAll(high.extraArgs());
         return new Settings(
                 high.maxRamPercent() != null ? high.maxRamPercent() : low.maxRamPercent(),
-                high.gc()           != null ? high.gc()           : low.gc(),
-                high.stringDedup()  != null ? high.stringDedup()  : low.stringDedup(),
+                high.gc() != null ? high.gc() : low.gc(),
+                high.stringDedup() != null ? high.stringDedup() : low.stringDedup(),
                 args);
     }
 
@@ -115,10 +114,12 @@ public final class JvmOptions {
         List<String> out = new ArrayList<>();
         out.add("-XX:MaxRAMPercentage=" + fmt(perJvm));
         switch (gc) {
-            case "zgc"           -> out.add("-XX:+UseZGC");
-            case "g1"            -> out.add("-XX:+UseG1GC");
-            case "none", "default", "" -> { /* leave the JVM's own default */ }
-            default              -> out.add("-XX:+UseZGC");
+            case "zgc" -> out.add("-XX:+UseZGC");
+            case "g1" -> out.add("-XX:+UseG1GC");
+            case "none", "default", "" -> {
+                /* leave the JVM's own default */
+            }
+            default -> out.add("-XX:+UseZGC");
         }
         // String deduplication only has an effect on G1/ZGC; skip it otherwise.
         if (dedup && (gc.equals("zgc") || gc.equals("g1"))) {
@@ -177,7 +178,7 @@ public final class JvmOptions {
      */
     public static HeapPlan.Plan planAndApply(int requestedJvms) {
         if (!autoHeapEnabled()) {
-            WorkerSlots.configure(0);   // unbounded: honour the user's relative/explicit sizing
+            WorkerSlots.configure(0); // unbounded: honour the user's relative/explicit sizing
             heapPlan = null;
             return null;
         }
@@ -202,9 +203,12 @@ public final class JvmOptions {
         Settings s = processSettings();
         if (s.maxRamPercent() != null) return false;
         for (String a : s.extraArgs()) {
-            if (a.startsWith("-Xmx") || a.startsWith("-Xms")
-                    || a.startsWith("-XX:MaxHeapSize") || a.startsWith("-XX:MinHeapSize")
-                    || a.startsWith("-XX:MaxRAMPercentage") || a.startsWith("-XX:SoftMaxHeapSize")) {
+            if (a.startsWith("-Xmx")
+                    || a.startsWith("-Xms")
+                    || a.startsWith("-XX:MaxHeapSize")
+                    || a.startsWith("-XX:MinHeapSize")
+                    || a.startsWith("-XX:MaxRAMPercentage")
+                    || a.startsWith("-XX:SoftMaxHeapSize")) {
                 return false;
             }
         }
@@ -234,7 +238,9 @@ public final class JvmOptions {
                 out.add("-XX:ZUncommitDelay=30");
             }
             case "g1" -> out.add("-XX:+UseG1GC");
-            case "none", "default", "" -> { /* JVM default collector */ }
+            case "none", "default", "" -> {
+                /* JVM default collector */
+            }
             default -> {
                 out.add("-XX:+UseZGC");
                 out.add("-XX:+ZUncommit");

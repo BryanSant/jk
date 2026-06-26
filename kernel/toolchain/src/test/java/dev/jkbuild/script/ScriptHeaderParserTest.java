@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.script;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.VersionSelector;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class ScriptHeaderParserTest {
 
@@ -31,9 +31,7 @@ class ScriptHeaderParserTest {
         assertThat(h.release()).isEqualTo(21);
         assertThat(h.deps())
                 .extracting(Dependency::module)
-                .containsExactly(
-                        "com.squareup.okhttp3:okhttp",
-                        "com.fasterxml.jackson.core:jackson-databind");
+                .containsExactly("com.squareup.okhttp3:okhttp", "com.fasterxml.jackson.core:jackson-databind");
         assertThat(h.deps())
                 .extracting(d -> ((VersionSelector.Exact) d.version()).version())
                 .containsExactly("4.12.0", "2.18.2");
@@ -77,9 +75,7 @@ class ScriptHeaderParserTest {
         assertThat(h.release()).isEqualTo(21);
         assertThat(h.deps())
                 .extracting(Dependency::module)
-                .containsExactly(
-                        "com.squareup.okhttp3:okhttp",
-                        "org.slf4j:slf4j-simple");
+                .containsExactly("com.squareup.okhttp3:okhttp", "org.slf4j:slf4j-simple");
     }
 
     @Test
@@ -124,8 +120,7 @@ class ScriptHeaderParserTest {
 
     @Test
     void invalid_dep_is_rejected() {
-        Assertions.assertThrows(IllegalArgumentException.class,
-                () -> ScriptHeaderParser.parse("//jk dep not-a-coord"));
+        Assertions.assertThrows(IllegalArgumentException.class, () -> ScriptHeaderParser.parse("//jk dep not-a-coord"));
     }
 
     @Test
@@ -136,8 +131,7 @@ class ScriptHeaderParserTest {
         Dependency d = h.deps().getFirst();
         assertThat(d.module()).isEqualTo("com.example:lib");
         assertThat(d.pinned()).isFalse();
-        assertThat(d.version())
-                .isInstanceOf(VersionSelector.Caret.class);
+        assertThat(d.version()).isInstanceOf(VersionSelector.Caret.class);
     }
 
     @Test
@@ -146,10 +140,8 @@ class ScriptHeaderParserTest {
                 //jk dep com.example:lib@~1.2.3
                 //jk dep com.example:tool@latest
                 """);
-        assertThat(h.deps().get(0).version())
-                .isInstanceOf(VersionSelector.Tilde.class);
-        assertThat(h.deps().get(1).version())
-                .isInstanceOf(VersionSelector.Latest.class);
+        assertThat(h.deps().get(0).version()).isInstanceOf(VersionSelector.Tilde.class);
+        assertThat(h.deps().get(1).version()).isInstanceOf(VersionSelector.Latest.class);
     }
 
     @Test
@@ -164,8 +156,8 @@ class ScriptHeaderParserTest {
 
     @Test
     void colon_form_with_decorations_is_rejected() {
-        Assertions.assertThrows(IllegalArgumentException.class,
-                () -> ScriptHeaderParser.parse("//jk dep com.example:lib:^1.0"));
+        Assertions.assertThrows(
+                IllegalArgumentException.class, () -> ScriptHeaderParser.parse("//jk dep com.example:lib:^1.0"));
     }
 
     @Test

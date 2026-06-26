@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import dev.jkbuild.config.JkCacheConfig;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.config.JkCacheConfig;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CachePruneSchedulerTest {
 
@@ -26,8 +25,10 @@ class CachePruneSchedulerTest {
         JkCacheConfig cfg = new JkCacheConfig(true, Optional.empty(), 7, 30);
         // Stamp was 1 day ago — interval is 7 → skip.
         long oneDayAgo = System.currentTimeMillis() - (24L * 60 * 60 * 1000);
-        Files.writeString(cacheRoot.resolve(CachePruneScheduler.LAST_PRUNED_FILE),
-                Long.toString(oneDayAgo), StandardCharsets.UTF_8);
+        Files.writeString(
+                cacheRoot.resolve(CachePruneScheduler.LAST_PRUNED_FILE),
+                Long.toString(oneDayAgo),
+                StandardCharsets.UTF_8);
 
         assertThat(CachePruneScheduler.shouldRun(cfg, cacheRoot)).isFalse();
     }
@@ -36,8 +37,10 @@ class CachePruneSchedulerTest {
     void should_run_after_interval(@TempDir Path cacheRoot) throws IOException {
         JkCacheConfig cfg = new JkCacheConfig(true, Optional.empty(), 7, 30);
         long tenDaysAgo = System.currentTimeMillis() - (10L * 24 * 60 * 60 * 1000);
-        Files.writeString(cacheRoot.resolve(CachePruneScheduler.LAST_PRUNED_FILE),
-                Long.toString(tenDaysAgo), StandardCharsets.UTF_8);
+        Files.writeString(
+                cacheRoot.resolve(CachePruneScheduler.LAST_PRUNED_FILE),
+                Long.toString(tenDaysAgo),
+                StandardCharsets.UTF_8);
 
         assertThat(CachePruneScheduler.shouldRun(cfg, cacheRoot)).isTrue();
     }
@@ -45,8 +48,8 @@ class CachePruneSchedulerTest {
     @Test
     void should_run_when_stamp_is_garbage(@TempDir Path cacheRoot) throws IOException {
         JkCacheConfig cfg = new JkCacheConfig(true, Optional.empty(), 7, 30);
-        Files.writeString(cacheRoot.resolve(CachePruneScheduler.LAST_PRUNED_FILE),
-                "not-a-number", StandardCharsets.UTF_8);
+        Files.writeString(
+                cacheRoot.resolve(CachePruneScheduler.LAST_PRUNED_FILE), "not-a-number", StandardCharsets.UTF_8);
         assertThat(CachePruneScheduler.shouldRun(cfg, cacheRoot)).isTrue();
     }
 

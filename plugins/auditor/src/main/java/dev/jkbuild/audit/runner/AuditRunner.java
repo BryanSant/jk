@@ -10,7 +10,6 @@ import dev.jkbuild.plugin.Plugin;
 import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -71,10 +70,10 @@ public final class AuditRunner implements Plugin {
                 String key = line.substring(0, space);
                 String val = line.substring(space + 1).strip();
                 switch (key) {
-                    case "LOCKFILE"  -> lockfilePath = Path.of(val);
+                    case "LOCKFILE" -> lockfilePath = Path.of(val);
                     case "BATCH_URL" -> batchUrl = URI.create(val);
                     case "VULNS_URL" -> vulnsUrl = URI.create(val);
-                    default -> { }
+                    default -> {}
                 }
             }
         } catch (IOException e) {

@@ -6,7 +6,6 @@ import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkVendor;
-
 import java.nio.file.Path;
 
 /**

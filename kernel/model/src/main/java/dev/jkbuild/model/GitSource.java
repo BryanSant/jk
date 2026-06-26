@@ -50,8 +50,13 @@ public record GitSource(
     }
 
     /** Without coordinate/version overrides — the common case. */
-    public GitSource(String canonicalUrl, String originalUrl, GitRefSpec ref,
-                     String path, boolean submodules, boolean verifySignature) {
+    public GitSource(
+            String canonicalUrl,
+            String originalUrl,
+            GitRefSpec ref,
+            String path,
+            boolean submodules,
+            boolean verifySignature) {
         this(canonicalUrl, originalUrl, ref, path, submodules, verifySignature, null, null, null, null);
     }
 
@@ -61,30 +66,66 @@ public record GitSource(
     }
 
     public GitSource withPath(String path) {
-        return new GitSource(canonicalUrl, originalUrl, ref, path, submodules, verifySignature,
-                overrideGroup, overrideArtifact, overrideVersion, fetch);
+        return new GitSource(
+                canonicalUrl,
+                originalUrl,
+                ref,
+                path,
+                submodules,
+                verifySignature,
+                overrideGroup,
+                overrideArtifact,
+                overrideVersion,
+                fetch);
     }
 
     public GitSource withSubmodules(boolean submodules) {
-        return new GitSource(canonicalUrl, originalUrl, ref, path, submodules, verifySignature,
-                overrideGroup, overrideArtifact, overrideVersion, fetch);
+        return new GitSource(
+                canonicalUrl,
+                originalUrl,
+                ref,
+                path,
+                submodules,
+                verifySignature,
+                overrideGroup,
+                overrideArtifact,
+                overrideVersion,
+                fetch);
     }
 
     public GitSource withVerifySignature(boolean verifySignature) {
-        return new GitSource(canonicalUrl, originalUrl, ref, path, submodules, verifySignature,
-                overrideGroup, overrideArtifact, overrideVersion, fetch);
+        return new GitSource(
+                canonicalUrl,
+                originalUrl,
+                ref,
+                path,
+                submodules,
+                verifySignature,
+                overrideGroup,
+                overrideArtifact,
+                overrideVersion,
+                fetch);
     }
 
     /** Attach discovery overrides; any argument may be {@code null} to keep discovery. */
     public GitSource withOverrides(String group, String artifact, String version) {
-        return new GitSource(canonicalUrl, originalUrl, ref, path, submodules, verifySignature,
-                group, artifact, version, fetch);
+        return new GitSource(
+                canonicalUrl, originalUrl, ref, path, submodules, verifySignature, group, artifact, version, fetch);
     }
 
     /** Attach the branch-tip freshness policy ({@code null} = default 12h window). */
     public GitSource withFetch(String fetch) {
-        return new GitSource(canonicalUrl, originalUrl, ref, path, submodules, verifySignature,
-                overrideGroup, overrideArtifact, overrideVersion, fetch);
+        return new GitSource(
+                canonicalUrl,
+                originalUrl,
+                ref,
+                path,
+                submodules,
+                verifySignature,
+                overrideGroup,
+                overrideArtifact,
+                overrideVersion,
+                fetch);
     }
 
     /** True when a coordinate or version override is set (vs. pure discovery). */

@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * {@code jk run} — project mode. {@code jk run} builds (if needed) and runs
@@ -22,11 +20,15 @@ class RunCommandTest {
     @Test
     void runs_current_project_and_forwards_args(@TempDir Path tempDir) throws Exception {
         // Scaffold a runnable project, write source that exits with code = arg count.
-        run("new",
-                "--group", "com.example",
-                "--name", "widget",
+        run(
+                "new",
+                "--group",
+                "com.example",
+                "--name",
+                "widget",
                 "--executable",
-                "--layout", "traditional",
+                "--layout",
+                "traditional",
                 tempDir.toString());
         Path src = tempDir.resolve("src/main/java/com/example/Main.java");
         Files.createDirectories(src.getParent());
@@ -40,15 +42,12 @@ class RunCommandTest {
                 """);
 
         // No jar yet — `jk run` should auto-build then exec.
-        int exit = run("run", "-C", tempDir.toString(),
-                "--cache-dir", SharedTestCache.arg());
+        int exit = run("run", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg());
         assertThat(exit).isEqualTo(0);
         assertThat(tempDir.resolve("target/widget-0.1.0.jar")).exists();
 
         // Args after `--` reach the main method.
-        int withArgs = run("run", "-C", tempDir.toString(),
-                "--cache-dir", SharedTestCache.arg(),
-                "--", "a", "b", "c");
+        int withArgs = run("run", "-C", tempDir.toString(), "--cache-dir", SharedTestCache.arg(), "--", "a", "b", "c");
         assertThat(withArgs).isEqualTo(3);
     }
 

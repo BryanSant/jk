@@ -8,7 +8,6 @@ import dev.jkbuild.discovery.ToolProvisioner;
 import dev.jkbuild.discovery.ToolSpec;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.util.PathUtil;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,7 +33,12 @@ public final class ToolProvisioning {
     private ToolProvisioning() {}
 
     public record Result(InstalledTool tool, Source source, String detail) {
-        public enum Source { CACHED, LINKED, DOWNLOADED }
+        public enum Source {
+            CACHED,
+            LINKED,
+            DOWNLOADED
+        }
+
         public Result {
             if (tool == null) throw new IllegalArgumentException("tool");
             if (source == null) throw new IllegalArgumentException("source");
@@ -48,20 +52,14 @@ public final class ToolProvisioning {
      * {@link InstalledTool} and a tag describing how it was obtained
      * (for log output).
      */
-    public static Result provision(
-            ToolDistribution distribution,
-            ToolRegistry registry,
-            Http http,
-            boolean noDiscover) throws IOException, InterruptedException {
+    public static Result provision(ToolDistribution distribution, ToolRegistry registry, Http http, boolean noDiscover)
+            throws IOException, InterruptedException {
         return provision(distribution, registry, http, noDiscover, false, new ToolProvisioner());
     }
 
     public static Result provision(
-            ToolDistribution distribution,
-            ToolRegistry registry,
-            Http http,
-            boolean noDiscover,
-            boolean noCache) throws IOException, InterruptedException {
+            ToolDistribution distribution, ToolRegistry registry, Http http, boolean noDiscover, boolean noCache)
+            throws IOException, InterruptedException {
         return provision(distribution, registry, http, noDiscover, noCache, new ToolProvisioner());
     }
 
@@ -71,13 +69,16 @@ public final class ToolProvisioning {
             Http http,
             boolean noDiscover,
             boolean noCache,
-            ToolProvisioner provisioner) throws IOException, InterruptedException {
+            ToolProvisioner provisioner)
+            throws IOException, InterruptedException {
 
         ToolSpec spec = specFor(distribution);
 
         // 1. Healthy cached install wins (skipped when noCache).
         Optional<InstalledTool> existing = registry.find(distribution.tool(), distribution.version());
-        if (!noCache && existing.isPresent() && isHealthyEntry(spec, existing.get().home())) {
+        if (!noCache
+                && existing.isPresent()
+                && isHealthyEntry(spec, existing.get().home())) {
             return new Result(existing.get(), Result.Source.CACHED, "");
         }
         // 2. Broken cache entry — purge and continue.
@@ -105,7 +106,8 @@ public final class ToolProvisioning {
 
         // 4. Download fallback.
         InstalledTool installed = new ToolInstaller(http, registry).install(distribution);
-        return new Result(installed, Result.Source.DOWNLOADED, distribution.downloadUri().toString());
+        return new Result(
+                installed, Result.Source.DOWNLOADED, distribution.downloadUri().toString());
     }
 
     /**
@@ -125,5 +127,4 @@ public final class ToolProvisioning {
     private static ToolSpec specFor(ToolDistribution distribution) {
         return new ToolSpec(distribution.tool().slug(), distribution.version(), null);
     }
-
 }

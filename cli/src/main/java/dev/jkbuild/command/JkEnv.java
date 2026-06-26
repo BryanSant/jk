@@ -4,9 +4,7 @@ package dev.jkbuild.command;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
-import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -85,8 +83,13 @@ public final class JkEnv {
             }
         }
         var req = new dev.jkbuild.jdk.JdkResolution.Request(
-                root.orElse(cwd), /*switch*/ null, System.getenv("JK_JDK"),
-                lockId, projectJdk, javaRelease, System::getenv);
+                root.orElse(cwd), /*switch*/
+                null,
+                System.getenv("JK_JDK"),
+                lockId,
+                projectJdk,
+                javaRelease,
+                System::getenv);
         var resolved = dev.jkbuild.jdk.JdkResolution.resolveForHook(req, registry, globalDefault);
         if (resolved.jdk().isEmpty()) return Target.empty();
         var home = resolved.jdk().get().home();
@@ -135,15 +138,14 @@ public final class JkEnv {
      * installed GraalVM". Empty when no GraalVM is configured/installed.
      */
     private Optional<Path> resolveGraalHome(String projectGraalSpec, ResolvedJdk javaJdk) {
-        for (String spec : new String[]{System.getenv("JK_GRAAL"), projectGraalSpec}) {
+        for (String spec : new String[] {System.getenv("JK_GRAAL"), projectGraalSpec}) {
             if (spec == null || spec.isBlank()) continue;
             if (spec.trim().equalsIgnoreCase("native")) {
                 Optional<Path> g = newestInstalledGraal();
                 if (g.isPresent()) return g;
                 continue;
             }
-            Optional<dev.jkbuild.jdk.JdkHit> hit =
-                    registry.findHitBySpec(spec).filter(JkEnv::isGraalVendor);
+            Optional<dev.jkbuild.jdk.JdkHit> hit = registry.findHitBySpec(spec).filter(JkEnv::isGraalVendor);
             if (hit.isPresent()) return Optional.of(hit.get().home());
         }
         // The `jk jdk graal` default pointer (symlink, then config identifier).
@@ -164,13 +166,12 @@ public final class JkEnv {
     private Optional<Path> newestInstalledGraal() {
         return registry.listHits().stream()
                 .filter(JkEnv::isGraalVendor)
-                .sorted(Comparator
-                        .comparingInt((dev.jkbuild.jdk.JdkHit h) -> {
+                .sorted(Comparator.comparingInt((dev.jkbuild.jdk.JdkHit h) -> {
                             int i = JdkVendor.GRAAL_PREFERENCE.indexOf(h.vendor());
                             return i >= 0 ? i : Integer.MAX_VALUE;
                         })
-                        .thenComparing(h -> h.version() == null ? ""
-                                : dev.jkbuild.jdk.JdkSelector.versionKey(h.version()),
+                        .thenComparing(
+                                h -> h.version() == null ? "" : dev.jkbuild.jdk.JdkSelector.versionKey(h.version()),
                                 Comparator.reverseOrder()))
                 .map(dev.jkbuild.jdk.JdkHit::home)
                 .findFirst();
@@ -247,7 +248,9 @@ public final class JkEnv {
     }
 
     private static boolean isWindowsAbsolute(String s) {
-        return s.length() >= 3 && Character.isLetter(s.charAt(0)) && s.charAt(1) == ':'
+        return s.length() >= 3
+                && Character.isLetter(s.charAt(0))
+                && s.charAt(1) == ':'
                 && (s.charAt(2) == '\\' || s.charAt(2) == '/');
     }
 

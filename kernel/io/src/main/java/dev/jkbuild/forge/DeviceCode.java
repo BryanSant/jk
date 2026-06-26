@@ -11,7 +11,6 @@ public record DeviceCode(
         String deviceCode,
         String userCode,
         String verificationUri,
-        String verificationUriComplete,   // may be null; provider-optional
+        String verificationUriComplete, // may be null; provider-optional
         int interval,
-        int expiresIn) {
-}
+        int expiresIn) {}

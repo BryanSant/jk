@@ -1,19 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -23,8 +19,10 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class LockCommandTest {
 
@@ -82,10 +80,14 @@ class LockCommandTest {
         assertThat(exit).isEqualTo(0);
         exit = run("add", "com.foo:root:1.0", "-C", tempDir.toString());
         assertThat(exit).isEqualTo(0);
-        exit = run("lock",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        exit = run(
+                "lock",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         // Inspect the lockfile.
@@ -108,25 +110,35 @@ class LockCommandTest {
 
     @Test
     void lock_without_build_jk_fails(@TempDir Path tempDir) {
-        int exit = run("lock", "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(2);
     }
 
     @Test
     void lock_with_no_dependencies_defaults_to_junit(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        int exit = run("lock",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
         // No project deps — but jk defaults the test framework to JUnit.
         assertThat(DefaultTestDepsFixture.projectCoords(lock)).isEmpty();
-        assertThat(lock.artifacts()).extracting(Lockfile.Artifact::name)
+        assertThat(lock.artifacts())
+                .extracting(Lockfile.Artifact::name)
                 .containsExactlyInAnyOrder(DefaultTestDepsFixture.JUPITER, DefaultTestDepsFixture.LAUNCHER);
     }
 
@@ -177,10 +189,14 @@ class LockCommandTest {
                 """);
 
         // Invoke from INSIDE the module directory — locks only that module.
-        int exit = run("lock",
-                "-C", app.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "-C",
+                app.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         // Each module has its own lock file alongside its jk.toml.
@@ -189,8 +205,7 @@ class LockCommandTest {
         // External coords are resolved; the workspace sibling is not locked.
         assertThat(DefaultTestDepsFixture.projectCoords(lock))
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
-        assertThat(DefaultTestDepsFixture.projectCoords(lock))
-                .doesNotContain("com.acme:libb");
+        assertThat(DefaultTestDepsFixture.projectCoords(lock)).doesNotContain("com.acme:libb");
 
         // Workspace root's own jk.lock was NOT created by this invocation.
         assertThat(Files.exists(tempDir.resolve("jk.lock"))).isFalse();
@@ -240,10 +255,14 @@ class LockCommandTest {
                 """);
 
         // Invoke from the workspace root — cascades to all modules.
-        int exit = run("lock",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         // Root gets its own lock (empty — no deps declared at root).
@@ -253,8 +272,7 @@ class LockCommandTest {
         Lockfile appLock = LockfileReader.read(app.resolve("jk.lock"));
         assertThat(DefaultTestDepsFixture.projectCoords(appLock))
                 .containsExactlyInAnyOrder("com.foo:root", "com.foo:leaf");
-        assertThat(DefaultTestDepsFixture.projectCoords(appLock))
-                .doesNotContain("com.acme:libb");
+        assertThat(DefaultTestDepsFixture.projectCoords(appLock)).doesNotContain("com.acme:libb");
 
         // libb gets its own lock (empty — no deps declared).
         assertThat(Files.exists(libb.resolve("jk.lock"))).isTrue();
@@ -267,18 +285,23 @@ class LockCommandTest {
 
         run("new", tempDir.toString());
         run("add", "com.foo:root:1.0", "-C", tempDir.toString());
-        assertThat(run("lock", "-C", tempDir.toString(),
-                "--repo-url", base.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(run(
+                        "lock",
+                        "-C",
+                        tempDir.toString(),
+                        "--repo-url",
+                        base.toString(),
+                        "--cache-dir",
+                        cache.toString()))
+                .isEqualTo(0);
 
         // Stop the server so any network attempt would fail; offline must not need it.
         server.stop(0);
-        int exit = run("lock", "--offline", "-C", tempDir.toString(),
-                "--cache-dir", cache.toString());
+        int exit = run("lock", "--offline", "-C", tempDir.toString(), "--cache-dir", cache.toString());
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(DefaultTestDepsFixture.projectCoords(lock))
-                .containsExactly("com.foo:leaf", "com.foo:root");
+        assertThat(DefaultTestDepsFixture.projectCoords(lock)).containsExactly("com.foo:leaf", "com.foo:root");
     }
 
     @Test
@@ -286,12 +309,16 @@ class LockCommandTest {
         // jk.toml declares com.foo:root, but the lockfile has no such package.
         writeProjectWithRootDep(tempDir);
         LockfileWriter.write(
-                new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
-                        Lockfile.RESOLUTION_ALGORITHM, List.of()),
+                new Lockfile(Lockfile.CURRENT_VERSION, "jk test", Lockfile.RESOLUTION_ALGORITHM, List.of()),
                 tempDir.resolve("jk.lock"));
 
-        int exit = run("lock", "--offline", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "--offline",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(6);
     }
 
@@ -300,15 +327,25 @@ class LockCommandTest {
         writeProjectWithRootDep(tempDir);
         // Lock references a checksum whose blob is absent from the (empty) cache.
         Lockfile.Artifact root = new Lockfile.Artifact(
-                "com.foo:root", "1.0", "central+" + base, "sha256:" + "00".repeat(32),
-                null, List.of(), List.of(), null);
+                "com.foo:root",
+                "1.0",
+                "central+" + base,
+                "sha256:" + "00".repeat(32),
+                null,
+                List.of(),
+                List.of(),
+                null);
         LockfileWriter.write(
-                new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
-                        Lockfile.RESOLUTION_ALGORITHM, List.of(root)),
+                new Lockfile(Lockfile.CURRENT_VERSION, "jk test", Lockfile.RESOLUTION_ALGORITHM, List.of(root)),
                 tempDir.resolve("jk.lock"));
 
-        int exit = run("lock", "--offline", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "--offline",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(6);
     }
 
@@ -321,15 +358,14 @@ class LockCommandTest {
         Path online = Files.createDirectories(tempDir.resolve("online"));
         run("new", online.toString());
         run("add", "com.foo:root:1.0", "-C", online.toString());
-        assertThat(run("lock", "-C", online.toString(),
-                "--repo-url", base.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(run("lock", "-C", online.toString(), "--repo-url", base.toString(), "--cache-dir", cache.toString()))
+                .isEqualTo(0);
 
         // Fresh project, no lockfile, offline — must resolve from the journal.
         Path fresh = Files.createDirectories(tempDir.resolve("fresh"));
         writeProjectWithRootDep(fresh);
         server.stop(0);
-        int exit = run("lock", "--offline", "-C", fresh.toString(),
-                "--cache-dir", cache.toString());
+        int exit = run("lock", "--offline", "-C", fresh.toString(), "--cache-dir", cache.toString());
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(fresh.resolve("jk.lock"));
@@ -341,8 +377,14 @@ class LockCommandTest {
     void kotlin_project_lock_pins_floating_compiler_version(@TempDir Path tempDir) throws Exception {
         // 2.4.0-RC2 is higher than 2.3.21 and also in range, but a floating
         // selector must skip the pre-release and pin the highest stable.
-        registerMetadata("org.jetbrains.kotlin", "kotlin-compiler-embeddable",
-                "2.0.21", "2.3.0", "2.3.21", "2.4.0-RC2", "3.0.0");
+        registerMetadata(
+                "org.jetbrains.kotlin",
+                "kotlin-compiler-embeddable",
+                "2.0.21",
+                "2.3.0",
+                "2.3.21",
+                "2.4.0-RC2",
+                "3.0.0");
         Files.createDirectories(tempDir);
         Files.writeString(tempDir.resolve("jk.toml"), """
                 [project]
@@ -352,9 +394,14 @@ class LockCommandTest {
                 kotlin = "^2.3.0"
                 """);
 
-        int exit = run("lock", "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         // ^2.3.0 → >=2.3.0, <3.0.0; highest *stable* match is 2.3.21 (not 2.4.0-RC2).
@@ -375,9 +422,14 @@ class LockCommandTest {
                 kotlin = "=2.1.0"
                 """);
 
-        int exit = run("lock", "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
@@ -387,9 +439,14 @@ class LockCommandTest {
     @Test
     void java_project_lock_has_no_kotlin_version(@TempDir Path tempDir) throws Exception {
         run("new", tempDir.toString());
-        int exit = run("lock", "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "lock",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
         assertThat(LockfileReader.read(tempDir.resolve("jk.lock")).kotlin()).isNull();
     }
@@ -432,28 +489,32 @@ class LockCommandTest {
     private static Lockfile.Artifact pkg(Lockfile lock, String module) {
         return lock.artifacts().stream()
                 .filter(p -> p.name().equals(module))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
     }
 
     private void registerPom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".pom";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".pom";
         served.put(path, body.getBytes(StandardCharsets.UTF_8));
     }
 
     private void registerJar(String group, String artifact, String version, byte[] bytes) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".jar";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".jar";
         served.put(path, bytes);
     }
 
     private void registerMetadata(String group, String artifact, String... versions) {
-        StringBuilder xml = new StringBuilder("<metadata><groupId>").append(group)
-                .append("</groupId><artifactId>").append(artifact)
+        StringBuilder xml = new StringBuilder("<metadata><groupId>")
+                .append(group)
+                .append("</groupId><artifactId>")
+                .append(artifact)
                 .append("</artifactId><versioning><versions>");
         for (String v : versions) xml.append("<version>").append(v).append("</version>");
         xml.append("</versions></versioning></metadata>");
-        served.put("/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
+        served.put(
+                "/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
                 xml.toString().getBytes(StandardCharsets.UTF_8));
     }
 

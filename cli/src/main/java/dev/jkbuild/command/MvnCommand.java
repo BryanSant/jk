@@ -6,24 +6,22 @@ import dev.jkbuild.compat.PassthroughEnv;
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkResolver;
-import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
-
+import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 
 /**
@@ -34,17 +32,34 @@ import java.util.Optional;
  */
 public final class MvnCommand implements CliCommand {
 
-    @Override public String name() { return "mvn"; }
-    @Override public String description() { return "Passthrough to Maven (jk manages the install)"; }
-    @Override public boolean passthrough() { return true; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "mvn";
+    }
+
+    @Override
+    public String description() {
+        return "Passthrough to Maven (jk manages the install)";
+    }
+
+    @Override
+    public boolean passthrough() {
+        return true;
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<dir>", "Project directory.", "-C", "--directory"),
-                Opt.value("<dir>", "Override the tools install root.", "--tools-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.value("<dir>", "Override the tools install root.", "--tools-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
+                        .hide(),
                 Opt.flag("Skip tool discovery.", "--no-discover"));
     }
-    @Override public List<Param> parameters() {
+
+    @Override
+    public List<Param> parameters() {
         return List.of(Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to Maven."));
     }
 
@@ -77,7 +92,8 @@ public final class MvnCommand implements CliCommand {
         List<String> command = new ArrayList<>();
         command.add(mvnBin.toString());
         command.addAll(args);
-        ProcessBuilder pb = new ProcessBuilder(command).directory(projectDir.toFile()).inheritIO();
+        ProcessBuilder pb =
+                new ProcessBuilder(command).directory(projectDir.toFile()).inheritIO();
         PassthroughEnv.apply(pb.environment(), jdk.map(InstalledJdk::home).orElse(null));
         return pb.start().waitFor();
     }
@@ -87,30 +103,40 @@ public final class MvnCommand implements CliCommand {
         Path workerJar = WorkerJar.COMPAT_BRIDGE.locate(new Cas(cache));
         Path spec = Files.createTempFile("jk-compat-", ".spec");
         try {
-            Files.write(spec, List.of(
-                    "COMMAND " + (isGradle ? "provision_gradle" : "provision_mvn"),
-                    "PROJECT_DIR " + projectDir.toAbsolutePath(),
-                    "TOOLS_ROOT " + toolsRoot.toAbsolutePath(),
-                    "NO_DISCOVER " + noDiscover), StandardCharsets.UTF_8);
+            Files.write(
+                    spec,
+                    List.of(
+                            "COMMAND " + (isGradle ? "provision_gradle" : "provision_mvn"),
+                            "PROJECT_DIR " + projectDir.toAbsolutePath(),
+                            "TOOLS_ROOT " + toolsRoot.toAbsolutePath(),
+                            "NO_DISCOVER " + noDiscover),
+                    StandardCharsets.UTF_8);
 
             Path javaExe = CompileToolchain.runningJavaHome()
-                    .resolve("bin").resolve(HostPlatform.isWindows() ? "java.exe" : "java");
-            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
+                    .resolve("bin")
+                    .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
+            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
+                    javaExe.toString(),
+                    1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
             String[] bin = {null};
             StringBuilder diag = new StringBuilder();
-            int exit = WorkerProcess.run(cmd, "##JKCMP:", json -> {
-                if ("result".equals(Ndjson.str(json, "t"))) {
-                    bin[0] = Ndjson.str(json, "bin");
-                    String err = Ndjson.str(json, "error");
-                    if (err != null) System.err.println("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
-                    String src = Ndjson.str(json, "source");
-                    String ver = Ndjson.str(json, "version");
-                    if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
-                        System.err.println((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
-                    }
-                }
-            }, ln -> diag.append(ln).append('\n'));
+            int exit = WorkerProcess.run(
+                    cmd,
+                    "##JKCMP:",
+                    json -> {
+                        if ("result".equals(Ndjson.str(json, "t"))) {
+                            bin[0] = Ndjson.str(json, "bin");
+                            String err = Ndjson.str(json, "error");
+                            if (err != null) System.err.println("jk " + (isGradle ? "gradle" : "mvn") + ": " + err);
+                            String src = Ndjson.str(json, "source");
+                            String ver = Ndjson.str(json, "version");
+                            if ("LINKED".equals(src) || "DOWNLOADED".equals(src)) {
+                                System.err.println((isGradle ? "Gradle " : "Maven ") + ver + " " + src.toLowerCase());
+                            }
+                        }
+                    },
+                    ln -> diag.append(ln).append('\n'));
             if (exit != 0) {
                 if (diag.length() > 0) System.err.println(diag.toString().trim());
                 return null;
@@ -120,5 +146,4 @@ public final class MvnCommand implements CliCommand {
             Files.deleteIfExists(spec);
         }
     }
-
 }

@@ -1,16 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.jdk.JdkToolUninstaller;
-
-import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.Ansi;
+import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Confirm;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.cli.tui.Spinner;
-import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.InstalledJdk;
@@ -18,28 +15,24 @@ import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkInstaller;
 import dev.jkbuild.jdk.JdkRegistry;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.util.JkDirs;
-import org.jline.terminal.Terminal;
+import dev.jkbuild.jdk.JdkToolUninstaller;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
-import java.io.BufferedReader;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
+import org.jline.terminal.Terminal;
 
 /**
  * {@code jk jdk uninstall <source>/<spec>} — source-qualified single-target
@@ -62,23 +55,40 @@ import java.util.Set;
 // Take our CliCommand interface + main's expanded aliases and logic
 public final class JdkUninstallCommand implements CliCommand {
 
-    @Override public String name() { return "uninstall"; }
-    @Override public java.util.List<String> aliases() { return java.util.List.of("remove", "rm", "del"); }
-    @Override public String description() { return "Uninstall a Java Development Kit"; }
-    @Override public java.util.List<Opt> options() {
-        return java.util.List.of(
-                Opt.flag("Skip the confirmation prompt.", "-y", "--yes"),
-                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide());
-    }
-    @Override public java.util.List<Param> parameters() {
-        return java.util.List.of(Param.of("spec", Arity.ZERO_OR_ONE,
-                "The vendor/version of JDK you'd like to uninstall\n"
-                + "  (ex: 25, lts, latest, temurin-25, openjdk-26)"));
+    @Override
+    public String name() {
+        return "uninstall";
     }
 
-    private static final Set<String> KNOWN_SOURCES = Set.of(
-            "jk", "intellij", "jdks", "sdkman", "jbang", "mise", "asdf", "jenv",
-            "homebrew", "path");
+    @Override
+    public java.util.List<String> aliases() {
+        return java.util.List.of("remove", "rm", "del");
+    }
+
+    @Override
+    public String description() {
+        return "Uninstall a Java Development Kit";
+    }
+
+    @Override
+    public java.util.List<Opt> options() {
+        return java.util.List.of(
+                Opt.flag("Skip the confirmation prompt.", "-y", "--yes"),
+                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir")
+                        .hide());
+    }
+
+    @Override
+    public java.util.List<Param> parameters() {
+        return java.util.List.of(Param.of(
+                "spec",
+                Arity.ZERO_OR_ONE,
+                "The vendor/version of JDK you'd like to uninstall\n"
+                        + "  (ex: 25, lts, latest, temurin-25, openjdk-26)"));
+    }
+
+    private static final Set<String> KNOWN_SOURCES =
+            Set.of("jk", "intellij", "jdks", "sdkman", "jbang", "mise", "asdf", "jenv", "homebrew", "path");
 
     /**
      * Sources jk refuses to uninstall from — the install's lifecycle belongs to
@@ -92,14 +102,17 @@ public final class JdkUninstallCommand implements CliCommand {
     /** Explain why a forbidden {@code source} can't be removed by jk. */
     private static String forbiddenSourceMessage(String source) {
         return switch (source) {
-            case "intellij" -> "jk jdk uninstall: `" + source + "` JDKs are managed by your IDE — "
-                    + "remove this one through IntelliJ (Project Structure ▸ SDKs, or the "
-                    + "Download JDK list), not jk.";
-            default -> "jk jdk uninstall: refusing to remove `" + source
-                    + "` installs — they're managed by the OS package manager "
-                    + "(use your distro's tooling, e.g. apt/dnf/brew, to remove them).";
+            case "intellij" ->
+                "jk jdk uninstall: `" + source + "` JDKs are managed by your IDE — "
+                        + "remove this one through IntelliJ (Project Structure ▸ SDKs, or the "
+                        + "Download JDK list), not jk.";
+            default ->
+                "jk jdk uninstall: refusing to remove `" + source
+                        + "` installs — they're managed by the OS package manager "
+                        + "(use your distro's tooling, e.g. apt/dnf/brew, to remove them).";
         };
     }
+
     String argument;
     boolean assumeYes;
     Path jdksDir;
@@ -141,8 +154,8 @@ public final class JdkUninstallCommand implements CliCommand {
         String source = slash < 0 ? null : argument.substring(0, slash);
         String spec = slash < 0 ? argument : argument.substring(slash + 1);
         if (slash == 0 || slash == argument.length() - 1) {
-            System.err.println("jk jdk uninstall: argument must be `<spec>` or `<source>/<spec>` "
-                    + "(got `" + argument + "`). Examples: temurin-26.0.1, intellij/temurin-26.0.1.");
+            System.err.println("jk jdk uninstall: argument must be `<spec>` or `<source>/<spec>` " + "(got `" + argument
+                    + "`). Examples: temurin-26.0.1, intellij/temurin-26.0.1.");
             return 64;
         }
 
@@ -153,15 +166,17 @@ public final class JdkUninstallCommand implements CliCommand {
                 return 64;
             }
             if (!KNOWN_SOURCES.contains(source)) {
-                System.err.println("jk jdk uninstall: unknown source `" + source + "` "
-                        + "(supported: " + String.join(", ", KNOWN_SOURCES.stream().sorted().toList()) + ")");
+                System.err.println("jk jdk uninstall: unknown source `" + source + "` " + "(supported: "
+                        + String.join(", ", KNOWN_SOURCES.stream().sorted().toList()) + ")");
                 return 64;
             }
         }
         // Keyword specs (lts, stable, latest) → resolve to best installed match.
         if (dev.jkbuild.jdk.JdkKeywords.isKeyword(spec)) {
             var hits = source != null
-                    ? registry.listHits().stream().filter(h -> source.equals(h.source())).toList()
+                    ? registry.listHits().stream()
+                            .filter(h -> source.equals(h.source()))
+                            .toList()
                     : registry.listHits();
             var kw = dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, hits);
             if (kw.isEmpty()) {
@@ -173,9 +188,7 @@ public final class JdkUninstallCommand implements CliCommand {
 
         // Source-qualified → that probe only; bare spec → first match in
         // probe-chain order across every source.
-        Optional<JdkHit> match = source != null
-                ? registry.findHitBySpec(spec, source)
-                : registry.findHitBySpec(spec);
+        Optional<JdkHit> match = source != null ? registry.findHitBySpec(spec, source) : registry.findHitBySpec(spec);
         if (match.isEmpty()) {
             String where = source != null
                     ? "no `" + source + "` install matches `" + spec + "`"
@@ -229,8 +242,7 @@ public final class JdkUninstallCommand implements CliCommand {
         // Wizard.run's finally force-restores ECHO+ICANON on, so a plain
         // System.in readLine inside this block works as expected.
         try (terminal) {
-            Optional<List<JdkHit>> outcome =
-                    JdkUninstallWizard.run(installed, currentDefault, terminal);
+            Optional<List<JdkHit>> outcome = JdkUninstallWizard.run(installed, currentDefault, terminal);
             if (outcome.isEmpty()) {
                 // Ctrl-C cancellation. Render the red closer on the active rail,
                 // identical to `jk jdk install`. Runtime.halt() (not close())
@@ -262,16 +274,14 @@ public final class JdkUninstallCommand implements CliCommand {
      * disk work + default-pointer reconciliation. Interactive=true keeps
      * the {@link Spinner} from competing with the framework's bar.
      */
-    private Integer runDeleteGoal(List<JdkHit> victims, JdkRegistry registry,
-                                  GlobalDefaultJdk defaults) {
+    private Integer runDeleteGoal(List<JdkHit> victims, JdkRegistry registry, GlobalDefaultJdk defaults) {
         Path cache = JkDirs.cache();
 
         Phase deletePhase = Phase.builder("delete")
                 .kind(PhaseKind.IO)
                 .scope(victims.size())
                 .execute(ctx -> {
-                    ctx.label("delete " + victims.size() + " install"
-                            + (victims.size() == 1 ? "" : "s"));
+                    ctx.label("delete " + victims.size() + " install" + (victims.size() == 1 ? "" : "s"));
                     for (JdkHit v : victims) {
                         try {
                             uninstallOne(v, registry);
@@ -325,9 +335,12 @@ public final class JdkUninstallCommand implements CliCommand {
         // Failure names the resolved `<source>/<identifier>` in yellow; the
         // success line (below) styles it as `[source]/identifier` instead.
         String label = hit.source() + "/" + identifier;
-        try (var sp = Spinner.show(System.out,
-                "Deleting " + Theme.colorize(JdkInstallCommand.tildeCollapse(installDir), Theme.active().path())
-                        + "...")) {
+        try (var sp = Spinner.show(
+                System.out,
+                "Deleting "
+                        + Theme.colorize(
+                                JdkInstallCommand.tildeCollapse(installDir),
+                                Theme.active().path()) + "...")) {
             // Try the owning tool first so its manifest stays consistent
             // (sdkman, mise, jbang, jenv, asdf, brew). Anything left on disk
             // after — including the intellij / java-home sources, which
@@ -340,14 +353,12 @@ public final class JdkUninstallCommand implements CliCommand {
             // The spinner has already cleared its line; print the failure where
             // the confirmation prompt was (confirmDeletion wiped it for us), then
             // rethrow so the goal records the failure and the exit code is 1.
-            System.out.println(
-                    Theme.colorize(Glyphs.CROSS, Theme.active().error())
-                            + " Failed to remove " + Theme.colorize(label, Theme.active().warning()) + "!");
+            System.out.println(Theme.colorize(Glyphs.CROSS, Theme.active().error()) + " Failed to remove "
+                    + Theme.colorize(label, Theme.active().warning()) + "!");
             throw e;
         }
-        System.out.println(
-                Theme.colorize(Glyphs.CHECK, Theme.active().completedStep())
-                        + " Removed " + JdkRender.coord(hit.source(), identifier));
+        System.out.println(Theme.colorize(Glyphs.CHECK, Theme.active().completedStep()) + " Removed "
+                + JdkRender.coord(hit.source(), identifier));
     }
 
     /**
@@ -362,18 +373,16 @@ public final class JdkUninstallCommand implements CliCommand {
         String warn = Theme.colorize("‼", Theme.active().warning());
         String question;
         if (victims.size() == 1) {
-            question = "\n" + warn + " Are you sure you want to delete "
-                    + target(victims.getFirst()) + "?";
+            question = "\n" + warn + " Are you sure you want to delete " + target(victims.getFirst()) + "?";
         } else {
             // The wizard already left a blank line after its "╰── Done" closer,
             // so this header needs no leading newline of its own.
-            System.out.println(warn + " Are you sure you want to delete the following "
-                    + victims.size() + " JDKs?");
+            System.out.println(warn + " Are you sure you want to delete the following " + victims.size() + " JDKs?");
             String dash = Theme.colorize("-", Theme.active().warning());
             for (JdkHit h : victims) {
                 System.out.println(dash + "  " + target(h));
             }
-            System.out.println();   // blank line before the Proceed prompt
+            System.out.println(); // blank line before the Proceed prompt
             question = warn + " Proceed?";
         }
         // Reuse the wizard's already-open terminal when present (the bulk path);
@@ -395,7 +404,8 @@ public final class JdkUninstallCommand implements CliCommand {
 
     /** The {@code source/identifier} a deletion targets, in cyan. */
     private static String target(JdkHit h) {
-        return Theme.colorize(h.source() + "/" + JdkRegistry.identifierFor(h.home()),
+        return Theme.colorize(
+                h.source() + "/" + JdkRegistry.identifierFor(h.home()),
                 Theme.active().cyan());
     }
 
@@ -422,13 +432,18 @@ public final class JdkUninstallCommand implements CliCommand {
             if (survivors.isEmpty()) {
                 defaults.clear();
                 System.out.println(Theme.colorize(
-                        "(no remaining JDKs — global default cleared)", Theme.active().normalGray()));
+                        "(no remaining JDKs — global default cleared)",
+                        Theme.active().normalGray()));
             } else {
                 defaults.set(survivors.getFirst());
                 System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
                         + " The " + Theme.colorize("default", Theme.active().focused())
-                        + " JDK is now set to " + Theme.colorize(survivors.getFirst().identifier(), Theme.active().focused())
-                        + " " + Theme.colorize("(non-LTS fallback)", Theme.active().darkGray()));
+                        + " JDK is now set to "
+                        + Theme.colorize(
+                                survivors.getFirst().identifier(),
+                                Theme.active().focused())
+                        + " "
+                        + Theme.colorize("(non-LTS fallback)", Theme.active().darkGray()));
             }
         }
     }
@@ -436,14 +451,15 @@ public final class JdkUninstallCommand implements CliCommand {
     /** Swallow stderr from {@code applyLts} when we're going to fall back ourselves. */
     private static java.io.PrintStream swallow() {
         return new java.io.PrintStream(new java.io.OutputStream() {
-            @Override public void write(int b) {}
-            @Override public void write(byte[] b, int off, int len) {}
+            @Override
+            public void write(int b) {}
+
+            @Override
+            public void write(byte[] b, int off, int len) {}
         });
     }
 
     private static boolean isInteractiveTerminal() {
-        return System.console() != null
-                && !"dumb".equals(System.getenv("TERM"))
-                && System.getenv("CI") == null;
+        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
     }
 }

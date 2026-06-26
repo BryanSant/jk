@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-import dev.jkbuild.test.JUnitLauncher;
-import org.junit.jupiter.api.Test;
-
-import java.util.List;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import dev.jkbuild.test.JUnitLauncher;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
 /** {@link TestSupport#renderFailures} surfaces each failure's name + stack, not just a count. */
 class TestFailureRenderingTest {
@@ -39,7 +38,7 @@ class TestFailureRenderingTest {
     @Test
     void pluralises_and_falls_back_to_message_when_no_stack() {
         var a = new JUnitLauncher.Failure("A > x()", "", "boom", "boom\n\tat A.x(A.java:1)");
-        var b = new JUnitLauncher.Failure("(test run)", "", "runner exited 1", "");  // no stack
+        var b = new JUnitLauncher.Failure("(test run)", "", "runner exited 1", ""); // no stack
         var result = new JUnitLauncher.Result(2, 0, 2, 0, List.of(a, b));
 
         List<String> lines = TestSupport.renderFailures(result);

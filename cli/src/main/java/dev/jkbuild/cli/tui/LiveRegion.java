@@ -54,6 +54,7 @@ public interface LiveRegion {
     /** Encapsulates the mutable registry so the interface exposes only methods. */
     final class Holder {
         private Holder() {}
+
         private static final AtomicReference<LiveRegion> ACTIVE = new AtomicReference<>();
     }
 }

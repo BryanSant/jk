@@ -58,8 +58,7 @@ public final class ForgeAuth {
         if (cli.isPresent()) return cli.map(t -> new ResolvedToken(t, TokenSource.NATIVE_CLI));
 
         // 4. jk's stored credential for this host
-        return store.read(resolveHost(kind, host))
-                .map(t -> new ResolvedToken(t, TokenSource.STORE));
+        return store.read(resolveHost(kind, host)).map(t -> new ResolvedToken(t, TokenSource.STORE));
     }
 
     /** Persist a freshly-obtained token (device flow or pasted PAT). */
@@ -79,8 +78,8 @@ public final class ForgeAuth {
     public static String resolveHost(ForgeKind kind, String host) {
         String h = nonBlank(host);
         if (h != null) return ForgeKind.normalizeHost(h);
-        return kind.defaultHost().orElseThrow(() -> new AuthException(
-                kind.displayName() + " has no default host — pass --host."));
+        return kind.defaultHost()
+                .orElseThrow(() -> new AuthException(kind.displayName() + " has no default host — pass --host."));
     }
 
     private static String nonBlank(String s) {

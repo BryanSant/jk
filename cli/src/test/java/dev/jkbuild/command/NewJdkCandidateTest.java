@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkVendor;
-import org.junit.jupiter.api.Test;
-
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.HashMap;
@@ -12,8 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class NewJdkCandidateTest {
 
@@ -29,11 +28,10 @@ class NewJdkCandidateTest {
         var temurin21 = installed("temurin-21.0.5", 21, JdkVendor.TEMURIN);
         var graal17 = installable("graalvm-jdk-17", 17, "Oracle", "GraalVM");
 
-        var filtered = NewJdkCandidate.filter(
-                List.of(temurin25, graal25, graalCe25, temurin21, graal17),
-                true, LTS);
+        var filtered = NewJdkCandidate.filter(List.of(temurin25, graal25, graalCe25, temurin21, graal17), true, LTS);
 
-        assertThat(filtered).extracting(NewJdkCandidate::id)
+        assertThat(filtered)
+                .extracting(NewJdkCandidate::id)
                 .containsExactlyInAnyOrder("graalvm-jdk-25.0.3", "graalvm-ce-25.0.3");
     }
 
@@ -47,7 +45,8 @@ class NewJdkCandidateTest {
         // to position 0 and leave the rest in their original order.
         var filtered = NewJdkCandidate.filter(List.of(corretto25, temurin25, graal25), false, LTS);
 
-        assertThat(filtered).extracting(NewJdkCandidate::id)
+        assertThat(filtered)
+                .extracting(NewJdkCandidate::id)
                 .containsExactly("temurin-25.0.3", "corretto-25.0.3", "graalvm-jdk-25.0.3");
     }
 
@@ -70,8 +69,7 @@ class NewJdkCandidateTest {
         var corretto25 = installed("corretto-25.0.3", 25, JdkVendor.CORRETTO);
         var graal25 = installable("graalvm-jdk-25.0.3", 25, "Oracle", "GraalVM");
         var filtered = NewJdkCandidate.filter(List.of(corretto25, graal25), false, LTS);
-        assertThat(filtered).extracting(NewJdkCandidate::id)
-                .containsExactly("corretto-25.0.3", "graalvm-jdk-25.0.3");
+        assertThat(filtered).extracting(NewJdkCandidate::id).containsExactly("corretto-25.0.3", "graalvm-jdk-25.0.3");
     }
 
     @Test
@@ -97,7 +95,8 @@ class NewJdkCandidateTest {
 
         assertThat(candidates).hasSize(3);
         assertThat(candidates).allMatch(c -> !c.installed());
-        assertThat(candidates).extracting(NewJdkCandidate::id)
+        assertThat(candidates)
+                .extracting(NewJdkCandidate::id)
                 .contains("temurin-25.0.3", "graalvm-25.0.3", "graalvm-ce-25.0.3");
     }
 
@@ -106,8 +105,7 @@ class NewJdkCandidateTest {
         // Same vendor-product-major appears both installed AND in the catalog.
         var fx = new Fixture();
         var temurinOpt = fx.option("temurin-25.0.3", 25, JdkVendor.TEMURIN);
-        var catalog = new JdkCatalog(List.of(
-                entry("Eclipse", "Temurin", 25, "25.0.3")));
+        var catalog = new JdkCatalog(List.of(entry("Eclipse", "Temurin", 25, "25.0.3")));
 
         var candidates = fx.build(List.of(temurinOpt), Optional.of(catalog));
 
@@ -147,8 +145,7 @@ class NewJdkCandidateTest {
     void build_dedupes_sdkman_and_catalog_entries_pointing_at_the_same_jdk() {
         var fx = new Fixture();
         var sdkmanGraal = fx.option("25.0.3-graal", 25, JdkVendor.ORACLE_GRAALVM);
-        var catalog = new JdkCatalog(List.of(
-                entry("Oracle", "GraalVM", 25, "25.0.3", "graalvm-jdk-25.0.3")));
+        var catalog = new JdkCatalog(List.of(entry("Oracle", "GraalVM", 25, "25.0.3", "graalvm-jdk-25.0.3")));
 
         var candidates = fx.build(List.of(sdkmanGraal), Optional.of(catalog));
 
@@ -184,7 +181,8 @@ class NewJdkCandidateTest {
 
         // Three different vendors at the same major → three candidates.
         assertThat(candidates).hasSize(3);
-        assertThat(candidates).extracting(NewJdkCandidate::id)
+        assertThat(candidates)
+                .extracting(NewJdkCandidate::id)
                 .containsExactly("temurin-25.0.3", "25.0.3-graal", "25.0.3-librca");
     }
 
@@ -210,8 +208,7 @@ class NewJdkCandidateTest {
         private final Map<NewJdkOptions.Option, JdkVendor> vendors = new HashMap<>();
 
         NewJdkOptions.Option option(String id, int major, JdkVendor vendor) {
-            var opt = new NewJdkOptions.Option(id, id + "  (JDK " + major + ")",
-                    Path.of("/fake/" + id), major, "jk");
+            var opt = new NewJdkOptions.Option(id, id + "  (JDK " + major + ")", Path.of("/fake/" + id), major, "jk");
             vendors.put(opt, vendor);
             return opt;
         }
@@ -227,8 +224,7 @@ class NewJdkCandidateTest {
 
     /** Convenience for standalone-candidate tests that don't go through {@code build()}. */
     private static NewJdkCandidate installed(String id, int major, JdkVendor vendor) {
-        var opt = new NewJdkOptions.Option(id, id + "  (JDK " + major + ")",
-                Path.of("/fake/" + id), major, "jk");
+        var opt = new NewJdkOptions.Option(id, id + "  (JDK " + major + ")", Path.of("/fake/" + id), major, "jk");
         return new NewJdkCandidate.Installed(opt, vendor);
     }
 
@@ -237,27 +233,47 @@ class NewJdkCandidateTest {
     }
 
     private static JdkCatalog.Entry entry(String vendor, String product, int major, String version) {
-        return entry(vendor, product, major, version,
-                product.toLowerCase().replace(" ", "-") + "-" + version);
+        return entry(vendor, product, major, version, product.toLowerCase().replace(" ", "-") + "-" + version);
     }
 
     private static JdkCatalog.Entry entry(
             String vendor, String product, int major, String version, String installFolder) {
         return new JdkCatalog.Entry(
-                vendor, product, "test", major, version,
-                /* defaultForMajor */ true, /* preview */ false, List.of(),
-                OS, ARCH, "tar.gz",
+                vendor,
+                product,
+                "test",
+                major,
+                version,
+                /* defaultForMajor */ true, /* preview */
+                false,
+                List.of(),
+                OS,
+                ARCH,
+                "tar.gz",
                 URI.create("https://example.com/" + installFolder + ".tar.gz"),
-                "sha256:abc", 1L, installFolder, "");
+                "sha256:abc",
+                1L,
+                installFolder,
+                "");
     }
 
-    private static JdkCatalog.Entry entryOnDifferentOs(
-            String vendor, String product, int major, String version) {
+    private static JdkCatalog.Entry entryOnDifferentOs(String vendor, String product, int major, String version) {
         return new JdkCatalog.Entry(
-                vendor, product, "test", major, version,
-                true, false, List.of(),
-                "darwin", "aarch64", "tar.gz",
+                vendor,
+                product,
+                "test",
+                major,
+                version,
+                true,
+                false,
+                List.of(),
+                "darwin",
+                "aarch64",
+                "tar.gz",
                 URI.create("https://example.com/foo.tar.gz"),
-                "sha256:abc", 1L, "foo-" + version + "-mac", "");
+                "sha256:abc",
+                1L,
+                "foo-" + version + "-mac",
+                "");
     }
 }

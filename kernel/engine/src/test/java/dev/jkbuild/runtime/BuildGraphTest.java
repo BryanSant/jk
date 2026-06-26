@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Graph-resolution coverage for the unified composite build graph (path deps;
@@ -34,8 +33,7 @@ class BuildGraphTest {
         if (pathDeps.length > 0) {
             sb.append("\n[dependencies.main]\n");
             for (String d : pathDeps) {
-                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n"
-                        .formatted(d, d, d));
+                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n".formatted(d, d, d));
             }
         }
         Files.writeString(dir.resolve("jk.toml"), sb.toString());
@@ -74,8 +72,8 @@ class BuildGraphTest {
         BuildGraph.Result r = resolve(tmp.resolve("a"), tmp);
 
         assertThat(r.errors()).isEmpty();
-        assertThat(coords(r)).containsExactlyInAnyOrder(
-                "com.example:a", "com.example:b", "com.example:cc", "com.example:d");
+        assertThat(coords(r))
+                .containsExactlyInAnyOrder("com.example:a", "com.example:b", "com.example:cc", "com.example:d");
         // d (shared) appears exactly once and before both b and cc.
         List<String> order = coords(r);
         assertThat(order.indexOf("com.example:d")).isLessThan(order.indexOf("com.example:b"));

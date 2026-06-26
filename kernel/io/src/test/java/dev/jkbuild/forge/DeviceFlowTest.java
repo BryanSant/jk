@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.forge;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.http.Http;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class DeviceFlowTest {
 
@@ -36,13 +35,19 @@ class DeviceFlowTest {
 
     /** A flow wired to the local server, with sleeps stubbed out. */
     private DeviceFlow flow() {
-        return new DeviceFlow(new Http(), base.resolve("/device/code"), base.resolve("/token"),
-                "TestForge", "client-123", "read:packages",
-                seconds -> { /* no real waiting in tests */ });
+        return new DeviceFlow(
+                new Http(),
+                base.resolve("/device/code"),
+                base.resolve("/token"),
+                "TestForge",
+                "client-123",
+                "read:packages",
+                seconds -> {
+                    /* no real waiting in tests */
+                });
     }
 
-    private void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String json)
-            throws IOException {
+    private void respond(com.sun.net.httpserver.HttpExchange exchange, int status, String json) throws IOException {
         byte[] body = json.getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().add("Content-Type", "application/json");
         exchange.sendResponseHeaders(status, body.length);
@@ -94,7 +99,7 @@ class DeviceFlowTest {
             }
         });
 
-        String token = flow().run(dc -> { });
+        String token = flow().run(dc -> {});
         assertThat(token).isEqualTo("tok-after-wait");
         assertThat(polls.get()).isEqualTo(3);
     }
@@ -112,7 +117,7 @@ class DeviceFlowTest {
             respond(ex, 400, "{\"error\":\"access_denied\"}");
         });
 
-        assertThatThrownBy(() -> flow().run(dc -> { }))
+        assertThatThrownBy(() -> flow().run(dc -> {}))
                 .isInstanceOf(AuthException.class)
                 .hasMessageContaining("denied");
     }
@@ -130,15 +135,14 @@ class DeviceFlowTest {
             respond(ex, 400, "{\"error\":\"expired_token\"}");
         });
 
-        assertThatThrownBy(() -> flow().run(dc -> { }))
+        assertThatThrownBy(() -> flow().run(dc -> {}))
                 .isInstanceOf(AuthException.class)
                 .hasMessageContaining("expired");
     }
 
     @Test
     void forHost_refuses_provider_without_device_flow() {
-        assertThatThrownBy(() ->
-                DeviceFlow.forHost(new Http(), ForgeKind.BITBUCKET, "bitbucket.org", "cid", "scope"))
+        assertThatThrownBy(() -> DeviceFlow.forHost(new Http(), ForgeKind.BITBUCKET, "bitbucket.org", "cid", "scope"))
                 .isInstanceOf(AuthException.class)
                 .hasMessageContaining("does not support");
     }

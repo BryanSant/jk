@@ -26,12 +26,12 @@ public final class HeapPlan {
 
     private HeapPlan() {}
 
-    static final long MIN_PARALLEL_HEAP = 512L << 20;   // 512 MiB per JVM to bother parallelising
-    static final long BUFFER_FLOOR      = 96L << 20;    // never reserve less than 96 MiB
-    static final double BUFFER_FRACTION = 0.10;         // ...or 10% of available, whichever is greater
-    static final double SOFT_FRACTION   = 0.50;         // good-neighbour soft target
-    static final long XMS_FLOOR         = 64L << 20;    // small initial heap; ZGC grows toward soft-max
-    static final long XMX_FLOOR         = 32L << 20;    // never hand a JVM a degenerate heap
+    static final long MIN_PARALLEL_HEAP = 512L << 20; // 512 MiB per JVM to bother parallelising
+    static final long BUFFER_FLOOR = 96L << 20; // never reserve less than 96 MiB
+    static final double BUFFER_FRACTION = 0.10; // ...or 10% of available, whichever is greater
+    static final double SOFT_FRACTION = 0.50; // good-neighbour soft target
+    static final long XMS_FLOOR = 64L << 20; // small initial heap; ZGC grows toward soft-max
+    static final long XMX_FLOOR = 32L << 20; // never hand a JVM a degenerate heap
 
     /**
      * The resolved budget. {@code parallelism} is the number of worker JVMs that
@@ -66,8 +66,8 @@ public final class HeapPlan {
         long perJvm = Math.max(XMX_FLOOR, usable / jvms);
         String warning = null;
         if (jvms == 1 && usable < MIN_PARALLEL_HEAP) {
-            warning = "only " + mib(usable) + " MiB of usable memory (< 512 MiB) — "
-                    + "building serially with -Xmx" + mib(perJvm) + "m as a best effort";
+            warning = "only " + mib(usable) + " MiB of usable memory (< 512 MiB) — " + "building serially with -Xmx"
+                    + mib(perJvm) + "m as a best effort";
         }
 
         long softMax = Math.min(perJvm, Math.max((long) (perJvm * SOFT_FRACTION), MIN_PARALLEL_HEAP));

@@ -4,9 +4,8 @@ package dev.jkbuild.cli.tui;
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Gradient;
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.utils.AttributedStyle;
-
 import java.io.PrintStream;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Single-line progress bar widget for long-running CLI operations
@@ -48,6 +47,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
 
     /** Right-aligned percent column: "  5%", " 62%", "100%". */
     static final int PERCENT_WIDTH = 4;
+
     static final String GAP = "  ";
     static final String SEPARATOR = ": ";
 
@@ -69,6 +69,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
     private final AttributedStyle[] failColors;
     /** Empty glyphs take the gradient's left-most (darkest) color, not a neutral dim. */
     private final AttributedStyle emptyStyle;
+
     private final boolean silent;
 
     private int lastFilled = 0;
@@ -162,7 +163,7 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
             out.flush();
             return;
         }
-        out.print(Ansi.CLEAR_LINE);      // clear the bar line
+        out.print(Ansi.CLEAR_LINE); // clear the bar line
         out.print(OSC_CLEAR);
         out.print(SHOW_CURSOR);
         out.println(message);
@@ -188,15 +189,14 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
             out.flush();
             return;
         }
-        out.print(Ansi.CLEAR_LINE);           // wipe the bar line
-        out.println(line);                // emit the hoisted message
+        out.print(Ansi.CLEAR_LINE); // wipe the bar line
+        out.println(line); // emit the hoisted message
         // Force a fresh full redraw at the same position. Without resetting
         // `drawn`, renderDiff would no-op on identical state and the bar
         // wouldn't reappear.
         drawn = false;
         renderInitial(lastFilled, lastPercentVal, lastPercent, lastStatus);
-        out.print(Ansi.taskbarProgress(
-                (int) Math.round(lastFilled * 100.0 / SEGMENTS)));
+        out.print(Ansi.taskbarProgress((int) Math.round(lastFilled * 100.0 / SEGMENTS)));
         out.flush();
         drawn = true;
     }
@@ -348,5 +348,4 @@ public final class SpinnerProgressBar implements AutoCloseable, LiveRegion {
         double t = Math.max(0.0, Math.min(1.0, (double) pct / 100.0));
         return Theme.active().bright(Theme.active().progressGradient().at(t)).bold();
     }
-
 }

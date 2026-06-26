@@ -8,7 +8,6 @@ import dev.jkbuild.lock.LockfileWriter;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.resolver.LockOrchestrator;
 import dev.jkbuild.resolver.ResolveObserver;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -91,17 +90,14 @@ public final class AutoLock {
             LockOrchestrator orchestrator = new LockOrchestrator(repos);
 
             Lockfile updated = orchestrator.lockConservative(
-                    effective, existing, jkVersion,
-                    features == null ? List.of() : features,
-                    withDefaults, observer);
+                    effective, existing, jkVersion, features == null ? List.of() : features, withDefaults, observer);
 
             // Stamp git-source provenance using already-locked SHAs (no re-fetch).
-            java.util.Map<String, String> lockedShas =
-                    GitSourceResolution.lockedImmutableShas(existing);
+            java.util.Map<String, String> lockedShas = GitSourceResolution.lockedImmutableShas(existing);
             dev.jkbuild.runtime.GitSourceResolution.Prepared prep;
             try {
-                prep = GitSourceResolution.prepare(effective, repos, cas,
-                        CompileToolchain.runningJavaHome(), jkVersion, lockedShas);
+                prep = GitSourceResolution.prepare(
+                        effective, repos, cas, CompileToolchain.runningJavaHome(), jkVersion, lockedShas);
                 updated = GitSourceResolution.stamp(updated, prep.gitInfoByKey());
             } catch (Exception ignored) {
                 // Git-source stamping is best-effort in auto-lock

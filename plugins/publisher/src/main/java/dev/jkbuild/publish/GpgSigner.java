@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.publish;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Iterator;
+import java.util.Objects;
 import org.bouncycastle.bcpg.ArmoredOutputStream;
 import org.bouncycastle.bcpg.HashAlgorithmTags;
 import org.bouncycastle.openpgp.PGPException;
@@ -16,14 +23,6 @@ import org.bouncycastle.openpgp.operator.bc.BcPBESecretKeyDecryptorBuilder;
 import org.bouncycastle.openpgp.operator.bc.BcPGPContentSignerBuilder;
 import org.bouncycastle.openpgp.operator.bc.BcPGPDigestCalculatorProvider;
 import org.bouncycastle.openpgp.operator.jcajce.JcaKeyFingerprintCalculator;
-
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.Iterator;
-import java.util.Objects;
 
 /**
  * Detached ASCII-armored GPG signatures over artifact bytes, used by
@@ -49,9 +48,9 @@ public final class GpgSigner {
     public static GpgSigner fromKeyFile(Path keyFile, char[] passphrase) throws IOException {
         Objects.requireNonNull(keyFile, "keyFile");
         try (InputStream raw = Files.newInputStream(keyFile);
-             InputStream decoded = PGPUtil.getDecoderStream(raw)) {
-            PGPSecretKeyRingCollection rings = new PGPSecretKeyRingCollection(
-                    decoded, new JcaKeyFingerprintCalculator());
+                InputStream decoded = PGPUtil.getDecoderStream(raw)) {
+            PGPSecretKeyRingCollection rings =
+                    new PGPSecretKeyRingCollection(decoded, new JcaKeyFingerprintCalculator());
             for (Iterator<PGPSecretKeyRing> rIter = rings.getKeyRings(); rIter.hasNext(); ) {
                 PGPSecretKeyRing ring = rIter.next();
                 for (Iterator<PGPSecretKey> kIter = ring.getSecretKeys(); kIter.hasNext(); ) {
@@ -84,8 +83,7 @@ public final class GpgSigner {
     public byte[] signArmored(byte[] data) throws IOException {
         try {
             PGPSignatureGenerator gen = new PGPSignatureGenerator(
-                    new BcPGPContentSignerBuilder(publicKey.getAlgorithm(), HashAlgorithmTags.SHA256),
-                    publicKey);
+                    new BcPGPContentSignerBuilder(publicKey.getAlgorithm(), HashAlgorithmTags.SHA256), publicKey);
             gen.init(PGPSignature.BINARY_DOCUMENT, privateKey);
             gen.update(data);
             PGPSignature sig = gen.generate();

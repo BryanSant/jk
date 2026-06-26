@@ -2,9 +2,9 @@
 package dev.jkbuild.resolver;
 
 import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.EffectivePom;
@@ -12,10 +12,9 @@ import dev.jkbuild.repo.EffectivePomBuilder;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.Pom;
 import dev.jkbuild.repo.RepoGroup;
-
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
 import java.util.EnumSet;
@@ -101,17 +100,14 @@ public final class LockOrchestrator {
             String jkVersion,
             Collection<String> featuresRequested,
             boolean withDefaults,
-            ResolveObserver observer) throws IOException, InterruptedException {
-        Lockfile base = lock(project, jkVersion, featuresRequested, withDefaults, observer,
-                Map.of());
+            ResolveObserver observer)
+            throws IOException, InterruptedException {
+        Lockfile base = lock(project, jkVersion, featuresRequested, withDefaults, observer, Map.of());
         return attachSources(base);
     }
 
-    public Lockfile lock(
-            JkBuild project,
-            String jkVersion,
-            Collection<String> featuresRequested,
-            boolean withDefaults) throws IOException, InterruptedException {
+    public Lockfile lock(JkBuild project, String jkVersion, Collection<String> featuresRequested, boolean withDefaults)
+            throws IOException, InterruptedException {
         return lock(project, jkVersion, featuresRequested, withDefaults, ResolveObserver.NOOP);
     }
 
@@ -126,7 +122,8 @@ public final class LockOrchestrator {
             String jkVersion,
             Collection<String> featuresRequested,
             boolean withDefaults,
-            ResolveObserver observer) throws IOException, InterruptedException {
+            ResolveObserver observer)
+            throws IOException, InterruptedException {
         return lock(project, jkVersion, featuresRequested, withDefaults, observer, Map.of());
     }
 
@@ -144,7 +141,8 @@ public final class LockOrchestrator {
             String jkVersion,
             Collection<String> featuresRequested,
             boolean withDefaults,
-            ResolveObserver observer) throws IOException, InterruptedException {
+            ResolveObserver observer)
+            throws IOException, InterruptedException {
         Map<String, String> prefs = new HashMap<>();
         for (Lockfile.Artifact pkg : existing.artifacts()) {
             prefs.put(pkg.name(), pkg.version());
@@ -158,10 +156,10 @@ public final class LockOrchestrator {
             Collection<String> featuresRequested,
             boolean withDefaults,
             ResolveObserver observer,
-            Map<String, String> lockedVersionPrefs) throws IOException, InterruptedException {
+            Map<String, String> lockedVersionPrefs)
+            throws IOException, InterruptedException {
 
-        Set<String> activated = project.features().activate(
-                new LinkedHashSet<>(featuresRequested), withDefaults);
+        Set<String> activated = project.features().activate(new LinkedHashSet<>(featuresRequested), withDefaults);
 
         // Declared-scope roots, deduped (declared wins). Optional deps are
         // WITHHELD here — they enter only when an activated feature names them.
@@ -184,7 +182,7 @@ public final class LockOrchestrator {
             if (opt == null) {
                 throw new IllegalArgumentException(
                         "feature dependency '" + depName + "' is not a declared optional dependency"
-                        + " — declare it under [dependencies.*] with `optional = true`");
+                                + " — declare it under [dependencies.*] with `optional = true`");
             }
             deduped.putIfAbsent(opt.module(), opt);
         }
@@ -227,8 +225,7 @@ public final class LockOrchestrator {
                 // floating platform dep doesn't take down the entire lock.
                 continue;
             }
-            Coordinate bomCoord = Coordinate.of(
-                    platformDep.group(), platformDep.name(), bomVersion);
+            Coordinate bomCoord = Coordinate.of(platformDep.group(), platformDep.name(), bomVersion);
             EffectivePom bomPom = pomBuilder.build(bomCoord);
             String bomLabel = bomCoord.toGav();
             for (Pom.Dep m : bomPom.managedDependencies()) {
@@ -238,12 +235,11 @@ public final class LockOrchestrator {
                     bomConstraints.put(m.module(), m.version());
                     constraintProvenance.put(m.module(), bomLabel);
                 } else if (!existing.equals(m.version())) {
-                    throw new IllegalStateException(
-                            "platform BOM conflict on `" + m.module()
-                                    + "`: " + constraintProvenance.get(m.module())
-                                    + " constrains to " + existing + ", but "
-                                    + bomLabel + " constrains to " + m.version()
-                                    + ". Pick one BOM or pin the coord explicitly.");
+                    throw new IllegalStateException("platform BOM conflict on `" + m.module()
+                            + "`: " + constraintProvenance.get(m.module())
+                            + " constrains to " + existing + ", but "
+                            + bomLabel + " constrains to " + m.version()
+                            + ". Pick one BOM or pin the coord explicitly.");
                 }
             }
         }
@@ -271,7 +267,9 @@ public final class LockOrchestrator {
             }
             if (rootModules.isEmpty()) continue;
             for (String module : reachableFrom(rootModules, resolution)) {
-                tagsByModule.computeIfAbsent(module, k -> EnumSet.noneOf(Scope.class)).add(scope);
+                tagsByModule
+                        .computeIfAbsent(module, k -> EnumSet.noneOf(Scope.class))
+                        .add(scope);
             }
         }
 
@@ -281,10 +279,8 @@ public final class LockOrchestrator {
         List<Lockfile.Artifact> packages = new ArrayList<>(resolution.modules().size());
         for (Resolution.ResolvedModule mod : resolution.modules().values()) {
             int colon = mod.module().indexOf(':');
-            Coordinate coord = Coordinate.of(
-                    mod.module().substring(0, colon),
-                    mod.module().substring(colon + 1),
-                    mod.version());
+            Coordinate coord =
+                    Coordinate.of(mod.module().substring(0, colon), mod.module().substring(colon + 1), mod.version());
 
             observer.onPackage(mod.module(), mod.version());
 
@@ -311,14 +307,7 @@ public final class LockOrchestrator {
             }
 
             packages.add(new Lockfile.Artifact(
-                    mod.module(),
-                    mod.version(),
-                    source,
-                    checksum,
-                    null,
-                    new ArrayList<>(tags),
-                    mod.deps(),
-                    pinnedBy));
+                    mod.module(), mod.version(), source, checksum, null, new ArrayList<>(tags), mod.deps(), pinnedBy));
         }
 
         // File deps: emit a lockfile entry directly — no solver, no network.
@@ -326,7 +315,8 @@ public final class LockOrchestrator {
         // ClasspathResolver resolves them via the checksum like any other dep.
         for (Dependency dep : fileDeps) {
             String version = dep.version() instanceof VersionSelector.Exact e
-                    ? e.version() : dep.version().raw();
+                    ? e.version()
+                    : dep.version().raw();
             observer.onPackage(dep.module(), version);
             EnumSet<Scope> tags = EnumSet.noneOf(Scope.class);
             for (Scope scope : SCOPES) {
@@ -336,16 +326,17 @@ public final class LockOrchestrator {
             }
             if (tags.isEmpty()) tags.add(Scope.MAIN);
             packages.add(new Lockfile.Artifact(
-                    dep.module(), version, "local",
+                    dep.module(),
+                    version,
+                    "local",
                     "sha256:" + dep.sha256(),
-                    null, new ArrayList<>(tags), List.of(), null));
+                    null,
+                    new ArrayList<>(tags),
+                    List.of(),
+                    null));
         }
 
-        return new Lockfile(
-                Lockfile.CURRENT_VERSION,
-                "jk " + jkVersion,
-                Lockfile.RESOLUTION_ALGORITHM,
-                packages);
+        return new Lockfile(Lockfile.CURRENT_VERSION, "jk " + jkVersion, Lockfile.RESOLUTION_ALGORITHM, packages);
     }
 
     /**
@@ -391,26 +382,41 @@ public final class LockOrchestrator {
                 continue;
             }
             int colon = pkg.name().indexOf(':');
-            if (colon < 0) { updated.add(pkg); continue; }
+            if (colon < 0) {
+                updated.add(pkg);
+                continue;
+            }
             Coordinate sourcesCoord = new Coordinate(
-                    pkg.name().substring(0, colon),
-                    pkg.name().substring(colon + 1),
-                    pkg.version(), "sources", "jar");
+                    pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version(), "sources", "jar");
             try {
                 RepoGroup.RepoFetched hit = repos.tryFetchArtifact(sourcesCoord).orElse(null);
                 if (hit != null) {
                     updated.add(new Lockfile.Artifact(
-                            pkg.name(), pkg.version(), pkg.source(),
-                            pkg.checksum(), pkg.path(), pkg.scopes(), pkg.deps(),
-                            pkg.pinnedBy(), pkg.git(),
+                            pkg.name(),
+                            pkg.version(),
+                            pkg.source(),
+                            pkg.checksum(),
+                            pkg.path(),
+                            pkg.scopes(),
+                            pkg.deps(),
+                            pkg.pinnedBy(),
+                            pkg.git(),
                             "sha256:" + hit.fetched().sha256()));
                     continue;
                 }
-            } catch (Exception ignored) { /* sources not available for this package */ }
+            } catch (Exception ignored) {
+                /* sources not available for this package */
+            }
             updated.add(pkg);
         }
-        return new Lockfile(lock.version(), lock.generatedBy(), lock.resolutionAlgorithm(),
-                lock.jdk(), lock.kotlin(), updated, lock.plugins());
+        return new Lockfile(
+                lock.version(),
+                lock.generatedBy(),
+                lock.resolutionAlgorithm(),
+                lock.jdk(),
+                lock.kotlin(),
+                updated,
+                lock.plugins());
     }
 
     /** BFS through the resolved graph starting from {@code roots}. */

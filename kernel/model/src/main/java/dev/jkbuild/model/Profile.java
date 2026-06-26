@@ -14,11 +14,7 @@ import java.util.Objects;
  * scalars. The {@code ci} profile is auto-selected when standard CI env
  * vars are present.
  */
-public record Profile(
-        String name,
-        String inherits,
-        List<String> javacArgs,
-        List<String> jvmArgs) {
+public record Profile(String name, String inherits, List<String> javacArgs, List<String> jvmArgs) {
 
     public Profile {
         Objects.requireNonNull(name, "name");

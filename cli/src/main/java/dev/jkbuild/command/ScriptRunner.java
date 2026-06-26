@@ -1,13 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.jdk.HostPlatform;
-import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.runtime.KotlinWorkerSetup;
-
-import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
@@ -16,6 +11,7 @@ import dev.jkbuild.compile.KotlincDriver;
 import dev.jkbuild.compile.KotlincRequest;
 import dev.jkbuild.compile.KotlincResult;
 import dev.jkbuild.http.Http;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.RepositorySpec;
@@ -31,12 +27,13 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.KotlinWorkerSetup;
 import dev.jkbuild.script.ScriptHeader;
 import dev.jkbuild.script.ScriptHeaderParser;
 import dev.jkbuild.tool.JarManifest;
 import dev.jkbuild.util.Hashing;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -80,8 +77,8 @@ final class ScriptRunner {
     private final URI repoUrl;
     private final boolean forceRecompile;
 
-    ScriptRunner(GlobalOptions global, Path cacheDirOverride, Path stateDirOverride,
-                 URI repoUrl, boolean forceRecompile) {
+    ScriptRunner(
+            GlobalOptions global, Path cacheDirOverride, Path stateDirOverride, URI repoUrl, boolean forceRecompile) {
         this.global = global;
         this.cacheDirOverride = cacheDirOverride;
         this.stateDirOverride = stateDirOverride;
@@ -92,21 +89,24 @@ final class ScriptRunner {
     // Cross-phase keys (mode-specific, but all live in the same record).
     private static final GoalKey<ScriptHeader> HEADER = GoalKey.of("script-header", ScriptHeader.class);
     private static final GoalKey<Path> CLASSES_DIR = GoalKey.of("classes-dir", Path.class);
+
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> WORKER_CP = GoalKey.of("kotlin-worker-cp", List.class);
+
     private static final GoalKey<Path> KT_STDLIB = GoalKey.of("kotlin-stdlib", Path.class);
     private static final GoalKey<Path> KOTLINC_BIN = GoalKey.of("kotlinc-bin", Path.class);
     private static final GoalKey<String> MAIN_CLASS = GoalKey.of("main-class", String.class);
+
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> CLASSPATH = GoalKey.of("classpath", List.class);
+
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> JAR_DECLARED_DEPS = GoalKey.of("jar-declared-deps", List.class);
 
     /** True when {@code arg} names a file type this runner can execute. */
     static boolean isRunnableFile(String arg) {
         String s = arg.toLowerCase(Locale.ROOT);
-        return s.endsWith(".java") || s.endsWith(".kt")
-                || s.endsWith(".kts") || s.endsWith(".jar");
+        return s.endsWith(".java") || s.endsWith(".kt") || s.endsWith(".kts") || s.endsWith(".jar");
     }
 
     /**
@@ -117,16 +117,15 @@ final class ScriptRunner {
     int run(Path file, List<String> args) throws IOException, InterruptedException {
         String name = file.getFileName().toString().toLowerCase(Locale.ROOT);
         if (name.endsWith(".java")) return runJavaScript(file, args);
-        if (name.endsWith(".kts"))  return runKtsScript(file, args);
-        if (name.endsWith(".kt"))   return runKotlinScript(file, args);
-        if (name.endsWith(".jar"))  return runJar(file, args);
+        if (name.endsWith(".kts")) return runKtsScript(file, args);
+        if (name.endsWith(".kt")) return runKotlinScript(file, args);
+        if (name.endsWith(".jar")) return runJar(file, args);
         throw new IllegalArgumentException("unsupported file type: " + file);
     }
 
     // --- .java -----------------------------------------------------------
 
-    private int runJavaScript(Path script, List<String> args)
-            throws IOException, InterruptedException {
+    private int runJavaScript(Path script, List<String> args) throws IOException, InterruptedException {
         if (!Files.isRegularFile(script)) {
             System.err.println("jk tool run: script not found: " + script);
             return 66;
@@ -189,7 +188,8 @@ final class ScriptRunner {
                     CompileResult result = compileJava(script, header, classesDir, cp);
                     if (!result.success()) {
                         for (var d : result.diagnostics()) {
-                            ctx.error("javac",
+                            ctx.error(
+                                    "javac",
                                     d.severity() + " "
                                             + (d.source() != null ? d.source().getFileName() : "<unknown>")
                                             + ":" + d.line() + ": " + d.message());
@@ -214,25 +214,25 @@ final class ScriptRunner {
         return execJava(paths.classesDir, cp, header.javaOptions(), mainClass, args);
     }
 
-    private CompileResult compileJava(Path script, ScriptHeader header,
-                                      Path classesDir, List<Path> classpath) throws IOException {
-        int release = header.release() != null
-                ? header.release() : Runtime.version().feature();
+    private CompileResult compileJava(Path script, ScriptHeader header, Path classesDir, List<Path> classpath)
+            throws IOException {
+        int release =
+                header.release() != null ? header.release() : Runtime.version().feature();
         CompileRequest request = CompileRequest.builder()
                 .sources(List.of(script.toAbsolutePath()))
                 .classpath(classpath)
                 .outputDir(classesDir)
                 .release(release)
                 .extraOptions(header.javacOptions())
-                .javaHome(CompileToolchain.resolveJavaHome(script.toAbsolutePath().getParent()))
+                .javaHome(
+                        CompileToolchain.resolveJavaHome(script.toAbsolutePath().getParent()))
                 .build();
         return new JavacDriver().compile(request);
     }
 
     // --- .kt -------------------------------------------------------------
 
-    private int runKotlinScript(Path script, List<String> args)
-            throws IOException, InterruptedException {
+    private int runKotlinScript(Path script, List<String> args) throws IOException, InterruptedException {
         if (!Files.isRegularFile(script)) {
             System.err.println("jk tool run: script not found: " + script);
             return 66;
@@ -282,14 +282,14 @@ final class ScriptRunner {
                 .requires("parse-script")
                 .scope(1)
                 .execute(ctx -> {
-                    ctx.label(header.kotlinVersion() != null
-                            ? "resolve kotlin compiler " + header.kotlinVersion()
-                            : "resolve kotlin compiler");
+                    ctx.label(
+                            header.kotlinVersion() != null
+                                    ? "resolve kotlin compiler " + header.kotlinVersion()
+                                    : "resolve kotlin compiler");
                     Cas cas = new Cas(paths.cacheDir);
                     RepoGroup repos = buildRepos(header, new Http(), cas);
                     try {
-                        KotlinWorkerSetup.Prepared prep =
-                                KotlinWorkerSetup.prepare(repos, cas, header.kotlinVersion());
+                        KotlinWorkerSetup.Prepared prep = KotlinWorkerSetup.prepare(repos, cas, header.kotlinVersion());
                         ctx.put(WORKER_CP, prep.workerClasspath());
                         ctx.put(KT_STDLIB, prep.stdlib());
                     } catch (InterruptedException e) {
@@ -321,13 +321,15 @@ final class ScriptRunner {
                     @SuppressWarnings("unchecked")
                     List<Path> depsClasspath = (List<Path>) ctx.require(CLASSPATH);
                     int jvmTarget = header.release() != null
-                            ? header.release() : Runtime.version().feature();
+                            ? header.release()
+                            : Runtime.version().feature();
                     // Compilation classpath: script deps + the version-matched
                     // stdlib (the in-process worker has no kotlin-home to auto-add
                     // it; paired with -no-stdlib).
                     List<Path> compileCp = new ArrayList<>(depsClasspath);
                     compileCp.add(ctx.require(KT_STDLIB));
-                    Path workingDir = paths.cacheDir.resolve("actions")
+                    Path workingDir = paths.cacheDir
+                            .resolve("actions")
                             .resolve("incremental-kotlin")
                             .resolve(dev.jkbuild.task.ActionKey.qualifiedTaskId("script", classesDir));
                     @SuppressWarnings("unchecked")
@@ -385,8 +387,7 @@ final class ScriptRunner {
 
     // --- .kts ------------------------------------------------------------
 
-    private int runKtsScript(Path script, List<String> args)
-            throws IOException, InterruptedException {
+    private int runKtsScript(Path script, List<String> args) throws IOException, InterruptedException {
         if (!Files.isRegularFile(script)) {
             System.err.println("jk tool run: script not found: " + script);
             return 66;
@@ -400,8 +401,8 @@ final class ScriptRunner {
                 .execute(ctx -> {
                     ctx.label("provision kotlinc");
                     Path kotlinHome = CompileToolchain.resolveKotlinHome(cacheDir, null, ctx::output);
-                    Path kotlinc = kotlinHome.resolve("bin").resolve(
-                            HostPlatform.isWindows() ? "kotlinc.bat" : "kotlinc");
+                    Path kotlinc =
+                            kotlinHome.resolve("bin").resolve(HostPlatform.isWindows() ? "kotlinc.bat" : "kotlinc");
                     if (!Files.exists(kotlinc)) {
                         ctx.error("kotlinc-missing", "kotlinc not found at " + kotlinc);
                         throw new RuntimeException("kotlinc missing");
@@ -411,9 +412,7 @@ final class ScriptRunner {
                 })
                 .build();
 
-        Goal goal = Goal.builder("run-kts")
-                .addPhase(resolveKotlinc)
-                .build();
+        Goal goal = Goal.builder("run-kts").addPhase(resolveKotlinc).build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cacheDir);
         if (!result.success()) {
@@ -439,8 +438,7 @@ final class ScriptRunner {
 
     // --- .jar ------------------------------------------------------------
 
-    private int runJar(Path jar, List<String> args)
-            throws IOException, InterruptedException {
+    private int runJar(Path jar, List<String> args) throws IOException, InterruptedException {
         if (!Files.isRegularFile(jar)) {
             System.err.println("jk tool run: jar not found: " + jar);
             return 66;
@@ -452,8 +450,7 @@ final class ScriptRunner {
                     ctx.label("read manifest + embedded poms");
                     Optional<String> mainClass = JarManifest.mainClass(jar);
                     if (mainClass.isEmpty()) {
-                        ctx.error("no-main-class",
-                                jar + " has no Main-Class in its MANIFEST.MF");
+                        ctx.error("no-main-class", jar + " has no Main-Class in its MANIFEST.MF");
                         throw new RuntimeException("missing Main-Class");
                     }
                     ctx.put(MAIN_CLASS, mainClass.get());
@@ -469,15 +466,17 @@ final class ScriptRunner {
                                 if (scoped != null) declaredDeps.addAll(scoped);
                             }
                         } catch (RuntimeException e) {
-                            ctx.warn("pom-parse",
-                                    "failed to parse embedded pom for " + p.coord()
-                                            + ": " + e.getMessage());
+                            ctx.warn(
+                                    "pom-parse",
+                                    "failed to parse embedded pom for " + p.coord() + ": " + e.getMessage());
                         }
                     }
                     if (JarManifest.hasModuleInfo(jar)) {
-                        ctx.warn("jpms", jar.getFileName()
-                                + " ships a module-info.class (JPMS module); "
-                                + "running it from the classpath.");
+                        ctx.warn(
+                                "jpms",
+                                jar.getFileName()
+                                        + " ships a module-info.class (JPMS module); "
+                                        + "running it from the classpath.");
                     }
                     ctx.put(JAR_DECLARED_DEPS, declaredDeps);
                     ctx.progress(1);
@@ -505,9 +504,7 @@ final class ScriptRunner {
                     Cas cas = new Cas(cacheDir);
                     Http http = new Http();
                     RepoGroup repos = new RepoGroup(List.of(new MavenRepo(
-                            "central",
-                            repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url(),
-                            http, cas)));
+                            "central", repoUrl != null ? repoUrl : RepositorySpec.MAVEN_CENTRAL.url(), http, cas)));
                     try {
                         classpath.addAll(resolveClasspath(declaredDeps, repos));
                     } catch (RuntimeException e) {
@@ -536,7 +533,8 @@ final class ScriptRunner {
         @SuppressWarnings("unchecked")
         List<Path> classpath = (List<Path>) goal.get(CLASSPATH).orElseThrow();
 
-        Path java = CompileToolchain.runningJavaHome().resolve("bin")
+        Path java = CompileToolchain.runningJavaHome()
+                .resolve("bin")
                 .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<String> command = new ArrayList<>();
         command.add(java.toString());
@@ -568,8 +566,8 @@ final class ScriptRunner {
 
     private Paths scriptPaths(byte[] sourceBytes) {
         String hash = Hashing.sha256Hex(sourceBytes);
-        return new Paths(cacheDir(),
-                stateDir().resolve("script-cache").resolve(hash).resolve("classes"));
+        return new Paths(
+                cacheDir(), stateDir().resolve("script-cache").resolve(hash).resolve("classes"));
     }
 
     private Path cacheDir() {
@@ -589,8 +587,8 @@ final class ScriptRunner {
                 list.add(new MavenRepo("script-repo-" + list.size(), uri, http, cas));
             }
             if (list.isEmpty()) {
-                list.add(new MavenRepo(RepositorySpec.MAVEN_CENTRAL.name(),
-                        RepositorySpec.MAVEN_CENTRAL.url(), http, cas));
+                list.add(new MavenRepo(
+                        RepositorySpec.MAVEN_CENTRAL.name(), RepositorySpec.MAVEN_CENTRAL.url(), http, cas));
             }
         }
         return new RepoGroup(list);
@@ -609,22 +607,22 @@ final class ScriptRunner {
             Resolution.ResolvedModule m = resolution.modules().get(module);
             if (m == null) continue;
             int colon = m.module().indexOf(':');
-            Coordinate coord = Coordinate.of(
-                    m.module().substring(0, colon),
-                    m.module().substring(colon + 1),
-                    m.version());
+            Coordinate coord =
+                    Coordinate.of(m.module().substring(0, colon), m.module().substring(colon + 1), m.version());
             jars.add(repos.tryFetchArtifact(coord)
-                    .orElseThrow(() -> new MavenRepo.ArtifactNotFoundException(
-                            "jar not found in any declared repo: " + coord))
-                    .fetched().cachePath());
+                    .orElseThrow(() ->
+                            new MavenRepo.ArtifactNotFoundException("jar not found in any declared repo: " + coord))
+                    .fetched()
+                    .cachePath());
         }
         return jars;
     }
 
-    private int execJava(Path classesDir, List<Path> classpath, List<String> jvmArgs,
-                         String mainClass, List<String> args)
+    private int execJava(
+            Path classesDir, List<Path> classpath, List<String> jvmArgs, String mainClass, List<String> args)
             throws IOException, InterruptedException {
-        Path java = CompileToolchain.runningJavaHome().resolve("bin")
+        Path java = CompileToolchain.runningJavaHome()
+                .resolve("bin")
                 .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<Path> full = new ArrayList<>();
         full.add(classesDir);
@@ -657,5 +655,4 @@ final class ScriptRunner {
                 ? name.substring(0, name.length() - suffix.length())
                 : name;
     }
-
 }

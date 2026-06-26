@@ -52,16 +52,15 @@ public final class JdkSelector {
             for (JdkVendor v : JdkVendor.PREFERENCE) {
                 String prefix = v.jbPrefix().orElse(null);
                 if (prefix == null) continue;
-                Optional<JdkCatalog.Entry> preferred = select(
-                        catalog, JdkSpec.parse(prefix + "-" + rawSpec.trim()), os, arch);
+                Optional<JdkCatalog.Entry> preferred =
+                        select(catalog, JdkSpec.parse(prefix + "-" + rawSpec.trim()), os, arch);
                 if (preferred.isPresent()) return preferred;
             }
         }
         return select(catalog, JdkSpec.parse(rawSpec), os, arch);
     }
 
-    public static Optional<JdkCatalog.Entry> select(
-            JdkCatalog catalog, JdkSpec spec, String os, String arch) {
+    public static Optional<JdkCatalog.Entry> select(JdkCatalog catalog, JdkSpec spec, String os, String arch) {
         String token = spec.normalized();
         List<JdkCatalog.Entry> matches = new ArrayList<>();
         for (JdkCatalog.Entry entry : catalog.entries()) {
@@ -86,10 +85,8 @@ public final class JdkSelector {
             if (!defaults.isEmpty()) matches = defaults;
         }
 
-        matches.sort(Comparator
-                .comparing(JdkCatalog.Entry::preview)
-                .thenComparing((JdkCatalog.Entry e) -> versionKey(e.version()),
-                        Comparator.reverseOrder()));
+        matches.sort(Comparator.comparing(JdkCatalog.Entry::preview)
+                .thenComparing((JdkCatalog.Entry e) -> versionKey(e.version()), Comparator.reverseOrder()));
         return Optional.of(matches.getFirst());
     }
 
@@ -105,8 +102,7 @@ public final class JdkSelector {
      * version breaks remaining ties. Returns empty if nothing satisfies the
      * version constraint on the target host.
      */
-    public static Optional<JdkCatalog.Entry> selectFlexible(
-            JdkCatalog catalog, String raw, String os, String arch) {
+    public static Optional<JdkCatalog.Entry> selectFlexible(JdkCatalog catalog, String raw, String os, String arch) {
         var query = parseFlexible(raw);
 
         List<Scored> scored = new ArrayList<>();
@@ -118,7 +114,8 @@ public final class JdkSelector {
             // which the user almost certainly didn't ask for. Exact-version too.
             if (query.lowerBound().isPresent()) {
                 if (!query.lowerBound().get().satisfiedBy(entry.majorVersion())) continue;
-            } else if (query.major().isPresent() && entry.majorVersion() != query.major().get()) {
+            } else if (query.major().isPresent()
+                    && entry.majorVersion() != query.major().get()) {
                 continue;
             }
             if (query.exactVersion().isPresent()
@@ -135,8 +132,7 @@ public final class JdkSelector {
         if (query.lowerBound().isPresent()) {
             // Range: the LOWEST major satisfying the bound wins (">=21" → 21, not
             // the newest), then vendor preference, default-for-major, GA, version.
-            order = Comparator
-                    .comparingInt((Scored s) -> s.entry.majorVersion())
+            order = Comparator.comparingInt((Scored s) -> s.entry.majorVersion())
                     .thenComparingInt(s -> -s.score)
                     .thenComparingInt(s -> vendorRank(s.entry))
                     .thenComparing(s -> s.entry.defaultForMajor() ? 0 : 1)
@@ -145,23 +141,23 @@ public final class JdkSelector {
         } else {
             order = Comparator
                     // Higher hint score first.
-                    .comparingInt((Scored s) -> s.score).reversed()
+                    .comparingInt((Scored s) -> s.score)
+                    .reversed()
                     // Default-for-major preferred when there are no hint scores to
                     // separate (esp. bare-major inputs like "25").
                     .thenComparing(s -> s.entry.defaultForMajor() ? 0 : 1)
                     // Non-preview preferred.
                     .thenComparing(s -> s.entry.preview() ? 1 : 0)
                     // Highest version wins remaining ties.
-                    .thenComparing((Scored s) -> versionKey(s.entry.version()),
-                            Comparator.reverseOrder());
+                    .thenComparing((Scored s) -> versionKey(s.entry.version()), Comparator.reverseOrder());
         }
         scored.sort(order);
         return Optional.of(scored.getFirst().entry);
     }
 
     /** Outcome of {@link #parseFlexible} — the tokens we extracted from raw input. */
-    public record FlexibleQuery(Optional<Integer> major, Optional<String> exactVersion,
-                                List<String> hints, Optional<Bound> lowerBound) {
+    public record FlexibleQuery(
+            Optional<Integer> major, Optional<String> exactVersion, List<String> hints, Optional<Bound> lowerBound) {
 
         /** Back-compat 3-arg form (no range bound). */
         public FlexibleQuery(Optional<Integer> major, Optional<String> exactVersion, List<String> hints) {
@@ -219,7 +215,8 @@ public final class JdkSelector {
                     try {
                         int m = Integer.parseInt(tok.substring(0, dot));
                         if (major == null) major = m;
-                    } catch (NumberFormatException ignored) {}
+                    } catch (NumberFormatException ignored) {
+                    }
                 }
             } else if (tok.equals("java") || tok.equals("jdk")) {
                 // Noise words — they don't disambiguate (every entry is a JDK).
@@ -227,8 +224,8 @@ public final class JdkSelector {
                 hints.add(tok);
             }
         }
-        return new FlexibleQuery(Optional.ofNullable(major), Optional.ofNullable(exact),
-                List.copyOf(hints), Optional.ofNullable(bound));
+        return new FlexibleQuery(
+                Optional.ofNullable(major), Optional.ofNullable(exact), List.copyOf(hints), Optional.ofNullable(bound));
     }
 
     /**
@@ -238,8 +235,8 @@ public final class JdkSelector {
      */
     private static int scoreHints(JdkCatalog.Entry entry, List<String> hints) {
         if (hints.isEmpty()) return 0;
-        var haystack = (entry.vendor() + " " + entry.product() + " "
-                + entry.suggestedSdkName() + " " + String.join(" ", entry.aliases()))
+        var haystack = (entry.vendor() + " " + entry.product() + " " + entry.suggestedSdkName() + " "
+                        + String.join(" ", entry.aliases()))
                 .toLowerCase(Locale.ROOT);
         int score = 0;
         for (var h : hints) {

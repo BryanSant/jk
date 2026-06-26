@@ -1,12 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.args;
 
-import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.Command;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -78,9 +76,15 @@ public final class ArgParser {
 
     // --- long options: --name, --name=value, --no-name -----------------------
 
-    private static int parseLong(Command command, Map<String, Opt> byName, Invocation.Builder out,
-                                 List<String> args, int i, String tok,
-                                 boolean passthroughUnknown) throws ParseException {
+    private static int parseLong(
+            Command command,
+            Map<String, Opt> byName,
+            Invocation.Builder out,
+            List<String> args,
+            int i,
+            String tok,
+            boolean passthroughUnknown)
+            throws ParseException {
         String name = tok;
         String inline = null;
         int eq = tok.indexOf('=');
@@ -102,18 +106,22 @@ public final class ArgParser {
             }
         }
         if (passthroughUnknown) {
-            out.addPositional(tok);   // treat unknown option as passthrough arg
+            out.addPositional(tok); // treat unknown option as passthrough arg
             return i;
         }
-        throw new ParseException(ParseException.Kind.UNKNOWN_OPTION, tok,
-                "unrecognized option " + name);
+        throw new ParseException(ParseException.Kind.UNKNOWN_OPTION, tok, "unrecognized option " + name);
     }
 
     // --- short options: -n value, -nvalue, -qv (bundled flags) ---------------
 
-    private static int parseShort(Map<String, Opt> byName, Invocation.Builder out,
-                                  List<String> args, int i, String tok,
-                                  boolean passthroughUnknown) throws ParseException {
+    private static int parseShort(
+            Map<String, Opt> byName,
+            Invocation.Builder out,
+            List<String> args,
+            int i,
+            String tok,
+            boolean passthroughUnknown)
+            throws ParseException {
         // Walk the cluster char by char; a value-taking short consumes the rest
         // of the token (or the next arg) and ends the cluster.
         for (int c = 1; c < tok.length(); c++) {
@@ -121,18 +129,18 @@ public final class ArgParser {
             Opt opt = byName.get(shortName);
             if (opt == null) {
                 if (passthroughUnknown) {
-                    out.addPositional(tok);   // treat whole cluster as passthrough
+                    out.addPositional(tok); // treat whole cluster as passthrough
                     return i;
                 }
-                throw new ParseException(ParseException.Kind.UNKNOWN_OPTION, shortName,
-                        "unrecognized option " + shortName);
+                throw new ParseException(
+                        ParseException.Kind.UNKNOWN_OPTION, shortName, "unrecognized option " + shortName);
             }
             if (opt.takesValue()) {
                 String rest = tok.substring(c + 1);
                 String inline = rest.isEmpty() ? null : rest;
                 return consume(out, opt, args, i, inline);
             }
-            out.flag(opt.canonicalName(), true);   // boolean short; continue the cluster
+            out.flag(opt.canonicalName(), true); // boolean short; continue the cluster
         }
         return i;
     }
@@ -156,7 +164,9 @@ public final class ArgParser {
             } else if (opt.fallbackValue() != null) {
                 value = opt.fallbackValue();
             } else {
-                throw new ParseException(ParseException.Kind.MISSING_VALUE, opt.canonicalName(),
+                throw new ParseException(
+                        ParseException.Kind.MISSING_VALUE,
+                        opt.canonicalName(),
                         "option " + opt.names().get(opt.names().size() - 1) + " requires a value");
             }
         }
@@ -183,7 +193,8 @@ public final class ArgParser {
         Invocation snapshot = builder.build();
         for (Opt opt : command.options()) {
             if (opt.required() && !snapshot.has(opt.canonicalName())) {
-                throw new ParseException(ParseException.Kind.MISSING_REQUIRED,
+                throw new ParseException(
+                        ParseException.Kind.MISSING_REQUIRED,
                         opt.names().get(opt.names().size() - 1),
                         "missing required option " + opt.names().get(opt.names().size() - 1));
             }
@@ -195,17 +206,20 @@ public final class ArgParser {
         for (Param p : command.parameters()) {
             min += p.arity().min();
             max += p.arity().max();
-            if (max < 0) max = Integer.MAX_VALUE;   // overflow guard
+            if (max < 0) max = Integer.MAX_VALUE; // overflow guard
         }
         if (given < min) {
             Param firstUnsatisfied = command.parameters().stream()
-                    .filter(p -> p.arity().required()).findFirst().orElse(null);
+                    .filter(p -> p.arity().required())
+                    .findFirst()
+                    .orElse(null);
             String name = firstUnsatisfied != null ? firstUnsatisfied.name() : "argument";
-            throw new ParseException(ParseException.Kind.MISSING_REQUIRED, name,
-                    "missing required argument <" + name + ">");
+            throw new ParseException(
+                    ParseException.Kind.MISSING_REQUIRED, name, "missing required argument <" + name + ">");
         }
         if (given > max) {
-            throw new ParseException(ParseException.Kind.TOO_MANY_ARGS,
+            throw new ParseException(
+                    ParseException.Kind.TOO_MANY_ARGS,
                     snapshot.positionals().get((int) max),
                     "unexpected extra argument: " + snapshot.positionals().get((int) max));
         }

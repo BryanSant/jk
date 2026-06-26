@@ -1,36 +1,34 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.jdk.HostPlatform;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.runtime.CompositeLocator;
-
+import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.PathDisplay;
-import dev.jkbuild.cli.Ansi;
-import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.GoalWedge;
 import dev.jkbuild.compile.ClasspathResolver;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.config.WorkspaceClasspath;
 import dev.jkbuild.config.WorkspaceLocator;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.runtime.BuildPipeline;
+import dev.jkbuild.runtime.CompileToolchain;
+import dev.jkbuild.runtime.CompositeLocator;
+import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -57,14 +55,27 @@ import java.util.List;
  */
 public final class RunCommand implements CliCommand {
 
-    @Override public String name() { return "run"; }
-    @Override public String description() { return "Run the current project's designated target"; }
-    @Override public List<Opt> options() {
-        return List.of(
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
+    @Override
+    public String name() {
+        return "run";
     }
-    @Override public List<Param> parameters() {
+
+    @Override
+    public String description() {
+        return "Run the current project's designated target";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
+                        .hide());
+    }
+
+    @Override
+    public List<Param> parameters() {
         return List.of(Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to the project's main method."));
     }
 
@@ -94,12 +105,11 @@ public final class RunCommand implements CliCommand {
         return runProject(projectDir, positional);
     }
 
-    private int runProject(Path projectDir, List<String> appArgs)
-            throws IOException, InterruptedException {
+    private int runProject(Path projectDir, List<String> appArgs) throws IOException, InterruptedException {
         JkBuild project = JkBuildParser.parse(projectDir.resolve("jk.toml"));
         if (project.project().main() == null) {
-            System.err.println("jk run: no `main` class set in [project] for "
-                    + projectDir + " — set `main = \"<fqcn>\"`.");
+            System.err.println(
+                    "jk run: no `main` class set in [project] for " + projectDir + " — set `main = \"<fqcn>\"`.");
             return 64;
         }
         BuildLayout layout = BuildLayout.of(projectDir, project);
@@ -116,8 +126,17 @@ public final class RunCommand implements CliCommand {
         Path lockFile = projectDir.resolve("jk.lock");
         int estimatedTestCount = TestCommand.estimateTestCount(projectDir.resolve("src/test/java"));
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                projectDir, cache, projectDir.resolve("jk.toml"), lockFile, projectDir,
-                1, estimatedTestCount, null, jdksDir, buildOpts.skipTests, global.verbose);
+                projectDir,
+                cache,
+                projectDir.resolve("jk.toml"),
+                lockFile,
+                projectDir,
+                1,
+                estimatedTestCount,
+                null,
+                jdksDir,
+                buildOpts.skipTests,
+                global.verbose);
         Goal.Builder builder = BuildPipeline.coreBuilder(inputs);
         BuildPipeline.appendDeclaredTails(builder, inputs);
         Goal goal = builder.build();
@@ -127,13 +146,18 @@ public final class RunCommand implements CliCommand {
         // In chip modes (AUTO/QUIET) the goal settles with the ▶ Exec chip line showing
         // the exec command directly — no second banner line. In VERBOSE/JSON no chip is
         // printed, so printExecBanner runs after the goal as before.
-        ConsoleSpec spec = new ConsoleSpec("Exec",
+        ConsoleSpec spec = new ConsoleSpec(
+                "Exec",
                 r -> {
-                    try { return execTail(projectDir, execCommand(projectDir, project, layout)); }
-                    catch (IOException e) { return "Executing"; }
+                    try {
+                        return execTail(projectDir, execCommand(projectDir, project, layout));
+                    } catch (IOException e) {
+                        return "Executing";
+                    }
                 },
                 r -> GoalWedge.coord(coord),
-                true, true);
+                true,
+                true);
         GoalResult result = GoalConsole.runGoal(goal, mode, cache, spec, coord);
         if (!result.success()) {
             var testResult = goal.get(BuildPipeline.TEST_RESULT).orElse(null);
@@ -149,15 +173,17 @@ public final class RunCommand implements CliCommand {
         } else {
             // Chip already settled with exec info; emit the blank separator + color reset.
             System.err.println();
-            if (Theme.colorEnabled()) { System.err.print(Ansi.RESET); System.err.flush(); }
+            if (Theme.colorEnabled()) {
+                System.err.print(Ansi.RESET);
+                System.err.flush();
+            }
         }
         command.addAll(appArgs);
         return new ProcessBuilder(command).inheritIO().start().waitFor();
     }
 
     /** The command line for the best available artifact (native &gt; shadow &gt; jar). */
-    private List<String> execCommand(Path projectDir, JkBuild project, BuildLayout layout)
-            throws IOException {
+    private List<String> execCommand(Path projectDir, JkBuild project, BuildLayout layout) throws IOException {
         List<String> command = new ArrayList<>();
 
         Path nativeBin = layout.nativeBinary();
@@ -166,8 +192,10 @@ public final class RunCommand implements CliCommand {
             return command;
         }
 
-        String javaExe = CompileToolchain.runningJavaHome().resolve("bin")
-                .resolve(HostPlatform.isWindows() ? "java.exe" : "java").toString();
+        String javaExe = CompileToolchain.runningJavaHome()
+                .resolve("bin")
+                .resolve(HostPlatform.isWindows() ? "java.exe" : "java")
+                .toString();
         command.add(javaExe);
 
         Path shadow = layout.shadowJar();
@@ -195,15 +223,18 @@ public final class RunCommand implements CliCommand {
         if (command.size() == 1) {
             // Native binary — exec'd directly, no JVM.
             Path bin = Path.of(command.get(0));
-            return "native binary: "
-                    + Theme.colorize(PathDisplay.of(bin, projectDir), t.highlight());
+            return "native binary: " + Theme.colorize(PathDisplay.of(bin, projectDir), t.highlight());
         }
         // JVM — derive the jdk leaf, resolving symlinks so "current" shows the real spec.
         Path javaExe = Path.of(command.get(0));
-        try { javaExe = javaExe.toRealPath(); } catch (IOException ignored) {}
+        try {
+            javaExe = javaExe.toRealPath();
+        } catch (IOException ignored) {
+        }
         Path jdkHome = javaExe.getParent() != null ? javaExe.getParent().getParent() : null;
         String jdkLeaf = jdkHome != null && jdkHome.getFileName() != null
-                ? jdkHome.getFileName().toString() : "java";
+                ? jdkHome.getFileName().toString()
+                : "java";
         String javaCmd;
         if ("-jar".equals(command.get(1))) {
             // Shadow jar bundles all deps — runnable with -jar alone.
@@ -215,8 +246,7 @@ public final class RunCommand implements CliCommand {
             String jarDisplay = PathDisplay.of(firstClasspathEntry(command), projectDir);
             javaCmd = (hasDeps ? "java -cp … -jar " : "java -jar ") + jarDisplay;
         }
-        return Theme.colorize(jdkLeaf, t.cyan())
-                + ": " + Theme.colorize(javaCmd, t.highlight());
+        return Theme.colorize(jdkLeaf, t.cyan()) + ": " + Theme.colorize(javaCmd, t.highlight());
     }
 
     /**
@@ -225,8 +255,8 @@ public final class RunCommand implements CliCommand {
      */
     private static void printExecBanner(Path projectDir, List<String> command) {
         Theme t = Theme.active();
-        System.err.println(Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen())
-                + " " + execTail(projectDir, command));
+        System.err.println(
+                Theme.colorize(dev.jkbuild.cli.tui.Glyphs.PLAY, t.brightGreen()) + " " + execTail(projectDir, command));
         System.err.println();
         // Reset any lingering SGR state so the program's own output starts from
         // the terminal's default colors (only when we're emitting color at all).
@@ -243,9 +273,7 @@ public final class RunCommand implements CliCommand {
         return Path.of(cp.contains(sep) ? cp.substring(0, cp.indexOf(sep)) : cp);
     }
 
-
-    private List<Path> assembleRuntimeClasspath(Path projectDir, JkBuild project, Path projectJar)
-            throws IOException {
+    private List<Path> assembleRuntimeClasspath(Path projectDir, JkBuild project, Path projectJar) throws IOException {
         List<Path> classpath = new ArrayList<>();
         classpath.add(projectJar);
 
@@ -260,20 +288,22 @@ public final class RunCommand implements CliCommand {
         Cas cas = new Cas(cacheDir());
         if (Files.exists(lockFile)) {
             Lockfile lock = LockfileReader.read(lockFile);
-            classpath.addAll(new ClasspathResolver(cas).classpathFor(lock,
-                    ClasspathResolver.RUNTIME));
+            classpath.addAll(new ClasspathResolver(cas).classpathFor(lock, ClasspathResolver.RUNTIME));
         }
-        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project,
-                ClasspathResolver.RUNTIME);
+        WorkspaceClasspath.Result siblings = WorkspaceClasspath.resolve(projectDir, project, ClasspathResolver.RUNTIME);
         classpath.addAll(siblings.jars());
 
         // Composite (path + branch-git) source deps: locate their jars + runtime
         // external deps (already built upfront by CompositeBuild) for the run classpath.
         try {
             CompositeLocator.Located composite = CompositeLocator.locate(
-                    projectDir, project, ClasspathResolver.RUNTIME,
-                    ClasspathResolver.RUNTIME, cas, cacheDir().resolve("git"));
-            for (Path j : composite.jars())            if (!classpath.contains(j)) classpath.add(j);
+                    projectDir,
+                    project,
+                    ClasspathResolver.RUNTIME,
+                    ClasspathResolver.RUNTIME,
+                    cas,
+                    cacheDir().resolve("git"));
+            for (Path j : composite.jars()) if (!classpath.contains(j)) classpath.add(j);
             for (Path j : composite.externalDepJars()) if (!classpath.contains(j)) classpath.add(j);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -296,5 +326,4 @@ public final class RunCommand implements CliCommand {
         }
         return sb.toString();
     }
-
 }

@@ -3,8 +3,8 @@ package dev.jkbuild.publish.runner;
 
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.credential.RepoCredential;
-import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.lock.Lockfile;
+import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.ObjectStoreConfig;
 import dev.jkbuild.plugin.Plugin;
@@ -21,9 +21,7 @@ import dev.jkbuild.publish.SigningOptions;
 import dev.jkbuild.publish.SigstoreSigner;
 import dev.jkbuild.publish.SlsaProvenance;
 import dev.jkbuild.publish.SourcesJar;
-
 import java.io.IOException;
-import java.io.PrintStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -106,21 +104,24 @@ public final class PublishRunner implements Plugin {
                 String key = line.substring(0, sp);
                 String val = line.substring(sp + 1).strip();
                 switch (key) {
-                    case "PROJECT_DIR"           -> projectDir = Path.of(val);
-                    case "JAR"                   -> jar = Path.of(val);
-                    case "REPO_URL"              -> repoUrl = URI.create(val);
-                    case "REPO_AUTH_TYPE"        -> repoAuthType = val;
-                    case "REPO_USER"             -> repoUser = val;
-                    case "REPO_PASS"             -> repoPass = val;
-                    case "REPO_TOKEN"            -> repoToken = val;
-                    case "DRY_RUN"               -> dryRun = "true".equalsIgnoreCase(val);
-                    case "NO_SOURCES"            -> noSources = "true".equalsIgnoreCase(val);
-                    case "SLSA"                  -> slsa = "true".equalsIgnoreCase(val);
-                    case "SBOM"                  -> sbom = "true".equalsIgnoreCase(val);
-                    case "SIGN_GPG"              -> { signGpg = true; gpgKeyFile = Path.of(val); }
-                    case "SIGN_GPG_PASS"         -> gpgPassphrase = val;
-                    case "SIGN_SIGSTORE"         -> signSigstore = "true".equalsIgnoreCase(val);
-                    case "OBJECT_STORE_REGION"   -> osRegion = val;
+                    case "PROJECT_DIR" -> projectDir = Path.of(val);
+                    case "JAR" -> jar = Path.of(val);
+                    case "REPO_URL" -> repoUrl = URI.create(val);
+                    case "REPO_AUTH_TYPE" -> repoAuthType = val;
+                    case "REPO_USER" -> repoUser = val;
+                    case "REPO_PASS" -> repoPass = val;
+                    case "REPO_TOKEN" -> repoToken = val;
+                    case "DRY_RUN" -> dryRun = "true".equalsIgnoreCase(val);
+                    case "NO_SOURCES" -> noSources = "true".equalsIgnoreCase(val);
+                    case "SLSA" -> slsa = "true".equalsIgnoreCase(val);
+                    case "SBOM" -> sbom = "true".equalsIgnoreCase(val);
+                    case "SIGN_GPG" -> {
+                        signGpg = true;
+                        gpgKeyFile = Path.of(val);
+                    }
+                    case "SIGN_GPG_PASS" -> gpgPassphrase = val;
+                    case "SIGN_SIGSTORE" -> signSigstore = "true".equalsIgnoreCase(val);
+                    case "OBJECT_STORE_REGION" -> osRegion = val;
                     case "OBJECT_STORE_ENDPOINT" -> osEndpoint = val;
                 }
             }
@@ -147,22 +148,24 @@ public final class PublishRunner implements Plugin {
         try {
             byte[] jarBytes = Files.readAllBytes(jar);
             artifacts.add(new MavenPublisher.Artifact(".jar", jarBytes));
-            out.emit("{\"t\":\"artifact\",\"name\":" + Ndjson.quote(jar.getFileName().toString())
-                    + ",\"size\":" + jarBytes.length + "}");
+            out.emit("{\"t\":\"artifact\",\"name\":"
+                    + Ndjson.quote(jar.getFileName().toString()) + ",\"size\":" + jarBytes.length + "}");
 
             PublishablePom.Pom pom = PublishablePom.render(project, PublishablePom.Metadata.empty());
             byte[] pomBytes = pom.xml().getBytes(StandardCharsets.UTF_8);
             artifacts.add(new MavenPublisher.Artifact(".pom", pomBytes));
-            out.emit("{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
-                    + "-" + project.project().version() + ".pom")
+            out.emit("{\"t\":\"artifact\",\"name\":"
+                    + Ndjson.quote(
+                            project.project().name() + "-" + project.project().version() + ".pom")
                     + ",\"size\":" + pomBytes.length + "}");
 
             if (!noSources) {
                 Path srcRoot = projectDir.resolve("src/main/java");
                 byte[] sourcesJar = SourcesJar.build(List.of(srcRoot));
                 artifacts.add(new MavenPublisher.Artifact("-sources.jar", sourcesJar));
-                out.emit("{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
-                        + "-" + project.project().version() + "-sources.jar")
+                out.emit("{\"t\":\"artifact\",\"name\":"
+                        + Ndjson.quote(project.project().name() + "-"
+                                + project.project().version() + "-sources.jar")
                         + ",\"size\":" + sourcesJar.length + "}");
             }
 
@@ -172,17 +175,26 @@ public final class PublishRunner implements Plugin {
                         "https://github.com/buildjk/jk",
                         "https://buildjk.dev/jk-build/v1",
                         UUID.randomUUID().toString(),
-                        Instant.now(), Instant.now(),
+                        Instant.now(),
+                        Instant.now(),
                         Map.of("configRef", "jk.toml"),
-                        Map.of("group", project.project().group(),
-                                "artifact", project.project().name(),
-                                "version", project.project().version(),
-                                "jdk", project.project().jdk() == null ? "" : project.project().jdk()));
+                        Map.of(
+                                "group",
+                                project.project().group(),
+                                "artifact",
+                                project.project().name(),
+                                "version",
+                                project.project().version(),
+                                "jdk",
+                                project.project().jdk() == null
+                                        ? ""
+                                        : project.project().jdk()));
                 byte[] provenance = SlsaProvenance.generate(
                         List.of(new SlsaProvenance.Subject(jarFilename, Checksums.sha256Hex(jarBytes))), ctx);
                 artifacts.add(new MavenPublisher.Artifact(".intoto.json", provenance));
-                out.emit("{\"t\":\"artifact\",\"name\":" + Ndjson.quote(project.project().name()
-                        + "-" + project.project().version() + ".intoto.json")
+                out.emit("{\"t\":\"artifact\",\"name\":"
+                        + Ndjson.quote(project.project().name() + "-"
+                                + project.project().version() + ".intoto.json")
                         + ",\"size\":" + provenance.length + "}");
             }
 
@@ -193,8 +205,8 @@ public final class PublishRunner implements Plugin {
                 byte[] spdxBytes = Sbom.spdx(project, lock);
                 artifacts.add(new MavenPublisher.Artifact("-cyclonedx.json", cdx));
                 artifacts.add(new MavenPublisher.Artifact("-spdx.json", spdxBytes));
-                out.emit("{\"t\":\"artifact\",\"name\":\"cyclonedx+spdx\",\"size\":"
-                        + (cdx.length + spdxBytes.length) + "}");
+                out.emit("{\"t\":\"artifact\",\"name\":\"cyclonedx+spdx\",\"size\":" + (cdx.length + spdxBytes.length)
+                        + "}");
             }
         } catch (IOException e) {
             System.err.println("jk-publish-runner: artifact assembly failed: " + e.getMessage());
@@ -202,8 +214,7 @@ public final class PublishRunner implements Plugin {
         }
 
         if (dryRun) {
-            out.emit("{\"t\":\"result\",\"ok\":true,\"dry_run\":true,\"files\":"
-                    + artifacts.size() + "}");
+            out.emit("{\"t\":\"result\",\"ok\":true,\"dry_run\":true,\"files\":" + artifacts.size() + "}");
             return 0;
         }
 
@@ -211,12 +222,10 @@ public final class PublishRunner implements Plugin {
         SigningOptions signing;
         try {
             GpgSigner gpg = signGpg
-                    ? GpgSigner.fromKeyFile(gpgKeyFile,
-                            gpgPassphrase != null ? gpgPassphrase.toCharArray() : new char[0])
+                    ? GpgSigner.fromKeyFile(
+                            gpgKeyFile, gpgPassphrase != null ? gpgPassphrase.toCharArray() : new char[0])
                     : null;
-            SigstoreSigner sigstoreSigner = signSigstore
-                    ? KeylessSigstoreSigner.sigstorePublic()
-                    : null;
+            SigstoreSigner sigstoreSigner = signSigstore ? KeylessSigstoreSigner.sigstorePublic() : null;
             signing = new SigningOptions(gpg, sigstoreSigner);
         } catch (IOException e) {
             System.err.println("jk-publish-runner: signing setup failed: " + e.getMessage());
@@ -225,20 +234,22 @@ public final class PublishRunner implements Plugin {
 
         // Upload.
         try {
-            RepoCredential cred = switch (repoAuthType.toLowerCase()) {
-                case "basic"   -> new RepoCredential.Basic(repoUser != null ? repoUser : "",
-                                          repoPass != null ? repoPass : "");
-                case "bearer"  -> new RepoCredential.Bearer(repoToken != null ? repoToken : "");
-                default        -> new RepoCredential.Anonymous();
-            };
-            ObjectStoreConfig objectStore = new ObjectStoreConfig(
-                    blankToNull(osRegion), blankToNull(osEndpoint), null, null, null);
+            RepoCredential cred =
+                    switch (repoAuthType.toLowerCase()) {
+                        case "basic" ->
+                            new RepoCredential.Basic(
+                                    repoUser != null ? repoUser : "", repoPass != null ? repoPass : "");
+                        case "bearer" -> new RepoCredential.Bearer(repoToken != null ? repoToken : "");
+                        default -> new RepoCredential.Anonymous();
+                    };
+            ObjectStoreConfig objectStore =
+                    new ObjectStoreConfig(blankToNull(osRegion), blankToNull(osEndpoint), null, null, null);
             MavenPublisher publisher = MavenPublisher.withObjectStore(repoUrl, cred, objectStore);
 
             MavenPublisher.Result result = publisher.publish(project.project(), artifacts, signing);
             for (Map.Entry<String, Integer> e : result.statusByPath().entrySet()) {
-                out.emit("{\"t\":\"upload\",\"name\":" + Ndjson.quote(e.getKey())
-                        + ",\"status\":" + e.getValue() + "}");
+                out.emit(
+                        "{\"t\":\"upload\",\"name\":" + Ndjson.quote(e.getKey()) + ",\"status\":" + e.getValue() + "}");
             }
 
             if (!result.allOk()) {
@@ -254,7 +265,10 @@ public final class PublishRunner implements Plugin {
             return 1;
         } finally {
             if (signing != null && signing.sigstore() instanceof AutoCloseable c) {
-                try { c.close(); } catch (Exception ignored) {}
+                try {
+                    c.close();
+                } catch (Exception ignored) {
+                }
             }
         }
     }
@@ -262,5 +276,4 @@ public final class PublishRunner implements Plugin {
     private static String blankToNull(String s) {
         return (s == null || s.isBlank()) ? null : s;
     }
-
 }

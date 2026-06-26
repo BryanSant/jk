@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo.s3;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-import java.util.Optional;
 import java.util.function.Function;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class AwsCredentialChainTest {
 
@@ -20,11 +18,13 @@ class AwsCredentialChainTest {
 
     @Test
     void env_credentials_win(@TempDir Path awsDir) {
-        var chain = new AwsCredentialChain(env(Map.of(
-                "AWS_ACCESS_KEY_ID", "AKID",
-                "AWS_SECRET_ACCESS_KEY", "SECRET",
-                "AWS_SESSION_TOKEN", "TOK",
-                "AWS_REGION", "eu-west-1")), awsDir);
+        var chain = new AwsCredentialChain(
+                env(Map.of(
+                        "AWS_ACCESS_KEY_ID", "AKID",
+                        "AWS_SECRET_ACCESS_KEY", "SECRET",
+                        "AWS_SESSION_TOKEN", "TOK",
+                        "AWS_REGION", "eu-west-1")),
+                awsDir);
 
         AwsCredentials c = chain.resolve(null).orElseThrow();
         assertThat(c.accessKeyId()).isEqualTo("AKID");
@@ -35,9 +35,9 @@ class AwsCredentialChainTest {
 
     @Test
     void region_override_beats_env() {
-        var chain = new AwsCredentialChain(env(Map.of(
-                "AWS_ACCESS_KEY_ID", "AKID", "AWS_SECRET_ACCESS_KEY", "SECRET",
-                "AWS_REGION", "eu-west-1")), Path.of("/nonexistent"));
+        var chain = new AwsCredentialChain(
+                env(Map.of("AWS_ACCESS_KEY_ID", "AKID", "AWS_SECRET_ACCESS_KEY", "SECRET", "AWS_REGION", "eu-west-1")),
+                Path.of("/nonexistent"));
         assertThat(chain.resolve("us-east-2").orElseThrow().region()).isEqualTo("us-east-2");
     }
 
@@ -62,7 +62,8 @@ class AwsCredentialChainTest {
                 """);
 
         var work = new AwsCredentialChain(env(Map.of("AWS_PROFILE", "work")), awsDir)
-                .resolve(null).orElseThrow();
+                .resolve(null)
+                .orElseThrow();
         assertThat(work.accessKeyId()).isEqualTo("WORKAK");
         assertThat(work.sessionToken()).isEqualTo("WORKTOK");
         assertThat(work.region()).isEqualTo("ap-south-1");

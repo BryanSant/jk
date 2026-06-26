@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.CompileRequest;
 import dev.jkbuild.compile.CompileResult;
@@ -8,10 +10,6 @@ import dev.jkbuild.compile.JavaCompileStrategies;
 import dev.jkbuild.compile.JavaCompileStrategy;
 import dev.jkbuild.compile.JavacDriver;
 import dev.jkbuild.compile.incremental.JavacFixture;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
@@ -21,8 +19,8 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * End-to-end incremental Java compilation (real subprocess javac). A recording
@@ -43,7 +41,7 @@ class JavaIncrementalCompileTest {
         p.write("a/B.java", "package a; public class B { public String greet() { return \"hello there\"; } }");
         Run r = p.build();
         assertThat(r.outcome).isEqualTo("compiled");
-        assertThat(r.compiledSources()).containsExactly("a/B.java");   // A is NOT recompiled
+        assertThat(r.compiledSources()).containsExactly("a/B.java"); // A is NOT recompiled
     }
 
     @Test
@@ -56,7 +54,8 @@ class JavaIncrementalCompileTest {
 
         // ABI change to B (add a public method) — A doesn't use it, but A depends on B,
         // so A is conservatively recompiled via the reverse-dependency closure.
-        p.write("a/B.java",
+        p.write(
+                "a/B.java",
                 "package a; public class B { public String greet() { return \"hi\"; } public void bye() {} }");
         Run r = p.build();
         assertThat(r.compiledSources()).containsExactlyInAnyOrder("a/B.java", "a/A.java");
@@ -74,7 +73,7 @@ class JavaIncrementalCompileTest {
 
         p.write("a/B.java", "package a; public class B { public static final int X = 2; }");
         Run r = p.build();
-        assertThat(r.compiledSources()).contains("a/A.java");        // A recompiled despite no bytecode edge
+        assertThat(r.compiledSources()).contains("a/A.java"); // A recompiled despite no bytecode edge
         assertThat(invokeStaticInt(p.out, "a.A", "v")).isEqualTo(2); // and picked up the new value
     }
 
@@ -82,10 +81,13 @@ class JavaIncrementalCompileTest {
     void dependency_abi_change_recompiles_referencing_sources(@TempDir Path dir) throws Exception {
         // Two versions of a dependency at different paths (a dependency bump). v2
         // adds an overload, an ABI change A's bytecode must react to.
-        JavacFixture.compile(dir.resolve("depv1"),
+        JavacFixture.compile(
+                dir.resolve("depv1"),
                 java.util.Map.of("dep.Lib", "package dep; public class Lib { public void f(Object o) {} }"));
-        JavacFixture.compile(dir.resolve("depv2"),
-                java.util.Map.of("dep.Lib",
+        JavacFixture.compile(
+                dir.resolve("depv2"),
+                java.util.Map.of(
+                        "dep.Lib",
                         "package dep; public class Lib { public void f(Object o) {} public void f(String s) {} }"));
         Path depV1 = dir.resolve("depv1").resolve("out");
         Path depV2 = dir.resolve("depv2").resolve("out");
@@ -93,9 +95,9 @@ class JavaIncrementalCompileTest {
         Project p = new Project(dir);
         p.write("a/A.java", "package a; public class A { public void call(dep.Lib lib) { lib.f(\"hi\"); } }");
 
-        p.build(List.of(depV1));                       // compile A against dep v1
-        Run r = p.build(List.of(depV2));               // dep bumped to v2 (different classpath path)
-        assertThat(r.compiledSources()).contains("a/A.java");   // A recompiled because dep/Lib's ABI changed
+        p.build(List.of(depV1)); // compile A against dep v1
+        Run r = p.build(List.of(depV2)); // dep bumped to v2 (different classpath path)
+        assertThat(r.compiledSources()).contains("a/A.java"); // A recompiled because dep/Lib's ABI changed
     }
 
     @Test
@@ -103,23 +105,23 @@ class JavaIncrementalCompileTest {
         Project p = new Project(dir);
         p.write("a/A.java", "package a; public class A { public int f() { return 1; } }");
         p.build();
-        Run r = p.build();   // identical inputs
+        Run r = p.build(); // identical inputs
         assertThat(r.outcome).startsWith("cache-hit");
-        assertThat(r.compiledSources()).isEmpty();   // nothing forked javac
+        assertThat(r.compiledSources()).isEmpty(); // nothing forked javac
     }
 
     @Test
     void removing_a_leaf_source_deletes_its_class_without_recompiling(@TempDir Path dir) throws Exception {
         Project p = new Project(dir);
         p.write("a/A.java", "package a; public class A { public int f() { return 1; } }");
-        p.write("a/B.java", "package a; public class B { public int g() { return 2; } }");  // independent
+        p.write("a/B.java", "package a; public class B { public int g() { return 2; } }"); // independent
         p.build();
 
         p.remove("a/B.java");
         Run r = p.build();
-        assertThat(r.outcome).isEqualTo("compiled");          // incremental, not a full rebuild
-        assertThat(r.compiledSources()).isEmpty();            // A untouched, B gone → nothing recompiled
-        assertThat(p.classExists("a/B.class")).isFalse();     // the removed class is cleaned up
+        assertThat(r.outcome).isEqualTo("compiled"); // incremental, not a full rebuild
+        assertThat(r.compiledSources()).isEmpty(); // A untouched, B gone → nothing recompiled
+        assertThat(p.classExists("a/B.class")).isFalse(); // the removed class is cleaned up
         assertThat(p.classExists("a/A.class")).isTrue();
     }
 
@@ -140,14 +142,13 @@ class JavaIncrementalCompileTest {
     }
 
     @Test
-    void removing_a_constant_holder_recompiles_remaining_sources_conservatively(@TempDir Path dir)
-            throws Exception {
+    void removing_a_constant_holder_recompiles_remaining_sources_conservatively(@TempDir Path dir) throws Exception {
         Project p = new Project(dir);
         // B is a constant holder: consumers inline B.X with no bytecode edge, so its
         // removal can't be tracked precisely → recompile everything still present.
         p.write("a/B.java", "package a; public class B { public static final int X = 1; }");
-        p.write("a/A.java", "package a; public class A { public int f() { return 5; } }");  // no edge to B
-        p.write("a/C.java", "package a; public class C { public int g() { return 6; } }");  // no edge to B
+        p.write("a/A.java", "package a; public class A { public int f() { return 5; } }"); // no edge to B
+        p.write("a/C.java", "package a; public class C { public int g() { return 6; } }"); // no edge to B
         p.build();
 
         p.remove("a/B.java");
@@ -221,8 +222,7 @@ class JavaIncrementalCompileTest {
                     .build();
             Recording rec = new Recording(JavaCompileStrategies.resolve());
             JavaIncrementalCompile.Result result = JavaIncrementalCompile.run(
-                    "compile-main", req, "jk-test", true, cas, actionCache, stateDir,
-                    new JavacDriver(rec), null);
+                    "compile-main", req, "jk-test", true, cas, actionCache, stateDir, new JavacDriver(rec), null);
             if (requireSuccess) {
                 assertThat(result.success()).as("compile succeeded").isTrue();
             }
@@ -245,11 +245,13 @@ class JavaIncrementalCompileTest {
             this.delegate = delegate;
         }
 
-        @Override public String name() {
+        @Override
+        public String name() {
             return "recording";
         }
 
-        @Override public CompileResult compile(CompileRequest request) throws IOException {
+        @Override
+        public CompileResult compile(CompileRequest request) throws IOException {
             for (Path s : request.sources()) {
                 String n = s.toString().replace('\\', '/');
                 int idx = n.indexOf("/src/main/java/");
@@ -264,7 +266,7 @@ class JavaIncrementalCompileTest {
     }
 
     private static int invokeStaticInt(Path out, String fqcn, String method) throws Exception {
-        try (URLClassLoader cl = new URLClassLoader(new URL[]{out.toUri().toURL()}, null)) {
+        try (URLClassLoader cl = new URLClassLoader(new URL[] {out.toUri().toURL()}, null)) {
             return (int) Class.forName(fqcn, true, cl).getMethod(method).invoke(null);
         }
     }

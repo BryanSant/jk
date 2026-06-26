@@ -12,7 +12,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -28,16 +27,29 @@ import java.util.Optional;
  */
 public final class JdkGraalCommand implements CliCommand {
 
-    @Override public String name() { return "graal"; }
-    @Override public String description() { return "Set a specific GraalVM JDK to be the native-image default"; }
-
-    @Override public List<Opt> options() {
-        return List.of(Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
+    @Override
+    public String name() {
+        return "graal";
     }
-    @Override public List<Param> parameters() {
-        return List.of(Param.of("spec", Arity.ZERO_OR_ONE,
+
+    @Override
+    public String description() {
+        return "Set a specific GraalVM JDK to be the native-image default";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
+                .hide());
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of(
+                "spec",
+                Arity.ZERO_OR_ONE,
                 "The vendor/version of GraalVM you'd like to make the default\n"
-                + "  (ex: 25, lts, latest, graal-25, graalce-25)"));
+                        + "  (ex: 25, lts, latest, graal-25, graalce-25)"));
     }
 
     @Override
@@ -47,7 +59,8 @@ public final class JdkGraalCommand implements CliCommand {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
 
-        List<JdkHit> graals = registry.listHits().stream().filter(JdkGraalCommand::isGraal).toList();
+        List<JdkHit> graals =
+                registry.listHits().stream().filter(JdkGraalCommand::isGraal).toList();
         if (graals.isEmpty()) {
             System.err.println("jk jdk graal: no GraalVM JDK installed — install one with "
                     + "`jk jdk install native` (or `jk jdk install graalvm-25`).");
@@ -62,8 +75,7 @@ public final class JdkGraalCommand implements CliCommand {
                     ? dev.jkbuild.jdk.JdkKeywords.bestInstalledMatch(spec, graals)
                     : registry.findHitBySpec(spec).filter(JdkGraalCommand::isGraal);
             if (match.isEmpty()) {
-                System.err.println("jk jdk graal: no installed GraalVM matches `" + spec
-                        + "` (try `jk jdk list`).");
+                System.err.println("jk jdk graal: no installed GraalVM matches `" + spec + "` (try `jk jdk list`).");
                 return 1;
             }
             chosen = match.get();
@@ -73,7 +85,8 @@ public final class JdkGraalCommand implements CliCommand {
         defaults.setGraal(new InstalledJdk(identifier, chosen.home()));
         System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
                 + " The " + Theme.colorize("native", Theme.active().focused())
-                + " (default GraalVM) JDK is now set to " + Theme.colorize(display(chosen), Theme.active().focused())
+                + " (default GraalVM) JDK is now set to "
+                + Theme.colorize(display(chosen), Theme.active().focused())
                 + " " + Theme.colorize("(" + identifier + ")", Theme.active().darkGray()));
         return 0;
     }
@@ -84,13 +97,13 @@ public final class JdkGraalCommand implements CliCommand {
 
     /** Oracle GraalVM before GraalVM CE; newer version first within a flavour. */
     private static Comparator<JdkHit> byGraalPreference() {
-        return Comparator
-                .comparingInt((JdkHit h) -> {
+        return Comparator.comparingInt((JdkHit h) -> {
                     int i = JdkVendor.GRAAL_PREFERENCE.indexOf(h.vendor());
                     return i >= 0 ? i : Integer.MAX_VALUE;
                 })
-                .thenComparing(h -> h.version() == null ? ""
-                        : dev.jkbuild.jdk.JdkSelector.versionKey(h.version()), Comparator.reverseOrder());
+                .thenComparing(
+                        h -> h.version() == null ? "" : dev.jkbuild.jdk.JdkSelector.versionKey(h.version()),
+                        Comparator.reverseOrder());
     }
 
     private static String display(JdkHit hit) {

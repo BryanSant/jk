@@ -1,16 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.java.compiler;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
-import javax.annotation.processing.AbstractProcessor;
-import javax.annotation.processing.RoundEnvironment;
-import javax.annotation.processing.SupportedAnnotationTypes;
-import javax.lang.model.SourceVersion;
-import javax.lang.model.element.Element;
-import javax.lang.model.element.TypeElement;
-import javax.tools.JavaFileObject;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -24,8 +15,15 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import javax.annotation.processing.AbstractProcessor;
+import javax.annotation.processing.RoundEnvironment;
+import javax.annotation.processing.SupportedAnnotationTypes;
+import javax.lang.model.SourceVersion;
+import javax.lang.model.element.Element;
+import javax.lang.model.element.TypeElement;
+import javax.tools.JavaFileObject;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 public class InProcessJavacTest {
 
@@ -36,20 +34,26 @@ public class InProcessJavacTest {
 
     @SupportedAnnotationTypes("dev.jkbuild.java.compiler.InProcessJavacTest.Gen")
     public static final class GenProcessor extends AbstractProcessor {
-        @Override public SourceVersion getSupportedSourceVersion() {
+        @Override
+        public SourceVersion getSupportedSourceVersion() {
             return SourceVersion.latestSupported();
         }
 
-        @Override public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
+        @Override
+        public boolean process(Set<? extends TypeElement> annotations, RoundEnvironment round) {
             for (Element e : round.getElementsAnnotatedWith(Gen.class)) {
                 if (!(e instanceof TypeElement type)) continue;
-                String pkg = processingEnv.getElementUtils().getPackageOf(type).getQualifiedName().toString();
+                String pkg = processingEnv
+                        .getElementUtils()
+                        .getPackageOf(type)
+                        .getQualifiedName()
+                        .toString();
                 String genName = (pkg.isEmpty() ? "" : pkg + ".") + type.getSimpleName() + "Gen";
                 try {
                     JavaFileObject jfo = processingEnv.getFiler().createSourceFile(genName, type);
                     try (Writer w = jfo.openWriter()) {
-                        w.write((pkg.isEmpty() ? "" : "package " + pkg + ";\n")
-                                + "public class " + type.getSimpleName() + "Gen {}\n");
+                        w.write((pkg.isEmpty() ? "" : "package " + pkg + ";\n") + "public class " + type.getSimpleName()
+                                + "Gen {}\n");
                     }
                 } catch (IOException ex) {
                     throw new UncheckedIOException(ex);
@@ -63,8 +67,8 @@ public class InProcessJavacTest {
     void captures_generated_to_originating_source(@TempDir Path dir) throws IOException {
         Path src = dir.resolve("src/app/Widget.java");
         Files.createDirectories(src.getParent());
-        Files.writeString(src, "package app; "
-                + "@dev.jkbuild.java.compiler.InProcessJavacTest.Gen public class Widget {}");
+        Files.writeString(
+                src, "package app; " + "@dev.jkbuild.java.compiler.InProcessJavacTest.Gen public class Widget {}");
 
         Path classOut = dir.resolve("classes");
         Path genOut = dir.resolve("generated");
@@ -73,10 +77,11 @@ public class InProcessJavacTest {
         List<Path> classpath = testClasspath();
 
         InProcessJavac.Result r = InProcessJavac.compile(
-                List.of(src), classpath, classOut, genOut, 21, List.of(),
-                List.of(new GenProcessor()));
+                List.of(src), classpath, classOut, genOut, 21, List.of(), List.of(new GenProcessor()));
 
-        assertThat(r.success()).as("compile + processing succeeded: %s", r.diagnostics()).isTrue();
+        assertThat(r.success())
+                .as("compile + processing succeeded: %s", r.diagnostics())
+                .isTrue();
 
         // Provenance: the generated WidgetGen.java is attributed to Widget.java.
         assertThat(r.generated()).hasSize(1);

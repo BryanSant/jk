@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.credential;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MavenSettingsTest {
 
@@ -41,8 +40,8 @@ class MavenSettingsTest {
             assertThat(s.username()).isEqualTo("deployer");
             assertThat(s.password()).isEqualTo("s3cr3t");
         });
-        assertThat(settings.server("ghp")).hasValueSatisfying(
-                s -> assertThat(s.username()).isEqualTo("octocat"));
+        assertThat(settings.server("ghp"))
+                .hasValueSatisfying(s -> assertThat(s.username()).isEqualTo("octocat"));
         assertThat(settings.server("unknown")).isEmpty();
     }
 

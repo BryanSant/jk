@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import dev.jkbuild.discovery.JkProbe;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.discovery.JkProbe;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JdkResolverTest {
 
@@ -26,7 +25,8 @@ class JdkResolverTest {
 
         JdkResolver resolver = new JdkResolver(isolatedRegistry(jdks));
         assertThat(resolver.resolve(project))
-                .isPresent().get()
+                .isPresent()
+                .get()
                 .extracting(InstalledJdk::identifier)
                 .isEqualTo("temurin-21.0.5");
     }
@@ -61,7 +61,7 @@ class JdkResolverTest {
     private static void makeJdkInstall(Path home, String version) throws IOException {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
-        Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+        Files.writeString(
+                home.resolve("release"), "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
     }
 }

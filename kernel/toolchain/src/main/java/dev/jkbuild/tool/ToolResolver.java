@@ -12,7 +12,6 @@ import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.NaiveResolver;
 import dev.jkbuild.resolver.Resolution;
 import dev.jkbuild.resolver.Resolver;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
@@ -47,10 +46,7 @@ public final class ToolResolver {
 
     /** Convenience: Central-only resolver backed by a shared {@link Cas}. */
     public static ToolResolver mavenCentral(Http http, Cas cas) {
-        MavenRepo central = new MavenRepo(
-                "central",
-                URI.create("https://repo.maven.apache.org/maven2/"),
-                http, cas);
+        MavenRepo central = new MavenRepo("central", URI.create("https://repo.maven.apache.org/maven2/"), http, cas);
         return new ToolResolver(RepoGroup.of(central));
     }
 
@@ -62,8 +58,7 @@ public final class ToolResolver {
         // 1. Transitive resolution from the primary coord.
         Resolver resolver = new NaiveResolver(new EffectivePomBuilder(repos));
         Dependency root = new Dependency(
-                primary.group() + ":" + primary.artifact(),
-                VersionSelector.parse("=" + primary.version()));
+                primary.group() + ":" + primary.artifact(), VersionSelector.parse("=" + primary.version()));
         Resolution resolution = resolver.resolve(List.of(root));
 
         // 2. Fetch each resolved jar. Primary first so classpath order is stable.
@@ -74,10 +69,8 @@ public final class ToolResolver {
         for (Resolution.ResolvedModule m : resolution.modules().values()) {
             if (m.module().equals(primaryKey)) continue;
             int colon = m.module().indexOf(':');
-            Coordinate coord = Coordinate.of(
-                    m.module().substring(0, colon),
-                    m.module().substring(colon + 1),
-                    m.version());
+            Coordinate coord =
+                    Coordinate.of(m.module().substring(0, colon), m.module().substring(colon + 1), m.version());
             classpath.add(fetchJar(coord));
         }
 
@@ -85,16 +78,17 @@ public final class ToolResolver {
         String mainClass = mainClassOverride;
         if (mainClass == null || mainClass.isBlank()) {
             Optional<String> fromManifest = JarManifest.mainClass(primaryJar);
-            mainClass = fromManifest.orElseThrow(() -> new IOException(
-                    primary + " has no Main-Class in its manifest — pass --main <class>."));
+            mainClass = fromManifest.orElseThrow(
+                    () -> new IOException(primary + " has no Main-Class in its manifest — pass --main <class>."));
         }
         return new ToolEnv(binName, primary, mainClass, classpath);
     }
 
     private Path fetchJar(Coordinate coord) throws IOException, InterruptedException {
         return repos.tryFetchArtifact(coord)
-                .orElseThrow(() -> new MavenRepo.ArtifactNotFoundException(
-                        "jar not found in any declared repo: " + coord))
-                .fetched().cachePath();
+                .orElseThrow(
+                        () -> new MavenRepo.ArtifactNotFoundException("jar not found in any declared repo: " + coord))
+                .fetched()
+                .cachePath();
     }
 }

@@ -6,7 +6,6 @@ import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
@@ -35,9 +34,9 @@ public final class ShellCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.value("<dir>",
-                "Override the JDK install root. Default: the IntelliJ JDK directory.",
-                "--jdks-dir").hide());
+        return List.of(
+                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir")
+                        .hide());
     }
 
     @Override

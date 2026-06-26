@@ -2,11 +2,6 @@
 package dev.jkbuild.lock;
 
 import dev.jkbuild.model.Scope;
-import org.tomlj.Toml;
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -14,8 +9,11 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import org.tomlj.Toml;
+import org.tomlj.TomlArray;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * Parses {@code jk.lock} (TOML) into a {@link Lockfile}.
@@ -38,8 +36,7 @@ public final class LockfileReader {
      * read per distinct file per process. Keying on size + mtime means an
      * auto-lock update (which rewrites the file) gets a fresh parse.
      */
-    private static final ConcurrentHashMap<CacheKey, Lockfile> READ_CACHE =
-            new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<CacheKey, Lockfile> READ_CACHE = new ConcurrentHashMap<>();
 
     private record CacheKey(Path path, long size, FileTime modified) {}
 
@@ -50,8 +47,7 @@ public final class LockfileReader {
 
     public static Lockfile read(Path file) throws IOException {
         BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
-        CacheKey key = new CacheKey(
-                file.toAbsolutePath().normalize(), attrs.size(), attrs.lastModifiedTime());
+        CacheKey key = new CacheKey(file.toAbsolutePath().normalize(), attrs.size(), attrs.lastModifiedTime());
         Lockfile cached = READ_CACHE.get(key);
         if (cached != null) return cached;
         TomlParseResult result = Toml.parse(file);
@@ -67,8 +63,8 @@ public final class LockfileReader {
 
     private static Lockfile fromResult(TomlParseResult result, String origin) {
         if (result.hasErrors()) {
-            throw new IllegalArgumentException(
-                    "jk.lock parse error in " + origin + ": " + result.errors().getFirst().getMessage());
+            throw new IllegalArgumentException("jk.lock parse error in " + origin + ": "
+                    + result.errors().getFirst().getMessage());
         }
         Long lockVersionLong = result.getLong("version");
         if (lockVersionLong == null) {
@@ -97,10 +93,10 @@ public final class LockfileReader {
         TomlArray pluginArray = result.getArray("plugin");
         if (pluginArray != null) {
             for (int i = 0; i < pluginArray.size(); i++) {
-                TomlTable t    = pluginArray.getTable(i);
-                String coord   = requireString(t, "coordinate");
-                String ver     = requireString(t, "version");
-                String chk     = requireString(t, "checksum");
+                TomlTable t = pluginArray.getTable(i);
+                String coord = requireString(t, "coordinate");
+                String ver = requireString(t, "version");
+                String chk = requireString(t, "checksum");
                 plugins.add(new Lockfile.PluginEntry(coord, ver, chk));
             }
         }
@@ -140,12 +136,11 @@ public final class LockfileReader {
         Lockfile.Artifact.GitInfo git = null;
         String gitUrl = table.getString("git");
         if (gitUrl != null) {
-            git = new Lockfile.Artifact.GitInfo(gitUrl, requireString(table, "rev"),
-                    table.getString("ref"));
+            git = new Lockfile.Artifact.GitInfo(gitUrl, requireString(table, "rev"), table.getString("ref"));
         }
         String sourcesChecksum = table.getString("sources"); // optional
-        return new Lockfile.Artifact(name, version, source, checksum, path, scopes, deps, pinnedBy,
-                git, sourcesChecksum);
+        return new Lockfile.Artifact(
+                name, version, source, checksum, path, scopes, deps, pinnedBy, git, sourcesChecksum);
     }
 
     private static String requireString(TomlParseResult result, String key) {

@@ -13,7 +13,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Param;
 import dev.jkbuild.resolver.Provenance;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -82,7 +81,8 @@ public final class WhyCommand implements CliCommand {
     private static String renderPath(Provenance.Path path) {
         return path.steps().stream()
                 .map(s -> Coords.module(s.module(), s.version()))
-                .collect(Collectors.joining(Theme.colorize(" -> ", Theme.active().darkGray())));
+                .collect(
+                        Collectors.joining(Theme.colorize(" -> ", Theme.active().darkGray())));
     }
 
     /** Strip the version component if present; return arg unchanged when no colon. */

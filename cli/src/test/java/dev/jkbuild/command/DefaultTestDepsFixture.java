@@ -2,7 +2,6 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.lock.Lockfile;
-
 import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
@@ -21,6 +20,7 @@ final class DefaultTestDepsFixture {
 
     /** Coords jk injects into every TEST scope — present in every resolved lock. */
     static final String JUPITER = "org.junit.jupiter:junit-jupiter";
+
     static final String LAUNCHER = "org.junit.platform:junit-platform-launcher";
 
     private DefaultTestDepsFixture() {}
@@ -41,14 +41,18 @@ final class DefaultTestDepsFixture {
 
     private static void seedArtifact(Map<String, byte[]> served, String group, String artifact, String version) {
         String base = "/" + group.replace('.', '/') + "/" + artifact;
-        put(served, base + "/maven-metadata.xml",
+        put(
+                served,
+                base + "/maven-metadata.xml",
                 "<metadata><groupId>" + group + "</groupId><artifactId>" + artifact
                         + "</artifactId><versioning><versions><version>" + version
                         + "</version></versions></versioning></metadata>");
         String dir = base + "/" + version + "/" + artifact + "-" + version;
-        put(served, dir + ".pom",
-                "<project><groupId>" + group + "</groupId><artifactId>" + artifact
-                        + "</artifactId><version>" + version + "</version></project>");
+        put(
+                served,
+                dir + ".pom",
+                "<project><groupId>" + group + "</groupId><artifactId>" + artifact + "</artifactId><version>" + version
+                        + "</version></project>");
         served.put(dir + ".jar", (artifact + "-stub").getBytes(StandardCharsets.UTF_8));
     }
 

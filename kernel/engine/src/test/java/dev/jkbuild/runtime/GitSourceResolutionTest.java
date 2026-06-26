@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.git.GitFetcher;
 import dev.jkbuild.http.Http;
@@ -14,17 +17,13 @@ import dev.jkbuild.model.Scope;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.resolver.LockOrchestrator;
-import org.eclipse.jgit.api.Git;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.eclipse.jgit.api.Git;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * End-to-end (offline) wiring of a git-source dependency through the resolver
@@ -55,7 +54,11 @@ class GitSourceResolutionTest {
                 """);
         try (Git git = Git.init().setDirectory(repoDir.toFile()).call()) {
             git.add().addFilepattern(".").call();
-            var commit = git.commit().setMessage("v1").setAuthor("t", "t@e").setCommitter("t", "t@e").call();
+            var commit = git.commit()
+                    .setMessage("v1")
+                    .setAuthor("t", "t@e")
+                    .setCommitter("t", "t@e")
+                    .call();
             git.tag().setName("v1.0.0").setObjectId(commit).setAnnotated(false).call();
         }
         String url = repoDir.toUri().toString();
@@ -74,13 +77,12 @@ class GitSourceResolutionTest {
     void materializes_pins_and_stamps_a_git_dependency(@TempDir Path tmp) throws Exception {
         GitSource lib = buildLibraryRepo(tmp.resolve("lib"));
         Cas cas = new Cas(tmp.resolve("cas"));
-        RepoGroup baseRepos = RepoGroup.of(new MavenRepo(
-                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        RepoGroup baseRepos =
+                RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
 
         // Materialize + rewrite git deps to coordinate pins.
         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                consumer(lib), baseRepos, cas,
-                Path.of(System.getProperty("java.home")), "test");
+                consumer(lib), baseRepos, cas, Path.of(System.getProperty("java.home")), "test");
 
         // The git dep is gone; a pinned com.acme:widgets:1.0.0 coordinate replaces it.
         List<Dependency> mainDeps = prep.project().dependencies().of(Scope.MAIN);
@@ -94,13 +96,13 @@ class GitSourceResolutionTest {
         assertThat(prep.repos().repos().get(0).baseUrl().getScheme()).isEqualTo("file");
 
         // The real solver resolves the pin from the local file:// repo (offline).
-        Lockfile lock = new LockOrchestrator(prep.repos())
-                .lock(prep.project(), "test", List.of(), true);
+        Lockfile lock = new LockOrchestrator(prep.repos()).lock(prep.project(), "test", List.of(), true);
         lock = GitSourceResolution.stamp(lock, prep.gitInfoByKey());
 
         Lockfile.Artifact widgets = lock.artifacts().stream()
                 .filter(p -> p.name().equals("com.acme:widgets"))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         assertThat(widgets.version()).isEqualTo("1.0.0");
         // Git provenance is stamped onto the locked package.
         assertThat(widgets.git()).isNotNull();
@@ -129,19 +131,22 @@ class GitSourceResolutionTest {
         String branch;
         try (Git git = Git.init().setDirectory(repoDir.toFile()).call()) {
             git.add().addFilepattern(".").call();
-            git.commit().setMessage("v1").setAuthor("t", "t@e").setCommitter("t", "t@e").call();
+            git.commit()
+                    .setMessage("v1")
+                    .setAuthor("t", "t@e")
+                    .setCommitter("t", "t@e")
+                    .call();
             branch = git.getRepository().getBranch();
         }
         String url = repoDir.toUri().toString();
         GitSource branchLib = GitSource.of(url, url, new GitRefSpec.Branch(branch));
 
         Cas cas = new Cas(tmp.resolve("cas"));
-        RepoGroup baseRepos = RepoGroup.of(new MavenRepo(
-                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        RepoGroup baseRepos =
+                RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
 
         GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                consumer(branchLib), baseRepos, cas,
-                Path.of(System.getProperty("java.home")), "test");
+                consumer(branchLib), baseRepos, cas, Path.of(System.getProperty("java.home")), "test");
 
         // The branch dep passes through unchanged — still a git dep, not a pin.
         List<Dependency> mainDeps = prep.project().dependencies().of(Scope.MAIN);
@@ -157,16 +162,15 @@ class GitSourceResolutionTest {
         Path libDir = tmp.resolve("lib");
         GitSource lib = buildLibraryRepo(libDir);
         Cas cas = new Cas(tmp.resolve("cas"));
-        RepoGroup baseRepos = RepoGroup.of(new MavenRepo(
-                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        RepoGroup baseRepos =
+                RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
         Path javaHome = Path.of(System.getProperty("java.home"));
 
         // First lock: capture the immutable-ref provenance.
-        GitSourceResolution.Prepared prep = GitSourceResolution.prepare(
-                consumer(lib), baseRepos, cas, javaHome, "test");
+        GitSourceResolution.Prepared prep =
+                GitSourceResolution.prepare(consumer(lib), baseRepos, cas, javaHome, "test");
         Lockfile lock = GitSourceResolution.stamp(
-                new LockOrchestrator(prep.repos()).lock(prep.project(), "test", List.of(), true),
-                prep.gitInfoByKey());
+                new LockOrchestrator(prep.repos()).lock(prep.project(), "test", List.of(), true), prep.gitInfoByKey());
         Map<String, String> lockedShas = GitSourceResolution.lockedImmutableShas(lock);
         assertThat(lockedShas).isNotEmpty();
 
@@ -177,13 +181,22 @@ class GitSourceResolutionTest {
                     public class Widget { public static String name() { return "tampered"; } }
                     """);
             git.add().addFilepattern(".").call();
-            var c2 = git.commit().setMessage("rewrite").setAuthor("t", "t@e").setCommitter("t", "t@e").call();
-            git.tag().setName("v1.0.0").setObjectId(c2).setAnnotated(false).setForceUpdate(true).call();
+            var c2 = git.commit()
+                    .setMessage("rewrite")
+                    .setAuthor("t", "t@e")
+                    .setCommitter("t", "t@e")
+                    .call();
+            git.tag()
+                    .setName("v1.0.0")
+                    .setObjectId(c2)
+                    .setAnnotated(false)
+                    .setForceUpdate(true)
+                    .call();
         }
 
         // Re-locking against the recorded SHA must fail loudly.
-        assertThatThrownBy(() -> GitSourceResolution.prepare(
-                consumer(lib), baseRepos, cas, javaHome, "test", lockedShas))
+        assertThatThrownBy(
+                        () -> GitSourceResolution.prepare(consumer(lib), baseRepos, cas, javaHome, "test", lockedShas))
                 .isInstanceOf(GitFetcher.TagRewriteException.class)
                 .hasMessageContaining("rewrite detected");
     }

@@ -40,12 +40,12 @@ public final class WorkerSlots {
      */
     public static Lease acquire() {
         Semaphore s = slots;
-        if (s == null) return () -> { };
+        if (s == null) return () -> {};
         try {
             s.acquire();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            return () -> { };
+            return () -> {};
         }
         return s::release;
     }

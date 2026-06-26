@@ -2,7 +2,6 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.credential.RepoCredential;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -28,8 +27,7 @@ public interface RepoTransport {
      * found (e.g. HTTP 404 / missing object) so callers can try the next repo;
      * throws {@link IOException} for genuine transport failures.
      */
-    Optional<byte[]> fetch(URI uri, RepoCredential credential)
-            throws IOException, InterruptedException;
+    Optional<byte[]> fetch(URI uri, RepoCredential credential) throws IOException, InterruptedException;
 
     /**
      * Fetch the bytes at {@code uri} as a stream, so the caller can pump them

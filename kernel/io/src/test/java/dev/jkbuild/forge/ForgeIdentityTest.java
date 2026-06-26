@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.forge;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.http.Http;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class ForgeIdentityTest {
 
@@ -77,7 +76,8 @@ class ForgeIdentityTest {
             ex.sendResponseHeaders(401, -1);
             ex.close();
         });
-        assertThat(identity().login(base.resolve("/user"), "login", "bad-token")).isEmpty();
+        assertThat(identity().login(base.resolve("/user"), "login", "bad-token"))
+                .isEmpty();
     }
 
     @Test

@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver.pubgrub;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class PubGrubBacktrackTest {
 
@@ -21,13 +20,12 @@ class PubGrubBacktrackTest {
                 .version("shared", "2.0")
                 .version("shared", "1.5")
                 .version("shared", "1.0")
-                .version("a", "1.0", deps -> deps
-                        .require("shared", VersionSet.between("1.0", true, "2.0", false)))
+                .version("a", "1.0", deps -> deps.require("shared", VersionSet.between("1.0", true, "2.0", false)))
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        Map<String, String> solution = solver.solve("root", "1.0",
-                List.of(Term.positive("a", VersionSet.exact("1.0"))));
+        Map<String, String> solution =
+                solver.solve("root", "1.0", List.of(Term.positive("a", VersionSet.exact("1.0"))));
 
         assertThat(solution).containsEntry("shared", "1.5");
     }
@@ -38,16 +36,17 @@ class PubGrubBacktrackTest {
         PackageSource src = InMemoryPackageSource.builder()
                 .version("shared", "1.0")
                 .version("shared", "2.0")
-                .version("a", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("1.0")))
-                .version("b", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("2.0")))
+                .version("a", "1.0", deps -> deps.require("shared", VersionSet.exact("1.0")))
+                .version("b", "1.0", deps -> deps.require("shared", VersionSet.exact("2.0")))
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        assertThatThrownBy(() -> solver.solve("root", "1.0", List.of(
-                Term.positive("a", VersionSet.exact("1.0")),
-                Term.positive("b", VersionSet.exact("1.0")))))
+        assertThatThrownBy(() -> solver.solve(
+                        "root",
+                        "1.0",
+                        List.of(
+                                Term.positive("a", VersionSet.exact("1.0")),
+                                Term.positive("b", VersionSet.exact("1.0")))))
                 .isInstanceOf(UnsatisfiableException.class);
     }
 
@@ -61,23 +60,20 @@ class PubGrubBacktrackTest {
         PackageSource src = InMemoryPackageSource.builder()
                 .version("shared", "2.0")
                 .version("shared", "1.0")
-                .version("a", "2.0", deps -> deps
-                        .require("shared", VersionSet.atLeast("2.0", true)))
-                .version("a", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("1.0")))
-                .version("b", "1.0", deps -> deps
-                        .require("shared", VersionSet.atLeast("2.0", true)))
+                .version("a", "2.0", deps -> deps.require("shared", VersionSet.atLeast("2.0", true)))
+                .version("a", "1.0", deps -> deps.require("shared", VersionSet.exact("1.0")))
+                .version("b", "1.0", deps -> deps.require("shared", VersionSet.atLeast("2.0", true)))
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        Map<String, String> solution = solver.solve("root", "1.0", List.of(
-                Term.positive("a", VersionSet.atLeast("1.0", true)),
-                Term.positive("b", VersionSet.exact("1.0"))));
+        Map<String, String> solution = solver.solve(
+                "root",
+                "1.0",
+                List.of(
+                        Term.positive("a", VersionSet.atLeast("1.0", true)),
+                        Term.positive("b", VersionSet.exact("1.0"))));
 
-        assertThat(solution)
-                .containsEntry("a", "2.0")
-                .containsEntry("b", "1.0")
-                .containsEntry("shared", "2.0");
+        assertThat(solution).containsEntry("a", "2.0").containsEntry("b", "1.0").containsEntry("shared", "2.0");
     }
 
     @Test
@@ -85,13 +81,11 @@ class PubGrubBacktrackTest {
         // a requires shared 1.0, but only shared 2.0 exists.
         PackageSource src = InMemoryPackageSource.builder()
                 .version("shared", "2.0")
-                .version("a", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("1.0")))
+                .version("a", "1.0", deps -> deps.require("shared", VersionSet.exact("1.0")))
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
-        assertThatThrownBy(() -> solver.solve("root", "1.0",
-                List.of(Term.positive("a", VersionSet.exact("1.0")))))
+        assertThatThrownBy(() -> solver.solve("root", "1.0", List.of(Term.positive("a", VersionSet.exact("1.0")))))
                 .isInstanceOf(UnsatisfiableException.class);
     }
 }

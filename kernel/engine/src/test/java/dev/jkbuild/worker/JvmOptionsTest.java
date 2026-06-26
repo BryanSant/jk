@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.worker;
 
-import dev.jkbuild.worker.JvmOptions.Settings;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.worker.JvmOptions.Settings;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JvmOptionsTest {
 
@@ -21,8 +20,7 @@ class JvmOptionsTest {
     @Test
     void heap_cap_is_divided_across_concurrent_jvms() {
         // 4 concurrent test workers → each gets a quarter of the base cap.
-        assertThat(JvmOptions.flags(Settings.NONE, 4))
-                .contains("-XX:MaxRAMPercentage=12.5");
+        assertThat(JvmOptions.flags(Settings.NONE, 4)).contains("-XX:MaxRAMPercentage=12.5");
     }
 
     @Test
@@ -44,22 +42,25 @@ class JvmOptionsTest {
         try {
             // The CLI stashes resolved settings; worker forks read them back.
             JvmOptions.setProcessSettings(new Settings(80.0, "g1", false, java.util.List.of()));
-            assertThat(JvmOptions.workerFlags(1))
-                    .containsExactly("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC");
+            assertThat(JvmOptions.workerFlags(1)).containsExactly("-XX:MaxRAMPercentage=80", "-XX:+UseG1GC");
             // Concurrency still divides the resolved cap.
             assertThat(JvmOptions.workerFlags(4)).contains("-XX:MaxRAMPercentage=20");
         } finally {
-            JvmOptions.setProcessSettings(null);   // don't leak into other tests
+            JvmOptions.setProcessSettings(null); // don't leak into other tests
         }
     }
 
     @Test
     void absolute_flags_emit_xms_softmax_xmx_and_zgc_uncommit() {
-        HeapPlan.Plan plan = new HeapPlan.Plan(
-                4, 64L << 20, 512L << 20, 800L << 20, null);
+        HeapPlan.Plan plan = new HeapPlan.Plan(4, 64L << 20, 512L << 20, 800L << 20, null);
         assertThat(JvmOptions.absoluteFlags(plan, Settings.NONE))
-                .containsExactly("-Xms64m", "-Xmx800m", "-XX:SoftMaxHeapSize=512m",
-                        "-XX:+UseZGC", "-XX:+ZUncommit", "-XX:ZUncommitDelay=30",
+                .containsExactly(
+                        "-Xms64m",
+                        "-Xmx800m",
+                        "-XX:SoftMaxHeapSize=512m",
+                        "-XX:+UseZGC",
+                        "-XX:+ZUncommit",
+                        "-XX:ZUncommitDelay=30",
                         "-XX:+UseStringDeduplication");
     }
 
@@ -68,14 +69,13 @@ class JvmOptionsTest {
         HeapPlan.Plan plan = new HeapPlan.Plan(1, 64L << 20, 256L << 20, 256L << 20, null);
         Settings serial = new Settings(null, "none", false, java.util.List.of());
         assertThat(JvmOptions.absoluteFlags(plan, serial))
-                .containsExactly("-Xms64m", "-Xmx256m");   // no SoftMaxHeapSize, no collector
+                .containsExactly("-Xms64m", "-Xmx256m"); // no SoftMaxHeapSize, no collector
     }
 
     @Test
     void auto_heap_disabled_when_user_pins_a_heap_flag() {
         try {
-            JvmOptions.setProcessSettings(new Settings(null, null, null,
-                    java.util.List.of("-Xmx2g")));
+            JvmOptions.setProcessSettings(new Settings(null, null, null, java.util.List.of("-Xmx2g")));
             assertThat(JvmOptions.autoHeapEnabled()).isFalse();
             JvmOptions.setProcessSettings(new Settings(50.0, null, null, java.util.List.of()));
             assertThat(JvmOptions.autoHeapEnabled()).isFalse();

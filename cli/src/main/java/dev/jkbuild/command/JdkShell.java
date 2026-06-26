@@ -28,8 +28,9 @@ enum JdkShell {
     Path rcFile(Path home) {
         return switch (this) {
             case BASH -> home.resolve(".bashrc");
-            case ZSH  -> home.resolve(".zshenv");
-            case FISH -> home.resolve(".config").resolve("fish").resolve("conf.d").resolve("jk.fish");
+            case ZSH -> home.resolve(".zshenv");
+            case FISH ->
+                home.resolve(".config").resolve("fish").resolve("conf.d").resolve("jk.fish");
         };
     }
 
@@ -37,7 +38,7 @@ enum JdkShell {
     String rcFileDisplay() {
         return switch (this) {
             case BASH -> "~/.bashrc";
-            case ZSH  -> "~/.zshenv";
+            case ZSH -> "~/.zshenv";
             case FISH -> "~/.config/fish/conf.d/jk.fish";
         };
     }
@@ -64,7 +65,7 @@ enum JdkShell {
         String name = (slash >= 0 ? raw.substring(slash + 1) : raw).toLowerCase(Locale.ROOT);
         return switch (name) {
             case "bash" -> Optional.of(BASH);
-            case "zsh"  -> Optional.of(ZSH);
+            case "zsh" -> Optional.of(ZSH);
             case "fish" -> Optional.of(FISH);
             default -> Optional.empty();
         };

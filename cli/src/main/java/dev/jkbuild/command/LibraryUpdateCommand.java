@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
@@ -10,8 +9,6 @@ import dev.jkbuild.library.LibraryCatalog;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-import org.jline.utils.AttributedStyle;
-
 import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpResponse;
@@ -24,21 +21,31 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import org.jline.utils.AttributedStyle;
 
 /** {@code jk library update} — pull the latest library catalog. */
 public final class LibraryUpdateCommand implements CliCommand {
 
-    static final URI DEFAULT_SOURCE = URI.create(
-            "https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml");
+    static final URI DEFAULT_SOURCE =
+            URI.create("https://raw.githubusercontent.com/jkbuild/jk-library-registry/refs/heads/main/libraries.toml");
 
-    @Override public String name() { return "update"; }
-    @Override public String description() { return "Fetch the latest library catalog"; }
+    @Override
+    public String name() {
+        return "update";
+    }
+
+    @Override
+    public String description() {
+        return "Fetch the latest library catalog";
+    }
 
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<url>", "Override the upstream URL (used by tests).", "--source").hide(),
-                Opt.value("<file>", "Override the local cache path (used by tests).", "--cache-file").hide());
+                Opt.value("<url>", "Override the upstream URL (used by tests).", "--source")
+                        .hide(),
+                Opt.value("<file>", "Override the local cache path (used by tests).", "--cache-file")
+                        .hide());
     }
 
     private URI source = DEFAULT_SOURCE;
@@ -58,21 +65,27 @@ public final class LibraryUpdateCommand implements CliCommand {
         try {
             response = new Http().get(source);
         } catch (IOException e) {
-            System.err.println("jk library update: failed to reach " + source + "\n  " + e.getMessage()); return 1;
+            System.err.println("jk library update: failed to reach " + source + "\n  " + e.getMessage());
+            return 1;
         }
         if (response.statusCode() != 200) {
-            System.err.println("jk library update: HTTP " + response.statusCode() + " from " + source); return 1;
+            System.err.println("jk library update: HTTP " + response.statusCode() + " from " + source);
+            return 1;
         }
         String body = new String(response.body(), StandardCharsets.UTF_8);
 
         Map<String, LibraryCatalog.Module> after;
-        try { after = materialise(body); }
-        catch (RuntimeException e) {
-            System.err.println("jk library update: refusing to replace cache — upstream payload did not validate:\n  " + e.getMessage()); return 1;
+        try {
+            after = materialise(body);
+        } catch (RuntimeException e) {
+            System.err.println("jk library update: refusing to replace cache — upstream payload did not validate:\n  "
+                    + e.getMessage());
+            return 1;
         }
 
         Files.createDirectories(cacheFile.getParent());
-        if (Files.exists(cacheFile)) Files.copy(cacheFile, previousBackup, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        if (Files.exists(cacheFile))
+            Files.copy(cacheFile, previousBackup, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         Files.writeString(cacheFile, body, StandardCharsets.UTF_8);
 
         Diff diff = Diff.compute(before, after);
@@ -82,8 +95,11 @@ public final class LibraryUpdateCommand implements CliCommand {
 
     private static Map<String, LibraryCatalog.Module> currentEntries(Path cacheFile) {
         if (!Files.isRegularFile(cacheFile)) return Map.of();
-        try { return materialise(Files.readString(cacheFile, StandardCharsets.UTF_8)); }
-        catch (IOException | RuntimeException e) { return Map.of(); }
+        try {
+            return materialise(Files.readString(cacheFile, StandardCharsets.UTF_8));
+        } catch (IOException | RuntimeException e) {
+            return Map.of();
+        }
     }
 
     private static Map<String, LibraryCatalog.Module> materialise(String body) {
@@ -94,10 +110,14 @@ public final class LibraryUpdateCommand implements CliCommand {
     }
 
     private void printSummary(int total, Diff diff, Duration elapsed) {
-        System.out.println(Theme.colorize("✓ Library catalog updated", Theme.active().completedStep())
-                + " — " + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
-                + " entries cached " + ConsoleSpec.took(elapsed));
-        if (diff.isEmpty()) { System.out.println("\n  (no changes from previous version)"); return; }
+        System.out.println(
+                Theme.colorize("✓ Library catalog updated", Theme.active().completedStep())
+                        + " — " + Theme.colorize(String.valueOf(total), AttributedStyle.DEFAULT.bold())
+                        + " entries cached " + ConsoleSpec.took(elapsed));
+        if (diff.isEmpty()) {
+            System.out.println("\n  (no changes from previous version)");
+            return;
+        }
         emitList("Added", diff.added, Theme.active().completedStep());
         emitList("Removed", diff.removed, Theme.active().error());
         emitList("Changed", diff.changed, Theme.active().warning());
@@ -114,15 +134,21 @@ public final class LibraryUpdateCommand implements CliCommand {
     private record Diff(List<String> added, List<String> removed, List<String> changed) {
         static Diff compute(Map<String, LibraryCatalog.Module> before, Map<String, LibraryCatalog.Module> after) {
             List<String> added = new ArrayList<>(), removed = new ArrayList<>(), changed = new ArrayList<>();
-            for (Iterator<String> it = new TreeSet<>(after.keySet()).iterator(); it.hasNext();) {
+            for (Iterator<String> it = new TreeSet<>(after.keySet()).iterator(); it.hasNext(); ) {
                 String name = it.next();
                 LibraryCatalog.Module b = before.get(name), a = after.get(name);
                 if (b == null) added.add(Coords.shortName(name) + " → " + Coords.module(a.moduleKey()));
-                else if (!b.equals(a)) changed.add(Coords.shortName(name) + ": " + Coords.module(b.moduleKey()) + " → " + Coords.module(a.moduleKey()));
+                else if (!b.equals(a))
+                    changed.add(Coords.shortName(name) + ": " + Coords.module(b.moduleKey()) + " → "
+                            + Coords.module(a.moduleKey()));
             }
-            for (String name : new TreeSet<>(before.keySet())) if (!after.containsKey(name)) removed.add(Coords.shortName(name));
+            for (String name : new TreeSet<>(before.keySet()))
+                if (!after.containsKey(name)) removed.add(Coords.shortName(name));
             return new Diff(added, removed, changed);
         }
-        boolean isEmpty() { return added.isEmpty() && removed.isEmpty() && changed.isEmpty(); }
+
+        boolean isEmpty() {
+            return added.isEmpty() && removed.isEmpty() && changed.isEmpty();
+        }
     }
 }

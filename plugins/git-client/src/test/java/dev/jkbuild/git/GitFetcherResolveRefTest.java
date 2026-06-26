@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.git;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.time.Instant;
+import java.time.ZoneOffset;
 import org.eclipse.jgit.api.Git;
 import org.eclipse.jgit.lib.PersonIdent;
 import org.eclipse.jgit.revwalk.RevCommit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.time.Instant;
-import java.time.ZoneOffset;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Exercises {@link GitFetcher#resolveRef} against a real local git repo built
@@ -34,13 +33,21 @@ class GitFetcherResolveRefTest {
             Files.writeString(repoDir.resolve("a.txt"), "one");
             git.add().addFilepattern("a.txt").call();
             PersonIdent tagAuthor = new PersonIdent("t", "t@e", TAG_TIME, ZoneOffset.UTC);
-            RevCommit c1 = git.commit().setMessage("one").setAuthor(tagAuthor).setCommitter(tagAuthor).call();
+            RevCommit c1 = git.commit()
+                    .setMessage("one")
+                    .setAuthor(tagAuthor)
+                    .setCommitter(tagAuthor)
+                    .call();
             git.tag().setName("v1.2.3").setObjectId(c1).setAnnotated(false).call();
 
             Files.writeString(repoDir.resolve("b.txt"), "two");
             git.add().addFilepattern("b.txt").call();
             PersonIdent headAuthor = new PersonIdent("t", "t@e", HEAD_TIME, ZoneOffset.UTC);
-            RevCommit c2 = git.commit().setMessage("two").setAuthor(headAuthor).setCommitter(headAuthor).call();
+            RevCommit c2 = git.commit()
+                    .setMessage("two")
+                    .setAuthor(headAuthor)
+                    .setCommitter(headAuthor)
+                    .call();
 
             String url = repoDir.toUri().toString();
             return new Repo(GitSource.of(url, url, new GitRefSpec.Tag("v1.2.3")), c1.getName(), c2.getName());

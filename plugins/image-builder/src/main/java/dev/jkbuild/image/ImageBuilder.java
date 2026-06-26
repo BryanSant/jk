@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.image;
 
+import com.google.cloud.tools.jib.api.CacheDirectoryCreationException;
 import com.google.cloud.tools.jib.api.Containerizer;
-import com.google.cloud.tools.jib.api.ImageReference;
 import com.google.cloud.tools.jib.api.InvalidImageReferenceException;
 import com.google.cloud.tools.jib.api.Jib;
 import com.google.cloud.tools.jib.api.JibContainer;
 import com.google.cloud.tools.jib.api.JibContainerBuilder;
-import com.google.cloud.tools.jib.api.CacheDirectoryCreationException;
 import com.google.cloud.tools.jib.api.RegistryException;
 import com.google.cloud.tools.jib.api.RegistryImage;
 import com.google.cloud.tools.jib.api.TarImage;
 import com.google.cloud.tools.jib.api.buildplan.AbsoluteUnixPath;
 import com.google.cloud.tools.jib.api.buildplan.Platform;
 import com.google.cloud.tools.jib.api.buildplan.Port;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -71,7 +69,8 @@ public final class ImageBuilder {
     public static Result pushToRegistry(Plan plan) throws IOException, InterruptedException {
         try {
             JibContainer container = run(plan, Containerizer.to(registryTarget(plan)));
-            return new Result(plan.config().targetReference(plan.artifact(), plan.version()),
+            return new Result(
+                    plan.config().targetReference(plan.artifact(), plan.version()),
                     container.getDigest().toString());
         } catch (InvalidImageReferenceException e) {
             throw new IOException("invalid target image reference: " + e.getMessage(), e);
@@ -79,13 +78,14 @@ public final class ImageBuilder {
     }
 
     /** Build to a local OCI tarball ({@code --tarball} mode). */
-    public static Result writeToTarball(Plan plan, Path tarball)
-            throws IOException, InterruptedException {
+    public static Result writeToTarball(Plan plan, Path tarball) throws IOException, InterruptedException {
         try {
-            JibContainer container = run(plan,
-                    Containerizer.to(TarImage.at(tarball).named(plan.config()
-                            .targetReference(plan.artifact(), plan.version()))));
-            return new Result(plan.config().targetReference(plan.artifact(), plan.version()),
+            JibContainer container = run(
+                    plan,
+                    Containerizer.to(TarImage.at(tarball)
+                            .named(plan.config().targetReference(plan.artifact(), plan.version()))));
+            return new Result(
+                    plan.config().targetReference(plan.artifact(), plan.version()),
                     container.getDigest().toString());
         } catch (InvalidImageReferenceException e) {
             throw new IOException("invalid target image reference: " + e.getMessage(), e);

@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.publish;
 
-import dev.jkbuild.publish.testkit.GpgTestFixture;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import dev.jkbuild.publish.testkit.GpgTestFixture;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class GpgSignerTest {
 
@@ -48,7 +47,6 @@ class GpgSignerTest {
     void empty_keyring_is_rejected(@TempDir Path tempDir) throws Exception {
         Path empty = tempDir.resolve("empty.asc");
         Files.writeString(empty, "");
-        assertThatThrownBy(() -> GpgSigner.fromKeyFile(empty, new char[0]))
-                .isInstanceOf(IOException.class);
+        assertThatThrownBy(() -> GpgSigner.fromKeyFile(empty, new char[0])).isInstanceOf(IOException.class);
     }
 }

@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
-import dev.jkbuild.jdk.JdkHit;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.jdk.JdkHit;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class IntellijProbeTest {
 
     @Test
     void default_root_is_dot_jdks_on_linux() {
-        assertThat(IntellijProbe.defaultRoot("Linux", "/home/me"))
-                .isEqualTo(Path.of("/home/me/.jdks"));
+        assertThat(IntellijProbe.defaultRoot("Linux", "/home/me")).isEqualTo(Path.of("/home/me/.jdks"));
     }
 
     @Test
@@ -41,8 +39,7 @@ class IntellijProbeTest {
         Path install = tempDir.resolve("temurin-21");
         Files.createDirectories(install.resolve("bin"));
         Files.writeString(install.resolve("bin").resolve("java"), "#!/fake\n");
-        Files.writeString(install.resolve("release"),
-                "JAVA_VERSION=\"21.0.5\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+        Files.writeString(install.resolve("release"), "JAVA_VERSION=\"21.0.5\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
 
         List<JdkHit> hits = new IntellijProbe(tempDir).discoverAllJdks();
         assertThat(hits).hasSize(1);
@@ -55,8 +52,7 @@ class IntellijProbeTest {
         Path realHome = bundle.resolve("Contents").resolve("Home");
         Files.createDirectories(realHome.resolve("bin"));
         Files.writeString(realHome.resolve("bin").resolve("java"), "#!/fake\n");
-        Files.writeString(realHome.resolve("release"),
-                "JAVA_VERSION=\"21.0.5\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+        Files.writeString(realHome.resolve("release"), "JAVA_VERSION=\"21.0.5\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
 
         List<JdkHit> hits = new IntellijProbe(tempDir).discoverAllJdks();
         assertThat(hits).hasSize(1);

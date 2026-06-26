@@ -14,7 +14,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.resolver.DependencyTree;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,18 +61,18 @@ public final class TreeCommand implements CliCommand {
         var scopesArg = in.value("scopes").or(() -> in.value("scope"));
         if (scopesArg.isPresent()) {
             List<String> tokens = Arrays.stream(scopesArg.get().split(","))
-                    .map(String::trim).filter(s -> !s.isEmpty()).toList();
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toList();
             if (tokens.isEmpty()) {
-                System.err.println("jk tree: --scopes requires at least one scope (valid: "
-                        + validScopes() + ")");
+                System.err.println("jk tree: --scopes requires at least one scope (valid: " + validScopes() + ")");
                 return 2;
             }
             Set<Scope> ordered = new LinkedHashSet<>();
             for (String token : tokens) {
                 List<Scope> expanded = resolveScopeToken(token);
                 if (expanded == null) {
-                    System.err.println("jk tree: invalid scope '" + token + "' (valid: "
-                            + validScopes() + ")");
+                    System.err.println("jk tree: invalid scope '" + token + "' (valid: " + validScopes() + ")");
                     return 2;
                 }
                 ordered.addAll(expanded);
@@ -88,7 +87,8 @@ public final class TreeCommand implements CliCommand {
             return 2;
         }
         if (!Files.exists(lockFile)) {
-            System.err.println("jk tree: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir) + " (run `jk lock` first)");
+            System.err.println(
+                    "jk tree: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(dir) + " (run `jk lock` first)");
             return 2;
         }
 
@@ -104,8 +104,7 @@ public final class TreeCommand implements CliCommand {
         String title = " - Dependencies Tree ";
         String header = nerdfont
                 ? Theme.colorize(title, t.goalChip())
-                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
-                                t.bright(t.planBadgeColor()))
+                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
                 : Theme.colorize(title, t.goalChip());
         System.out.println();
         System.out.println(header);
@@ -126,7 +125,8 @@ public final class TreeCommand implements CliCommand {
      * {@link ClasspathResolver#RUNTIME} so it stays in sync with the real run classpath.
      */
     private static final List<Scope> EXEC_SCOPES = Arrays.stream(Scope.values())
-            .filter(ClasspathResolver.RUNTIME::contains).toList();
+            .filter(ClasspathResolver.RUNTIME::contains)
+            .toList();
 
     /**
      * Resolve a user-supplied scope token (case-insensitive) to one or more scopes:
@@ -153,8 +153,9 @@ public final class TreeCommand implements CliCommand {
     /** Comma-separated list of valid scope names (incl. the {@code exec}/{@code run}/{@code all} meta-scopes). */
     private static String validScopes() {
         return Arrays.stream(Scope.values())
-                .map(s -> s.name().toLowerCase(Locale.ROOT))
-                .collect(Collectors.joining(", ")) + ", exec/run, all";
+                        .map(s -> s.name().toLowerCase(Locale.ROOT))
+                        .collect(Collectors.joining(", "))
+                + ", exec/run, all";
     }
 
     /**

@@ -37,9 +37,7 @@ public final class ToolRegistry {
 
     public Optional<InstalledTool> find(BuildTool tool, String version) {
         Path dir = installDir(tool, version);
-        return Files.isDirectory(dir)
-                ? Optional.of(new InstalledTool(tool, version, dir))
-                : Optional.empty();
+        return Files.isDirectory(dir) ? Optional.of(new InstalledTool(tool, version, dir)) : Optional.empty();
     }
 
     public List<InstalledTool> list(BuildTool tool) throws IOException {
@@ -49,8 +47,8 @@ public final class ToolRegistry {
         try (Stream<Path> stream = Files.list(slugDir)) {
             stream.filter(Files::isDirectory)
                     .sorted(Comparator.comparing(Path::getFileName))
-                    .forEach(p -> result.add(
-                            new InstalledTool(tool, p.getFileName().toString(), p)));
+                    .forEach(p ->
+                            result.add(new InstalledTool(tool, p.getFileName().toString(), p)));
         }
         return result;
     }

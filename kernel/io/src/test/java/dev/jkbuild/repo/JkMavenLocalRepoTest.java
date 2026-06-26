@@ -1,20 +1,19 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JkMavenLocalRepoTest {
 
@@ -64,8 +63,7 @@ class JkMavenLocalRepoTest {
         repo.materialize(rel(Coordinate.of("com.example", "widget", "2.0"), "jar"), blob);
         repo.materialize(rel(Coordinate.of("com.example", "widget", "1.5"), "jar"), blob);
 
-        assertThat(repo.versions("com.example", "widget"))
-                .containsExactlyInAnyOrder("1.0", "1.5", "2.0");
+        assertThat(repo.versions("com.example", "widget")).containsExactlyInAnyOrder("1.0", "1.5", "2.0");
     }
 
     @Test
@@ -83,10 +81,13 @@ class JkMavenLocalRepoTest {
         repo.materialize(rel(Coordinate.of("org.acme.tools", "gadget", "3.1"), "pom"), blob);
 
         List<JkMavenLocalRepo.Module> modules = repo.modules();
-        assertThat(modules).extracting(JkMavenLocalRepo.Module::moduleKey)
+        assertThat(modules)
+                .extracting(JkMavenLocalRepo.Module::moduleKey)
                 .containsExactlyInAnyOrder("com.example:widget", "org.acme.tools:gadget");
         JkMavenLocalRepo.Module widget = modules.stream()
-                .filter(m -> m.moduleKey().equals("com.example:widget")).findFirst().orElseThrow();
+                .filter(m -> m.moduleKey().equals("com.example:widget"))
+                .findFirst()
+                .orElseThrow();
         assertThat(widget.group()).isEqualTo("com.example");
         assertThat(widget.artifact()).isEqualTo("widget");
         assertThat(widget.versions()).containsExactlyInAnyOrder("1.0", "2.0");

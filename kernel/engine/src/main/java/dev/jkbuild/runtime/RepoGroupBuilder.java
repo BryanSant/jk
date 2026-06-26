@@ -13,7 +13,6 @@ import dev.jkbuild.repo.RepoCredentialResolver;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.repo.RepoTransport;
 import dev.jkbuild.repo.RepoTransports;
-
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
@@ -41,8 +40,8 @@ public final class RepoGroupBuilder {
             // Tests pin one URL; project-declared repos are ignored.
             repos.add(new MavenRepo("central", overrideUrl, http, cas, localRepo));
         } else if (project.repositories().isEmpty()) {
-            repos.add(new MavenRepo(RepositorySpec.MAVEN_CENTRAL.name(),
-                    RepositorySpec.MAVEN_CENTRAL.url(), http, cas, localRepo));
+            repos.add(new MavenRepo(
+                    RepositorySpec.MAVEN_CENTRAL.name(), RepositorySpec.MAVEN_CENTRAL.url(), http, cas, localRepo));
         } else {
             // Resolve credentials per declared repo (env / store / settings.xml /
             // forge-token bridge). Public repos resolve to ANONYMOUS, so this is

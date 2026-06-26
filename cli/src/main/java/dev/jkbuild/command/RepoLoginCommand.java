@@ -9,7 +9,6 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
 import dev.jkbuild.repo.RepoCredentialStore;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
@@ -38,17 +37,17 @@ public final class RepoLoginCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<USER>",
-                        "HTTP Basic username (else stdin = bearer token)",
-                        "--username"),
-                Opt.value("<dir>", "Override the credentials directory. Default: ~/.jk/repo-credentials.",
-                        "--credentials-dir").hide());
+                Opt.value("<USER>", "HTTP Basic username (else stdin = bearer token)", "--username"),
+                Opt.value(
+                                "<dir>",
+                                "Override the credentials directory. Default: ~/.jk/repo-credentials.",
+                                "--credentials-dir")
+                        .hide());
     }
 
     @Override
     public List<Param> parameters() {
-        return List.of(Param.of("id", Arity.ONE,
-                "Repository id (matches [repositories.<id>] in jk.toml)."));
+        return List.of(Param.of("id", Arity.ONE, "Repository id (matches [repositories.<id>] in jk.toml)."));
     }
 
     @Override
@@ -66,8 +65,7 @@ public final class RepoLoginCommand implements CliCommand {
             return 1;
         }
         if (secret.isBlank()) {
-            System.err.println("error: no "
-                    + (username != null ? "password" : "token") + " supplied on stdin.");
+            System.err.println("error: no " + (username != null ? "password" : "token") + " supplied on stdin.");
             return 1;
         }
 
@@ -77,15 +75,13 @@ public final class RepoLoginCommand implements CliCommand {
         store(credentialsDir).write(id, cred);
 
         if (!global.quiet) {
-            System.out.println("Stored " + (username != null ? "basic" : "token")
-                    + " credentials for repository '" + id + "'.");
+            System.out.println(
+                    "Stored " + (username != null ? "basic" : "token") + " credentials for repository '" + id + "'.");
         }
         return 0;
     }
 
     private static RepoCredentialStore store(Path credentialsDir) {
-        return credentialsDir != null
-                ? new RepoCredentialStore(credentialsDir)
-                : new RepoCredentialStore();
+        return credentialsDir != null ? new RepoCredentialStore(credentialsDir) : new RepoCredentialStore();
     }
 }

@@ -2,7 +2,6 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.lock.Lockfile;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -116,9 +115,7 @@ public final class SyncManifest {
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             String checksum = pkg.checksum();
             if (checksum == null || checksum.isBlank()) continue;
-            String hex = checksum.startsWith("sha256:")
-                    ? checksum.substring("sha256:".length())
-                    : checksum;
+            String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
             if (seen.add(hex)) sorted.add(hex);
         }
         return sorted;

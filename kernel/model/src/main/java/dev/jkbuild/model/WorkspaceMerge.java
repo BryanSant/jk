@@ -50,8 +50,7 @@ public final class WorkspaceMerge {
      * resolvable set; classpath construction (which keeps the original
      * parsed module) still sees the sibling refs.
      */
-    public static JkBuild applyToModule(
-            JkBuild root, JkBuild module, Collection<JkBuild> allModules) {
+    public static JkBuild applyToModule(JkBuild root, JkBuild module, Collection<JkBuild> allModules) {
         if (allModules.isEmpty()) return module;
 
         Map<String, JkBuild> siblingByArtifact = new LinkedHashMap<>();
@@ -60,8 +59,8 @@ public final class WorkspaceMerge {
             siblingByArtifact.put(m.project().name(), m);
             internal.add(m.project().group() + ":" + m.project().name());
         }
-        Map<String, Workspace.WorkspaceDependency> wsDeps = root.workspace() != null
-                ? root.workspace().dependencies() : Map.of();
+        Map<String, Workspace.WorkspaceDependency> wsDeps =
+                root.workspace() != null ? root.workspace().dependencies() : Map.of();
 
         // First pass: resolve this module's own deps, strip sibling refs, and
         // track which siblings are direct dependencies (for export propagation).
@@ -88,8 +87,7 @@ public final class WorkspaceMerge {
             for (Dependency d : sibling.dependencies().of(Scope.EXPORT)) {
                 Dependency r = resolve(d, siblingByArtifact, wsDeps);
                 if (internal.contains(r.module())) continue;
-                List<Dependency> mainList =
-                        resolvedByScope.computeIfAbsent(Scope.MAIN, k -> new ArrayList<>());
+                List<Dependency> mainList = resolvedByScope.computeIfAbsent(Scope.MAIN, k -> new ArrayList<>());
                 if (mainList.stream().noneMatch(e -> e.module().equals(r.module()))) {
                     mainList.add(r);
                 }
@@ -120,9 +118,8 @@ public final class WorkspaceMerge {
             internal.add(coord);
         }
 
-        Map<String, Workspace.WorkspaceDependency> wsDeps = root.workspace() != null
-                ? root.workspace().dependencies()
-                : Map.of();
+        Map<String, Workspace.WorkspaceDependency> wsDeps =
+                root.workspace() != null ? root.workspace().dependencies() : Map.of();
 
         Map<Scope, List<Dependency>> mergedByScope = new EnumMap<>(Scope.class);
         for (Scope scope : Scope.values()) {
@@ -161,9 +158,7 @@ public final class WorkspaceMerge {
      * shared-dep table. Non-placeholder deps pass through unchanged.
      */
     private static Dependency resolve(
-            Dependency d,
-            Map<String, JkBuild> siblingByArtifact,
-            Map<String, Workspace.WorkspaceDependency> wsDeps) {
+            Dependency d, Map<String, JkBuild> siblingByArtifact, Map<String, Workspace.WorkspaceDependency> wsDeps) {
         if (!d.module().startsWith(UNRESOLVED_PREFIX)) return d;
         String name = d.library();
         // Sibling lookup first. Modules typically name siblings as
@@ -185,7 +180,6 @@ public final class WorkspaceMerge {
             }
             return Dependency.of(name, ws.module(), ws.version());
         }
-        throw new IllegalStateException(
-                "no workspace dependency or sibling named `" + name + "`");
+        throw new IllegalStateException("no workspace dependency or sibling named `" + name + "`");
     }
 }

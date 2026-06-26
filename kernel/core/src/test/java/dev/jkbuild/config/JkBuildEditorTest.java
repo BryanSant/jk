@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Tests the surgical text editor against the v0.7 name-as-key sub-table
@@ -30,21 +30,18 @@ class JkBuildEditorTest {
     @Test
     void add_to_file_without_dependencies_table_creates_sub_scope() {
         String result = JkBuildEditor.addDependency(
-                BASE, Scope.MAIN, "jackson-databind",
-                "com.fasterxml.jackson.core", "jackson-databind", "=2.18.2");
+                BASE, Scope.MAIN, "jackson-databind", "com.fasterxml.jackson.core", "jackson-databind", "=2.18.2");
 
         assertThat(result).contains("[dependencies.main]");
-        assertThat(result).contains(
-                "jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
+        assertThat(result)
+                .contains("jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
 
         JkBuild parsed = JkBuildParser.parse(result);
-        assertThat(parsed.dependencies().of(Scope.MAIN))
-                .singleElement()
-                .satisfies(d -> {
-                    assertThat(d.library()).isEqualTo("jackson-databind");
-                    assertThat(d.module()).isEqualTo("com.fasterxml.jackson.core:jackson-databind");
-                    assertThat(d.version()).isInstanceOf(VersionSelector.Exact.class);
-                });
+        assertThat(parsed.dependencies().of(Scope.MAIN)).singleElement().satisfies(d -> {
+            assertThat(d.library()).isEqualTo("jackson-databind");
+            assertThat(d.module()).isEqualTo("com.fasterxml.jackson.core:jackson-databind");
+            assertThat(d.version()).isInstanceOf(VersionSelector.Exact.class);
+        });
     }
 
     @Test
@@ -52,8 +49,7 @@ class JkBuildEditorTest {
         // `acme-thing` is deliberately not in the bundled catalog — that
         // way this test exercises the structured-form artifact-omission
         // branch, not the catalog-shorthand branch tested below.
-        String result = JkBuildEditor.addDependency(
-                BASE, Scope.MAIN, "acme-thing", "com.acme", "acme-thing", "1.0.0");
+        String result = JkBuildEditor.addDependency(BASE, Scope.MAIN, "acme-thing", "com.acme", "acme-thing", "1.0.0");
 
         assertThat(result).contains("acme-thing = { group = \"com.acme\", version = \"1.0.0\" }");
         assertThat(result).doesNotContain(", name =");
@@ -62,8 +58,7 @@ class JkBuildEditorTest {
     @Test
     void add_emits_shorthand_for_catalog_known_names() {
         // picocli is in the bundled catalog → cargo-style one-liner.
-        String result = JkBuildEditor.addDependency(
-                BASE, Scope.MAIN, "picocli", "info.picocli", "picocli", "4.7.7");
+        String result = JkBuildEditor.addDependency(BASE, Scope.MAIN, "picocli", "info.picocli", "picocli", "4.7.7");
 
         assertThat(result).contains("picocli = \"4.7.7\"");
         assertThat(result).doesNotContain("group = \"info.picocli\"");
@@ -80,8 +75,7 @@ class JkBuildEditorTest {
         // Same name as a catalog entry but a deliberately different group:
         // the user is overriding the catalog, so the structured form is
         // emitted (the shorthand would lie about the resolved coord).
-        String result = JkBuildEditor.addDependency(
-                BASE, Scope.MAIN, "picocli", "io.fork", "picocli", "4.7.7");
+        String result = JkBuildEditor.addDependency(BASE, Scope.MAIN, "picocli", "io.fork", "picocli", "4.7.7");
 
         assertThat(result).contains("picocli = { group = \"io.fork\", version = \"4.7.7\" }");
     }
@@ -89,11 +83,10 @@ class JkBuildEditorTest {
     @Test
     void add_emits_artifact_when_it_differs_from_name() {
         String result = JkBuildEditor.addDependency(
-                BASE, Scope.MAIN, "spring-web",
-                "org.springframework.boot", "spring-boot-starter-web", "3.4.0");
+                BASE, Scope.MAIN, "spring-web", "org.springframework.boot", "spring-boot-starter-web", "3.4.0");
 
-        assertThat(result).contains(
-                "spring-web = { group = \"org.springframework.boot\", "
+        assertThat(result)
+                .contains("spring-web = { group = \"org.springframework.boot\", "
                         + "name = \"spring-boot-starter-web\", version = \"3.4.0\" }");
 
         JkBuild parsed = JkBuildParser.parse(result);
@@ -110,8 +103,7 @@ class JkBuildEditorTest {
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
-        String result = JkBuildEditor.addDependency(
-                start, Scope.MAIN, "tomlj", "org.tomlj", "tomlj", "1.1.1");
+        String result = JkBuildEditor.addDependency(start, Scope.MAIN, "tomlj", "org.tomlj", "tomlj", "1.1.1");
 
         assertThat(result).contains("picocli = { group = \"info.picocli\", version = \"4.7.7\" }");
         assertThat(result).contains("tomlj = \"1.1.1\"");
@@ -130,8 +122,7 @@ class JkBuildEditorTest {
                 """;
 
         String result = JkBuildEditor.addDependency(
-                start, Scope.TEST, "junit-jupiter",
-                "org.junit.jupiter", "junit-jupiter", "6.1.0");
+                start, Scope.TEST, "junit-jupiter", "org.junit.jupiter", "junit-jupiter", "6.1.0");
 
         assertThat(result).contains("[dependencies.main]");
         assertThat(result).contains("[dependencies.test]");
@@ -153,8 +144,7 @@ class JkBuildEditorTest {
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
-        String result = JkBuildEditor.addDependency(
-                start, Scope.MAIN, "tomlj", "org.tomlj", "tomlj", "1.1.1");
+        String result = JkBuildEditor.addDependency(start, Scope.MAIN, "tomlj", "org.tomlj", "tomlj", "1.1.1");
 
         // Should extend the flat table, not create [dependencies.main].
         assertThat(result).doesNotContain("[dependencies.main]");
@@ -173,8 +163,7 @@ class JkBuildEditorTest {
                 """;
 
         String result = JkBuildEditor.addDependency(
-                start, Scope.TEST, "junit-jupiter",
-                "org.junit.jupiter", "junit-jupiter", "6.1.0");
+                start, Scope.TEST, "junit-jupiter", "org.junit.jupiter", "junit-jupiter", "6.1.0");
 
         assertThat(result).contains("[dependencies.test]");
         JkBuild parsed = JkBuildParser.parse(result);
@@ -190,8 +179,8 @@ class JkBuildEditorTest {
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
-        assertThatThrownBy(() -> JkBuildEditor.addDependency(
-                start, Scope.MAIN, "picocli", "info.picocli", "picocli", "5.0.0"))
+        assertThatThrownBy(() ->
+                        JkBuildEditor.addDependency(start, Scope.MAIN, "picocli", "info.picocli", "picocli", "5.0.0"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("already contains \"picocli\"");
     }
@@ -206,9 +195,8 @@ class JkBuildEditorTest {
 
         // The same short name is fine in a different scope (e.g., lombok
         // is both `processor` and `provided`).
-        String result = JkBuildEditor.addDependency(
-                start, Scope.PROCESSOR, "lombok",
-                "org.projectlombok", "lombok", "1.18.34");
+        String result =
+                JkBuildEditor.addDependency(start, Scope.PROCESSOR, "lombok", "org.projectlombok", "lombok", "1.18.34");
 
         assertThat(result).contains("[dependencies.provided]");
         assertThat(result).contains("[dependencies.processor]");
@@ -269,8 +257,7 @@ class JkBuildEditorTest {
 
     @Test
     void remove_when_scope_missing_throws_clear_error() {
-        assertThatThrownBy(() ->
-                JkBuildEditor.removeDependency(BASE, Scope.TEST, "anything"))
+        assertThatThrownBy(() -> JkBuildEditor.removeDependency(BASE, Scope.TEST, "anything"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("dependencies.test not found");
     }
@@ -283,8 +270,7 @@ class JkBuildEditorTest {
                 picocli = { group = "info.picocli", version = "4.7.7" }
                 """;
 
-        assertThatThrownBy(() ->
-                JkBuildEditor.removeDependency(start, Scope.MAIN, "tomlj"))
+        assertThatThrownBy(() -> JkBuildEditor.removeDependency(start, Scope.MAIN, "tomlj"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("\"tomlj\" not found");
     }
@@ -309,8 +295,7 @@ class JkBuildEditorTest {
                 javac = ["-g"]
                 """;
 
-        String result = JkBuildEditor.addDependency(
-                start, Scope.MAIN, "tomlj", "org.tomlj", "tomlj", "1.1.1");
+        String result = JkBuildEditor.addDependency(start, Scope.MAIN, "tomlj", "org.tomlj", "tomlj", "1.1.1");
 
         assertThat(result).contains("# User comment above deps.");
         assertThat(result).contains("# Inline comment about picocli.");
@@ -335,8 +320,7 @@ class JkBuildEditorTest {
     void add_module_appends_to_inline_array() {
         String result = JkBuildEditor.addWorkspaceModule(WS, "cli");
         assertThat(result).contains("modules = [\"core\", \"io\", \"cli\"]");
-        assertThat(JkBuildParser.parse(result).workspace().modules())
-                .containsExactly("core", "io", "cli");
+        assertThat(JkBuildParser.parse(result).workspace().modules()).containsExactly("core", "io", "cli");
     }
 
     @Test
@@ -379,8 +363,7 @@ class JkBuildEditorTest {
         String result = JkBuildEditor.addWorkspaceModule(start, "cli");
         assertThat(result).contains("# the workspace");
         assertThat(result).contains("    \"cli\",");
-        assertThat(JkBuildParser.parse(result).workspace().modules())
-                .containsExactly("core", "io", "cli");
+        assertThat(JkBuildParser.parse(result).workspace().modules()).containsExactly("core", "io", "cli");
     }
 
     @Test
@@ -398,8 +381,7 @@ class JkBuildEditorTest {
                 ]
                 """;
         String result = JkBuildEditor.addWorkspaceModule(start, "cli");
-        assertThat(JkBuildParser.parse(result).workspace().modules())
-                .containsExactly("core", "io", "cli");
+        assertThat(JkBuildParser.parse(result).workspace().modules()).containsExactly("core", "io", "cli");
     }
 
     @Test
@@ -447,15 +429,12 @@ class JkBuildEditorTest {
 
     @Test
     void name_validation_rejects_bad_characters() {
-        assertThatThrownBy(() -> JkBuildEditor.addDependency(
-                BASE, Scope.MAIN, "has spaces", "g", "a", "1.0"))
+        assertThatThrownBy(() -> JkBuildEditor.addDependency(BASE, Scope.MAIN, "has spaces", "g", "a", "1.0"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("dependency name must match");
-        assertThatThrownBy(() -> JkBuildEditor.addDependency(
-                BASE, Scope.MAIN, "9starts-with-digit", "g", "a", "1.0"))
+        assertThatThrownBy(() -> JkBuildEditor.addDependency(BASE, Scope.MAIN, "9starts-with-digit", "g", "a", "1.0"))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> JkBuildEditor.addDependency(
-                BASE, Scope.MAIN, "", "g", "a", "1.0"))
+        assertThatThrownBy(() -> JkBuildEditor.addDependency(BASE, Scope.MAIN, "", "g", "a", "1.0"))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 }

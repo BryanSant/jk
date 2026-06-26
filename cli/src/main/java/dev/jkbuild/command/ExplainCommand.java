@@ -13,7 +13,6 @@ import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.runtime.BuildGraph;
 import dev.jkbuild.task.ActionCache;
 import dev.jkbuild.util.JkDirs;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -32,8 +31,15 @@ import java.util.Set;
  */
 public final class ExplainCommand implements CliCommand {
 
-    @Override public String name() { return "explain"; }
-    @Override public String description() { return "Print the planned build (units, order, cache hit/miss)"; }
+    @Override
+    public String name() {
+        return "explain";
+    }
+
+    @Override
+    public String description() {
+        return "Print the planned build (units, order, cache hit/miss)";
+    }
 
     @Override
     public List<Opt> options() {
@@ -43,15 +49,17 @@ public final class ExplainCommand implements CliCommand {
                 Opt.flag("Estimate the ETA for a serial build (one module at a time).", "--no-parallel"),
                 Opt.flag("", "--parallel").hide(),
                 Opt.flag("Estimate the ETA with tests running concurrently across modules.", "--parallel-tests"),
-                Opt.value("<dir>",
-                        "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
-                        "--cache-dir").hide());
+                Opt.value(
+                                "<dir>",
+                                "Override the jk cache directory. Default: $JK_CACHE_DIR or ~/.cache/jk.",
+                                "--cache-dir")
+                        .hide());
     }
 
     @Override
     public int run(Invocation in) throws Exception {
         if (in.isSet("run")) {
-            return new BuildCommand().run(in);   // forwards --cache-dir; build options default
+            return new BuildCommand().run(in); // forwards --cache-dir; build options default
         }
         GlobalOptions global = GlobalOptions.from(in);
         Path cacheDir = in.value("cache-dir").map(Path::of).orElse(null);
@@ -77,7 +85,8 @@ public final class ExplainCommand implements CliCommand {
         // On a TTY, wrap the cached-module list to the terminal width; piped output gets
         // the full list on one line (MAX_VALUE → never wraps).
         int width = dev.jkbuild.cli.run.GoalConsole.isInteractiveTerminal()
-                ? dev.jkbuild.cli.tui.CommandManager.detectColumns() : Integer.MAX_VALUE;
+                ? dev.jkbuild.cli.tui.CommandManager.detectColumns()
+                : Integer.MAX_VALUE;
 
         // Forecast every module's full phase pipeline (compile → test → package),
         // truthfully — see BuildPlanForecast.
@@ -101,30 +110,38 @@ public final class ExplainCommand implements CliCommand {
             for (BuildPlanForecast.Module m : modules) {
                 Path mdir = m.unit().dir();
                 var inputs = new dev.jkbuild.runtime.BuildPipeline.Inputs(
-                        mdir, cache, mdir.resolve("jk.toml"), mdir.resolve("jk.lock"), mdir, 1,
+                        mdir,
+                        cache,
+                        mdir.resolve("jk.toml"),
+                        mdir.resolve("jk.lock"),
+                        mdir,
+                        1,
                         TestCommand.estimateTestCount(mdir.resolve("src/test/java")),
-                        null, JkDirs.jdks(), false, false);
-                var goal = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty()).build();
+                        null,
+                        JkDirs.jdks(),
+                        false,
+                        false);
+                var goal = dev.jkbuild.runtime.BuildPipeline.coreBuilder(inputs, m.dirty())
+                        .build();
                 int weight = goal.estimatedTotalWeight();
                 int testWeight = goal.phases().stream()
                         .filter(p -> p.name().equals("run-tests"))
-                        .mapToInt(dev.jkbuild.run.Phase::estimateWeight).sum();
+                        .mapToInt(dev.jkbuild.run.Phase::estimateWeight)
+                        .sum();
                 costs.add(new dev.jkbuild.runtime.EffortWeights.ModuleCost(
                         mdir, graph.edges().getOrDefault(mdir, Set.of()), weight, testWeight));
             }
-            int concurrency = Math.max(1,
-                    Math.min(Runtime.getRuntime().availableProcessors(), modules.size()));
+            int concurrency = Math.max(1, Math.min(Runtime.getRuntime().availableProcessors(), modules.size()));
             etaMillis = dev.jkbuild.runtime.EffortWeights.scheduleMillis(costs, concurrency, serial, parallelTests);
         } catch (RuntimeException e) {
-            etaMillis = 0;   // never fail explain over the estimate
+            etaMillis = 0; // never fail explain over the estimate
         }
 
         // Header: a dark royal blue (#0F4786) " - Build Plan " chip, capped by a matching ▶
         // segment arrow when nerdfont, then the build-time estimate (yellow).
         String header = nerdfont
                 ? Theme.colorize(" - Build Plan ", t.planBadge())
-                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD,
-                                t.bright(t.planBadgeColor()))
+                        + Theme.colorize(dev.jkbuild.cli.tui.Glyphs.SEGMENT_END_NERD, t.bright(t.planBadgeColor()))
                 : Theme.colorize(" - Build Plan ", t.planBadge());
         String estimate = etaMillis == 0
                 ? "Build time " + Theme.colorize("unknown", t.warning())
@@ -137,19 +154,20 @@ public final class ExplainCommand implements CliCommand {
 
         // Workspace-wide stats directly under the root bullet.
         int totalModules = modules.size();
-        int totalSources = modules.stream().mapToInt(BuildPlanForecast.Module::sourceCount).sum();
-        int totalTests   = modules.stream().mapToInt(BuildPlanForecast.Module::testCount).sum();
-        int totalJars    = (int) modules.stream().filter(BuildPlanForecast.Module::producesJar).count();
-        int totalImages  = (int) modules.stream().filter(BuildPlanForecast.Module::producesImage).count();
+        int totalSources =
+                modules.stream().mapToInt(BuildPlanForecast.Module::sourceCount).sum();
+        int totalTests =
+                modules.stream().mapToInt(BuildPlanForecast.Module::testCount).sum();
+        int totalJars = (int)
+                modules.stream().filter(BuildPlanForecast.Module::producesJar).count();
+        int totalImages = (int)
+                modules.stream().filter(BuildPlanForecast.Module::producesImage).count();
         String rootPfx = " " + Theme.colorize("│", t.darkGray()) + " · ";
-        if (totalModules > 1)
-            System.out.println(rootPfx + "Modules: " + String.format("%,d", totalModules));
+        if (totalModules > 1) System.out.println(rootPfx + "Modules: " + String.format("%,d", totalModules));
         System.out.println(rootPfx + "Sources: " + fmtCount(totalSources, "file", "files"));
-        System.out.println(rootPfx + "Tests: "   + fmtCount(totalTests,   "test", "tests"));
-        if (totalJars > 0)
-            System.out.println(rootPfx + "Packages: " + fmtCount(totalJars, "jar", "jars"));
-        if (totalImages > 0)
-            System.out.println(rootPfx + "Containers: " + fmtCount(totalImages, "image", "images"));
+        System.out.println(rootPfx + "Tests: " + fmtCount(totalTests, "test", "tests"));
+        if (totalJars > 0) System.out.println(rootPfx + "Packages: " + fmtCount(totalJars, "jar", "jars"));
+        if (totalImages > 0) System.out.println(rootPfx + "Containers: " + fmtCount(totalImages, "image", "images"));
 
         // Partition the topo order by cache status: every fully-cached module (wherever
         // it sits in the order) collapses into the "Fully Cached" section (names only);
@@ -170,16 +188,16 @@ public final class ExplainCommand implements CliCommand {
             if (verbose) {
                 for (int j = 0; j < cachedIdx.size(); j++) {
                     int i = cachedIdx.get(j);
-                    renderModuleRow(modules.get(i), i + 1, j == cachedIdx.size() - 1,
-                            childPrefix, nerdfont, true, t);
+                    renderModuleRow(modules.get(i), i + 1, j == cachedIdx.size() - 1, childPrefix, nerdfont, true, t);
                 }
             } else {
                 List<String> names = new ArrayList<>();
-                for (int i : cachedIdx) names.add(":" + shortName(modules.get(i).unit().coord()));
+                for (int i : cachedIdx)
+                    names.add(":" + shortName(modules.get(i).unit().coord()));
                 // Wrap the full list across lines (no truncation): the first line hangs off
                 // a "╰─ " connector; continuations align under the first name.
                 List<String> lines = wrapNames(names, Math.max(20, width - 7));
-                String cont = childPrefix + "   ";   // align past "╰─ "
+                String cont = childPrefix + "   "; // align past "╰─ "
                 for (int li = 0; li < lines.size(); li++) {
                     System.out.println((li == 0 ? childPrefix + Theme.colorize("╰─ ", t.darkGray()) : cont)
                             + renderCachedNames(lines.get(li), t));
@@ -187,28 +205,38 @@ public final class ExplainCommand implements CliCommand {
             }
         }
         if (!dirtyIdx.isEmpty()) {
-            System.out.println(" " + Theme.colorize("╰─", t.darkGray())
-                    + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
+            System.out.println(
+                    " " + Theme.colorize("╰─", t.darkGray()) + dev.jkbuild.cli.tui.Badge.pill("Rebuild", nerdfont));
             String secPfx = "    " + Theme.colorize("│", t.darkGray()) + " · ";
             int dirtyModules = dirtyIdx.size();
-            int dirtySources = modules.stream().filter(BuildPlanForecast.Module::dirty)
-                    .mapToInt(BuildPlanForecast.Module::sourceCount).sum();
-            int dirtyTests   = modules.stream().filter(BuildPlanForecast.Module::dirty)
-                    .mapToInt(BuildPlanForecast.Module::testCount).sum();
-            int dirtyJars    = (int) modules.stream().filter(m -> m.dirty() && m.producesJar()).count();
-            int dirtyImages  = (int) modules.stream().filter(m -> m.dirty() && m.producesImage()).count();
+            int dirtySources = modules.stream()
+                    .filter(BuildPlanForecast.Module::dirty)
+                    .mapToInt(BuildPlanForecast.Module::sourceCount)
+                    .sum();
+            int dirtyTests = modules.stream()
+                    .filter(BuildPlanForecast.Module::dirty)
+                    .mapToInt(BuildPlanForecast.Module::testCount)
+                    .sum();
+            int dirtyJars = (int)
+                    modules.stream().filter(m -> m.dirty() && m.producesJar()).count();
+            int dirtyImages = (int)
+                    modules.stream().filter(m -> m.dirty() && m.producesImage()).count();
             if (totalModules > 1)
-                System.out.println(secPfx + "Modules: " + String.format("%,d", dirtyModules) + pct(dirtyModules, totalModules));
-            System.out.println(secPfx + "Sources: "    + fmtCount(dirtySources, "file",   "files")   + pct(dirtySources, totalSources));
-            System.out.println(secPfx + "Tests: "      + fmtCount(dirtyTests,   "test",   "tests")   + pct(dirtyTests,   totalTests));
+                System.out.println(
+                        secPfx + "Modules: " + String.format("%,d", dirtyModules) + pct(dirtyModules, totalModules));
+            System.out.println(
+                    secPfx + "Sources: " + fmtCount(dirtySources, "file", "files") + pct(dirtySources, totalSources));
+            System.out.println(
+                    secPfx + "Tests: " + fmtCount(dirtyTests, "test", "tests") + pct(dirtyTests, totalTests));
             if (totalJars > 0)
-                System.out.println(secPfx + "Packages: "   + fmtCount(dirtyJars,    "jar",    "jars")    + pct(dirtyJars,    totalJars));
+                System.out.println(
+                        secPfx + "Packages: " + fmtCount(dirtyJars, "jar", "jars") + pct(dirtyJars, totalJars));
             if (totalImages > 0)
-                System.out.println(secPfx + "Containers: " + fmtCount(dirtyImages,  "image",  "images")  + pct(dirtyImages,  totalImages));
+                System.out.println(secPfx + "Containers: " + fmtCount(dirtyImages, "image", "images")
+                        + pct(dirtyImages, totalImages));
             for (int j = 0; j < dirtyIdx.size(); j++) {
                 int i = dirtyIdx.get(j);
-                renderModuleRow(modules.get(i), i + 1, j == dirtyIdx.size() - 1,
-                        "    ", nerdfont, verbose, t);
+                renderModuleRow(modules.get(i), i + 1, j == dirtyIdx.size() - 1, "    ", nerdfont, verbose, t);
             }
         }
         return 0;
@@ -217,8 +245,8 @@ public final class ExplainCommand implements CliCommand {
     /** "1m 20s" / "8s" / "<1s" — coarse predicted-duration formatting for the plan summary. */
     private static String fmtDuration(long millis) {
         if (millis <= 0) return "0s";
-        long s = millis / 1000;                       // floor: don't over-state
-        if (s == 0) return "<1s";                     // a sub-second cache-verify pass
+        long s = millis / 1000; // floor: don't over-state
+        if (s == 0) return "<1s"; // a sub-second cache-verify pass
         return s >= 60 ? (s / 60) + "m " + (s % 60) + "s" : s + "s";
     }
 
@@ -231,12 +259,19 @@ public final class ExplainCommand implements CliCommand {
      * (Fully Cached / Rebuild) and the origin / dependency edges are omitted as noise.
      * Phases render when the module rebuilds, or always under {@code verbose}.
      */
-    private static void renderModuleRow(BuildPlanForecast.Module m, int idx, boolean last,
-                                        String prefix, boolean nerdfont, boolean verbose, Theme t) {
+    private static void renderModuleRow(
+            BuildPlanForecast.Module m,
+            int idx,
+            boolean last,
+            String prefix,
+            boolean nerdfont,
+            boolean verbose,
+            Theme t) {
         System.out.println(prefix
                 + Theme.colorize((last ? "╰" : "├") + "─", t.darkGray())
                 + dev.jkbuild.cli.tui.Badge.pill(String.format("%02d", idx), nerdfont)
-                + ' ' + coloredCoord(m.unit().coord(), t));
+                + ' '
+                + coloredCoord(m.unit().coord(), t));
 
         if (m.dirty() || verbose) {
             String spine = prefix + (last ? "   " : Theme.colorize("│", t.darkGray()) + "  ");
@@ -265,8 +300,8 @@ public final class ExplainCommand implements CliCommand {
     private static String boldCoord(String coord, Theme t) {
         int colon = coord.indexOf(':');
         if (colon < 0) return Theme.colorize(coord, t.coordName().bold());
-        return Theme.colorize(coord.substring(0, colon), t.coordGroup().bold())
-                + ":" + Theme.colorize(coord.substring(colon + 1), t.coordName().bold());
+        return Theme.colorize(coord.substring(0, colon), t.coordGroup().bold()) + ":"
+                + Theme.colorize(coord.substring(colon + 1), t.coordName().bold());
     }
 
     /** The artifact half of a {@code group:artifact} coordinate. */
@@ -285,8 +320,7 @@ public final class ExplainCommand implements CliCommand {
             if (p.matches("…\\+\\d+ more…")) {
                 sb.append(Theme.colorize(p, t.darkGray()));
             } else if (p.startsWith(":")) {
-                sb.append(Theme.colorize(":", t.darkGray()))
-                        .append(Theme.colorize(p.substring(1), t.coordName()));
+                sb.append(Theme.colorize(":", t.darkGray())).append(Theme.colorize(p.substring(1), t.coordName()));
             } else {
                 sb.append(Theme.colorize(p, t.coordName()));
             }
@@ -315,8 +349,10 @@ public final class ExplainCommand implements CliCommand {
         StringBuilder s = new StringBuilder(Theme.colorize("□ ", t.brightWhite()))
                 .append(Theme.colorize(padRight(verb, verbCol), t.warning()));
         if (detail != null) {
-            s.append(' ').append(Theme.colorize("·", t.darkGray()))
-                    .append(' ').append(Theme.colorize(detail, t.brightWhite().italic()));
+            s.append(' ')
+                    .append(Theme.colorize("·", t.darkGray()))
+                    .append(' ')
+                    .append(Theme.colorize(detail, t.brightWhite().italic()));
         }
         return s.toString();
     }
@@ -338,8 +374,8 @@ public final class ExplainCommand implements CliCommand {
     private static String coloredCoord(String coord, Theme t) {
         int colon = coord.indexOf(':');
         if (colon < 0) return Theme.colorize(coord, t.coordName());
-        return Theme.colorize(coord.substring(0, colon), t.coordGroup())
-                + ":" + Theme.colorize(coord.substring(colon + 1), t.coordName());
+        return Theme.colorize(coord.substring(0, colon), t.coordGroup()) + ":"
+                + Theme.colorize(coord.substring(colon + 1), t.coordName());
     }
 
     /**
@@ -354,8 +390,7 @@ public final class ExplainCommand implements CliCommand {
         if (available <= 0 || units.size() <= 1 || full.length() <= available) return full;
         String best = "…+" + units.size() + " more…"; // marker-only, if even one unit won't fit
         for (int k = 1; k < units.size(); k++) {
-            String candidate = String.join(", ", units.subList(0, k))
-                    + ", …+" + (units.size() - k) + " more…";
+            String candidate = String.join(", ", units.subList(0, k)) + ", …+" + (units.size() - k) + " more…";
             if (candidate.length() > available) break; // front grows monotonically
             best = candidate;
         }
@@ -384,5 +419,4 @@ public final class ExplainCommand implements CliCommand {
         if (cur.length() > 0) lines.add(cur.toString());
         return lines;
     }
-
 }

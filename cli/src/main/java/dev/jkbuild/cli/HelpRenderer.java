@@ -2,15 +2,10 @@
 package dev.jkbuild.cli;
 
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.utils.AttributedStyle;
-
 import java.io.PrintStream;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import org.jline.utils.AttributedStyle;
 
 /**
  * The help-screen painter for jk's model-driven rendering path. Paints
@@ -93,7 +88,11 @@ public final class HelpRenderer {
         if (!model.subcommands().isEmpty()) {
             out.append(nl).append(heading("Commands:", ansi)).append(nl);
             int width = model.subcommands().stream()
-                    .filter(s -> !s.hidden()).mapToInt(s -> s.name().length()).max().orElse(0) + 2;
+                            .filter(s -> !s.hidden())
+                            .mapToInt(s -> s.name().length())
+                            .max()
+                            .orElse(0)
+                    + 2;
             for (SubcommandModel sub : model.subcommands()) {
                 if (sub.hidden()) continue;
                 appendCommandRow(out, sub.name(), sub, width, ansi);
@@ -116,9 +115,13 @@ public final class HelpRenderer {
         for (ParameterModel p : params) {
             String label = p.label();
             String[] desc = p.description();
-            sb.append("  ").append(paramLabel(label, ansi))
-              .append(" ".repeat(width - label.length())).append(desc.length > 0 ? desc[0] : "").append(nl);
-            for (int i = 1; i < desc.length; i++) sb.append(indent).append(desc[i]).append(nl);
+            sb.append("  ")
+                    .append(paramLabel(label, ansi))
+                    .append(" ".repeat(width - label.length()))
+                    .append(desc.length > 0 ? desc[0] : "")
+                    .append(nl);
+            for (int i = 1; i < desc.length; i++)
+                sb.append(indent).append(desc[i]).append(nl);
         }
         return sb.toString();
     }
@@ -127,7 +130,11 @@ public final class HelpRenderer {
         String[] desc = sub.description();
         String firstLine = desc.length > 0 ? desc[0] : "";
         String padding = " ".repeat(width - name.length());
-        out.append("  ").append(commandName(name, ansi)).append(padding).append(firstLine).append(System.lineSeparator());
+        out.append("  ")
+                .append(commandName(name, ansi))
+                .append(padding)
+                .append(firstLine)
+                .append(System.lineSeparator());
     }
 
     /**
@@ -157,7 +164,8 @@ public final class HelpRenderer {
     }
 
     private static int rowWidth(OptionModel opt) {
-        return opt.namePart().length() + (opt.labelPart().isEmpty() ? 0 : opt.labelPart().length() + 1);
+        return opt.namePart().length()
+                + (opt.labelPart().isEmpty() ? 0 : opt.labelPart().length() + 1);
     }
 
     // --- short (bare `jk`) help screen -----------------------------------
@@ -173,14 +181,17 @@ public final class HelpRenderer {
      * {@link CommandDispatch} registry instead of picocli's CommandSpec map.
      * Called from {@link Jk#run()} now that all commands are ported.
      */
-    public static void printShortHelp(List<dev.jkbuild.model.command.CliCommand> commands,
-                                       String rootDescription, String qualifiedName,
-                                       PrintStream out, boolean ansi) {
+    public static void printShortHelp(
+            List<dev.jkbuild.model.command.CliCommand> commands,
+            String rootDescription,
+            String qualifiedName,
+            PrintStream out,
+            boolean ansi) {
         out.println(rootDescription);
         out.println();
         if (ansi) {
-            out.println(heading("Usage:", true) + " "
-                    + commandName(qualifiedName, true) + paramLabel(" <COMMAND> [OPTIONS]", true));
+            out.println(heading("Usage:", true) + " " + commandName(qualifiedName, true)
+                    + paramLabel(" <COMMAND> [OPTIONS]", true));
         } else {
             out.println("Usage: " + qualifiedName + " <COMMAND> [OPTIONS]");
         }
@@ -216,12 +227,10 @@ public final class HelpRenderer {
         String ellipsisPad = " ".repeat(descCol - 2 - ellipsis.length());
         String helpCmd = "jk --help";
         if (ansi) {
-            out.println("  " + paramLabel(ellipsis, true) + ellipsisPad
-                    + "See all commands and options by running " + commandName(helpCmd, true));
+            out.println("  " + paramLabel(ellipsis, true) + ellipsisPad + "See all commands and options by running "
+                    + commandName(helpCmd, true));
         } else {
-            out.println("  " + ellipsis + ellipsisPad
-                    + "See all commands and options by running " + helpCmd);
+            out.println("  " + ellipsis + ellipsisPad + "See all commands and options by running " + helpCmd);
         }
     }
-
 }

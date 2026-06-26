@@ -2,7 +2,6 @@
 package dev.jkbuild.resolver.pubgrub;
 
 import dev.jkbuild.resolver.Versions;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -18,8 +17,7 @@ import java.util.stream.Collectors;
  * ordering (qualifier precedence: alpha &lt; beta &lt; rc &lt; ga &lt; sp)
  * ships as a follow-up.
  */
-public sealed interface VersionSet
-        permits VersionSet.Empty, VersionSet.All, VersionSet.Range, VersionSet.Union {
+public sealed interface VersionSet permits VersionSet.Empty, VersionSet.All, VersionSet.Range, VersionSet.Union {
 
     /** The empty set. */
     Empty EMPTY = Empty.INSTANCE;
@@ -75,35 +73,86 @@ public sealed interface VersionSet
 
     final class Empty implements VersionSet {
         static final Empty INSTANCE = new Empty();
+
         private Empty() {}
 
-        @Override public boolean contains(String version) { return false; }
-        @Override public VersionSet intersect(VersionSet other) { return this; }
-        @Override public VersionSet union(VersionSet other) { return other; }
-        @Override public VersionSet complement() { return ALL; }
-        @Override public boolean isEmpty() { return true; }
-        @Override public String toString() { return "∅"; }
+        @Override
+        public boolean contains(String version) {
+            return false;
+        }
+
+        @Override
+        public VersionSet intersect(VersionSet other) {
+            return this;
+        }
+
+        @Override
+        public VersionSet union(VersionSet other) {
+            return other;
+        }
+
+        @Override
+        public VersionSet complement() {
+            return ALL;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return true;
+        }
+
+        @Override
+        public String toString() {
+            return "∅";
+        }
     }
 
     final class All implements VersionSet {
         static final All INSTANCE = new All();
+
         private All() {}
 
-        @Override public boolean contains(String version) { return true; }
-        @Override public VersionSet intersect(VersionSet other) { return other; }
-        @Override public VersionSet union(VersionSet other) { return this; }
-        @Override public VersionSet complement() { return EMPTY; }
-        @Override public boolean isEmpty() { return false; }
-        @Override public boolean isAll() { return true; }
-        @Override public String toString() { return "*"; }
+        @Override
+        public boolean contains(String version) {
+            return true;
+        }
+
+        @Override
+        public VersionSet intersect(VersionSet other) {
+            return other;
+        }
+
+        @Override
+        public VersionSet union(VersionSet other) {
+            return this;
+        }
+
+        @Override
+        public VersionSet complement() {
+            return EMPTY;
+        }
+
+        @Override
+        public boolean isEmpty() {
+            return false;
+        }
+
+        @Override
+        public boolean isAll() {
+            return true;
+        }
+
+        @Override
+        public String toString() {
+            return "*";
+        }
     }
 
     /**
      * A single range. {@code null} bounds mean unbounded on that side.
      * Constructor normalizes degenerate ranges to {@link #EMPTY}.
      */
-    record Range(String min, boolean minInclusive, String max, boolean maxInclusive)
-            implements VersionSet {
+    record Range(String min, boolean minInclusive, String max, boolean maxInclusive) implements VersionSet {
 
         public Range {
             // Reject inverted bounds at construction time so callers don't
@@ -111,11 +160,9 @@ public sealed interface VersionSet
             // unbounded / empty.
             if (min != null && max != null) {
                 int cmp = Versions.compare(min, max);
-                if (cmp > 0
-                        || (cmp == 0 && (!minInclusive || !maxInclusive))) {
-                    throw new IllegalArgumentException(
-                            "empty range: " + bracket(minInclusive, '[', '(')
-                                    + min + "," + max + bracket(maxInclusive, ']', ')'));
+                if (cmp > 0 || (cmp == 0 && (!minInclusive || !maxInclusive))) {
+                    throw new IllegalArgumentException("empty range: " + bracket(minInclusive, '[', '(') + min + ","
+                            + max + bracket(maxInclusive, ']', ')'));
                 }
             }
         }
@@ -154,9 +201,16 @@ public sealed interface VersionSet
                 loInc = minInclusive;
             } else {
                 int cmp = Versions.compare(min, other.min);
-                if (cmp > 0) { lo = min; loInc = minInclusive; }
-                else if (cmp < 0) { lo = other.min; loInc = other.minInclusive; }
-                else { lo = min; loInc = minInclusive && other.minInclusive; }
+                if (cmp > 0) {
+                    lo = min;
+                    loInc = minInclusive;
+                } else if (cmp < 0) {
+                    lo = other.min;
+                    loInc = other.minInclusive;
+                } else {
+                    lo = min;
+                    loInc = minInclusive && other.minInclusive;
+                }
             }
             String hi;
             boolean hiInc;
@@ -168,9 +222,16 @@ public sealed interface VersionSet
                 hiInc = maxInclusive;
             } else {
                 int cmp = Versions.compare(max, other.max);
-                if (cmp < 0) { hi = max; hiInc = maxInclusive; }
-                else if (cmp > 0) { hi = other.max; hiInc = other.maxInclusive; }
-                else { hi = max; hiInc = maxInclusive && other.maxInclusive; }
+                if (cmp < 0) {
+                    hi = max;
+                    hiInc = maxInclusive;
+                } else if (cmp > 0) {
+                    hi = other.max;
+                    hiInc = other.maxInclusive;
+                } else {
+                    hi = max;
+                    hiInc = maxInclusive && other.maxInclusive;
+                }
             }
             // Empty if lo > hi, or lo == hi with either side exclusive.
             if (lo != null && hi != null) {
@@ -196,28 +257,44 @@ public sealed interface VersionSet
             if (overlapsOrTouches(other)) {
                 String lo;
                 boolean loInc;
-                if (min == null || other.min == null) { lo = null; loInc = false; }
-                else {
+                if (min == null || other.min == null) {
+                    lo = null;
+                    loInc = false;
+                } else {
                     int cmp = Versions.compare(min, other.min);
-                    if (cmp < 0) { lo = min; loInc = minInclusive; }
-                    else if (cmp > 0) { lo = other.min; loInc = other.minInclusive; }
-                    else { lo = min; loInc = minInclusive || other.minInclusive; }
+                    if (cmp < 0) {
+                        lo = min;
+                        loInc = minInclusive;
+                    } else if (cmp > 0) {
+                        lo = other.min;
+                        loInc = other.minInclusive;
+                    } else {
+                        lo = min;
+                        loInc = minInclusive || other.minInclusive;
+                    }
                 }
                 String hi;
                 boolean hiInc;
-                if (max == null || other.max == null) { hi = null; hiInc = false; }
-                else {
+                if (max == null || other.max == null) {
+                    hi = null;
+                    hiInc = false;
+                } else {
                     int cmp = Versions.compare(max, other.max);
-                    if (cmp > 0) { hi = max; hiInc = maxInclusive; }
-                    else if (cmp < 0) { hi = other.max; hiInc = other.maxInclusive; }
-                    else { hi = max; hiInc = maxInclusive || other.maxInclusive; }
+                    if (cmp > 0) {
+                        hi = max;
+                        hiInc = maxInclusive;
+                    } else if (cmp < 0) {
+                        hi = other.max;
+                        hiInc = other.maxInclusive;
+                    } else {
+                        hi = max;
+                        hiInc = maxInclusive || other.maxInclusive;
+                    }
                 }
                 return new Range(lo, loInc, hi, hiInc);
             }
             // Disjoint: keep both, sorted.
-            return Range.compareLow(this, other) < 0
-                    ? Union.of(List.of(this, other))
-                    : Union.of(List.of(other, this));
+            return Range.compareLow(this, other) < 0 ? Union.of(List.of(this, other)) : Union.of(List.of(other, this));
         }
 
         @Override
@@ -236,18 +313,22 @@ public sealed interface VersionSet
         }
 
         @Override
-        public boolean isEmpty() { return false; }
+        public boolean isEmpty() {
+            return false;
+        }
 
         private boolean overlapsOrTouches(Range other) {
             // Touches: this.max == other.min (and at least one is inclusive)
             // Overlaps: intersection is non-empty
             if (!intersectRange(other).isEmpty()) return true;
-            if (max != null && other.min != null
+            if (max != null
+                    && other.min != null
                     && Versions.compare(max, other.min) == 0
                     && (maxInclusive || other.minInclusive)) {
                 return true;
             }
-            return min != null && other.max != null
+            return min != null
+                    && other.max != null
                     && Versions.compare(min, other.max) == 0
                     && (minInclusive || other.maxInclusive);
         }
@@ -261,8 +342,7 @@ public sealed interface VersionSet
 
         @Override
         public String toString() {
-            if (min != null && max != null && minInclusive && maxInclusive
-                    && Versions.compare(min, max) == 0) {
+            if (min != null && max != null && minInclusive && maxInclusive && Versions.compare(min, max) == 0) {
                 return "{" + min + "}";
             }
             return (minInclusive ? "[" : "(")
@@ -282,8 +362,7 @@ public sealed interface VersionSet
         public Union {
             Objects.requireNonNull(parts, "parts");
             if (parts.size() < 2) {
-                throw new IllegalArgumentException(
-                        "Union must have at least two parts; got: " + parts);
+                throw new IllegalArgumentException("Union must have at least two parts; got: " + parts);
             }
             parts = List.copyOf(parts);
         }
@@ -332,12 +411,13 @@ public sealed interface VersionSet
         }
 
         @Override
-        public boolean isEmpty() { return false; }
+        public boolean isEmpty() {
+            return false;
+        }
 
         @Override
         public String toString() {
-            return parts.stream().map(Object::toString)
-                    .collect(Collectors.joining(" ∪ "));
+            return parts.stream().map(Object::toString).collect(Collectors.joining(" ∪ "));
         }
     }
 }

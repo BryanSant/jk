@@ -1,18 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Workspace-internal classpath resolution, focused on {@code [dependencies.export]}
@@ -24,8 +23,7 @@ class WorkspaceClasspathTest {
     void export_sibling_is_on_the_declaring_modules_own_classpath(@TempDir Path root) throws Exception {
         scaffold(root);
         JkBuild app = JkBuildParser.parse(root.resolve("app/jk.toml"));
-        var result = WorkspaceClasspath.resolve(root.resolve("app"), app,
-                Set.of(Scope.EXPORT, Scope.MAIN));
+        var result = WorkspaceClasspath.resolve(root.resolve("app"), app, Set.of(Scope.EXPORT, Scope.MAIN));
         // `app` declares `lib` in [dependencies.export]; it must be on app's own classpath.
         assertThat(jarNames(result)).anyMatch(n -> n.startsWith("lib-"));
     }
@@ -34,8 +32,7 @@ class WorkspaceClasspathTest {
     void export_deps_ride_transitively_to_a_consumer(@TempDir Path root) throws Exception {
         scaffold(root);
         JkBuild top = JkBuildParser.parse(root.resolve("top/jk.toml"));
-        var result = WorkspaceClasspath.resolve(root.resolve("top"), top,
-                Set.of(Scope.EXPORT, Scope.MAIN));
+        var result = WorkspaceClasspath.resolve(root.resolve("top"), top, Set.of(Scope.EXPORT, Scope.MAIN));
         // `top` depends on `app` (main); `app` exports `lib` — so `top` transitively
         // gets BOTH app and lib (the export rider).
         List<String> names = jarNames(result);

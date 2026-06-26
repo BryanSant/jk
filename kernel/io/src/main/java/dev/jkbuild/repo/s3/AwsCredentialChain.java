@@ -50,8 +50,7 @@ public final class AwsCredentialChain {
         String region = firstNonBlank(regionOverride, envRegion);
 
         if (envAk != null && envSk != null) {
-            return Optional.of(new AwsCredentials(envAk, envSk,
-                    nonBlank(env.apply("AWS_SESSION_TOKEN")), region));
+            return Optional.of(new AwsCredentials(envAk, envSk, nonBlank(env.apply("AWS_SESSION_TOKEN")), region));
         }
 
         String profile = firstNonBlank(env.apply("AWS_PROFILE"), "default");
@@ -84,7 +83,8 @@ public final class AwsCredentialChain {
                 if (!inSection) continue;
                 int eq = line.indexOf('=');
                 if (eq > 0) {
-                    out.put(line.substring(0, eq).trim().toLowerCase(Locale.ROOT),
+                    out.put(
+                            line.substring(0, eq).trim().toLowerCase(Locale.ROOT),
                             line.substring(eq + 1).trim());
                 }
             }

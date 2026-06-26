@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import dev.jkbuild.discovery.JkProbe;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.discovery.JkProbe;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JdkResolutionTest {
 
@@ -60,7 +59,7 @@ class JdkResolutionTest {
         Path j21 = makeJdk(jdks, "temurin-21.0.5");
         Path j25 = makeJdk(jdks, "temurin-25.0.3");
         GlobalDefaultJdk gdj = gdj(tmp);
-        gdj.set(new InstalledJdk("temurin-25.0.3", j25));     // default = 25
+        gdj.set(new InstalledJdk("temurin-25.0.3", j25)); // default = 25
         gdj.setCurrent(new InstalledJdk("temurin-21.0.5", j21)); // current = 21
 
         var r = JdkResolution.resolve(req(tmp).build(), reg(jdks), gdj, LATEST_LTS);
@@ -143,8 +142,8 @@ class JdkResolutionTest {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
         String version = dirName.substring(dirName.indexOf('-') + 1);
-        Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
+        Files.writeString(
+                home.resolve("release"), "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"Eclipse Adoptium\"\n");
         return home.toRealPath();
     }
 
@@ -159,17 +158,38 @@ class JdkResolutionTest {
         private int projectJavaRelease;
         private final Map<String, String> env = new java.util.HashMap<>();
 
-        ReqBuilder(Path projectDir) { this.projectDir = projectDir; }
+        ReqBuilder(Path projectDir) {
+            this.projectDir = projectDir;
+        }
 
-        ReqBuilder switchSpec(String s) { this.switchSpec = s; return this; }
-        ReqBuilder envSpec(String s) { this.envSpec = s; return this; }
-        ReqBuilder lockJdkId(String s) { this.lockJdkId = s; return this; }
-        ReqBuilder projectJdkSpec(String s) { this.projectJdkSpec = s; return this; }
-        ReqBuilder projectJavaRelease(int r) { this.projectJavaRelease = r; return this; }
+        ReqBuilder switchSpec(String s) {
+            this.switchSpec = s;
+            return this;
+        }
+
+        ReqBuilder envSpec(String s) {
+            this.envSpec = s;
+            return this;
+        }
+
+        ReqBuilder lockJdkId(String s) {
+            this.lockJdkId = s;
+            return this;
+        }
+
+        ReqBuilder projectJdkSpec(String s) {
+            this.projectJdkSpec = s;
+            return this;
+        }
+
+        ReqBuilder projectJavaRelease(int r) {
+            this.projectJavaRelease = r;
+            return this;
+        }
 
         JdkResolution.Request build() {
-            return new JdkResolution.Request(projectDir, switchSpec, envSpec, lockJdkId,
-                    projectJdkSpec, projectJavaRelease, env::get);
+            return new JdkResolution.Request(
+                    projectDir, switchSpec, envSpec, lockJdkId, projectJdkSpec, projectJavaRelease, env::get);
         }
     }
 }

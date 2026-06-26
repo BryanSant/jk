@@ -19,7 +19,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
@@ -53,20 +52,34 @@ import java.util.Optional;
  */
 public final class JdkEnsureCommand implements CliCommand {
 
-    @Override public String name() { return "ensure"; }
-    @Override public String description() { return "Ensure a Java Development Kit is available"; }
-
-    @Override public List<Opt> options() {
-        return List.of(
-                Opt.value("<dir>", "Override the install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide(),
-                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url").hide(),
-                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file").hide());
+    @Override
+    public String name() {
+        return "ensure";
     }
 
-    @Override public List<Param> parameters() {
-        return List.of(Param.of("spec", Arity.ONE,
+    @Override
+    public String description() {
+        return "Ensure a Java Development Kit is available";
+    }
+
+    @Override
+    public List<Opt> options() {
+        return List.of(
+                Opt.value("<dir>", "Override the install root. Default: the IntelliJ JDK directory.", "--jdks-dir")
+                        .hide(),
+                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url")
+                        .hide(),
+                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file")
+                        .hide());
+    }
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(Param.of(
+                "spec",
+                Arity.ONE,
                 "The vendor/version of JDK you'd like to ensure is installed\n"
-                + "  and available (ex: 25, lts, latest, temurin-25, openjdk-26)"));
+                        + "  and available (ex: 25, lts, latest, temurin-25, openjdk-26)"));
     }
 
     private String spec;
@@ -90,15 +103,12 @@ public final class JdkEnsureCommand implements CliCommand {
         JdkRegistry registry = jdksDir != null ? new JdkRegistry(jdksDir) : new JdkRegistry();
         JdkInstaller installer = new JdkInstaller(new Http(), registry);
 
-        return JdkKeywords.isKeyword(spec)
-                ? ensureKeyword(registry, installer)
-                : ensureVersion(registry, installer);
+        return JdkKeywords.isKeyword(spec) ? ensureKeyword(registry, installer) : ensureVersion(registry, installer);
     }
 
     // --- version specs (bare major / full version / vendor-hinted) ----------
 
-    private int ensureVersion(JdkRegistry registry, JdkInstaller installer)
-            throws IOException, InterruptedException {
+    private int ensureVersion(JdkRegistry registry, JdkInstaller installer) throws IOException, InterruptedException {
         JdkSelector.FlexibleQuery q = JdkSelector.parseFlexible(spec);
         String min = q.exactVersion().orElse(null);
 
@@ -120,18 +130,15 @@ public final class JdkEnsureCommand implements CliCommand {
         // candidate — that's what lets a ≥ match install a newer point release
         // when the feed has moved past the requested one. selectPreferred adds
         // the Temurin bias when no vendor was named.
-        String selectInput = q.major().isPresent()
-                ? hintsAndMajor(q.hints(), q.major().get())
-                : spec;
-        Optional<JdkCatalog.Entry> candidate =
-                JdkSelector.selectPreferred(catalog, selectInput, os, arch);
+        String selectInput =
+                q.major().isPresent() ? hintsAndMajor(q.hints(), q.major().get()) : spec;
+        Optional<JdkCatalog.Entry> candidate = JdkSelector.selectPreferred(catalog, selectInput, os, arch);
 
         if (candidate.isPresent()) {
             JdkCatalog.Entry e = candidate.get();
             // Hint-only spec (no major typed): now that the feed told us the
             // major, re-check installed before downloading.
-            if (q.major().isEmpty()
-                    && reportIfPresent(registry.findHitAtLeast(e.majorVersion(), min, q.hints()))) {
+            if (q.major().isEmpty() && reportIfPresent(registry.findHitAtLeast(e.majorVersion(), min, q.hints()))) {
                 return 0;
             }
             if (min == null || atLeast(e.version(), min)) {
@@ -144,8 +151,7 @@ public final class JdkEnsureCommand implements CliCommand {
 
     // --- keyword specs (lts / stable / latest) ------------------------------
 
-    private int ensureKeyword(JdkRegistry registry, JdkInstaller installer)
-            throws IOException, InterruptedException {
+    private int ensureKeyword(JdkRegistry registry, JdkInstaller installer) throws IOException, InterruptedException {
         if (!hostSupported()) return 1;
         String os = HostPlatform.currentOs();
         String arch = HostPlatform.currentArch();
@@ -162,8 +168,8 @@ public final class JdkEnsureCommand implements CliCommand {
         // The latest point release is the floor — an older installed copy
         // doesn't satisfy a keyword spec. `native` additionally requires a
         // GraalVM (satisfactionHints); lts/latest are vendor-agnostic.
-        if (reportIfPresent(registry.findHitAtLeast(
-                e.majorVersion(), e.version(), JdkKeywords.satisfactionHints(spec)))) {
+        if (reportIfPresent(
+                registry.findHitAtLeast(e.majorVersion(), e.version(), JdkKeywords.satisfactionHints(spec)))) {
             return 0;
         }
         report(label(e), installEntry(installer, e, unableToLocatePreface(e)));
@@ -172,14 +178,13 @@ public final class JdkEnsureCommand implements CliCommand {
 
     // --- fallback -----------------------------------------------------------
 
-    private int fallbackToLts(JdkRegistry registry, JdkInstaller installer,
-                              JdkCatalog catalog, String os, String arch)
+    private int fallbackToLts(JdkRegistry registry, JdkInstaller installer, JdkCatalog catalog, String os, String arch)
             throws IOException, InterruptedException {
         Optional<JdkCatalog.Entry> entry = JdkKeywords.resolveToMajorSpec(catalog, "lts", os, arch)
                 .flatMap(majorSpec -> JdkSelector.select(catalog, JdkSpec.parse(majorSpec), os, arch));
         if (entry.isEmpty()) {
-            System.err.println("jk jdk ensure: no JDK matches " + spec
-                    + " and no LTS JDK is available for " + os + "/" + arch + ".");
+            System.err.println("jk jdk ensure: no JDK matches " + spec + " and no LTS JDK is available for " + os + "/"
+                    + arch + ".");
             return 1;
         }
         JdkCatalog.Entry e = entry.get();
@@ -216,8 +221,7 @@ public final class JdkEnsureCommand implements CliCommand {
         String label = label(entry);
         long total = entry.archiveSize();
         InstalledJdk installed;
-        try (dev.jkbuild.cli.tui.JdkDownloadBar pb =
-                     dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+        try (dev.jkbuild.cli.tui.JdkDownloadBar pb = dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
             installed = installer.install(entry, bytes -> pb.update(bytes, total));
             pb.finish();
         }
@@ -233,7 +237,9 @@ public final class JdkEnsureCommand implements CliCommand {
 
     /** Pre-download notice shown when nothing installed satisfied the spec. */
     private static String unableToLocatePreface(JdkCatalog.Entry e) {
-        return Theme.colorize("Unable to locate a suitable JDK. Installing ", Theme.active().normalGray())
+        return Theme.colorize(
+                        "Unable to locate a suitable JDK. Installing ",
+                        Theme.active().normalGray())
                 + Theme.colorize(label(e), Theme.active().cyan())
                 + Theme.colorize("...", Theme.active().normalGray());
     }
@@ -275,10 +281,12 @@ public final class JdkEnsureCommand implements CliCommand {
     private JdkCatalog fetchCatalog() throws IOException, InterruptedException {
         boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
         JdkCatalogClient client = (feedUrl != null
-                ? new JdkCatalogClient(new Http(), feedUrl,
-                        cacheFile != null ? cacheFile : ephemeralCachePath(),
-                        Duration.ZERO)
-                : new JdkCatalogClient())
+                        ? new JdkCatalogClient(
+                                new Http(),
+                                feedUrl,
+                                cacheFile != null ? cacheFile : ephemeralCachePath(),
+                                Duration.ZERO)
+                        : new JdkCatalogClient())
                 .onWarning(System.err::println);
         return client.fetch(refresh);
     }

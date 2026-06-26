@@ -5,7 +5,6 @@ import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Command;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
 import java.util.ArrayList;
 import java.util.List;
 

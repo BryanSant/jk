@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class JavacLintTest {
 
@@ -17,13 +16,11 @@ class JavacLintTest {
 
     @Test
     void omits_lint_when_disabled() {
-        assertThat(JavacLint.effectiveArgs(false, List.of("-Werror")))
-                .containsExactly("-Werror");
+        assertThat(JavacLint.effectiveArgs(false, List.of("-Werror"))).containsExactly("-Werror");
     }
 
     @Test
     void enabled_with_no_user_args_is_just_the_default() {
-        assertThat(JavacLint.effectiveArgs(true, List.of()))
-                .containsExactly("-Xlint:deprecation,unchecked");
+        assertThat(JavacLint.effectiveArgs(true, List.of())).containsExactly("-Xlint:deprecation,unchecked");
     }
 }

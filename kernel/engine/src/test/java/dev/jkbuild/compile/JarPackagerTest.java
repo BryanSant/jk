@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,8 +14,8 @@ import java.util.List;
 import java.util.jar.Attributes;
 import java.util.jar.JarEntry;
 import java.util.jar.JarFile;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JarPackagerTest {
 
@@ -34,7 +33,8 @@ class JarPackagerTest {
 
         List<String> entries = listEntries(jar);
         // META-INF/* entries come first (jar plumbing), then our files alphabetized.
-        List<String> ours = entries.stream().filter(e -> !e.startsWith("META-INF/")).toList();
+        List<String> ours =
+                entries.stream().filter(e -> !e.startsWith("META-INF/")).toList();
         assertThat(ours).containsExactly("Root.class", "a/A.class", "z/sub/Z.class");
     }
 
@@ -49,8 +49,8 @@ class JarPackagerTest {
         new JarPackager().packageJar(JarPackager.JarRequest.of(input, jarA));
         // Bump mtime of source files between runs to make sure the packager
         // doesn't pick up wall-clock timestamps.
-        Files.setLastModifiedTime(input.resolve("Hello.class"),
-                FileTime.fromMillis(System.currentTimeMillis() + 60_000));
+        Files.setLastModifiedTime(
+                input.resolve("Hello.class"), FileTime.fromMillis(System.currentTimeMillis() + 60_000));
         new JarPackager().packageJar(JarPackager.JarRequest.of(input, jarB));
 
         assertThat(Files.readAllBytes(jarA)).isEqualTo(Files.readAllBytes(jarB));
@@ -85,8 +85,7 @@ class JarPackagerTest {
         Files.writeString(input.resolve("x.txt"), "data");
 
         Path jar = tempDir.resolve("out.jar");
-        new JarPackager().packageJar(
-                JarPackager.JarRequest.of(input, jar).withMainClass("com.example.Main"));
+        new JarPackager().packageJar(JarPackager.JarRequest.of(input, jar).withMainClass("com.example.Main"));
 
         try (JarFile jf = new JarFile(jar.toFile())) {
             Attributes attrs = jf.getManifest().getMainAttributes();
@@ -105,11 +104,12 @@ class JarPackagerTest {
         Files.writeString(input.resolve("x.txt"), "data");
 
         Path jar = tempDir.resolve("out.jar");
-        new JarPackager().packageJar(JarPackager.JarRequest.of(input, jar)
-                .withMainClass("com.example.Main")
-                .withAttributes(java.util.Map.of(
-                        "Implementation-Title", "widget",
-                        "Implementation-Version", "1.0.0")));
+        new JarPackager()
+                .packageJar(JarPackager.JarRequest.of(input, jar)
+                        .withMainClass("com.example.Main")
+                        .withAttributes(java.util.Map.of(
+                                "Implementation-Title", "widget",
+                                "Implementation-Version", "1.0.0")));
 
         try (JarFile jf = new JarFile(jar.toFile())) {
             Attributes attrs = jf.getManifest().getMainAttributes();

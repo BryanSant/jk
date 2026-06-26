@@ -34,9 +34,7 @@ public final class JdkResolver {
         String spec = validatePin(pin.get());
         Optional<InstalledJdk> direct = registry.findBySpec(spec);
         if (direct.isPresent()) return direct;
-        return new JdkProvisioning(registry)
-                .resolve(JdkSpec.parse(spec))
-                .map(JdkProvisioning.Result::jdk);
+        return new JdkProvisioning(registry).resolve(JdkSpec.parse(spec)).map(JdkProvisioning.Result::jdk);
     }
 
     /**
@@ -47,9 +45,8 @@ public final class JdkResolver {
         String pin = raw.trim();
         JdkSelector.FlexibleQuery q = JdkSelector.parseFlexible(pin);
         if (q.major().isEmpty() || q.exactVersion().isPresent() || q.hints().isEmpty()) {
-            throw new IllegalArgumentException(
-                    ".jdk-version must be <vendor>-<major> (e.g. \"temurin-25\"), not \"" + pin
-                    + "\". Pin a vendor and major release — jk keeps the patch version current.");
+            throw new IllegalArgumentException(".jdk-version must be <vendor>-<major> (e.g. \"temurin-25\"), not \""
+                    + pin + "\". Pin a vendor and major release — jk keeps the patch version current.");
         }
         return pin;
     }
@@ -66,11 +63,8 @@ public final class JdkResolver {
      * an optional {@code --jdks-dir} override. {@code jdksDirOverride} may
      * be {@code null} to use the IntelliJ JDK directory default.
      */
-    public static Optional<InstalledJdk> forProject(Path projectDir, Path jdksDirOverride)
-            throws IOException {
-        JdkRegistry registry = jdksDirOverride != null
-                ? new JdkRegistry(jdksDirOverride)
-                : new JdkRegistry();
+    public static Optional<InstalledJdk> forProject(Path projectDir, Path jdksDirOverride) throws IOException {
+        JdkRegistry registry = jdksDirOverride != null ? new JdkRegistry(jdksDirOverride) : new JdkRegistry();
         Optional<InstalledJdk> resolved = new JdkResolver(registry).resolve(projectDir);
         // Record the "this JDK was used by a project build / run / test"
         // signal. Best-effort; downstream wizards lean on this for

@@ -28,8 +28,7 @@ public final class PwshShell implements Shell {
     public String activateScript(String jkExe) {
         // pwsh templates use straight `'...'` for the exe path — escape any
         // embedded single quotes per PowerShell's `''` doubling rule.
-        return ShellResources.load("pwsh.ps1")
-                .replace("__JK_EXE__", jkExe.replace("'", "''"));
+        return ShellResources.load("pwsh.ps1").replace("__JK_EXE__", jkExe.replace("'", "''"));
     }
 
     @Override
@@ -42,8 +41,7 @@ public final class PwshShell implements Shell {
         // Cross-platform $PROFILE on Windows lives under Documents; on macOS
         // and Linux PowerShell uses ~/.config/powershell/. Pick the most
         // common Windows location since pwsh on Unix is rare for jk users.
-        return home.resolve("Documents").resolve("PowerShell")
-                .resolve("Microsoft.PowerShell_profile.ps1");
+        return home.resolve("Documents").resolve("PowerShell").resolve("Microsoft.PowerShell_profile.ps1");
     }
 
     @Override

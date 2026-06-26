@@ -41,8 +41,7 @@ public final class JavaCompileStrategies {
             }
         }
         if (preferred != null) {
-            throw new IllegalStateException(
-                    "no JavaCompileStrategy named `" + preferred + "` on the classpath");
+            throw new IllegalStateException("no JavaCompileStrategy named `" + preferred + "` on the classpath");
         }
         return fallback != null ? fallback : new SubprocessJavacStrategy();
     }

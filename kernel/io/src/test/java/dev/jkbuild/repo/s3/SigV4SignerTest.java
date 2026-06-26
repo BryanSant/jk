@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo.s3;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class SigV4SignerTest {
 
@@ -25,12 +23,19 @@ class SigV4SignerTest {
 
         String emptyPayloadHash = SigV4Signer.sha256Hex(new byte[0]);
         String auth = SigV4Signer.authorization(
-                "GET", URI.create("https://example.amazonaws.com/"),
-                headers, emptyPayloadHash, AK, SK, "us-east-1", "service", DATE);
+                "GET",
+                URI.create("https://example.amazonaws.com/"),
+                headers,
+                emptyPayloadHash,
+                AK,
+                SK,
+                "us-east-1",
+                "service",
+                DATE);
 
         // Authoritative expected value from the get-vanilla test case.
-        assertThat(auth).isEqualTo(
-                "AWS4-HMAC-SHA256 "
+        assertThat(auth)
+                .isEqualTo("AWS4-HMAC-SHA256 "
                         + "Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, "
                         + "SignedHeaders=host;x-amz-date, "
                         + "Signature=5fa00fa31553b73ebf1942676e86291e8372ff2a2260956d9b8aae1d763fbf31");

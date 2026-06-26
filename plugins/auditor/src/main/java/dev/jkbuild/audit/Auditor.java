@@ -3,7 +3,6 @@ package dev.jkbuild.audit;
 
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.util.JkThreads;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -29,7 +28,9 @@ public final class Auditor {
 
     private final OsvClient client;
 
-    public Auditor() { this(new OsvClient()); }
+    public Auditor() {
+        this(new OsvClient());
+    }
 
     public Auditor(OsvClient client) {
         this.client = Objects.requireNonNull(client, "client");
@@ -57,14 +58,17 @@ public final class Auditor {
         Map<String, CompletableFuture<OsvClient.Vulnerability>> futures = uniqueIds.stream()
                 .collect(Collectors.toMap(
                         id -> id,
-                        id -> CompletableFuture.supplyAsync(() -> {
-                            try {
-                                return client.fetchVuln(id);
-                            } catch (IOException | InterruptedException e) {
-                                if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-                                throw new RuntimeException(e);
-                            }
-                        }, JkThreads.io())));
+                        id -> CompletableFuture.supplyAsync(
+                                () -> {
+                                    try {
+                                        return client.fetchVuln(id);
+                                    } catch (IOException | InterruptedException e) {
+                                        if (e instanceof InterruptedException)
+                                            Thread.currentThread().interrupt();
+                                        throw new RuntimeException(e);
+                                    }
+                                },
+                                JkThreads.io())));
 
         // Assemble findings in the same package × vulnId order as before —
         // determinism is important for the supply-chain report sidecar.
@@ -75,9 +79,7 @@ public final class Auditor {
                 for (String vulnId : results.get(i).vulnIds()) {
                     OsvClient.Vulnerability v = futures.get(vulnId).get();
                     findings.add(new AuditReport.Finding(
-                            pkg.name(), pkg.version(),
-                            vulnId, v.summary(),
-                            AuditReport.Severity.parse(v.severity())));
+                            pkg.name(), pkg.version(), vulnId, v.summary(), AuditReport.Severity.parse(v.severity())));
                 }
             }
         } catch (ExecutionException e) {

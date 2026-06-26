@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class SpinnerTest {
 
@@ -54,7 +53,9 @@ class SpinnerTest {
         int idx = visible.indexOf(shortMsg);
         assertThat(idx).isGreaterThanOrEqualTo(0);
         long spaces = visible.substring(idx + shortMsg.length())
-                .chars().takeWhile(c -> c == ' ').count();
+                .chars()
+                .takeWhile(c -> c == ' ')
+                .count();
         assertThat(spaces).isEqualTo(expectedShrink);
     }
 
@@ -74,7 +75,7 @@ class SpinnerTest {
         buf.reset();
         s.close();
         String out = buf.toString(StandardCharsets.UTF_8);
-        assertThat(out).contains("\r\033[K");  // clear current line
+        assertThat(out).contains("\r\033[K"); // clear current line
         assertThat(out).contains("\033[?25h"); // show cursor
     }
 
@@ -88,11 +89,10 @@ class SpinnerTest {
             Thread.yield();
         }
         String out = buf.toString(StandardCharsets.UTF_8);
-        assertThat(out).contains("\033]9;4;3\007");  // indeterminate
-        assertThat(out).contains("\033]9;4;0\007");  // cleared on close
+        assertThat(out).contains("\033]9;4;3\007"); // indeterminate
+        assertThat(out).contains("\033]9;4;0\007"); // cleared on close
         // Indeterminate-set must precede clear.
-        assertThat(out.indexOf("\033]9;4;3\007"))
-                .isLessThan(out.indexOf("\033]9;4;0\007"));
+        assertThat(out.indexOf("\033]9;4;3\007")).isLessThan(out.indexOf("\033]9;4;0\007"));
     }
 
     @Test
@@ -117,8 +117,7 @@ class SpinnerTest {
         buf.reset();
         s.close();
         String out = buf.toString(StandardCharsets.UTF_8);
-        assertThat(out.indexOf("\033]9;4;0\007"))
-                .isLessThan(out.indexOf("\033[?25h"));
+        assertThat(out.indexOf("\033]9;4;0\007")).isLessThan(out.indexOf("\033[?25h"));
     }
 
     private static PrintStream stream(ByteArrayOutputStream buf) {

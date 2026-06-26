@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -33,7 +32,9 @@ public final class SdkmanProbe implements LocalToolProbe {
     }
 
     @Override
-    public String name() { return "sdkman"; }
+    public String name() {
+        return "sdkman";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {

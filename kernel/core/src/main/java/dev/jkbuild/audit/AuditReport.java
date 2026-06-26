@@ -2,7 +2,6 @@
 package dev.jkbuild.audit;
 
 import dev.jkbuild.lock.Lockfile;
-
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -17,7 +16,11 @@ import java.util.Objects;
 public final class AuditReport {
 
     public enum Severity {
-        CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN;
+        CRITICAL,
+        HIGH,
+        MEDIUM,
+        LOW,
+        UNKNOWN;
 
         public static Severity parse(String raw) {
             if (raw == null) return UNKNOWN;
@@ -34,12 +37,7 @@ public final class AuditReport {
         }
     }
 
-    public record Finding(
-            String module,
-            String version,
-            String vulnId,
-            String summary,
-            Severity severity) {
+    public record Finding(String module, String version, String vulnId, String summary, Severity severity) {
         public Finding {
             Objects.requireNonNull(module, "module");
             Objects.requireNonNull(version, "version");
@@ -90,8 +88,10 @@ public final class AuditReport {
             sb.append("No known vulnerabilities in the locked dependencies.\n");
             return sb.toString();
         }
-        sb.append(findings.size()).append(" finding")
-                .append(findings.size() == 1 ? "" : "s").append(" by severity: ");
+        sb.append(findings.size())
+                .append(" finding")
+                .append(findings.size() == 1 ? "" : "s")
+                .append(" by severity: ");
         Map<Severity, Integer> counts = bySeverity();
         boolean first = true;
         for (var entry : counts.entrySet()) {
@@ -102,10 +102,17 @@ public final class AuditReport {
         }
         sb.append("\n\n");
         for (Finding f : findings) {
-            sb.append("- **").append(f.severity()).append("** ")
-                    .append(f.module()).append(':').append(f.version())
-                    .append(" — [").append(f.vulnId()).append("](https://osv.dev/vulnerability/")
-                    .append(f.vulnId()).append(')');
+            sb.append("- **")
+                    .append(f.severity())
+                    .append("** ")
+                    .append(f.module())
+                    .append(':')
+                    .append(f.version())
+                    .append(" — [")
+                    .append(f.vulnId())
+                    .append("](https://osv.dev/vulnerability/")
+                    .append(f.vulnId())
+                    .append(')');
             if (!f.summary().isEmpty()) {
                 sb.append(" — ").append(f.summary());
             }

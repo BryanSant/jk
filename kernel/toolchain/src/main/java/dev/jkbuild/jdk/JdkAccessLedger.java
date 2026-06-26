@@ -2,7 +2,6 @@
 package dev.jkbuild.jdk;
 
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -78,8 +77,7 @@ public final class JdkAccessLedger {
         try {
             if (file.getParent() != null) Files.createDirectories(file.getParent());
             String line = System.currentTimeMillis() + "\t" + event + "\t" + identifier + "\n";
-            Files.writeString(file, line, StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND);
+            Files.writeString(file, line, StandardCharsets.UTF_8, StandardOpenOption.CREATE, StandardOpenOption.APPEND);
         } catch (IOException ignored) {
             // Best-effort.
         }
@@ -129,11 +127,19 @@ public final class JdkAccessLedger {
         for (Entry e : sorted.values()) {
             // Compaction loses fine-grained per-touch history (intentional);
             // the rollup is what wizards consume.
-            sb.append(e.millis).append('\t').append(e.event).append('\t').append(e.identifier).append('\n');
+            sb.append(e.millis)
+                    .append('\t')
+                    .append(e.event)
+                    .append('\t')
+                    .append(e.identifier)
+                    .append('\n');
         }
         Path tmp = file.resolveSibling(file.getFileName() + ".compact");
         Files.writeString(tmp, sb.toString(), StandardCharsets.UTF_8);
-        Files.move(tmp, file, java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+        Files.move(
+                tmp,
+                file,
+                java.nio.file.StandardCopyOption.ATOMIC_MOVE,
                 java.nio.file.StandardCopyOption.REPLACE_EXISTING);
         return Files.size(file);
     }

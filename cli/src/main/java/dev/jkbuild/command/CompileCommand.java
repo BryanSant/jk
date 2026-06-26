@@ -5,14 +5,13 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
-import dev.jkbuild.runtime.BuildPipeline;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.runtime.BuildPipeline;
+import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,12 +29,22 @@ import java.util.List;
  */
 public final class CompileCommand implements CliCommand {
 
-    @Override public String name() { return "compile"; }
-    @Override public String description() { return "Compile this project's source code"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "compile";
+    }
+
+    @Override
+    public String description() {
+        return "Compile this project's source code";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<name>", "Apply a build profile. Default: auto (ci on CI).", "--profile"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide());
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide());
     }
 
     @Override
@@ -55,16 +64,25 @@ public final class CompileCommand implements CliCommand {
         // compileOnly → lock → sync → compile. The pipeline resolves jk.lock on
         // first run and re-locks when jk.toml changed; no "run jk lock first".
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                dir, cache, buildFile, lockFile, lockFile.getParent(),
-                1, 0, profileName, null,
-                /* skipTests */ true, global.verbose, /* testOnly */ false, /* compileOnly */ true);
+                dir,
+                cache,
+                buildFile,
+                lockFile,
+                lockFile.getParent(),
+                1,
+                0,
+                profileName,
+                null,
+                /* skipTests */ true,
+                global.verbose, /* testOnly */
+                false, /* compileOnly */
+                true);
         Goal goal = BuildPipeline.coreBuilder(inputs).build();
 
-        ConsoleSpec spec = new ConsoleSpec("Compile",
-                r -> Theme.colorize("Compiled", Theme.active().focused()),
-                r -> "Compilation failed");
-        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
-                BuildCommand.buildTarget(buildFile, dir));
+        ConsoleSpec spec = new ConsoleSpec(
+                "Compile", r -> Theme.colorize("Compiled", Theme.active().focused()), r -> "Compilation failed");
+        GoalResult result = GoalConsole.runGoal(
+                goal, GoalConsole.modeFor(global), cache, spec, BuildCommand.buildTarget(buildFile, dir));
         return result.success() ? 0 : 1;
     }
 }

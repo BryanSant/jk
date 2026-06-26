@@ -2,7 +2,6 @@
 package dev.jkbuild.script;
 
 import dev.jkbuild.model.Dependency;
-
 import java.net.URI;
 import java.util.List;
 import java.util.Objects;
@@ -39,7 +38,6 @@ public record ScriptHeader(
     }
 
     public static ScriptHeader empty() {
-        return new ScriptHeader(List.of(), null, List.of(), List.of(),
-                List.of(), List.of(), List.of(), null);
+        return new ScriptHeader(List.of(), null, List.of(), List.of(), List.of(), List.of(), List.of(), null);
     }
 }

@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -17,9 +15,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class EffectivePomBuilderTest {
 
@@ -135,8 +134,8 @@ class EffectivePomBuilderTest {
                 """);
 
         EffectivePom pom = newBuilder(tempDir).build(Coordinate.of("org.example", "child", "1.0"));
-        assertThat(pom.dependencies()).singleElement()
-                .satisfies(d -> assertThat(d.version()).isEqualTo("2.18.2"));
+        assertThat(pom.dependencies()).singleElement().satisfies(d -> assertThat(d.version())
+                .isEqualTo("2.18.2"));
     }
 
     @Test
@@ -172,7 +171,7 @@ class EffectivePomBuilderTest {
         EffectivePom pom = newBuilder(tempDir).build(Coordinate.of("org.example", "child", "1.0"));
         assertThat(pom.dependencies()).singleElement().satisfies(d -> {
             assertThat(d.version()).isEqualTo("32.1.3-jre");
-            assertThat(d.scope()).isEqualTo("test");   // not null/compile
+            assertThat(d.scope()).isEqualTo("test"); // not null/compile
         });
     }
 
@@ -223,8 +222,7 @@ class EffectivePomBuilderTest {
         assertThat(pom.managedDependencies())
                 .extracting(Pom.Dep::module)
                 .containsExactlyInAnyOrder(
-                        "com.fasterxml.jackson.core:jackson-databind",
-                        "com.fasterxml.jackson.core:jackson-core");
+                        "com.fasterxml.jackson.core:jackson-databind", "com.fasterxml.jackson.core:jackson-core");
     }
 
     @Test
@@ -334,8 +332,7 @@ class EffectivePomBuilderTest {
                 </project>
                 """);
 
-        assertThatThrownBy(() -> newBuilder(tempDir)
-                .build(Coordinate.of("org.example", "a", "1.0")))
+        assertThatThrownBy(() -> newBuilder(tempDir).build(Coordinate.of("org.example", "a", "1.0")))
                 .isInstanceOf(PomParseException.class)
                 .hasMessageContaining("cycle");
     }
@@ -348,8 +345,8 @@ class EffectivePomBuilderTest {
     }
 
     private void registerPom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".pom";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".pom";
         poms.put(path, body.getBytes(StandardCharsets.UTF_8));
     }
 }

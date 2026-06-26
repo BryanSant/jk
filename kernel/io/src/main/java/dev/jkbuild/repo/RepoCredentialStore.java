@@ -3,7 +3,6 @@ package dev.jkbuild.repo;
 
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -54,12 +53,14 @@ public final class RepoCredentialStore {
             if (lines.isEmpty()) return Optional.empty();
             String scheme = lines.get(0).strip().toLowerCase(Locale.ROOT);
             return switch (scheme) {
-                case "bearer" -> lines.size() >= 2 && !lines.get(1).isBlank()
-                        ? Optional.of(new RepoCredential.Bearer(lines.get(1).strip()))
-                        : Optional.empty();
-                case "basic" -> lines.size() >= 3
-                        ? Optional.of(new RepoCredential.Basic(lines.get(1), lines.get(2)))
-                        : Optional.empty();
+                case "bearer" ->
+                    lines.size() >= 2 && !lines.get(1).isBlank()
+                            ? Optional.of(new RepoCredential.Bearer(lines.get(1).strip()))
+                            : Optional.empty();
+                case "basic" ->
+                    lines.size() >= 3
+                            ? Optional.of(new RepoCredential.Basic(lines.get(1), lines.get(2)))
+                            : Optional.empty();
                 default -> Optional.empty();
             };
         } catch (IOException e) {
@@ -68,18 +69,23 @@ public final class RepoCredentialStore {
     }
 
     public void write(String repoId, RepoCredential cred) {
-        String body = switch (cred) {
-            case RepoCredential.Bearer b -> "bearer\n" + b.token() + "\n";
-            case RepoCredential.Basic b -> "basic\n" + b.username() + "\n" + b.password() + "\n";
-            case RepoCredential.Anonymous ignored ->
-                    throw new IllegalArgumentException("refusing to store an anonymous credential");
-        };
+        String body =
+                switch (cred) {
+                    case RepoCredential.Bearer b -> "bearer\n" + b.token() + "\n";
+                    case RepoCredential.Basic b -> "basic\n" + b.username() + "\n" + b.password() + "\n";
+                    case RepoCredential.Anonymous ignored ->
+                        throw new IllegalArgumentException("refusing to store an anonymous credential");
+                };
         Path file = fileFor(repoId);
         try {
             Files.createDirectories(dir);
             trySetOwnerOnly(dir, "rwx------");
-            Files.writeString(file, body, StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING,
+            Files.writeString(
+                    file,
+                    body,
+                    StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE,
+                    StandardOpenOption.TRUNCATE_EXISTING,
                     StandardOpenOption.WRITE);
             trySetOwnerOnly(file, "rw-------");
         } catch (IOException e) {
@@ -109,9 +115,8 @@ public final class RepoCredentialStore {
     }
 
     private static void trySetOwnerOnly(Path path, String perms) {
-        PosixFileAttributeView view =
-                Files.getFileAttributeView(path, PosixFileAttributeView.class);
-        if (view == null) return;   // non-POSIX (Windows)
+        PosixFileAttributeView view = Files.getFileAttributeView(path, PosixFileAttributeView.class);
+        if (view == null) return; // non-POSIX (Windows)
         try {
             Files.setPosixFilePermissions(path, PosixFilePermissions.fromString(perms));
         } catch (IOException ignored) {

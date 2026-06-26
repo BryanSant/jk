@@ -1,6 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.Node;
@@ -8,25 +16,11 @@ import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 import org.xml.sax.SAXException;
 
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
 /**
  * Parsed contents of a Maven repository's {@code maven-metadata.xml}.
  * Only the bits the resolver currently needs: the version list.
  */
-public record MavenMetadata(
-        String groupId,
-        String artifactId,
-        List<String> versions,
-        String latest,
-        String release) {
+public record MavenMetadata(String groupId, String artifactId, List<String> versions, String latest, String release) {
 
     public MavenMetadata {
         Objects.requireNonNull(artifactId, "artifactId");
@@ -52,8 +46,7 @@ public record MavenMetadata(
         Element metadata = doc.getDocumentElement();
         if (metadata == null || !"metadata".equals(metadata.getNodeName())) {
             throw new IllegalArgumentException(
-                    "expected <metadata> root, got: "
-                            + (metadata == null ? "<none>" : metadata.getNodeName()));
+                    "expected <metadata> root, got: " + (metadata == null ? "<none>" : metadata.getNodeName()));
         }
         String groupId = childText(metadata, "groupId");
         String artifactId = childText(metadata, "artifactId");

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import dev.jkbuild.model.JkBuild;
+import org.junit.jupiter.api.Test;
 
 class FormatStylesTest {
 
@@ -37,8 +37,8 @@ class FormatStylesTest {
     void toml_per_language_overrides_default_and_alias() {
         var cfg = new JkBuild.FormatConfig("standard", "google", null);
         var r = FormatStyles.resolve(null, null, null, cfg);
-        assertThat(r.java()).isEqualTo("google");          // format.java wins over format.style alias
-        assertThat(r.kotlin()).isEqualTo("kotlinlang");    // falls back to alias-derived
+        assertThat(r.java()).isEqualTo("google"); // format.java wins over format.style alias
+        assertThat(r.kotlin()).isEqualTo("kotlinlang"); // falls back to alias-derived
     }
 
     @Test

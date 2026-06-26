@@ -1,19 +1,17 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CompileCommandTest {
 
@@ -31,8 +29,12 @@ class CompileCommandTest {
                 }
                 """);
 
-        int exit = run("check", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "check",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
     }
 
@@ -48,8 +50,12 @@ class CompileCommandTest {
         System.setOut(new PrintStream(stdout, true, StandardCharsets.UTF_8));
         int exit;
         try {
-            exit = run("check", "-C", tempDir.toString(),
-                    "--cache-dir", tempDir.resolve("cache").toString());
+            exit = run(
+                    "check",
+                    "-C",
+                    tempDir.toString(),
+                    "--cache-dir",
+                    tempDir.resolve("cache").toString());
         } finally {
             System.setOut(originalOut);
         }
@@ -67,8 +73,12 @@ class CompileCommandTest {
     void check_reports_no_sources_as_clean(@TempDir Path tempDir) throws Exception {
         scaffold(tempDir);
         // No src/ at all — empty project.
-        int exit = run("check", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "check",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
     }
 
@@ -80,7 +90,7 @@ class CompileCommandTest {
 
     private static void scaffold(Path dir) throws IOException {
         run("new", dir.toString());
-        ScaffoldTestSupport.writeEmptyLock(dir);   // jk new no longer locks; check needs a lock
+        ScaffoldTestSupport.writeEmptyLock(dir); // jk new no longer locks; check needs a lock
     }
 
     private static int run(String... args) {

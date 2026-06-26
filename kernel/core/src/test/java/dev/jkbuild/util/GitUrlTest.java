@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.util;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 class GitUrlTest {
 
@@ -17,14 +17,12 @@ class GitUrlTest {
 
     @Test
     void expand_passes_through_full_urls_untouched() {
-        assertThat(GitUrl.expand("https://example.com/foo/bar"))
-                .isEqualTo("https://example.com/foo/bar");
+        assertThat(GitUrl.expand("https://example.com/foo/bar")).isEqualTo("https://example.com/foo/bar");
     }
 
     @Test
     void canonicalize_strips_dot_git_and_default_port_and_trailing_slash() {
-        assertThat(GitUrl.canonicalize("https://GitHub.com:443/Foo/Bar.git/"))
-                .isEqualTo("https://github.com/Foo/Bar");
+        assertThat(GitUrl.canonicalize("https://GitHub.com:443/Foo/Bar.git/")).isEqualTo("https://github.com/Foo/Bar");
     }
 
     @Test
@@ -35,15 +33,13 @@ class GitUrlTest {
 
     @Test
     void canonicalize_scp_form_becomes_ssh_url() {
-        assertThat(GitUrl.canonicalize("git@github.com:foo/bar.git"))
-                .isEqualTo("ssh://git@github.com/foo/bar");
+        assertThat(GitUrl.canonicalize("git@github.com:foo/bar.git")).isEqualTo("ssh://git@github.com/foo/bar");
     }
 
     @Test
     void canonicalize_treats_shorthand_with_dot_git_identically() {
         // gh:foo/bar and gh:foo/bar.git collapse to the same cache key.
-        assertThat(GitUrl.canonicalize("gh:foo/bar"))
-                .isEqualTo(GitUrl.canonicalize("gh:foo/bar.git"));
+        assertThat(GitUrl.canonicalize("gh:foo/bar")).isEqualTo(GitUrl.canonicalize("gh:foo/bar.git"));
     }
 
     @Test

@@ -8,7 +8,6 @@ import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -44,7 +43,12 @@ public final class BuildGraph {
     /** Guards symlink loops {@code toRealPath} can't collapse and pathological graphs. */
     public static final int MAX_DEPTH = 512;
 
-    public enum Origin { ROOT, MODULE, PATH, BRANCH_GIT }
+    public enum Origin {
+        ROOT,
+        MODULE,
+        PATH,
+        BRANCH_GIT
+    }
 
     /**
      * One project to build. {@code dir} is canonical (real path) — the identity key.
@@ -52,7 +56,9 @@ public final class BuildGraph {
      */
     public record BuildUnit(Path dir, JkBuild manifest, String coord, Origin origin, GitSource gitSource) {
         /** Dependency units are compile-only; root/modules run their own tests. */
-        public boolean isDependency() { return origin == Origin.PATH || origin == Origin.BRANCH_GIT; }
+        public boolean isDependency() {
+            return origin == Origin.PATH || origin == Origin.BRANCH_GIT;
+        }
     }
 
     /**
@@ -61,7 +67,9 @@ public final class BuildGraph {
      * @param errors    cycle / depth-cap / coordinate-mismatch / missing-jk.toml
      */
     public record Result(List<BuildUnit> topoOrder, Map<Path, Set<Path>> edges, List<String> errors) {
-        public boolean hasErrors() { return !errors.isEmpty(); }
+        public boolean hasErrors() {
+            return !errors.isEmpty();
+        }
     }
 
     private BuildGraph() {}
@@ -71,8 +79,7 @@ public final class BuildGraph {
      * is the git checkout cache ({@code $JK_CACHE/git}) used to clone branch git
      * targets during discovery (the clone reveals a target's edges).
      */
-    public static Result resolve(Path entryDir, JkBuild entry, Path gitRoot)
-            throws IOException, InterruptedException {
+    public static Result resolve(Path entryDir, JkBuild entry, Path gitRoot) throws IOException, InterruptedException {
         Builder b = new Builder(gitRoot);
         try {
             if (entry.isWorkspaceRoot()) {
@@ -110,27 +117,27 @@ public final class BuildGraph {
      * {@link GitFetcher}, cached). Shared with {@code CompositeLocator} and
      * {@code jk idea}.
      */
-    public static Path targetDir(Path fromDir, Dependency dep, Path gitRoot)
-            throws IOException, InterruptedException {
+    public static Path targetDir(Path fromDir, Dependency dep, Path gitRoot) throws IOException, InterruptedException {
         if (dep.isPath()) {
             return fromDir.resolve(dep.pathSource()).normalize();
         }
         GitSource src = dep.gitSource();
         Path checkout = new GitFetcher(gitRoot).fetch(src).checkoutPath();
-        return (src.path() != null && !src.path().isBlank())
-                ? checkout.resolve(src.path()) : checkout;
+        return (src.path() != null && !src.path().isBlank()) ? checkout.resolve(src.path()) : checkout;
     }
 
     // ---------------------------------------------------------------------
 
     private static final class Builder {
         final Path gitRoot;
-        final Map<Path, BuildUnit> units = new LinkedHashMap<>();    // canonical dir → unit
-        final Map<Path, Set<Path>> edges = new LinkedHashMap<>();    // dir → prereq dirs
+        final Map<Path, BuildUnit> units = new LinkedHashMap<>(); // canonical dir → unit
+        final Map<Path, Set<Path>> edges = new LinkedHashMap<>(); // dir → prereq dirs
         final List<String> errors = new ArrayList<>();
-        final LinkedHashSet<Path> onStack = new LinkedHashSet<>();   // cycle detection
+        final LinkedHashSet<Path> onStack = new LinkedHashSet<>(); // cycle detection
 
-        Builder(Path gitRoot) { this.gitRoot = gitRoot; }
+        Builder(Path gitRoot) {
+            this.gitRoot = gitRoot;
+        }
 
         void addUnit(Path canonicalDir, JkBuild m, Origin origin, GitSource git) {
             String coord = m.project().group() + ":" + m.project().name();
@@ -139,12 +146,12 @@ public final class BuildGraph {
         }
 
         void addEdge(Path from, Path prereq) {
-            if (!from.equals(prereq)) edges.computeIfAbsent(from, k -> new LinkedHashSet<>()).add(prereq);
+            if (!from.equals(prereq))
+                edges.computeIfAbsent(from, k -> new LinkedHashSet<>()).add(prereq);
         }
 
         /** Add every module of a workspace as a unit, wire module-order edges, then descend composites. */
-        void addWorkspace(Path wsRoot, JkBuild root, Origin moduleOrigin)
-                throws IOException, InterruptedException {
+        void addWorkspace(Path wsRoot, JkBuild root, Origin moduleOrigin) throws IOException, InterruptedException {
             Map<Path, JkBuild> modules = WorkspaceLoader.loadModules(wsRoot, root);
             // Index by coord + bare name for sibling/order-after edge resolution.
             Map<String, Path> dirByCoord = new LinkedHashMap<>();
@@ -152,7 +159,10 @@ public final class BuildGraph {
             for (var e : modules.entrySet()) {
                 Path c = canonical(e.getKey());
                 addUnit(c, e.getValue(), moduleOrigin, null);
-                dirByCoord.put(e.getValue().project().group() + ":" + e.getValue().project().name(), c);
+                dirByCoord.put(
+                        e.getValue().project().group() + ":"
+                                + e.getValue().project().name(),
+                        c);
                 dirByName.put(e.getValue().project().name(), c);
             }
             for (var e : modules.entrySet()) {
@@ -164,8 +174,8 @@ public final class BuildGraph {
         }
 
         /** Sibling-dep + {@code [build].order-after} prereq edges (lifted from BuildCommand.topoSortModules). */
-        private void addModuleEdges(Path moduleDir, JkBuild m,
-                                    Map<String, Path> dirByCoord, Map<String, Path> dirByName) {
+        private void addModuleEdges(
+                Path moduleDir, JkBuild m, Map<String, Path> dirByCoord, Map<String, Path> dirByName) {
             for (Scope scope : Scope.values()) {
                 for (Dependency d : m.dependencies().of(scope)) {
                     String module = d.module();
@@ -184,8 +194,7 @@ public final class BuildGraph {
         }
 
         /** Discover the composite (path / branch-git) deps of a unit; recurse depth-first. */
-        void discoverComposites(Path fromDir, JkBuild from, int depth)
-                throws IOException, InterruptedException {
+        void discoverComposites(Path fromDir, JkBuild from, int depth) throws IOException, InterruptedException {
             if (depth > MAX_DEPTH) {
                 errors.add("composite dependency chain exceeds " + MAX_DEPTH
                         + " levels (likely a cycle through symlinks)");
@@ -197,7 +206,7 @@ public final class BuildGraph {
                 if (targetDir == null) continue; // error recorded
                 Path key = canonical(targetDir);
                 addEdge(fromCanon, key);
-                if (units.containsKey(key)) continue;              // memoized
+                if (units.containsKey(key)) continue; // memoized
                 if (onStack.contains(key)) {
                     errors.add("composite dependency cycle through " + targetDir);
                     continue;
@@ -211,8 +220,8 @@ public final class BuildGraph {
                 try {
                     target = JkBuildParser.parse(Files.readString(toml));
                 } catch (RuntimeException e) {
-                    errors.add("composite dependency `" + dep.module() + "` failed to parse "
-                            + toml + ": " + e.getMessage());
+                    errors.add("composite dependency `" + dep.module() + "` failed to parse " + toml + ": "
+                            + e.getMessage());
                     continue;
                 }
                 String coord = target.project().group() + ":" + target.project().name();
@@ -253,8 +262,8 @@ public final class BuildGraph {
                 }
             }
             if (sorted.size() != units.size()) {
-                errors.add("composite/workspace build graph has a cycle among "
-                        + (units.size() - sorted.size()) + " unit(s)");
+                errors.add("composite/workspace build graph has a cycle among " + (units.size() - sorted.size())
+                        + " unit(s)");
                 return List.of();
             }
             return sorted;

@@ -2,7 +2,6 @@
 package dev.jkbuild.resolver;
 
 import dev.jkbuild.model.Dependency;
-
 import java.io.IOException;
 import java.util.List;
 

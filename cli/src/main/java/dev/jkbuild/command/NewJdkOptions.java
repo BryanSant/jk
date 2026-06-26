@@ -3,7 +3,6 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkRegistry;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -54,7 +53,8 @@ public final class NewJdkOptions {
             for (var jdk : registry.list()) {
                 var id = jdk.identifier();
                 var home = canonicalize(jdk.home());
-                int major = parseMajorFromIdentifier(id).orElseGet(() -> readReleaseMajor(jdk.home()).orElse(0));
+                int major = parseMajorFromIdentifier(id)
+                        .orElseGet(() -> readReleaseMajor(jdk.home()).orElse(0));
                 byCanon.putIfAbsent(home, new Option(id, labelFor(id, major), home, major, "jk"));
             }
         } catch (IOException ignored) {
@@ -65,7 +65,8 @@ public final class NewJdkOptions {
         for (var hit : discovered) {
             var home = canonicalize(hit.home());
             if (byCanon.containsKey(home)) continue;
-            int major = parseMajor(hit.version()).orElseGet(() -> readReleaseMajor(hit.home()).orElse(0));
+            int major = parseMajor(hit.version())
+                    .orElseGet(() -> readReleaseMajor(hit.home()).orElse(0));
             var id = idFor(hit, major);
             byCanon.putIfAbsent(home, new Option(id, labelFor(hit, major), home, major, hit.source()));
         }
@@ -73,8 +74,8 @@ public final class NewJdkOptions {
         // Highest major first; within a major, the jk-managed install sorts
         // ahead of external sources via a "jk < anything" comparator.
         return byCanon.values().stream()
-                .sorted(Comparator
-                        .comparingInt(Option::major).reversed()
+                .sorted(Comparator.comparingInt(Option::major)
+                        .reversed()
                         .thenComparing(o -> "jk".equals(o.source()) ? 0 : 1)
                         .thenComparing(Option::label))
                 .toList();
@@ -105,7 +106,8 @@ public final class NewJdkOptions {
         var clean = new StringBuilder();
         for (int i = 0; i < first.length(); i++) {
             char c = first.charAt(i);
-            if (Character.isDigit(c)) clean.append(c); else break;
+            if (Character.isDigit(c)) clean.append(c);
+            else break;
         }
         if (clean.length() == 0) return java.util.Optional.empty();
         int n = Integer.parseInt(clean.toString());
@@ -118,7 +120,8 @@ public final class NewJdkOptions {
         var sb2 = new StringBuilder();
         for (int i = 0; i < second.length(); i++) {
             char c = second.charAt(i);
-            if (Character.isDigit(c)) sb2.append(c); else break;
+            if (Character.isDigit(c)) sb2.append(c);
+            else break;
         }
         return sb2.length() == 0 ? java.util.Optional.of(1) : java.util.Optional.of(Integer.parseInt(sb2.toString()));
     }

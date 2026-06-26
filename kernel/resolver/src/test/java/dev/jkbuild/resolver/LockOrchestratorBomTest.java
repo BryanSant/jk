@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
@@ -15,11 +18,6 @@ import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -29,9 +27,10 @@ import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * BOM-driven resolution end-to-end through {@link LockOrchestrator}:
@@ -79,15 +78,23 @@ class LockOrchestratorBomTest {
     }
 
     private void serveLeaf(String group, String artifact, String version) {
-        serveMetadata("/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
-                group, artifact, List.of(version));
-        servePom(group, artifact, version,
-                "<project><groupId>" + group + "</groupId><artifactId>" + artifact
-                        + "</artifactId><version>" + version + "</version></project>");
+        serveMetadata(
+                "/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
+                group,
+                artifact,
+                List.of(version));
+        servePom(
+                group,
+                artifact,
+                version,
+                "<project><groupId>" + group + "</groupId><artifactId>" + artifact + "</artifactId><version>" + version
+                        + "</version></project>");
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void conflicting_platform_boms_surface_diagnostic(@TempDir Path tempDir) throws Exception {
@@ -161,8 +168,7 @@ class LockOrchestratorBomTest {
                 </project>
                 """);
         // widget metadata advertises higher versions, but BOM pins 1.0.
-        serveMetadata("/com/foo/widget/maven-metadata.xml",
-                "com.foo", "widget", List.of("1.0", "2.0"));
+        serveMetadata("/com/foo/widget/maven-metadata.xml", "com.foo", "widget", List.of("1.0", "2.0"));
         servePom("com.foo", "widget", "1.0", """
                 <project>
                   <groupId>com.foo</groupId>
@@ -171,22 +177,20 @@ class LockOrchestratorBomTest {
                 </project>
                 """);
 
-        JkBuild project = jkBuildWithDeps(
-                Map.of(
-                        Scope.PLATFORM, List.of(
-                                Dependency.of("the-bom", "org.example:the-bom",
-                                        VersionSelector.parse("=1.0"))),
-                        Scope.MAIN, List.of(
+        JkBuild project = jkBuildWithDeps(Map.of(
+                Scope.PLATFORM, List.of(Dependency.of("the-bom", "org.example:the-bom", VersionSelector.parse("=1.0"))),
+                Scope.MAIN,
+                        List.of(
                                 // No version on the main dep — let the BOM pin it.
-                                new Dependency("com.foo:widget",
-                                        VersionSelector.parseFloating("1.0")))));
+                                new Dependency("com.foo:widget", VersionSelector.parseFloating("1.0")))));
 
         LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
         Lockfile lock = orchestrator.lock(project, "test");
 
         Lockfile.Artifact widget = lock.artifacts().stream()
                 .filter(p -> p.name().equals("com.foo:widget"))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         assertThat(widget.version()).isEqualTo("1.0");
         assertThat(widget.pinnedBy()).isEqualTo("org.example:the-bom:1.0");
     }
@@ -202,16 +206,16 @@ class LockOrchestratorBomTest {
                 </project>
                 """);
 
-        JkBuild project = jkBuildWithDeps(Map.of(
-                Scope.PROCESSOR, List.of(
-                        new Dependency("com.foo:proc", VersionSelector.parseFloating("1.0")))));
+        JkBuild project = jkBuildWithDeps(
+                Map.of(Scope.PROCESSOR, List.of(new Dependency("com.foo:proc", VersionSelector.parseFloating("1.0")))));
 
         LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
         Lockfile lock = orchestrator.lock(project, "test");
 
         Lockfile.Artifact proc = lock.artifacts().stream()
                 .filter(p -> p.name().equals("com.foo:proc"))
-                .findFirst().orElseThrow();   // would be absent if PROCESSOR were dropped in resolution
+                .findFirst()
+                .orElseThrow(); // would be absent if PROCESSOR were dropped in resolution
         assertThat(proc.scopes()).contains(Scope.PROCESSOR);
     }
 
@@ -225,13 +229,11 @@ class LockOrchestratorBomTest {
         // `extra` is optional; the `with-extra` feature (a default) names it.
         Dependency core = new Dependency("com.foo:core", VersionSelector.parseFloating("1.0"));
         Dependency extra = new Dependency("com.foo:extra", VersionSelector.parseFloating("1.0"))
-                .withOptional(true);   // library = "extra"
+                .withOptional(true); // library = "extra"
         Features features = new Features(
-                Map.of("with-extra", new Feature("with-extra", List.of("extra"), List.of())),
-                List.of("with-extra"));
+                Map.of("with-extra", new Feature("with-extra", List.of("extra"), List.of())), List.of("with-extra"));
         JkBuild project = jkBuildWithFeatures(
-                new JkBuild.Dependencies(new EnumMap<>(Map.of(Scope.MAIN, List.of(core, extra)))),
-                features);
+                new JkBuild.Dependencies(new EnumMap<>(Map.of(Scope.MAIN, List.of(core, extra)))), features);
 
         LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
 
@@ -249,12 +251,9 @@ class LockOrchestratorBomTest {
         // `core` is a normal (non-optional) dep; a feature referencing it is a
         // config error — most likely a forgotten `optional = true`.
         Dependency core = new Dependency("com.foo:core", VersionSelector.parseFloating("1.0"));
-        Features features = new Features(
-                Map.of("x", new Feature("x", List.of("core"), List.of())),
-                List.of("x"));
+        Features features = new Features(Map.of("x", new Feature("x", List.of("core"), List.of())), List.of("x"));
         JkBuild project = jkBuildWithFeatures(
-                new JkBuild.Dependencies(new EnumMap<>(Map.of(Scope.MAIN, List.of(core)))),
-                features);
+                new JkBuild.Dependencies(new EnumMap<>(Map.of(Scope.MAIN, List.of(core)))), features);
 
         LockOrchestrator orchestrator = new LockOrchestrator(repoGroup(tempDir));
         assertThatThrownBy(() -> orchestrator.lock(project, "test"))
@@ -265,7 +264,10 @@ class LockOrchestratorBomTest {
     private static JkBuild jkBuildWithFeatures(JkBuild.Dependencies deps, Features features) {
         return new JkBuild(
                 new JkBuild.Project("com.example", "test", "0.1.0", 25),
-                deps, List.<RepositorySpec>of(), Profiles.empty(), features);
+                deps,
+                List.<RepositorySpec>of(),
+                Profiles.empty(),
+                features);
     }
 
     private static List<String> modules(Lockfile lock) {
@@ -280,29 +282,37 @@ class LockOrchestratorBomTest {
 
         Lockfile.Artifact jupiter = lock.artifacts().stream()
                 .filter(p -> p.name().equals("org.junit.jupiter:junit-jupiter"))
-                .findFirst().orElseThrow();
-        assertThat(jupiter.version()).isEqualTo("6.1.0");        // latest stable the repo offers
+                .findFirst()
+                .orElseThrow();
+        assertThat(jupiter.version()).isEqualTo("6.1.0"); // latest stable the repo offers
         assertThat(jupiter.scopes()).contains(Scope.TEST);
-        assertThat(lock.artifacts()).anyMatch(p ->
-                p.name().equals("org.junit.platform:junit-platform-launcher"));
+        assertThat(lock.artifacts()).anyMatch(p -> p.name().equals("org.junit.platform:junit-platform-launcher"));
     }
 
     @Test
     void user_declared_junit_version_wins_over_default(@TempDir Path tempDir) throws Exception {
         // The user pins an older JUnit; the default must not override it.
-        serveMetadata("/org/junit/jupiter/junit-jupiter/maven-metadata.xml",
-                "org.junit.jupiter", "junit-jupiter", List.of("5.10.0", "6.1.0"));
-        servePom("org.junit.jupiter", "junit-jupiter", "5.10.0",
+        serveMetadata(
+                "/org/junit/jupiter/junit-jupiter/maven-metadata.xml",
+                "org.junit.jupiter",
+                "junit-jupiter",
+                List.of("5.10.0", "6.1.0"));
+        servePom(
+                "org.junit.jupiter",
+                "junit-jupiter",
+                "5.10.0",
                 "<project><groupId>org.junit.jupiter</groupId>"
                         + "<artifactId>junit-jupiter</artifactId><version>5.10.0</version></project>");
 
-        JkBuild project = jkBuildWithDeps(Map.of(Scope.TEST, List.of(
-                new Dependency("org.junit.jupiter:junit-jupiter", VersionSelector.parse("=5.10.0")))));
+        JkBuild project = jkBuildWithDeps(Map.of(
+                Scope.TEST,
+                List.of(new Dependency("org.junit.jupiter:junit-jupiter", VersionSelector.parse("=5.10.0")))));
         Lockfile lock = new LockOrchestrator(repoGroup(tempDir)).lock(project, "test");
 
         Lockfile.Artifact jupiter = lock.artifacts().stream()
                 .filter(p -> p.name().equals("org.junit.jupiter:junit-jupiter"))
-                .findFirst().orElseThrow();
+                .findFirst()
+                .orElseThrow();
         assertThat(jupiter.version()).isEqualTo("5.10.0");
     }
 
@@ -324,9 +334,7 @@ class LockOrchestratorBomTest {
         EnumMap<Scope, List<Dependency>> copy = new EnumMap<>(Scope.class);
         copy.putAll(byScope);
         JkBuild.Dependencies deps = new JkBuild.Dependencies(copy);
-        return new JkBuild(
-                new JkBuild.Project("com.example", "test", "0.1.0", 25),
-                deps);
+        return new JkBuild(new JkBuild.Project("com.example", "test", "0.1.0", 25), deps);
     }
 
     private void servePath(String path, String body) {
@@ -334,16 +342,20 @@ class LockOrchestratorBomTest {
     }
 
     private void servePom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".pom";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".pom";
         servePath(path, body);
     }
 
     private void serveMetadata(String path, String group, String artifact, List<String> versions) {
         StringBuilder body = new StringBuilder();
-        body.append("<metadata><groupId>").append(group).append("</groupId>")
-            .append("<artifactId>").append(artifact).append("</artifactId>")
-            .append("<versioning><versions>");
+        body.append("<metadata><groupId>")
+                .append(group)
+                .append("</groupId>")
+                .append("<artifactId>")
+                .append(artifact)
+                .append("</artifactId>")
+                .append("<versioning><versions>");
         for (String v : versions) body.append("<version>").append(v).append("</version>");
         body.append("</versions></versioning></metadata>");
         servePath(path, body.toString());

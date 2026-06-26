@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Scope;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class SyncManifestTest {
 
@@ -19,11 +18,28 @@ class SyncManifestTest {
     void write_then_read_roundtrips(@TempDir Path tempDir) throws IOException {
         Path lockFile = tempDir.resolve("jk.lock");
         Files.writeString(lockFile, "stub");
-        Lockfile lock = new Lockfile(1, "jk test", "pubgrub-v1", null, List.of(
-                new Lockfile.Artifact("com.foo:bar", "1.0", "central+https://...",
-                        "sha256:aaaaaa", null, List.of(Scope.MAIN), List.of()),
-                new Lockfile.Artifact("com.foo:baz", "2.0", "central+https://...",
-                        "sha256:bbbbbb", null, List.of(Scope.MAIN), List.of())));
+        Lockfile lock = new Lockfile(
+                1,
+                "jk test",
+                "pubgrub-v1",
+                null,
+                List.of(
+                        new Lockfile.Artifact(
+                                "com.foo:bar",
+                                "1.0",
+                                "central+https://...",
+                                "sha256:aaaaaa",
+                                null,
+                                List.of(Scope.MAIN),
+                                List.of()),
+                        new Lockfile.Artifact(
+                                "com.foo:baz",
+                                "2.0",
+                                "central+https://...",
+                                "sha256:bbbbbb",
+                                null,
+                                List.of(Scope.MAIN),
+                                List.of())));
 
         Path actionRoot = tempDir.resolve("actions");
         Path manifest = SyncManifest.write(actionRoot, lockFile, lock);
@@ -41,12 +57,29 @@ class SyncManifestTest {
     void packages_without_checksum_are_skipped(@TempDir Path tempDir) throws IOException {
         Path lockFile = tempDir.resolve("jk.lock");
         Files.writeString(lockFile, "stub");
-        Lockfile lock = new Lockfile(1, "jk test", "pubgrub-v1", null, List.of(
-                new Lockfile.Artifact("com.foo:bar", "1.0", "central+https://...",
-                        "sha256:aaaaaa", null, List.of(Scope.MAIN), List.of()),
-                // POM-only / path-style — no checksum to root.
-                new Lockfile.Artifact("com.foo:nope", "2.0", "central+https://...",
-                        null, null, List.of(Scope.MAIN), List.of())));
+        Lockfile lock = new Lockfile(
+                1,
+                "jk test",
+                "pubgrub-v1",
+                null,
+                List.of(
+                        new Lockfile.Artifact(
+                                "com.foo:bar",
+                                "1.0",
+                                "central+https://...",
+                                "sha256:aaaaaa",
+                                null,
+                                List.of(Scope.MAIN),
+                                List.of()),
+                        // POM-only / path-style — no checksum to root.
+                        new Lockfile.Artifact(
+                                "com.foo:nope",
+                                "2.0",
+                                "central+https://...",
+                                null,
+                                null,
+                                List.of(Scope.MAIN),
+                                List.of())));
 
         Path actionRoot = tempDir.resolve("actions");
         Path manifest = SyncManifest.write(actionRoot, lockFile, lock);
@@ -62,7 +95,6 @@ class SyncManifestTest {
         Files.createDirectories(b.getParent());
         Files.writeString(a, "stub");
         Files.writeString(b, "stub");
-        assertThat(Sweep.projectFingerprint(a))
-                .isNotEqualTo(Sweep.projectFingerprint(b));
+        assertThat(Sweep.projectFingerprint(a)).isNotEqualTo(Sweep.projectFingerprint(b));
     }
 }

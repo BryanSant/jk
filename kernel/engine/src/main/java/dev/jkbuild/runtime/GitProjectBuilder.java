@@ -4,7 +4,6 @@ package dev.jkbuild.runtime;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.repo.RepoGroup;
-
 import java.io.IOException;
 import java.nio.file.Path;
 
@@ -36,9 +35,16 @@ public final class GitProjectBuilder {
      * own dependencies through {@code repos} (no network when it declares none);
      * compiles with {@code javaHome}.
      */
-    static Built build(Path projectDir, JkBuild project,
-                       String group, String artifact, String version,
-                       Path javaHome, Cas cas, RepoGroup repos, String jkVersion)
+    static Built build(
+            Path projectDir,
+            JkBuild project,
+            String group,
+            String artifact,
+            String version,
+            Path javaHome,
+            Cas cas,
+            RepoGroup repos,
+            String jkVersion)
             throws IOException, InterruptedException {
         LocalProjectBuilder.Built b = LocalProjectBuilder.build(
                 projectDir, project, group, artifact, version, javaHome, cas, repos, jkVersion);

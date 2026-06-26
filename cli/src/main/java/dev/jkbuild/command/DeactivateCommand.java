@@ -4,7 +4,6 @@ package dev.jkbuild.command;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
 import java.util.List;
 
 /**
@@ -27,8 +26,7 @@ public final class DeactivateCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.value("<shell>",
-                "Shell to emit for. Defaults to $__JK_SHELL.", "-s", "--shell"));
+        return List.of(Opt.value("<shell>", "Shell to emit for. Defaults to $__JK_SHELL.", "-s", "--shell"));
     }
 
     @Override

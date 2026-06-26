@@ -2,7 +2,6 @@
 package dev.jkbuild.forge;
 
 import dev.jkbuild.http.Http;
-
 import java.net.URI;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -53,9 +52,8 @@ public interface ForgeIdentity {
             String cached = cache.get(cacheKey);
             if (cached != null) return Optional.of(cached);
             try {
-                HttpResponse<byte[]> resp = http.get(userEndpoint, Map.of(
-                        "Authorization", "Bearer " + token,
-                        "Accept", "application/json"));
+                HttpResponse<byte[]> resp = http.get(
+                        userEndpoint, Map.of("Authorization", "Bearer " + token, "Accept", "application/json"));
                 if (resp.statusCode() / 100 != 2) return Optional.empty();
                 String login = readJsonStr(new String(resp.body(), StandardCharsets.UTF_8), loginField);
                 if (login == null || login.isBlank()) return Optional.empty();
@@ -81,10 +79,15 @@ public interface ForgeIdentity {
                 char c = json.charAt(i);
                 if (c == '\\' && i + 1 < json.length()) {
                     char n = json.charAt(++i);
-                    if (n == '"') sb.append('"'); else if (n == '\\') sb.append('\\');
-                    else { sb.append('\\'); sb.append(n); }
-                } else if (c == '"') { break; }
-                else sb.append(c);
+                    if (n == '"') sb.append('"');
+                    else if (n == '\\') sb.append('\\');
+                    else {
+                        sb.append('\\');
+                        sb.append(n);
+                    }
+                } else if (c == '"') {
+                    break;
+                } else sb.append(c);
             }
             return sb.toString();
         }

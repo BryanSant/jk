@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ClasspathFingerprintTest {
 
@@ -30,9 +29,9 @@ class ClasspathFingerprintTest {
     void local_non_archive_file_is_keyed_by_raw_content(@TempDir Path dir) throws IOException {
         Path f = write(dir.resolve("target/blob.bin"), "V1");
         String v1 = ClasspathFingerprint.entry(f);
-        Files.writeString(f, "V1");                          // same bytes
+        Files.writeString(f, "V1"); // same bytes
         assertThat(ClasspathFingerprint.entry(f)).isEqualTo(v1);
-        Files.writeString(f, "V2");                          // changed bytes
+        Files.writeString(f, "V2"); // changed bytes
         assertThat(ClasspathFingerprint.entry(f)).isNotEqualTo(v1);
     }
 
@@ -41,7 +40,7 @@ class ClasspathFingerprintTest {
         Path classes = Files.createDirectories(dir.resolve("classes"));
         write(classes.resolve("a/A.class"), "AAAA");
         String before = ClasspathFingerprint.entry(classes);
-        write(classes.resolve("a/B.class"), "BBBB");        // a new class file
+        write(classes.resolve("a/B.class"), "BBBB"); // a new class file
         assertThat(ClasspathFingerprint.entry(classes)).isNotEqualTo(before);
     }
 
@@ -49,13 +48,13 @@ class ClasspathFingerprintTest {
     void jar_is_keyed_by_logical_content_not_packaging(@TempDir Path dir) throws IOException {
         // jk re-jars the same classes in a different order with fresh timestamps
         // every build; the fingerprint must see through that to the contents.
-        Path j1 = writeJar(dir.resolve("a.jar"), new String[][]{{"A.class", "AA"}, {"B.class", "BB"}}, 1000);
-        Path j2 = writeJar(dir.resolve("b.jar"), new String[][]{{"B.class", "BB"}, {"A.class", "AA"}}, 9_999_000);
+        Path j1 = writeJar(dir.resolve("a.jar"), new String[][] {{"A.class", "AA"}, {"B.class", "BB"}}, 1000);
+        Path j2 = writeJar(dir.resolve("b.jar"), new String[][] {{"B.class", "BB"}, {"A.class", "AA"}}, 9_999_000);
         assertThat(ClasspathFingerprint.entry(j1))
                 .as("same entries, different order + timestamps → same fingerprint")
                 .isEqualTo(ClasspathFingerprint.entry(j2));
 
-        Path j3 = writeJar(dir.resolve("c.jar"), new String[][]{{"A.class", "AA"}, {"B.class", "CHANGED"}}, 1000);
+        Path j3 = writeJar(dir.resolve("c.jar"), new String[][] {{"A.class", "AA"}, {"B.class", "CHANGED"}}, 1000);
         assertThat(ClasspathFingerprint.entry(j3))
                 .as("an entry's content change → different fingerprint")
                 .isNotEqualTo(ClasspathFingerprint.entry(j1));

@@ -42,15 +42,11 @@ public record Dependency(
         Objects.requireNonNull(module, "module");
         Objects.requireNonNull(version, "version");
         if (!module.contains(":") || module.indexOf(':') != module.lastIndexOf(':')) {
-            throw new IllegalArgumentException(
-                    "dependency module must be 'group:artifact' (got: " + module + ")");
+            throw new IllegalArgumentException("dependency module must be 'group:artifact' (got: " + module + ")");
         }
-        int sourceBits = (gitSource != null ? 1 : 0)
-                + (pathSource != null ? 1 : 0)
-                + (sha256 != null ? 1 : 0);
+        int sourceBits = (gitSource != null ? 1 : 0) + (pathSource != null ? 1 : 0) + (sha256 != null ? 1 : 0);
         if (sourceBits > 1) {
-            throw new IllegalArgumentException(
-                    "dependency cannot set more than one of git, path, or sha256 sources");
+            throw new IllegalArgumentException("dependency cannot set more than one of git, path, or sha256 sources");
         }
         // Derive pinned from the resolution mode, regardless of the
         // value the caller passed. Source-backed deps are always pinned;
@@ -63,8 +59,14 @@ public record Dependency(
      * existing factory and caller routes through here, defaulting to a
      * non-optional (always-resolved) dependency.
      */
-    public Dependency(String library, String module, VersionSelector version,
-                      GitSource gitSource, String pathSource, String sha256, boolean pinned) {
+    public Dependency(
+            String library,
+            String module,
+            VersionSelector version,
+            GitSource gitSource,
+            String pathSource,
+            String sha256,
+            boolean pinned) {
         this(library, module, version, gitSource, pathSource, sha256, pinned, false);
     }
 
@@ -94,28 +96,24 @@ public record Dependency(
 
     /** Git-sourced constructor; version is a synthetic marker. */
     public static Dependency git(String module, GitSource source) {
-        return new Dependency(artifactOf(module), module,
-                VersionSelector.parse("=git"), source, null, null, false);
+        return new Dependency(artifactOf(module), module, VersionSelector.parse("=git"), source, null, null, false);
     }
 
     /** Git-sourced with explicit library handle. */
     public static Dependency git(String library, String module, GitSource source) {
-        return new Dependency(library, module, VersionSelector.parse("=git"),
-                source, null, null, false);
+        return new Dependency(library, module, VersionSelector.parse("=git"), source, null, null, false);
     }
 
     /** Local-path sourced; version is a synthetic marker. */
     public static Dependency path(String library, String module, String path) {
         Objects.requireNonNull(path, "path");
-        return new Dependency(library, module, VersionSelector.parse("=path"),
-                null, path, null, false);
+        return new Dependency(library, module, VersionSelector.parse("=path"), null, path, null, false);
     }
 
     /** CAS file-sourced; pinned to an exact version. */
     public static Dependency file(String library, String module, String version, String sha256) {
         Objects.requireNonNull(sha256, "sha256");
-        return new Dependency(library, module, VersionSelector.parse("=" + version),
-                null, null, sha256, false);
+        return new Dependency(library, module, VersionSelector.parse("=" + version), null, null, sha256, false);
     }
 
     public boolean isGit() {
@@ -146,10 +144,8 @@ public record Dependency(
         return module.substring(idx + 1);
     }
 
-    private static boolean derivePinned(VersionSelector version,
-                                        GitSource gitSource,
-                                        String pathSource,
-                                        String sha256) {
+    private static boolean derivePinned(
+            VersionSelector version, GitSource gitSource, String pathSource, String sha256) {
         if (gitSource != null || pathSource != null || sha256 != null) return true;
         return version instanceof VersionSelector.Exact;
     }

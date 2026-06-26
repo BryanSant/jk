@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Duration;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * {@link ConsoleSpec#fmtDuration} is the one duration formatter in the CLI:
@@ -49,10 +48,9 @@ class ConsoleSpecTest {
         assertThat(ConsoleSpec.fmtDuration(Duration.ofSeconds(86_400))).isEqualTo("1d 0h 0m 0s");
         // 1d 12h 13m 5s
         assertThat(ConsoleSpec.fmtDuration(
-                Duration.ofDays(1).plusHours(12).plusMinutes(13).plusSeconds(5)))
+                        Duration.ofDays(1).plusHours(12).plusMinutes(13).plusSeconds(5)))
                 .isEqualTo("1d 12h 13m 5s");
-        assertThat(ConsoleSpec.fmtDuration(Duration.ofDays(10).plusSeconds(7)))
-                .isEqualTo("10d 0h 0m 7s");
+        assertThat(ConsoleSpec.fmtDuration(Duration.ofDays(10).plusSeconds(7))).isEqualTo("10d 0h 0m 7s");
     }
 
     @Test

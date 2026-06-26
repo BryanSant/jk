@@ -7,7 +7,6 @@ import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ForgeIdentity;
 import dev.jkbuild.forge.ForgeKind;
 import dev.jkbuild.forge.ResolvedToken;
-
 import java.net.URI;
 import java.util.Locale;
 import java.util.Optional;
@@ -41,13 +40,15 @@ public final class RepoCredentialResolver {
     private final ForgeIdentity identity;
 
     public RepoCredentialResolver() {
-        this(System::getenv, MavenSettings.load(), new RepoCredentialStore(),
-                new ForgeAuth(), ForgeIdentity.real());
+        this(System::getenv, MavenSettings.load(), new RepoCredentialStore(), new ForgeAuth(), ForgeIdentity.real());
     }
 
-    public RepoCredentialResolver(Function<String, String> env, MavenSettings settings,
-                                  RepoCredentialStore store, ForgeAuth forgeAuth,
-                                  ForgeIdentity identity) {
+    public RepoCredentialResolver(
+            Function<String, String> env,
+            MavenSettings settings,
+            RepoCredentialStore store,
+            ForgeAuth forgeAuth,
+            ForgeIdentity identity) {
         this.env = env;
         this.settings = settings;
         this.store = store;
@@ -81,8 +82,7 @@ public final class RepoCredentialResolver {
             // 4. ~/.m2/settings.xml
             Optional<RepoCredential> fromSettings = settings.server(repoId)
                     .map(s -> new RepoCredential.Basic(
-                            s.username() == null ? "" : s.username(),
-                            s.password() == null ? "" : s.password()));
+                            s.username() == null ? "" : s.username(), s.password() == null ? "" : s.password()));
             if (fromSettings.isPresent()) return fromSettings.get();
         }
 

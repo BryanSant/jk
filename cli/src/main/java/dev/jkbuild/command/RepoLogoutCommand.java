@@ -8,7 +8,6 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
 import dev.jkbuild.repo.RepoCredentialStore;
-
 import java.nio.file.Path;
 import java.util.List;
 
@@ -30,15 +29,16 @@ public final class RepoLogoutCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.value("<dir>",
-                "Override the credentials directory. Default: ~/.jk/repo-credentials.",
-                "--credentials-dir").hide());
+        return List.of(Opt.value(
+                        "<dir>",
+                        "Override the credentials directory. Default: ~/.jk/repo-credentials.",
+                        "--credentials-dir")
+                .hide());
     }
 
     @Override
     public List<Param> parameters() {
-        return List.of(Param.of("id", Arity.ONE,
-                "Repository id (matches [repositories.<id>] in jk.toml)."));
+        return List.of(Param.of("id", Arity.ONE, "Repository id (matches [repositories.<id>] in jk.toml)."));
     }
 
     @Override
@@ -47,9 +47,8 @@ public final class RepoLogoutCommand implements CliCommand {
         Path credentialsDir = in.value("credentials-dir").map(Path::of).orElse(null);
         GlobalOptions global = GlobalOptions.from(in);
 
-        RepoCredentialStore store = credentialsDir != null
-                ? new RepoCredentialStore(credentialsDir)
-                : new RepoCredentialStore();
+        RepoCredentialStore store =
+                credentialsDir != null ? new RepoCredentialStore(credentialsDir) : new RepoCredentialStore();
         store.clear(id);
         if (!global.quiet) {
             System.out.println("Removed stored credentials for repository '" + id + "'.");

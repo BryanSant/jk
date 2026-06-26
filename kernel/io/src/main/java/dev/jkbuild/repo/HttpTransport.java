@@ -3,7 +3,6 @@ package dev.jkbuild.repo;
 
 import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -30,8 +29,7 @@ public final class HttpTransport implements RepoTransport {
     }
 
     @Override
-    public Optional<byte[]> fetch(URI uri, RepoCredential credential)
-            throws IOException, InterruptedException {
+    public Optional<byte[]> fetch(URI uri, RepoCredential credential) throws IOException, InterruptedException {
         HttpResponse<byte[]> response = http.get(uri, AuthHeaders.of(credential));
         int status = response.statusCode();
         if (status == 404) return Optional.empty();

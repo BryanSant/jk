@@ -5,7 +5,6 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
 import java.io.IOException;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -39,7 +38,8 @@ public final class HookEnvCommand implements CliCommand {
 
     @Override
     public List<Opt> options() {
-        return List.of(Opt.value("<shell>", "Shell: bash | zsh | fish | pwsh.", "-s", "--shell").require());
+        return List.of(Opt.value("<shell>", "Shell: bash | zsh | fish | pwsh.", "-s", "--shell")
+                .require());
     }
 
     @Override
@@ -69,8 +69,8 @@ public final class HookEnvCommand implements CliCommand {
      *
      * <p>Package-private so tests can drive it without a real shell.
      */
-    static void emit(Shell shell, JkEnv.Target target, JkDiff prevDiff,
-                     JkDiff.EnvSnapshot snapshot, StringBuilder out) {
+    static void emit(
+            Shell shell, JkEnv.Target target, JkDiff prevDiff, JkDiff.EnvSnapshot snapshot, StringBuilder out) {
         var nextDiff = prevDiff.next(target, snapshot);
 
         // 1. Keys the prior diff tracked but the new target no longer owns —

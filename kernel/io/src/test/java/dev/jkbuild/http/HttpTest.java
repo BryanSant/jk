@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.http;
 
-import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import com.sun.net.httpserver.HttpServer;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -18,9 +17,9 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.zip.GZIPOutputStream;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class HttpTest {
 
@@ -148,8 +147,7 @@ class HttpTest {
         HttpResponse<byte[]> response = http().get(base.resolve("/gz"));
         assertThat(response.statusCode()).isEqualTo(200);
         // Body is the *decompressed* payload, not the wire bytes.
-        assertThat(new String(response.body(), StandardCharsets.UTF_8))
-                .isEqualTo("hello, gzip world");
+        assertThat(new String(response.body(), StandardCharsets.UTF_8)).isEqualTo("hello, gzip world");
     }
 
     @Test
@@ -196,8 +194,7 @@ class HttpTest {
 
         HttpResponse<InputStream> response = http().getStream(base.resolve("/gz-stream"));
         try (var in = response.body()) {
-            assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8))
-                    .isEqualTo("streamed payload");
+            assertThat(new String(in.readAllBytes(), StandardCharsets.UTF_8)).isEqualTo("streamed payload");
         }
     }
 
@@ -241,12 +238,11 @@ class HttpTest {
             exchange.close();
         });
 
-        HttpResponse<byte[]> response = http().postForm(base.resolve("/device/token"),
-                java.util.Map.of("grant_type", "device_code"));
+        HttpResponse<byte[]> response =
+                http().postForm(base.resolve("/device/token"), java.util.Map.of("grant_type", "device_code"));
         assertThat(response.statusCode()).isEqualTo(400);
-        assertThat(new String(response.body(), StandardCharsets.UTF_8))
-                .contains("authorization_pending");
-        assertThat(calls.get()).isEqualTo(1);   // 4xx is not retried
+        assertThat(new String(response.body(), StandardCharsets.UTF_8)).contains("authorization_pending");
+        assertThat(calls.get()).isEqualTo(1); // 4xx is not retried
     }
 
     @Test
@@ -267,8 +263,8 @@ class HttpTest {
             exchange.close();
         });
 
-        HttpResponse<byte[]> response = http().postForm(base.resolve("/flaky-post"),
-                java.util.Map.of("client_id", "Iv1.abc"));
+        HttpResponse<byte[]> response =
+                http().postForm(base.resolve("/flaky-post"), java.util.Map.of("client_id", "Iv1.abc"));
         assertThat(response.statusCode()).isEqualTo(200);
         assertThat(calls.get()).isEqualTo(3);
     }
@@ -287,8 +283,10 @@ class HttpTest {
         });
 
         byte[] payload = "jar-bytes".getBytes(StandardCharsets.UTF_8);
-        HttpResponse<byte[]> response = http().put(base.resolve("/repo/artifact.jar"), payload,
-                java.util.Map.of("Authorization", "Basic dTpw", "Content-Type", "application/java-archive"));
+        HttpResponse<byte[]> response = http().put(
+                        base.resolve("/repo/artifact.jar"),
+                        payload,
+                        java.util.Map.of("Authorization", "Basic dTpw", "Content-Type", "application/java-archive"));
 
         assertThat(response.statusCode()).isEqualTo(201);
         assertThat(seenMethod.get()).isEqualTo("PUT");
@@ -306,10 +304,10 @@ class HttpTest {
             exchange.close();
         });
 
-        HttpResponse<byte[]> response = http().put(base.resolve("/repo/denied.jar"),
-                new byte[]{1, 2, 3}, java.util.Map.of());
+        HttpResponse<byte[]> response =
+                http().put(base.resolve("/repo/denied.jar"), new byte[] {1, 2, 3}, java.util.Map.of());
         assertThat(response.statusCode()).isEqualTo(401);
-        assertThat(calls.get()).isEqualTo(1);   // 4xx is not retried
+        assertThat(calls.get()).isEqualTo(1); // 4xx is not retried
     }
 
     @Test
@@ -327,8 +325,7 @@ class HttpTest {
             exchange.close();
         });
 
-        HttpResponse<byte[]> response = http().put(base.resolve("/repo/flaky.jar"),
-                new byte[]{9}, java.util.Map.of());
+        HttpResponse<byte[]> response = http().put(base.resolve("/repo/flaky.jar"), new byte[] {9}, java.util.Map.of());
         assertThat(response.statusCode()).isEqualTo(201);
         assertThat(calls.get()).isEqualTo(3);
     }
@@ -342,12 +339,9 @@ class HttpTest {
     }
 
     private static Http http() {
-        HttpClient client = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(2))
-                .build();
+        HttpClient client =
+                HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
         // Tight backoff to keep the test fast — three attempts at 1ms each.
-        return new Http(client, new Duration[]{
-                Duration.ofMillis(1), Duration.ofMillis(1)
-        });
+        return new Http(client, new Duration[] {Duration.ofMillis(1), Duration.ofMillis(1)});
     }
 }

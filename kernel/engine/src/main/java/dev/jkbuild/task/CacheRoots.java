@@ -2,7 +2,6 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -107,9 +106,8 @@ public final class CacheRoots {
     }
 
     /** 64 hex chars, optionally preceded by {@code sha256:}. */
-    private static final Pattern EXPLICIT_SHA = Pattern.compile(
-            "(?:^|[\\s:])(?:sha256:)?([0-9a-f]{64})(?:$|[\\s\\n])",
-            Pattern.MULTILINE);
+    private static final Pattern EXPLICIT_SHA =
+            Pattern.compile("(?:^|[\\s:])(?:sha256:)?([0-9a-f]{64})(?:$|[\\s\\n])", Pattern.MULTILINE);
 
     /**
      * A path fragment ending in the CAS layout's
@@ -118,6 +116,6 @@ public final class CacheRoots {
      * does — the caller still calls {@link Cas#hashFromPath} to verify
      * the path actually sits under the active CAS root.
      */
-    private static final Pattern CAS_PATH = Pattern.compile(
-            "(?<=[\\s\"'(])/[^\\s\"'\\n]*/sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{60}");
+    private static final Pattern CAS_PATH =
+            Pattern.compile("(?<=[\\s\"'(])/[^\\s\"'\\n]*/sha256/[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{60}");
 }

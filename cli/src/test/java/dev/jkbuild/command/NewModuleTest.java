@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * {@code jk new} / {@code jk init} module-awareness: detecting an enclosing
@@ -72,9 +71,10 @@ class NewModuleTest {
         assertThat(Jk.execute("new", module.toString())).isZero();
 
         String toml = Files.readString(module.resolve("jk.toml"));
-        assertThat(toml).contains("jdk      = \"25\"");   // toolchain inherited (bare major)
-        assertThat(toml).contains("java     = 17");   // compile target flowed through
-        assertThat(JkBuildParser.parse(module.resolve("jk.toml")).project().javaRelease()).isEqualTo(17);
+        assertThat(toml).contains("jdk      = \"25\""); // toolchain inherited (bare major)
+        assertThat(toml).contains("java     = 17"); // compile target flowed through
+        assertThat(JkBuildParser.parse(module.resolve("jk.toml")).project().javaRelease())
+                .isEqualTo(17);
     }
 
     @Test
@@ -90,7 +90,8 @@ class NewModuleTest {
         Path module = tempDir.resolve("k");
 
         assertThat(Jk.execute("new", module.toString())).isZero();
-        assertThat(JkBuildParser.parse(module.resolve("jk.toml")).project().isKotlin()).isTrue();
+        assertThat(JkBuildParser.parse(module.resolve("jk.toml")).project().isKotlin())
+                .isTrue();
     }
 
     @Test
@@ -104,8 +105,10 @@ class NewModuleTest {
         // Standalone: its own group, parent untouched. No lock at scaffold —
         // it's generated on the first build/run.
         assertThat(sub.resolve("jk.lock")).doesNotExist();
-        assertThat(JkBuildParser.parse(sub.resolve("jk.toml")).project().group()).isEqualTo("com.solo");
-        assertThat(JkBuildParser.parse(tempDir.resolve("jk.toml")).isWorkspaceRoot()).isFalse();
+        assertThat(JkBuildParser.parse(sub.resolve("jk.toml")).project().group())
+                .isEqualTo("com.solo");
+        assertThat(JkBuildParser.parse(tempDir.resolve("jk.toml")).isWorkspaceRoot())
+                .isFalse();
     }
 
     // ---- detectParentDir boundary logic -------------------------------------
@@ -126,9 +129,9 @@ class NewModuleTest {
 
     @Test
     void detect_stops_at_a_git_boundary(@TempDir Path dir) throws IOException {
-        Files.writeString(dir.resolve("jk.toml"), PLAIN_PROJECT);   // project above the repo
+        Files.writeString(dir.resolve("jk.toml"), PLAIN_PROJECT); // project above the repo
         Path repo = dir.resolve("repo");
-        Files.createDirectories(repo.resolve(".git"));              // git root with no jk.toml
+        Files.createDirectories(repo.resolve(".git")); // git root with no jk.toml
         Path start = repo.resolve("sub");
         Files.createDirectories(start);
         // Walking up hits repo/.git before the project above — standalone.
@@ -159,8 +162,10 @@ class NewModuleTest {
 
     @Test
     void jdk_floor_uses_the_chosen_java_version() {
-        assertThat(NewCommand.jdkFloor(answers("lang", "java", "javaVersion", "25"), null)).isEqualTo(25);
-        assertThat(NewCommand.jdkFloor(answers("lang", "java", "javaVersion", "17"), null)).isEqualTo(17);
+        assertThat(NewCommand.jdkFloor(answers("lang", "java", "javaVersion", "25"), null))
+                .isEqualTo(25);
+        assertThat(NewCommand.jdkFloor(answers("lang", "java", "javaVersion", "17"), null))
+                .isEqualTo(17);
     }
 
     @Test
@@ -170,8 +175,7 @@ class NewModuleTest {
 
     @Test
     void jdk_floor_defaults_to_latest_lts_when_unanswered() {
-        assertThat(NewCommand.jdkFloor(answers("lang", "java"), null))
-                .isEqualTo(NewCommand.LATEST_LTS_MAJOR);
+        assertThat(NewCommand.jdkFloor(answers("lang", "java"), null)).isEqualTo(NewCommand.LATEST_LTS_MAJOR);
     }
 
     private static dev.jkbuild.cli.tui.Answers answers(String... kv) {

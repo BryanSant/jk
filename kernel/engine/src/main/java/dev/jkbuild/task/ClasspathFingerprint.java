@@ -2,7 +2,6 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.util.Hashing;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -54,12 +53,12 @@ public final class ClasspathFingerprint {
     /** Content identity of a single entry (CAS blob, jar, classes dir, or missing). */
     public static String entry(Path p) throws IOException {
         String abs = p.toAbsolutePath().normalize().toString();
-        if (isCasPath(abs)) return "cas:" + abs;                 // path encodes content hash
+        if (isCasPath(abs)) return "cas:" + abs; // path encodes content hash
         if (Files.isDirectory(p)) return "dir:" + hashTree(p);
         if (Files.isRegularFile(p)) {
             if (isArchive(abs)) {
                 String logical = hashArchive(p);
-                if (logical != null) return "jar:" + logical;    // logical content, not raw bytes
+                if (logical != null) return "jar:" + logical; // logical content, not raw bytes
             }
             return "file:" + Hashing.sha256Hex(p);
         }
@@ -102,8 +101,7 @@ public final class ClasspathFingerprint {
             for (Path f : (Iterable<Path>) walk::iterator) {
                 if (!Files.isRegularFile(f)) continue;
                 if (isBuildMetadata(f.getFileName().toString())) continue;
-                files.add(dir.relativize(f).toString().replace('\\', '/')
-                        + ":" + Hashing.sha256Hex(f));
+                files.add(dir.relativize(f).toString().replace('\\', '/') + ":" + Hashing.sha256Hex(f));
             }
         }
         files.sort(Comparator.naturalOrder());

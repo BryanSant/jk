@@ -1,11 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import org.tomlj.Toml;
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +8,10 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.tomlj.Toml;
+import org.tomlj.TomlArray;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * Parses the {@code [image]} block (PRD §22.2). Returns plain data —
@@ -22,9 +21,14 @@ import java.util.Map;
 public final class ImageConfigParser {
 
     public record ImageConfigData(
-            String base, String user, List<Integer> ports,
-            Map<String, String> env, Map<String, String> labels,
-            String registry, String tag, List<String> platforms,
+            String base,
+            String user,
+            List<Integer> ports,
+            Map<String, String> env,
+            Map<String, String> labels,
+            String registry,
+            String tag,
+            List<String> platforms,
             String mainClass) {}
 
     private ImageConfigParser() {}
@@ -41,8 +45,7 @@ public final class ImageConfigParser {
         }
         TomlTable image = result.getTable("image");
         if (image == null) {
-            return new ImageConfigData(null, null, List.of(), Map.of(), Map.of(),
-                    null, null, List.of(), null);
+            return new ImageConfigData(null, null, List.of(), Map.of(), Map.of(), null, null, List.of(), null);
         }
         return new ImageConfigData(
                 image.getString("base"),

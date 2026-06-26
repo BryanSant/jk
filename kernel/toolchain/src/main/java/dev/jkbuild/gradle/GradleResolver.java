@@ -3,7 +3,6 @@ package dev.jkbuild.gradle;
 
 import dev.jkbuild.compat.BuildTool;
 import dev.jkbuild.compat.ToolDistribution;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -29,12 +28,10 @@ public final class GradleResolver {
     /** jk's bundled default when no wrapper is present. Matches {@code .sdkmanrc}. */
     public static final String DEFAULT_VERSION = "9.5.1";
 
-    private static final String DEFAULT_BASE =
-            "https://services.gradle.org/distributions/";
+    private static final String DEFAULT_BASE = "https://services.gradle.org/distributions/";
 
     // gradle-<version>-(bin|all).zip
-    private static final Pattern FILENAME_VERSION = Pattern.compile(
-            "gradle-(?<v>[^/]+)-(?:bin|all)\\.zip$");
+    private static final Pattern FILENAME_VERSION = Pattern.compile("gradle-(?<v>[^/]+)-(?:bin|all)\\.zip$");
 
     public ToolDistribution resolve(Path projectDir) throws IOException {
         Path wrapperProps = projectDir.resolve("gradle/wrapper/gradle-wrapper.properties");
@@ -60,8 +57,8 @@ public final class GradleResolver {
         URI uri = URI.create(url.trim());
         String version = parseVersion(uri).orElse("wrapper");
         String sha256 = props.getProperty("distributionSha256Sum");
-        return new ToolDistribution(BuildTool.GRADLE, version, uri, "zip",
-                sha256 == null || sha256.isBlank() ? null : sha256.trim());
+        return new ToolDistribution(
+                BuildTool.GRADLE, version, uri, "zip", sha256 == null || sha256.isBlank() ? null : sha256.trim());
     }
 
     static Optional<String> parseVersion(URI uri) {

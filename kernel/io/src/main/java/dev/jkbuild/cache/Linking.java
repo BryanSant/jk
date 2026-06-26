@@ -56,7 +56,6 @@ public final class Linking {
             // FileSystemException covers cross-filesystem and
             // permission-denied cases on Linux/macOS.
         }
-        Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES,
-                StandardCopyOption.REPLACE_EXISTING);
+        Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES, StandardCopyOption.REPLACE_EXISTING);
     }
 }

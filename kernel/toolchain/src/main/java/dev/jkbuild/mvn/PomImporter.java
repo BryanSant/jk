@@ -2,27 +2,18 @@
 package dev.jkbuild.mvn;
 
 import dev.jkbuild.compat.ImportReport;
-import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.Features;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Profiles;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.model.Workspace;
-import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.repo.Pom;
 import dev.jkbuild.repo.PomParseException;
 import dev.jkbuild.repo.PomParser;
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
-import org.xml.sax.InputSource;
-import org.xml.sax.SAXException;
-
-import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.net.URI;
@@ -35,6 +26,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.Node;
+import org.w3c.dom.NodeList;
+import org.xml.sax.InputSource;
+import org.xml.sax.SAXException;
 
 /**
  * Converts a Maven {@code pom.xml} into a {@link JkBuild} model plus a
@@ -66,10 +65,7 @@ public final class PomImporter {
      * the relative module path, and one aggregated {@link ImportReport}
      * spanning the root + every child.
      */
-    public record WorkspaceImportResult(
-            JkBuild root,
-            Map<String, JkBuild> modules,
-            ImportReport report) {}
+    public record WorkspaceImportResult(JkBuild root, Map<String, JkBuild> modules, ImportReport report) {}
 
     private PomImporter() {}
 
@@ -142,15 +138,14 @@ public final class PomImporter {
         Pom rootPomParsed = PomParser.parse(rootXml);
         JkBuild.Project rootProject = mapProject(rootPomParsed, rootDoc, report, null);
         // Root coords serve as the "expected parent" for children.
-        Pom.Parent expectedParent = new Pom.Parent(
-                rootProject.group(), rootPomParsed.artifactId(), rootProject.version());
+        Pom.Parent expectedParent =
+                new Pom.Parent(rootProject.group(), rootPomParsed.artifactId(), rootProject.version());
         warnUnsupportedSections(rootDoc, report, /*isWorkspaceRoot=*/ true);
 
         Workspace workspace = new Workspace(modules);
         // The workspace root is a coordination point — no deps of its own.
         JkBuild rootJkBuild = new JkBuild(
-                rootProject, JkBuild.Dependencies.empty(),
-                List.of(), Profiles.empty(), Features.empty(), workspace);
+                rootProject, JkBuild.Dependencies.empty(), List.of(), Profiles.empty(), Features.empty(), workspace);
 
         Map<String, JkBuild> moduleBuilds = new LinkedHashMap<>();
         Path projectDir = rootPom.toAbsolutePath().getParent();
@@ -188,9 +183,8 @@ public final class PomImporter {
 
     // --- project ------------------------------------------------------------
 
-    private static JkBuild.Project mapProject(Pom pom, Document doc,
-                                              ImportReport.Builder report,
-                                              Pom.Parent suppressParentMatching) {
+    private static JkBuild.Project mapProject(
+            Pom pom, Document doc, ImportReport.Builder report, Pom.Parent suppressParentMatching) {
         String group = pom.groupId();
         String version = pom.version();
         if (pom.parent() != null) {
@@ -220,8 +214,17 @@ public final class PomImporter {
         String mainClass = mainClassFromPom(doc);
         // A Kotlin project sets `kotlin` and leaves `java` at 0 (mutually exclusive).
         int java = kotlin != null ? 0 : jdk;
-        return new JkBuild.Project(group, pom.artifactId(), version, jdk, java, kotlin,
-                mainClass, false, JkBuild.NativeMode.DISABLED, description);
+        return new JkBuild.Project(
+                group,
+                pom.artifactId(),
+                version,
+                jdk,
+                java,
+                kotlin,
+                mainClass,
+                false,
+                JkBuild.NativeMode.DISABLED,
+                description);
     }
 
     /**
@@ -239,7 +242,10 @@ public final class PomImporter {
         if (properties != null) {
             for (String key : new String[] {"kotlin.version", "kotlin.compiler.version"}) {
                 String v = childText(properties, key);
-                if (v != null && !v.isBlank()) { propVersion = v.trim(); break; }
+                if (v != null && !v.isBlank()) {
+                    propVersion = v.trim();
+                    break;
+                }
             }
         }
         Element plugins = childElement(childElement(root, "build"), "plugins");
@@ -254,8 +260,7 @@ public final class PomImporter {
             }
         }
         if (!present) return null; // only the plugin marks a Kotlin project
-        String resolved = (pluginVersion != null && !pluginVersion.startsWith("${"))
-                ? pluginVersion : propVersion;
+        String resolved = (pluginVersion != null && !pluginVersion.startsWith("${")) ? pluginVersion : propVersion;
         if (resolved == null || resolved.isBlank()) {
             resolved = KotlinResolver.DEFAULT_VERSION;
             report.warning("kotlin-maven-plugin recognised without a resolvable version; defaulted"
@@ -298,8 +303,8 @@ public final class PomImporter {
         // First check properties: maven.compiler.release / .source / .target.
         Element properties = childElement(root, "properties");
         if (properties != null) {
-            for (String key : new String[] {
-                    "maven.compiler.release", "maven.compiler.target", "maven.compiler.source"}) {
+            for (String key :
+                    new String[] {"maven.compiler.release", "maven.compiler.target", "maven.compiler.source"}) {
                 String value = childText(properties, key);
                 if (value != null && !value.isBlank()) return Optional.of(value.trim());
             }
@@ -352,14 +357,12 @@ public final class PomImporter {
                         + " Run `mvn help:effective-pom` and re-import.");
             }
             Scope scope = mapScope(dep.scope());
-            byScope.computeIfAbsent(scope, s -> new ArrayList<>())
-                    .add(toDependency(dep));
+            byScope.computeIfAbsent(scope, s -> new ArrayList<>()).add(toDependency(dep));
         }
         // dependencyManagement: BOM imports → PLATFORM; bare version pins → warning.
         for (Pom.Dep managed : pom.managedDependencies()) {
             if ("import".equalsIgnoreCase(managed.scope()) && "pom".equalsIgnoreCase(managed.type())) {
-                byScope.computeIfAbsent(Scope.PLATFORM, s -> new ArrayList<>())
-                        .add(toDependency(managed));
+                byScope.computeIfAbsent(Scope.PLATFORM, s -> new ArrayList<>()).add(toDependency(managed));
             } else {
                 report.warning("`<dependencyManagement>` entry " + managed.module() + " is a version pin,"
                         + " not a BOM import. jk has no equivalent; the pin was dropped."
@@ -413,7 +416,8 @@ public final class PomImporter {
             }
             String name = (id == null || id.isBlank()) ? "repo" + (deduped.size() + 1) : id;
             // Central is the implicit default — skip duplicate declarations of it.
-            if (name.equals("central") || url.startsWith("https://repo.maven.apache.org/")
+            if (name.equals("central")
+                    || url.startsWith("https://repo.maven.apache.org/")
                     || url.startsWith("https://repo1.maven.org/")) {
                 continue;
             }
@@ -428,8 +432,7 @@ public final class PomImporter {
 
     // --- unsupported-section warnings ---------------------------------------
 
-    private static void warnUnsupportedSections(Document doc, ImportReport.Builder report,
-                                                boolean isWorkspaceRoot) {
+    private static void warnUnsupportedSections(Document doc, ImportReport.Builder report, boolean isWorkspaceRoot) {
         Element root = doc.getDocumentElement();
         Element profiles = childElement(root, "profiles");
         if (profiles != null) {
@@ -471,7 +474,8 @@ public final class PomImporter {
     private static void analyzeProfile(Element profile, ImportReport.Builder report) {
         String id = childText(profile, "id");
         String label = id == null || id.isBlank() ? "<unnamed>" : id;
-        StringBuilder summary = new StringBuilder("Maven profile `").append(label).append("`: ");
+        StringBuilder summary =
+                new StringBuilder("Maven profile `").append(label).append("`: ");
         List<String> parts = new ArrayList<>();
 
         String activation = describeActivation(childElement(profile, "activation"));
@@ -481,8 +485,8 @@ public final class PomImporter {
         if (deps != null) {
             int count = childElements(deps, "dependency").size();
             if (count > 0) {
-                parts.add(count + " dependenc" + (count == 1 ? "y" : "ies")
-                        + " (convert to a jk feature `" + label + "` if opt-in, or move into the main deps list)");
+                parts.add(count + " dependenc" + (count == 1 ? "y" : "ies") + " (convert to a jk feature `" + label
+                        + "` if opt-in, or move into the main deps list)");
             }
         }
         Element managed = childElement(childElement(profile, "dependencyManagement"), "dependencies");

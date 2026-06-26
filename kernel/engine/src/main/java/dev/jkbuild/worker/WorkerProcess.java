@@ -52,15 +52,19 @@ public final class WorkerProcess {
      * @param onProtocol    receives each protocol line with the prefix stripped
      * @param onPassthrough receives each non-protocol line verbatim; may be {@code null} to drop them
      */
-    public static int run(List<String> command, String prefix,
-                          Consumer<String> onProtocol, Consumer<String> onPassthrough)
+    public static int run(
+            List<String> command, String prefix, Consumer<String> onProtocol, Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
         return run(command, java.util.Map.of(), prefix, onProtocol, onPassthrough);
     }
 
     /** As {@link #run(List, String, Consumer, Consumer)}, adding {@code extraEnv} to the child's environment. */
-    public static int run(List<String> command, java.util.Map<String, String> extraEnv, String prefix,
-                          Consumer<String> onProtocol, Consumer<String> onPassthrough)
+    public static int run(
+            List<String> command,
+            java.util.Map<String, String> extraEnv,
+            String prefix,
+            Consumer<String> onProtocol,
+            Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
         return converse(command, extraEnv, prefix, (json, convo) -> onProtocol.accept(json), onPassthrough);
     }
@@ -78,17 +82,22 @@ public final class WorkerProcess {
      *
      * @param onPassthrough receives each non-protocol line; may be {@code null} to drop
      */
-    public static int converse(List<String> command, String prefix,
-                               BiConsumer<String, Conversation> onProtocol,
-                               Consumer<String> onPassthrough)
+    public static int converse(
+            List<String> command,
+            String prefix,
+            BiConsumer<String, Conversation> onProtocol,
+            Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
         return converse(command, java.util.Map.of(), prefix, onProtocol, onPassthrough);
     }
 
     /** As {@link #converse(List, String, BiConsumer, Consumer)}, adding {@code extraEnv} to the child's environment. */
-    public static int converse(List<String> command, java.util.Map<String, String> extraEnv, String prefix,
-                               BiConsumer<String, Conversation> onProtocol,
-                               Consumer<String> onPassthrough)
+    public static int converse(
+            List<String> command,
+            java.util.Map<String, String> extraEnv,
+            String prefix,
+            BiConsumer<String, Conversation> onProtocol,
+            Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
         ProcessBuilder pb = new ProcessBuilder(command).redirectErrorStream(true);
         if (extraEnv != null && !extraEnv.isEmpty()) pb.environment().putAll(extraEnv);
@@ -99,17 +108,20 @@ public final class WorkerProcess {
         }
     }
 
-    private static int converse(ProcessBuilder pb, String prefix,
-                                BiConsumer<String, Conversation> onProtocol,
-                                Consumer<String> onPassthrough)
+    private static int converse(
+            ProcessBuilder pb,
+            String prefix,
+            BiConsumer<String, Conversation> onProtocol,
+            Consumer<String> onPassthrough)
             throws IOException, InterruptedException {
         Process process = pb.start();
-        try (BufferedReader reader = new BufferedReader(
-                     new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
-             BufferedWriter stdin = new BufferedWriter(
-                     new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8))) {
+        try (BufferedReader reader =
+                        new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8));
+                BufferedWriter stdin =
+                        new BufferedWriter(new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8))) {
             Conversation convo = new Conversation() {
-                @Override public void send(String line) {
+                @Override
+                public void send(String line) {
                     try {
                         stdin.write(line);
                         stdin.write('\n');
@@ -118,7 +130,9 @@ public final class WorkerProcess {
                         // Worker is gone / pipe broken; the read loop will end.
                     }
                 }
-                @Override public void closeInput() {
+
+                @Override
+                public void closeInput() {
                     try {
                         stdin.close();
                     } catch (IOException ignored) {

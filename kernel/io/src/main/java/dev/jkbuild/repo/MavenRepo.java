@@ -7,7 +7,6 @@ import dev.jkbuild.credential.RepoCredential;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.util.Hashing;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -59,10 +58,16 @@ public final class MavenRepo {
      * authenticates with {@code credential} (anonymous repos pass
      * {@link RepoCredential#ANONYMOUS}).
      */
-    public MavenRepo(String name, URI baseUrl, Http http, Cas cas, JkMavenLocalRepo localRepo,
-                     RepoCredential credential) {
-        this(name, baseUrl, RepoTransports.forUrl(baseUrl, Objects.requireNonNull(http, "http")),
-                cas, localRepo, credential, http);
+    public MavenRepo(
+            String name, URI baseUrl, Http http, Cas cas, JkMavenLocalRepo localRepo, RepoCredential credential) {
+        this(
+                name,
+                baseUrl,
+                RepoTransports.forUrl(baseUrl, Objects.requireNonNull(http, "http")),
+                cas,
+                localRepo,
+                credential,
+                http);
     }
 
     /**
@@ -70,8 +75,13 @@ public final class MavenRepo {
      * non-HTTP backends (s3://, file://, …) selected by the caller. These don't
      * get the HTTP metadata cache (it has no status/headers to revalidate against).
      */
-    public MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas,
-                     JkMavenLocalRepo localRepo, RepoCredential credential) {
+    public MavenRepo(
+            String name,
+            URI baseUrl,
+            RepoTransport transport,
+            Cas cas,
+            JkMavenLocalRepo localRepo,
+            RepoCredential credential) {
         this(name, baseUrl, transport, cas, localRepo, credential, null);
     }
 
@@ -80,8 +90,14 @@ public final class MavenRepo {
      * repo is http(s) (enabling the metadata cache), or {@code null} for a
      * non-HTTP transport.
      */
-    private MavenRepo(String name, URI baseUrl, RepoTransport transport, Cas cas,
-                      JkMavenLocalRepo localRepo, RepoCredential credential, Http httpOrNull) {
+    private MavenRepo(
+            String name,
+            URI baseUrl,
+            RepoTransport transport,
+            Cas cas,
+            JkMavenLocalRepo localRepo,
+            RepoCredential credential,
+            Http httpOrNull) {
         this.name = Objects.requireNonNull(name, "name");
         this.baseUrl = normalize(Objects.requireNonNull(baseUrl, "baseUrl"));
         this.transport = Objects.requireNonNull(transport, "transport");
@@ -92,15 +108,13 @@ public final class MavenRepo {
         // applies to http(s) repos — a file:// (or other) baseUrl can be paired
         // with an Http client but must keep enumerating via the transport.
         this.metadataCache = (httpOrNull != null && isHttp(this.baseUrl))
-                ? new MavenMetadataCache(httpOrNull, cas.root().resolve("metadata"),
-                        MavenMetadataCache.DEFAULT_TTL)
+                ? new MavenMetadataCache(httpOrNull, cas.root().resolve("metadata"), MavenMetadataCache.DEFAULT_TTL)
                 : null;
     }
 
     private static boolean isHttp(URI uri) {
         String scheme = uri.getScheme();
-        return scheme != null
-                && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"));
+        return scheme != null && (scheme.equalsIgnoreCase("http") || scheme.equalsIgnoreCase("https"));
     }
 
     public String name() {
@@ -158,7 +172,8 @@ public final class MavenRepo {
         // the difference between a cold-cache resolve fitting under the CLI's
         // heap cap and OOMing on it.
         Cas.Stored stored;
-        try (var in = transport.fetchStream(uri, credential)
+        try (var in = transport
+                .fetchStream(uri, credential)
                 .orElseThrow(() -> new ArtifactNotFoundException("not found in " + name + ": " + uri))) {
             stored = cas.putStream(in);
         }
@@ -198,6 +213,8 @@ public final class MavenRepo {
 
     /** Thrown when the requested artifact returns 404 from this repo. */
     public static final class ArtifactNotFoundException extends IOException {
-        public ArtifactNotFoundException(String message) { super(message); }
+        public ArtifactNotFoundException(String message) {
+            super(message);
+        }
     }
 }

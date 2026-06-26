@@ -34,11 +34,11 @@ import java.util.Set;
 public final class Diagnostics {
 
     // ANSI 24-bit color codes — colors match JkDarkTheme.
-    private static final String RESET   = "\033[m";
-    private static final String RED     = "\033[38;2;233;30;99m";  // NORMAL_RED  — ‼ header
-    private static final String PRIMARY = "\033[38;2;63;81;181m";  // PRIMARY     — group part of group:artifact
-    private static final String CYAN    = "\033[38;2;0;188;212m";  // NORMAL_CYAN — artifact part, bare packages
-    private static final String BLUE    = "\033[38;2;83;109;254m"; // BRIGHT_BLUE — version constraints
+    private static final String RESET = "\033[m";
+    private static final String RED = "\033[38;2;233;30;99m"; // NORMAL_RED  — ‼ header
+    private static final String PRIMARY = "\033[38;2;63;81;181m"; // PRIMARY     — group part of group:artifact
+    private static final String CYAN = "\033[38;2;0;188;212m"; // NORMAL_CYAN — artifact part, bare packages
+    private static final String BLUE = "\033[38;2;83;109;254m"; // BRIGHT_BLUE — version constraints
 
     private Diagnostics() {}
 
@@ -60,8 +60,7 @@ public final class Diagnostics {
         return render(rootCause, rootDepNames, false);
     }
 
-    public static String render(Incompatibility rootCause, Map<String, String> rootDepNames,
-                                boolean ansi) {
+    public static String render(Incompatibility rootCause, Map<String, String> rootDepNames, boolean ansi) {
         Map<Incompatibility, Integer> incomingEdges = new HashMap<>();
         countIncomingEdges(rootCause, incomingEdges, new HashSet<>());
 
@@ -121,11 +120,17 @@ public final class Diagnostics {
         if (!hintedFor.add(pkg)) return;
 
         out.append('\n');
-        out.append("Hint: the dep `").append(name)
-                .append("` resolves to `").append(pkg).append("`, which Maven Central does not\n");
+        out.append("Hint: the dep `")
+                .append(name)
+                .append("` resolves to `")
+                .append(pkg)
+                .append("`, which Maven Central does not\n");
         out.append("recognize. If it is published under a different name, set\n");
         out.append("`name` explicitly:\n\n");
-        out.append("  ").append(name).append(" = { group = \"").append(group)
+        out.append("  ")
+                .append(name)
+                .append(" = { group = \"")
+                .append(group)
                 .append("\", name = \"<correct-name>\", version = \"...\" }\n");
         out.append("\n");
         out.append("(jk defaults `name` to the table key when omitted — see\n");
@@ -133,9 +138,7 @@ public final class Diagnostics {
     }
 
     private static void countIncomingEdges(
-            Incompatibility inco,
-            Map<Incompatibility, Integer> counts,
-            Set<Incompatibility> visited) {
+            Incompatibility inco, Map<Incompatibility, Integer> counts, Set<Incompatibility> visited) {
         if (!visited.add(inco)) return;
         if (inco.cause() instanceof Incompatibility.Cause.Derived d) {
             counts.merge(d.a(), 1, Integer::sum);
@@ -167,22 +170,38 @@ public final class Diagnostics {
             case Incompatibility.Cause.Derived d -> {
                 renderInco(d.a(), out, prefix, emitted, numbered, ansi);
                 renderInco(d.b(), out, prefix, emitted, numbered, ansi);
-                out.append(prefix).append(label).append("therefore: ")
-                        .append(describeConclusion(inco, ansi)).append('\n');
+                out.append(prefix)
+                        .append(label)
+                        .append("therefore: ")
+                        .append(describeConclusion(inco, ansi))
+                        .append('\n');
             }
             case Incompatibility.Cause.Dependency dep ->
-                    out.append(prefix).append("- ").append(label)
-                            .append(describe(dep.from(), ansi)).append(" depends on ")
-                            .append(describe(dep.to(), ansi)).append('\n');
+                out.append(prefix)
+                        .append("- ")
+                        .append(label)
+                        .append(describe(dep.from(), ansi))
+                        .append(" depends on ")
+                        .append(describe(dep.to(), ansi))
+                        .append('\n');
             case Incompatibility.Cause.NoVersions nv ->
-                    out.append(prefix).append("- ").append(label)
-                            .append("no versions of ").append(colorPkg(nv.pkg(), ansi))
-                            .append(" match ").append(colorVersion(nv.requested().toString(), ansi))
-                            .append('\n');
+                out.append(prefix)
+                        .append("- ")
+                        .append(label)
+                        .append("no versions of ")
+                        .append(colorPkg(nv.pkg(), ansi))
+                        .append(" match ")
+                        .append(colorVersion(nv.requested().toString(), ansi))
+                        .append('\n');
             case Incompatibility.Cause.Root r ->
-                    out.append(prefix).append("- ").append(label)
-                            .append("the root project ").append(colorPkg(r.rootPkg(), ansi))
-                            .append(' ').append(colorVersion(r.rootVersion(), ansi)).append('\n');
+                out.append(prefix)
+                        .append("- ")
+                        .append(label)
+                        .append("the root project ")
+                        .append(colorPkg(r.rootPkg(), ansi))
+                        .append(' ')
+                        .append(colorVersion(r.rootVersion(), ansi))
+                        .append('\n');
         }
     }
 
@@ -203,8 +222,10 @@ public final class Diagnostics {
         String prefix = term.positive() ? "" : "not ";
         VersionSet vs = term.versions();
         if (vs instanceof VersionSet.Range r
-                && r.min() != null && r.max() != null
-                && r.minInclusive() && r.maxInclusive()
+                && r.min() != null
+                && r.max() != null
+                && r.minInclusive()
+                && r.maxInclusive()
                 && r.min().equals(r.max())) {
             return prefix + colorPkg(term.pkg(), ansi) + " " + colorVersion(r.min(), ansi);
         }

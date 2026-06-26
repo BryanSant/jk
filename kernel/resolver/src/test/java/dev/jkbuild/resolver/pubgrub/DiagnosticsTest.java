@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver.pubgrub;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.fail;
+import org.junit.jupiter.api.Test;
 
 class DiagnosticsTest {
 
@@ -16,17 +15,16 @@ class DiagnosticsTest {
         PackageSource src = InMemoryPackageSource.builder()
                 .version("shared", "1.0")
                 .version("shared", "2.0")
-                .version("a", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("1.0")))
-                .version("b", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("2.0")))
+                .version("a", "1.0", deps -> deps.require("shared", VersionSet.exact("1.0")))
+                .version("b", "1.0", deps -> deps.require("shared", VersionSet.exact("2.0")))
                 .build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
         try {
-            solver.solve("root", "1.0", List.of(
-                    Term.positive("a", VersionSet.exact("1.0")),
-                    Term.positive("b", VersionSet.exact("1.0"))));
+            solver.solve(
+                    "root",
+                    "1.0",
+                    List.of(Term.positive("a", VersionSet.exact("1.0")), Term.positive("b", VersionSet.exact("1.0"))));
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
             String rendered = Diagnostics.render(e.rootCause());
@@ -41,14 +39,12 @@ class DiagnosticsTest {
 
     @Test
     void renders_missing_version() {
-        PackageSource src = InMemoryPackageSource.builder()
-                .version("widget", "1.0")
-                .build();
+        PackageSource src =
+                InMemoryPackageSource.builder().version("widget", "1.0").build();
 
         PubGrubSolver solver = new PubGrubSolver(src);
         try {
-            solver.solve("root", "1.0",
-                    List.of(Term.positive("widget", VersionSet.exact("9.9.9"))));
+            solver.solve("root", "1.0", List.of(Term.positive("widget", VersionSet.exact("9.9.9"))));
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
             String rendered = Diagnostics.render(e.rootCause());
@@ -64,15 +60,13 @@ class DiagnosticsTest {
         // not print the same sentence twice.
         Term root = Term.positive("root", VersionSet.exact("1.0"));
         Term dep = Term.positive("widget", VersionSet.exact("1.0"));
-        Incompatibility shared = new Incompatibility(
-                List.of(root, dep.invert()),
-                new Incompatibility.Cause.Dependency(root, dep));
+        Incompatibility shared =
+                new Incompatibility(List.of(root, dep.invert()), new Incompatibility.Cause.Dependency(root, dep));
 
         Incompatibility a = shared;
         Incompatibility b = shared;
-        Incompatibility derived = new Incompatibility(
-                List.of(root, dep.invert()),
-                new Incompatibility.Cause.Derived(a, b));
+        Incompatibility derived =
+                new Incompatibility(List.of(root, dep.invert()), new Incompatibility.Cause.Derived(a, b));
 
         String rendered = Diagnostics.render(derived);
         long bulletCount = rendered.lines().filter(l -> l.startsWith("  - ")).count();
@@ -87,16 +81,18 @@ class DiagnosticsTest {
         PackageSource src = InMemoryPackageSource.builder()
                 .version("shared", "1.0")
                 .version("shared", "2.0")
-                .version("a", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("1.0")))
-                .version("b", "1.0", deps -> deps
-                        .require("shared", VersionSet.exact("2.0")))
+                .version("a", "1.0", deps -> deps.require("shared", VersionSet.exact("1.0")))
+                .version("b", "1.0", deps -> deps.require("shared", VersionSet.exact("2.0")))
                 .build();
 
         try {
-            new PubGrubSolver(src).solve("root", "1.0", List.of(
-                    Term.positive("a", VersionSet.exact("1.0")),
-                    Term.positive("b", VersionSet.exact("1.0"))));
+            new PubGrubSolver(src)
+                    .solve(
+                            "root",
+                            "1.0",
+                            List.of(
+                                    Term.positive("a", VersionSet.exact("1.0")),
+                                    Term.positive("b", VersionSet.exact("1.0"))));
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
             String rendered = Diagnostics.render(e.rootCause());
@@ -113,20 +109,16 @@ class DiagnosticsTest {
         // reference the same leaf. The leaf appears once and is numbered.
         Term root = Term.positive("root", VersionSet.exact("1.0"));
         Term dep = Term.positive("widget", VersionSet.exact("1.0"));
-        Incompatibility leaf = new Incompatibility(
-                List.of(root, dep.invert()),
-                new Incompatibility.Cause.Dependency(root, dep));
+        Incompatibility leaf =
+                new Incompatibility(List.of(root, dep.invert()), new Incompatibility.Cause.Dependency(root, dep));
 
         // Two distinct Derived nodes that both reference the leaf.
-        Incompatibility branchA = new Incompatibility(
-                List.of(root, dep.invert()),
-                new Incompatibility.Cause.Derived(leaf, leaf));
-        Incompatibility branchB = new Incompatibility(
-                List.of(root, dep.invert()),
-                new Incompatibility.Cause.Derived(leaf, leaf));
-        Incompatibility top = new Incompatibility(
-                List.of(root, dep.invert()),
-                new Incompatibility.Cause.Derived(branchA, branchB));
+        Incompatibility branchA =
+                new Incompatibility(List.of(root, dep.invert()), new Incompatibility.Cause.Derived(leaf, leaf));
+        Incompatibility branchB =
+                new Incompatibility(List.of(root, dep.invert()), new Incompatibility.Cause.Derived(leaf, leaf));
+        Incompatibility top =
+                new Incompatibility(List.of(root, dep.invert()), new Incompatibility.Cause.Derived(branchA, branchB));
 
         String rendered = Diagnostics.render(top);
         // The shared leaf should be numbered (it has >1 incoming edges) and
@@ -141,16 +133,17 @@ class DiagnosticsTest {
         // "org.postgresql:postgres" — which doesn't exist on Maven Central.
         // The diagnostic should explain the defaulting and suggest setting
         // `name = "..."` explicitly.
-        PackageSource src = InMemoryPackageSource.builder().build();   // no packages exist
+        PackageSource src = InMemoryPackageSource.builder().build(); // no packages exist
 
         try {
-            new PubGrubSolver(src).solve("root", "1.0",
-                    List.of(Term.positive("org.postgresql:postgres", VersionSet.exact("42.7.4"))));
+            new PubGrubSolver(src)
+                    .solve(
+                            "root",
+                            "1.0",
+                            List.of(Term.positive("org.postgresql:postgres", VersionSet.exact("42.7.4"))));
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
-            String rendered = Diagnostics.render(
-                    e.rootCause(),
-                    Map.of("org.postgresql:postgres", "postgres"));
+            String rendered = Diagnostics.render(e.rootCause(), Map.of("org.postgresql:postgres", "postgres"));
             assertThat(rendered).contains("Hint: the dep `postgres` resolves to `org.postgresql:postgres`");
             assertThat(rendered).contains("set\n`name` explicitly");
             assertThat(rendered).contains("postgres = { group = \"org.postgresql\", name = \"<correct-name>\"");
@@ -169,13 +162,14 @@ class DiagnosticsTest {
         PackageSource src = InMemoryPackageSource.builder().build();
 
         try {
-            new PubGrubSolver(src).solve("root", "1.0",
-                    List.of(Term.positive("org.postgresql:postgresql", VersionSet.exact("42.7.4"))));
+            new PubGrubSolver(src)
+                    .solve(
+                            "root",
+                            "1.0",
+                            List.of(Term.positive("org.postgresql:postgresql", VersionSet.exact("42.7.4"))));
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
-            String rendered = Diagnostics.render(
-                    e.rootCause(),
-                    Map.of("org.postgresql:postgresql", "postgres-jdbc"));
+            String rendered = Diagnostics.render(e.rootCause(), Map.of("org.postgresql:postgresql", "postgres-jdbc"));
             assertThat(rendered).doesNotContain("Hint: the dep");
             assertThat(rendered).doesNotContain("artifact-coord-design");
         } catch (Exception e) {
@@ -193,13 +187,14 @@ class DiagnosticsTest {
                 .build();
 
         try {
-            new PubGrubSolver(src).solve("root", "1.0",
-                    List.of(Term.positive("org.postgresql:postgresql", VersionSet.exact("99.9.9"))));
+            new PubGrubSolver(src)
+                    .solve(
+                            "root",
+                            "1.0",
+                            List.of(Term.positive("org.postgresql:postgresql", VersionSet.exact("99.9.9"))));
             fail("expected UnsatisfiableException");
         } catch (UnsatisfiableException e) {
-            String rendered = Diagnostics.render(
-                    e.rootCause(),
-                    Map.of("org.postgresql:postgresql", "postgresql"));
+            String rendered = Diagnostics.render(e.rootCause(), Map.of("org.postgresql:postgresql", "postgresql"));
             assertThat(rendered).doesNotContain("Hint: the dep");
         } catch (Exception e) {
             fail("expected UnsatisfiableException, got: " + e);

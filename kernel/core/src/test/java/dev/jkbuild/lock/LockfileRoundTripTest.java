@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.lock;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class LockfileRoundTripTest {
 
@@ -26,10 +25,19 @@ class LockfileRoundTripTest {
         Lockfile.Artifact.GitInfo git = new Lockfile.Artifact.GitInfo(
                 "https://github.com/acme/widgets", "3f2a9c1b4d5e6f70819203a4b5c6d7e8f9012345", "tag:v1.4.0");
         Lockfile lock = new Lockfile(
-                Lockfile.CURRENT_VERSION, "jk test", Lockfile.RESOLUTION_ALGORITHM,
+                Lockfile.CURRENT_VERSION,
+                "jk test",
+                Lockfile.RESOLUTION_ALGORITHM,
                 List.of(new Lockfile.Artifact(
-                        "com.acme:widgets", "1.4.0", "git+https://github.com/acme/widgets",
-                        "sha256:abcd", null, List.of(dev.jkbuild.model.Scope.MAIN), List.of(), null, git)));
+                        "com.acme:widgets",
+                        "1.4.0",
+                        "git+https://github.com/acme/widgets",
+                        "sha256:abcd",
+                        null,
+                        List.of(dev.jkbuild.model.Scope.MAIN),
+                        List.of(),
+                        null,
+                        git)));
 
         String rendered = LockfileWriter.render(lock);
         assertThat(rendered)
@@ -38,8 +46,8 @@ class LockfileRoundTripTest {
                 .contains("ref      = \"tag:v1.4.0\"");
 
         Lockfile reparsed = LockfileReader.parse(rendered);
-        assertThat(reparsed.artifacts()).singleElement().satisfies(p ->
-                assertThat(p.git()).isEqualTo(git));
+        assertThat(reparsed.artifacts()).singleElement().satisfies(p -> assertThat(p.git())
+                .isEqualTo(git));
     }
 
     @Test

@@ -3,11 +3,6 @@ package dev.jkbuild.runtime;
 
 import dev.jkbuild.config.EnvValues;
 import dev.jkbuild.config.TomlValues;
-import org.tomlj.Toml;
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -22,6 +17,10 @@ import java.util.OptionalDouble;
 import java.util.OptionalLong;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
+import org.tomlj.Toml;
+import org.tomlj.TomlArray;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * A learned ledger of how long each module's build phases actually take, so the
@@ -114,9 +113,7 @@ public final class PhaseTimings {
                 .toArray();
         if (rates.length == 0) return OptionalDouble.empty();
         int n = rates.length;
-        return OptionalDouble.of(n % 2 == 1
-                ? rates[n / 2]
-                : (rates[n / 2 - 1] + rates[n / 2]) / 2.0);
+        return OptionalDouble.of(n % 2 == 1 ? rates[n / 2] : (rates[n / 2 - 1] + rates[n / 2]) / 2.0);
     }
 
     /** A measured per-unit rate for one phase of one module, to fold into the ledger. */
@@ -135,13 +132,13 @@ public final class PhaseTimings {
             if (s.observedPerUnit() < 0) continue;
             String k = key(s.dir(), s.phase());
             Entry prev = m.get(k);
-            double next = prev == null ? s.observedPerUnit()
-                    : alpha * s.observedPerUnit() + (1 - alpha) * prev.perUnit();
+            double next =
+                    prev == null ? s.observedPerUnit() : alpha * s.observedPerUnit() + (1 - alpha) * prev.perUnit();
             m.put(k, new Entry(next, nowMillis));
         }
         try {
             write(cache.resolve("timings.toml"), m);
-            MEMO.remove(cache);   // next load() in this process sees the update
+            MEMO.remove(cache); // next load() in this process sees the update
         } catch (IOException | RuntimeException ignored) {
             // advisory cache — never fail the build over it
         }
@@ -152,7 +149,7 @@ public final class PhaseTimings {
     /** Bounds for {@link #prune}: a byte ceiling and a max entry age. */
     public record Limits(long maxBytes, long maxAgeMillis) {
         static final long DEFAULT_MAX_MB = 100;
-        static final long DEFAULT_MAX_AGE_DAYS = 730;   // 2 years
+        static final long DEFAULT_MAX_AGE_DAYS = 730; // 2 years
 
         /**
          * Resolve from {@code JK_TIMINGS_MAX_SIZE_MB} / {@code JK_TIMINGS_MAX_AGE_DAYS}
@@ -163,7 +160,8 @@ public final class PhaseTimings {
             long mb = envLong(env, "JK_TIMINGS_MAX_SIZE_MB")
                     .orElseGet(() -> tomlLong(userConfig, "timings-max-size-mb").orElse(DEFAULT_MAX_MB));
             long days = envLong(env, "JK_TIMINGS_MAX_AGE_DAYS")
-                    .orElseGet(() -> tomlLong(userConfig, "timings-max-age-days").orElse(DEFAULT_MAX_AGE_DAYS));
+                    .orElseGet(
+                            () -> tomlLong(userConfig, "timings-max-age-days").orElse(DEFAULT_MAX_AGE_DAYS));
             return new Limits(Math.max(0, mb) * 1024L * 1024L, Math.max(0, days) * 86_400_000L);
         }
     }
@@ -205,7 +203,8 @@ public final class PhaseTimings {
             if (keep < m.size()) {
                 // Drop the oldest (smallest updatedMillis) first.
                 List<Map.Entry<String, Entry>> sorted = new ArrayList<>(m.entrySet());
-                sorted.sort(java.util.Comparator.comparingLong(en -> en.getValue().updatedMillis()));
+                sorted.sort(
+                        java.util.Comparator.comparingLong(en -> en.getValue().updatedMillis()));
                 for (int i = 0; i < sorted.size() - keep; i++) {
                     m.remove(sorted.get(i).getKey());
                     bySize++;
@@ -240,8 +239,8 @@ public final class PhaseTimings {
                         String dir = e.getString("dir");
                         String phase = e.getString("phase");
                         Double pu = e.contains("per-unit-weight") ? e.getDouble("per-unit-weight") : null;
-                        long updated = e.contains("updated") && e.getLong("updated") != null
-                                ? e.getLong("updated") : 0L;
+                        long updated =
+                                e.contains("updated") && e.getLong("updated") != null ? e.getLong("updated") : 0L;
                         if (dir != null && phase != null && pu != null && pu >= 0) {
                             m.put(key(dir, phase), new Entry(pu, updated));
                         }
@@ -256,19 +255,25 @@ public final class PhaseTimings {
 
     private static String render(Map<String, Entry> m) {
         StringBuilder out = new StringBuilder(256);
-        m.entrySet().stream()
-                .sorted(Map.Entry.comparingByKey())
-                .forEach(e -> {
-                    int sep = e.getKey().indexOf(' ');
-                    String dir = e.getKey().substring(0, sep);
-                    String phase = e.getKey().substring(sep + 1);
-                    out.append("[[timing]]\n")
-                            .append("dir             = ").append(quote(dir)).append('\n')
-                            .append("phase           = ").append(quote(phase)).append('\n')
-                            .append("per-unit-weight = ").append(round3(e.getValue().perUnit())).append('\n')
-                            .append("updated         = ").append(e.getValue().updatedMillis()).append('\n')
-                            .append('\n');
-                });
+        m.entrySet().stream().sorted(Map.Entry.comparingByKey()).forEach(e -> {
+            int sep = e.getKey().indexOf(' ');
+            String dir = e.getKey().substring(0, sep);
+            String phase = e.getKey().substring(sep + 1);
+            out.append("[[timing]]\n")
+                    .append("dir             = ")
+                    .append(quote(dir))
+                    .append('\n')
+                    .append("phase           = ")
+                    .append(quote(phase))
+                    .append('\n')
+                    .append("per-unit-weight = ")
+                    .append(round3(e.getValue().perUnit()))
+                    .append('\n')
+                    .append("updated         = ")
+                    .append(e.getValue().updatedMillis())
+                    .append('\n')
+                    .append('\n');
+        });
         return out.toString();
     }
 

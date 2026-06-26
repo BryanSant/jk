@@ -34,11 +34,14 @@ public record GoalResult(
      * the older callers all came from the SIGINT bridge.
      */
     public GoalResult(
-            String goalName, boolean success, Duration duration,
-            List<PhaseReport> phases, List<Diagnostic> warnings,
-            List<Diagnostic> errors, boolean cancelled) {
-        this(goalName, success, duration, phases, warnings, errors,
-                cancelled, cancelled);
+            String goalName,
+            boolean success,
+            Duration duration,
+            List<PhaseReport> phases,
+            List<Diagnostic> warnings,
+            List<Diagnostic> errors,
+            boolean cancelled) {
+        this(goalName, success, duration, phases, warnings, errors, cancelled, cancelled);
     }
 
     /** One row in the report's per-phase breakdown. */

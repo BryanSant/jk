@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 class ShellTest {
 
@@ -27,17 +27,14 @@ class ShellTest {
     void bash_set_unset_env() {
         var sh = new BashShell();
         assertThat(sh.setEnv("FOO", "bar")).isEqualTo("export FOO=bar\n");
-        assertThat(sh.setEnv("PATH", "/x/y:/z"))
-                .isEqualTo("export PATH=/x/y:/z\n"); // path-y chars don't need quoting
-        assertThat(sh.setEnv("MSG", "hello world"))
-                .isEqualTo("export MSG='hello world'\n");
+        assertThat(sh.setEnv("PATH", "/x/y:/z")).isEqualTo("export PATH=/x/y:/z\n"); // path-y chars don't need quoting
+        assertThat(sh.setEnv("MSG", "hello world")).isEqualTo("export MSG='hello world'\n");
         assertThat(sh.unsetEnv("FOO")).isEqualTo("unset FOO\n");
     }
 
     @Test
     void bash_escapes_embedded_single_quotes() {
-        assertThat(new BashShell().setEnv("X", "it's"))
-                .isEqualTo("export X='it'\\''s'\n");
+        assertThat(new BashShell().setEnv("X", "it's")).isEqualTo("export X='it'\\''s'\n");
     }
 
     @Test
@@ -57,16 +54,13 @@ class ShellTest {
     @Test
     void pwsh_set_unset_env() {
         var sh = new PwshShell();
-        assertThat(sh.setEnv("JAVA_HOME", "/opt/jdk"))
-                .isEqualTo("$Env:JAVA_HOME = '/opt/jdk'\n");
-        assertThat(sh.unsetEnv("FOO"))
-                .isEqualTo("Remove-Item -ErrorAction SilentlyContinue -Path Env:/FOO\n");
+        assertThat(sh.setEnv("JAVA_HOME", "/opt/jdk")).isEqualTo("$Env:JAVA_HOME = '/opt/jdk'\n");
+        assertThat(sh.unsetEnv("FOO")).isEqualTo("Remove-Item -ErrorAction SilentlyContinue -Path Env:/FOO\n");
     }
 
     @Test
     void pwsh_escapes_single_quotes_via_doubling() {
-        assertThat(new PwshShell().setEnv("X", "it's"))
-                .isEqualTo("$Env:X = 'it''s'\n");
+        assertThat(new PwshShell().setEnv("X", "it's")).isEqualTo("$Env:X = 'it''s'\n");
     }
 
     @Test
@@ -156,8 +150,7 @@ class ShellTest {
                 .isEqualTo("eval \"$(/opt/jk/bin/jk activate bash)\"");
         assertThat(new ZshShell().activationLine("/opt/jk/bin/jk"))
                 .isEqualTo("eval \"$(/opt/jk/bin/jk activate zsh)\"");
-        assertThat(new FishShell().activationLine("/opt/jk/bin/jk"))
-                .isEqualTo("/opt/jk/bin/jk activate fish | source");
+        assertThat(new FishShell().activationLine("/opt/jk/bin/jk")).isEqualTo("/opt/jk/bin/jk activate fish | source");
         assertThat(new PwshShell().activationLine("/opt/jk/bin/jk"))
                 .contains("Invoke-Expression")
                 .contains("activate pwsh");

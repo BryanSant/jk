@@ -3,24 +3,23 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.audit.AuditReport;
 import dev.jkbuild.cache.Cas;
-import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.lock.LockfileReader;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
-import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
-
+import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -43,14 +42,26 @@ import java.util.List;
  */
 public final class AuditCommand implements CliCommand {
 
-    @Override public String name() { return "audit"; }
-    @Override public String description() { return "Check the locked dependencies for known vulnerabilities"; }
-    @Override public java.util.List<Opt> options() {
+    @Override
+    public String name() {
+        return "audit";
+    }
+
+    @Override
+    public String description() {
+        return "Check the locked dependencies for known vulnerabilities";
+    }
+
+    @Override
+    public java.util.List<Opt> options() {
         return java.util.List.of(
                 Opt.value("<level>", "Severity: CRITICAL|HIGH|MEDIUM|LOW. Default: LOW.", "--severity"),
-                Opt.value("<url>", "Override the OSV batch query URL (for tests).", "--osv-batch-url").hide(),
-                Opt.value("<url>", "Override the OSV vulnerability lookup URL (for tests).", "--osv-vulns-url").hide());
+                Opt.value("<url>", "Override the OSV batch query URL (for tests).", "--osv-batch-url")
+                        .hide(),
+                Opt.value("<url>", "Override the OSV vulnerability lookup URL (for tests).", "--osv-vulns-url")
+                        .hide());
     }
+
     URI osvBatchUrl;
     URI osvVulnsUrl;
 
@@ -133,8 +144,7 @@ public final class AuditCommand implements CliCommand {
 
         List<AuditReport.Finding> blocking = report.filterAtLeast(threshold);
         if (!blocking.isEmpty()) {
-            System.err.println("jk audit: " + blocking.size()
-                    + " finding(s) at or above " + threshold + " — failing.");
+            System.err.println("jk audit: " + blocking.size() + " finding(s) at or above " + threshold + " — failing.");
             return 1;
         }
         return 0;
@@ -145,32 +155,39 @@ public final class AuditCommand implements CliCommand {
      * findings. Uses a hand-rolled field extractor — no Jackson required in
      * the driver.
      */
-    private List<AuditReport.Finding> runWorker(Path lockPath, Path cache)
-            throws IOException, InterruptedException {
+    private List<AuditReport.Finding> runWorker(Path lockPath, Path cache) throws IOException, InterruptedException {
         Path workerJar = WorkerJar.AUDITOR.locate(new Cas(cache));
         Path spec = writeSpec(lockPath);
         try {
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
                     .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
-            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
+            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
+                    javaExe.toString(),
+                    1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
 
             List<AuditReport.Finding> findings = new ArrayList<>();
-            int exit = WorkerProcess.run(cmd, "##JKAU:", json -> {
-                if (!"finding".equals(Ndjson.str(json, "t"))) return;
-                String module   = Ndjson.str(json, "module");
-                String version  = Ndjson.str(json, "version");
-                String vulnId   = Ndjson.str(json, "vuln_id");
-                String severity = Ndjson.str(json, "severity");
-                String summary  = Ndjson.str(json, "summary");
-                if (module != null && version != null && vulnId != null) {
-                    findings.add(new AuditReport.Finding(
-                            module, version, vulnId,
-                            summary != null ? summary : "",
-                            AuditReport.Severity.parse(severity)));
-                }
-            }, null);
+            int exit = WorkerProcess.run(
+                    cmd,
+                    "##JKAU:",
+                    json -> {
+                        if (!"finding".equals(Ndjson.str(json, "t"))) return;
+                        String module = Ndjson.str(json, "module");
+                        String version = Ndjson.str(json, "version");
+                        String vulnId = Ndjson.str(json, "vuln_id");
+                        String severity = Ndjson.str(json, "severity");
+                        String summary = Ndjson.str(json, "summary");
+                        if (module != null && version != null && vulnId != null) {
+                            findings.add(new AuditReport.Finding(
+                                    module,
+                                    version,
+                                    vulnId,
+                                    summary != null ? summary : "",
+                                    AuditReport.Severity.parse(severity)));
+                        }
+                    },
+                    null);
             if (exit != 0) {
                 throw new RuntimeException("audit worker exited with code " + exit);
             }

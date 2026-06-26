@@ -3,7 +3,6 @@ package dev.jkbuild.compile;
 
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerProcess;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +26,7 @@ public final class KotlincDriver {
 
     /** Mirrors the worker's {@code Ndjson.PREFIX}. */
     private static final String PROTOCOL_PREFIX = "##JKKC:";
+
     private static final String WORKER_MAIN = "dev.jkbuild.plugin.worker.PluginWorkerMain";
 
     public KotlincResult compile(KotlincRequest request) {
@@ -44,25 +44,33 @@ public final class KotlincDriver {
         Path spec = writeSpec(request);
         try {
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
-                    request.javaHome().resolve("bin").resolve("java").toString(), 1,
+                    request.javaHome().resolve("bin").resolve("java").toString(),
+                    1,
                     List.of(
-                        // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
-                        "--enable-native-access=ALL-UNNAMED",
-                        "-cp", request.workerClasspath().stream()
-                                .map(Path::toString).collect(Collectors.joining(java.io.File.pathSeparator)),
-                        WORKER_MAIN, "@" + spec.toAbsolutePath()));
+                            // Silence the JDK's native-access / Unsafe warnings the compiler triggers.
+                            "--enable-native-access=ALL-UNNAMED",
+                            "-cp",
+                            request.workerClasspath().stream()
+                                    .map(Path::toString)
+                                    .collect(Collectors.joining(java.io.File.pathSeparator)),
+                            WORKER_MAIN,
+                            "@" + spec.toAbsolutePath()));
 
             List<String> diagnostics = new ArrayList<>();
             String[] status = {null};
             // Non-protocol lines (JDK/compiler chatter) are dropped, as before.
-            int exit = WorkerProcess.run(cmd, PROTOCOL_PREFIX, json -> {
-                String t = Ndjson.str(json, "t");
-                if ("diag".equals(t)) {
-                    diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg"));
-                } else if ("result".equals(t)) {
-                    status[0] = Ndjson.str(json, "status");
-                }
-            }, null);
+            int exit = WorkerProcess.run(
+                    cmd,
+                    PROTOCOL_PREFIX,
+                    json -> {
+                        String t = Ndjson.str(json, "t");
+                        if ("diag".equals(t)) {
+                            diagnostics.add(Ndjson.str(json, "sev") + ": " + Ndjson.str(json, "msg"));
+                        } else if ("result".equals(t)) {
+                            status[0] = Ndjson.str(json, "status");
+                        }
+                    },
+                    null);
             boolean success = exit == 0 && "COMPILATION_SUCCESS".equals(status[0]);
             return new KotlincResult(success, String.join("\n", diagnostics));
         } finally {
@@ -94,5 +102,4 @@ public final class KotlincDriver {
         Files.write(spec, lines, StandardCharsets.UTF_8);
         return spec;
     }
-
 }

@@ -34,7 +34,9 @@ public final class HostRateLimiter {
     private static final HostRateLimiter SHARED = new HostRateLimiter(DEFAULT_PERMITS);
 
     /** Process-wide shared limiter at the default capacity. */
-    public static HostRateLimiter shared() { return SHARED; }
+    public static HostRateLimiter shared() {
+        return SHARED;
+    }
 
     private final int permitsPerHost;
     private final ConcurrentMap<String, Semaphore> semaphores = new ConcurrentHashMap<>();
@@ -45,8 +47,7 @@ public final class HostRateLimiter {
     }
 
     /** Acquire a permit for {@code host}, run {@code work}, release on return or throw. */
-    public <T, E extends Exception> T run(String host, ThrowingSupplier<T, E> work)
-            throws E, InterruptedException {
+    public <T, E extends Exception> T run(String host, ThrowingSupplier<T, E> work) throws E, InterruptedException {
         Semaphore sem = semaphores.computeIfAbsent(host, h -> new Semaphore(permitsPerHost));
         sem.acquire();
         try {
@@ -57,8 +58,7 @@ public final class HostRateLimiter {
     }
 
     /** Convenience: extract the host from a URI before dispatching. */
-    public <T, E extends Exception> T run(URI uri, ThrowingSupplier<T, E> work)
-            throws E, InterruptedException {
+    public <T, E extends Exception> T run(URI uri, ThrowingSupplier<T, E> work) throws E, InterruptedException {
         String host = uri.getHost() != null ? uri.getHost() : uri.toString();
         return run(host, work);
     }

@@ -53,14 +53,12 @@ public final class Coords {
 
     /** {@code [blue]group[/]:[cyan]artifact[/]:[bright-blue]version[/]}. */
     public static String gav(String group, String artifact, String version) {
-        return ga(group, artifact)
-                + ":" + Theme.colorize(version, versionStyle());
+        return ga(group, artifact) + ":" + Theme.colorize(version, versionStyle());
     }
 
     /** {@code [blue]group[/]:[cyan]artifact[/]} (no version). */
     public static String ga(String group, String artifact) {
-        return Theme.colorize(group, groupStyle())
-                + ":" + Theme.colorize(artifact, artifactStyle());
+        return Theme.colorize(group, groupStyle()) + ":" + Theme.colorize(artifact, artifactStyle());
     }
 
     /** Color a {@link Coordinate} as {@code group:artifact:version}. */
@@ -86,9 +84,8 @@ public final class Coords {
      */
     public static String module(String moduleKey, String version) {
         int colon = moduleKey.indexOf(':');
-        String colored = colon < 0
-                ? shortName(moduleKey)
-                : ga(moduleKey.substring(0, colon), moduleKey.substring(colon + 1));
+        String colored =
+                colon < 0 ? shortName(moduleKey) : ga(moduleKey.substring(0, colon), moduleKey.substring(colon + 1));
         if (version != null && !version.isEmpty()) {
             colored += ":" + Theme.colorize(version, versionStyle());
         }

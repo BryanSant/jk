@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.forge;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ForgeAuthTest {
 
@@ -27,9 +26,12 @@ class ForgeAuthTest {
         store.write("github.com", "stored-token");
         CliTokenProbe cli = argv -> Optional.of("gh-token");
 
-        var auth = new ForgeAuth(store, env(Map.of(
-                "JK_GITHUB_TOKEN", "jk-token",
-                "GITHUB_TOKEN", "native-token")), cli);
+        var auth = new ForgeAuth(
+                store,
+                env(Map.of(
+                        "JK_GITHUB_TOKEN", "jk-token",
+                        "GITHUB_TOKEN", "native-token")),
+                cli);
 
         var resolved = auth.resolveSilently(ForgeKind.GITHUB, null).orElseThrow();
         assertThat(resolved.value()).isEqualTo("jk-token");
@@ -104,7 +106,9 @@ class ForgeAuthTest {
     @Test
     void bitbucket_has_no_native_cli_so_cli_step_is_skipped(@TempDir Path dir) {
         // nativeCliToken() is empty for Bitbucket → the probe must never run.
-        CliTokenProbe failing = argv -> { throw new AssertionError("CLI must not be probed"); };
+        CliTokenProbe failing = argv -> {
+            throw new AssertionError("CLI must not be probed");
+        };
         var auth = new ForgeAuth(new TokenStore(dir), env(Map.of()), failing);
         assertThat(auth.resolveSilently(ForgeKind.BITBUCKET, null)).isEmpty();
     }

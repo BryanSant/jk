@@ -3,8 +3,6 @@ package dev.jkbuild.compile;
 
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.worker.WorkerProcess;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
@@ -34,8 +32,7 @@ public final class WorkerJavac {
     private WorkerJavac() {}
 
     /** @param generated generated source file → the input source file(s) it originated from */
-    public record Result(boolean success, List<CompileResult.Diagnostic> diagnostics,
-                         Map<Path, Set<Path>> generated) {
+    public record Result(boolean success, List<CompileResult.Diagnostic> diagnostics, Map<Path, Set<Path>> generated) {
         public Result {
             diagnostics = List.copyOf(diagnostics);
         }
@@ -76,27 +73,37 @@ public final class WorkerJavac {
             boolean win = HostPlatform.isWindows();
             Path javaExe = req.javaHome().resolve("bin").resolve(win ? "java.exe" : "java");
             int exit = dev.jkbuild.worker.PluginLoader.run(
-                    javaExe, req.workerJar().toString(),
-                    dev.jkbuild.worker.JvmOptions.workerFlags(1), PREFIX,
-                    List.of("@" + spec.toAbsolutePath()), json -> {
-                String t = Ndjson.str(json, "t");
-                if (t == null) return;
-                switch (t) {
-                    case "diag" -> diagnostics.add(new CompileResult.Diagnostic(
-                            CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
-                            null, 0, 0, Ndjson.str(json, "msg")));
-                    case "prov" -> {
-                        String genStr = Ndjson.str(json, "gen");
-                        if (genStr == null) return;
-                        Path gen = Path.of(genStr);
-                        Set<Path> origins = new TreeSet<>();
-                        for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
-                        generated.put(gen, origins);
-                    }
-                    case "result" -> status[0] = Ndjson.str(json, "status");
-                    default -> { /* ignore */ }
-                }
-            }, null);
+                    javaExe,
+                    req.workerJar().toString(),
+                    dev.jkbuild.worker.JvmOptions.workerFlags(1),
+                    PREFIX,
+                    List.of("@" + spec.toAbsolutePath()),
+                    json -> {
+                        String t = Ndjson.str(json, "t");
+                        if (t == null) return;
+                        switch (t) {
+                            case "diag" ->
+                                diagnostics.add(new CompileResult.Diagnostic(
+                                        CompileResult.Severity.fromName(Ndjson.str(json, "sev")),
+                                        null,
+                                        0,
+                                        0,
+                                        Ndjson.str(json, "msg")));
+                            case "prov" -> {
+                                String genStr = Ndjson.str(json, "gen");
+                                if (genStr == null) return;
+                                Path gen = Path.of(genStr);
+                                Set<Path> origins = new TreeSet<>();
+                                for (String s : Ndjson.strArray(json, "src")) origins.add(Path.of(s));
+                                generated.put(gen, origins);
+                            }
+                            case "result" -> status[0] = Ndjson.str(json, "status");
+                            default -> {
+                                /* ignore */
+                            }
+                        }
+                    },
+                    null);
             boolean success = exit == 0 && "OK".equals(status[0]);
             return new Result(success, diagnostics, generated);
         } finally {

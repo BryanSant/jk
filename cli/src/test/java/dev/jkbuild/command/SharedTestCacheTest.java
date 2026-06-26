@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /** The shared integration-test cache directory is stable, created, and reused. */
 class SharedTestCacheTest {
@@ -14,8 +13,8 @@ class SharedTestCacheTest {
     void dir_is_created_and_stable_within_the_jvm() {
         var first = SharedTestCache.dir();
         var second = SharedTestCache.dir();
-        assertThat(first).isSameAs(second);               // one shared dir per run
-        assertThat(Files.isDirectory(first)).isTrue();    // materialised on access
+        assertThat(first).isSameAs(second); // one shared dir per run
+        assertThat(Files.isDirectory(first)).isTrue(); // materialised on access
         assertThat(SharedTestCache.arg()).isEqualTo(first.toString());
     }
 

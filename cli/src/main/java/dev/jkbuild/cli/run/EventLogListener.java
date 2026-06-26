@@ -5,7 +5,6 @@ import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.PhaseStatus;
-
 import java.io.IOException;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -56,36 +55,81 @@ public final class EventLogListener implements GoalListener {
             String safeGoal = goalName.replaceAll("[^A-Za-z0-9_.-]", "_");
             Path file = dir.resolve(TS_FORMAT.format(Instant.now()) + "-" + safeGoal + ".ndjson");
             PrintStream stream = new PrintStream(
-                    Files.newOutputStream(file,
-                            StandardOpenOption.CREATE_NEW,
-                            StandardOpenOption.WRITE),
-                    /*autoFlush=*/ true, StandardCharsets.UTF_8);
+                    Files.newOutputStream(file, StandardOpenOption.CREATE_NEW, StandardOpenOption.WRITE),
+                    /*autoFlush=*/ true,
+                    StandardCharsets.UTF_8);
             return new EventLogListener(file, stream);
         } catch (IOException e) {
             return null;
         }
     }
 
-    public Path file() { return file; }
+    public Path file() {
+        return file;
+    }
 
     // The bulk of the work delegates to NdjsonListener's wire format
     // by re-using its helper privately. We keep them as separate
     // classes (rather than wrapping) so listener-ordering on
     // System.out vs the log file stays explicit.
 
-    @Override public void goalStart(GoalView v)                          { line(NdjsonShape.goalStart(v)); }
-    @Override public void phaseStart(String phase, int scope)            { line(NdjsonShape.phaseStart(phase, scope)); }
-    @Override public void progress(String phase, int delta, GoalView v)  { line(NdjsonShape.progress(phase, delta, v)); }
-    @Override public void scopeUpdate(String phase, int delta, GoalView v){ line(NdjsonShape.scopeUpdate(phase, delta, v)); }
-    @Override public void label(String phase, String label)              { line(NdjsonShape.label(phase, label)); }
-    @Override public void output(String phase, String line)              { line(NdjsonShape.output(phase, line)); }
-    @Override public void warn(String phase, String code, String msg)    { line(NdjsonShape.warn(phase, code, msg)); }
-    @Override public void error(String phase, String code, String msg)   { line(NdjsonShape.error(phase, code, msg)); }
-    @Override public void error(String phase, String code, String msg, String test, String exClass) { line(NdjsonShape.error(phase, code, msg, test, exClass)); }
-    @Override public void phaseFinish(String phase, PhaseStatus s, Duration d) { line(NdjsonShape.phaseFinish(phase, s, d)); }
-    @Override public void goalFinish(GoalResult r)                       {
+    @Override
+    public void goalStart(GoalView v) {
+        line(NdjsonShape.goalStart(v));
+    }
+
+    @Override
+    public void phaseStart(String phase, int scope) {
+        line(NdjsonShape.phaseStart(phase, scope));
+    }
+
+    @Override
+    public void progress(String phase, int delta, GoalView v) {
+        line(NdjsonShape.progress(phase, delta, v));
+    }
+
+    @Override
+    public void scopeUpdate(String phase, int delta, GoalView v) {
+        line(NdjsonShape.scopeUpdate(phase, delta, v));
+    }
+
+    @Override
+    public void label(String phase, String label) {
+        line(NdjsonShape.label(phase, label));
+    }
+
+    @Override
+    public void output(String phase, String line) {
+        line(NdjsonShape.output(phase, line));
+    }
+
+    @Override
+    public void warn(String phase, String code, String msg) {
+        line(NdjsonShape.warn(phase, code, msg));
+    }
+
+    @Override
+    public void error(String phase, String code, String msg) {
+        line(NdjsonShape.error(phase, code, msg));
+    }
+
+    @Override
+    public void error(String phase, String code, String msg, String test, String exClass) {
+        line(NdjsonShape.error(phase, code, msg, test, exClass));
+    }
+
+    @Override
+    public void phaseFinish(String phase, PhaseStatus s, Duration d) {
+        line(NdjsonShape.phaseFinish(phase, s, d));
+    }
+
+    @Override
+    public void goalFinish(GoalResult r) {
         line(NdjsonShape.goalFinish(r));
-        try { stream.close(); } catch (RuntimeException ignored) {}
+        try {
+            stream.close();
+        } catch (RuntimeException ignored) {
+        }
     }
 
     private void line(String s) {

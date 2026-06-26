@@ -6,7 +6,6 @@ import dev.jkbuild.gradle.GradleExporter;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -22,8 +21,15 @@ import java.util.Map;
  */
 public final class ExportGradleCommand implements CliCommand {
 
-    @Override public String name() { return "gradle"; }
-    @Override public String description() { return "Generate a Gradle (Kotlin DSL) build from jk.toml"; }
+    @Override
+    public String name() {
+        return "gradle";
+    }
+
+    @Override
+    public String description() {
+        return "Generate a Gradle (Kotlin DSL) build from jk.toml";
+    }
 
     @Override
     public List<Opt> options() {

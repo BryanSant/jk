@@ -17,8 +17,8 @@ import java.util.Optional;
  */
 public final class Invocation {
 
-    private final Map<String, List<String>> values;   // value options: canonical → values
-    private final Map<String, Boolean> flags;          // boolean flags: canonical → state
+    private final Map<String, List<String>> values; // value options: canonical → values
+    private final Map<String, Boolean> flags; // boolean flags: canonical → state
     private final List<String> positionals;
 
     private Invocation(Map<String, List<String>> values, Map<String, Boolean> flags, List<String> positionals) {

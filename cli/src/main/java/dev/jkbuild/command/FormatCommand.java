@@ -3,26 +3,24 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.cli.PathDisplay;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.http.Http;
-import dev.jkbuild.model.JkBuild;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.model.Coordinate;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.runtime.CompileToolchain;
-import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.worker.JvmOptions;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -52,7 +50,7 @@ public final class FormatCommand implements CliCommand {
     private static final String PALANTIR_VERSION = "2.80.0";
     private static final String GOOGLE_VERSION = "1.28.0";
     private static final String KTFMT_VERSION = "0.61";
-    private static final int KOTLIN_MAX_WIDTH = 120;   // match Palantir's 120-col
+    private static final int KOTLIN_MAX_WIDTH = 120; // match Palantir's 120-col
 
     // palantir/google-java-format reflectively use the JDK compiler internals.
     private static final List<String> JAVAC_EXPORTS = List.of(
@@ -65,10 +63,18 @@ public final class FormatCommand implements CliCommand {
             "--add-opens=jdk.compiler/com.sun.tools.javac.code=ALL-UNNAMED",
             "--add-opens=jdk.compiler/com.sun.tools.javac.comp=ALL-UNNAMED");
 
-    @Override public String name() { return "format"; }
-    @Override public String description() { return "Format Java/Kotlin source code"; }
+    @Override
+    public String name() {
+        return "format";
+    }
 
-    @Override public List<Opt> options() {
+    @Override
+    public String description() {
+        return "Format Java/Kotlin source code";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.flag("Check formatting; fail if unformatted.", "--check"),
                 Opt.value("<style>", "Java style: palantir | google | aosp.", "--java-style"),
@@ -113,10 +119,14 @@ public final class FormatCommand implements CliCommand {
         var resolver = ToolResolver.mavenCentral(new Http(), cas);
 
         // Resolve the formatter impl jars jk hands to the worker's Provisioner.
-        List<Path> javaJars = javaFiles.isEmpty() ? List.of()
-                : resolver.resolve(javaCoord(styles.java()), "java-format", "ignored").classpath();
-        List<Path> kotlinJars = kotlinFiles.isEmpty() ? List.of()
-                : resolver.resolve(Coordinate.of("com.facebook", "ktfmt", KTFMT_VERSION), "ktfmt", "ignored").classpath();
+        List<Path> javaJars = javaFiles.isEmpty()
+                ? List.of()
+                : resolver.resolve(javaCoord(styles.java()), "java-format", "ignored")
+                        .classpath();
+        List<Path> kotlinJars = kotlinFiles.isEmpty()
+                ? List.of()
+                : resolver.resolve(Coordinate.of("com.facebook", "ktfmt", KTFMT_VERSION), "ktfmt", "ignored")
+                        .classpath();
 
         Path spec = writeSpec(check, styles, javaFiles, javaJars, kotlinFiles, kotlinJars);
         try {
@@ -136,17 +146,22 @@ public final class FormatCommand implements CliCommand {
         return "palantir".equals(style) ? PALANTIR_VERSION : GOOGLE_VERSION;
     }
 
-    private Path writeSpec(boolean check, FormatStyles.Resolved styles,
-                           List<Path> javaFiles, List<Path> javaJars,
-                           List<Path> kotlinFiles, List<Path> kotlinJars) throws IOException {
+    private Path writeSpec(
+            boolean check,
+            FormatStyles.Resolved styles,
+            List<Path> javaFiles,
+            List<Path> javaJars,
+            List<Path> kotlinFiles,
+            List<Path> kotlinJars)
+            throws IOException {
         List<String> lines = new ArrayList<>();
         lines.add("mode\t" + (check ? "check" : "apply"));
         if (!javaFiles.isEmpty()) {
             lines.add("java\t" + styles.java() + "\t" + javaVersion(styles.java()) + "\t" + joinJars(javaJars));
         }
         if (!kotlinFiles.isEmpty()) {
-            lines.add("kotlin\t" + styles.kotlin() + "\t" + KTFMT_VERSION + "\t"
-                    + KOTLIN_MAX_WIDTH + "\t" + joinJars(kotlinJars));
+            lines.add("kotlin\t" + styles.kotlin() + "\t" + KTFMT_VERSION + "\t" + KOTLIN_MAX_WIDTH + "\t"
+                    + joinJars(kotlinJars));
         }
         for (Path f : javaFiles) lines.add("f\tjava\t" + f.toAbsolutePath());
         for (Path f : kotlinFiles) lines.add("f\tkotlin\t" + f.toAbsolutePath());
@@ -156,15 +171,18 @@ public final class FormatCommand implements CliCommand {
     }
 
     private static String joinJars(List<Path> jars) {
-        return jars.stream().map(p -> p.toAbsolutePath().toString())
-                .reduce((a, b) -> a + File.pathSeparator + b).orElse("");
+        return jars.stream()
+                .map(p -> p.toAbsolutePath().toString())
+                .reduce((a, b) -> a + File.pathSeparator + b)
+                .orElse("");
     }
 
-    private int forkWorker(Cas cas, Path spec, boolean hasJava, boolean check, GlobalOptions global,
-                           long startMs, Path projectDir)
+    private int forkWorker(
+            Cas cas, Path spec, boolean hasJava, boolean check, GlobalOptions global, long startMs, Path projectDir)
             throws IOException, InterruptedException {
         Path workerJar = WorkerJar.FORMATTER.locate(cas);
-        Path javaExe = CompileToolchain.runningJavaHome().resolve("bin")
+        Path javaExe = CompileToolchain.runningJavaHome()
+                .resolve("bin")
                 .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
         List<String> rest = new ArrayList<>();
         if (hasJava) rest.addAll(JAVAC_EXPORTS);
@@ -173,32 +191,41 @@ public final class FormatCommand implements CliCommand {
         rest.add(spec.toAbsolutePath().toString());
         List<String> cmd = JvmOptions.javaCommand(javaExe.toString(), 1, rest);
 
-        int[] counts = {0, 0, 0};   // changed, clean, errors
-        int exit = WorkerProcess.run(cmd, "##JKFMT:", json -> {
-            String t = Ndjson.str(json, "t");
-            if ("file".equals(t)) {
-                String status = Ndjson.str(json, "status");
-                String path = Ndjson.str(json, "path");
-                if ("changed".equals(status)) {
-                    counts[0]++;
-                    if (!global.outputIsJson()) {
-                        String mark = Theme.colorize("✓", Theme.active().success());
-                        String rel  = Theme.colorize(PathDisplay.of(Path.of(path), projectDir), Theme.active().path());
-                        System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
+        int[] counts = {0, 0, 0}; // changed, clean, errors
+        int exit = WorkerProcess.run(
+                cmd,
+                "##JKFMT:",
+                json -> {
+                    String t = Ndjson.str(json, "t");
+                    if ("file".equals(t)) {
+                        String status = Ndjson.str(json, "status");
+                        String path = Ndjson.str(json, "path");
+                        if ("changed".equals(status)) {
+                            counts[0]++;
+                            if (!global.outputIsJson()) {
+                                String mark = Theme.colorize("✓", Theme.active().success());
+                                String rel = Theme.colorize(
+                                        PathDisplay.of(Path.of(path), projectDir),
+                                        Theme.active().path());
+                                System.out.println(mark + " " + (check ? "Would format: " : "Formatted: ") + rel);
+                            }
+                        } else if ("error".equals(status)) {
+                            counts[2]++;
+                            System.err.println("  error  " + path + ": " + Ndjson.str(json, "msg"));
+                        } else {
+                            counts[1]++;
+                        }
                     }
-                } else if ("error".equals(status)) {
-                    counts[2]++;
-                    System.err.println("  error  " + path + ": " + Ndjson.str(json, "msg"));
-                } else {
-                    counts[1]++;
-                }
-            }
-        }, line -> { if (global.verbose) System.err.println("  [formatter] " + line); });
+                },
+                line -> {
+                    if (global.verbose) System.err.println("  [formatter] " + line);
+                });
 
         if (!global.outputIsJson()) {
             String check_ = Theme.colorize("✓", Theme.active().success());
-            String verb   = Theme.colorize(check ? "Checked" : "Formatted", Theme.active().focused());
-            String body   = check
+            String verb = Theme.colorize(
+                    check ? "Checked" : "Formatted", Theme.active().focused());
+            String body = check
                     ? counts[0] + " to format, " + counts[1] + " already clean"
                     : counts[0] + " file" + (counts[0] == 1 ? "" : "s") + ", " + counts[1] + " already clean";
             if (counts[2] > 0) body += ", " + counts[2] + " error" + (counts[2] == 1 ? "" : "s");
@@ -223,12 +250,14 @@ public final class FormatCommand implements CliCommand {
     private static boolean notExcluded(Path p) {
         for (Path seg : p) {
             String s = seg.toString();
-            if (s.equals("target") || s.equals("build") || s.equals(".jk")
-                    || s.equals(".git") || s.equals("node_modules")) {
+            if (s.equals("target")
+                    || s.equals("build")
+                    || s.equals(".jk")
+                    || s.equals(".git")
+                    || s.equals("node_modules")) {
                 return false;
             }
         }
         return true;
     }
-
 }

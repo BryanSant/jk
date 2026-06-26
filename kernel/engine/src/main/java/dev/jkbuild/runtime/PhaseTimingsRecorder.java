@@ -3,7 +3,6 @@ package dev.jkbuild.runtime;
 
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.PhaseStatus;
-
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;

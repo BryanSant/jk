@@ -29,7 +29,7 @@ public final class JarManifest {
     /** Read the {@code Main-Class} attribute, or empty if the jar has none. */
     public static Optional<String> mainClass(Path jar) throws IOException {
         try (InputStream in = Files.newInputStream(jar);
-             ZipInputStream zis = new ZipInputStream(in)) {
+                ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if (!entry.getName().equalsIgnoreCase("META-INF/MANIFEST.MF")) continue;
@@ -38,8 +38,7 @@ public final class JarManifest {
                 mf.read(new ByteArrayInputStream(body));
                 Attributes main = mf.getMainAttributes();
                 String value = main.getValue(Attributes.Name.MAIN_CLASS);
-                return value == null || value.isBlank()
-                        ? Optional.empty() : Optional.of(value.trim());
+                return value == null || value.isBlank() ? Optional.empty() : Optional.of(value.trim());
             }
         }
         return Optional.empty();
@@ -48,7 +47,7 @@ public final class JarManifest {
     /** Probe the entire manifest as a UTF-8 string (for diagnostics). */
     public static Optional<String> rawManifest(Path jar) throws IOException {
         try (InputStream in = Files.newInputStream(jar);
-             ZipInputStream zis = new ZipInputStream(in)) {
+                ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if (entry.getName().equalsIgnoreCase("META-INF/MANIFEST.MF")) {
@@ -71,7 +70,7 @@ public final class JarManifest {
         // group:artifact → builder
         var byCoord = new LinkedHashMap<String, EmbeddedPom.Builder>();
         try (InputStream in = Files.newInputStream(jar);
-             ZipInputStream zis = new ZipInputStream(in)) {
+                ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 String name = entry.getName();
@@ -86,8 +85,7 @@ public final class JarManifest {
                 String group = dir.substring(0, dirSlash);
                 String artifact = dir.substring(dirSlash + 1);
                 String coord = group + ":" + artifact;
-                EmbeddedPom.Builder b = byCoord.computeIfAbsent(coord,
-                        k -> new EmbeddedPom.Builder(group, artifact));
+                EmbeddedPom.Builder b = byCoord.computeIfAbsent(coord, k -> new EmbeddedPom.Builder(group, artifact));
                 if (file.equals("pom.xml")) {
                     b.pomXml = zis.readAllBytes();
                 } else if (file.equals("pom.properties")) {
@@ -116,14 +114,17 @@ public final class JarManifest {
                 String key = line.substring(0, eq).trim();
                 String val = line.substring(eq + 1).trim();
                 switch (key) {
-                    case "groupId"    -> groupId    = val;
+                    case "groupId" -> groupId = val;
                     case "artifactId" -> artifactId = val;
-                    case "version"    -> version    = val;
+                    case "version" -> version = val;
                 }
             }
-            if (groupId != null && !groupId.isBlank()
-                    && artifactId != null && !artifactId.isBlank()
-                    && version != null && !version.isBlank()) {
+            if (groupId != null
+                    && !groupId.isBlank()
+                    && artifactId != null
+                    && !artifactId.isBlank()
+                    && version != null
+                    && !version.isBlank()) {
                 return Optional.of(dev.jkbuild.model.Coordinate.of(groupId, artifactId, version));
             }
         }
@@ -133,7 +134,7 @@ public final class JarManifest {
     /** Whether the jar contains a top-level {@code module-info.class} (a real Java module). */
     public static boolean hasModuleInfo(Path jar) throws IOException {
         try (InputStream in = Files.newInputStream(jar);
-             ZipInputStream zis = new ZipInputStream(in)) {
+                ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if (entry.getName().equals("module-info.class")) return true;
@@ -148,21 +149,29 @@ public final class JarManifest {
      * {@code PomImporter.importFromBytes}); {@code pomProperties} is the raw
      * key-value text of {@code pom.properties}.
      */
-    public record EmbeddedPom(String group, String artifact,
-                              byte[] pomXml, String pomProperties) {
-        public boolean hasPomXml() { return pomXml != null && pomXml.length > 0; }
-        public String coord() { return group + ":" + artifact; }
+    public record EmbeddedPom(String group, String artifact, byte[] pomXml, String pomProperties) {
+        public boolean hasPomXml() {
+            return pomXml != null && pomXml.length > 0;
+        }
+
+        public String coord() {
+            return group + ":" + artifact;
+        }
 
         static final class Builder {
             final String group;
             final String artifact;
             byte[] pomXml;
             String pomProperties;
+
             Builder(String group, String artifact) {
                 this.group = group;
                 this.artifact = artifact;
             }
-            EmbeddedPom build() { return new EmbeddedPom(group, artifact, pomXml, pomProperties); }
+
+            EmbeddedPom build() {
+                return new EmbeddedPom(group, artifact, pomXml, pomProperties);
+            }
         }
     }
 }

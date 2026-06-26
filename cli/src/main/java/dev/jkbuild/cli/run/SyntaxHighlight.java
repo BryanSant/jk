@@ -2,12 +2,10 @@
 package dev.jkbuild.cli.run;
 
 import dev.jkbuild.cli.theme.Theme;
-
-import org.jline.utils.AttributedStyle;
-
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Single-line Java/Kotlin syntax highlighter for compiler-diagnostic source
@@ -36,12 +34,25 @@ public final class SyntaxHighlight {
     private SyntaxHighlight() {}
 
     /** Which Prism grammar to colorize with. */
-    public enum Language { JAVA, KOTLIN }
+    public enum Language {
+        JAVA,
+        KOTLIN
+    }
 
     /** A colorable token class; maps to a {@link Theme} style via {@link #styleFor}. */
     enum Role {
-        KEYWORD, TYPE, FUNCTION, CONSTANT, STRING, NUMBER, COMMENT, ANNOTATION,
-        NAMESPACE, PUNCTUATION, PATH, PLAIN
+        KEYWORD,
+        TYPE,
+        FUNCTION,
+        CONSTANT,
+        STRING,
+        NUMBER,
+        COMMENT,
+        ANNOTATION,
+        NAMESPACE,
+        PUNCTUATION,
+        PATH,
+        PLAIN
     }
 
     /** One ordered grammar rule: a regex anchored at the cursor and the role it paints. */
@@ -61,6 +72,7 @@ public final class SyntaxHighlight {
     private static final Rule BLOCK_COMMENT = Rule.of("/\\*\\*?[\\s\\S]*?\\*/", Role.COMMENT);
     /** A line comment, but not the {@code //} inside a URL ({@code http://}) or escaped. */
     private static final Rule LINE_COMMENT = Rule.of("(?<![:\\\\])//.*", Role.COMMENT);
+
     private static final Rule OPEN_COMMENT = Rule.of("/\\*[\\s\\S]*", Role.COMMENT);
 
     private static final Rule PUNCTUATION = Rule.of("[{}\\[\\]();,.:]", Role.PUNCTUATION);
@@ -80,18 +92,21 @@ public final class SyntaxHighlight {
             // annotation use (@Test, @foo.Bar) — not a field access like x@y is invalid anyway
             Rule.of("(?<!\\.)@[A-Za-z_]\\w*(?:\\s*\\.\\s*\\w+)*", Role.ANNOTATION),
             // number: binary, hex (with optional fraction/exponent), decimal/float — case-insensitive
-            Rule.of("\\b0b[01][01_]*l?\\b"
-                    + "|\\b0x(?:\\.[\\da-f_p+-]+|[\\da-f_]+(?:\\.[\\da-f_p+-]+)?)\\b"
-                    + "|(?:\\b\\d[\\d_]*(?:\\.[\\d_]*)?|\\B\\.\\d[\\d_]*)(?:e[+-]?\\d[\\d_]*)?[dfl]?",
-                    Pattern.CASE_INSENSITIVE, Role.NUMBER),
+            Rule.of(
+                    "\\b0b[01][01_]*l?\\b"
+                            + "|\\b0x(?:\\.[\\da-f_p+-]+|[\\da-f_]+(?:\\.[\\da-f_p+-]+)?)\\b"
+                            + "|(?:\\b\\d[\\d_]*(?:\\.[\\d_]*)?|\\B\\.\\d[\\d_]*)(?:e[+-]?\\d[\\d_]*)?[dfl]?",
+                    Pattern.CASE_INSENSITIVE,
+                    Role.NUMBER),
             // keywords (incl. boolean/null literals, folded in for one color)
-            Rule.of("\\b(?:abstract|assert|boolean|break|byte|case|catch|char|class|const"
-                    + "|continue|default|do|double|else|enum|exports|extends|final|finally|float"
-                    + "|for|goto|if|implements|import|instanceof|int|interface|long|module|native"
-                    + "|new|non-sealed|null|open|opens|package|permits|private|protected|provides"
-                    + "|public|record|requires|return|sealed|short|static|strictfp|super|switch"
-                    + "|synchronized|this|throw|throws|to|transient|transitive|try|uses|var|void"
-                    + "|volatile|while|with|yield|true|false)\\b",
+            Rule.of(
+                    "\\b(?:abstract|assert|boolean|break|byte|case|catch|char|class|const"
+                            + "|continue|default|do|double|else|enum|exports|extends|final|finally|float"
+                            + "|for|goto|if|implements|import|instanceof|int|interface|long|module|native"
+                            + "|new|non-sealed|null|open|opens|package|permits|private|protected|provides"
+                            + "|public|record|requires|return|sealed|short|static|strictfp|super|switch"
+                            + "|synchronized|this|throw|throws|to|transient|transitive|try|uses|var|void"
+                            + "|volatile|while|with|yield|true|false)\\b",
                     Role.KEYWORD),
             // ALL_CAPS constant — must precede the type rule
             Rule.of("\\b[A-Z][A-Z_\\d]+\\b", Role.CONSTANT),
@@ -117,20 +132,22 @@ public final class SyntaxHighlight {
             // annotation: @Foo, @field:Foo, @[Foo Bar]
             Rule.of("(?<!\\.)@(?:\\w+:)?(?:[A-Z]\\w*|\\[[^\\]]+\\])", Role.ANNOTATION),
             // number
-            Rule.of("\\b(?:0[xX][\\da-fA-F]+(?:_[\\da-fA-F]+)*"
-                    + "|0[bB][01]+(?:_[01]+)*"
-                    + "|\\d+(?:_\\d+)*(?:\\.\\d+(?:_\\d+)*)?(?:[eE][+-]?\\d+(?:_\\d+)*)?[fFL]?)\\b",
+            Rule.of(
+                    "\\b(?:0[xX][\\da-fA-F]+(?:_[\\da-fA-F]+)*"
+                            + "|0[bB][01]+(?:_[01]+)*"
+                            + "|\\d+(?:_\\d+)*(?:\\.\\d+(?:_\\d+)*)?(?:[eE][+-]?\\d+(?:_\\d+)*)?[fFL]?)\\b",
                     Role.NUMBER),
             // boolean literals (inherited from clike)
             Rule.of("\\b(?:true|false)\\b", Role.KEYWORD),
             // keywords — the lookbehind prevents coloring member access like kotlin.properties.get
-            Rule.of("(?<!\\.)\\b(?:abstract|actual|annotation|as|break|by|catch|class|companion"
-                    + "|const|constructor|continue|crossinline|data|do|dynamic|else|enum|expect"
-                    + "|external|final|finally|for|fun|get|if|import|in|infix|init|inline|inner"
-                    + "|interface|internal|is|lateinit|noinline|null|object|open|operator|out"
-                    + "|override|package|private|protected|public|reified|return|sealed|set|super"
-                    + "|suspend|tailrec|this|throw|to|try|typealias|val|var|vararg|when|where"
-                    + "|while)\\b",
+            Rule.of(
+                    "(?<!\\.)\\b(?:abstract|actual|annotation|as|break|by|catch|class|companion"
+                            + "|const|constructor|continue|crossinline|data|do|dynamic|else|enum|expect"
+                            + "|external|final|finally|for|fun|get|if|import|in|infix|init|inline|inner"
+                            + "|interface|internal|is|lateinit|noinline|null|object|open|operator|out"
+                            + "|override|package|private|protected|public|reified|return|sealed|set|super"
+                            + "|suspend|tailrec|this|throw|to|try|typealias|val|var|vararg|when|where"
+                            + "|while)\\b",
                     Role.KEYWORD),
             // label: loop@ / this@Foo
             Rule.of("\\b\\w+@", Role.FUNCTION),
@@ -217,18 +234,18 @@ public final class SyntaxHighlight {
     static AttributedStyle styleFor(Role role) {
         Theme t = Theme.active();
         return switch (role) {
-            case KEYWORD     -> t.synKeyword();
-            case TYPE        -> t.synType();
-            case FUNCTION    -> t.synFunction();
-            case CONSTANT    -> t.synConstant();
-            case STRING      -> t.synString();
-            case NUMBER      -> t.synNumber();
-            case COMMENT     -> t.synComment();
-            case ANNOTATION  -> t.synAnnotation();
-            case NAMESPACE   -> t.synNamespace();
+            case KEYWORD -> t.synKeyword();
+            case TYPE -> t.synType();
+            case FUNCTION -> t.synFunction();
+            case CONSTANT -> t.synConstant();
+            case STRING -> t.synString();
+            case NUMBER -> t.synNumber();
+            case COMMENT -> t.synComment();
+            case ANNOTATION -> t.synAnnotation();
+            case NAMESPACE -> t.synNamespace();
             case PUNCTUATION -> t.synPunctuation();
-            case PATH        -> t.path();
-            case PLAIN       -> AttributedStyle.DEFAULT;
+            case PATH -> t.path();
+            case PLAIN -> AttributedStyle.DEFAULT;
         };
     }
 }

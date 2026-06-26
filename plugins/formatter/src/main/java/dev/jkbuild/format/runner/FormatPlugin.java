@@ -13,7 +13,6 @@ import dev.jkbuild.plugin.Plugin;
 import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
 import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -57,25 +56,31 @@ public final class FormatPlugin implements Plugin {
         }
         Spec spec = Spec.parse(Path.of(args.get(0)));
 
-        Formatter javaFmt = spec.javaJars.isEmpty() ? null : Formatter.builder()
-                .lineEndingsPolicy(LineEnding.UNIX.createPolicy())
-                .encoding(StandardCharsets.UTF_8)
-                .steps(List.of(javaStep(spec)))
-                .build();
+        Formatter javaFmt = spec.javaJars.isEmpty()
+                ? null
+                : Formatter.builder()
+                        .lineEndingsPolicy(LineEnding.UNIX.createPolicy())
+                        .encoding(StandardCharsets.UTF_8)
+                        .steps(List.of(javaStep(spec)))
+                        .build();
 
-        Formatter kotlinFmt = spec.kotlinJars.isEmpty() ? null : Formatter.builder()
-                .lineEndingsPolicy(LineEnding.UNIX.createPolicy())
-                .encoding(StandardCharsets.UTF_8)
-                .steps(List.of(KtfmtStep.create(
-                        spec.kotlinVersion, provisioner(spec.kotlinJars),
-                        ktfmtStyle(spec.kotlinStyle), ktfmtOptions(spec.kotlinMaxWidth))))
-                .build();
+        Formatter kotlinFmt = spec.kotlinJars.isEmpty()
+                ? null
+                : Formatter.builder()
+                        .lineEndingsPolicy(LineEnding.UNIX.createPolicy())
+                        .encoding(StandardCharsets.UTF_8)
+                        .steps(List.of(KtfmtStep.create(
+                                spec.kotlinVersion,
+                                provisioner(spec.kotlinJars),
+                                ktfmtStyle(spec.kotlinStyle),
+                                ktfmtOptions(spec.kotlinMaxWidth))))
+                        .build();
 
         int changed = 0, clean = 0, errors = 0;
         try {
             for (FileRef ref : spec.files) {
                 Formatter fmt = ref.kotlin ? kotlinFmt : javaFmt;
-                if (fmt == null) continue;   // no formatter for this language (shouldn't happen)
+                if (fmt == null) continue; // no formatter for this language (shouldn't happen)
                 // Java 21+ unnamed classes (no type declaration) can't be parsed by
                 // palantir/google-java-format — skip them silently.
                 if (!ref.kotlin && isUnnamedClass(ref.file)) {
@@ -106,8 +111,7 @@ public final class FormatPlugin implements Plugin {
             if (kotlinFmt != null) kotlinFmt.close();
         }
 
-        out.emit("{\"t\":\"done\",\"changed\":" + changed + ",\"clean\":" + clean
-                + ",\"errors\":" + errors + "}");
+        out.emit("{\"t\":\"done\",\"changed\":" + changed + ",\"clean\":" + clean + ",\"errors\":" + errors + "}");
         // In --check mode, an unformatted (changed) file is a failure; errors always are.
         if (errors > 0) return 1;
         if (!spec.apply && changed > 0) return 1;
@@ -117,7 +121,8 @@ public final class FormatPlugin implements Plugin {
     private static void emitFile(ProtocolWriter out, File file, String status, String msg) {
         StringBuilder sb = new StringBuilder("{\"t\":\"file\",\"path\":")
                 .append(Ndjson.quote(file.getAbsolutePath()))
-                .append(",\"status\":").append(Ndjson.quote(status));
+                .append(",\"status\":")
+                .append(Ndjson.quote(status));
         if (msg != null) sb.append(",\"msg\":").append(Ndjson.quote(msg));
         out.emit(sb.append("}").toString());
     }
@@ -163,8 +168,7 @@ public final class FormatPlugin implements Plugin {
     private static boolean isUnnamedClass(File file) throws java.io.IOException {
         String src = Files.readString(file.toPath(), StandardCharsets.UTF_8);
         // Strip line and block comments before checking for type declarations.
-        String stripped = src.replaceAll("//[^\n]*", "")
-                             .replaceAll("(?s)/\\*.*?\\*/", " ");
+        String stripped = src.replaceAll("//[^\n]*", "").replaceAll("(?s)/\\*.*?\\*/", " ");
         return !TYPE_DECL.matcher(stripped).find();
     }
 
@@ -201,7 +205,9 @@ public final class FormatPlugin implements Plugin {
                         s.kotlinJars = jars(p[4]);
                     }
                     case "f" -> s.files.add(new FileRef("kotlin".equals(p[1]), new File(p[2])));
-                    default -> { /* ignore unknown records for forward-compat */ }
+                    default -> {
+                        /* ignore unknown records for forward-compat */
+                    }
                 }
             }
             return s;

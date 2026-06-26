@@ -2,31 +2,25 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.run.GoalConsole;
-import dev.jkbuild.config.JkBuildEditor;
-import dev.jkbuild.config.JkBuildParser;
-import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.cli.tui.Answers;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.cli.tui.WizardStep;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.util.JkDirs;
+import dev.jkbuild.config.JkBuildEditor;
+import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.JkThreads;
-import org.jline.terminal.Terminal;
-import org.jline.utils.AttributedString;
-import org.jline.utils.AttributedStringBuilder;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -36,6 +30,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import org.jline.terminal.Terminal;
+import org.jline.utils.AttributedStringBuilder;
 
 /**
  * {@code jk new} — create a new jk project (aliases: {@code init}, {@code create}).
@@ -61,26 +57,43 @@ import java.util.Optional;
  */
 public final class NewCommand implements CliCommand {
 
-    @Override public String name() { return "new"; }
-    @Override public String description() { return "Create a new jk project (or workspace module)"; }
-    @Override public List<String> aliases() { return List.of("create"); }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "new";
+    }
+
+    @Override
+    public String description() {
+        return "Create a new jk project (or workspace module)";
+    }
+
+    @Override
+    public List<String> aliases() {
+        return List.of("create");
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<name>", "Project name and target directory leaf.", "--name"),
                 Opt.value("<group>", "Maven groupId (default: from git config).", "--group"),
                 Opt.value("<spec>", "JDK: 25, corretto-25, or lts|stable|latest.", "--jdk"),
                 Opt.value("<lang>", "Language: java | kotlin. Default: java.", "--lang"),
-                Opt.flag("Executable project (default is a library).", "--executable").negate(),
+                Opt.flag("Executable project (default is a library).", "--executable")
+                        .negate(),
                 Opt.flag("Shadow (fat) jar. Implies --executable.", "--shadow"),
                 Opt.flag("Wire a GraalVM native-image build.", "--native"),
                 Opt.value("<deps>", "Curated deps, comma-separated.", "--deps"),
                 Opt.value("<layout>", "Layout: simple | traditional.", "--layout"),
                 Opt.value("<module>", "Kotlin module name (-> project.module).", "--kotlin-module"),
                 Opt.flag("Force a standalone project (not a module).", "--no-module"),
-                Opt.flag("", "--no-member").hide());   // undocumented synonym for --no-module
+                Opt.flag("", "--no-member").hide()); // undocumented synonym for --no-module
     }
-    @Override public List<Param> parameters() {
-        return List.of(Param.of("directory", Arity.ZERO_OR_ONE, "Target directory. Default: cwd or a ./<name> subdir."));
+
+    @Override
+    public List<Param> parameters() {
+        return List.of(
+                Param.of("directory", Arity.ZERO_OR_ONE, "Target directory. Default: cwd or a ./<name> subdir."));
     }
 
     String name;
@@ -99,6 +112,7 @@ public final class NewCommand implements CliCommand {
 
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> CANDIDATES = GoalKey.of("candidates", List.class);
+
     private static final GoalKey<Terminal> TERMINAL = GoalKey.of("terminal", Terminal.class);
     private static final GoalKey<Answers> ANSWERS = GoalKey.of("answers", Answers.class);
     private static final GoalKey<NewJdkCandidate> PICKED = GoalKey.of("picked", NewJdkCandidate.class);
@@ -106,6 +120,7 @@ public final class NewCommand implements CliCommand {
 
     /** Set during scaffold when the new project was registered as a workspace module. */
     private record Module(Path root, String rel) {}
+
     private volatile Module registered;
 
     /**
@@ -127,13 +142,25 @@ public final class NewCommand implements CliCommand {
 
     /** Inherited context from the parent project's {@code [project]} block. */
     private record ParentInfo(Path root, dev.jkbuild.model.JkBuild.Project project) {
-        String displayName() { return project.name(); }
-        String group() { return project.group(); }
-        boolean kotlin() { return project.isKotlin(); }
+        String displayName() {
+            return project.name();
+        }
+
+        String group() {
+            return project.group();
+        }
+
+        boolean kotlin() {
+            return project.isKotlin();
+        }
         /** The JDK toolchain version (which JDK runs the build). */
-        int jdkMajor() { return project.jdkMajor() > 0 ? project.jdkMajor() : project.javaRelease(); }
+        int jdkMajor() {
+            return project.jdkMajor() > 0 ? project.jdkMajor() : project.javaRelease();
+        }
         /** The {@code java = N} compile target, which flows through even when it diverges from {@link #jdkMajor()}. */
-        int javaRelease() { return project.javaRelease(); }
+        int javaRelease() {
+            return project.javaRelease();
+        }
     }
 
     /**
@@ -148,8 +175,8 @@ public final class NewCommand implements CliCommand {
         Path normHome = home == null ? null : home.toAbsolutePath().normalize();
         for (Path dir = startDir.toAbsolutePath().normalize(); dir != null; dir = dir.getParent()) {
             if (Files.exists(dir.resolve("jk.toml"))) return Optional.of(dir);
-            if (Files.isDirectory(dir.resolve(".git"))) return Optional.empty();  // exited the repo
-            if (dir.equals(normHome)) return Optional.empty();                    // hit $HOME
+            if (Files.isDirectory(dir.resolve(".git"))) return Optional.empty(); // exited the repo
+            if (dir.equals(normHome)) return Optional.empty(); // hit $HOME
         }
         return Optional.empty();
     }
@@ -168,14 +195,16 @@ public final class NewCommand implements CliCommand {
 
     /** Resolve {@link #parent} by parsing the detected parent's manifest (null if none / unparseable). */
     private ParentInfo resolveParent(Path startDir) {
-        Path home = Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null);
+        Path home = Optional.ofNullable(System.getProperty("user.home"))
+                .map(Path::of)
+                .orElse(null);
         Optional<Path> root = detectParentDir(startDir, home, noModule);
         if (root.isEmpty()) return null;
         try {
             var project = JkBuildParser.parse(root.get().resolve("jk.toml")).project();
             return new ParentInfo(root.get(), project);
         } catch (IOException | RuntimeException e) {
-            return null;   // unreadable/unparseable parent — treat this as a standalone project
+            return null; // unreadable/unparseable parent — treat this as a standalone project
         }
     }
 
@@ -192,7 +221,8 @@ public final class NewCommand implements CliCommand {
         this.layoutFlag = in.value("layout").orElse(null);
         this.kotlinModule = in.value("kotlin-module").orElse(null);
         this.noModule = in.isSet("no-module") || in.isSet("no-member");
-        this.directory = in.positionals().isEmpty() ? null : Path.of(in.positionals().get(0));
+        this.directory =
+                in.positionals().isEmpty() ? null : Path.of(in.positionals().get(0));
         this.global = GlobalOptions.from(in);
         return callBody();
     }
@@ -205,10 +235,10 @@ public final class NewCommand implements CliCommand {
         // For any other invocation we defer the existing-manifest check to
         // after the target is fully resolved (the project name may come from
         // the wizard or from `--name`).
-        if (directory != null && isCurrentDirArg(directory)
-                && Files.exists(cwd.resolve("jk.toml"))) {
-            String existing = wizardPresetName(directory, cwd).orElseGet(
-                    () -> cwd.getFileName() != null ? cwd.getFileName().toString() : "this directory");
+        if (directory != null && isCurrentDirArg(directory) && Files.exists(cwd.resolve("jk.toml"))) {
+            String existing = wizardPresetName(directory, cwd)
+                    .orElseGet(
+                            () -> cwd.getFileName() != null ? cwd.getFileName().toString() : "this directory");
             emitProjectExistsError(existing, parent != null, true, null);
             return 2; // EX_CONFIG
         }
@@ -253,10 +283,10 @@ public final class NewCommand implements CliCommand {
                 .scope(1)
                 .execute(ctx -> {
                     ctx.label("discover JDKs + fetch catalog + open terminal");
-                    var jdkOptionsFuture = java.util.concurrent.CompletableFuture
-                            .supplyAsync(NewJdkOptions::discover, JkThreads.io());
-                    var catalogFuture = java.util.concurrent.CompletableFuture
-                            .supplyAsync(NewCommand::fetchCatalogQuiet, JkThreads.io());
+                    var jdkOptionsFuture =
+                            java.util.concurrent.CompletableFuture.supplyAsync(NewJdkOptions::discover, JkThreads.io());
+                    var catalogFuture = java.util.concurrent.CompletableFuture.supplyAsync(
+                            NewCommand::fetchCatalogQuiet, JkThreads.io());
                     Terminal terminal;
                     try {
                         terminal = Wizard.openTerminal();
@@ -268,7 +298,9 @@ public final class NewCommand implements CliCommand {
                     var jdkOptions = jdkOptionsFuture.join();
                     var catalog = catalogFuture.join();
                     var candidates = NewJdkCandidate.build(
-                            jdkOptions, catalog, LATEST_LTS_MAJOR,
+                            jdkOptions,
+                            catalog,
+                            LATEST_LTS_MAJOR,
                             dev.jkbuild.jdk.HostPlatform.currentOs(),
                             dev.jkbuild.jdk.HostPlatform.currentArch());
                     if (candidates.isEmpty()) {
@@ -287,15 +319,16 @@ public final class NewCommand implements CliCommand {
                     ctx.label("run wizard");
                     Terminal terminal = ctx.require(TERMINAL);
                     @SuppressWarnings("unchecked")
-                    List<NewJdkCandidate> candidates =
-                            (List<NewJdkCandidate>) ctx.require(CANDIDATES);
+                    List<NewJdkCandidate> candidates = (List<NewJdkCandidate>) ctx.require(CANDIDATES);
 
                     Answers preset = wizardPresetName(directory, cwd)
                             .map(n -> Answers.of(Map.of("name", (Object) n)))
                             .orElseGet(() -> Answers.of(Map.of()));
-                    var groupGuess = NewGroupGuess.guess(cwd,
+                    var groupGuess = NewGroupGuess.guess(
+                            cwd,
                             Optional.ofNullable(System.getProperty("user.home"))
-                                    .map(Path::of).orElse(null));
+                                    .map(Path::of)
+                                    .orElse(null));
                     var wizard = buildWizard(candidates, groupGuess, parent, defaultJdk.isPresent());
                     var wizardResult = wizard.run(terminal, preset);
                     if (wizardResult.isEmpty()) {
@@ -304,9 +337,9 @@ public final class NewCommand implements CliCommand {
                         // the red marker beside it. Runtime.halt() skips
                         // shutdown hooks — JLine's cleanup hook would block
                         // on the NonBlockingReader.
-                        Wizard.printCancellation(terminal,
-                                parent != null ? "𝘅 Module creation canceled"
-                                        : "𝘅 Project creation canceled");
+                        Wizard.printCancellation(
+                                terminal,
+                                parent != null ? "𝘅 Module creation canceled" : "𝘅 Project creation canceled");
                         Runtime.getRuntime().halt(130);
                     }
                     ctx.put(ANSWERS, wizardResult.get());
@@ -348,8 +381,7 @@ public final class NewCommand implements CliCommand {
                     var inputs = fromAnswers(ctx.require(ANSWERS), cwd, pickedOpt);
                     ctx.put(INPUTS, inputs);
                     if (Files.exists(inputs.directory().resolve("jk.toml"))) {
-                        ctx.error("exists", "project " + inputs.name()
-                                + " already exists at " + inputs.directory());
+                        ctx.error("exists", "project " + inputs.name() + " already exists at " + inputs.directory());
                         throw new RuntimeException("project exists");
                     }
                     ctx.label("scaffold " + inputs.name());
@@ -396,13 +428,17 @@ public final class NewCommand implements CliCommand {
 
             NewInputs inputs = goal.get(INPUTS).orElseThrow();
             boolean isInit = directory != null && isCurrentDirArg(directory);
-            goal.get(TERMINAL).ifPresentOrElse(
-                    t -> emitSuccessOnTerminal(inputs, t, registered, isInit),
-                    () -> emitSuccessPlain(inputs, registered, isInit));
+            goal.get(TERMINAL)
+                    .ifPresentOrElse(
+                            t -> emitSuccessOnTerminal(inputs, t, registered, isInit),
+                            () -> emitSuccessPlain(inputs, registered, isInit));
             return 0;
         } finally {
             goal.get(TERMINAL).ifPresent(t -> {
-                try { t.close(); } catch (IOException ignored) {}
+                try {
+                    t.close();
+                } catch (IOException ignored) {
+                }
             });
         }
     }
@@ -425,7 +461,8 @@ public final class NewCommand implements CliCommand {
             return 64;
         }
         if (Files.exists(inputs.directory().resolve("jk.toml"))) {
-            emitProjectExistsError(inputs.name(), parent != null, directory != null && isCurrentDirArg(directory), null);
+            emitProjectExistsError(
+                    inputs.name(), parent != null, directory != null && isCurrentDirArg(directory), null);
             return 2;
         }
         Path cache = JkDirs.cache();
@@ -440,13 +477,12 @@ public final class NewCommand implements CliCommand {
                 })
                 .build();
 
-        Goal goal = Goal.builder("new")
-                .addPhase(scaffold)
-                .build();
+        Goal goal = Goal.builder("new").addPhase(scaffold).build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) return 1;
-        if (!global.outputIsJson()) emitSuccessPlain(inputs, registered, directory != null && isCurrentDirArg(directory));
+        if (!global.outputIsJson())
+            emitSuccessPlain(inputs, registered, directory != null && isCurrentDirArg(directory));
         return 0;
     }
 
@@ -463,9 +499,7 @@ public final class NewCommand implements CliCommand {
     }
 
     private static boolean isInteractiveTerminal() {
-        return System.console() != null
-                && !"dumb".equals(System.getenv("TERM"))
-                && System.getenv("CI") == null;
+        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
     }
 
     private boolean anyFlagSupplied() {
@@ -489,30 +523,31 @@ public final class NewCommand implements CliCommand {
      * for the success message.
      */
     private void scaffoldAndRegister(NewInputs inputs) throws IOException {
-        NewScaffolder.write(inputs, parent == null);   // modules skip the gitignore (root owns it)
+        NewScaffolder.write(inputs, parent == null); // modules skip the gitignore (root owns it)
         if (parent != null) {
             Path root = parent.root();
             String rel = root.relativize(inputs.directory()).toString().replace('\\', '/');
             Path rootToml = root.resolve("jk.toml");
             // Registers the module, promoting a plain project into a workspace
             // root (creating the [workspace] table) when this is its first module.
-            Files.writeString(rootToml,
-                    JkBuildEditor.registerWorkspaceModule(Files.readString(rootToml), rel));
+            Files.writeString(rootToml, JkBuildEditor.registerWorkspaceModule(Files.readString(rootToml), rel));
             registered = new Module(root, rel);
         }
     }
 
     private NewInputs fromFlags(Path cwd) {
         var presetName = wizardPresetName(directory, cwd);
-        var resolvedName = (name != null && !name.isBlank())
-                ? name
-                : presetName.orElse("untitled");
+        var resolvedName = (name != null && !name.isBlank()) ? name : presetName.orElse("untitled");
         Path target = resolveTarget(directory, cwd, resolvedName);
         var resolvedGroup = (group != null && !group.isBlank())
                 ? group
-                : parent != null ? parent.group()
-                : NewGroupGuess.guess(cwd,
-                        Optional.ofNullable(System.getProperty("user.home")).map(Path::of).orElse(null));
+                : parent != null
+                        ? parent.group()
+                        : NewGroupGuess.guess(
+                                cwd,
+                                Optional.ofNullable(System.getProperty("user.home"))
+                                        .map(Path::of)
+                                        .orElse(null));
         // Resolve the JDK pin written to jk.toml: an explicit --jdk wins (keeping
         // a vendor only when the user typed one); else inherit the parent's major
         // (module); else adopt the global default JDK's major; else the latest
@@ -536,9 +571,9 @@ public final class NewCommand implements CliCommand {
         // release) even when it diverges from the JDK toolchain; standalone
         // projects target their JDK.
         int resolvedJavaRelease = parent != null ? parent.javaRelease() : resolvedJdkMajor;
-        var resolvedLang = (lang != null && !lang.isBlank()) ? parseLanguage(lang)
-                : (parent != null && parent.kotlin()) ? NewInputs.Language.KOTLIN
-                : NewInputs.Language.JAVA;
+        var resolvedLang = (lang != null && !lang.isBlank())
+                ? parseLanguage(lang)
+                : (parent != null && parent.kotlin()) ? NewInputs.Language.KOTLIN : NewInputs.Language.JAVA;
         var isExecutable = Boolean.TRUE.equals(executable) || shadow || nativeImage;
         var resolvedLayout = (layoutFlag != null && !layoutFlag.isBlank()) ? layoutFlag.toLowerCase() : "simple";
         var resolvedMain = isExecutable
@@ -549,12 +584,21 @@ public final class NewCommand implements CliCommand {
                 ? Optional.of(kotlinModule)
                 : Optional.<String>empty();
         return new NewInputs(
-                resolvedGroup, resolvedName,
-                resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
+                resolvedGroup,
+                resolvedName,
+                resolvedJdk,
+                resolvedJdkMajor,
+                resolvedJavaRelease,
                 Optional.<String>empty(), // flag path doesn't resolve to a specific install
-                resolvedMain, shadow, nativeImage,
-                resolvedLang, resolvedLayout, resolvedKotlinModule,
-                resolvedDeps, true, target);
+                resolvedMain,
+                shadow,
+                nativeImage,
+                resolvedLang,
+                resolvedLayout,
+                resolvedKotlinModule,
+                resolvedDeps,
+                true,
+                target);
     }
 
     /**
@@ -602,8 +646,7 @@ public final class NewCommand implements CliCommand {
         return raw.equals(".") || raw.equals("./") || raw.equals(".\\");
     }
 
-    private static void emitProjectExistsError(
-            String name, boolean isModule, boolean isInit, Terminal terminal) {
+    private static void emitProjectExistsError(String name, boolean isModule, boolean isInit, Terminal terminal) {
         var verb = isInit ? "initialize" : "create";
         var noun = isModule ? "module" : "project";
         var body = Theme.active().normalGray();
@@ -620,11 +663,11 @@ public final class NewCommand implements CliCommand {
             writer.flush();
         } else {
             System.err.println();
-            System.err.println(
-                    Theme.colorize(dev.jkbuild.cli.tui.Glyphs.CROSS, Theme.active().error())
-                            + Theme.colorize(" Failed to " + verb + " " + noun + " ", body)
-                            + Theme.colorize(name, Theme.active().cyan())
-                            + Theme.colorize(". Project already exists.", body));
+            System.err.println(Theme.colorize(
+                            dev.jkbuild.cli.tui.Glyphs.CROSS, Theme.active().error())
+                    + Theme.colorize(" Failed to " + verb + " " + noun + " ", body)
+                    + Theme.colorize(name, Theme.active().cyan())
+                    + Theme.colorize(". Project already exists.", body));
         }
     }
 
@@ -633,14 +676,13 @@ public final class NewCommand implements CliCommand {
         var warn = Theme.active().warning();
         var label = Theme.active().activeStep();
         var body = Theme.active().normalGray();
-        System.err.println(
-                Theme.colorize("⚠", warn)
-                        + " " + Theme.colorize("Jk", label)
-                        + Theme.colorize(": No JDKs found on this system. Run ", body)
-                        + Theme.colorize("jk jdk install", warn)
-                        + Theme.colorize(" first, then re-run ", body)
-                        + Theme.colorize("jk new", warn)
-                        + Theme.colorize(".", body));
+        System.err.println(Theme.colorize("⚠", warn)
+                + " " + Theme.colorize("Jk", label)
+                + Theme.colorize(": No JDKs found on this system. Run ", body)
+                + Theme.colorize("jk jdk install", warn)
+                + Theme.colorize(" first, then re-run ", body)
+                + Theme.colorize("jk new", warn)
+                + Theme.colorize(".", body));
     }
 
     private static NewInputs.Language parseLanguage(String value) {
@@ -650,8 +692,7 @@ public final class NewCommand implements CliCommand {
         return switch (value.toLowerCase(Locale.ROOT)) {
             case "java" -> NewInputs.Language.JAVA;
             case "kotlin", "kt" -> NewInputs.Language.KOTLIN;
-            default -> throw new IllegalArgumentException(
-                    "jk new: --lang must be 'java' or 'kotlin', got: " + value);
+            default -> throw new IllegalArgumentException("jk new: --lang must be 'java' or 'kotlin', got: " + value);
         };
     }
 
@@ -727,7 +768,7 @@ public final class NewCommand implements CliCommand {
      * {@link NewJdkCandidate#filter}, so this is just a lookup.
      */
     private NewJdkCandidate pickCandidate(Answers answers, List<NewJdkCandidate> candidates) {
-        if (answers.has("jdk")) {   // the "Select a JDK" step ran
+        if (answers.has("jdk")) { // the "Select a JDK" step ran
             var pickedId = answers.get("jdk");
             return candidates.stream()
                     .filter(c -> c.id().equals(pickedId))
@@ -757,8 +798,8 @@ public final class NewCommand implements CliCommand {
         }
         try {
             var entry = installable.entry();
-            var installer = new dev.jkbuild.jdk.JdkInstaller(
-                    new dev.jkbuild.http.Http(), new dev.jkbuild.jdk.JdkRegistry());
+            var installer =
+                    new dev.jkbuild.jdk.JdkInstaller(new dev.jkbuild.http.Http(), new dev.jkbuild.jdk.JdkRegistry());
             // Download (progress bar) then extract (spinner).
             var label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
             long total = entry.archiveSize();
@@ -798,13 +839,13 @@ public final class NewCommand implements CliCommand {
      */
     private static String deriveMainFqcn(String group, NewInputs.Language lang, boolean compact) {
         return switch (lang) {
-            case JAVA   -> group + ".Main";
+            case JAVA -> group + ".Main";
             case KOTLIN -> compact ? "MainKt" : group + ".MainKt";
         };
     }
 
-    private static Wizard buildWizard(List<NewJdkCandidate> candidates, String groupGuess,
-                                      ParentInfo parent, boolean hasDefaultJdk) {
+    private static Wizard buildWizard(
+            List<NewJdkCandidate> candidates, String groupGuess, ParentInfo parent, boolean hasDefaultJdk) {
         boolean module = parent != null;
         // Modules inherit the parent's group, JDK, and language as defaults; a
         // standalone project guesses the group and defaults to the latest LTS.
@@ -828,21 +869,21 @@ public final class NewCommand implements CliCommand {
         }
 
         var javaLayoutStep = WizardStep.RadioStep.vertical("layout", "Project layout:")
-                .choice("simple",      "Simple (sources in ./src, tests in ./test)")
+                .choice("simple", "Simple (sources in ./src, tests in ./test)")
                 .choice("traditional", "Traditional (sources in ./src/main/java, tests in ./src/test/java)")
                 .defaultChoice("simple")
                 .when(a -> "java".equals(a.get("lang")))
                 .build();
 
         var kotlinLayoutStep = WizardStep.RadioStep.vertical("layout", "Project layout:")
-                .choice("simple",      "Simple (sources in ./src, tests in ./test)")
+                .choice("simple", "Simple (sources in ./src, tests in ./test)")
                 .choice("traditional", "Traditional (sources in ./src/main/kotlin, tests in ./src/test/kotlin)")
                 .defaultChoice("simple")
                 .when(a -> "kotlin".equals(a.get("lang")))
                 .build();
 
         var javaOptions = WizardStep.MultiSelectStep.vertical("javaOptions", "Include common libraries:")
-                .choice("lombok",   "Lombok (boilerplate reduction)")
+                .choice("lombok", "Lombok (boilerplate reduction)")
                 .choice("jspecify", "JSpecify (null-safety)")
                 .defaults(java.util.Set.of("lombok", "jspecify"))
                 .when(a -> "java".equals(a.get("lang")))
@@ -875,7 +916,8 @@ public final class NewCommand implements CliCommand {
             if (dev.jkbuild.jdk.JdkLts.isLtsMajor(v)) jvb = jvb.choice(String.valueOf(v), String.valueOf(v));
         }
         int latestStable = dev.jkbuild.jdk.JdkLts.OFFLINE_LATEST_STABLE;
-        if (latestStable > LATEST_LTS_MAJOR) jvb = jvb.choice(String.valueOf(latestStable), String.valueOf(latestStable));
+        if (latestStable > LATEST_LTS_MAJOR)
+            jvb = jvb.choice(String.valueOf(latestStable), String.valueOf(latestStable));
         var javaVersion = jvb.defaultChoice(String.valueOf(LATEST_LTS_MAJOR))
                 .when(a -> "java".equals(a.get("lang")) && !module && !hasDefaultJdk)
                 .build();
@@ -898,10 +940,13 @@ public final class NewCommand implements CliCommand {
         var jdkStep = WizardStep.RadioStep.vertical("jdk", "Select a JDK:")
                 .choicesFn(answers -> {
                     int floor = jdkFloor(answers, parent);
-                    var filtered = NewJdkCandidate.filter(candidates, false, LATEST_LTS_MAJOR)
-                            .stream().filter(c -> c.major() >= floor).toList();
+                    var filtered = NewJdkCandidate.filter(candidates, false, LATEST_LTS_MAJOR).stream()
+                            .filter(c -> c.major() >= floor)
+                            .toList();
                     if (filtered.isEmpty()) {
-                        filtered = candidates.stream().filter(c -> c.major() >= floor).toList();
+                        filtered = candidates.stream()
+                                .filter(c -> c.major() >= floor)
+                                .toList();
                     }
                     if (filtered.isEmpty()) filtered = candidates;
                     return filtered.stream()
@@ -912,9 +957,7 @@ public final class NewCommand implements CliCommand {
                 .defaultChoice(defaultJdkId);
 
         return Wizard.builder()
-                .title(module
-                        ? "Create a New Module for " + parent.displayName()
-                        : "Create a New Project")
+                .title(module ? "Create a New Module for " + parent.displayName() : "Create a New Project")
                 .step(WizardStep.InputStep.of("name", module ? "Module name:" : "Project name:")
                         .placeholder("untitled")
                         .defaultValue("untitled")
@@ -956,7 +999,10 @@ public final class NewCommand implements CliCommand {
         if ("kotlin".equalsIgnoreCase(answers.get("lang"))) return 0;
         String v = answers.get("javaVersion");
         if (v != null && !v.isBlank()) {
-            try { return Integer.parseInt(v.trim()); } catch (NumberFormatException ignored) {}
+            try {
+                return Integer.parseInt(v.trim());
+            } catch (NumberFormatException ignored) {
+            }
         }
         return LATEST_LTS_MAJOR;
     }
@@ -979,7 +1025,7 @@ public final class NewCommand implements CliCommand {
         Optional<String> resolvedJdkIdentifier;
         if (parent != null) {
             resolvedJdkMajor = parent.jdkMajor() > 0 ? parent.jdkMajor() : parent.javaRelease();
-            resolvedJdkIdentifier = Optional.empty();   // modules write no lock
+            resolvedJdkIdentifier = Optional.empty(); // modules write no lock
         } else if (defaultJdk.isPresent()) {
             resolvedJdkMajor = dev.jkbuild.model.JkBuild.Project.majorOf(defaultJdk.get());
             resolvedJdkIdentifier = defaultJdk;
@@ -996,15 +1042,15 @@ public final class NewCommand implements CliCommand {
         if (parent != null) {
             resolvedJavaRelease = parent.javaRelease();
         } else if ("java".equalsIgnoreCase(answers.get("lang"))
-                && answers.has("javaVersion") && !answers.get("javaVersion").isBlank()) {
+                && answers.has("javaVersion")
+                && !answers.get("javaVersion").isBlank()) {
             resolvedJavaRelease = parseJdkMajorOrDefault(answers.get("javaVersion"));
         } else {
             resolvedJavaRelease = resolvedJdkMajor;
         }
 
-        var resolvedLang = "kotlin".equalsIgnoreCase(answers.get("lang"))
-                ? NewInputs.Language.KOTLIN
-                : NewInputs.Language.JAVA;
+        var resolvedLang =
+                "kotlin".equalsIgnoreCase(answers.get("lang")) ? NewInputs.Language.KOTLIN : NewInputs.Language.JAVA;
         var isExecutable = "executable".equals(answers.get("kind"));
 
         var targets = answers.getList("targets");
@@ -1012,8 +1058,8 @@ public final class NewCommand implements CliCommand {
         boolean resolvedNative = isExecutable && targets.contains("native");
 
         // Layout comes from its own dedicated step; default to "simple" if not answered.
-        String resolvedLayout = answers.has("layout") && !answers.get("layout").isBlank()
-                ? answers.get("layout") : "simple";
+        String resolvedLayout =
+                answers.has("layout") && !answers.get("layout").isBlank() ? answers.get("layout") : "simple";
         Optional<String> resolvedKotlinModule = Optional.empty();
         var deps = new ArrayList<String>();
         if (resolvedLang == NewInputs.Language.JAVA) {
@@ -1033,12 +1079,21 @@ public final class NewCommand implements CliCommand {
                 : Optional.<String>empty();
 
         return new NewInputs(
-                resolvedGroup, resolvedName,
-                resolvedJdk, resolvedJdkMajor, resolvedJavaRelease,
+                resolvedGroup,
+                resolvedName,
+                resolvedJdk,
+                resolvedJdkMajor,
+                resolvedJavaRelease,
                 resolvedJdkIdentifier,
-                resolvedMain, resolvedShadow, resolvedNative,
-                resolvedLang, resolvedLayout, resolvedKotlinModule,
-                deps, true, target);
+                resolvedMain,
+                resolvedShadow,
+                resolvedNative,
+                resolvedLang,
+                resolvedLayout,
+                resolvedKotlinModule,
+                deps,
+                true,
+                target);
     }
 
     private static void emitSuccessOnTerminal(NewInputs inputs, Terminal terminal, Module module, boolean isInit) {
@@ -1055,7 +1110,9 @@ public final class NewCommand implements CliCommand {
         var noun = module != null ? "module" : "project";
         writer.println();
         writer.println(new AttributedStringBuilder()
-                .append(dev.jkbuild.cli.tui.Glyphs.CHECK + " " + verb + " new " + noun + " ", Theme.active().success())
+                .append(
+                        dev.jkbuild.cli.tui.Glyphs.CHECK + " " + verb + " new " + noun + " ",
+                        Theme.active().success())
                 .append(inputs.name(), Theme.active().cyan())
                 .append(".", Theme.active().success())
                 .toAttributedString()
@@ -1076,8 +1133,7 @@ public final class NewCommand implements CliCommand {
 
     private static void emitSuccessPlain(NewInputs inputs, Module module, boolean isInit) {
         if (module != null) {
-            System.out.println("Registered module '" + module.rel()
-                    + "' in workspace " + module.root());
+            System.out.println("Registered module '" + module.rel() + "' in workspace " + module.root());
         }
         var verb = isInit ? "Initialized" : "Created";
         var noun = module != null ? "module" : "project";
@@ -1091,13 +1147,11 @@ public final class NewCommand implements CliCommand {
     }
 
     private static List<String> nextSteps(NewInputs inputs) {
-        return List.of(
-                "cd " + inputs.directory().toAbsolutePath(),
-                inputs.isRunnable() ? "jk run" : "jk build");
+        return List.of("cd " + inputs.directory().toAbsolutePath(), inputs.isRunnable() ? "jk run" : "jk build");
     }
 
     // Suppress unused warning for the import we keep for clarity.
     @SuppressWarnings("unused")
-    private static final List<String> CURATED_IDS = Arrays.asList(
-            "lombok", "jspecify", "kotest", "commons-lang", "commons-io", "guava");
+    private static final List<String> CURATED_IDS =
+            Arrays.asList("lombok", "jspecify", "kotest", "commons-lang", "commons-io", "guava");
 }

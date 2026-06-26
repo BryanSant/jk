@@ -38,7 +38,8 @@ public final class IntellijJdkDir {
     public static Path installDirOf(Path javaHome) {
         Path fileName = javaHome.getFileName();
         Path parent = javaHome.getParent();
-        if (fileName != null && parent != null
+        if (fileName != null
+                && parent != null
                 && "Home".equals(fileName.toString())
                 && parent.getFileName() != null
                 && "Contents".equals(parent.getFileName().toString())) {

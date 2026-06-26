@@ -1,25 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-import dev.jkbuild.jdk.JdkResolution;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compat.BuildTool;
-import dev.jkbuild.compat.InstalledTool;
 import dev.jkbuild.compat.ToolDistribution;
 import dev.jkbuild.compat.ToolInstaller;
 import dev.jkbuild.compat.ToolProvisioning;
 import dev.jkbuild.compat.ToolRegistry;
 import dev.jkbuild.http.Http;
-import dev.jkbuild.jdk.InstalledJdk;
+import dev.jkbuild.jdk.JdkResolution;
 import dev.jkbuild.kotlin.KotlinResolver;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -50,7 +46,9 @@ public final class CompileToolchain {
             dev.jkbuild.lock.Lockfile lock = readLockSoft(projectDir);
             JkBuild build = readBuildSoft(projectDir);
             JdkResolution.Request req = new JdkResolution.Request(
-                    projectDir, System.getProperty("jk.jdk"), System.getenv("JK_JDK"),
+                    projectDir,
+                    System.getProperty("jk.jdk"),
+                    System.getenv("JK_JDK"),
                     lock != null ? lock.jdk() : null,
                     (build != null && build.project() != null) ? build.project().jdk() : null,
                     (build != null && build.project() != null) ? build.project().javaRelease() : 0,
@@ -95,8 +93,7 @@ public final class CompileToolchain {
         String home = System.getProperty("java.home");
         if (home == null || home.isBlank()) home = System.getenv("JAVA_HOME");
         if (home == null || home.isBlank()) {
-            throw new IllegalStateException(
-                    "Cannot resolve a JDK: no project pin (`.jdk-version` or `.sdkmanrc`), "
+            throw new IllegalStateException("Cannot resolve a JDK: no project pin (`.jdk-version` or `.sdkmanrc`), "
                     + "no `java.home` (running under native-image?), and `JAVA_HOME` is unset. "
                     + "Pin a JDK with a `.jdk-version` file, set `JAVA_HOME`, or run jk on a JVM.");
         }
@@ -127,8 +124,7 @@ public final class CompileToolchain {
         if (lock != null && lock.kotlin() != null && !lock.kotlin().isBlank()) {
             return lock.kotlin();
         }
-        if (project != null
-                && project.project().kotlin() instanceof dev.jkbuild.model.VersionSelector.Exact exact) {
+        if (project != null && project.project().kotlin() instanceof dev.jkbuild.model.VersionSelector.Exact exact) {
             return exact.version();
         }
         return null;
@@ -161,27 +157,25 @@ public final class CompileToolchain {
         if (versionOverride == null || versionOverride.isBlank()) {
             dist = KotlinResolver.defaultDistribution();
         } else {
-            URI uri = URI.create(
-                    "https://github.com/JetBrains/kotlin/releases/download/v" + versionOverride
-                            + "/kotlin-compiler-" + versionOverride + ".zip");
+            URI uri = URI.create("https://github.com/JetBrains/kotlin/releases/download/v" + versionOverride
+                    + "/kotlin-compiler-" + versionOverride + ".zip");
             dist = new ToolDistribution(BuildTool.KOTLIN, versionOverride, uri, "zip");
         }
         try {
             boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
-            ToolProvisioning.Result result = ToolProvisioning.provision(
-                    dist, registry, new Http(), /*noDiscover=*/ false, refresh);
+            ToolProvisioning.Result result =
+                    ToolProvisioning.provision(dist, registry, new Http(), /*noDiscover=*/ false, refresh);
             switch (result.source()) {
-                case LINKED -> notice.accept("Linked Kotlin " + dist.version()
-                        + " from " + result.detail());
-                case DOWNLOADED -> notice.accept("Installed Kotlin " + dist.version()
-                        + " from " + result.detail());
-                case CACHED -> { /* silent */ }
+                case LINKED -> notice.accept("Linked Kotlin " + dist.version() + " from " + result.detail());
+                case DOWNLOADED -> notice.accept("Installed Kotlin " + dist.version() + " from " + result.detail());
+                case CACHED -> {
+                    /* silent */
+                }
             }
             return result.tool().home();
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            throw new RuntimeException("failed to provision Kotlin " + dist.version() + ": "
-                    + e.getMessage(), e);
+            throw new RuntimeException("failed to provision Kotlin " + dist.version() + ": " + e.getMessage(), e);
         }
     }
 }

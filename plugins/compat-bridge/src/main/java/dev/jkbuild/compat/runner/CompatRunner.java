@@ -17,9 +17,7 @@ import dev.jkbuild.plugin.Plugin;
 import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
 import java.io.IOException;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -80,16 +78,16 @@ public final class CompatRunner implements Plugin {
                 String key = line.substring(0, sp);
                 String val = line.substring(sp + 1).strip();
                 switch (key) {
-                    case "COMMAND"     -> command    = val;
-                    case "SOURCE"      -> source     = Path.of(val);
-                    case "OUT"         -> out_       = Path.of(val);
-                    case "REPORT"      -> report     = Path.of(val);
-                    case "TMP_DIR"     -> tmpDir     = Path.of(val);
-                    case "BASE_DIR"    -> baseDir    = Path.of(val);
+                    case "COMMAND" -> command = val;
+                    case "SOURCE" -> source = Path.of(val);
+                    case "OUT" -> out_ = Path.of(val);
+                    case "REPORT" -> report = Path.of(val);
+                    case "TMP_DIR" -> tmpDir = Path.of(val);
+                    case "BASE_DIR" -> baseDir = Path.of(val);
                     case "PROJECT_DIR" -> projectDir = Path.of(val);
-                    case "TARGET"      -> target     = Path.of(val);
-                    case "TOOLS_ROOT"  -> toolsRoot  = Path.of(val);
-                    case "FORCE"       -> force      = "true".equalsIgnoreCase(val);
+                    case "TARGET" -> target = Path.of(val);
+                    case "TOOLS_ROOT" -> toolsRoot = Path.of(val);
+                    case "FORCE" -> force = "true".equalsIgnoreCase(val);
                     case "NO_DISCOVER" -> noDiscover = "true".equalsIgnoreCase(val);
                 }
             }
@@ -104,16 +102,18 @@ public final class CompatRunner implements Plugin {
         }
 
         return switch (command) {
-            case "import"          -> runImport(out, source, out_, report, tmpDir, baseDir, force);
-            case "provision_mvn"   -> runProvision(out, projectDir, toolsRoot, noDiscover, false);
-            case "provision_gradle"-> runProvision(out, projectDir, toolsRoot, noDiscover, true);
-            default -> { System.err.println("jk-compat-runner: unknown command: " + command); yield 2; }
+            case "import" -> runImport(out, source, out_, report, tmpDir, baseDir, force);
+            case "provision_mvn" -> runProvision(out, projectDir, toolsRoot, noDiscover, false);
+            case "provision_gradle" -> runProvision(out, projectDir, toolsRoot, noDiscover, true);
+            default -> {
+                System.err.println("jk-compat-runner: unknown command: " + command);
+                yield 2;
+            }
         };
     }
 
-    private static int runImport(ProtocolWriter out,
-                                  Path source, Path outPath, Path report,
-                                  Path tmpDir, Path baseDir, boolean force) {
+    private static int runImport(
+            ProtocolWriter out, Path source, Path outPath, Path report, Path tmpDir, Path baseDir, boolean force) {
         if (source == null || outPath == null) {
             System.err.println("jk-compat-runner: import requires SOURCE and OUT");
             return 2;
@@ -145,12 +145,11 @@ public final class CompatRunner implements Plugin {
             for (Map.Entry<String, JkBuild> e : modules.entrySet()) {
                 Path moduleJkBuild = effectiveBaseDir.resolve(e.getKey()).resolve("jk.toml");
                 if (Files.exists(moduleJkBuild) && !force) {
-                    out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite "
-                            + moduleJkBuild + " — pass --force\"}");
+                    out.emit("{\"t\":\"result\",\"ok\":false,\"error\":\"would overwrite " + moduleJkBuild
+                            + " — pass --force\"}");
                     return 73;
                 }
-                Files.writeString(moduleJkBuild, JkBuildRenderer.render(e.getValue()),
-                        StandardCharsets.UTF_8);
+                Files.writeString(moduleJkBuild, JkBuildRenderer.render(e.getValue()), StandardCharsets.UTF_8);
                 out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(moduleJkBuild.toString()) + "}");
             }
 
@@ -160,23 +159,23 @@ public final class CompatRunner implements Plugin {
                 var proj = root.project();
                 String coord = proj.group() + "-" + proj.name() + "-" + proj.version();
                 for (int n = 1; ; n++) {
-                    Path candidate = tmpDir.resolve(coord + "-" + n
-                            + "-" + source.getFileName() + "-import.md");
-                    if (!Files.exists(candidate)) { reportTarget = candidate; break; }
+                    Path candidate = tmpDir.resolve(coord + "-" + n + "-" + source.getFileName() + "-import.md");
+                    if (!Files.exists(candidate)) {
+                        reportTarget = candidate;
+                        break;
+                    }
                 }
             }
             if (reportTarget != null) {
                 Path rDir = reportTarget.getParent();
                 if (rDir != null) Files.createDirectories(rDir);
-                Files.writeString(reportTarget,
-                        importReport.renderMarkdown(source.toString()), StandardCharsets.UTF_8);
+                Files.writeString(reportTarget, importReport.renderMarkdown(source.toString()), StandardCharsets.UTF_8);
                 out.emit("{\"t\":\"wrote\",\"path\":" + Ndjson.quote(reportTarget.toString()) + "}");
             }
 
             int warnings = importReport.issues().size();
             boolean hasErrors = importReport.hasErrors();
-            out.emit("{\"t\":\"result\",\"ok\":true,\"warnings\":" + warnings
-                    + ",\"errors\":" + hasErrors + "}");
+            out.emit("{\"t\":\"result\",\"ok\":true,\"warnings\":" + warnings + ",\"errors\":" + hasErrors + "}");
             return 0;
         } catch (IOException e) {
             out.emit("{\"t\":\"result\",\"ok\":false,\"error\":" + Ndjson.quote(e.getMessage()) + "}");
@@ -184,20 +183,17 @@ public final class CompatRunner implements Plugin {
         }
     }
 
-    private static int runProvision(ProtocolWriter out,
-                                     Path projectDir, Path toolsRoot,
-                                     boolean noDiscover, boolean isGradle) {
+    private static int runProvision(
+            ProtocolWriter out, Path projectDir, Path toolsRoot, boolean noDiscover, boolean isGradle) {
         if (projectDir == null || toolsRoot == null) {
             System.err.println("jk-compat-runner: provision requires PROJECT_DIR and TOOLS_ROOT");
             return 2;
         }
         try {
             ToolRegistry registry = new ToolRegistry(toolsRoot);
-            ToolDistribution dist = isGradle
-                    ? new GradleResolver().resolve(projectDir)
-                    : new MavenResolver().resolve(projectDir);
-            ToolProvisioning.Result result =
-                    ToolProvisioning.provision(dist, registry, new Http(), noDiscover);
+            ToolDistribution dist =
+                    isGradle ? new GradleResolver().resolve(projectDir) : new MavenResolver().resolve(projectDir);
+            ToolProvisioning.Result result = ToolProvisioning.provision(dist, registry, new Http(), noDiscover);
             InstalledTool tool = result.tool();
             out.emit("{\"t\":\"result\",\"ok\":true"
                     + ",\"bin\":" + Ndjson.quote(tool.binary().toString())
@@ -212,5 +208,4 @@ public final class CompatRunner implements Plugin {
             return 1;
         }
     }
-
 }

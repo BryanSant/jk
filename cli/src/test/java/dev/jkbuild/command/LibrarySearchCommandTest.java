@@ -1,23 +1,21 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.repo.JkMavenLocalRepo;
 import dev.jkbuild.repo.MavenLayout;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class LibrarySearchCommandTest {
 
@@ -32,7 +30,9 @@ class LibrarySearchCommandTest {
     }
 
     @AfterEach
-    void restore() { System.setOut(originalOut); }
+    void restore() {
+        System.setOut(originalOut);
+    }
 
     @Test
     void search_matches_substring_of_name_in_bundled_catalog(@TempDir Path tempHome) {
@@ -70,8 +70,7 @@ class LibrarySearchCommandTest {
     @Test
     void search_AND_semantics_with_multiple_terms() {
         // Both "spring" and "starter" must appear somewhere.
-        int exit = Jk.execute(
-                "library", "search", "spring", "starter");
+        int exit = Jk.execute("library", "search", "spring", "starter");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("spring-boot-starter");
@@ -88,8 +87,7 @@ class LibrarySearchCommandTest {
 
     @Test
     void search_with_no_matches_returns_nonzero_and_clear_message() {
-        int exit = Jk.execute(
-                "library", "search", "definitely-not-in-registry-xyz");
+        int exit = Jk.execute("library", "search", "definitely-not-in-registry-xyz");
         assertThat(exit).isOne();
         assertThat(out.toString(StandardCharsets.UTF_8)).contains("No matches");
     }
@@ -102,8 +100,7 @@ class LibrarySearchCommandTest {
         Path blob = new Cas(cache).put("junit-jar".getBytes(StandardCharsets.UTF_8));
         new JkMavenLocalRepo(cache).materialize(MavenLayout.artifactPath(coord), blob);
 
-        int exit = Jk.execute(
-                "library", "search", "junit", "--offline", "--cache-dir", cache.toString());
+        int exit = Jk.execute("library", "search", "junit", "--offline", "--cache-dir", cache.toString());
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         // The cached coord is shown, annotated with its local version...
@@ -115,16 +112,14 @@ class LibrarySearchCommandTest {
     @Test
     void offline_with_nothing_cached_reports_no_local_matches(@TempDir Path tempDir) {
         Path cache = tempDir.resolve("cache");
-        int exit = Jk.execute(
-                "library", "search", "junit", "--offline", "--cache-dir", cache.toString());
+        int exit = Jk.execute("library", "search", "junit", "--offline", "--cache-dir", cache.toString());
         assertThat(exit).isOne();
         assertThat(out.toString(StandardCharsets.UTF_8)).contains("No matches (cached locally)");
     }
 
     @Test
     void search_limit_truncates_with_explanatory_footer() {
-        int exit = Jk.execute(
-                "library", "search", "kotlin", "--limit", "1");
+        int exit = Jk.execute("library", "search", "kotlin", "--limit", "1");
         assertThat(exit).isZero();
         String stdout = out.toString(StandardCharsets.UTF_8);
         assertThat(stdout).contains("more");

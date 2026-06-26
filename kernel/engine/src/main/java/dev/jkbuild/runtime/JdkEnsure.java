@@ -14,7 +14,6 @@ import dev.jkbuild.jdk.JdkResolution;
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.JkBuild;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -48,7 +47,11 @@ import java.util.Optional;
  */
 public final class JdkEnsure {
 
-    public enum Source { ALREADY_PINNED, LOCKFILE_INSTALL, INSTALLED }
+    public enum Source {
+        ALREADY_PINNED,
+        LOCKFILE_INSTALL,
+        INSTALLED
+    }
 
     public record Outcome(Optional<InstalledJdk> jdk, Source source, String specUsed) {
         public Outcome {
@@ -59,19 +62,23 @@ public final class JdkEnsure {
 
     private JdkEnsure() {}
 
-    public static Outcome ensure(Path projectDir, Path jdksDirOverride, JkBuild build, Lockfile lock,
-                                 java.util.function.Consumer<String> warn)
+    public static Outcome ensure(
+            Path projectDir,
+            Path jdksDirOverride,
+            JkBuild build,
+            Lockfile lock,
+            java.util.function.Consumer<String> warn)
             throws IOException, InterruptedException {
-        JdkRegistry registry = jdksDirOverride != null
-                ? new JdkRegistry(jdksDirOverride)
-                : new JdkRegistry();
+        JdkRegistry registry = jdksDirOverride != null ? new JdkRegistry(jdksDirOverride) : new JdkRegistry();
         GlobalDefaultJdk defaults = GlobalDefaultJdk.current();
         int latestLts = JdkLts.OFFLINE_LATEST_LTS;
 
         // Walk the one canonical resolution order (--jdk / JK_JDK / .jdk-version /
         // jk.lock / project.jdk / project.java-floor / current / default / env / PATH).
         JdkResolution.Request req = new JdkResolution.Request(
-                projectDir, System.getProperty("jk.jdk"), System.getenv("JK_JDK"),
+                projectDir,
+                System.getProperty("jk.jdk"),
+                System.getenv("JK_JDK"),
                 lock != null ? lock.jdk() : null,
                 (build != null && build.project() != null) ? build.project().jdk() : null,
                 (build != null && build.project() != null) ? build.project().javaRelease() : 0,
@@ -96,11 +103,11 @@ public final class JdkEnsure {
         JdkCatalog catalog = new JdkCatalogClient().onWarning(warn).fetch();
         // selectPreferred biases a vendor-unqualified spec to jk's vendor order
         // and resolves range specs (">=26") to the lowest available major.
-        Optional<JdkCatalog.Entry> entry = JdkSelector.selectPreferred(
-                catalog, spec, HostPlatform.currentOs(), HostPlatform.currentArch());
+        Optional<JdkCatalog.Entry> entry =
+                JdkSelector.selectPreferred(catalog, spec, HostPlatform.currentOs(), HostPlatform.currentArch());
         if (entry.isEmpty()) {
-            throw new IOException("no JDK matches " + spec + " on "
-                    + HostPlatform.currentOs() + "/" + HostPlatform.currentArch());
+            throw new IOException(
+                    "no JDK matches " + spec + " on " + HostPlatform.currentOs() + "/" + HostPlatform.currentArch());
         }
         JdkInstaller installer = new JdkInstaller(new Http(), registry);
         InstalledJdk installed = installer.install(entry.get());
@@ -109,7 +116,8 @@ public final class JdkEnsure {
         // de-facto default — but only when no default is set yet, and only for
         // the bootstrap case (a named project pin must not hijack the global
         // default). r.tier() == DEFAULT marks the bootstrap path.
-        if (r.tier() == JdkResolution.Tier.DEFAULT && defaults.currentIdentifier().isEmpty()) {
+        if (r.tier() == JdkResolution.Tier.DEFAULT
+                && defaults.currentIdentifier().isEmpty()) {
             defaults.set(installed);
         }
         return new Outcome(Optional.of(installed), Source.INSTALLED, spec);

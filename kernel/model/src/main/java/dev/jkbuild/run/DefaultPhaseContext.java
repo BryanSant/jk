@@ -35,18 +35,25 @@ final class DefaultPhaseContext implements PhaseContext {
     private static final double INTERP_CAP = 0.9;
 
     private final boolean weighted;
-    private volatile long weight;                  // mutable: reweight() resizes the slice mid-run
-    private final AtomicLong internalScope;        // fraction denominator (weighted)
+    private volatile long weight; // mutable: reweight() resizes the slice mid-run
+    private final AtomicLong internalScope; // fraction denominator (weighted)
     private final AtomicLong internalDone = new AtomicLong(0);
-    private final AtomicLong emitted = new AtomicLong(0);   // weight-ticks added so far (weighted)
+    private final AtomicLong emitted = new AtomicLong(0); // weight-ticks added so far (weighted)
     private final AtomicInteger scopeGrowth = new AtomicInteger(0); // legacy denominator growth
 
     /** Wall-clock interpolation: 0 = off; else the phase's expected duration. */
-    private volatile long expectedNanos;           // scaled with the weight on reweight()
+    private volatile long expectedNanos; // scaled with the weight on reweight()
+
     private final long startNanos;
 
-    DefaultPhaseContext(String phase, Goal goal, int internalScope, int weight,
-                        boolean weighted, long expectedNanos, long startNanos) {
+    DefaultPhaseContext(
+            String phase,
+            Goal goal,
+            int internalScope,
+            int weight,
+            boolean weighted,
+            long expectedNanos,
+            long startNanos) {
         this.phase = phase;
         this.goal = goal;
         this.weighted = weighted;
@@ -76,9 +83,7 @@ final class DefaultPhaseContext implements PhaseContext {
     private void advance() {
         long scope = internalScope.get();
         long done = internalDone.get();
-        long target = scope > 0
-                ? Math.round(weight * Math.min(1.0, (double) done / scope))
-                : (done > 0 ? weight : 0);
+        long target = scope > 0 ? Math.round(weight * Math.min(1.0, (double) done / scope)) : (done > 0 ? weight : 0);
         advanceTo(target);
     }
 
@@ -96,7 +101,9 @@ final class DefaultPhaseContext implements PhaseContext {
     }
 
     /** True when this phase eases its slice forward over time. */
-    boolean interpolating() { return expectedNanos > 0; }
+    boolean interpolating() {
+        return expectedNanos > 0;
+    }
 
     /** Monotonic advance of the weighted numerator to {@code target} ticks. */
     private synchronized void advanceTo(long target) {
@@ -216,9 +223,9 @@ final class DefaultPhaseContext implements PhaseContext {
 
     @Override
     public <T> T require(GoalKey<T> key) {
-        return goal.get(key).orElseThrow(() ->
-                new IllegalStateException("phase '" + phase + "' required key '"
-                        + key.name() + "' but it wasn't set by any upstream phase"));
+        return goal.get(key)
+                .orElseThrow(() -> new IllegalStateException("phase '" + phase + "' required key '" + key.name()
+                        + "' but it wasn't set by any upstream phase"));
     }
 
     /**

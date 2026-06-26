@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 /**
  * Lightweight smoke tests against the host's real SDKMAN / Homebrew /
@@ -25,8 +24,7 @@ class ProbeSmokeTest {
         Path home = Path.of(javaHomeEnv);
         if (!Files.exists(home.resolve("release"))) return;
 
-        Optional<String> version = ToolHealth.detectVersion(
-                ToolSpec.jdk("ignored", null), home);
+        Optional<String> version = ToolHealth.detectVersion(ToolSpec.jdk("ignored", null), home);
         if (version.isEmpty()) return;
 
         EnvVarProbe probe = new EnvVarProbe();
@@ -37,8 +35,7 @@ class ProbeSmokeTest {
     }
 
     @Test
-    void sdkman_probe_returns_kotlin_when_kotlin_home_resolves_to_sdkman_install()
-            throws Exception {
+    void sdkman_probe_returns_kotlin_when_kotlin_home_resolves_to_sdkman_install() throws Exception {
         String kotlinHome = System.getenv("KOTLIN_HOME");
         if (kotlinHome == null || !kotlinHome.contains(".sdkman")) return;
 

@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.model;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import org.junit.jupiter.api.Test;
 
 class CoordinateTest {
 
@@ -34,7 +34,6 @@ class CoordinateTest {
 
     @Test
     void rejects_malformed() {
-        assertThatThrownBy(() -> Coordinate.parse("foo:bar"))
-                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> Coordinate.parse("foo:bar")).isInstanceOf(IllegalArgumentException.class);
     }
 }

@@ -51,28 +51,52 @@ public record Opt(
     }
 
     public Opt hide() {
-        return new Opt(names, paramLabel, description, takesValue, repeatable, split, true, negatable, required, fallbackValue);
+        return new Opt(
+                names,
+                paramLabel,
+                description,
+                takesValue,
+                repeatable,
+                split,
+                true,
+                negatable,
+                required,
+                fallbackValue);
     }
 
     public Opt require() {
-        return new Opt(names, paramLabel, description, takesValue, repeatable, split, hidden, negatable, true, fallbackValue);
+        return new Opt(
+                names, paramLabel, description, takesValue, repeatable, split, hidden, negatable, true, fallbackValue);
     }
 
     public Opt negate() {
-        return new Opt(names, paramLabel, description, takesValue, repeatable, split, hidden, true, required, fallbackValue);
+        return new Opt(
+                names, paramLabel, description, takesValue, repeatable, split, hidden, true, required, fallbackValue);
     }
 
     public Opt repeat() {
-        return new Opt(names, paramLabel, description, takesValue, true, split, hidden, negatable, required, fallbackValue);
+        return new Opt(
+                names, paramLabel, description, takesValue, true, split, hidden, negatable, required, fallbackValue);
     }
 
     public Opt splitOn(String delimiter) {
-        return new Opt(names, paramLabel, description, takesValue, true, delimiter, hidden, negatable, required, fallbackValue);
+        return new Opt(
+                names,
+                paramLabel,
+                description,
+                takesValue,
+                true,
+                delimiter,
+                hidden,
+                negatable,
+                required,
+                fallbackValue);
     }
 
     /** Optional-argument option: present-without-value yields {@code fallback}. */
     public Opt withFallback(String fallback) {
-        return new Opt(names, paramLabel, description, takesValue, repeatable, split, hidden, negatable, required, fallback);
+        return new Opt(
+                names, paramLabel, description, takesValue, repeatable, split, hidden, negatable, required, fallback);
     }
 
     /** The canonical (longest {@code --}) name, used as the lookup key in {@link Invocation}. */

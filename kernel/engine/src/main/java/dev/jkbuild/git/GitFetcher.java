@@ -2,14 +2,12 @@
 package dev.jkbuild.git;
 
 import dev.jkbuild.config.ActiveConfig;
-import dev.jkbuild.forge.ForgeAuth;
 import dev.jkbuild.forge.ForgeGitCredentials;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -21,7 +19,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.Callable;
 
 /**
  * Git resolver (PRD §11). Thin driver: writes a spec file and forks the
@@ -102,7 +99,9 @@ public final class GitFetcher {
     public void invalidateBranchTip(GitSource source) {
         try {
             Files.deleteIfExists(metaFile(source));
-        } catch (IOException ignored) { /* best-effort */ }
+        } catch (IOException ignored) {
+            /* best-effort */
+        }
     }
 
     /** Tag-rewrite check: re-resolve and fail if the SHA changed. */
@@ -120,25 +119,20 @@ public final class GitFetcher {
         Objects.requireNonNull(source, "source");
         Result r = runWorker("resolve_ref", source, false, null);
         if (!r.ok) throw new IOException(r.error);
-        return new RefInfo(
-                r.sha,
-                Instant.ofEpochSecond(r.commitTime),
-                Optional.ofNullable(r.nearestTag));
+        return new RefInfo(r.sha, Instant.ofEpochSecond(r.commitTime), Optional.ofNullable(r.nearestTag));
     }
 
     // --- worker dispatch -----------------------------------------------------
 
-    private Result runWorker(String command, GitSource source,
-                              boolean noCache, String expectedSha)
-            throws IOException {
+    private Result runWorker(String command, GitSource source, boolean noCache, String expectedSha) throws IOException {
         // Resolve credentials in the parent — has access to ForgeAuth/keychain.
         String[] cred = credentials.resolveCredentials(source.canonicalUrl());
 
         List<String> lines = new ArrayList<>();
-        lines.add("COMMAND "  + command);
-        lines.add("URL "      + source.canonicalUrl());
+        lines.add("COMMAND " + command);
+        lines.add("URL " + source.canonicalUrl());
         lines.add("REF_TYPE " + refTypeName(source.ref()));
-        lines.add("REF "      + refValue(source.ref()));
+        lines.add("REF " + refValue(source.ref()));
         lines.add("NO_CACHE " + noCache);
         lines.add("GIT_ROOT " + gitRoot.toAbsolutePath());
         if (cred != null) {
@@ -151,29 +145,33 @@ public final class GitFetcher {
         try {
             // 0600 so credentials are not world-readable.
             try {
-                Files.setPosixFilePermissions(spec,
-                        java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
-            } catch (UnsupportedOperationException ignored) {}
+                Files.setPosixFilePermissions(
+                        spec, java.nio.file.attribute.PosixFilePermissions.fromString("rw-------"));
+            } catch (UnsupportedOperationException ignored) {
+            }
             Files.write(spec, lines, StandardCharsets.UTF_8);
 
             Path workerJar = WorkerJar.GIT_CLIENT.locate();
             List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
-                    javaExe().toString(), 1,
+                    javaExe().toString(),
+                    1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
 
             Result result = new Result();
             StringBuilder diag = new StringBuilder();
             int exit;
             try {
-                exit = WorkerProcess.run(cmd, "##JKGIT:",
+                exit = WorkerProcess.run(
+                        cmd,
+                        "##JKGIT:",
                         json -> {
                             if (!"result".equals(Ndjson.str(json, "t"))) return;
-                            result.ok         = Ndjson.bool(json, "ok", true);
-                            result.sha        = Ndjson.str(json, "sha");
-                            result.checkout   = Ndjson.str(json, "checkout");
-                            result.error      = Ndjson.str(json, "error");
+                            result.ok = Ndjson.bool(json, "ok", true);
+                            result.sha = Ndjson.str(json, "sha");
+                            result.checkout = Ndjson.str(json, "checkout");
+                            result.error = Ndjson.str(json, "error");
                             result.tagRewrite = Ndjson.bool(json, "tag_rewrite", false);
-                            result.actual     = Ndjson.str(json, "actual");
+                            result.actual = Ndjson.str(json, "actual");
                             result.commitTime = Ndjson.longValue(json, "commit_time", 0);
                             result.nearestTag = Ndjson.str(json, "nearest_tag");
                         },
@@ -197,17 +195,17 @@ public final class GitFetcher {
 
     private static String refTypeName(GitRefSpec ref) {
         return switch (ref) {
-            case GitRefSpec.Tag ignored    -> "Tag";
+            case GitRefSpec.Tag ignored -> "Tag";
             case GitRefSpec.Branch ignored -> "Branch";
-            case GitRefSpec.Rev ignored    -> "Rev";
+            case GitRefSpec.Rev ignored -> "Rev";
         };
     }
 
     private static String refValue(GitRefSpec ref) {
         return switch (ref) {
-            case GitRefSpec.Tag t    -> t.name();
+            case GitRefSpec.Tag t -> t.name();
             case GitRefSpec.Branch b -> b.name();
-            case GitRefSpec.Rev r    -> r.sha();
+            case GitRefSpec.Rev r -> r.sha();
         };
     }
 
@@ -228,20 +226,24 @@ public final class GitFetcher {
         if (m == null) return null;
         Path checkout = Path.of(m.checkout);
         if (!Files.isDirectory(checkout)) return null;
-        if (offline()) return new Fetched(m.sha, checkout);   // never hit network offline
+        if (offline()) return new Fetched(m.sha, checkout); // never hit network offline
         long window = windowMillis(source.fetch());
-        if (window < 0) return null;                          // "always"/"0" → re-resolve
-        return System.currentTimeMillis() - m.epochMs < window
-                ? new Fetched(m.sha, checkout) : null;
+        if (window < 0) return null; // "always"/"0" → re-resolve
+        return System.currentTimeMillis() - m.epochMs < window ? new Fetched(m.sha, checkout) : null;
     }
 
     private void recordBranchTip(GitSource source, Fetched f) {
         try {
             Path meta = metaFile(source);
             Files.createDirectories(meta.getParent());
-            Files.writeString(meta, System.currentTimeMillis() + "\n" + f.sha() + "\n"
-                    + f.checkoutPath().toAbsolutePath(), StandardCharsets.UTF_8);
-        } catch (IOException ignored) { /* best-effort: a missed stamp just re-resolves sooner */ }
+            Files.writeString(
+                    meta,
+                    System.currentTimeMillis() + "\n" + f.sha() + "\n"
+                            + f.checkoutPath().toAbsolutePath(),
+                    StandardCharsets.UTF_8);
+        } catch (IOException ignored) {
+            /* best-effort: a missed stamp just re-resolves sooner */
+        }
     }
 
     private TipMeta readTip(GitSource source) {
@@ -250,7 +252,10 @@ public final class GitFetcher {
             if (!Files.isRegularFile(meta)) return null;
             List<String> lines = Files.readAllLines(meta, StandardCharsets.UTF_8);
             if (lines.size() < 3) return null;
-            return new TipMeta(Long.parseLong(lines.get(0).trim()), lines.get(1).trim(), lines.get(2).trim());
+            return new TipMeta(
+                    Long.parseLong(lines.get(0).trim()),
+                    lines.get(1).trim(),
+                    lines.get(2).trim());
         } catch (RuntimeException | IOException e) {
             return null;
         }
@@ -272,7 +277,7 @@ public final class GitFetcher {
             case 'm' -> n * 60_000L;
             case 'h' -> n * 3_600_000L;
             case 'd' -> n * 86_400_000L;
-            default  -> DEFAULT_WINDOW_MS;
+            default -> DEFAULT_WINDOW_MS;
         };
     }
 
@@ -293,8 +298,8 @@ public final class GitFetcher {
 
     private static Path javaExe() {
         String home = System.getProperty("java.home");
-        Path java = Path.of(home, "bin",
-                System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
+        Path java = Path.of(
+                home, "bin", System.getProperty("os.name", "").toLowerCase().contains("win") ? "java.exe" : "java");
         return java;
     }
 
@@ -322,8 +327,17 @@ public final class GitFetcher {
             this.expectedSha = expectedSha;
             this.actualSha = actualSha;
         }
-        public GitSource source()    { return source; }
-        public String expectedSha()  { return expectedSha; }
-        public String actualSha()    { return actualSha; }
+
+        public GitSource source() {
+            return source;
+        }
+
+        public String expectedSha() {
+            return expectedSha;
+        }
+
+        public String actualSha() {
+            return actualSha;
+        }
     }
 }

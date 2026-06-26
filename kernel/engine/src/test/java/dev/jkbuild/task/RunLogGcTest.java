@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Duration;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class RunLogGcTest {
 
@@ -27,8 +26,10 @@ class RunLogGcTest {
         Path stale = Files.writeString(runs.resolve("ancient.ndjson"), "...");
         Path fresh = Files.writeString(runs.resolve("today.ndjson"), "...");
         // Backdate the stale log to 10 days ago.
-        Files.setLastModifiedTime(stale,
-                FileTime.fromMillis(System.currentTimeMillis() - Duration.ofDays(10).toMillis()));
+        Files.setLastModifiedTime(
+                stale,
+                FileTime.fromMillis(
+                        System.currentTimeMillis() - Duration.ofDays(10).toMillis()));
 
         var r = RunLogGc.sweep(tempDir, RunLogGc.DEFAULT_TTL, false);
 
@@ -42,8 +43,10 @@ class RunLogGcTest {
         Path runs = tempDir.resolve("runs");
         Files.createDirectories(runs);
         Path stale = Files.writeString(runs.resolve("old.ndjson"), "...");
-        Files.setLastModifiedTime(stale,
-                FileTime.fromMillis(System.currentTimeMillis() - Duration.ofDays(10).toMillis()));
+        Files.setLastModifiedTime(
+                stale,
+                FileTime.fromMillis(
+                        System.currentTimeMillis() - Duration.ofDays(10).toMillis()));
 
         var r = RunLogGc.sweep(tempDir, RunLogGc.DEFAULT_TTL, true);
 

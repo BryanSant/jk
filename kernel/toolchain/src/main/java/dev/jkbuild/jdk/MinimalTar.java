@@ -47,16 +47,15 @@ public final class MinimalTar {
          *                 {@code null} for directories and symlinks
          * @param size     uncompressed byte count of the entry data
          */
-        void handle(String name, String linkName, int mode,
-                    boolean isDir, boolean isLink,
-                    InputStream data, long size) throws IOException;
+        void handle(String name, String linkName, int mode, boolean isDir, boolean isLink, InputStream data, long size)
+                throws IOException;
     }
 
     /** Stream through a raw (uncompressed) TAR archive, invoking {@code handler} for each entry. */
     public static void stream(InputStream tar, EntryHandler handler) throws IOException {
         byte[] header = new byte[512];
-        String pendingName = null;   // GNU 'L' or PAX 'path'
-        String pendingLink = null;   // GNU 'K' or PAX 'linkpath'
+        String pendingName = null; // GNU 'L' or PAX 'path'
+        String pendingLink = null; // GNU 'K' or PAX 'linkpath'
 
         while (true) {
             int read = readFully(tar, header, 0, 512);
@@ -68,10 +67,10 @@ public final class MinimalTar {
                 break;
             }
 
-            String name     = nullTermStr(header, 0, 100);
-            int    mode     = octalInt(header, 100, 8);
-            long   size     = octalLong(header, 124, 12);
-            char   typeFlag = (char) (header[156] & 0xFF);
+            String name = nullTermStr(header, 0, 100);
+            int mode = octalInt(header, 100, 8);
+            long size = octalLong(header, 124, 12);
+            char typeFlag = (char) (header[156] & 0xFF);
             String linkName = nullTermStr(header, 157, 100);
 
             // USTAR/POSIX prefix (bytes 345-499) extends the name.
@@ -81,8 +80,14 @@ public final class MinimalTar {
             }
 
             // Apply any pending long name from a previous 'L'/'K'/PAX entry.
-            if (pendingName != null) { name = pendingName; pendingName = null; }
-            if (pendingLink != null) { linkName = pendingLink; pendingLink = null; }
+            if (pendingName != null) {
+                name = pendingName;
+                pendingName = null;
+            }
+            if (pendingLink != null) {
+                linkName = pendingLink;
+                pendingLink = null;
+            }
 
             long dataBlocks = (size + 511) / 512;
 
@@ -109,7 +114,7 @@ public final class MinimalTar {
                         if (eqIdx < 0) continue;
                         String k = kv.substring(0, eqIdx);
                         String v = kv.substring(eqIdx + 1);
-                        if ("path".equals(k))     pendingName = v;
+                        if ("path".equals(k)) pendingName = v;
                         if ("linkpath".equals(k)) pendingLink = v;
                     }
                     skipPadding(tar, dataBlocks, size);
@@ -185,7 +190,9 @@ public final class MinimalTar {
     private static int octalInt(byte[] buf, int off, int len) {
         try {
             return Integer.parseInt(nullTermStr(buf, off, len).strip(), 8);
-        } catch (NumberFormatException e) { return 0; }
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static long octalLong(byte[] buf, int off, int len) {
@@ -197,7 +204,9 @@ public final class MinimalTar {
         }
         try {
             return Long.parseLong(nullTermStr(buf, off, len).strip(), 8);
-        } catch (NumberFormatException e) { return 0; }
+        } catch (NumberFormatException e) {
+            return 0;
+        }
     }
 
     private static boolean isZeroBlock(byte[] buf) {
@@ -228,14 +237,16 @@ public final class MinimalTar {
             this.remaining = size;
         }
 
-        @Override public int read() throws IOException {
+        @Override
+        public int read() throws IOException {
             if (remaining <= 0) return -1;
             int b = delegate.read();
             if (b >= 0) remaining--;
             return b;
         }
 
-        @Override public int read(byte[] b, int off, int len) throws IOException {
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
             if (remaining <= 0) return -1;
             int n = delegate.read(b, off, (int) Math.min(len, remaining));
             if (n > 0) remaining -= n;
@@ -243,9 +254,15 @@ public final class MinimalTar {
         }
 
         void skipRemaining() throws IOException {
-            if (remaining > 0) { delegate.skipNBytes(remaining); remaining = 0; }
+            if (remaining > 0) {
+                delegate.skipNBytes(remaining);
+                remaining = 0;
+            }
         }
 
-        @Override public void close() { /* don't close the underlying stream */ }
+        @Override
+        public void close() {
+            /* don't close the underlying stream */
+        }
     }
 }

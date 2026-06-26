@@ -8,6 +8,4 @@ package dev.jkbuild.repo.s3;
  * may be null when an explicit endpoint makes it irrelevant; S3 signing still
  * needs a region string, so callers default it (e.g. {@code us-east-1}).
  */
-public record AwsCredentials(String accessKeyId, String secretAccessKey,
-                             String sessionToken, String region) {
-}
+public record AwsCredentials(String accessKeyId, String secretAccessKey, String sessionToken, String region) {}

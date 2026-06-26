@@ -1,14 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Optional;
 import java.util.function.Function;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * Discovers and merges configuration into a single {@link JkConfig} per the
@@ -42,6 +41,7 @@ public final class JkConfigLoader {
 
     /** Env var → JkConfig setter. */
     private static final String ENV_COLOR = "JK_COLOR";
+
     private static final String ENV_OFFLINE = "JK_OFFLINE";
     private static final String ENV_RERUN = "JK_RERUN";
     private static final String ENV_REFRESH = "JK_REFRESH";
@@ -60,11 +60,11 @@ public final class JkConfigLoader {
      * should call {@link JkConfig#mergedWith(JkConfig)} with the CLI-derived
      * layer last to enforce the documented precedence.
      */
-    public static JkConfig load(Path startDir, boolean noConfig, Optional<Path> explicitConfigFile)
-            throws IOException {
+    public static JkConfig load(Path startDir, boolean noConfig, Optional<Path> explicitConfigFile) throws IOException {
         // File layers, lowest precedence first, then the env layer on top.
         JkConfig out = JkConfig.empty();
-        for (Path layer : ConfigSources.discover(startDir, noConfig, explicitConfigFile).layers()) {
+        for (Path layer :
+                ConfigSources.discover(startDir, noConfig, explicitConfigFile).layers()) {
             out = out.mergedWith(loadTomlOrEmpty(layer));
         }
         // Env vars override files but are overridden by CLI flags (caller's job).

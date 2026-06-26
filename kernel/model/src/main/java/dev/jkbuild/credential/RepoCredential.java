@@ -11,8 +11,7 @@ package dev.jkbuild.credential;
  * {@link Bearer}); object-store credential shapes (AWS SigV4 keys, Azure
  * SharedKey) are added with their transports.
  */
-public sealed interface RepoCredential
-        permits RepoCredential.Anonymous, RepoCredential.Basic, RepoCredential.Bearer {
+public sealed interface RepoCredential permits RepoCredential.Anonymous, RepoCredential.Basic, RepoCredential.Bearer {
 
     /** No authentication — public repositories. */
     record Anonymous() implements RepoCredential {}

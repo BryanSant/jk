@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.cli.Jk;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -12,8 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /** {@code jk explain} renders the unified composite build plan (BuildGraph). */
 class ExplainCommandTest {
@@ -31,8 +30,7 @@ class ExplainCommandTest {
         if (pathDeps.length > 0) {
             sb.append("\n[dependencies.main]\n");
             for (String d : pathDeps) {
-                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n"
-                        .formatted(d, d, d));
+                sb.append("%s = { group = \"com.example\", name = \"%s\", path = \"../%s\" }\n".formatted(d, d, d));
             }
         }
         Files.writeString(dir.resolve("jk.toml"), sb.toString());
@@ -63,11 +61,12 @@ class ExplainCommandTest {
         // Narrow budget → leading units that fit, then a "…+N more…" remaining-count marker.
         String elided = ExplainCommand.elideDeps(units, 40);
         assertThat(elided).startsWith(":engine");
-        assertThat(elided).matches(".*…\\+\\d+ more…$");      // ends with …+<count> more…
+        assertThat(elided).matches(".*…\\+\\d+ more…$"); // ends with …+<count> more…
         assertThat(elided.length()).isLessThan(full.length());
         // Count = units that didn't fit (the leading ones shown are excluded).
         int shown = (int) java.util.Arrays.stream(elided.split(", "))
-                .filter(s -> s.startsWith(":")).count();
+                .filter(s -> s.startsWith(":"))
+                .count();
         assertThat(elided).contains("…+" + (units.size() - shown) + " more…");
 
         // A single prereq is never elided.
@@ -79,8 +78,7 @@ class ExplainCommandTest {
         List<String> tokens = List.of(":model", ":plugin-api", ":core", ":io", ":auditor");
 
         // Unbounded (the non-TTY MAX_VALUE) → the whole list on one line.
-        assertThat(ExplainCommand.wrapNames(tokens, Integer.MAX_VALUE))
-                .containsExactly(String.join(", ", tokens));
+        assertThat(ExplainCommand.wrapNames(tokens, Integer.MAX_VALUE)).containsExactly(String.join(", ", tokens));
 
         // Narrow → several lines, each within the budget; every token kept, order preserved.
         List<String> lines = ExplainCommand.wrapNames(tokens, 20);

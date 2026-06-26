@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
-import dev.jkbuild.cache.Cas;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.cache.Cas;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CasSweepTest {
 
@@ -89,8 +88,7 @@ class CasSweepTest {
 
     /** Bump mtime far enough into the past to clear MIN_AGE_FOR_SWEEP. */
     private static void backdate(Path file) throws IOException {
-        long past = System.currentTimeMillis()
-                - Sweep.MIN_AGE_FOR_SWEEP.toMillis() - 60_000L;
+        long past = System.currentTimeMillis() - Sweep.MIN_AGE_FOR_SWEEP.toMillis() - 60_000L;
         Files.setLastModifiedTime(file, FileTime.fromMillis(past));
     }
 }

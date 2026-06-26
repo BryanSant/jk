@@ -4,7 +4,6 @@ package dev.jkbuild.task;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cache.Linking;
 import dev.jkbuild.util.Hashing;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -65,11 +64,8 @@ public final class ActionCache {
      * the CAS, and write the {@link ActionRecord}. After this, callers
      * can later restore the same outputs via {@link #restore}.
      */
-    public ActionRecord store(
-            String taskId,
-            String actionKey,
-            Map<String, String> inputs,
-            Path outputDir) throws IOException {
+    public ActionRecord store(String taskId, String actionKey, Map<String, String> inputs, Path outputDir)
+            throws IOException {
         Map<String, String> outputs = new TreeMap<>();
         if (Files.exists(outputDir)) {
             try (Stream<Path> stream = Files.walk(outputDir)) {
@@ -88,8 +84,7 @@ public final class ActionCache {
                     byte[] bytes = Files.readAllBytes(file);
                     String hex = Hashing.sha256Hex(bytes);
                     cas.putByLink(file, hex);
-                    String relPath = outputDir.relativize(file).toString()
-                            .replace(File.separatorChar, '/');
+                    String relPath = outputDir.relativize(file).toString().replace(File.separatorChar, '/');
                     outputs.put(relPath, hex);
                 }
             }
@@ -105,10 +100,8 @@ public final class ActionCache {
      * and pointer.
      */
     public ActionRecord storeWithOutputs(
-            String taskId,
-            String actionKey,
-            Map<String, String> inputs,
-            Map<String, String> outputs) throws IOException {
+            String taskId, String actionKey, Map<String, String> inputs, Map<String, String> outputs)
+            throws IOException {
         return storeWithOutputs(taskId, actionKey, inputs, outputs, Map.of());
     }
 
@@ -118,7 +111,8 @@ public final class ActionCache {
             String actionKey,
             Map<String, String> inputs,
             Map<String, String> outputs,
-            Map<String, List<String>> units) throws IOException {
+            Map<String, List<String>> units)
+            throws IOException {
         Files.createDirectories(keysDir());
         Files.createDirectories(tasksDir());
         ActionRecord record = new ActionRecord(taskId, actionKey, inputs, outputs, units);
@@ -140,8 +134,7 @@ public final class ActionCache {
         // doesn't wipe the stamp a later phase relies on. (The test result is a CAS
         // marker now, not a file here — see TestStamp.)
         Map<String, byte[]> stamps = new LinkedHashMap<>();
-        for (String f : new String[]{
-                FreshnessStamp.JAVA_STAMP, FreshnessStamp.KOTLIN_STAMP}) {
+        for (String f : new String[] {FreshnessStamp.JAVA_STAMP, FreshnessStamp.KOTLIN_STAMP}) {
             Path sp = outputDir.resolve(f);
             if (Files.isRegularFile(sp)) stamps.put(f, Files.readAllBytes(sp));
         }
@@ -194,8 +187,9 @@ public final class ActionCache {
      * each artifact's {@code baseDir}-relative path as its output key. The
      * companion of {@link #restoreArtifacts} for single/few-file packaging.
      */
-    public ActionRecord storeArtifacts(String taskId, String actionKey, Map<String, String> inputs,
-                                       Path baseDir, List<Path> artifacts) throws IOException {
+    public ActionRecord storeArtifacts(
+            String taskId, String actionKey, Map<String, String> inputs, Path baseDir, List<Path> artifacts)
+            throws IOException {
         Map<String, String> outputs = new TreeMap<>();
         for (Path a : artifacts) {
             if (!Files.isRegularFile(a)) continue;
@@ -228,8 +222,7 @@ public final class ActionCache {
         }
 
         /** Back-compat: a record with no per-source unit grouping. */
-        public ActionRecord(String taskId, String actionKey,
-                            Map<String, String> inputs, Map<String, String> outputs) {
+        public ActionRecord(String taskId, String actionKey, Map<String, String> inputs, Map<String, String> outputs) {
             this(taskId, actionKey, inputs, outputs, Map.of());
         }
     }
@@ -239,10 +232,18 @@ public final class ActionCache {
         sb.append("TASK ").append(record.taskId()).append('\n');
         sb.append("KEY ").append(record.actionKey()).append('\n');
         for (Map.Entry<String, String> e : new TreeMap<>(record.inputs()).entrySet()) {
-            sb.append("INPUT ").append(e.getValue()).append(' ').append(e.getKey()).append('\n');
+            sb.append("INPUT ")
+                    .append(e.getValue())
+                    .append(' ')
+                    .append(e.getKey())
+                    .append('\n');
         }
         for (Map.Entry<String, String> e : new TreeMap<>(record.outputs()).entrySet()) {
-            sb.append("OUTPUT ").append(e.getValue()).append(' ').append(e.getKey()).append('\n');
+            sb.append("OUTPUT ")
+                    .append(e.getValue())
+                    .append(' ')
+                    .append(e.getKey())
+                    .append('\n');
         }
         // UNIT <relPath> <sourceAbsPath> — relPath is space-free (Java class
         // path), source is the rest of the line so it may contain spaces.
@@ -288,7 +289,9 @@ public final class ActionCache {
         return new ActionRecord(
                 Objects.requireNonNull(taskId, "taskId in record"),
                 Objects.requireNonNull(actionKey, "actionKey in record"),
-                inputs, outputs, units);
+                inputs,
+                outputs,
+                units);
     }
 
     private Path keysDir() {

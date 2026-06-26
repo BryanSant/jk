@@ -11,20 +11,18 @@ package dev.jkbuild.model;
  *
  * <p>Irrelevant for {@code http(s)} and {@code file://} repositories.
  */
-public record ObjectStoreConfig(String region, String endpoint,
-                                String accessKey, String secretKey, String sessionToken) {
+public record ObjectStoreConfig(
+        String region, String endpoint, String accessKey, String secretKey, String sessionToken) {
 
     public static final ObjectStoreConfig EMPTY = new ObjectStoreConfig(null, null, null, null, null);
 
     /** True when no field is set (the table declared no object-store config). */
     public boolean isEmpty() {
-        return region == null && endpoint == null
-                && accessKey == null && secretKey == null && sessionToken == null;
+        return region == null && endpoint == null && accessKey == null && secretKey == null && sessionToken == null;
     }
 
     /** True when both an access key and secret key are present (explicit credentials). */
     public boolean hasExplicitCredentials() {
-        return accessKey != null && !accessKey.isBlank()
-                && secretKey != null && !secretKey.isBlank();
+        return accessKey != null && !accessKey.isBlank() && secretKey != null && !secretKey.isBlank();
     }
 }

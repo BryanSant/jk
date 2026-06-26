@@ -6,11 +6,8 @@ import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.worker.WorkerJar;
 import dev.jkbuild.worker.WorkerProcess;
-
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -77,7 +74,6 @@ public final class JUnitLauncher {
         return flags;
     }
 
-
     /**
      * Run the project's tests. {@code workers} of 1 (today's default) takes
      * the one-shot path; anything higher fans out across pull-mode workers.
@@ -98,8 +94,7 @@ public final class JUnitLauncher {
             Map<String, String> workerJarProps,
             TestProgressListener listener)
             throws IOException, InterruptedException {
-        return run(javaHome, testClassesDir, runtimeClasspath, cacheRoot, workers,
-                workerJarProps, listener, null);
+        return run(javaHome, testClassesDir, runtimeClasspath, cacheRoot, workers, workerJarProps, listener, null);
     }
 
     /**
@@ -142,8 +137,7 @@ public final class JUnitLauncher {
     // -------- single-worker ---------------------------------------------
 
     private Result runSingle(
-            Path javaBinary, String classpath, Path testClassesDir,
-            TestProgressListener listener, Path testResultsDir)
+            Path javaBinary, String classpath, Path testClassesDir, TestProgressListener listener, Path testResultsDir)
             throws IOException, InterruptedException {
         XmlTestReport xml = testResultsDir != null ? new XmlTestReport() : null;
         MarkdownTestReport md = testResultsDir != null ? new MarkdownTestReport() : null;
@@ -153,18 +147,30 @@ public final class JUnitLauncher {
         // of surfacing only as "runner exited N".
         var crash = new CaptureBuffer();
         int exit = dev.jkbuild.worker.PluginLoader.run(
-                javaBinary, classpath, runnerFlags(1), PROTOCOL_PREFIX,
+                javaBinary,
+                classpath,
+                runnerFlags(1),
+                PROTOCOL_PREFIX,
                 List.of("--scan-classpath=" + testClassesDir),
                 aggregator::accept,
-                line -> { crash.add(line); listener.onUserOutput(0, line); });
+                line -> {
+                    crash.add(line);
+                    listener.onUserOutput(0, line);
+                });
         Result result = aggregator.toResult(exit, crash.text());
         if (xml != null) {
-            try { xml.writeAll(testResultsDir); }
-            catch (IOException e) { /* non-fatal: tests ran, just report writing failed */ }
+            try {
+                xml.writeAll(testResultsDir);
+            } catch (IOException e) {
+                /* non-fatal: tests ran, just report writing failed */
+            }
         }
         if (md != null) {
-            try { md.writeAll(testResultsDir.getParent()); }
-            catch (IOException e) { /* non-fatal */ }
+            try {
+                md.writeAll(testResultsDir.getParent());
+            } catch (IOException e) {
+                /* non-fatal */
+            }
         }
         return result;
     }
@@ -172,8 +178,12 @@ public final class JUnitLauncher {
     // -------- parallel pull-queue ---------------------------------------
 
     private Result runParallel(
-            Path javaBinary, String classpath, Path testClassesDir,
-            int workers, TestProgressListener listener, Path testResultsDir)
+            Path javaBinary,
+            String classpath,
+            Path testClassesDir,
+            int workers,
+            TestProgressListener listener,
+            Path testResultsDir)
             throws IOException, InterruptedException {
         // 1. Discovery — one fork, list-only mode, harvest class FQCNs.
         List<String> classes = discoverClasses(javaBinary, classpath, testClassesDir, listener);
@@ -197,18 +207,15 @@ public final class JUnitLauncher {
         for (int w = 0; w < actualWorkers; w++) {
             final int workerId = w + 1;
             final int idx = w;
-            List<String> args = List.of(
-                    "--pull",
-                    "--worker=" + workerId,
-                    "--scan-classpath=" + testClassesDir);
+            List<String> args = List.of("--pull", "--worker=" + workerId, "--scan-classpath=" + testClassesDir);
             var agg = new ResultAggregator(listener, workerId, xml, md);
             aggregators.add(agg);
             final var crash = new CaptureBuffer();
             captures.add(crash);
             final int totalWorkers = actualWorkers;
             var t = new Thread(
-                    () -> exits[idx] = driveWorker(javaBinary, classpath, workerId, totalWorkers,
-                            args, queue, agg, listener, crash),
+                    () -> exits[idx] = driveWorker(
+                            javaBinary, classpath, workerId, totalWorkers, args, queue, agg, listener, crash),
                     "jk-test-worker-" + workerId);
             t.start();
             workerThreads.add(t);
@@ -242,16 +249,22 @@ public final class JUnitLauncher {
                     crash.append(captures.get(i).text());
                 }
             }
-            return new Result(1, 0, 1, 0, List.of(
-                    new Failure("(test run)", "", "runner exited " + worstExit, crash.toString())));
+            return new Result(
+                    1, 0, 1, 0, List.of(new Failure("(test run)", "", "runner exited " + worstExit, crash.toString())));
         }
         if (xml != null) {
-            try { xml.writeAll(testResultsDir); }
-            catch (IOException e) { /* non-fatal: tests ran, just report writing failed */ }
+            try {
+                xml.writeAll(testResultsDir);
+            } catch (IOException e) {
+                /* non-fatal: tests ran, just report writing failed */
+            }
         }
         if (md != null) {
-            try { md.writeAll(testResultsDir.getParent()); }
-            catch (IOException e) { /* non-fatal */ }
+            try {
+                md.writeAll(testResultsDir.getParent());
+            } catch (IOException e) {
+                /* non-fatal */
+            }
         }
         return new Result(total, succeeded, failed, skipped, allFailures);
     }
@@ -264,9 +277,15 @@ public final class JUnitLauncher {
      * passed through to the parent's stdout, tagged with the worker id.
      */
     private int driveWorker(
-            Path javaBinary, String classpath, int workerId, int totalWorkers,
-            List<String> args, ConcurrentLinkedDeque<String> queue,
-            ResultAggregator aggregator, TestProgressListener listener, CaptureBuffer crash) {
+            Path javaBinary,
+            String classpath,
+            int workerId,
+            int totalWorkers,
+            List<String> args,
+            ConcurrentLinkedDeque<String> queue,
+            ResultAggregator aggregator,
+            TestProgressListener listener,
+            CaptureBuffer crash) {
         // Pull protocol: each "ready" pulls the next class from the shared queue.
         java.util.function.BiConsumer<String, WorkerProcess.Conversation> handler = (json, convo) -> {
             String event = Ndjson.str(json, "e");
@@ -289,10 +308,14 @@ public final class JUnitLauncher {
 
         try {
             return dev.jkbuild.worker.PluginLoader.converse(
-                    javaBinary, classpath,
+                    javaBinary,
+                    classpath,
                     // N test JVMs run at once → divide the heap cap by N so they fit.
                     runnerFlags(totalWorkers),
-                    PROTOCOL_PREFIX, args, handler, passthrough);
+                    PROTOCOL_PREFIX,
+                    args,
+                    handler,
+                    passthrough);
         } catch (IOException e) {
             listener.onUserOutput(workerId, "reader error: " + e.getMessage());
             return -1;
@@ -312,7 +335,10 @@ public final class JUnitLauncher {
             throws IOException, InterruptedException {
         var classes = new ArrayList<String>();
         dev.jkbuild.worker.PluginLoader.run(
-                javaBinary, classpath, runnerFlags(1), PROTOCOL_PREFIX,
+                javaBinary,
+                classpath,
+                runnerFlags(1),
+                PROTOCOL_PREFIX,
                 List.of("--list-only", "--scan-classpath=" + testClassesDir),
                 json -> {
                     String event = Ndjson.str(json, "e");
@@ -320,10 +346,10 @@ public final class JUnitLauncher {
                         classes.add(Ndjson.str(json, "class"));
                     } else if ("discovery_total".equals(event)) {
                         listener.onDiscoveryTotal(
-                                Ndjson.intValue(json, "classes", 0),
-                                Ndjson.intValue(json, "tests", 0));
+                                Ndjson.intValue(json, "classes", 0), Ndjson.intValue(json, "tests", 0));
                     }
-                }, null);
+                },
+                null);
         return classes;
     }
 
@@ -410,8 +436,8 @@ public final class JUnitLauncher {
             this(listener, workerId, null, null);
         }
 
-        ResultAggregator(TestProgressListener listener, int workerId,
-                         XmlTestReport xmlReport, MarkdownTestReport mdReport) {
+        ResultAggregator(
+                TestProgressListener listener, int workerId, XmlTestReport xmlReport, MarkdownTestReport mdReport) {
             this.listener = listener;
             this.workerId = workerId;
             this.xmlReport = xmlReport;
@@ -433,9 +459,8 @@ public final class JUnitLauncher {
             String event = Ndjson.str(json, "e");
             if (event == null) return;
             switch (event) {
-                case "discovery_total" -> listener.onDiscoveryTotal(
-                        Ndjson.intValue(json, "classes", 0),
-                        Ndjson.intValue(json, "tests", 0));
+                case "discovery_total" ->
+                    listener.onDiscoveryTotal(Ndjson.intValue(json, "classes", 0), Ndjson.intValue(json, "tests", 0));
                 case "dynamic_registered" -> {
                     if ("TEST".equals(Ndjson.str(json, "type"))) {
                         dynamicIds.add(Ndjson.str(json, "id"));
@@ -450,11 +475,7 @@ public final class JUnitLauncher {
 
         private void onStarted(String json) {
             boolean isTest = "TEST".equals(Ndjson.str(json, "type"));
-            listener.onTestStarted(
-                    Ndjson.str(json, "id"),
-                    Ndjson.str(json, "display"),
-                    isTest,
-                    workerId);
+            listener.onTestStarted(Ndjson.str(json, "id"), Ndjson.str(json, "display"), isTest, workerId);
         }
 
         private void onFinished(String json) {
@@ -483,10 +504,10 @@ public final class JUnitLauncher {
                 String throwable = Ndjson.nested(json, "throwable");
                 if ("ABORTED".equals(status)) {
                     if (xmlReport != null) xmlReport.recordSkipped(id, display, "aborted");
-                    if (mdReport  != null) mdReport.recordSkipped(id, display, "aborted");
+                    if (mdReport != null) mdReport.recordSkipped(id, display, "aborted");
                 } else {
                     if (xmlReport != null) xmlReport.recordFinished(id, display, duration, throwable);
-                    if (mdReport  != null) mdReport.recordFinished(id, display, duration, throwable);
+                    if (mdReport != null) mdReport.recordFinished(id, display, duration, throwable);
                 }
             }
         }
@@ -513,16 +534,11 @@ public final class JUnitLauncher {
             if (isTest) skipped++;
             String reason = Ndjson.str(json, "reason");
             listener.onTestSkipped(
-                    id,
-                    Ndjson.str(json, "display"),
-                    reason != null ? reason : "",
-                    isTest,
-                    wasStatic,
-                    workerId);
+                    id, Ndjson.str(json, "display"), reason != null ? reason : "", isTest, wasStatic, workerId);
             if (isTest) {
                 String display = Ndjson.str(json, "display");
                 if (xmlReport != null) xmlReport.recordSkipped(id, display, reason);
-                if (mdReport  != null) mdReport.recordSkipped(id, display, reason);
+                if (mdReport != null) mdReport.recordSkipped(id, display, reason);
             }
         }
 
@@ -538,9 +554,16 @@ public final class JUnitLauncher {
         synchronized Result toResult(int exitCode, String crashOutput) {
             long total = succeeded + failed + skipped;
             if (total == 0 && exitCode != 0) {
-                return new Result(1, 0, 1, 0, List.of(new Failure(
-                        "(test run)", "", "runner exited " + exitCode,
-                        crashOutput == null ? "" : crashOutput)));
+                return new Result(
+                        1,
+                        0,
+                        1,
+                        0,
+                        List.of(new Failure(
+                                "(test run)",
+                                "",
+                                "runner exited " + exitCode,
+                                crashOutput == null ? "" : crashOutput)));
             }
             return new Result(total, succeeded, failed, skipped, List.copyOf(failures));
         }
@@ -569,23 +592,24 @@ public final class JUnitLauncher {
             if (lines.size() > MAX_LINES) lines.removeFirst();
         }
 
-        synchronized boolean isEmpty() { return lines.isEmpty(); }
+        synchronized boolean isEmpty() {
+            return lines.isEmpty();
+        }
 
-        synchronized String text() { return String.join("\n", lines); }
+        synchronized String text() {
+            return String.join("\n", lines);
+        }
     }
 
-    public record Result(
-            long total,
-            long succeeded,
-            long failed,
-            long skipped,
-            List<Failure> failures) {
+    public record Result(long total, long succeeded, long failed, long skipped, List<Failure> failures) {
 
         public Result {
             failures = List.copyOf(failures);
         }
 
-        public boolean allPassed() { return failed == 0; }
+        public boolean allPassed() {
+            return failed == 0;
+        }
     }
 
     /**

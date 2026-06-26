@@ -48,10 +48,11 @@ public final class DefaultJdkPolicy {
 
         pool.sort(Comparator
                 // Highest major first (no-op within the LTS pool, decisive otherwise).
-                .comparingInt((JdkHit h) -> major(h) == null ? Integer.MIN_VALUE : major(h)).reversed()
+                .comparingInt((JdkHit h) -> major(h) == null ? Integer.MIN_VALUE : major(h))
+                .reversed()
                 // Newest version next.
-                .thenComparing(h -> h.version() == null ? "" : JdkSelector.versionKey(h.version()),
-                        Comparator.reverseOrder())
+                .thenComparing(
+                        h -> h.version() == null ? "" : JdkSelector.versionKey(h.version()), Comparator.reverseOrder())
                 // Vendor preference breaks the remaining ties (lower rank wins).
                 .thenComparingInt(DefaultJdkPolicy::vendorRank));
         return Optional.of(pool.getFirst());
@@ -63,8 +64,11 @@ public final class DefaultJdkPolicy {
         int end = 0;
         while (end < v.length() && Character.isDigit(v.charAt(end))) end++;
         if (end == 0) return null;
-        try { return Integer.parseInt(v.substring(0, end)); }
-        catch (NumberFormatException e) { return null; }
+        try {
+            return Integer.parseInt(v.substring(0, end));
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
     private static int vendorRank(JdkHit h) {

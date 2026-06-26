@@ -1,15 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli;
 
-import dev.jkbuild.command.*;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.command.*;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.config.JkConfig;
 import dev.jkbuild.config.JkConfigLoader;
-
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /** jk CLI entrypoint — routes verbs through {@link CommandDispatch}. */
 public final class Jk {
@@ -27,17 +25,17 @@ public final class Jk {
      * (e.g. {@code install} → {@code tool install}).
      */
     static final Map<String, List<String>> VERB_ALIASES = Map.ofEntries(
-            Map.entry("generate", List.of("new")),            // Maven mvn archetype:generate
-            Map.entry("dependencies", List.of("tree")),       // Gradle gradle dependencies
-            Map.entry("package", List.of("build")),           // Maven mvn package
-            Map.entry("deploy", List.of("publish")),          // Maven mvn deploy
-            Map.entry("upgrade", List.of("update")),          // npm/yarn/apt vocabulary
+            Map.entry("generate", List.of("new")), // Maven mvn archetype:generate
+            Map.entry("dependencies", List.of("tree")), // Gradle gradle dependencies
+            Map.entry("package", List.of("build")), // Maven mvn package
+            Map.entry("deploy", List.of("publish")), // Maven mvn deploy
+            Map.entry("upgrade", List.of("update")), // npm/yarn/apt vocabulary
             Map.entry("sh", List.of("shell")),
             Map.entry("bash", List.of("shell")),
-            Map.entry("nativeCompile", List.of("native")),    // Gradle :nativeCompile task
-            Map.entry("verify-target", List.of("verify")),    // Maven's `verify` phase output naming
-            Map.entry("verify-build", List.of("verify")),     // renamed verb; verify-build kept for back-compat
-            Map.entry("check", List.of("compile")));          // renamed verb; check kept for back-compat
+            Map.entry("nativeCompile", List.of("native")), // Gradle :nativeCompile task
+            Map.entry("verify-target", List.of("verify")), // Maven's `verify` phase output naming
+            Map.entry("verify-build", List.of("verify")), // renamed verb; verify-build kept for back-compat
+            Map.entry("check", List.of("compile"))); // renamed verb; check kept for back-compat
 
     public static void main(String[] args) {
         dev.jkbuild.cli.tui.GlobalCancel.install();
@@ -77,9 +75,12 @@ public final class Jk {
             return 0;
         }
         // Bare `jk` (no verb, no flags): curated short-help screen.
-        HelpRenderer.printShortHelp(CommandDispatch.commands(),
+        HelpRenderer.printShortHelp(
+                CommandDispatch.commands(),
                 "A fast build tool and package manager for Java & Kotlin",
-                "jk", System.out, ansi);
+                "jk",
+                System.out,
+                ansi);
         return 0;
     }
 
@@ -87,18 +88,25 @@ public final class Jk {
     private static String fullHelp(boolean ansi) {
         java.util.Map<String, SubcommandModel> byName = new java.util.LinkedHashMap<>();
         for (var c : CommandDispatch.commands()) {
-            if (!c.hidden()) byName.put(c.name(), new SubcommandModel(c.name(), new String[]{c.description()}, false));
+            if (!c.hidden()) byName.put(c.name(), new SubcommandModel(c.name(), new String[] {c.description()}, false));
         }
         List<OptionModel> globals = GlobalOptions.globalOpts().stream()
-                .filter(o -> !o.hidden()).map(CommandModels::option).toList();
+                .filter(o -> !o.hidden())
+                .map(CommandModels::option)
+                .toList();
         String nl = System.lineSeparator();
         StringBuilder sb = new StringBuilder();
-        sb.append("A fast build tool and package manager for Java & Kotlin").append(nl).append(nl);
+        sb.append("A fast build tool and package manager for Java & Kotlin")
+                .append(nl)
+                .append(nl);
         // Usage line
         if (ansi) {
-            sb.append(HelpRenderer.paint("Usage:", Theme.active().sectionHeading(), true)).append(" ")
-              .append(HelpRenderer.paint("jk", Theme.active().commandName(), true))
-              .append(HelpRenderer.paint(" <COMMAND> [OPTIONS]", Theme.active().paramLabel(), true)).append(nl);
+            sb.append(HelpRenderer.paint("Usage:", Theme.active().sectionHeading(), true))
+                    .append(" ")
+                    .append(HelpRenderer.paint("jk", Theme.active().commandName(), true))
+                    .append(HelpRenderer.paint(
+                            " <COMMAND> [OPTIONS]", Theme.active().paramLabel(), true))
+                    .append(nl);
         } else {
             sb.append("Usage: jk <COMMAND> [OPTIONS]").append(nl);
         }
@@ -106,34 +114,50 @@ public final class Jk {
         java.util.Set<String> placed = new java.util.LinkedHashSet<>();
         boolean firstGroup = true;
         for (CommandGroup group : UsageGroups.COMMAND_GROUPS) {
-            List<String> visible = group.names().stream().filter(byName::containsKey).toList();
+            List<String> visible =
+                    group.names().stream().filter(byName::containsKey).toList();
             if (visible.isEmpty()) continue;
             if (!firstGroup) sb.append(nl);
             firstGroup = false;
-            sb.append(nl).append(HelpRenderer.paint(group.heading(), Theme.active().sectionHeading(), ansi)).append(nl);
+            sb.append(nl)
+                    .append(HelpRenderer.paint(group.heading(), Theme.active().sectionHeading(), ansi))
+                    .append(nl);
             int width = visible.stream().mapToInt(String::length).max().orElse(0) + 4;
             for (String name : visible) {
                 SubcommandModel sub = byName.get(name);
                 String padding = " ".repeat(width - name.length());
-                sb.append("  ").append(HelpRenderer.paint(name, Theme.active().commandName(), ansi)).append(padding)
-                  .append(sub.description().length > 0 ? sub.description()[0] : "").append(nl);
+                sb.append("  ")
+                        .append(HelpRenderer.paint(name, Theme.active().commandName(), ansi))
+                        .append(padding)
+                        .append(sub.description().length > 0 ? sub.description()[0] : "")
+                        .append(nl);
                 placed.add(name);
             }
         }
         // Ungrouped leftover
-        List<String> leftover = byName.keySet().stream().filter(n -> !placed.contains(n)).sorted().toList();
+        List<String> leftover = byName.keySet().stream()
+                .filter(n -> !placed.contains(n))
+                .sorted()
+                .toList();
         if (!leftover.isEmpty()) {
-            sb.append(nl).append(HelpRenderer.paint("Other commands:", Theme.active().sectionHeading(), ansi)).append(nl);
+            sb.append(nl)
+                    .append(HelpRenderer.paint("Other commands:", Theme.active().sectionHeading(), ansi))
+                    .append(nl);
             int width = leftover.stream().mapToInt(String::length).max().orElse(0) + 4;
             for (String name : leftover) {
                 SubcommandModel sub = byName.get(name);
                 String padding = " ".repeat(width - name.length());
-                sb.append("  ").append(HelpRenderer.paint(name, Theme.active().commandName(), ansi)).append(padding)
-                  .append(sub.description().length > 0 ? sub.description()[0] : "").append(nl);
+                sb.append("  ")
+                        .append(HelpRenderer.paint(name, Theme.active().commandName(), ansi))
+                        .append(padding)
+                        .append(sub.description().length > 0 ? sub.description()[0] : "")
+                        .append(nl);
             }
         }
         // Global options
-        sb.append(nl).append(HelpRenderer.paint("Global options:", Theme.active().sectionHeading(), ansi)).append(nl);
+        sb.append(nl)
+                .append(HelpRenderer.paint("Global options:", Theme.active().sectionHeading(), ansi))
+                .append(nl);
         sb.append(HelpRenderer.renderOptionRows(globals, ansi));
         return sb.toString();
     }
@@ -206,8 +230,7 @@ public final class Jk {
             }
         }
         try {
-            JkConfig resolved = JkConfigLoader.load(
-                    java.nio.file.Path.of("").toAbsolutePath(), noConfig, explicit);
+            JkConfig resolved = JkConfigLoader.load(java.nio.file.Path.of("").toAbsolutePath(), noConfig, explicit);
             ActiveConfig.install(resolved);
         } catch (java.io.IOException e) {
             // Best-effort — a broken user/project config shouldn't kill the CLI.
@@ -241,5 +264,4 @@ public final class Jk {
         System.arraycopy(args, 1, out, mapped.size(), args.length - 1);
         return out;
     }
-
 }

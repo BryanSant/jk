@@ -34,6 +34,7 @@ public final class Rail {
     private static final String CLOSE_CHAR = "╰";
     /** Filled box for the active step; empty box for completed/inactive steps. */
     private static final String BULLET_CHAR = "■";
+
     private static final String BULLET_CHAR_EMPTY = "□";
 
     /** Horizontal bars drawn after the corner glyph on the top/bottom of the frame. */
@@ -98,9 +99,7 @@ public final class Rail {
     /** {@code ╰── [text]} with explicit rail state (controls the corner-glyph color). */
     public static AttributedString closer(String text, AttributedStyle textStyle, StepState state) {
         var cornerStyle = Theme.active().railStyle(state, RailGlyph.CLOSE);
-        var sb = new AttributedStringBuilder()
-                .append(CLOSE_CHAR, cornerStyle)
-                .append(CORNER_DASHES, cornerStyle);
+        var sb = new AttributedStringBuilder().append(CLOSE_CHAR, cornerStyle).append(CORNER_DASHES, cornerStyle);
         if (text != null && !text.isEmpty()) {
             sb.append(" ").append(text, textStyle);
         }
@@ -113,11 +112,12 @@ public final class Rail {
      * when active, dark-gray otherwise.
      */
     public static AttributedString stepBullet(StepState state, String prompt) {
-        var promptStyle = switch (state) {
-            case ACTIVE -> Theme.active().focused();
-            case COMPLETED -> Theme.active().completedPrompt();
-            case INACTIVE -> Theme.active().dim();
-        };
+        var promptStyle =
+                switch (state) {
+                    case ACTIVE -> Theme.active().focused();
+                    case COMPLETED -> Theme.active().completedPrompt();
+                    case INACTIVE -> Theme.active().dim();
+                };
         var bullet = state == StepState.ACTIVE ? BULLET_CHAR : BULLET_CHAR_EMPTY;
         return new AttributedStringBuilder()
                 .append(bullet, Theme.active().railStyle(state, RailGlyph.BULLET))

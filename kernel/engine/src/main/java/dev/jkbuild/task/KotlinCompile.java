@@ -5,7 +5,6 @@ import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.KotlincDriver;
 import dev.jkbuild.compile.KotlincRequest;
 import dev.jkbuild.compile.KotlincResult;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.Map;
@@ -43,8 +42,9 @@ public final class KotlinCompile {
      * @param useCache when false ({@code --rerun}), skip the lookup and always
      *                 run the worker; the result is still recorded.
      */
-    public static Result run(String taskId, KotlincRequest request, String jkVersion,
-                             boolean useCache, Cas cas, ActionCache actionCache) throws IOException {
+    public static Result run(
+            String taskId, KotlincRequest request, String jkVersion, boolean useCache, Cas cas, ActionCache actionCache)
+            throws IOException {
         String key = ActionKey.forKotlinc(taskId, request, jkVersion);
 
         if (useCache) {

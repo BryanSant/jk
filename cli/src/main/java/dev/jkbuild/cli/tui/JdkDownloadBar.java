@@ -4,9 +4,8 @@ package dev.jkbuild.cli.tui;
 import dev.jkbuild.cli.Ansi;
 import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.utils.AttributedStyle;
-
 import java.io.PrintStream;
+import org.jline.utils.AttributedStyle;
 
 /**
  * Animated JDK download progress bar styled like the {@code jk build} goal
@@ -26,7 +25,7 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
     private static final String[] FRAMES = Spinner.FRAMES;
 
     private final PrintStream out;
-    private final String displayName;   // "Eclipse Temurin 26"
+    private final String displayName; // "Eclipse Temurin 26"
     private final boolean nerdfont;
     private final boolean silent;
     private final AttributedStyle[] frameColors = Spinner.buildGradient(FRAMES.length);
@@ -45,8 +44,8 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
         this.displayName = displayName;
         this.nerdfont = nerdfont;
         this.silent = silent;
-        this.failColors = SpinnerProgressBar.buildGradient(ProgressBar.SEGMENTS,
-                Theme.active().failureGradient());
+        this.failColors = SpinnerProgressBar.buildGradient(
+                ProgressBar.SEGMENTS, Theme.active().failureGradient());
     }
 
     /**
@@ -119,17 +118,23 @@ public final class JdkDownloadBar implements AutoCloseable, LiveRegion {
     // ── animation ──────────────────────────────────────────────────────────
 
     private void startAnimator() {
-        animator = new Thread(() -> {
-            while (!closed) {
-                try { Thread.sleep(Spinner.FRAME_MS); } catch (InterruptedException e) { break; }
-                synchronized (this) {
-                    if (!closed) {
-                        repaint();
-                        frame = (frame + 1) % FRAMES.length;
+        animator = new Thread(
+                () -> {
+                    while (!closed) {
+                        try {
+                            Thread.sleep(Spinner.FRAME_MS);
+                        } catch (InterruptedException e) {
+                            break;
+                        }
+                        synchronized (this) {
+                            if (!closed) {
+                                repaint();
+                                frame = (frame + 1) % FRAMES.length;
+                            }
+                        }
                     }
-                }
-            }
-        }, "jk-jdk-download");
+                },
+                "jk-jdk-download");
         animator.setDaemon(true);
         animator.start();
     }

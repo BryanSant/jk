@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class DefaultJdkPolicyTest {
 
@@ -29,8 +28,7 @@ class DefaultJdkPolicyTest {
         JdkHit j17 = hit("17.0.13", JdkVendor.TEMURIN);
         JdkHit j21 = hit("21.0.5", JdkVendor.TEMURIN);
         JdkHit j26 = hit("26.0.1", JdkVendor.TEMURIN);
-        assertThat(DefaultJdkPolicy.choose(List.of(j17, j21, j26), LATEST_LTS))
-                .contains(j26);
+        assertThat(DefaultJdkPolicy.choose(List.of(j17, j21, j26), LATEST_LTS)).contains(j26);
     }
 
     @Test
@@ -39,8 +37,7 @@ class DefaultJdkPolicyTest {
         JdkHit j24 = hit("24.0.2", JdkVendor.TEMURIN);
         JdkHit j25 = hit("25.0.3", JdkVendor.TEMURIN);
         JdkHit j26 = hit("26.0.1", JdkVendor.TEMURIN);
-        assertThat(DefaultJdkPolicy.choose(List.of(j24, j25, j26), LATEST_LTS))
-                .contains(j25);
+        assertThat(DefaultJdkPolicy.choose(List.of(j24, j25, j26), LATEST_LTS)).contains(j25);
     }
 
     @Test
@@ -52,7 +49,6 @@ class DefaultJdkPolicyTest {
     }
 
     private static JdkHit hit(String version, JdkVendor vendor) {
-        return new JdkHit(Path.of("/jdks/" + vendor.name().toLowerCase() + "-" + version),
-                version, vendor, "jk");
+        return new JdkHit(Path.of("/jdks/" + vendor.name().toLowerCase() + "-" + version), version, vendor, "jk");
     }
 }

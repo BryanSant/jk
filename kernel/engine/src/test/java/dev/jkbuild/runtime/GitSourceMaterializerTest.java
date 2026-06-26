@@ -1,22 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
-import dev.jkbuild.cache.Cas;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.GitRefSpec;
 import dev.jkbuild.model.GitSource;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import org.eclipse.jgit.api.Git;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
-
-import java.nio.file.Files;
-import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * End-to-end (offline) materialization: build a local git "library" repo with
@@ -43,7 +41,11 @@ class GitSourceMaterializerTest {
                 """);
         try (Git git = Git.init().setDirectory(repoDir.toFile()).call()) {
             git.add().addFilepattern(".").call();
-            var commit = git.commit().setMessage("v1").setAuthor("t", "t@e").setCommitter("t", "t@e").call();
+            var commit = git.commit()
+                    .setMessage("v1")
+                    .setAuthor("t", "t@e")
+                    .setCommitter("t", "t@e")
+                    .call();
             git.tag().setName("v1.0.0").setObjectId(commit).setAnnotated(false).call();
         }
         String url = repoDir.toUri().toString();
@@ -55,19 +57,23 @@ class GitSourceMaterializerTest {
         GitSource source = buildLibraryRepo(tmp.resolve("lib"));
 
         Cas cas = new Cas(tmp.resolve("cas"));
-        RepoGroup buildRepos = RepoGroup.of(new MavenRepo(
-                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        RepoGroup buildRepos =
+                RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
         var materializer = new GitSourceMaterializer(
-                tmp.resolve("git"), tmp.resolve("git-artifacts"),
-                cas, buildRepos, Path.of(System.getProperty("java.home")), "test",
+                tmp.resolve("git"),
+                tmp.resolve("git-artifacts"),
+                cas,
+                buildRepos,
+                Path.of(System.getProperty("java.home")),
+                "test",
                 new dev.jkbuild.forge.ForgeGitCredentials());
 
         GitSourceMaterializer.Materialized m = materializer.materialize(source);
 
         assertThat(m.group()).isEqualTo("com.acme");
         assertThat(m.artifact()).isEqualTo("widgets");
-        assertThat(m.version()).isEqualTo("1.0.0");          // coerced from tag v1.0.0
-        assertThat(m.gitInfo().rev()).hasSize(40);            // resolved commit SHA
+        assertThat(m.version()).isEqualTo("1.0.0"); // coerced from tag v1.0.0
+        assertThat(m.gitInfo().rev()).hasSize(40); // resolved commit SHA
         assertThat(m.gitInfo().ref()).isEqualTo("tag=v1.0.0");
 
         // The file:// repo has the artifact at the standard Maven layout.
@@ -88,11 +94,16 @@ class GitSourceMaterializerTest {
         GitSource overridden = base.withOverrides("org.fork", "widgetz", "9.9.9-fork");
 
         Cas cas = new Cas(tmp.resolve("cas"));
-        RepoGroup buildRepos = RepoGroup.of(new MavenRepo(
-                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        RepoGroup buildRepos =
+                RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
         var materializer = new GitSourceMaterializer(
-                tmp.resolve("git"), tmp.resolve("git-artifacts"),
-                cas, buildRepos, Path.of(System.getProperty("java.home")), "test", new dev.jkbuild.forge.ForgeGitCredentials());
+                tmp.resolve("git"),
+                tmp.resolve("git-artifacts"),
+                cas,
+                buildRepos,
+                Path.of(System.getProperty("java.home")),
+                "test",
+                new dev.jkbuild.forge.ForgeGitCredentials());
 
         GitSourceMaterializer.Materialized m = materializer.materialize(overridden);
 
@@ -100,7 +111,8 @@ class GitSourceMaterializerTest {
         assertThat(m.artifact()).isEqualTo("widgetz");
         assertThat(m.version()).isEqualTo("9.9.9-fork");
         Path repoDir = Path.of(m.repoUrl());
-        assertThat(repoDir.resolve("org/fork/widgetz/9.9.9-fork/widgetz-9.9.9-fork.jar")).exists();
+        assertThat(repoDir.resolve("org/fork/widgetz/9.9.9-fork/widgetz-9.9.9-fork.jar"))
+                .exists();
         assertThat(Files.readString(repoDir.resolve("org/fork/widgetz/9.9.9-fork/widgetz-9.9.9-fork.pom")))
                 .contains("<groupId>org.fork</groupId>")
                 .contains("<artifactId>widgetz</artifactId>")
@@ -111,14 +123,19 @@ class GitSourceMaterializerTest {
     void is_idempotent_on_a_cache_hit(@TempDir Path tmp) throws Exception {
         GitSource source = buildLibraryRepo(tmp.resolve("lib"));
         Cas cas = new Cas(tmp.resolve("cas"));
-        RepoGroup buildRepos = RepoGroup.of(new MavenRepo(
-                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        RepoGroup buildRepos =
+                RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
         var materializer = new GitSourceMaterializer(
-                tmp.resolve("git"), tmp.resolve("git-artifacts"),
-                cas, buildRepos, Path.of(System.getProperty("java.home")), "test", new dev.jkbuild.forge.ForgeGitCredentials());
+                tmp.resolve("git"),
+                tmp.resolve("git-artifacts"),
+                cas,
+                buildRepos,
+                Path.of(System.getProperty("java.home")),
+                "test",
+                new dev.jkbuild.forge.ForgeGitCredentials());
 
         var first = materializer.materialize(source);
-        var second = materializer.materialize(source);   // cache hit — same sha/version/repo
+        var second = materializer.materialize(source); // cache hit — same sha/version/repo
         assertThat(second.version()).isEqualTo(first.version());
         assertThat(second.gitInfo().rev()).isEqualTo(first.gitInfo().rev());
         assertThat(second.repoUrl()).isEqualTo(first.repoUrl());

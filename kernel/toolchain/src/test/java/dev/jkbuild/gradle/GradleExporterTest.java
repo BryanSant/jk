@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.gradle;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class GradleExporterTest {
 
@@ -57,7 +56,8 @@ class GradleExporterTest {
                 """);
 
         String kts = GradleExporter.export(b, Map.of("com.google.guava:guava", "33.4.0-jre"))
-                .buildFiles().get("");
+                .buildFiles()
+                .get("");
 
         assertThat(kts).contains("implementation(\"com.google.guava:guava:33.4.0-jre\")");
         assertThat(kts).doesNotContain("33.0.0-jre");

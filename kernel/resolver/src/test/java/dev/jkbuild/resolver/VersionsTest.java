@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 class VersionsTest {
 
@@ -71,21 +71,16 @@ class VersionsTest {
     void maven_timestamped_snapshot_ordering() {
         // Maven's publisher generates `<baseVersion>-<yyyyMMdd.HHmmss>-<buildNumber>`
         // for deployed snapshots; later timestamps compare greater.
-        assertThat(Versions.compare(
-                "1.0-20260520.123456-7",
-                "1.0-20260519.000000-1")).isPositive();
+        assertThat(Versions.compare("1.0-20260520.123456-7", "1.0-20260519.000000-1"))
+                .isPositive();
         // ComparableVersion tokenises the timestamp as numeric segments rather
         // than recognising the snapshot pattern, so a timestamped snapshot
         // actually sorts ABOVE the bare `1.0` release. This is Maven's
         // documented behavior — code that needs to filter snapshots should
         // string-match `-SNAPSHOT` or the timestamp regex, not rely on order.
-        assertThat(Versions.compare(
-                "1.0-20260520.123456-7",
-                "1.0")).isPositive();
+        assertThat(Versions.compare("1.0-20260520.123456-7", "1.0")).isPositive();
         // The bare `-SNAPSHOT` qualifier IS recognised and sorts below release.
-        assertThat(Versions.compare(
-                "1.0-SNAPSHOT",
-                "1.0")).isNegative();
+        assertThat(Versions.compare("1.0-SNAPSHOT", "1.0")).isNegative();
     }
 
     @Test
@@ -105,9 +100,20 @@ class VersionsTest {
     @Test
     void pre_releases_are_unstable() {
         for (String v : new String[] {
-                "2.4.0-RC2", "2.4.0-rc1", "1.0-alpha", "1.0-beta", "2.0.0-M1",
-                "1.0-milestone-3", "1.0-cr1", "1.0-pre", "1.0-SNAPSHOT",
-                "1.0.0.RC2", "1.0.0-beta.1", "1.0-20260520.123456-7", "3.0.0-dev"}) {
+            "2.4.0-RC2",
+            "2.4.0-rc1",
+            "1.0-alpha",
+            "1.0-beta",
+            "2.0.0-M1",
+            "1.0-milestone-3",
+            "1.0-cr1",
+            "1.0-pre",
+            "1.0-SNAPSHOT",
+            "1.0.0.RC2",
+            "1.0.0-beta.1",
+            "1.0-20260520.123456-7",
+            "3.0.0-dev"
+        }) {
             assertThat(Versions.isStable(v)).as(v).isFalse();
         }
     }
@@ -115,9 +121,19 @@ class VersionsTest {
     @Test
     void releases_and_release_synonyms_are_stable() {
         for (String v : new String[] {
-                "2.4.0", "1.0", "1.0.0", "1.10.5", "32.1.3-jre", "1.0-ga",
-                "1.0.Final", "1.0-final", "1.0-release", "1.0-sp1", "1.0.0-android",
-                "20260520"}) {
+            "2.4.0",
+            "1.0",
+            "1.0.0",
+            "1.10.5",
+            "32.1.3-jre",
+            "1.0-ga",
+            "1.0.Final",
+            "1.0-final",
+            "1.0-release",
+            "1.0-sp1",
+            "1.0.0-android",
+            "20260520"
+        }) {
             assertThat(Versions.isStable(v)).as(v).isTrue();
         }
     }

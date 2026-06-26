@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,7 +42,9 @@ public final class SystemProbe implements LocalToolProbe {
     }
 
     @Override
-    public String name() { return "system"; }
+    public String name() {
+        return "system";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {
@@ -51,8 +52,7 @@ public final class SystemProbe implements LocalToolProbe {
         for (Path root : roots) {
             if (!Files.isDirectory(root)) continue;
             try (Stream<Path> entries = Files.list(root)) {
-                Optional<DiscoveredTool> hit = entries
-                        .filter(Files::isDirectory)
+                Optional<DiscoveredTool> hit = entries.filter(Files::isDirectory)
                         .map(this::asJdkHome)
                         .filter(home -> ToolHealth.isHealthy(spec, home))
                         .findFirst()
@@ -76,9 +76,8 @@ public final class SystemProbe implements LocalToolProbe {
         for (Path root : roots) {
             if (!Files.isDirectory(root)) continue; // fail fast per root
             try (Stream<Path> entries = Files.list(root)) {
-                entries.filter(Files::isDirectory)
-                        .map(this::asJdkHome)
-                        .forEach(p -> ProbeSupport.discoverJdk(p, name()).ifPresent(hits::add));
+                entries.filter(Files::isDirectory).map(this::asJdkHome).forEach(p -> ProbeSupport.discoverJdk(p, name())
+                        .ifPresent(hits::add));
             }
         }
         return hits;

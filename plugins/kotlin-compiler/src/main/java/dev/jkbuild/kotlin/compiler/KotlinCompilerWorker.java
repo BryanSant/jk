@@ -1,6 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.kotlin.compiler;
 
+import dev.jkbuild.plugin.Plugin;
+import dev.jkbuild.plugin.PluginManifest;
+import dev.jkbuild.plugin.protocol.ProtocolWriter;
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 import org.jetbrains.kotlin.buildtools.api.CompilationResult;
 import org.jetbrains.kotlin.buildtools.api.ExecutionPolicy;
 import org.jetbrains.kotlin.buildtools.api.KotlinToolchains;
@@ -9,18 +19,6 @@ import org.jetbrains.kotlin.buildtools.api.jvm.JvmPlatformToolchain;
 import org.jetbrains.kotlin.buildtools.api.jvm.JvmSnapshotBasedIncrementalCompilationConfiguration;
 import org.jetbrains.kotlin.buildtools.api.jvm.JvmSnapshotBasedIncrementalCompilationConfiguration.Builder;
 import org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmCompilationOperation;
-
-import dev.jkbuild.plugin.Plugin;
-import dev.jkbuild.plugin.PluginManifest;
-import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
-import java.io.File;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.Collectors;
 
 /**
  * Child-JVM entry point that drives the Kotlin Build Tools API.
@@ -66,8 +64,7 @@ public final class KotlinCompilerWorker implements Plugin {
     static int compile(CompileSpec spec, KcProtocol proto) throws Exception {
         spec.outputDir.mkdirs();
 
-        KotlinToolchains toolchains =
-                KotlinToolchains.loadImplementation(KotlinCompilerWorker.class.getClassLoader());
+        KotlinToolchains toolchains = KotlinToolchains.loadImplementation(KotlinCompilerWorker.class.getClassLoader());
         JvmPlatformToolchain jvm = JvmPlatformToolchain.from(toolchains);
         List<Path> sources = spec.sources.stream().map(File::toPath).toList();
 
@@ -76,8 +73,7 @@ public final class KotlinCompilerWorker implements Plugin {
             ExecutionPolicy policy = toolchains.createInProcessExecutionPolicy();
             WorkerLogger logger = new WorkerLogger(proto);
 
-            JvmCompilationOperation.Builder op =
-                    jvm.jvmCompilationOperationBuilder(sources, spec.outputDir.toPath());
+            JvmCompilationOperation.Builder op = jvm.jvmCompilationOperationBuilder(sources, spec.outputDir.toPath());
             // Destination is a first-class builder param above; everything else jk
             // controls as raw kotlinc arguments parsed into the typed argument model.
             op.getCompilerArguments().applyArgumentStrings(buildArgs(spec));
@@ -88,9 +84,8 @@ public final class KotlinCompilerWorker implements Plugin {
                 // dependency changes (without them it would fall back to a full
                 // rebuild on any classpath change). Source edits are tracked by
                 // the working dir under SourcesChanges.ToBeCalculated regardless.
-                List<Path> depSnapshots = spec.snapshotDir != null
-                        ? snapshotClasspath(jvm, session, policy, logger, spec)
-                        : List.of();
+                List<Path> depSnapshots =
+                        spec.snapshotDir != null ? snapshotClasspath(jvm, session, policy, logger, spec) : List.of();
                 Builder ic = op.snapshotBasedIcConfigurationBuilder(
                         spec.workingDir.toPath(), SourcesChanges.ToBeCalculated.INSTANCE, depSnapshots);
                 ic.set(JvmSnapshotBasedIncrementalCompilationConfiguration.USE_FIR_RUNNER, Boolean.TRUE);
@@ -131,7 +126,8 @@ public final class KotlinCompilerWorker implements Plugin {
                 Path snapshot = dir.resolve(snapshotName(entry));
                 if (!Files.isRegularFile(snapshot)) {
                     org.jetbrains.kotlin.buildtools.api.jvm.operations.JvmClasspathSnapshottingOperation snapOp =
-                            jvm.classpathSnapshottingOperationBuilder(entry.toPath()).build();
+                            jvm.classpathSnapshottingOperationBuilder(entry.toPath())
+                                    .build();
                     org.jetbrains.kotlin.buildtools.api.jvm.ClasspathEntrySnapshot computed =
                             session.executeOperation(snapOp, policy, logger);
                     computed.saveSnapshot(snapshot);

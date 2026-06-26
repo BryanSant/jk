@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.DisabledOnOs;
-import org.junit.jupiter.api.condition.OS;
-import org.junit.jupiter.api.io.TempDir;
+import dev.jkbuild.cli.Jk;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -22,8 +17,12 @@ import java.util.jar.Attributes;
 import java.util.jar.JarOutputStream;
 import java.util.jar.Manifest;
 import java.util.zip.ZipEntry;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.DisabledOnOs;
+import org.junit.jupiter.api.condition.OS;
+import org.junit.jupiter.api.io.TempDir;
 
 @DisabledOnOs(OS.WINDOWS) // POSIX launcher only.
 class InstallExecCommandTest {
@@ -50,7 +49,9 @@ class InstallExecCommandTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void tool_install_writes_launcher_and_env_json(@TempDir Path tempDir) throws Exception {
@@ -58,11 +59,17 @@ class InstallExecCommandTest {
         serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
 
         Path bin = tempDir.resolve("bin");
-        int exit = run("tool", "install",
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--state-dir", tempDir.toString(),
-                "--bin-dir", bin.toString(),
-                "--repo-url", base.toString(),
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--repo-url",
+                base.toString(),
                 "com.example:widget-cli:1.0.0");
         assertThat(exit).isEqualTo(0);
 
@@ -90,11 +97,16 @@ class InstallExecCommandTest {
         serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
 
         Path bin = tempDir.resolve("bin");
-        int exit = run("install",
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--state-dir", tempDir.toString(),
-                "--bin-dir", bin.toString(),
-                "--repo-url", base.toString(),
+        int exit = run(
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--repo-url",
+                base.toString(),
                 "com.example:widget-cli:1.0.0");
         assertThat(exit).isEqualTo(0);
         assertThat(bin.resolve("widget-cli")).exists();
@@ -107,12 +119,19 @@ class InstallExecCommandTest {
         serveJar("com.example", "widget-cli", "1.0.0", "com.example.Main");
 
         Path bin = tempDir.resolve("bin");
-        int exit = run("tool", "install",
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--state-dir", tempDir.toString(),
-                "--bin-dir", bin.toString(),
-                "--repo-url", base.toString(),
-                "--bin", "widget",
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--repo-url",
+                base.toString(),
+                "--bin",
+                "widget",
                 "com.example:widget-cli:1.0.0");
         assertThat(exit).isEqualTo(0);
         assertThat(bin.resolve("widget")).exists();
@@ -125,16 +144,22 @@ class InstallExecCommandTest {
         serveJar("com.example", "lib", "1.0.0", null); // no Main-Class
 
         Path bin = tempDir.resolve("bin");
-        int exit = run("tool", "install",
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--state-dir", tempDir.toString(),
-                "--bin-dir", bin.toString(),
-                "--repo-url", base.toString(),
-                "--main", "com.example.Alt",
+        int exit = run(
+                "tool",
+                "install",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--state-dir",
+                tempDir.toString(),
+                "--bin-dir",
+                bin.toString(),
+                "--repo-url",
+                base.toString(),
+                "--main",
+                "com.example.Alt",
                 "com.example:lib:1.0.0");
         assertThat(exit).isEqualTo(0);
-        assertThat(Files.readString(bin.resolve("lib")))
-                .contains("com.example.Alt");
+        assertThat(Files.readString(bin.resolve("lib"))).contains("com.example.Alt");
     }
 
     @Test
@@ -144,9 +169,13 @@ class InstallExecCommandTest {
         servePom("com.example", "tool", "1.0.0");
         served.put(mavenPath("com.example", "tool", "1.0.0", "jar"), Files.readAllBytes(realJar));
 
-        int exit = run("tool", "run",
-                "--cache-dir", tempDir.resolve("cache").toString(),
-                "--repo-url", base.toString(),
+        int exit = run(
+                "tool",
+                "run",
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--repo-url",
+                base.toString(),
                 "com.example:tool:1.0.0");
         // The synthetic ToolMain is a no-op; exit code is whatever it returns.
         assertThat(exit).isEqualTo(0);
@@ -167,8 +196,7 @@ class InstallExecCommandTest {
         served.put(mavenPath(group, artifact, version, "pom"), pom.getBytes());
     }
 
-    private void serveJar(String group, String artifact, String version, String mainClass)
-            throws IOException {
+    private void serveJar(String group, String artifact, String version, String mainClass) throws IOException {
         Manifest mf = new Manifest();
         mf.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         if (mainClass != null) {
@@ -190,8 +218,8 @@ class InstallExecCommandTest {
      */
     private static Path buildRealRunnableJar(Path tempDir, String className) throws Exception {
         Path src = tempDir.resolve(className + ".java");
-        Files.writeString(src, "public class " + className
-                + " { public static void main(String[] a) { System.exit(0); } }\n");
+        Files.writeString(
+                src, "public class " + className + " { public static void main(String[] a) { System.exit(0); } }\n");
         javax.tools.JavaCompiler compiler = javax.tools.ToolProvider.getSystemJavaCompiler();
         int rc = compiler.run(null, null, null, src.toString());
         if (rc != 0) throw new IllegalStateException("compile of " + src + " failed");
@@ -202,7 +230,7 @@ class InstallExecCommandTest {
         mf.getMainAttributes().put(Attributes.Name.MANIFEST_VERSION, "1.0");
         mf.getMainAttributes().put(Attributes.Name.MAIN_CLASS, className);
         try (var fos = Files.newOutputStream(jar);
-             JarOutputStream jos = new JarOutputStream(fos, mf)) {
+                JarOutputStream jos = new JarOutputStream(fos, mf)) {
             jos.putNextEntry(new ZipEntry(className + ".class"));
             jos.write(Files.readAllBytes(classFile));
             jos.closeEntry();
@@ -211,8 +239,8 @@ class InstallExecCommandTest {
     }
 
     private static String mavenPath(String group, String artifact, String version, String ext) {
-        return "/" + group.replace('.', '/') + "/" + artifact + "/"
-                + version + "/" + artifact + "-" + version + "." + ext;
+        return "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version + "."
+                + ext;
     }
 
     private static int run(String... args) {

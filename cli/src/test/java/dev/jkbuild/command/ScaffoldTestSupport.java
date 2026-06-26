@@ -4,7 +4,6 @@ package dev.jkbuild.command;
 import dev.jkbuild.cli.Jk;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileWriter;
-
 import java.io.IOException;
 import java.nio.file.Path;
 

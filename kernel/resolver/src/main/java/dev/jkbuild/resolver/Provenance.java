@@ -3,7 +3,6 @@ package dev.jkbuild.resolver;
 
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.JkBuild;
-
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -43,8 +42,7 @@ public final class Provenance {
         for (Lockfile.Artifact pkg : lock.artifacts()) {
             for (String depRef : pkg.deps()) {
                 String depModule = DependencyTree.stripVersion(depRef);
-                reverseDeps.computeIfAbsent(depModule, k -> new TreeSet<>())
-                        .add(pkg.name());
+                reverseDeps.computeIfAbsent(depModule, k -> new TreeSet<>()).add(pkg.name());
             }
         }
 
@@ -96,9 +94,7 @@ public final class Provenance {
         }
 
         public String render() {
-            return steps.stream()
-                    .map(s -> s.module() + " v" + s.version())
-                    .collect(Collectors.joining(" -> "));
+            return steps.stream().map(s -> s.module() + " v" + s.version()).collect(Collectors.joining(" -> "));
         }
     }
 

@@ -16,7 +16,6 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -28,11 +27,19 @@ import java.util.List;
  */
 public final class DenyCommand implements CliCommand {
 
-    @Override public String name() { return "deny"; }
-    @Override public String description() { return "Apply the project's license / source / yanked policy"; }
+    @Override
+    public String name() {
+        return "deny";
+    }
+
+    @Override
+    public String description() {
+        return "Apply the project's license / source / yanked policy";
+    }
 
     private static final GoalKey<DenyPolicy> POLICY = GoalKey.of("policy", DenyPolicy.class);
     private static final GoalKey<Lockfile> LOCK = GoalKey.of("lock", Lockfile.class);
+
     @SuppressWarnings("rawtypes")
     private static final GoalKey<List> VIOLATIONS = GoalKey.of("violations", List.class);
 
@@ -42,33 +49,46 @@ public final class DenyCommand implements CliCommand {
         Path projectDir = global.workingDir();
         Path jkBuild = projectDir.resolve("jk.toml");
         Path lockPath = projectDir.resolve("jk.lock");
-        if (!Files.exists(jkBuild)) { System.err.println("jk deny: " + jkBuild + " not found."); return 66; }
+        if (!Files.exists(jkBuild)) {
+            System.err.println("jk deny: " + jkBuild + " not found.");
+            return 66;
+        }
         if (!Files.exists(lockPath)) {
-            System.err.println("jk deny: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir) + " (run `jk lock` first)."); return 2;
+            System.err.println("jk deny: no jk.lock in " + dev.jkbuild.cli.PathDisplay.styledRaw(projectDir)
+                    + " (run `jk lock` first).");
+            return 2;
         }
         Path cache = JkDirs.cache();
 
-        Phase parsePolicy = Phase.builder("parse-policy").scope(1).execute(ctx -> {
-            ctx.label("parse policy + lock");
-            ctx.put(POLICY, DenyPolicyParser.parse(jkBuild));
-            ctx.put(LOCK, LockfileReader.read(lockPath));
-            ctx.progress(1);
-        }).build();
+        Phase parsePolicy = Phase.builder("parse-policy")
+                .scope(1)
+                .execute(ctx -> {
+                    ctx.label("parse policy + lock");
+                    ctx.put(POLICY, DenyPolicyParser.parse(jkBuild));
+                    ctx.put(LOCK, LockfileReader.read(lockPath));
+                    ctx.progress(1);
+                })
+                .build();
 
-        Phase check = Phase.builder("check").requires("parse-policy").scope(1).execute(ctx -> {
-            Lockfile lock = ctx.require(LOCK);
-            ctx.label("check " + lock.artifacts().size() + " packages");
-            List<PolicyChecker.Violation> violations = new PolicyChecker(ctx.require(POLICY)).check(lock);
-            ctx.put(VIOLATIONS, violations);
-            ctx.progress(1);
-        }).build();
+        Phase check = Phase.builder("check")
+                .requires("parse-policy")
+                .scope(1)
+                .execute(ctx -> {
+                    Lockfile lock = ctx.require(LOCK);
+                    ctx.label("check " + lock.artifacts().size() + " packages");
+                    List<PolicyChecker.Violation> violations = new PolicyChecker(ctx.require(POLICY)).check(lock);
+                    ctx.put(VIOLATIONS, violations);
+                    ctx.progress(1);
+                })
+                .build();
 
         Goal goal = Goal.builder("deny").addPhase(parsePolicy).addPhase(check).build();
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) return 1;
 
         @SuppressWarnings("unchecked")
-        List<PolicyChecker.Violation> violations = (List<PolicyChecker.Violation>) goal.get(VIOLATIONS).orElse(List.of());
+        List<PolicyChecker.Violation> violations =
+                (List<PolicyChecker.Violation>) goal.get(VIOLATIONS).orElse(List.of());
         Lockfile lock = goal.get(LOCK).orElseThrow();
 
         if (violations.isEmpty()) {

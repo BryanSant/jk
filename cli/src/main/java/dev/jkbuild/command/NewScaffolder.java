@@ -38,19 +38,15 @@ public final class NewScaffolder {
      * resolver treats it as a floating caret selector ({@code ^1} → 1.x.x).
      */
     public static final Map<String, List<CuratedEntry>> CURATED_DEPS = Map.of(
-            "lombok", List.of(
-                    new CuratedEntry("org.projectlombok:lombok", "1", "processor"),
-                    new CuratedEntry("org.projectlombok:lombok", "1", "provided")),
-            "jspecify", List.of(
-                    new CuratedEntry("org.jspecify:jspecify", "1", "main")),
-            "commons-lang", List.of(
-                    new CuratedEntry("org.apache.commons:commons-lang3", "3", "main")),
-            "commons-io", List.of(
-                    new CuratedEntry("commons-io:commons-io", "2", "main")),
-            "guava", List.of(
-                    new CuratedEntry("com.google.guava:guava", "33", "main")),
-            "kotest", List.of(
-                    new CuratedEntry("io.kotest:kotest-runner-junit6", "6", "test")));
+            "lombok",
+                    List.of(
+                            new CuratedEntry("org.projectlombok:lombok", "1", "processor"),
+                            new CuratedEntry("org.projectlombok:lombok", "1", "provided")),
+            "jspecify", List.of(new CuratedEntry("org.jspecify:jspecify", "1", "main")),
+            "commons-lang", List.of(new CuratedEntry("org.apache.commons:commons-lang3", "3", "main")),
+            "commons-io", List.of(new CuratedEntry("commons-io:commons-io", "2", "main")),
+            "guava", List.of(new CuratedEntry("com.google.guava:guava", "33", "main")),
+            "kotest", List.of(new CuratedEntry("io.kotest:kotest-runner-junit6", "6", "test")));
 
     private NewScaffolder() {}
 
@@ -74,7 +70,7 @@ public final class NewScaffolder {
         Files.writeString(buildFile, NewJkBuildRenderer.render(inputs), StandardCharsets.UTF_8);
 
         if (standalone) {
-            writeGitignore(dir);   // modules inherit the workspace root's .gitignore
+            writeGitignore(dir); // modules inherit the workspace root's .gitignore
         }
 
         createSourceTree(inputs);
@@ -168,8 +164,8 @@ public final class NewScaffolder {
         if (inputs.isRunnable()) {
             // Gate the instance-main syntax on the compile target, not the toolchain.
             boolean instanceMain = inputs.javaRelease() >= JAVA_INSTANCE_MAIN_MIN;
-            Files.writeString(srcDir.resolve(MAIN_CLASS + ".java"),
-                    renderJavaMain(pkg, instanceMain), StandardCharsets.UTF_8);
+            Files.writeString(
+                    srcDir.resolve(MAIN_CLASS + ".java"), renderJavaMain(pkg, instanceMain), StandardCharsets.UTF_8);
         }
     }
 
@@ -187,8 +183,7 @@ public final class NewScaffolder {
         Files.writeString(srcDir.resolve("Calc.kt"), renderKotlinCalc(pkg), StandardCharsets.UTF_8);
         Files.writeString(testDir.resolve("CalcTest.kt"), renderKotlinCalcTest(pkg), StandardCharsets.UTF_8);
         if (inputs.isRunnable()) {
-            Files.writeString(srcDir.resolve(MAIN_CLASS + ".kt"),
-                    renderKotlinMain(pkg), StandardCharsets.UTF_8);
+            Files.writeString(srcDir.resolve(MAIN_CLASS + ".kt"), renderKotlinMain(pkg), StandardCharsets.UTF_8);
         }
     }
 

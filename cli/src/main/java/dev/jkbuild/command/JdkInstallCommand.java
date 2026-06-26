@@ -2,11 +2,10 @@
 package dev.jkbuild.command;
 
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Confirm;
 import dev.jkbuild.cli.tui.Spinner;
-import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Wizard;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
@@ -18,25 +17,23 @@ import dev.jkbuild.jdk.JdkInstaller;
 import dev.jkbuild.jdk.JdkKeywords;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkSelector;
-import dev.jkbuild.run.Goal;
-import dev.jkbuild.run.GoalKey;
-import dev.jkbuild.run.GoalResult;
-import dev.jkbuild.run.Phase;
-import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
-import dev.jkbuild.util.JkDirs;
-import org.jline.terminal.Terminal;
-import org.jline.utils.AttributedStyle;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
+import dev.jkbuild.run.Goal;
+import dev.jkbuild.run.GoalKey;
+import dev.jkbuild.run.GoalResult;
+import dev.jkbuild.run.Phase;
+import dev.jkbuild.run.PhaseKind;
+import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.util.Optional;
+import org.jline.terminal.Terminal;
+import org.jline.utils.AttributedStyle;
 
 /**
  * {@code jk jdk install [<spec>]} — pull a JDK from the JetBrains JDK feed
@@ -54,21 +51,42 @@ import java.util.Optional;
  */
 public final class JdkInstallCommand implements CliCommand {
 
-    @Override public String name() { return "install"; }
-    @Override public java.util.List<String> aliases() { return java.util.List.of("add"); }
-    @Override public String description() { return "Install a Java Development Kit"; }
-    @Override public java.util.List<Opt> options() {
+    @Override
+    public String name() {
+        return "install";
+    }
+
+    @Override
+    public java.util.List<String> aliases() {
+        return java.util.List.of("add");
+    }
+
+    @Override
+    public String description() {
+        return "Install a Java Development Kit";
+    }
+
+    @Override
+    public java.util.List<Opt> options() {
         return java.util.List.of(
                 Opt.flag("After install, mark this JDK as the system-wide default.", "-d", "--make-default"),
-                Opt.flag("In the interactive wizard, list every vendor from the JetBrains feed.", "--show-all").hide(),
-                Opt.value("<dir>", "Override the install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide(),
-                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url").hide(),
-                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file").hide());
+                Opt.flag("In the interactive wizard, list every vendor from the JetBrains feed.", "--show-all")
+                        .hide(),
+                Opt.value("<dir>", "Override the install root. Default: the IntelliJ JDK directory.", "--jdks-dir")
+                        .hide(),
+                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url")
+                        .hide(),
+                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file")
+                        .hide());
     }
-    @Override public java.util.List<Param> parameters() {
-        return java.util.List.of(Param.of("spec", Arity.ZERO_OR_ONE,
+
+    @Override
+    public java.util.List<Param> parameters() {
+        return java.util.List.of(Param.of(
+                "spec",
+                Arity.ZERO_OR_ONE,
                 "The vendor/version of JDK you'd like to install\n"
-                + "  (ex: 25, lts, latest, native, temurin-25.0.3)"));
+                        + "  (ex: 25, lts, latest, native, temurin-25.0.3)"));
     }
 
     String spec;
@@ -129,10 +147,12 @@ public final class JdkInstallCommand implements CliCommand {
                     ctx.label("fetch JetBrains JDK feed");
                     boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
                     JdkCatalogClient client = (feedUrl != null
-                            ? new JdkCatalogClient(new Http(), feedUrl,
-                                    cacheFile != null ? cacheFile : ephemeralCachePath(),
-                                    java.time.Duration.ZERO)
-                            : new JdkCatalogClient())
+                                    ? new JdkCatalogClient(
+                                            new Http(),
+                                            feedUrl,
+                                            cacheFile != null ? cacheFile : ephemeralCachePath(),
+                                            java.time.Duration.ZERO)
+                                    : new JdkCatalogClient())
                             .onWarning(ctx::output);
                     try {
                         ctx.put(CATALOG, client.fetch(refresh));
@@ -172,11 +192,9 @@ public final class JdkInstallCommand implements CliCommand {
                         // vendor-unqualified specs (e.g. `26`, `25.0.3`); the
                         // keyword path already resolved `effective` to
                         // `temurin-<major>`, so it's a no-op bias there.
-                        Optional<JdkCatalog.Entry> selected =
-                                JdkSelector.selectPreferred(catalog, effective, os, arch);
+                        Optional<JdkCatalog.Entry> selected = JdkSelector.selectPreferred(catalog, effective, os, arch);
                         if (selected.isEmpty()) {
-                            ctx.error("no-match", "no JDK matches " + effective
-                                    + " on " + os + "/" + arch);
+                            ctx.error("no-match", "no JDK matches " + effective + " on " + os + "/" + arch);
                             throw new RuntimeException("no match");
                         }
                         entry = selected.get();
@@ -201,23 +219,19 @@ public final class JdkInstallCommand implements CliCommand {
                     boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
                     InstalledJdk already = refresh ? null : installer.alreadyInstalled(entry);
                     if (already != null) {
-                        String label = entry.vendor() + " " + entry.product()
-                                + " " + entry.majorVersion();
-                        System.out.println(doneLine(label, already.home(),
-                                "is already installed at"));
+                        String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
+                        System.out.println(doneLine(label, already.home(), "is already installed at"));
                         ctx.put(INSTALLED, already);
                         ctx.label("already installed");
                         ctx.progress(1);
                         return;
                     }
-                    String label = entry.vendor() + " " + entry.product()
-                            + " " + entry.majorVersion();
+                    String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
                     ctx.label("download " + label);
                     long total = entry.archiveSize();
                     try (dev.jkbuild.cli.tui.JdkDownloadBar pb =
-                                 dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
-                        JdkInstaller.DownloadedArchive dl = installer.download(entry, bytes ->
-                                pb.update(bytes, total));
+                            dev.jkbuild.cli.tui.JdkDownloadBar.show(System.out, label)) {
+                        JdkInstaller.DownloadedArchive dl = installer.download(entry, bytes -> pb.update(bytes, total));
                         pb.finish();
                         ctx.put(ARCHIVE, dl);
                     } catch (Exception e) {
@@ -240,21 +254,18 @@ public final class JdkInstallCommand implements CliCommand {
                         return;
                     }
                     JdkCatalog.Entry entry = ctx.require(ENTRY);
-                    String label = entry.vendor() + " " + entry.product()
-                            + " " + entry.majorVersion();
-                    String installing = "Installing "
-                            + Theme.colorize(label, Theme.active().focused()) + "...";
+                    String label = entry.vendor() + " " + entry.product() + " " + entry.majorVersion();
+                    String installing =
+                            "Installing " + Theme.colorize(label, Theme.active().focused()) + "...";
                     ctx.label("extract " + label);
                     InstalledJdk installed;
                     try (Spinner sp = Spinner.show(System.out, installing)) {
-                        installed = installer.extractInstalled(
-                                entry, ctx.require(ARCHIVE));
+                        installed = installer.extractInstalled(entry, ctx.require(ARCHIVE));
                         ctx.put(INSTALLED, installed);
                         // Journal the install event for the JDK-usage stats —
                         // feeds future wizards that surface a user's
                         // preferred vendors / versions.
-                        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath()
-                                .touch(installed.identifier(), "install");
+                        dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "install");
                     } catch (Exception e) {
                         ctx.error("extract", e.getMessage());
                         throw new RuntimeException(e);
@@ -277,18 +288,17 @@ public final class JdkInstallCommand implements CliCommand {
                     InstalledJdk installed = ctx.require(INSTALLED);
                     ctx.label("set " + installed.identifier() + " as default");
                     GlobalDefaultJdk.current().set(installed);
-                    dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath()
-                            .touch(installed.identifier(), "default-set");
+                    dev.jkbuild.jdk.JdkAccessLedger.atDefaultPath().touch(installed.identifier(), "default-set");
                     System.out.println();
                     System.out.println(Theme.colorize("➜", Theme.active().brightGreen())
-                            + " " + Theme.colorize(installed.identifier(),
-                                    AttributedStyle.DEFAULT.bold())
-                            + " is now the " + Theme.colorize("default", Theme.active().focused())
+                            + " " + Theme.colorize(installed.identifier(), AttributedStyle.DEFAULT.bold())
+                            + " is now the "
+                            + Theme.colorize("default", Theme.active().focused())
                             + " JDK");
                     Optional<JdkShell> shell = JdkShell.detect();
                     if (shell.isPresent()) {
-                        System.out.println("Add `" + shell.get().hookInstallCommand()
-                                + "` to activate JAVA_HOME on new shells.");
+                        System.out.println(
+                                "Add `" + shell.get().hookInstallCommand() + "` to activate JAVA_HOME on new shells.");
                     } else {
                         System.out.println("Add `jk hook <bash|zsh|fish>` output to your shell rc "
                                 + "to activate JAVA_HOME on new shells.");
@@ -339,17 +349,23 @@ public final class JdkInstallCommand implements CliCommand {
             Wizard.drainInput(terminal.reader(), 40L);
             dev.jkbuild.jdk.GlobalDefaultJdk defaults = dev.jkbuild.jdk.GlobalDefaultJdk.current();
             if (!alreadyMadeDefault) {
-                Integer cur = defaults.currentIdentifier().map(JdkListCommand::parseMajor).orElse(null);
+                Integer cur = defaults.currentIdentifier()
+                        .map(JdkListCommand::parseMajor)
+                        .orElse(null);
                 if (cur == null || newMajor >= cur) {
-                    if (Confirm.of("Make " + jdk.identifier() + " the default JDK?", true).ask(terminal)) {
+                    if (Confirm.of("Make " + jdk.identifier() + " the default JDK?", true)
+                            .ask(terminal)) {
                         defaults.set(jdk);
                     }
                 }
             }
             if (isGraalHome(jdk.home())) {
-                Integer curGraal = defaults.graalIdentifier().map(JdkListCommand::parseMajor).orElse(null);
+                Integer curGraal = defaults.graalIdentifier()
+                        .map(JdkListCommand::parseMajor)
+                        .orElse(null);
                 if (curGraal == null || newMajor >= curGraal) {
-                    if (Confirm.of("Make it the default GraalVM (jk native / GRAALVM_HOME)?", true).ask(terminal)) {
+                    if (Confirm.of("Make it the default GraalVM (jk native / GRAALVM_HOME)?", true)
+                            .ask(terminal)) {
                         defaults.setGraal(jdk);
                     }
                 }
@@ -384,8 +400,8 @@ public final class JdkInstallCommand implements CliCommand {
         if (resolved == null) {
             // A keyword resolved to nothing: lts/stable with no LTS major, or
             // `native` with no Oracle GraalVM, for this host.
-            System.err.println("jk jdk install: could not resolve `" + raw.trim()
-                    + "` against the JetBrains feed for " + os + "/" + arch + ".");
+            System.err.println("jk jdk install: could not resolve `" + raw.trim() + "` against the JetBrains feed for "
+                    + os + "/" + arch + ".");
         }
         return resolved;
     }
@@ -432,16 +448,15 @@ public final class JdkInstallCommand implements CliCommand {
         return abs;
     }
 
-    private static JdkInstallWizard.Result runWizard(
-            JdkCatalog catalog, String os, String arch, boolean showAll) throws IOException {
+    private static JdkInstallWizard.Result runWizard(JdkCatalog catalog, String os, String arch, boolean showAll)
+            throws IOException {
         Terminal terminal;
         try {
             terminal = Wizard.openTerminal();
         } catch (IOException e) {
             throw new IOException("failed to open terminal: " + e.getMessage(), e);
         }
-        Optional<JdkInstallWizard.Result> result =
-                JdkInstallWizard.run(catalog, os, arch, showAll, terminal);
+        Optional<JdkInstallWizard.Result> result = JdkInstallWizard.run(catalog, os, arch, showAll, terminal);
         if (result.isEmpty()) {
             // Ctrl-C cancellation. Wizard.printCancellation preserves the cyan
             // active-rail closer and prints the red marker beside it.
@@ -459,15 +474,13 @@ public final class JdkInstallCommand implements CliCommand {
     }
 
     private static boolean isInteractiveTerminal() {
-        return System.console() != null
-                && !"dumb".equals(System.getenv("TERM"))
-                && System.getenv("CI") == null;
+        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
     }
 
     private static Path ephemeralCachePath() throws java.io.IOException {
         Path tmp = java.nio.file.Files.createTempFile("jk-feed-", ".json.xz");
         tmp.toFile().deleteOnExit();
-        java.nio.file.Files.delete(tmp);  // force a fresh fetch
+        java.nio.file.Files.delete(tmp); // force a fresh fetch
         return tmp;
     }
 }

@@ -10,7 +10,6 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.runtime.CompileSupport;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -30,7 +29,9 @@ final class ExportSupport {
      *               version per module, so a flat map is faithful.
      */
     record Loaded(Path rootDir, JkBuild root, Map<Path, JkBuild> modules, Map<String, String> locked) {
-        boolean isWorkspace() { return root.isWorkspaceRoot(); }
+        boolean isWorkspace() {
+            return root.isWorkspaceRoot();
+        }
 
         /** Modules keyed by their root-relative directory (for Gradle {@code include(...)}). */
         Map<String, JkBuild> modulesByRelPath() {
@@ -56,8 +57,7 @@ final class ExportSupport {
 
     /** Resolve a project's concrete source layout (jk's own {@code AUTO} tree-probe rule). */
     static JkBuild.Layout resolveLayout(Path dir, JkBuild b) {
-        return CompileSupport.isSimpleLayout(b.project(), dir)
-                ? JkBuild.Layout.SIMPLE : JkBuild.Layout.TRADITIONAL;
+        return CompileSupport.isSimpleLayout(b.project(), dir) ? JkBuild.Layout.SIMPLE : JkBuild.Layout.TRADITIONAL;
     }
 
     /**
@@ -79,8 +79,7 @@ final class ExportSupport {
             System.err.println(cmd + ": " + e.getMessage());
             return null;
         }
-        Map<Path, JkBuild> modules = root.isWorkspaceRoot()
-                ? WorkspaceLoader.loadModules(startDir, root) : Map.of();
+        Map<Path, JkBuild> modules = root.isWorkspaceRoot() ? WorkspaceLoader.loadModules(startDir, root) : Map.of();
 
         Map<String, String> locked = new LinkedHashMap<>(lockedVersions(startDir));
         for (Path moduleDir : modules.keySet()) {
@@ -119,8 +118,7 @@ final class ExportSupport {
         int n = 0;
         for (ImportReport.Issue issue : report.issues()) {
             String tag = issue.severity() == ImportReport.Severity.ERROR ? "error" : "note";
-            System.err.println(Theme.colorize("  " + tag + ":", Theme.active().darkGray())
-                    + " " + issue.message());
+            System.err.println(Theme.colorize("  " + tag + ":", Theme.active().darkGray()) + " " + issue.message());
             n++;
         }
         return n;

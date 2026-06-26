@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.resolver.pubgrub.VersionSet;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
 
 class VersionSelectorsTest {
 
@@ -34,8 +34,7 @@ class VersionSelectorsTest {
 
     @Test
     void exact_selector_maps_to_exact_versionset() {
-        VersionSet set = VersionSelectors.toVersionSet(
-                new VersionSelector.Exact("=1.0", "1.0"));
+        VersionSet set = VersionSelectors.toVersionSet(new VersionSelector.Exact("=1.0", "1.0"));
         assertThat(set.contains("1.0")).isTrue();
         assertThat(set.contains("1.1")).isFalse();
     }

@@ -9,7 +9,6 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.util.JkDirs;
 import dev.jkbuild.util.TreeFingerprint;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -25,16 +24,22 @@ import java.util.stream.Stream;
  */
 public final class DoctorCommand implements CliCommand {
 
-    @Override public String name() { return "doctor"; }
-    @Override public String description() { return "Repair discovered mvn/gradle/kotlin installs"; }
+    @Override
+    public String name() {
+        return "doctor";
+    }
+
+    @Override
+    public String description() {
+        return "Repair discovered mvn/gradle/kotlin installs";
+    }
 
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<dir>", "Override the tools install root. Default: $JK_CACHE_DIR/tools.",
-                        "--tools-dir").hide(),
-                Opt.flag("Fingerprint each linked install (SHA-256 every file)",
-                        "--verify-linked"));
+                Opt.value("<dir>", "Override the tools install root. Default: $JK_CACHE_DIR/tools.", "--tools-dir")
+                        .hide(),
+                Opt.flag("Fingerprint each linked install (SHA-256 every file)", "--verify-linked"));
     }
 
     @Override
@@ -76,8 +81,7 @@ public final class DoctorCommand implements CliCommand {
         return 0;
     }
 
-    private static List<InstalledTool> listIncludingBrokenLinks(Path root, BuildTool tool)
-            throws IOException {
+    private static List<InstalledTool> listIncludingBrokenLinks(Path root, BuildTool tool) throws IOException {
         Path slugDir = root.resolve(tool.slug());
         if (!Files.exists(slugDir)) return List.of();
         List<InstalledTool> result = new ArrayList<>();
@@ -92,7 +96,10 @@ public final class DoctorCommand implements CliCommand {
     }
 
     private static String readlinkSafe(Path link) {
-        try { return Files.readSymbolicLink(link).toString(); }
-        catch (IOException e) { return "?"; }
+        try {
+            return Files.readSymbolicLink(link).toString();
+        } catch (IOException e) {
+            return "?";
+        }
     }
 }

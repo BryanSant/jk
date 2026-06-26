@@ -17,12 +17,7 @@ public record CompileResult(boolean success, List<Diagnostic> diagnostics) {
         return diagnostics.stream().anyMatch(d -> d.severity() == Severity.ERROR);
     }
 
-    public record Diagnostic(
-            Severity severity,
-            Path source,
-            long line,
-            long column,
-            String message) {
+    public record Diagnostic(Severity severity, Path source, long line, long column, String message) {
 
         public Diagnostic {
             Objects.requireNonNull(severity, "severity");
@@ -58,7 +53,10 @@ public record CompileResult(boolean success, List<Diagnostic> diagnostics) {
     }
 
     public enum Severity {
-        ERROR, WARNING, NOTE, OTHER;
+        ERROR,
+        WARNING,
+        NOTE,
+        OTHER;
 
         public static Severity fromJavacKind(javax.tools.Diagnostic.Kind kind) {
             return switch (kind) {

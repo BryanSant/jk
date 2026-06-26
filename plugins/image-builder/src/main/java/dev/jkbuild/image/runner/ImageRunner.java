@@ -7,9 +7,7 @@ import dev.jkbuild.plugin.Plugin;
 import dev.jkbuild.plugin.PluginManifest;
 import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.plugin.protocol.ProtocolWriter;
-
 import java.io.IOException;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -85,22 +83,31 @@ public final class ImageRunner implements Plugin {
                 String key = line.substring(0, sp);
                 String val = line.substring(sp + 1).strip();
                 switch (key) {
-                    case "MAIN_JAR"   -> mainJar    = Path.of(val);
-                    case "ARTIFACT"   -> artifact   = val;
-                    case "VERSION"    -> version    = val;
-                    case "MAIN_CLASS" -> mainClass  = val;
-                    case "BASE"       -> base       = val;
-                    case "USER"       -> user       = val;
-                    case "TARBALL"    -> tarball    = Path.of(val);
-                    case "REGISTRY"   -> registry   = val;
-                    case "TAG"        -> tag        = val;
-                    case "DEP_JAR"    -> depJars.add(Path.of(val));
-                    case "PLATFORM"   -> platforms.add(val);
-                    case "PORT"       -> {
-                        try { ports.add(Integer.parseInt(val)); } catch (NumberFormatException ignored) {}
+                    case "MAIN_JAR" -> mainJar = Path.of(val);
+                    case "ARTIFACT" -> artifact = val;
+                    case "VERSION" -> version = val;
+                    case "MAIN_CLASS" -> mainClass = val;
+                    case "BASE" -> base = val;
+                    case "USER" -> user = val;
+                    case "TARBALL" -> tarball = Path.of(val);
+                    case "REGISTRY" -> registry = val;
+                    case "TAG" -> tag = val;
+                    case "DEP_JAR" -> depJars.add(Path.of(val));
+                    case "PLATFORM" -> platforms.add(val);
+                    case "PORT" -> {
+                        try {
+                            ports.add(Integer.parseInt(val));
+                        } catch (NumberFormatException ignored) {
+                        }
                     }
-                    case "ENV"   -> { int eq = val.indexOf('='); if (eq > 0) env.put(val.substring(0, eq), val.substring(eq + 1)); }
-                    case "LABEL" -> { int eq = val.indexOf('='); if (eq > 0) labels.put(val.substring(0, eq), val.substring(eq + 1)); }
+                    case "ENV" -> {
+                        int eq = val.indexOf('=');
+                        if (eq > 0) env.put(val.substring(0, eq), val.substring(eq + 1));
+                    }
+                    case "LABEL" -> {
+                        int eq = val.indexOf('=');
+                        if (eq > 0) labels.put(val.substring(0, eq), val.substring(eq + 1));
+                    }
                 }
             }
         } catch (IOException e) {
@@ -113,10 +120,9 @@ public final class ImageRunner implements Plugin {
             return 2;
         }
 
-        ImageConfig config = new ImageConfig(base, user, ports, env, labels,
-                registry, tag, platforms.isEmpty() ? null : platforms, mainClass);
-        ImageBuilder.Plan plan = new ImageBuilder.Plan(
-                config, artifact, version, mainClass, mainJar, depJars);
+        ImageConfig config = new ImageConfig(
+                base, user, ports, env, labels, registry, tag, platforms.isEmpty() ? null : platforms, mainClass);
+        ImageBuilder.Plan plan = new ImageBuilder.Plan(config, artifact, version, mainClass, mainJar, depJars);
 
         try {
             if (tarball != null) {
@@ -136,5 +142,4 @@ public final class ImageRunner implements Plugin {
             return 1;
         }
     }
-
 }

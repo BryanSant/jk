@@ -2,7 +2,6 @@
 package dev.jkbuild.tool;
 
 import dev.jkbuild.jdk.HostPlatform;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -33,15 +32,19 @@ public final class AppLauncher {
      * (Windows) launching {@code mainClass} with {@code classpathJars} on the
      * classpath. Returns the launcher path.
      */
-    public static Path install(Path binDir, Path javaHome, String binName,
-                               String mainClass, List<Path> classpathJars) throws IOException {
+    public static Path install(Path binDir, Path javaHome, String binName, String mainClass, List<Path> classpathJars)
+            throws IOException {
         Files.createDirectories(binDir);
         Path launcher = binDir.resolve(binName + (HostPlatform.isWindows() ? ".cmd" : ""));
         String script = HostPlatform.isWindows()
                 ? renderWindows(javaHome, mainClass, classpathJars)
                 : renderPosix(javaHome, mainClass, classpathJars);
-        Files.writeString(launcher, script, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        Files.writeString(
+                launcher,
+                script,
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING);
         markExecutable(launcher);
         return launcher;
     }
@@ -83,8 +86,7 @@ public final class AppLauncher {
     private static String shellQuote(String value) {
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            if (!(Character.isLetterOrDigit(c)
-                    || c == '_' || c == '-' || c == '.' || c == '/' || c == ':')) {
+            if (!(Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == '/' || c == ':')) {
                 return "'" + value.replace("'", "'\\''") + "'";
             }
         }
@@ -103,5 +105,4 @@ public final class AppLauncher {
             // Non-POSIX filesystem.
         }
     }
-
 }

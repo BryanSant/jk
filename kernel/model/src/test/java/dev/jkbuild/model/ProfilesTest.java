@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.model;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
 
 class ProfilesTest {
 
     @Test
     void resolve_returns_profile_with_no_inheritance() {
-        Profile dev = new Profile("dev", null,
-                List.of("-g", "-parameters"), List.of());
+        Profile dev = new Profile("dev", null, List.of("-g", "-parameters"), List.of());
         Profiles profiles = new Profiles(Map.of("dev", dev));
         Profile resolved = profiles.resolve("dev");
         assertThat(resolved.javacArgs()).containsExactly("-g", "-parameters");
@@ -22,15 +20,12 @@ class ProfilesTest {
 
     @Test
     void inherits_merges_javac_args_with_parent_first() {
-        Profile dev = new Profile("dev", null,
-                List.of("-g", "-parameters"), List.of());
-        Profile ci = new Profile("ci", "dev",
-                List.of("-Werror"), List.of());
+        Profile dev = new Profile("dev", null, List.of("-g", "-parameters"), List.of());
+        Profile ci = new Profile("ci", "dev", List.of("-Werror"), List.of());
         Profiles profiles = new Profiles(Map.of("dev", dev, "ci", ci));
 
         Profile resolved = profiles.resolve("ci");
-        assertThat(resolved.javacArgs())
-                .containsExactly("-g", "-parameters", "-Werror");
+        assertThat(resolved.javacArgs()).containsExactly("-g", "-parameters", "-Werror");
     }
 
     @Test

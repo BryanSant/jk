@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.lock;
 
-import dev.jkbuild.model.Scope;
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
+import dev.jkbuild.model.Scope;
 import java.util.EnumSet;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class LockfileScopeTest {
 
@@ -29,16 +28,18 @@ class LockfileScopeTest {
         String rendered = LockfileWriter.render(original);
         Lockfile parsed = LockfileReader.parse(rendered);
 
-        assertThat(parsed.artifacts().getFirst().scopes())
-                .containsExactlyInAnyOrder(Scope.MAIN, Scope.TEST);
+        assertThat(parsed.artifacts().getFirst().scopes()).containsExactlyInAnyOrder(Scope.MAIN, Scope.TEST);
     }
 
     @Test
     void scopes_render_in_canonical_order() {
         // Constructor canonicalizes (de-duped, declaration-order via EnumSet).
         Lockfile.Artifact pkg = new Lockfile.Artifact(
-                "com.example:widget", "1.0", "central+x",
-                "sha256:abcd", null,
+                "com.example:widget",
+                "1.0",
+                "central+x",
+                "sha256:abcd",
+                null,
                 List.of(Scope.TEST, Scope.MAIN, Scope.MAIN),
                 List.of());
         // EnumSet returns elements in enum declaration order: MAIN comes first.
@@ -65,14 +66,11 @@ class LockfileScopeTest {
     @Test
     void in_any_scope_filters_correctly() {
         Lockfile.Artifact mainOnly = new Lockfile.Artifact(
-                "com.foo:a", "1.0", "central+x", "sha256:a", null,
-                List.of(Scope.MAIN), List.of());
+                "com.foo:a", "1.0", "central+x", "sha256:a", null, List.of(Scope.MAIN), List.of());
         Lockfile.Artifact testOnly = new Lockfile.Artifact(
-                "com.foo:b", "1.0", "central+x", "sha256:b", null,
-                List.of(Scope.TEST), List.of());
+                "com.foo:b", "1.0", "central+x", "sha256:b", null, List.of(Scope.TEST), List.of());
         Lockfile.Artifact both = new Lockfile.Artifact(
-                "com.foo:c", "1.0", "central+x", "sha256:c", null,
-                List.of(Scope.MAIN, Scope.TEST), List.of());
+                "com.foo:c", "1.0", "central+x", "sha256:c", null, List.of(Scope.MAIN, Scope.TEST), List.of());
 
         EnumSet<Scope> mainSet = EnumSet.of(Scope.MAIN);
         assertThat(mainOnly.inAnyScope(mainSet)).isTrue();

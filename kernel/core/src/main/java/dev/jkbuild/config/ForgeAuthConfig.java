@@ -1,15 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.config;
 
-import org.tomlj.TomlArray;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import org.tomlj.TomlArray;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * Forge OAuth-app client IDs sourced from {@code jk.toml} config files. This
@@ -43,8 +42,8 @@ import java.util.Optional;
  */
 public final class ForgeAuthConfig {
 
-    private final Map<String, String> byProvider;   // providerId (lowercased) → client id
-    private final Map<String, String> byHost;       // host (lowercased)       → client id
+    private final Map<String, String> byProvider; // providerId (lowercased) → client id
+    private final Map<String, String> byHost; // host (lowercased)       → client id
 
     private ForgeAuthConfig(Map<String, String> byProvider, Map<String, String> byHost) {
         this.byProvider = byProvider;
@@ -72,7 +71,8 @@ public final class ForgeAuthConfig {
             if (byHostId != null) return Optional.of(byHostId);
         }
         if (providerId != null) {
-            String byProviderId = byProvider.get(providerId.toLowerCase(Locale.ROOT).strip());
+            String byProviderId =
+                    byProvider.get(providerId.toLowerCase(Locale.ROOT).strip());
             if (byProviderId != null) return Optional.of(byProviderId);
         }
         return Optional.empty();
@@ -94,10 +94,10 @@ public final class ForgeAuthConfig {
      * {@code jk.toml} (or explicit {@code --config-file}). {@code noConfig}
      * short-circuits all file layers.
      */
-    public static ForgeAuthConfig discover(Path startDir, boolean noConfig,
-                                           Optional<Path> explicitConfigFile) {
+    public static ForgeAuthConfig discover(Path startDir, boolean noConfig, Optional<Path> explicitConfigFile) {
         ForgeAuthConfig out = empty();
-        for (Path layer : ConfigSources.discover(startDir, noConfig, explicitConfigFile).layers()) {
+        for (Path layer :
+                ConfigSources.discover(startDir, noConfig, explicitConfigFile).layers()) {
             out = out.mergedWith(loadFrom(layer));
         }
         return out;
@@ -113,7 +113,7 @@ public final class ForgeAuthConfig {
 
         Map<String, String> byProvider = new HashMap<>();
         for (String key : forge.keySet()) {
-            if (key.equals("host")) continue;   // reserved for the per-host array
+            if (key.equals("host")) continue; // reserved for the per-host array
             Object v = forge.get(key);
             if (v instanceof TomlTable provider) {
                 String cid = provider.getString("client-id");

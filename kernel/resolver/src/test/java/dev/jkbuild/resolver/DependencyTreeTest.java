@@ -1,27 +1,25 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.lock.Lockfile;
-import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Dependency;
+import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.VersionSelector;
-import org.junit.jupiter.api.Test;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class DependencyTreeTest {
 
     @Test
     void renders_simple_tree() {
         JkBuild project = projectWithMainDeps("com.foo:root");
-        Lockfile lock = lockOf(
-                pkg("com.foo:root", "1.0", List.of("com.foo:leaf@1.0")),
-                pkg("com.foo:leaf", "1.0", List.of()));
+        Lockfile lock =
+                lockOf(pkg("com.foo:root", "1.0", List.of("com.foo:leaf@1.0")), pkg("com.foo:leaf", "1.0", List.of()));
 
         String rendered = DependencyTree.render(project, lock);
         assertThat(rendered).isEqualToIgnoringWhitespace("""
@@ -62,8 +60,8 @@ class DependencyTreeTest {
                 java.util.function.UnaryOperator.identity(),
                 java.util.function.UnaryOperator.identity(),
                 java.util.function.UnaryOperator.identity(),
-                s -> "<dim>" + s + "</dim>",    // reference styler
-                java.util.function.UnaryOperator.identity());  // scope badge
+                s -> "<dim>" + s + "</dim>", // reference styler
+                java.util.function.UnaryOperator.identity()); // scope badge
 
         String rendered = DependencyTree.render(project, lock, Integer.MAX_VALUE, styling);
 
@@ -77,9 +75,8 @@ class DependencyTreeTest {
     @Test
     void depth_zero_shows_only_roots() {
         JkBuild project = projectWithMainDeps("com.foo:root");
-        Lockfile lock = lockOf(
-                pkg("com.foo:root", "1.0", List.of("com.foo:leaf@1.0")),
-                pkg("com.foo:leaf", "1.0", List.of()));
+        Lockfile lock =
+                lockOf(pkg("com.foo:root", "1.0", List.of("com.foo:leaf@1.0")), pkg("com.foo:leaf", "1.0", List.of()));
 
         String rendered = DependencyTree.render(project, lock, 0);
         assertThat(rendered).contains("com.foo:root:1.0");
@@ -98,19 +95,21 @@ class DependencyTreeTest {
     @Test
     void composite_deps_are_annotated_not_missing(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tmp) {
         var deps = new ArrayList<Dependency>();
-        deps.add(Dependency.path("lib", "com.foo:lib", "../lib"));          // ../lib absent → not built
-        deps.add(Dependency.git("com.foo:forked", dev.jkbuild.model.GitSource.of(
-                "https://x/forked", "https://x/forked", new dev.jkbuild.model.GitRefSpec.Branch("main"))));
+        deps.add(Dependency.path("lib", "com.foo:lib", "../lib")); // ../lib absent → not built
+        deps.add(Dependency.git(
+                "com.foo:forked",
+                dev.jkbuild.model.GitSource.of(
+                        "https://x/forked", "https://x/forked", new dev.jkbuild.model.GitRefSpec.Branch("main"))));
         JkBuild project = new JkBuild(
                 new JkBuild.Project("com.example", "widget", "0.1.0", 0),
                 new JkBuild.Dependencies(Map.of(Scope.MAIN, deps)));
 
-        String rendered = DependencyTree.render(project, lockOf(), tmp,
-                Integer.MAX_VALUE, DependencyTree.Styling.plain());
+        String rendered =
+                DependencyTree.render(project, lockOf(), tmp, Integer.MAX_VALUE, DependencyTree.Styling.plain());
 
         assertThat(rendered).contains("com.foo:lib [path, not built]");
         assertThat(rendered).contains("com.foo:forked [git: main]");
-        assertThat(rendered).doesNotContain("(missing)");   // composite deps aren't "missing"
+        assertThat(rendered).doesNotContain("(missing)"); // composite deps aren't "missing"
     }
 
     @Test
@@ -119,13 +118,11 @@ class DependencyTreeTest {
                 new JkBuild.Project("com.example", "widget", "0.1.0", 0),
                 new JkBuild.Dependencies(Map.of(
                         Scope.MAIN, List.of(new Dependency("com.foo:lib", new VersionSelector.Exact("=1.0", "1.0"))),
-                        Scope.TEST, List.of(new Dependency("org.junit:junit", new VersionSelector.Exact("=5.0", "5.0"))))));
-        Lockfile lock = lockOf(
-                pkg("com.foo:lib", "1.0", List.of()),
-                pkg("org.junit:junit", "5.0", List.of()));
+                        Scope.TEST,
+                                List.of(new Dependency("org.junit:junit", new VersionSelector.Exact("=5.0", "5.0"))))));
+        Lockfile lock = lockOf(pkg("com.foo:lib", "1.0", List.of()), pkg("org.junit:junit", "5.0", List.of()));
 
-        String rendered = DependencyTree.render(project, lock, tmp,
-                Integer.MAX_VALUE, DependencyTree.Styling.plain());
+        String rendered = DependencyTree.render(project, lock, tmp, Integer.MAX_VALUE, DependencyTree.Styling.plain());
 
         // main + test sections present; empty scopes (provided, runtime, …) omitted.
         // (Plain styling emits the bare scope label; padding/caps are the styler's job.)
@@ -138,8 +135,8 @@ class DependencyTreeTest {
     }
 
     @Test
-    void workspace_root_groups_modules_under_scope_sections(
-            @org.junit.jupiter.api.io.TempDir java.nio.file.Path root) throws Exception {
+    void workspace_root_groups_modules_under_scope_sections(@org.junit.jupiter.api.io.TempDir java.nio.file.Path root)
+            throws Exception {
         // A workspace root with two modules; module b depends on a via `workspace = true`.
         java.nio.file.Files.writeString(root.resolve("jk.toml"), """
                 [project]
@@ -171,10 +168,10 @@ class DependencyTreeTest {
         java.nio.file.Files.writeString(b.resolve("jk.lock"), EMPTY_LOCK);
 
         JkBuild rootProject = dev.jkbuild.config.JkBuildParser.parse(root.resolve("jk.toml"));
-        String rendered = DependencyTree.render(rootProject, lockOf(), root,
-                Integer.MAX_VALUE, DependencyTree.Styling.plain());
+        String rendered =
+                DependencyTree.render(rootProject, lockOf(), root, Integer.MAX_VALUE, DependencyTree.Styling.plain());
 
-        assertThat(rendered).contains("com.acme:ws:9.9.9");   // root
+        assertThat(rendered).contains("com.acme:ws:9.9.9"); // root
         // Scope-first: a `main` section is the top-level node, and module b (the only
         // module that declares a main dep) is a node beneath it. Module a has no deps
         // of its own, so it is NOT a standalone node — it appears only as b's sibling.
@@ -186,13 +183,11 @@ class DependencyTreeTest {
         assertThat(rendered).doesNotContain("workspace:a");
         assertThat(rendered).doesNotContain("(missing)");
         // b is the group node; a appears only as b's collapsed sibling nested under it.
-        assertThat(rendered.indexOf("com.acme:b:9.9.9"))
-                .isLessThan(rendered.indexOf("com.acme:a [workspace]"));
+        assertThat(rendered.indexOf("com.acme:b:9.9.9")).isLessThan(rendered.indexOf("com.acme:a [workspace]"));
     }
 
     @Test
-    void flatten_lists_each_scope_dep_once_without_nesting(
-            @org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+    void flatten_lists_each_scope_dep_once_without_nesting(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
         // Diamond: root -> a -> leaf ; root -> b -> leaf.
         JkBuild project = projectWithMainDeps("com.foo:root");
         Lockfile lock = lockOf(
@@ -201,12 +196,14 @@ class DependencyTreeTest {
                 pkg("com.foo:b", "1.0", List.of("com.foo:leaf@1.0")),
                 pkg("com.foo:leaf", "1.0", List.of()));
 
-        String rendered = DependencyTree.render(project, lock, dir, Integer.MAX_VALUE,
-                DependencyTree.Styling.plain(), true);
+        String rendered =
+                DependencyTree.render(project, lock, dir, Integer.MAX_VALUE, DependencyTree.Styling.plain(), true);
 
         // Whole closure present, flat, with no back-reference markers.
-        assertThat(rendered).contains("com.foo:root:1.0")
-                .contains("com.foo:a:1.0").contains("com.foo:b:1.0")
+        assertThat(rendered)
+                .contains("com.foo:root:1.0")
+                .contains("com.foo:a:1.0")
+                .contains("com.foo:b:1.0")
                 .contains("com.foo:leaf:1.0");
         assertThat(rendered).doesNotContain("⎋");
         // leaf is deduped to a single line despite two paths to it.
@@ -215,18 +212,22 @@ class DependencyTreeTest {
     }
 
     @Test
-    void explicit_scope_order_filters_and_reorders_sections(
-            @org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+    void explicit_scope_order_filters_and_reorders_sections(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
         var main = List.of(new Dependency("com.foo:m", new VersionSelector.Exact("=1.0", "1.0")));
         var test = List.of(new Dependency("com.foo:t", new VersionSelector.Exact("=1.0", "1.0")));
         JkBuild project = new JkBuild(
                 new JkBuild.Project("com.example", "widget", "0.1.0", 0),
                 new JkBuild.Dependencies(Map.of(Scope.MAIN, main, Scope.TEST, test)));
-        Lockfile lock = lockOf(
-                pkg("com.foo:m", "1.0", List.of()), pkg("com.foo:t", "1.0", List.of()));
+        Lockfile lock = lockOf(pkg("com.foo:m", "1.0", List.of()), pkg("com.foo:t", "1.0", List.of()));
 
-        String rendered = DependencyTree.render(project, lock, dir, Integer.MAX_VALUE,
-                DependencyTree.Styling.plain(), false, List.of(Scope.TEST, Scope.MAIN));
+        String rendered = DependencyTree.render(
+                project,
+                lock,
+                dir,
+                Integer.MAX_VALUE,
+                DependencyTree.Styling.plain(),
+                false,
+                List.of(Scope.TEST, Scope.MAIN));
 
         // Both requested sections render, in the given order (test before main),
         // overriding the default ordering; unrequested scopes are omitted.
@@ -235,23 +236,22 @@ class DependencyTreeTest {
     }
 
     @Test
-    void stack_blends_all_scopes_under_one_badge_row(
-            @org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
+    void stack_blends_all_scopes_under_one_badge_row(@org.junit.jupiter.api.io.TempDir java.nio.file.Path dir) {
         var main = List.of(new Dependency("com.foo:m", new VersionSelector.Exact("=1.0", "1.0")));
         var test = List.of(new Dependency("com.foo:t", new VersionSelector.Exact("=1.0", "1.0")));
         JkBuild project = new JkBuild(
                 new JkBuild.Project("com.example", "widget", "0.1.0", 0),
                 new JkBuild.Dependencies(Map.of(Scope.MAIN, main, Scope.TEST, test)));
-        Lockfile lock = lockOf(
-                pkg("com.foo:m", "1.0", List.of()), pkg("com.foo:t", "1.0", List.of()));
+        Lockfile lock = lockOf(pkg("com.foo:m", "1.0", List.of()), pkg("com.foo:t", "1.0", List.of()));
 
-        String rendered = DependencyTree.render(project, lock, dir, Integer.MAX_VALUE,
-                DependencyTree.Styling.plain(), false, null, true);
+        String rendered = DependencyTree.render(
+                project, lock, dir, Integer.MAX_VALUE, DependencyTree.Styling.plain(), false, null, true);
 
         // A single header line carries every scope badge; deps from all scopes are
         // blended into the one tree beneath it.
         List<String> headers = java.util.Arrays.stream(rendered.split("\n"))
-                .filter(l -> l.contains("main")).toList();
+                .filter(l -> l.contains("main"))
+                .toList();
         assertThat(headers).hasSize(1);
         assertThat(headers.get(0)).contains("main").contains("test");
         assertThat(rendered).contains("com.foo:m:1.0").contains("com.foo:t:1.0");
@@ -265,7 +265,6 @@ class DependencyTreeTest {
             resolution-algorithm = "pubgrub-v1"
             """;
 
-
     private static JkBuild projectWithMainDeps(String... modules) {
         var deps = new ArrayList<Dependency>();
         for (String m : modules) {
@@ -277,13 +276,11 @@ class DependencyTreeTest {
     }
 
     private static Lockfile lockOf(Lockfile.Artifact... packages) {
-        return new Lockfile(Lockfile.CURRENT_VERSION, "jk test",
-                Lockfile.RESOLUTION_ALGORITHM, List.of(packages));
+        return new Lockfile(Lockfile.CURRENT_VERSION, "jk test", Lockfile.RESOLUTION_ALGORITHM, List.of(packages));
     }
 
     private static Lockfile.Artifact pkg(String module, String version, List<String> deps) {
-        return new Lockfile.Artifact(module, version,
-                "central+https://repo.maven.apache.org/maven2/",
-                "sha256:dummy", null, deps);
+        return new Lockfile.Artifact(
+                module, version, "central+https://repo.maven.apache.org/maven2/", "sha256:dummy", null, deps);
     }
 }

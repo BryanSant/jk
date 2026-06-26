@@ -24,9 +24,7 @@ public interface CliTokenProbe {
     CliTokenProbe REAL = argv -> {
         if (argv == null || argv.isEmpty()) return Optional.empty();
         try {
-            Process p = new ProcessBuilder(argv)
-                    .redirectErrorStream(false)
-                    .start();
+            Process p = new ProcessBuilder(argv).redirectErrorStream(false).start();
             String out = new String(p.getInputStream().readAllBytes(), StandardCharsets.UTF_8).strip();
             boolean done = p.waitFor(5, TimeUnit.SECONDS);
             if (!done) {
@@ -35,7 +33,7 @@ public interface CliTokenProbe {
             }
             if (p.exitValue() == 0 && !out.isBlank()) return Optional.of(out);
             return Optional.empty();
-        } catch (IOException e) {            // command-not-found lands here
+        } catch (IOException e) { // command-not-found lands here
             return Optional.empty();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

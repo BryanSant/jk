@@ -1,13 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.audit;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Scope;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -15,8 +13,9 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 class AuditorTest {
 
@@ -50,7 +49,9 @@ class AuditorTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void empty_lockfile_yields_empty_report() throws Exception {
@@ -61,13 +62,27 @@ class AuditorTest {
 
     @Test
     void osv_findings_become_severity_classified_report() throws Exception {
-        Lockfile lock = new Lockfile(5, "jk test", "pubgrub-v1", List.of(
-                new Lockfile.Artifact("com.fasterxml.jackson.core:jackson-databind", "2.18.0",
-                        "central+https://...", "sha256:abc", null,
-                        List.of(Scope.MAIN), List.of()),
-                new Lockfile.Artifact("com.example:safe", "1.0.0",
-                        "central+https://...", "sha256:def", null,
-                        List.of(Scope.MAIN), List.of())));
+        Lockfile lock = new Lockfile(
+                5,
+                "jk test",
+                "pubgrub-v1",
+                List.of(
+                        new Lockfile.Artifact(
+                                "com.fasterxml.jackson.core:jackson-databind",
+                                "2.18.0",
+                                "central+https://...",
+                                "sha256:abc",
+                                null,
+                                List.of(Scope.MAIN),
+                                List.of()),
+                        new Lockfile.Artifact(
+                                "com.example:safe",
+                                "1.0.0",
+                                "central+https://...",
+                                "sha256:def",
+                                null,
+                                List.of(Scope.MAIN),
+                                List.of())));
 
         post.put("/v1/querybatch", ("""
                 {"results":[
@@ -98,11 +113,13 @@ class AuditorTest {
 
     @Test
     void severity_threshold_filter_blocks_only_at_or_above() throws Exception {
-        Lockfile lock = new Lockfile(5, "jk test", "pubgrub-v1", List.of(
-                new Lockfile.Artifact("g:a", "1.0", "s", "sha256:x", null,
-                        List.of(Scope.MAIN), List.of()),
-                new Lockfile.Artifact("g:b", "1.0", "s", "sha256:y", null,
-                        List.of(Scope.MAIN), List.of())));
+        Lockfile lock = new Lockfile(
+                5,
+                "jk test",
+                "pubgrub-v1",
+                List.of(
+                        new Lockfile.Artifact("g:a", "1.0", "s", "sha256:x", null, List.of(Scope.MAIN), List.of()),
+                        new Lockfile.Artifact("g:b", "1.0", "s", "sha256:y", null, List.of(Scope.MAIN), List.of())));
         post.put("/v1/querybatch", ("""
                 {"results":[
                   {"vulns":[{"id":"A"}]},
@@ -118,9 +135,11 @@ class AuditorTest {
 
         AuditReport report = new Auditor(osvClient()).audit(lock);
         assertThat(report.filterAtLeast(AuditReport.Severity.HIGH))
-                .extracting(AuditReport.Finding::vulnId).containsExactly("B");
+                .extracting(AuditReport.Finding::vulnId)
+                .containsExactly("B");
         assertThat(report.filterAtLeast(AuditReport.Severity.LOW))
-                .extracting(AuditReport.Finding::vulnId).containsExactlyInAnyOrder("A", "B");
+                .extracting(AuditReport.Finding::vulnId)
+                .containsExactlyInAnyOrder("A", "B");
     }
 
     private OsvClient osvClient() {

@@ -2,7 +2,6 @@
 package dev.jkbuild.config;
 
 import dev.jkbuild.util.JkDirs;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -59,8 +58,7 @@ public final class ConfigSources {
      * apply. {@code explicitConfigFile} ({@code --config-file}) replaces the
      * project layer; the user-global layer still merges underneath.
      */
-    public static ConfigSources discover(Path startDir, boolean noConfig,
-                                         Optional<Path> explicitConfigFile) {
+    public static ConfigSources discover(Path startDir, boolean noConfig, Optional<Path> explicitConfigFile) {
         if (noConfig) return new ConfigSources(List.of());
         List<Path> out = new ArrayList<>(2);
         out.add(JkDirs.userConfigFile());

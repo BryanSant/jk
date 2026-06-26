@@ -1,23 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class NewGroupGuessTest {
 
     @Test
     void github_email_uses_io_github_username() {
-        assertThat(NewGroupGuess.groupForEmail("octocat@github.com"))
-                .isEqualTo("io.github.octocat");
-        assertThat(NewGroupGuess.groupForEmail("Octocat@GitHub.IO"))
-                .isEqualTo("io.github.octocat");
+        assertThat(NewGroupGuess.groupForEmail("octocat@github.com")).isEqualTo("io.github.octocat");
+        assertThat(NewGroupGuess.groupForEmail("Octocat@GitHub.IO")).isEqualTo("io.github.octocat");
     }
 
     @Test
@@ -40,8 +37,7 @@ class NewGroupGuessTest {
     @Test
     void custom_domain_reverses_to_group() {
         assertThat(NewGroupGuess.groupForEmail("bryan@modmed.com")).isEqualTo("com.modmed");
-        assertThat(NewGroupGuess.groupForEmail("user@team.example.co.uk"))
-                .isEqualTo("uk.co.example.team");
+        assertThat(NewGroupGuess.groupForEmail("user@team.example.co.uk")).isEqualTo("uk.co.example.team");
     }
 
     @Test

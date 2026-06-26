@@ -3,7 +3,6 @@ package dev.jkbuild.kotlin;
 
 import dev.jkbuild.compat.BuildTool;
 import dev.jkbuild.compat.ToolDistribution;
-
 import java.net.URI;
 
 /**
@@ -25,14 +24,12 @@ public final class KotlinResolver {
      */
     public static final String DEFAULT_VERSION = "2.4.0";
 
-    private static final String DEFAULT_BASE =
-            "https://github.com/JetBrains/kotlin/releases/download/";
+    private static final String DEFAULT_BASE = "https://github.com/JetBrains/kotlin/releases/download/";
 
     private KotlinResolver() {}
 
     public static ToolDistribution defaultDistribution() {
-        URI uri = URI.create(DEFAULT_BASE + "v" + DEFAULT_VERSION
-                + "/kotlin-compiler-" + DEFAULT_VERSION + ".zip");
+        URI uri = URI.create(DEFAULT_BASE + "v" + DEFAULT_VERSION + "/kotlin-compiler-" + DEFAULT_VERSION + ".zip");
         return new ToolDistribution(BuildTool.KOTLIN, DEFAULT_VERSION, uri, "zip");
     }
 }

@@ -23,7 +23,7 @@ public final class MemoryProbe {
     private MemoryProbe() {}
 
     /** Conservative last-resort total when nothing else can be read. */
-    static final long FALLBACK_TOTAL = 2L << 30;   // 2 GiB
+    static final long FALLBACK_TOTAL = 2L << 30; // 2 GiB
     /** A cgroup limit at/above this is treated as "unlimited" (kernel sentinel). */
     static final long CGROUP_UNLIMITED = Long.MAX_VALUE / 2;
 
@@ -96,8 +96,7 @@ public final class MemoryProbe {
     /** {@code com.sun.management} OS bean fallback (macOS / no {@code /proc}). */
     private static Memory fromBean() {
         try {
-            var os = (com.sun.management.OperatingSystemMXBean)
-                    ManagementFactory.getOperatingSystemMXBean();
+            var os = (com.sun.management.OperatingSystemMXBean) ManagementFactory.getOperatingSystemMXBean();
             long total = os.getTotalMemorySize();
             long free = os.getFreeMemorySize();
             return new Memory(total, free > 0 ? free : total);
@@ -111,7 +110,7 @@ public final class MemoryProbe {
     static long meminfoValueBytes(String meminfo, String key) {
         for (String line : meminfo.split("\n")) {
             if (!line.startsWith(key + ":")) continue;
-            String rest = line.substring(key.length() + 1).trim();   // "16004 kB"
+            String rest = line.substring(key.length() + 1).trim(); // "16004 kB"
             String[] parts = rest.split("\\s+");
             try {
                 long value = Long.parseLong(parts[0]);

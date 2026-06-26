@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.compile;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JavacDriverTest {
 
@@ -25,10 +23,11 @@ class JavacDriverTest {
                 }
                 """);
 
-        CompileResult result = new JavacDriver().compile(CompileRequest.builder()
-                .sources(List.of(source))
-                .outputDir(tempDir.resolve("out"))
-                .build());
+        CompileResult result = new JavacDriver()
+                .compile(CompileRequest.builder()
+                        .sources(List.of(source))
+                        .outputDir(tempDir.resolve("out"))
+                        .build());
 
         assertThat(result.success()).isTrue();
         assertThat(result.hasErrors()).isFalse();
@@ -40,15 +39,16 @@ class JavacDriverTest {
         Path source = tempDir.resolve("Broken.java");
         Files.writeString(source, "public class Broken { void f(  // missing brace\n");
 
-        CompileResult result = new JavacDriver().compile(CompileRequest.builder()
-                .sources(List.of(source))
-                .outputDir(tempDir.resolve("out"))
-                .build());
+        CompileResult result = new JavacDriver()
+                .compile(CompileRequest.builder()
+                        .sources(List.of(source))
+                        .outputDir(tempDir.resolve("out"))
+                        .build());
 
         assertThat(result.success()).isFalse();
         assertThat(result.hasErrors()).isTrue();
-        assertThat(result.diagnostics()).anySatisfy(d ->
-                assertThat(d.severity()).isEqualTo(CompileResult.Severity.ERROR));
+        assertThat(result.diagnostics())
+                .anySatisfy(d -> assertThat(d.severity()).isEqualTo(CompileResult.Severity.ERROR));
     }
 
     @Test
@@ -63,17 +63,18 @@ class JavacDriverTest {
                 }
                 """);
 
-        CompileResult result = new JavacDriver().compile(CompileRequest.builder()
-                .sources(List.of(source))
-                .outputDir(tempDir.resolve("out"))
-                .extraOptions(List.of("-Xlint:deprecation"))
-                .build());
+        CompileResult result = new JavacDriver()
+                .compile(CompileRequest.builder()
+                        .sources(List.of(source))
+                        .outputDir(tempDir.resolve("out"))
+                        .extraOptions(List.of("-Xlint:deprecation"))
+                        .build());
 
-        assertThat(result.success()).isTrue();          // warnings don't fail the build
+        assertThat(result.success()).isTrue(); // warnings don't fail the build
         assertThat(result.hasErrors()).isFalse();
         assertThat(result.diagnostics()).anySatisfy(d -> {
             assertThat(d.severity()).isEqualTo(CompileResult.Severity.WARNING);
-            assertThat(d.describe()).doesNotStartWith("warning:");   // no severity prefix
+            assertThat(d.describe()).doesNotStartWith("warning:"); // no severity prefix
         });
     }
 
@@ -85,10 +86,11 @@ class JavacDriverTest {
                 """);
         Path out = tempDir.resolve("out");
 
-        CompileResult result = new JavacDriver().compile(CompileRequest.builder()
-                .sources(List.of(source))
-                // outputDir not set → check mode
-                .build());
+        CompileResult result = new JavacDriver()
+                .compile(CompileRequest.builder()
+                        .sources(List.of(source))
+                        // outputDir not set → check mode
+                        .build());
 
         assertThat(result.success()).isTrue();
         assertThat(out).doesNotExist();
@@ -110,10 +112,11 @@ class JavacDriverTest {
         Files.createDirectories(libPkg);
         Files.move(libSrc, libPkg.resolve("Lib.java"));
 
-        CompileResult libResult = new JavacDriver().compile(CompileRequest.builder()
-                .sources(List.of(libPkg.resolve("Lib.java")))
-                .outputDir(libDir)
-                .build());
+        CompileResult libResult = new JavacDriver()
+                .compile(CompileRequest.builder()
+                        .sources(List.of(libPkg.resolve("Lib.java")))
+                        .outputDir(libDir)
+                        .build());
         assertThat(libResult.success()).isTrue();
 
         Path consumer = tempDir.resolve("Use.java");
@@ -125,11 +128,12 @@ class JavacDriverTest {
                 }
                 """);
 
-        CompileResult result = new JavacDriver().compile(CompileRequest.builder()
-                .sources(List.of(consumer))
-                .classpath(List.of(libDir))
-                .outputDir(tempDir.resolve("consumer-out"))
-                .build());
+        CompileResult result = new JavacDriver()
+                .compile(CompileRequest.builder()
+                        .sources(List.of(consumer))
+                        .classpath(List.of(libDir))
+                        .outputDir(tempDir.resolve("consumer-out"))
+                        .build());
 
         assertThat(result.success()).isTrue();
     }
@@ -137,10 +141,7 @@ class JavacDriverTest {
     @Test
     void diagnostic_renders_with_location() {
         CompileResult.Diagnostic d = new CompileResult.Diagnostic(
-                CompileResult.Severity.ERROR,
-                Path.of("src/Foo.java"),
-                12, 7,
-                "missing semicolon");
+                CompileResult.Severity.ERROR, Path.of("src/Foo.java"), 12, 7, "missing semicolon");
         assertThat(d.render()).isEqualTo("error: src/Foo.java:12:7: missing semicolon");
     }
 }

@@ -2,12 +2,11 @@
 package dev.jkbuild.config;
 
 import dev.jkbuild.util.JkDirs;
-import org.tomlj.TomlParseResult;
-import org.tomlj.TomlTable;
-
 import java.nio.file.Path;
 import java.util.Optional;
 import java.util.function.Function;
+import org.tomlj.TomlParseResult;
+import org.tomlj.TomlTable;
 
 /**
  * User-global preferences for cache maintenance, parsed from the {@code [cache]}
@@ -42,14 +41,9 @@ import java.util.function.Function;
  * default rather than failing the build. The cache layer is an
  * optimisation, not a correctness gate.
  */
-public record JkCacheConfig(
-        boolean autoPrune,
-        Optional<Integer> maxSizeGb,
-        int pruneIntervalDays,
-        int recordTtlDays) {
+public record JkCacheConfig(boolean autoPrune, Optional<Integer> maxSizeGb, int pruneIntervalDays, int recordTtlDays) {
 
-    public static final JkCacheConfig DEFAULTS =
-            new JkCacheConfig(true, Optional.empty(), 7, 30);
+    public static final JkCacheConfig DEFAULTS = new JkCacheConfig(true, Optional.empty(), 7, 30);
 
     /**
      * The effective cache configuration for this machine: the user-global
@@ -90,10 +84,9 @@ public record JkCacheConfig(
 
         boolean autoPrune = TomlValues.optBoolean(cache, "auto-prune").orElse(DEFAULTS.autoPrune);
         Optional<Integer> maxSize = nonNegative(TomlValues.optInt(cache, "max-size-gb"));
-        int interval = nonNegative(TomlValues.optInt(cache, "prune-interval-days"))
-                .orElse(DEFAULTS.pruneIntervalDays);
-        int ttl = nonNegative(TomlValues.optInt(cache, "record-ttl-days"))
-                .orElse(DEFAULTS.recordTtlDays);
+        int interval =
+                nonNegative(TomlValues.optInt(cache, "prune-interval-days")).orElse(DEFAULTS.pruneIntervalDays);
+        int ttl = nonNegative(TomlValues.optInt(cache, "record-ttl-days")).orElse(DEFAULTS.recordTtlDays);
 
         return new JkCacheConfig(autoPrune, maxSize, interval, ttl);
     }

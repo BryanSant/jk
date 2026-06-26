@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.util.Hashing;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CasPrewriterTest {
 
@@ -51,14 +50,12 @@ class CasPrewriterTest {
 
         Map<String, String> outputs = prewriter.finish();
 
-        assertThat(outputs)
-                .containsEntry("Late.class", Hashing.sha256Hex("late-content".getBytes()));
+        assertThat(outputs).containsEntry("Late.class", Hashing.sha256Hex("late-content".getBytes()));
         assertThat(Files.exists(cas.pathFor(outputs.get("Late.class")))).isTrue();
     }
 
     @Test
-    void finish_uses_latest_content_when_file_is_modified_after_pre_processing(@TempDir Path tempDir)
-            throws Exception {
+    void finish_uses_latest_content_when_file_is_modified_after_pre_processing(@TempDir Path tempDir) throws Exception {
         Path classes = tempDir.resolve("classes");
         Files.createDirectories(classes);
         Cas cas = new Cas(tempDir.resolve("cas"));
@@ -74,8 +71,7 @@ class CasPrewriterTest {
             Files.writeString(file, "second-version-longer");
         } finally {
             Map<String, String> outputs = prewriter.finish();
-            assertThat(outputs).containsEntry("Mut.class",
-                    Hashing.sha256Hex("second-version-longer".getBytes()));
+            assertThat(outputs).containsEntry("Mut.class", Hashing.sha256Hex("second-version-longer".getBytes()));
         }
     }
 

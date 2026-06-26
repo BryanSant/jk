@@ -3,9 +3,7 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.Ansi;
-
 import dev.jkbuild.cli.GlobalOptions;
-
 import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.config.JkBuildEditor;
@@ -14,19 +12,18 @@ import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.JkBuild;
-import dev.jkbuild.model.Scope;
-import dev.jkbuild.repo.JkMavenLocalRepo;
-import dev.jkbuild.repo.MavenLayout;
 import dev.jkbuild.model.RepositorySpec;
-import dev.jkbuild.tool.JarManifest;
-import dev.jkbuild.util.Hashing;
-import dev.jkbuild.util.JkDirs;
+import dev.jkbuild.model.Scope;
 import dev.jkbuild.model.command.Arity;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
-
+import dev.jkbuild.repo.JkMavenLocalRepo;
+import dev.jkbuild.repo.MavenLayout;
+import dev.jkbuild.tool.JarManifest;
+import dev.jkbuild.util.Hashing;
+import dev.jkbuild.util.JkDirs;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -86,28 +83,23 @@ public final class AddCommand implements CliCommand {
     @Override
     public List<Opt> options() {
         return List.of(
-                Opt.value("<handle>", "Manifest key; defaults to the dependency name.",
-                        "--library"),
-                Opt.value("<group>",
-                        "Maven groupId. Required for a bare short name.",
-                        "--group"),
-                Opt.value("<name>", "Maven artifactId; defaults to the library handle.",
-                        "--name"),
+                Opt.value("<handle>", "Manifest key; defaults to the dependency name.", "--library"),
+                Opt.value("<group>", "Maven groupId. Required for a bare short name.", "--group"),
+                Opt.value("<name>", "Maven artifactId; defaults to the library handle.", "--name"),
                 // --version collides with the global --version, so jk uses --ver.
-                Opt.value("<ver>",
-                        "Version selector, e.g. \"3.4.0\", \"~3.4\", \"=3.4.0\".",
-                        "--ver"),
+                Opt.value("<ver>", "Version selector, e.g. \"3.4.0\", \"~3.4\", \"=3.4.0\".", "--ver"),
                 Opt.flag("Test scope", "--test"),
                 Opt.flag("Runtime scope", "--runtime"),
                 Opt.flag("Provided scope", "--provided"),
                 Opt.flag("Annotation processor scope", "--processor"),
-                Opt.flag("Check the dep is reachable without adding it.",
-                        "--ping"));
+                Opt.flag("Check the dep is reachable without adding it.", "--ping"));
     }
 
     @Override
     public List<Param> parameters() {
-        return List.of(Param.of("dep|path", Arity.ONE,
+        return List.of(Param.of(
+                "dep|path",
+                Arity.ONE,
                 "A dep: short-name, group:artifact[:version], or @version\n"
                         + "...or a local module (:name or a path like ./foo/bar)."));
     }
@@ -166,8 +158,8 @@ public final class AddCommand implements CliCommand {
         String original = Files.readString(file);
         String updated;
         try {
-            updated = JkBuildEditor.addDependency(original, scope,
-                    parsed.library(), parsed.group(), parsed.name(), parsed.versionLiteral());
+            updated = JkBuildEditor.addDependency(
+                    original, scope, parsed.library(), parsed.group(), parsed.name(), parsed.versionLiteral());
         } catch (IllegalStateException | IllegalArgumentException e) {
             System.err.println("jk add: " + e.getMessage());
             return 1;
@@ -187,18 +179,14 @@ public final class AddCommand implements CliCommand {
 
     /** The selected dependency scope, or {@code null} if more than one flag was given. */
     private Scope resolveScope() {
-        int selected = (test ? 1 : 0) + (runtime ? 1 : 0)
-                + (provided ? 1 : 0) + (processor ? 1 : 0);
+        int selected = (test ? 1 : 0) + (runtime ? 1 : 0) + (provided ? 1 : 0) + (processor ? 1 : 0);
         if (selected > 1) {
-            System.err.println(
-                    "jk add: --test / --runtime / --provided / --processor are mutually exclusive");
+            System.err.println("jk add: --test / --runtime / --provided / --processor are mutually exclusive");
             return null;
         }
-        return test ? Scope.TEST
-                : runtime ? Scope.RUNTIME
-                : provided ? Scope.PROVIDED
-                : processor ? Scope.PROCESSOR
-                : Scope.MAIN;
+        return test
+                ? Scope.TEST
+                : runtime ? Scope.RUNTIME : provided ? Scope.PROVIDED : processor ? Scope.PROCESSOR : Scope.MAIN;
     }
 
     /**
@@ -262,8 +250,7 @@ public final class AddCommand implements CliCommand {
         String original = Files.readString(currentToml);
         String updated;
         try {
-            updated = JkBuildEditor.addDependency(
-                    original, scope, name, group, artifact, "=" + version);
+            updated = JkBuildEditor.addDependency(original, scope, name, group, artifact, "=" + version);
         } catch (IllegalStateException | IllegalArgumentException e) {
             System.err.println("jk add: " + e.getMessage());
             return 1;
@@ -288,7 +275,8 @@ public final class AddCommand implements CliCommand {
                 String newRoot = JkBuildEditor.addWorkspaceModule(rootContent, rel);
                 if (!newRoot.equals(rootContent)) {
                     Files.writeString(rootToml, newRoot, StandardCharsets.UTF_8);
-                    System.out.println("Registered module '" + rel + "' in workspace " + dev.jkbuild.cli.PathDisplay.styledRaw(root));
+                    System.out.println("Registered module '" + rel + "' in workspace "
+                            + dev.jkbuild.cli.PathDisplay.styledRaw(root));
                 }
             }
         } catch (RuntimeException e) {
@@ -326,14 +314,12 @@ public final class AddCommand implements CliCommand {
         }
 
         // Flags override auto-detected values.
-        String group = nonBlankOr(groupFlag,
-                detected.map(Coordinate::group).orElse(null));
-        String artifact = nonBlankOr(nameFlag,
-                detected.map(Coordinate::artifact).orElse(null));
-        String version = nonBlankOr(versionFlag,
-                detected.map(Coordinate::version).orElse(null));
-        String library = nonBlankOr(libraryFlag,
-                artifact != null ? artifact : null);
+        String group = nonBlankOr(groupFlag, detected.map(Coordinate::group).orElse(null));
+        String artifact =
+                nonBlankOr(nameFlag, detected.map(Coordinate::artifact).orElse(null));
+        String version =
+                nonBlankOr(versionFlag, detected.map(Coordinate::version).orElse(null));
+        String library = nonBlankOr(libraryFlag, artifact != null ? artifact : null);
 
         // Validate: all three coordinates are required.
         if (group == null || artifact == null || version == null) {
@@ -369,8 +355,7 @@ public final class AddCommand implements CliCommand {
         String original = Files.readString(tomlFile);
         String updated;
         try {
-            updated = JkBuildEditor.addFileDependency(
-                    original, scope, library, group, artifact, version, sha256);
+            updated = JkBuildEditor.addFileDependency(original, scope, library, group, artifact, version, sha256);
         } catch (IllegalStateException | IllegalArgumentException e) {
             System.err.println("jk add: " + e.getMessage());
             return 1;
@@ -400,11 +385,10 @@ public final class AddCommand implements CliCommand {
      * {@code versionLiteral}) and the floating/pinned distinction for
      * round-trip display.
      */
-    record ParsedDep(String library, String group, String name,
-                     String versionLiteral, boolean floating) {
+    record ParsedDep(String library, String group, String name, String versionLiteral, boolean floating) {
 
-        static ParsedDep parse(String coord, String libraryFlag, String groupFlag,
-                               String nameFlag, String versionFlag) {
+        static ParsedDep parse(
+                String coord, String libraryFlag, String groupFlag, String nameFlag, String versionFlag) {
             if (coord == null || coord.isBlank()) {
                 throw new IllegalArgumentException("dependency argument must not be blank");
             }
@@ -430,25 +414,32 @@ public final class AddCommand implements CliCommand {
                 String library = nonBlank(libraryFlag, libraryKey);
                 var catalog = dev.jkbuild.library.LibraryCatalog.layered(System.err::println);
                 var catalogHit = catalog.lookup(libraryKey);
-                String group = nonBlank(groupFlag,
-                        catalogHit.map(dev.jkbuild.library.LibraryCatalog.Module::group).orElse(null));
-                String name = nonBlank(nameFlag,
-                        catalogHit.map(dev.jkbuild.library.LibraryCatalog.Module::artifact).orElse(library));
+                String group = nonBlank(
+                        groupFlag,
+                        catalogHit
+                                .map(dev.jkbuild.library.LibraryCatalog.Module::group)
+                                .orElse(null));
+                String name = nonBlank(
+                        nameFlag,
+                        catalogHit
+                                .map(dev.jkbuild.library.LibraryCatalog.Module::artifact)
+                                .orElse(library));
                 if (group == null || group.isBlank()) {
                     StringBuilder msg = new StringBuilder("bare name `")
-                            .append(libraryKey).append("` is not in the library catalog. ");
+                            .append(libraryKey)
+                            .append("` is not in the library catalog. ");
                     List<String> suggestions = catalog.suggestionsFor(libraryKey, 5);
                     if (!suggestions.isEmpty()) {
                         msg.append("Did you mean: ")
-                                .append(String.join(", ", suggestions)).append("? ");
+                                .append(String.join(", ", suggestions))
+                                .append("? ");
                     }
                     msg.append("Either pick an library name or supply --group ")
                             .append("(and optionally --name) explicitly.");
                     throw new IllegalArgumentException(msg.toString());
                 }
                 boolean hasFlagVersion = versionFlag != null && !versionFlag.isBlank();
-                String versionLiteral = hasFlagVersion ? versionFlag
-                        : atVersion != null ? atVersion : "latest";
+                String versionLiteral = hasFlagVersion ? versionFlag : atVersion != null ? atVersion : "latest";
                 return new ParsedDep(library, group, name, versionLiteral, !hasFlagVersion);
             }
 
@@ -483,8 +474,7 @@ public final class AddCommand implements CliCommand {
             }
             int sep = moduleStr.indexOf(':');
             if (sep < 0 || sep == moduleStr.length() - 1 || sep == 0) {
-                throw new IllegalArgumentException(
-                        "expected group:artifact in: " + coord);
+                throw new IllegalArgumentException("expected group:artifact in: " + coord);
             }
             String groupFromCoord = moduleStr.substring(0, sep);
             String artifactFromCoord = moduleStr.substring(sep + 1);
@@ -508,10 +498,10 @@ public final class AddCommand implements CliCommand {
 
         /** Best-effort Coordinate for --ping. Strips any `=` selector prefix. */
         Coordinate toCoord() {
-            String v = versionLiteral.startsWith("=") || versionLiteral.startsWith("^")
-                    || versionLiteral.startsWith("~")
-                    ? versionLiteral.substring(1)
-                    : versionLiteral;
+            String v =
+                    versionLiteral.startsWith("=") || versionLiteral.startsWith("^") || versionLiteral.startsWith("~")
+                            ? versionLiteral.substring(1)
+                            : versionLiteral;
             return Coordinate.of(group, name, v);
         }
     }
@@ -526,14 +516,12 @@ public final class AddCommand implements CliCommand {
 
         if (response.statusCode() == 200) {
             URI artifactUri = repoBase.resolve(MavenLayout.artifactPath(coord));
-            System.out.println(Theme.colorize("✓", Theme.active().success())
-                    + " " + coordStr + " is available.");
+            System.out.println(Theme.colorize("✓", Theme.active().success()) + " " + coordStr + " is available.");
             System.out.println(osc8Link(artifactUri.toString()));
             return 0;
         }
 
-        System.out.println(Theme.colorize("⚠", Theme.active().warning())
-                + " " + coordStr + " is unavailable.");
+        System.out.println(Theme.colorize("⚠", Theme.active().warning()) + " " + coordStr + " is unavailable.");
         System.out.println("Failed to find " + coordStr + " in any configured repo.");
         return 1;
     }

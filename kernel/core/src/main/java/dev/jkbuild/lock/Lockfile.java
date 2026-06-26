@@ -2,7 +2,6 @@
 package dev.jkbuild.lock;
 
 import dev.jkbuild.model.Scope;
-
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
@@ -45,18 +44,22 @@ public record Lockfile(
         Objects.requireNonNull(resolutionAlgorithm, "resolutionAlgorithm");
         Objects.requireNonNull(artifacts, "artifacts");
         artifacts = List.copyOf(artifacts);
-        plugins  = plugins == null ? List.of() : List.copyOf(plugins);
+        plugins = plugins == null ? List.of() : List.copyOf(plugins);
     }
 
     /** Back-compat constructor without plugin entries. */
-    public Lockfile(int version, String generatedBy, String resolutionAlgorithm,
-                    String jdk, String kotlin, List<Artifact> artifacts) {
+    public Lockfile(
+            int version,
+            String generatedBy,
+            String resolutionAlgorithm,
+            String jdk,
+            String kotlin,
+            List<Artifact> artifacts) {
         this(version, generatedBy, resolutionAlgorithm, jdk, kotlin, artifacts, List.of());
     }
 
     /** Back-compat constructor for callers that stamp a JDK but no Kotlin version. */
-    public Lockfile(int version, String generatedBy, String resolutionAlgorithm,
-                    String jdk, List<Artifact> artifacts) {
+    public Lockfile(int version, String generatedBy, String resolutionAlgorithm, String jdk, List<Artifact> artifacts) {
         this(version, generatedBy, resolutionAlgorithm, jdk, null, artifacts, List.of());
     }
 
@@ -94,8 +97,8 @@ public record Lockfile(
     public record PluginEntry(String coordinate, String version, String checksum) {
         public PluginEntry {
             Objects.requireNonNull(coordinate, "coordinate");
-            Objects.requireNonNull(version,    "version");
-            Objects.requireNonNull(checksum,   "checksum");
+            Objects.requireNonNull(version, "version");
+            Objects.requireNonNull(checksum, "checksum");
         }
 
         /** The raw hex SHA-256 (strips the {@code "sha256:"} prefix if present). */
@@ -132,17 +135,28 @@ public record Lockfile(
 
         /** Without sources checksum (the common case). */
         public Artifact(
-                String name, String version, String source,
-                String checksum, String path,
-                List<Scope> scopes, List<String> deps, String pinnedBy, GitInfo git) {
+                String name,
+                String version,
+                String source,
+                String checksum,
+                String path,
+                List<Scope> scopes,
+                List<String> deps,
+                String pinnedBy,
+                GitInfo git) {
             this(name, version, source, checksum, path, scopes, deps, pinnedBy, git, null);
         }
 
         /** Without git provenance — the common Maven-coordinate case. */
         public Artifact(
-                String name, String version, String source,
-                String checksum, String path,
-                List<Scope> scopes, List<String> deps, String pinnedBy) {
+                String name,
+                String version,
+                String source,
+                String checksum,
+                String path,
+                List<Scope> scopes,
+                List<String> deps,
+                String pinnedBy) {
             this(name, version, source, checksum, path, scopes, deps, pinnedBy, null, null);
         }
 
@@ -151,16 +165,18 @@ public record Lockfile(
          * don't track BOM provenance. Equivalent to passing {@code null}.
          */
         public Artifact(
-                String name, String version, String source,
-                String checksum, String path,
-                List<Scope> scopes, List<String> deps) {
+                String name,
+                String version,
+                String source,
+                String checksum,
+                String path,
+                List<Scope> scopes,
+                List<String> deps) {
             this(name, version, source, checksum, path, scopes, deps, null, null, null);
         }
 
         /** Convenience constructor for callers that don't care about scopes (defaults to MAIN). */
-        public Artifact(
-                String name, String version, String source,
-                String checksum, String path, List<String> deps) {
+        public Artifact(String name, String version, String source, String checksum, String path, List<String> deps) {
             this(name, version, source, checksum, path, List.of(Scope.MAIN), deps, null, null);
         }
 

@@ -17,7 +17,6 @@ import java.net.URI;
 public final class OfflineException extends IOException {
 
     public OfflineException(URI uri) {
-        super("offline: refusing outbound request to " + uri
-                + " (drop --offline / unset JK_OFFLINE to allow network)");
+        super("offline: refusing outbound request to " + uri + " (drop --offline / unset JK_OFFLINE to allow network)");
     }
 }

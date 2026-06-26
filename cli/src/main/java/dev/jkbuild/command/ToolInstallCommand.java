@@ -1,16 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.runtime.CompileToolchain;
-
-import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.cli.theme.Coords;
-
 import dev.jkbuild.cache.Cas;
+import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.model.command.Arity;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.model.command.Param;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
 import dev.jkbuild.run.Goal;
@@ -18,17 +20,11 @@ import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.run.PhaseStatus;
+import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.tool.ToolEnv;
 import dev.jkbuild.tool.ToolLauncher;
 import dev.jkbuild.tool.ToolResolver;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.model.command.Arity;
-import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
-import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.model.command.Param;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Files;
@@ -47,18 +43,32 @@ import java.util.List;
  */
 public final class ToolInstallCommand implements CliCommand {
 
-    @Override public String name() { return "install"; }
-    @Override public String description() { return "Install a tool from a Maven coordinate"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "install";
+    }
+
+    @Override
+    public String description() {
+        return "Install a tool from a Maven coordinate";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<name>", "Launcher name under $JK_BIN_DIR. Default: the artifact id.", "--bin"),
                 Opt.value("<class>", "Override the Main-Class (default: read from the jar manifest).", "--main"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the tool state directory.", "--state-dir").hide(),
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the tool state directory.", "--state-dir")
+                        .hide(),
                 Opt.value("<dir>", "Override the bin directory.", "--bin-dir").hide(),
-                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url").hide());
+                Opt.value("<url>", "Override the Maven repository URL (for tests).", "--repo-url")
+                        .hide());
     }
-    @Override public List<Param> parameters() {
+
+    @Override
+    public List<Param> parameters() {
         return List.of(Param.of("coord", Arity.ONE, "Maven coordinate (group:artifact:version)."));
     }
 
@@ -119,8 +129,7 @@ public final class ToolInstallCommand implements CliCommand {
                 .execute(ctx -> {
                     ctx.label("write launcher to " + binDir);
                     Path javaHome = CompileToolchain.runningJavaHome();
-                    Path launcher = ToolLauncher.install(
-                            envsRoot, binDir, javaHome, ctx.require(TOOL_ENV));
+                    Path launcher = ToolLauncher.install(envsRoot, binDir, javaHome, ctx.require(TOOL_ENV));
                     ctx.put(LAUNCHER, launcher);
                     ctx.progress(1);
                 })

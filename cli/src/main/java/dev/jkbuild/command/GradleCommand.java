@@ -10,7 +10,6 @@ import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.model.command.Param;
 import dev.jkbuild.util.JkDirs;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -24,17 +23,34 @@ import java.util.Optional;
  */
 public final class GradleCommand implements CliCommand {
 
-    @Override public String name() { return "gradle"; }
-    @Override public String description() { return "Passthrough to Gradle (jk manages the install)"; }
-    @Override public boolean passthrough() { return true; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "gradle";
+    }
+
+    @Override
+    public String description() {
+        return "Passthrough to Gradle (jk manages the install)";
+    }
+
+    @Override
+    public boolean passthrough() {
+        return true;
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<dir>", "Project directory.", "-C", "--directory"),
-                Opt.value("<dir>", "Override the tools install root.", "--tools-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide(),
+                Opt.value("<dir>", "Override the tools install root.", "--tools-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
+                        .hide(),
                 Opt.flag("Skip tool discovery.", "--no-discover"));
     }
-    @Override public List<Param> parameters() {
+
+    @Override
+    public List<Param> parameters() {
         return List.of(Param.of("args", Arity.ZERO_OR_MORE, "Arguments forwarded to Gradle."));
     }
 
@@ -59,7 +75,8 @@ public final class GradleCommand implements CliCommand {
         List<String> command = new ArrayList<>();
         command.add(gradleBin.toString());
         command.addAll(args);
-        ProcessBuilder pb = new ProcessBuilder(command).directory(projectDir.toFile()).inheritIO();
+        ProcessBuilder pb =
+                new ProcessBuilder(command).directory(projectDir.toFile()).inheritIO();
         PassthroughEnv.apply(pb.environment(), jdk.map(InstalledJdk::home).orElse(null));
         return pb.start().waitFor();
     }

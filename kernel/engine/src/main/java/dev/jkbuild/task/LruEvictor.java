@@ -3,7 +3,6 @@ package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.repo.JkMavenLocalRepo;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -43,12 +42,8 @@ public final class LruEvictor {
      * computed by {@link CacheRoots}; only used here to count how many
      * of the evictees were still in it (for the warning summary).
      */
-    public static Report evictDownTo(
-            Cas cas,
-            long maxBytes,
-            Set<String> reachable,
-            AccessLedger ledger,
-            boolean dryRun) throws IOException {
+    public static Report evictDownTo(Cas cas, long maxBytes, Set<String> reachable, AccessLedger ledger, boolean dryRun)
+            throws IOException {
         Path shaRoot = cas.root().resolve("sha256");
         if (!Files.isDirectory(shaRoot)) {
             return new Report(0, 0L, 0, 0L);
@@ -70,8 +65,8 @@ public final class LruEvictor {
                 if (hexOpt.isEmpty()) continue;
                 String hex = hexOpt.get();
                 long size = Files.size(file);
-                long atime = atimes.getOrDefault(hex,
-                        Files.getLastModifiedTime(file).toMillis());
+                long atime =
+                        atimes.getOrDefault(hex, Files.getLastModifiedTime(file).toMillis());
                 entries.add(new Entry(file, hex, size, atime, reachable.contains(hex)));
                 totalSize += size;
             }
@@ -83,8 +78,7 @@ public final class LruEvictor {
 
         // Oldest atime first; ties broken by size (delete the bigger one
         // for the same age, so we hit the budget faster).
-        entries.sort(Comparator
-                .<Entry>comparingLong(Entry::atime)
+        entries.sort(Comparator.<Entry>comparingLong(Entry::atime)
                 .thenComparing(Comparator.comparingLong(Entry::size).reversed()));
 
         int deleted = 0;
@@ -129,14 +123,15 @@ public final class LruEvictor {
             throw new IllegalArgumentException("unparseable size: " + spec, e);
         }
         String unit = s.substring(i).trim().toUpperCase(java.util.Locale.ROOT);
-        long mult = switch (unit) {
-            case "", "B" -> 1L;
-            case "K", "KB", "KIB" -> 1024L;
-            case "M", "MB", "MIB" -> 1024L * 1024;
-            case "G", "GB", "GIB" -> 1024L * 1024 * 1024;
-            case "T", "TB", "TIB" -> 1024L * 1024 * 1024 * 1024;
-            default -> throw new IllegalArgumentException("unknown size unit `" + unit + "` in " + spec);
-        };
+        long mult =
+                switch (unit) {
+                    case "", "B" -> 1L;
+                    case "K", "KB", "KIB" -> 1024L;
+                    case "M", "MB", "MIB" -> 1024L * 1024;
+                    case "G", "GB", "GIB" -> 1024L * 1024 * 1024;
+                    case "T", "TB", "TIB" -> 1024L * 1024 * 1024 * 1024;
+                    default -> throw new IllegalArgumentException("unknown size unit `" + unit + "` in " + spec);
+                };
         return Math.round(n * mult);
     }
 }

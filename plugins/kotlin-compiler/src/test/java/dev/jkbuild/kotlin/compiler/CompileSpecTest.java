@@ -1,17 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.kotlin.compiler;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Pure parsing + argument-building behaviour of the worker — no Build Tools
@@ -123,8 +122,8 @@ class CompileSpecTest {
         assertThat(args).containsSequence("-language-version", "2.4");
         assertThat(args).containsSequence("-classpath", "/libs/x.jar");
         assertThat(args).contains("-Xfriend-paths=/f1,/f2");
-        assertThat(args).contains("-Xuse-fir-ic");          // required by the FIR IC runner
-        assertThat(args).endsWith("-no-stdlib");             // free ARGs appended verbatim
+        assertThat(args).contains("-Xuse-fir-ic"); // required by the FIR IC runner
+        assertThat(args).endsWith("-no-stdlib"); // free ARGs appended verbatim
     }
 
     @Test

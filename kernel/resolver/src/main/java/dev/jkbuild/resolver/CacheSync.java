@@ -8,7 +8,6 @@ import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.model.Coordinate;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.util.JkThreads;
-
 import java.io.IOException;
 import java.net.URI;
 import java.util.ArrayList;
@@ -54,8 +53,7 @@ public final class CacheSync {
         return sync(lock, ProgressObserver.NOOP, false);
     }
 
-    public Report sync(Lockfile lock, ProgressObserver observer)
-            throws IOException, InterruptedException {
+    public Report sync(Lockfile lock, ProgressObserver observer) throws IOException, InterruptedException {
         return sync(lock, observer, false);
     }
 
@@ -103,8 +101,7 @@ public final class CacheSync {
         HostRateLimiter limiter = HostRateLimiter.shared();
         List<CompletableFuture<FetchResult>> futures = new ArrayList<>(pending.size());
         for (PendingFetch p : pending) {
-            CompletableFuture<FetchResult> fut = CompletableFuture.supplyAsync(
-                    () -> fetch(p, limiter), JkThreads.io());
+            CompletableFuture<FetchResult> fut = CompletableFuture.supplyAsync(() -> fetch(p, limiter), JkThreads.io());
             // Fire the per-package callback on the fetcher's completion
             // thread so the progress bar updates as parallel fetches
             // finish, not in a single end-of-pass burst. thenAccept
@@ -144,8 +141,7 @@ public final class CacheSync {
      *
      * @return count of sources JARs fetched (not counting those already cached)
      */
-    public int syncSources(Lockfile lock, ProgressObserver observer)
-            throws IOException, InterruptedException {
+    public int syncSources(Lockfile lock, ProgressObserver observer) throws IOException, InterruptedException {
         Map<String, MavenRepo> repoCache = new HashMap<>();
         List<PendingFetch> pending = new ArrayList<>();
         for (Lockfile.Artifact pkg : lock.artifacts()) {
@@ -158,8 +154,10 @@ public final class CacheSync {
                 continue;
             }
             // Reuse the existing repoFor() with the package's original source.
-            try { pending.add(new PendingFetch(pkg, hex, repoFor(pkg.source(), repoCache))); }
-            catch (IllegalArgumentException ignored) {} // non-maven source
+            try {
+                pending.add(new PendingFetch(pkg, hex, repoFor(pkg.source(), repoCache)));
+            } catch (IllegalArgumentException ignored) {
+            } // non-maven source
         }
 
         HostRateLimiter limiter = HostRateLimiter.shared();
@@ -171,13 +169,18 @@ public final class CacheSync {
         }
         for (int i = 0; i < futures.size(); i++) {
             FetchResult r;
-            try { r = futures.get(i).get(); }
-            catch (java.util.concurrent.ExecutionException e) {
+            try {
+                r = futures.get(i).get();
+            } catch (java.util.concurrent.ExecutionException e) {
                 observer.failed(pending.get(i).pkg, e.getMessage());
                 continue;
             }
-            if (r.error() == null) { fetched++; observer.fetched(pending.get(i).pkg); }
-            else                   { observer.failed(pending.get(i).pkg, r.error()); }
+            if (r.error() == null) {
+                fetched++;
+                observer.fetched(pending.get(i).pkg);
+            } else {
+                observer.failed(pending.get(i).pkg, r.error());
+            }
         }
         return fetched;
     }
@@ -185,9 +188,7 @@ public final class CacheSync {
     private static FetchResult fetchSources(PendingFetch p, HostRateLimiter limiter) {
         int colon = p.pkg.name().indexOf(':');
         Coordinate sourcesCoord = new dev.jkbuild.model.Coordinate(
-                p.pkg.name().substring(0, colon),
-                p.pkg.name().substring(colon + 1),
-                p.pkg.version(), "sources", "jar");
+                p.pkg.name().substring(0, colon), p.pkg.name().substring(colon + 1), p.pkg.version(), "sources", "jar");
         try {
             URI host = p.repo.baseUrl();
             MavenRepo.Fetched f = limiter.run(host, () -> p.repo.fetchArtifact(sourcesCoord));
@@ -212,8 +213,11 @@ public final class CacheSync {
         ProgressObserver NOOP = new ProgressObserver() {};
 
         default void upToDate(Lockfile.Artifact pkg) {}
+
         default void fetched(Lockfile.Artifact pkg) {}
+
         default void skipped(Lockfile.Artifact pkg) {}
+
         default void failed(Lockfile.Artifact pkg, String error) {}
     }
 
@@ -241,8 +245,7 @@ public final class CacheSync {
         if (existing != null) return existing;
         int plus = source.indexOf('+');
         if (plus <= 0 || plus >= source.length() - 1) {
-            throw new IllegalArgumentException(
-                    "lockfile package source must be '<name>+<url>', got: " + source);
+            throw new IllegalArgumentException("lockfile package source must be '<name>+<url>', got: " + source);
         }
         String name = source.substring(0, plus);
         URI url = URI.create(source.substring(plus + 1));
@@ -254,10 +257,7 @@ public final class CacheSync {
 
     private static Coordinate toCoord(Lockfile.Artifact pkg) {
         int colon = pkg.name().indexOf(':');
-        return Coordinate.of(
-                pkg.name().substring(0, colon),
-                pkg.name().substring(colon + 1),
-                pkg.version());
+        return Coordinate.of(pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version());
     }
 
     /** A package whose CAS entry is missing and needs to be fetched. */
@@ -265,14 +265,22 @@ public final class CacheSync {
 
     /** Outcome of one parallel fetch — null error means success. */
     private record FetchResult(String error) {
-        static FetchResult ok() { return new FetchResult(null); }
-        static FetchResult failure(String msg) { return new FetchResult(msg); }
+        static FetchResult ok() {
+            return new FetchResult(null);
+        }
+
+        static FetchResult failure(String msg) {
+            return new FetchResult(msg);
+        }
     }
 
     public record Report(int fetched, int upToDate, int skipped, List<String> errors) {
         public Report {
             errors = List.copyOf(errors);
         }
-        public boolean hasErrors() { return !errors.isEmpty(); }
+
+        public boolean hasErrors() {
+            return !errors.isEmpty();
+        }
     }
 }

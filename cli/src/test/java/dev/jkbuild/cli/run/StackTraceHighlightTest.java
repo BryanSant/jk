@@ -1,12 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.run;
 
-import dev.jkbuild.cli.theme.Theme;
-
-import org.junit.jupiter.api.Test;
-import org.jline.utils.AttributedString;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import dev.jkbuild.cli.theme.Theme;
+import org.jline.utils.AttributedString;
+import org.junit.jupiter.api.Test;
 
 /**
  * {@link StackTraceHighlight} paints genuine stack-trace lines (frame, summary,
@@ -25,7 +24,7 @@ class StackTraceHighlightTest {
         String raw = "\tat dev.jkbuild.FooTest.bar(FooTest.java:42)";
         String out = StackTraceHighlight.line(raw);
         assertThat(out).contains(ESC);
-        assertThat(plain(out)).isEqualTo(raw);                                  // round-trips
+        assertThat(plain(out)).isEqualTo(raw); // round-trips
         assertThat(out).contains(Theme.colorize("FooTest", Theme.active().synType()));
         assertThat(out).contains(Theme.colorize("bar", Theme.active().synFunction()));
         assertThat(out).contains(Theme.colorize("FooTest.java", Theme.active().path()));
@@ -39,7 +38,8 @@ class StackTraceHighlightTest {
         assertThat(out).contains(ESC);
         assertThat(plain(out)).isEqualTo(raw);
         assertThat(out).contains(Theme.colorize("Caused by:", Theme.active().synKeyword()));
-        assertThat(out).contains(Theme.colorize("NullPointerException", Theme.active().synType()));
+        assertThat(out)
+                .contains(Theme.colorize("NullPointerException", Theme.active().synType()));
     }
 
     @Test
@@ -55,11 +55,12 @@ class StackTraceHighlightTest {
         // A bare message, a failure header, a 'key: value' note, and ordinary
         // program output must not be mistaken for a trace and must not gain ANSI.
         for (String raw : new String[] {
-                "boom",
-                "1 test failed:",
-                "  FAILED  dev.jkbuild.FooTest > bar()",
-                "Note: Recompile with -Xlint",
-                "Building project..."}) {
+            "boom",
+            "1 test failed:",
+            "  FAILED  dev.jkbuild.FooTest > bar()",
+            "Note: Recompile with -Xlint",
+            "Building project..."
+        }) {
             assertThat(StackTraceHighlight.line(raw)).isEqualTo(raw);
         }
     }

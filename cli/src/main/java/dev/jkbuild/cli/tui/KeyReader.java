@@ -1,10 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
-import org.jline.utils.NonBlockingReader;
-
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import org.jline.utils.NonBlockingReader;
 
 /**
  * Single-byte / escape-sequence parser. Reads one logical key from a JLine
@@ -128,13 +127,14 @@ public final class KeyReader {
             return Key.Escape.INSTANCE;
         }
         var code = reader.read();
-        var key = switch (code) {
-            case 'A' -> (Key) Key.Up.INSTANCE;
-            case 'B' -> (Key) Key.Down.INSTANCE;
-            case 'C' -> (Key) Key.Right.INSTANCE;
-            case 'D' -> (Key) Key.Left.INSTANCE;
-            default -> (Key) new Key.Unknown(code);
-        };
+        var key =
+                switch (code) {
+                    case 'A' -> (Key) Key.Up.INSTANCE;
+                    case 'B' -> (Key) Key.Down.INSTANCE;
+                    case 'C' -> (Key) Key.Right.INSTANCE;
+                    case 'D' -> (Key) Key.Left.INSTANCE;
+                    default -> (Key) new Key.Unknown(code);
+                };
         // Some terminals emit modifier params (e.g. ESC[1;2A). The final letter
         // we already consumed terminates the sequence; trailing params would
         // come BEFORE it, not after. Drain any straggling digits/semicolons/~

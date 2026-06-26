@@ -1,14 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.worker;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 /** {@code /proc/meminfo} parsing and the live probe's invariants. */
 class MemoryProbeTest {
 
-    private static final String MEMINFO = String.join("\n",
+    private static final String MEMINFO = String.join(
+            "\n",
             "MemTotal:       16004000 kB",
             "MemFree:         1200000 kB",
             "MemAvailable:    8000000 kB",

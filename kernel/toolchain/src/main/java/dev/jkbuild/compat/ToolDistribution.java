@@ -13,12 +13,7 @@ import java.util.Objects;
  * may not carry one (Maven Wrapper does, Gradle Wrapper sometimes does).
  * The installer skips verification when null/blank.
  */
-public record ToolDistribution(
-        BuildTool tool,
-        String version,
-        URI downloadUri,
-        String archiveType,
-        String sha256) {
+public record ToolDistribution(BuildTool tool, String version, URI downloadUri, String archiveType, String sha256) {
 
     public ToolDistribution {
         Objects.requireNonNull(tool, "tool");

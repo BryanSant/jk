@@ -26,8 +26,7 @@ public final class BashShell implements Shell {
 
     @Override
     public String activateScript(String jkExe) {
-        return ShellResources.load("bash.sh")
-                .replace("__JK_EXE__", PosixQuote.quote(jkExe));
+        return ShellResources.load("bash.sh").replace("__JK_EXE__", PosixQuote.quote(jkExe));
     }
 
     @Override

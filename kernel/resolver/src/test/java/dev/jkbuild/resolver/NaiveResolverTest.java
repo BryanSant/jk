@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
@@ -8,11 +10,6 @@ import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.VersionSelector;
 import dev.jkbuild.repo.EffectivePomBuilder;
 import dev.jkbuild.repo.MavenRepo;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -21,8 +18,10 @@ import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class NaiveResolverTest {
 
@@ -65,8 +64,7 @@ class NaiveResolverTest {
     @Test
     void follows_transitives(@TempDir Path tempDir) throws Exception {
         registerPom("com.foo", "leaf", "1.0", project("com.foo", "leaf", "1.0", ""));
-        registerPom("com.foo", "root", "1.0", project("com.foo", "root", "1.0",
-                dep("com.foo", "leaf", "1.0", null)));
+        registerPom("com.foo", "root", "1.0", project("com.foo", "root", "1.0", dep("com.foo", "leaf", "1.0", null)));
 
         Resolution result = resolver(tempDir).resolve(List.of(dep("com.foo:root", "1.0")));
 
@@ -79,13 +77,17 @@ class NaiveResolverTest {
         // and libB-1.0 (which depends on shared-2.0).
         registerPom("com.foo", "shared", "1.0", project("com.foo", "shared", "1.0", ""));
         registerPom("com.foo", "shared", "2.0", project("com.foo", "shared", "2.0", ""));
-        registerPom("com.foo", "libA", "1.0", project("com.foo", "libA", "1.0",
-                dep("com.foo", "shared", "1.0", null)));
-        registerPom("com.foo", "libB", "1.0", project("com.foo", "libB", "1.0",
-                dep("com.foo", "shared", "2.0", null)));
-        registerPom("com.foo", "root", "1.0", project("com.foo", "root", "1.0",
-                dep("com.foo", "libA", "1.0", null)
-                        + dep("com.foo", "libB", "1.0", null)));
+        registerPom("com.foo", "libA", "1.0", project("com.foo", "libA", "1.0", dep("com.foo", "shared", "1.0", null)));
+        registerPom("com.foo", "libB", "1.0", project("com.foo", "libB", "1.0", dep("com.foo", "shared", "2.0", null)));
+        registerPom(
+                "com.foo",
+                "root",
+                "1.0",
+                project(
+                        "com.foo",
+                        "root",
+                        "1.0",
+                        dep("com.foo", "libA", "1.0", null) + dep("com.foo", "libB", "1.0", null)));
 
         Resolution result = resolver(tempDir).resolve(List.of(dep("com.foo:root", "1.0")));
         assertThat(result.modules().get("com.foo:shared").version()).isEqualTo("2.0");
@@ -95,9 +97,15 @@ class NaiveResolverTest {
     void test_scope_does_not_leak_from_transitive(@TempDir Path tempDir) throws Exception {
         registerPom("com.foo", "leaf-test", "1.0", project("com.foo", "leaf-test", "1.0", ""));
         registerPom("com.foo", "leaf-compile", "1.0", project("com.foo", "leaf-compile", "1.0", ""));
-        registerPom("com.foo", "lib", "1.0", project("com.foo", "lib", "1.0",
-                dep("com.foo", "leaf-test", "1.0", "test")
-                        + dep("com.foo", "leaf-compile", "1.0", null)));
+        registerPom(
+                "com.foo",
+                "lib",
+                "1.0",
+                project(
+                        "com.foo",
+                        "lib",
+                        "1.0",
+                        dep("com.foo", "leaf-test", "1.0", "test") + dep("com.foo", "leaf-compile", "1.0", null)));
 
         Resolution result = resolver(tempDir).resolve(List.of(dep("com.foo:lib", "1.0")));
 
@@ -131,8 +139,8 @@ class NaiveResolverTest {
     }
 
     private void registerPom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".pom";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".pom";
         poms.put(path, body.getBytes(StandardCharsets.UTF_8));
     }
 

@@ -5,6 +5,9 @@ import dev.jkbuild.cli.GlobalOptions;
 import dev.jkbuild.cli.run.ConsoleSpec;
 import dev.jkbuild.cli.run.GoalConsole;
 import dev.jkbuild.cli.theme.Theme;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
@@ -13,10 +16,6 @@ import dev.jkbuild.runtime.BuildPipeline;
 import dev.jkbuild.test.JUnitLauncher;
 import dev.jkbuild.test.TestProgressListener;
 import dev.jkbuild.util.JkDirs;
-import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
-import dev.jkbuild.model.command.Opt;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -41,14 +40,25 @@ import java.util.stream.Stream;
  */
 public final class TestCommand implements CliCommand {
 
-    @Override public String name() { return "test"; }
-    @Override public String description() { return "Compile and run tests"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "test";
+    }
+
+    @Override
+    public String description() {
+        return "Compile and run tests";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.value("<name>", "Apply a build profile. Default: auto (ci on CI).", "--profile"),
                 Opt.value("<N>", "Test-runner JVMs to fork in parallel. Default 1.", "-w", "--workers"),
-                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir").hide(),
-                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
+                Opt.value("<dir>", "Override the jk cache directory.", "--cache-dir")
+                        .hide(),
+                Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir")
+                        .hide());
     }
 
     String profileName;
@@ -84,8 +94,8 @@ public final class TestCommand implements CliCommand {
         int workerCount = workers != null && workers > 0 ? workers : 1;
         // Size the test-runner JVMs' heaps (and cap how many fork at once) to the
         // host's free memory before launching them.
-        dev.jkbuild.worker.HeapPlan.Plan heapPlan = dev.jkbuild.worker.JvmOptions.planAndApply(
-                dev.jkbuild.worker.HeapPlan.requestedJvms(
+        dev.jkbuild.worker.HeapPlan.Plan heapPlan =
+                dev.jkbuild.worker.JvmOptions.planAndApply(dev.jkbuild.worker.HeapPlan.requestedJvms(
                         1, workerCount, false, Runtime.getRuntime().availableProcessors()));
         if (heapPlan != null && heapPlan.warning() != null && !global.outputIsJson()) {
             System.err.println("jk test: " + heapPlan.warning());
@@ -93,21 +103,28 @@ public final class TestCommand implements CliCommand {
         // Up-front lexical estimate (Java + Kotlin test sources) so the bar's
         // denominator is set once; the static plan gates the numerator and
         // phase-end auto-fill closes any residual gap.
-        int estimatedTestCount = estimateTestCount(dir.resolve("src/test/java"))
-                + estimateTestCount(dir.resolve("src/test/kotlin"));
+        int estimatedTestCount =
+                estimateTestCount(dir.resolve("src/test/java")) + estimateTestCount(dir.resolve("src/test/kotlin"));
 
         // testOnly → the core pipeline runs through run-tests but never packages.
         BuildPipeline.Inputs inputs = new BuildPipeline.Inputs(
-                dir, cache, buildFile, lockFile, lockFile.getParent(),
-                workerCount, estimatedTestCount, profileName, jdksDir,
-                /* skipTests */ false, global.verbose, /* testOnly */ true);
+                dir,
+                cache,
+                buildFile,
+                lockFile,
+                lockFile.getParent(),
+                workerCount,
+                estimatedTestCount,
+                profileName,
+                jdksDir,
+                /* skipTests */ false,
+                global.verbose, /* testOnly */
+                true);
         Goal goal = BuildPipeline.coreBuilder(inputs).build();
 
-        ConsoleSpec spec = new ConsoleSpec("Test",
-                r -> testSummary(goal, r),
-                r -> testFailureMessage(goal, r));
-        GoalResult result = GoalConsole.runGoal(goal, GoalConsole.modeFor(global), cache, spec,
-                BuildCommand.buildTarget(buildFile, dir));
+        ConsoleSpec spec = new ConsoleSpec("Test", r -> testSummary(goal, r), r -> testFailureMessage(goal, r));
+        GoalResult result = GoalConsole.runGoal(
+                goal, GoalConsole.modeFor(global), cache, spec, BuildCommand.buildTarget(buildFile, dir));
 
         if (result.success()) return 0;
         // Test failures get exit 4 (PRD §6); compile / launcher errors are exit 1.
@@ -144,8 +161,8 @@ public final class TestCommand implements CliCommand {
      * numerator is gated on the static plan, so over-estimation just means the
      * bar reaches ~98% and phase-end auto-fill closes the rest.
      */
-    private static final Pattern TEST_ANNOTATION_REGEX = Pattern.compile(
-            "@(?:Test|ParameterizedTest|TestFactory|TestTemplate|RepeatedTest)\\b");
+    private static final Pattern TEST_ANNOTATION_REGEX =
+            Pattern.compile("@(?:Test|ParameterizedTest|TestFactory|TestTemplate|RepeatedTest)\\b");
 
     /** Bridge test-runner NDJSON events onto the goal's progress bar (delegates to TestSupport). */
     static TestProgressListener bridgeListener(PhaseContext ctx, int workerCount, boolean verbose) {
@@ -156,15 +173,14 @@ public final class TestCommand implements CliCommand {
         if (!Files.isDirectory(testSrcDir)) return 0;
         int count = 0;
         try (Stream<Path> walk = Files.walk(testSrcDir)) {
-            for (Path file : (Iterable<Path>) walk
-                    .filter(Files::isRegularFile)
-                    .filter(p -> {
-                        String n = p.getFileName().toString();
-                        return n.endsWith(".java") || n.endsWith(".kt");
-                    })::iterator) {
+            for (Path file : (Iterable<Path>) walk.filter(Files::isRegularFile).filter(p -> {
+                String n = p.getFileName().toString();
+                return n.endsWith(".java") || n.endsWith(".kt");
+            })::iterator) {
                 try {
                     String content = Files.readString(file);
-                    count += (int) TEST_ANNOTATION_REGEX.matcher(content).results().count();
+                    count += (int)
+                            TEST_ANNOTATION_REGEX.matcher(content).results().count();
                 } catch (IOException ignored) {
                     // best-effort: skip unreadable files, keep counting
                 }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.runtime;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.http.Http;
@@ -8,18 +10,14 @@ import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.repo.RepoGroup;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayInputStream;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.jar.JarInputStream;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class GitProjectBuilderTest {
 
@@ -43,14 +41,13 @@ class GitProjectBuilderTest {
 
         JkBuild project = JkBuildParser.parse(Files.readString(dir.resolve("jk.toml")));
         Cas cas = new Cas(dir.resolve("cache"));
-        RepoGroup repos = RepoGroup.of(new MavenRepo(
-                "central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
+        RepoGroup repos = RepoGroup.of(new MavenRepo("central", RepositorySpec.MAVEN_CENTRAL.url(), new Http(), cas));
         Path javaHome = Path.of(System.getProperty("java.home"));
 
         // Build under an overridden coordinate + git-derived version.
         String version = "1.2.3-20260601.134752-3f2a9c1b4d5e";
-        GitProjectBuilder.Built built = GitProjectBuilder.build(
-                dir, project, "com.acme", "widgets", version, javaHome, cas, repos, "test");
+        GitProjectBuilder.Built built =
+                GitProjectBuilder.build(dir, project, "com.acme", "widgets", version, javaHome, cas, repos, "test");
 
         assertThat(built.jar()).isNotEmpty();
         assertThat(jarEntryNames(built.jar())).contains("example/Hello.class");

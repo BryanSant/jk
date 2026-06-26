@@ -2,11 +2,10 @@
 package dev.jkbuild.forge;
 
 import dev.jkbuild.http.Http;
-
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.net.URI;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
 import java.util.function.Consumer;
@@ -41,14 +40,19 @@ public final class DeviceFlow {
     private final String scope;
     private final Sleeper sleeper;
 
-    public DeviceFlow(Http http, URI deviceCodeUri, URI tokenUri,
-                      String providerName, String clientId, String scope) {
+    public DeviceFlow(Http http, URI deviceCodeUri, URI tokenUri, String providerName, String clientId, String scope) {
         this(http, deviceCodeUri, tokenUri, providerName, clientId, scope, REAL_SLEEP);
     }
 
     /** Visible for tests — inject a no-op {@link Sleeper}. */
-    public DeviceFlow(Http http, URI deviceCodeUri, URI tokenUri, String providerName,
-                      String clientId, String scope, Sleeper sleeper) {
+    public DeviceFlow(
+            Http http,
+            URI deviceCodeUri,
+            URI tokenUri,
+            String providerName,
+            String clientId,
+            String scope,
+            Sleeper sleeper) {
         this.http = http;
         this.deviceCodeUri = deviceCodeUri;
         this.tokenUri = tokenUri;
@@ -59,14 +63,11 @@ public final class DeviceFlow {
     }
 
     /** Wire a flow for a concrete provider + host, sourcing endpoints from {@link ForgeKind}. */
-    public static DeviceFlow forHost(Http http, ForgeKind kind, String host,
-                                     String clientId, String scope) {
+    public static DeviceFlow forHost(Http http, ForgeKind kind, String host, String clientId, String scope) {
         if (!kind.supportsDeviceFlow()) {
-            throw new AuthException(kind.displayName()
-                    + " does not support the device flow — use a token instead.");
+            throw new AuthException(kind.displayName() + " does not support the device flow — use a token instead.");
         }
-        return new DeviceFlow(http, kind.deviceCodeUri(host), kind.tokenUri(host),
-                kind.displayName(), clientId, scope);
+        return new DeviceFlow(http, kind.deviceCodeUri(host), kind.tokenUri(host), kind.displayName(), clientId, scope);
     }
 
     /**
@@ -97,25 +98,28 @@ public final class DeviceFlow {
         int interval = Math.max(1, dc.interval());
         while (System.nanoTime() < deadline) {
             sleep(interval);
-            String body = parseBody(post(tokenUri, Map.of(
-                    "client_id", clientId,
-                    "device_code", dc.deviceCode(),
-                    "grant_type", "urn:ietf:params:oauth:grant-type:device_code")));
+            String body = parseBody(post(
+                    tokenUri,
+                    Map.of(
+                            "client_id",
+                            clientId,
+                            "device_code",
+                            dc.deviceCode(),
+                            "grant_type",
+                            "urn:ietf:params:oauth:grant-type:device_code")));
 
             String token = str(body, "access_token");
             if (token != null) return token;
             String error = str(body, "error");
             switch (error != null ? error : "") {
-                case "authorization_pending" -> { /* keep polling */ }
-                case "slow_down"             -> interval += 5;
-                case "expired_token"         ->
-                        throw new AuthException("Code expired — run `jk auth login` again.");
-                case "access_denied"         ->
-                        throw new AuthException("Authorization was denied.");
-                case ""                      ->
-                        throw new AuthException("Unexpected response from " + providerName + ".");
-                default                      ->
-                        throw new AuthException("Device flow failed: " + error);
+                case "authorization_pending" -> {
+                    /* keep polling */
+                }
+                case "slow_down" -> interval += 5;
+                case "expired_token" -> throw new AuthException("Code expired — run `jk auth login` again.");
+                case "access_denied" -> throw new AuthException("Authorization was denied.");
+                case "" -> throw new AuthException("Unexpected response from " + providerName + ".");
+                default -> throw new AuthException("Device flow failed: " + error);
             }
         }
         throw new AuthException("Timed out waiting for authorization.");
@@ -125,8 +129,8 @@ public final class DeviceFlow {
         try {
             return http.postForm(uri, form);
         } catch (IOException e) {
-            throw new AuthException("Network error talking to " + providerName
-                    + " (" + uri.getHost() + "): " + e.getMessage(), e);
+            throw new AuthException(
+                    "Network error talking to " + providerName + " (" + uri.getHost() + "): " + e.getMessage(), e);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new AuthException("Interrupted while contacting " + providerName + ".");
@@ -144,24 +148,38 @@ public final class DeviceFlow {
 
     private static String str(String json, String key) {
         String needle = "\"" + key + "\":\"";
-        int s = json.indexOf(needle); if (s < 0) return null; s += needle.length();
+        int s = json.indexOf(needle);
+        if (s < 0) return null;
+        s += needle.length();
         StringBuilder sb = new StringBuilder();
         for (int i = s; i < json.length(); i++) {
             char c = json.charAt(i);
             if (c == '\\' && i + 1 < json.length()) {
-                char n = json.charAt(++i); if (n == '"') sb.append('"'); else { sb.append('\\'); sb.append(n); }
-            } else if (c == '"') break; else sb.append(c);
+                char n = json.charAt(++i);
+                if (n == '"') sb.append('"');
+                else {
+                    sb.append('\\');
+                    sb.append(n);
+                }
+            } else if (c == '"') break;
+            else sb.append(c);
         }
         return sb.toString();
     }
 
     private static int intVal(String json, String key, int def) {
         String needle = "\"" + key + "\":";
-        int s = json.indexOf(needle); if (s < 0) return def; s += needle.length();
+        int s = json.indexOf(needle);
+        if (s < 0) return def;
+        s += needle.length();
         while (s < json.length() && json.charAt(s) == ' ') s++;
-        int e = s; while (e < json.length() && Character.isDigit(json.charAt(e))) e++;
-        try { return e > s ? Integer.parseInt(json.substring(s, e)) : def; }
-        catch (NumberFormatException x) { return def; }
+        int e = s;
+        while (e < json.length() && Character.isDigit(json.charAt(e))) e++;
+        try {
+            return e > s ? Integer.parseInt(json.substring(s, e)) : def;
+        } catch (NumberFormatException x) {
+            return def;
+        }
     }
 
     private void sleep(int seconds) {

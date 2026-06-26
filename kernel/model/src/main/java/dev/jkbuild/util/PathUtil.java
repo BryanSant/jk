@@ -30,8 +30,12 @@ public final class PathUtil {
         if (root == null || !Files.exists(root)) return;
         try (var stream = Files.walk(root)) {
             stream.sorted(Comparator.reverseOrder()).forEach(p -> {
-                try { Files.deleteIfExists(p); } catch (IOException ignored) {}
+                try {
+                    Files.deleteIfExists(p);
+                } catch (IOException ignored) {
+                }
             });
-        } catch (IOException ignored) {}
+        } catch (IOException ignored) {
+        }
     }
 }

@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.forge;
 
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermissions;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class TokenStoreTest {
 
@@ -50,11 +49,9 @@ class TokenStoreTest {
         store.write("github.com", "gh-token");
 
         Path file = dir.resolve("github.com");
-        PosixFileAttributeView posix =
-                Files.getFileAttributeView(file, PosixFileAttributeView.class);
+        PosixFileAttributeView posix = Files.getFileAttributeView(file, PosixFileAttributeView.class);
         assumeTrue(posix != null, "POSIX-only assertion");
 
-        assertThat(Files.getPosixFilePermissions(file))
-                .isEqualTo(PosixFilePermissions.fromString("rw-------"));
+        assertThat(Files.getPosixFilePermissions(file)).isEqualTo(PosixFilePermissions.fromString("rw-------"));
     }
 }

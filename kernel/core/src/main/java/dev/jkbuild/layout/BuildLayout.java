@@ -3,7 +3,6 @@ package dev.jkbuild.layout;
 
 import dev.jkbuild.config.WorkspaceLocator;
 import dev.jkbuild.model.JkBuild;
-
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.Objects;
@@ -42,12 +41,11 @@ public final class BuildLayout {
     private final String artifact;
     private final String version;
 
-    private BuildLayout(Path workspaceRoot, Path moduleRoot,
-                        String artifact, String version) {
+    private BuildLayout(Path workspaceRoot, Path moduleRoot, String artifact, String version) {
         this.workspaceRoot = Objects.requireNonNull(workspaceRoot, "workspaceRoot");
-        this.moduleRoot    = Objects.requireNonNull(moduleRoot, "moduleRoot");
-        this.artifact      = Objects.requireNonNull(artifact, "artifact");
-        this.version       = Objects.requireNonNull(version, "version");
+        this.moduleRoot = Objects.requireNonNull(moduleRoot, "moduleRoot");
+        this.artifact = Objects.requireNonNull(artifact, "artifact");
+        this.version = Objects.requireNonNull(version, "version");
     }
 
     public static BuildLayout of(Path projectDir, JkBuild project) {
@@ -57,24 +55,42 @@ public final class BuildLayout {
         if (!project.isWorkspaceRoot()) {
             try {
                 workspaceRoot = WorkspaceLocator.findRoot(projectDir).orElse(projectDir);
-            } catch (IOException ignored) {}
+            } catch (IOException ignored) {
+            }
         }
-        return new BuildLayout(workspaceRoot, projectDir,
-                project.project().name(), project.project().version());
+        return new BuildLayout(
+                workspaceRoot,
+                projectDir,
+                project.project().name(),
+                project.project().version());
     }
 
     public static BuildLayout of(Path workspaceRoot, Path moduleRoot, JkBuild project) {
         Objects.requireNonNull(project, "project");
-        return new BuildLayout(workspaceRoot, moduleRoot,
-                project.project().name(), project.project().version());
+        return new BuildLayout(
+                workspaceRoot,
+                moduleRoot,
+                project.project().name(),
+                project.project().version());
     }
 
     // ---- Roots --------------------------------------------------------
 
-    public Path workspaceRoot() { return workspaceRoot; }
-    public Path moduleRoot()    { return moduleRoot; }
-    public String artifact()    { return artifact; }
-    public String version()     { return version; }
+    public Path workspaceRoot() {
+        return workspaceRoot;
+    }
+
+    public Path moduleRoot() {
+        return moduleRoot;
+    }
+
+    public String artifact() {
+        return artifact;
+    }
+
+    public String version() {
+        return version;
+    }
 
     // ---- Per-module output (under moduleRoot/target/) ----------------------
 
@@ -151,8 +167,11 @@ public final class BuildLayout {
     public Path generatedSourcesDir(String processor, String sourceSet) {
         Objects.requireNonNull(processor, "processor");
         Objects.requireNonNull(sourceSet, "sourceSet");
-        return buildDir().resolve("generated").resolve("sources")
-                .resolve(processor).resolve(sourceSet);
+        return buildDir()
+                .resolve("generated")
+                .resolve("sources")
+                .resolve(processor)
+                .resolve(sourceSet);
     }
 
     /** {@code target/tmp/} — scratch space safe to delete between runs. */

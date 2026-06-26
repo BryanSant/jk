@@ -1,13 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.mvn;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.model.JkBuild;
-import org.junit.jupiter.api.Test;
-
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class PomExporterTest {
 
@@ -50,7 +49,8 @@ class PomExporterTest {
                 guava = { group = "com.google.guava", name = "guava", version = "^33.0.0-jre" }
                 """);
 
-        String xml = PomExporter.export(b, Map.of("com.google.guava:guava", "33.4.0-jre")).xml();
+        String xml = PomExporter.export(b, Map.of("com.google.guava:guava", "33.4.0-jre"))
+                .xml();
 
         assertThat(xml).contains("<version>33.4.0-jre</version>");
         assertThat(xml).doesNotContain("33.0.0-jre");

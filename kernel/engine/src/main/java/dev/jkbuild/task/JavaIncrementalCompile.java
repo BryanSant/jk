@@ -10,11 +10,6 @@ import dev.jkbuild.compile.incremental.ClassAbi;
 import dev.jkbuild.compile.incremental.ClassDependencies;
 import dev.jkbuild.compile.incremental.JavaClasspathAbi;
 import dev.jkbuild.util.Hashing;
-
-import org.objectweb.asm.tree.ClassNode;
-import org.objectweb.asm.ClassReader;
-
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -36,6 +31,8 @@ import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Supplier;
 import java.util.stream.Stream;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.tree.ClassNode;
 
 /**
  * Precise incremental Java compilation (mirrors {@link KotlinCompile} in shape;
@@ -64,18 +61,23 @@ public final class JavaIncrementalCompile {
     private JavaIncrementalCompile() {}
 
     /** Outcome of a {@link #run}; {@code diagnostics} carries javac's messages. */
-    public record Result(boolean success, String outcome, String actionKey,
-                         List<CompileResult.Diagnostic> diagnostics) {
+    public record Result(
+            boolean success, String outcome, String actionKey, List<CompileResult.Diagnostic> diagnostics) {
         public Result {
             diagnostics = List.copyOf(diagnostics);
         }
+
         public boolean cacheHit() {
             return outcome.startsWith("cache-hit");
         }
     }
 
     /** What {@link #run} would do for a set of inputs, without compiling. */
-    public enum Outcome { CACHE_HIT, INCREMENTAL, FULL }
+    public enum Outcome {
+        CACHE_HIT,
+        INCREMENTAL,
+        FULL
+    }
 
     /**
      * A dry-run prediction ({@code jk explain}): {@code sourceCount} is the total
@@ -112,21 +114,42 @@ public final class JavaIncrementalCompile {
      */
     public record ApSetup(Supplier<Path> workerJar, Path generatedSourceDir) {}
 
-    public static Result run(String taskId, CompileRequest request, String jkVersion,
-                             boolean useCache, Cas cas, ActionCache actionCache, Path stateDir)
+    public static Result run(
+            String taskId,
+            CompileRequest request,
+            String jkVersion,
+            boolean useCache,
+            Cas cas,
+            ActionCache actionCache,
+            Path stateDir)
             throws IOException {
         return run(taskId, request, jkVersion, useCache, cas, actionCache, stateDir, null);
     }
 
-    public static Result run(String taskId, CompileRequest request, String jkVersion, boolean useCache,
-                             Cas cas, ActionCache actionCache, Path stateDir, ApSetup ap)
+    public static Result run(
+            String taskId,
+            CompileRequest request,
+            String jkVersion,
+            boolean useCache,
+            Cas cas,
+            ActionCache actionCache,
+            Path stateDir,
+            ApSetup ap)
             throws IOException {
         return run(taskId, request, jkVersion, useCache, cas, actionCache, stateDir, new JavacDriver(), ap);
     }
 
     /** Test seam: inject the javac driver. */
-    static Result run(String taskId, CompileRequest request, String jkVersion, boolean useCache,
-                      Cas cas, ActionCache actionCache, Path stateDir, JavacDriver driver, ApSetup ap)
+    static Result run(
+            String taskId,
+            CompileRequest request,
+            String jkVersion,
+            boolean useCache,
+            Cas cas,
+            ActionCache actionCache,
+            Path stateDir,
+            JavacDriver driver,
+            ApSetup ap)
             throws IOException {
         Path out = request.outputDir();
         Files.createDirectories(out);
@@ -144,8 +167,7 @@ public final class JavaIncrementalCompile {
             }
         }
 
-        Optional<ActionCache.ActionRecord> prior =
-                useCache ? actionCache.lastFor(taskId) : Optional.empty();
+        Optional<ActionCache.ActionRecord> prior = useCache ? actionCache.lastFor(taskId) : Optional.empty();
         Map<String, ClassFacts> abi = useCache ? loadState(stateDir) : new HashMap<>();
 
         // A project only routes through the worker once a prior build has *proven* it
@@ -170,8 +192,8 @@ public final class JavaIncrementalCompile {
         // aggregate → stay full.
         boolean canInc = canIncrement(request, prior, abi) && (!useWorker || flags.isolating());
         if (canInc) {
-            return incremental(taskId, request, key, cas, actionCache, stateDir, out,
-                    prior.get(), abi, compiler, flags);
+            return incremental(
+                    taskId, request, key, cas, actionCache, stateDir, out, prior.get(), abi, compiler, flags);
         }
         return full(taskId, request, key, cas, actionCache, stateDir, out, compiler, flags);
     }
@@ -183,8 +205,9 @@ public final class JavaIncrementalCompile {
      * state (and a non-aggregating processor setup) → {@link Outcome#INCREMENTAL}
      * with the changed-source count; else {@link Outcome#FULL}.
      */
-    public static Prediction predict(String taskId, CompileRequest request, String jkVersion,
-                                     ActionCache actionCache, Path stateDir) throws IOException {
+    public static Prediction predict(
+            String taskId, CompileRequest request, String jkVersion, ActionCache actionCache, Path stateDir)
+            throws IOException {
         String key = ActionKey.forJavac(taskId, request, jkVersion);
         if (request.sources().isEmpty() || actionCache.lookup(key).isPresent()) {
             return new Prediction(Outcome.CACHE_HIT, key, request.sources().size());
@@ -194,7 +217,10 @@ public final class JavaIncrementalCompile {
         ApFlags flags = loadApFlags(stateDir);
         boolean canInc = canIncrement(request, prior, abi) && (!flags.sourceGenAps() || flags.isolating());
         if (canInc) {
-            return new Prediction(Outcome.INCREMENTAL, key, changedSources(request, prior.get().inputs()).size());
+            return new Prediction(
+                    Outcome.INCREMENTAL,
+                    key,
+                    changedSources(request, prior.get().inputs()).size());
         }
         return new Prediction(Outcome.FULL, key, request.sources().size());
     }
@@ -202,12 +228,12 @@ public final class JavaIncrementalCompile {
     // ---- decide -----------------------------------------------------------
 
     /** Incremental only on a pure modify/add change with usable prior state. */
-    private static boolean canIncrement(CompileRequest request,
-                                        Optional<ActionCache.ActionRecord> prior,
-                                        Map<String, ClassFacts> abi) throws IOException {
+    private static boolean canIncrement(
+            CompileRequest request, Optional<ActionCache.ActionRecord> prior, Map<String, ClassFacts> abi)
+            throws IOException {
         if (prior.isEmpty() || abi.isEmpty()) return false;
         ActionCache.ActionRecord p = prior.get();
-        if (p.units().isEmpty()) return false;               // pre-incremental record
+        if (p.units().isEmpty()) return false; // pre-incremental record
         Map<String, String> in = p.inputs();
         // release/options change → full (they affect every class). A *classpath*
         // change is fine: the incremental loop diffs dependency ABIs (§ phase 3).
@@ -225,7 +251,8 @@ public final class JavaIncrementalCompile {
 
     private static boolean classpathPathsUnchanged(CompileRequest request, Map<String, String> in) {
         Set<String> nowCp = new TreeSet<>();
-        for (Path cp : request.classpath()) nowCp.add("cp:" + cp.toAbsolutePath().normalize());
+        for (Path cp : request.classpath())
+            nowCp.add("cp:" + cp.toAbsolutePath().normalize());
         Set<String> priorCp = new TreeSet<>();
         for (String k : in.keySet()) if (k.startsWith("cp:")) priorCp.add(k);
         return nowCp.equals(priorCp);
@@ -233,7 +260,8 @@ public final class JavaIncrementalCompile {
 
     private static boolean processorPathUnchanged(CompileRequest request, Map<String, String> in) {
         Set<String> now = new TreeSet<>();
-        for (Path pp : request.processorPath()) now.add("pp:" + pp.toAbsolutePath().normalize());
+        for (Path pp : request.processorPath())
+            now.add("pp:" + pp.toAbsolutePath().normalize());
         Set<String> prior = new TreeSet<>();
         for (String k : in.keySet()) if (k.startsWith("pp:")) prior.add(k);
         return now.equals(prior);
@@ -241,20 +269,29 @@ public final class JavaIncrementalCompile {
 
     // ---- full -------------------------------------------------------------
 
-    private static Result full(String taskId, CompileRequest request, String key, Cas cas,
-                               ActionCache actionCache, Path stateDir, Path out,
-                               Compiler compiler, ApFlags flags) throws IOException {
-        deleteClasses(out);   // a full compile starts clean so removed classes don't linger
-        CompileOut co = compiler.compile(request.sources(), request.classpath(), out,
-                request.release(), request.extraOptions());
+    private static Result full(
+            String taskId,
+            CompileRequest request,
+            String key,
+            Cas cas,
+            ActionCache actionCache,
+            Path stateDir,
+            Path out,
+            Compiler compiler,
+            ApFlags flags)
+            throws IOException {
+        deleteClasses(out); // a full compile starts clean so removed classes don't linger
+        CompileOut co = compiler.compile(
+                request.sources(), request.classpath(), out, request.release(), request.extraOptions());
         if (!co.result().success() || co.result().hasErrors()) {
             return new Result(false, "errors", key, co.result().diagnostics());
         }
         Analysis a = analyze(out, request.sources(), co.generated(), Set.of());
         Map<String, List<String>> units = unitsOf(a, out);
         store(taskId, key, request, out, cas, actionCache, units);
-        saveUnion(stateDir, JavaClasspathAbi.union(
-                request.classpath(), cas, cas.root().resolve("cp-abi-snapshots")));
+        saveUnion(
+                stateDir,
+                JavaClasspathAbi.union(request.classpath(), cas, cas.root().resolve("cp-abi-snapshots")));
         // Remodule whether this project source-generates (so the next build routes
         // through the worker) and whether those processors are isolating.
         boolean sgap = flags.sourceGenAps() || a.hasGenerated() || a.orphans();
@@ -273,10 +310,19 @@ public final class JavaIncrementalCompile {
 
     // ---- incremental ------------------------------------------------------
 
-    private static Result incremental(String taskId, CompileRequest request, String key, Cas cas,
-                                      ActionCache actionCache, Path stateDir, Path out,
-                                      ActionCache.ActionRecord prior, Map<String, ClassFacts> abi,
-                                      Compiler compiler, ApFlags flags) throws IOException {
+    private static Result incremental(
+            String taskId,
+            CompileRequest request,
+            String key,
+            Cas cas,
+            ActionCache actionCache,
+            Path stateDir,
+            Path out,
+            ActionCache.ActionRecord prior,
+            Map<String, ClassFacts> abi,
+            Compiler compiler,
+            ApFlags flags)
+            throws IOException {
         // Carry over: lay down the prior full output, then recompile dirty waves on top.
         actionCache.restore(prior, out);
 
@@ -301,7 +347,7 @@ public final class JavaIncrementalCompile {
         Set<String> removedClasses = new TreeSet<>();
         boolean removedConstantHolder = false;
         for (Map.Entry<String, List<String>> e : prior.units().entrySet()) {
-            if (current(request, e.getKey()) != null) continue;   // source still present
+            if (current(request, e.getKey()) != null) continue; // source still present
             for (String rel : e.getValue()) {
                 String name = nameOf(rel);
                 ClassFacts f = facts.remove(name);
@@ -334,7 +380,7 @@ public final class JavaIncrementalCompile {
         } else {
             currentUnion = JavaClasspathAbi.union(request.classpath(), cas, cpCacheDir);
             if (!haveBaseline) {
-                seed.addAll(request.sources());   // no baseline to diff against → conservative, once
+                seed.addAll(request.sources()); // no baseline to diff against → conservative, once
             } else {
                 DepDiff dd = diffDeps(priorUnion, currentUnion);
                 if (dd.conservative) seed.addAll(request.sources());
@@ -362,8 +408,8 @@ public final class JavaIncrementalCompile {
                 }
             }
 
-            CompileOut co = compiler.compile(wave, withOutputDir(request.classpath(), out), out,
-                    request.release(), request.extraOptions());
+            CompileOut co = compiler.compile(
+                    wave, withOutputDir(request.classpath(), out), out, request.release(), request.extraOptions());
             diagnostics.addAll(co.result().diagnostics());
             if (!co.result().success() || co.result().hasErrors()) {
                 return new Result(false, "errors", key, diagnostics);
@@ -397,7 +443,7 @@ public final class JavaIncrementalCompile {
                 }
                 for (String rel : units.getOrDefault(srcKey(s), List.of())) {
                     String name = nameOf(rel);
-                    if (!nowNames.contains(name)) {        // a class this source no longer produces
+                    if (!nowNames.contains(name)) { // a class this source no longer produces
                         abiChanged.add(name);
                         facts.remove(name);
                     }
@@ -413,7 +459,10 @@ public final class JavaIncrementalCompile {
             boolean conservative = false;
             for (String name : abiChanged) {
                 ClassInfo ci = waveByName.get(name);
-                if (ci == null || ci.constants()) { conservative = true; break; }
+                if (ci == null || ci.constants()) {
+                    conservative = true;
+                    break;
+                }
             }
             Set<Path> next = conservative
                     ? new HashSet<>(request.sources())
@@ -432,8 +481,11 @@ public final class JavaIncrementalCompile {
     }
 
     /** Sources whose classes reference any ABI-changed type, via the forward-dep graph. */
-    private static Set<Path> referencers(Set<String> abiChanged, Map<String, ClassFacts> facts,
-                                         Map<String, List<String>> units, List<Path> sources) {
+    private static Set<Path> referencers(
+            Set<String> abiChanged,
+            Map<String, ClassFacts> facts,
+            Map<String, List<String>> units,
+            List<Path> sources) {
         if (abiChanged.isEmpty()) return Set.of();
         Map<String, Path> nameToSource = new HashMap<>();
         Map<String, Path> keyToSource = new HashMap<>();
@@ -459,8 +511,8 @@ public final class JavaIncrementalCompile {
 
     private record ClassInfo(String name, String relPath, String abi, List<String> deps, boolean constants) {}
 
-    private record Analysis(Map<Path, List<ClassInfo>> bySource, boolean orphans,
-                            boolean isolatingSafe, boolean hasGenerated) {}
+    private record Analysis(
+            Map<Path, List<ClassInfo>> bySource, boolean orphans, boolean isolatingSafe, boolean hasGenerated) {}
 
     /**
      * Read every {@code .class} under {@code out}, hash its ABI + deps, attribute it
@@ -473,9 +525,9 @@ public final class JavaIncrementalCompile {
      * @param knownRelPaths class outputs carried over from the prior build (so a
      *                      carried-over generated class isn't mistaken for an orphan)
      */
-    private static Analysis analyze(Path out, List<Path> sources,
-                                    Map<Path, Set<Path>> provenance,
-                                    Set<String> knownRelPaths) throws IOException {
+    private static Analysis analyze(
+            Path out, List<Path> sources, Map<Path, Set<Path>> provenance, Set<String> knownRelPaths)
+            throws IOException {
         // Suffix index: "pkg/dir/File.java" → source path.
         Map<String, Path> bySuffix = new HashMap<>();
         for (Path s : sources) {
@@ -503,18 +555,21 @@ public final class JavaIncrementalCompile {
                         source = origins.iterator().next();
                         hasGenerated = true;
                     } else if (origins.size() > 1) {
-                        isolatingSafe = false;   // aggregating: caller recompiles the full set
+                        isolatingSafe = false; // aggregating: caller recompiles the full set
                         hasGenerated = true;
                         continue;
                     } else if (knownRelPaths.contains(relPath)) {
-                        continue;                // carried over; facts kept from prior state
+                        continue; // carried over; facts kept from prior state
                     } else {
-                        orphans = true;          // generated with no provenance (non-worker path)
+                        orphans = true; // generated with no provenance (non-worker path)
                         continue;
                     }
                 }
-                bySource.computeIfAbsent(source, k -> new ArrayList<>()).add(
-                        new ClassInfo(cn.name, relPath, ClassAbi.hash(bytes),
+                bySource.computeIfAbsent(source, k -> new ArrayList<>())
+                        .add(new ClassInfo(
+                                cn.name,
+                                relPath,
+                                ClassAbi.hash(bytes),
                                 List.copyOf(ClassDependencies.referencedTypes(bytes)),
                                 ClassAbi.definesInlinableConstant(bytes)));
             }
@@ -543,8 +598,10 @@ public final class JavaIncrementalCompile {
 
     private static Map<String, ClassFacts> factsOf(Analysis a) {
         Map<String, ClassFacts> facts = new HashMap<>();
-        a.bySource.values().forEach(list ->
-                list.forEach(ci -> facts.put(ci.name(), new ClassFacts(ci.abi(), ci.deps(), ci.constants()))));
+        a.bySource
+                .values()
+                .forEach(list ->
+                        list.forEach(ci -> facts.put(ci.name(), new ClassFacts(ci.abi(), ci.deps(), ci.constants()))));
         return facts;
     }
 
@@ -561,8 +618,15 @@ public final class JavaIncrementalCompile {
     // ---- store + state ----------------------------------------------------
 
     /** Snapshot {@code out} into the CAS and record outputs + per-source units under {@code key}. */
-    private static void store(String taskId, String key, CompileRequest request, Path out, Cas cas,
-                              ActionCache actionCache, Map<String, List<String>> units) throws IOException {
+    private static void store(
+            String taskId,
+            String key,
+            CompileRequest request,
+            Path out,
+            Cas cas,
+            ActionCache actionCache,
+            Map<String, List<String>> units)
+            throws IOException {
         Map<String, String> outputs = new TreeMap<>();
         try (Stream<Path> walk = Files.walk(out)) {
             for (Path file : (Iterable<Path>) walk::iterator) {
@@ -580,8 +644,8 @@ public final class JavaIncrementalCompile {
     private record DepDiff(Set<String> changed, boolean conservative) {}
 
     /** Dependency classes whose ABI changed (or vanished) since the prior build. */
-    private static DepDiff diffDeps(Map<String, JavaClasspathAbi.DepFacts> prior,
-                                    Map<String, JavaClasspathAbi.DepFacts> current) {
+    private static DepDiff diffDeps(
+            Map<String, JavaClasspathAbi.DepFacts> prior, Map<String, JavaClasspathAbi.DepFacts> current) {
         Set<String> changed = new TreeSet<>();
         boolean conservative = false;
         for (Map.Entry<String, JavaClasspathAbi.DepFacts> e : prior.entrySet()) {
@@ -612,10 +676,10 @@ public final class JavaIncrementalCompile {
         }
     }
 
-    private static void saveUnion(Path stateDir, Map<String, JavaClasspathAbi.DepFacts> union)
-            throws IOException {
+    private static void saveUnion(Path stateDir, Map<String, JavaClasspathAbi.DepFacts> union) throws IOException {
         Files.createDirectories(stateDir);
-        Files.write(unionFile(stateDir),
+        Files.write(
+                unionFile(stateDir),
                 JavaClasspathAbi.writeDepFacts(new TreeMap<>(union)).getBytes(StandardCharsets.UTF_8));
     }
 
@@ -633,16 +697,16 @@ public final class JavaIncrementalCompile {
         if (!Files.isRegularFile(f)) return new HashMap<>();
         try {
             Map<String, ClassFacts> out = new LinkedHashMap<>();
-            try (BufferedReader br = new BufferedReader(
-                    new StringReader(new String(Files.readAllBytes(f), StandardCharsets.UTF_8)))) {
+            try (BufferedReader br =
+                    new BufferedReader(new StringReader(new String(Files.readAllBytes(f), StandardCharsets.UTF_8)))) {
                 String line;
                 while ((line = br.readLine()) != null) {
                     line = line.strip();
                     if (line.isEmpty()) continue;
                     String[] parts = line.split("\t", 4);
                     if (parts.length < 3) continue;
-                    List<String> deps = (parts.length >= 4 && !parts[3].isEmpty())
-                            ? List.of(parts[3].split(",", -1)) : List.of();
+                    List<String> deps =
+                            (parts.length >= 4 && !parts[3].isEmpty()) ? List.of(parts[3].split(",", -1)) : List.of();
                     out.put(parts[0], new ClassFacts(parts[1], deps, "1".equals(parts[2])));
                 }
             }
@@ -657,9 +721,14 @@ public final class JavaIncrementalCompile {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<String, ClassFacts> e : new TreeMap<>(facts).entrySet()) {
             ClassFacts v = e.getValue();
-            sb.append(e.getKey()).append('\t').append(v.abi()).append('\t')
-              .append(v.constants() ? '1' : '0').append('\t')
-              .append(String.join(",", v.deps())).append('\n');
+            sb.append(e.getKey())
+                    .append('\t')
+                    .append(v.abi())
+                    .append('\t')
+                    .append(v.constants() ? '1' : '0')
+                    .append('\t')
+                    .append(String.join(",", v.deps()))
+                    .append('\n');
         }
         Files.write(stateFile(stateDir), sb.toString().getBytes(StandardCharsets.UTF_8));
     }
@@ -668,8 +737,7 @@ public final class JavaIncrementalCompile {
 
     /** A javac invocation; returns its result plus any generated-file provenance. */
     private interface Compiler {
-        CompileOut compile(List<Path> sources, List<Path> classpath, Path outputDir,
-                           int release, List<String> options);
+        CompileOut compile(List<Path> sources, List<Path> classpath, Path outputDir, int release, List<String> options);
     }
 
     private record CompileOut(CompileResult result, Map<Path, Set<Path>> generated) {}
@@ -691,12 +759,19 @@ public final class JavaIncrementalCompile {
     }
 
     /** In-process javac in the worker: captures generated-file → originating-source. */
-    private static Compiler workerCompiler(Path workerJar, Path generatedSourceDir,
-                                           Path javaHome, List<Path> processorPath) {
+    private static Compiler workerCompiler(
+            Path workerJar, Path generatedSourceDir, Path javaHome, List<Path> processorPath) {
         return (sources, classpath, outputDir, release, options) -> {
             WorkerJavac.Result wr = WorkerJavac.compile(new WorkerJavac.Request(
-                    javaHome, workerJar, sources, classpath, processorPath,
-                    outputDir, generatedSourceDir, release, options));
+                    javaHome,
+                    workerJar,
+                    sources,
+                    classpath,
+                    processorPath,
+                    outputDir,
+                    generatedSourceDir,
+                    release,
+                    options));
             // The worker now returns structured diagnostics (severity + located
             // message), so warnings carry the right severity and route to warn.
             return new CompileOut(new CompileResult(wr.success(), wr.diagnostics()), wr.generated());
@@ -721,7 +796,7 @@ public final class JavaIncrementalCompile {
             for (String line : new String(Files.readAllBytes(f), StandardCharsets.UTF_8).split("\n")) {
                 line = line.strip();
                 if (line.startsWith("sourceGenAps=")) sourceGenAps = "true".equals(line.substring(13));
-                else if (line.startsWith("isolating="))   isolating   = "true".equals(line.substring(10));
+                else if (line.startsWith("isolating=")) isolating = "true".equals(line.substring(10));
             }
             return new ApFlags(sourceGenAps, isolating);
         } catch (RuntimeException corrupt) {
@@ -756,8 +831,7 @@ public final class JavaIncrementalCompile {
     private static Set<String> sourceKeys(Map<String, String> inputs) {
         Set<String> out = new TreeSet<>();
         for (String k : inputs.keySet()) {
-            if (k.startsWith("cp:") || k.startsWith("pp:")
-                    || k.equals("release") || k.equals("options")) continue;
+            if (k.startsWith("cp:") || k.startsWith("pp:") || k.equals("release") || k.equals("options")) continue;
             out.add(k);
         }
         return out;
@@ -765,7 +839,7 @@ public final class JavaIncrementalCompile {
 
     private static List<Path> withOutputDir(List<Path> classpath, Path out) {
         List<Path> cp = new ArrayList<>(classpath);
-        cp.add(out);   // so a wave sees carried-over + earlier-wave classes
+        cp.add(out); // so a wave sees carried-over + earlier-wave classes
         return cp;
     }
 

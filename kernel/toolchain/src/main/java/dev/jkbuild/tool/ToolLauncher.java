@@ -2,7 +2,6 @@
 package dev.jkbuild.tool;
 
 import dev.jkbuild.jdk.HostPlatform;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -40,23 +39,27 @@ public final class ToolLauncher {
      *
      * @return the launcher path the user should add to PATH.
      */
-    public static Path install(Path envsRoot, Path binDir, Path javaHome, ToolEnv env)
-            throws IOException {
+    public static Path install(Path envsRoot, Path binDir, Path javaHome, ToolEnv env) throws IOException {
         Path envDir = envsRoot.resolve(env.binName());
         Files.createDirectories(envDir);
         Files.createDirectories(binDir);
 
-        Files.writeString(envDir.resolve("env.json"), renderEnvJson(env, javaHome),
+        Files.writeString(
+                envDir.resolve("env.json"),
+                renderEnvJson(env, javaHome),
                 StandardCharsets.UTF_8,
                 StandardOpenOption.CREATE,
                 StandardOpenOption.TRUNCATE_EXISTING);
 
         Path launcher = binDir.resolve(env.binName() + (HostPlatform.isWindows() ? ".cmd" : ""));
-        String script = HostPlatform.isWindows()
-                ? renderWindowsLauncher(env, javaHome)
-                : renderPosixLauncher(env, javaHome);
-        Files.writeString(launcher, script, StandardCharsets.UTF_8,
-                StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+        String script =
+                HostPlatform.isWindows() ? renderWindowsLauncher(env, javaHome) : renderPosixLauncher(env, javaHome);
+        Files.writeString(
+                launcher,
+                script,
+                StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE,
+                StandardOpenOption.TRUNCATE_EXISTING);
         markExecutable(launcher);
         return launcher;
     }
@@ -118,7 +121,9 @@ public final class ToolLauncher {
         sb.append("  \"binName\": ").append(jsonString(env.binName())).append(",\n");
         sb.append("  \"primary\": ").append(jsonString(env.primary().toGav())).append(",\n");
         sb.append("  \"mainClass\": ").append(jsonString(env.mainClass())).append(",\n");
-        sb.append("  \"javaHome\": ").append(jsonString(javaHome.toAbsolutePath().toString())).append(",\n");
+        sb.append("  \"javaHome\": ")
+                .append(jsonString(javaHome.toAbsolutePath().toString()))
+                .append(",\n");
         sb.append("  \"classpath\": [\n");
         List<Path> cp = env.classpath();
         for (int i = 0; i < cp.size(); i++) {
@@ -152,8 +157,7 @@ public final class ToolLauncher {
     private static String shellQuote(String value) {
         for (int i = 0; i < value.length(); i++) {
             char c = value.charAt(i);
-            if (!(Character.isLetterOrDigit(c)
-                    || c == '_' || c == '-' || c == '.' || c == '/' || c == ':')) {
+            if (!(Character.isLetterOrDigit(c) || c == '_' || c == '-' || c == '.' || c == '/' || c == ':')) {
                 return "'" + value.replace("'", "'\\''") + "'";
             }
         }
@@ -172,5 +176,4 @@ public final class ToolLauncher {
             // Non-POSIX filesystem — caller is on Windows or an exotic FS.
         }
     }
-
 }

@@ -5,7 +5,6 @@ import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalListener;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.util.JkDirs;
-
 import java.nio.file.Path;
 import java.util.List;
 
@@ -77,14 +76,15 @@ public final class GoalConsole {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
 
-        GoalListener console = switch (mode) {
-            case JSON -> new NdjsonListener(System.out);
-            case VERBOSE -> new VerboseListener(System.out, System.err);
-            // AUTO animates only on an interactive TTY; QUIET / pipes print the
-            // result line without a spinner.
-            case AUTO -> new SimpleTaskListener(System.out, System.err, spec, isInteractiveTerminal());
-            case QUIET -> new SimpleTaskListener(System.out, System.err, spec, false);
-        };
+        GoalListener console =
+                switch (mode) {
+                    case JSON -> new NdjsonListener(System.out);
+                    case VERBOSE -> new VerboseListener(System.out, System.err);
+                    // AUTO animates only on an interactive TTY; QUIET / pipes print the
+                    // result line without a spinner.
+                    case AUTO -> new SimpleTaskListener(System.out, System.err, spec, isInteractiveTerminal());
+                    case QUIET -> new SimpleTaskListener(System.out, System.err, spec, false);
+                };
         goal.addListener(console);
         return goal.run();
     }
@@ -115,19 +115,18 @@ public final class GoalConsole {
      * {@code ✓}/{@code ✗} result line from {@code spec}. {@code --output json}
      * still emits NDJSON and {@code --verbose} still prints per-phase lines.
      */
-    public static GoalResult runGoal(Goal goal, Mode mode, Path cacheRoot,
-                                     ConsoleSpec spec, String module) {
+    public static GoalResult runGoal(Goal goal, Mode mode, Path cacheRoot, ConsoleSpec spec, String module) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
 
-        GoalListener console = switch (mode) {
-            case JSON -> new NdjsonListener(System.out);
-            case VERBOSE -> new VerboseListener(System.out, System.err);
-            case AUTO -> new CommandManagerListener(System.out, spec, module,
-                    goal.phases(), isInteractiveTerminal());
-            case QUIET -> new CommandManagerListener(System.out, spec, module,
-                    goal.phases(), false);
-        };
+        GoalListener console =
+                switch (mode) {
+                    case JSON -> new NdjsonListener(System.out);
+                    case VERBOSE -> new VerboseListener(System.out, System.err);
+                    case AUTO ->
+                        new CommandManagerListener(System.out, spec, module, goal.phases(), isInteractiveTerminal());
+                    case QUIET -> new CommandManagerListener(System.out, spec, module, goal.phases(), false);
+                };
         goal.addListener(console);
         return goal.run();
     }
@@ -160,16 +159,23 @@ public final class GoalConsole {
         if (log != null) goal.addListener(log);
         List<String> lines = new java.util.ArrayList<>();
         goal.addListener(new GoalListener() {
-            @Override public synchronized void output(String phase, String line) { lines.add(line); }
-            @Override public synchronized void warn(String phase, String code, String message) {
+            @Override
+            public synchronized void output(String phase, String line) {
+                lines.add(line);
+            }
+
+            @Override
+            public synchronized void warn(String phase, String code, String message) {
                 lines.add("  ⚠ " + phase + ": " + message);
             }
-            @Override public synchronized void error(String phase, String code, String message) {
+
+            @Override
+            public synchronized void error(String phase, String code, String message) {
                 lines.add("  ✗ " + phase + ": " + message);
             }
         });
         GoalResult r = goal.run();
-        synchronized (lines) {  // visibility barrier after the goal's threads finish
+        synchronized (lines) { // visibility barrier after the goal's threads finish
             return new Buffered(r, new java.util.ArrayList<>(lines));
         }
     }
@@ -183,9 +189,10 @@ public final class GoalConsole {
             case QUIET -> new SilentListener(System.out, System.err);
             case JSON -> new NdjsonListener(System.out);
             case VERBOSE -> new VerboseListener(System.out, System.err);
-            case AUTO -> isInteractiveTerminal()
-                    ? new ProgressBarListener(System.out, System.err, goal.phases())
-                    : new SilentListener(System.out, System.err);
+            case AUTO ->
+                isInteractiveTerminal()
+                        ? new ProgressBarListener(System.out, System.err, goal.phases())
+                        : new SilentListener(System.out, System.err);
         };
     }
 
@@ -195,8 +202,7 @@ public final class GoalConsole {
      * (bar + phase list) instead of a per-module view. The shared view is
      * settled by the caller after the last module. Always records the event log.
      */
-    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String module,
-                                         AggregateContext agg) {
+    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String module, AggregateContext agg) {
         return runGoalInto(goal, cacheRoot, module, agg, 0);
     }
 
@@ -207,8 +213,7 @@ public final class GoalConsole {
      * aggregate bar so the bar advances cumulatively without backtracking. Pass
      * the same estimate that was summed into {@link AggregateContext#calibrate}.
      */
-    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String module,
-                                         AggregateContext agg, long slice) {
+    public static GoalResult runGoalInto(Goal goal, Path cacheRoot, String module, AggregateContext agg, long slice) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
         goal.addListener(new AggregateModuleListener(agg, module, goal.phases(), slice));
@@ -223,9 +228,13 @@ public final class GoalConsole {
      * buffer (above the shared region) when the module completes. Phase/progress
      * events still feed the shared aggregate view live (the running rows + bar).
      */
-    public static GoalResult runGoalIntoBuffered(Goal goal, Path cacheRoot, String module,
-                                                 AggregateContext agg, long slice,
-                                                 java.util.List<String> outBuffer) {
+    public static GoalResult runGoalIntoBuffered(
+            Goal goal,
+            Path cacheRoot,
+            String module,
+            AggregateContext agg,
+            long slice,
+            java.util.List<String> outBuffer) {
         EventLogListener log = EventLogListener.open(cacheRoot, goal.name());
         if (log != null) goal.addListener(log);
         AggregateModuleListener lis = new AggregateModuleListener(agg, module, goal.phases(), slice);
@@ -236,8 +245,6 @@ public final class GoalConsole {
 
     /** True when stdout is an interactive terminal (not a pipe, dumb, or CI). */
     public static boolean isInteractiveTerminal() {
-        return System.console() != null
-                && !"dumb".equals(System.getenv("TERM"))
-                && System.getenv("CI") == null;
+        return System.console() != null && !"dumb".equals(System.getenv("TERM")) && System.getenv("CI") == null;
     }
 }

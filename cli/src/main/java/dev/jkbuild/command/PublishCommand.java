@@ -3,30 +3,29 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.cli.GlobalOptions;
-import dev.jkbuild.jdk.HostPlatform;
-import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.cli.run.GoalConsole;
+import dev.jkbuild.cli.theme.Coords;
 import dev.jkbuild.config.JkBuildParser;
 import dev.jkbuild.credential.RepoCredential;
+import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.layout.BuildLayout;
 import dev.jkbuild.model.Dependency;
 import dev.jkbuild.model.JkBuild;
 import dev.jkbuild.model.RepositorySpec;
+import dev.jkbuild.model.command.CliCommand;
+import dev.jkbuild.model.command.Invocation;
+import dev.jkbuild.model.command.Opt;
+import dev.jkbuild.plugin.protocol.Ndjson;
 import dev.jkbuild.repo.RepoCredentialResolver;
 import dev.jkbuild.run.Goal;
 import dev.jkbuild.run.GoalKey;
 import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseKind;
-import dev.jkbuild.model.command.CliCommand;
-import dev.jkbuild.model.command.Invocation;
-import dev.jkbuild.model.command.Opt;
-import dev.jkbuild.plugin.protocol.Ndjson;
-import dev.jkbuild.worker.WorkerJar;
-import dev.jkbuild.worker.WorkerProcess;
 import dev.jkbuild.runtime.CompileToolchain;
 import dev.jkbuild.util.JkDirs;
-
+import dev.jkbuild.worker.WorkerJar;
+import dev.jkbuild.worker.WorkerProcess;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -48,11 +47,21 @@ import java.util.Optional;
  */
 public final class PublishCommand implements CliCommand {
 
-    @Override public String name() { return "publish"; }
-    @Override public String description() { return "Publish artifacts to a package repository"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "publish";
+    }
+
+    @Override
+    public String description() {
+        return "Publish artifacts to a package repository";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
-                Opt.value("<url>", "Target Maven repository base URL.", "--repo-url").require(),
+                Opt.value("<url>", "Target Maven repository base URL.", "--repo-url")
+                        .require(),
                 Opt.value("<user>", "HTTP Basic username (PUBLISH_USER env).", "--user"),
                 Opt.value("<pass>", "HTTP Basic password (PUBLISH_PASSWORD env).", "--password"),
                 Opt.value("<REGION>", "Object-store region for s3:// / gs://.", "--region"),
@@ -127,9 +136,11 @@ public final class PublishCommand implements CliCommand {
                     ctx.label("parse jk.toml + validate version");
                     JkBuild project = JkBuildParser.parse(jkBuildPath);
                     if (project.project().version().endsWith("-SNAPSHOT") && !allowSnapshot) {
-                        ctx.error("snapshot", "refusing to publish a SNAPSHOT version "
-                                + "(use --allow-snapshot, or rename to -dev.N / -rc.N "
-                                + "per PRD §21.4).");
+                        ctx.error(
+                                "snapshot",
+                                "refusing to publish a SNAPSHOT version "
+                                        + "(use --allow-snapshot, or rename to -dev.N / -rc.N "
+                                        + "per PRD §21.4).");
                         throw new RuntimeException("snapshot refused");
                     }
                     // A composite source dep (`path =`, or a branch git dep) is built locally and has
@@ -137,18 +148,21 @@ public final class PublishCommand implements CliCommand {
                     // no resolvable version. Refuse until it's pinned to a real coordinate.
                     Dependency composite = firstCompositeDep(project);
                     if (composite != null) {
-                        ctx.error("composite-dep", "refusing to publish: dependency `"
-                                + composite.module() + "` is a local source dependency ("
-                                + (composite.isPath() ? "path" : "branch git")
-                                + ") with no published coordinate. Pin it to a released version"
-                                + " (`version = \"…\"`) — or an immutable git tag/rev — before publishing.");
+                        ctx.error(
+                                "composite-dep",
+                                "refusing to publish: dependency `"
+                                        + composite.module() + "` is a local source dependency ("
+                                        + (composite.isPath() ? "path" : "branch git")
+                                        + ") with no published coordinate. Pin it to a released version"
+                                        + " (`version = \"…\"`) — or an immutable git tag/rev — before publishing.");
                         throw new RuntimeException("composite dependency refused");
                     }
                     BuildLayout layout = BuildLayout.of(projectDir, project);
                     Path jar = jarPath != null ? jarPath : layout.mainJar();
                     if (!Files.exists(jar)) {
-                        ctx.error("missing-jar", "main jar not found at " + jar
-                                + " — run `jk build` first or pass --jar.");
+                        ctx.error(
+                                "missing-jar",
+                                "main jar not found at " + jar + " — run `jk build` first or pass --jar.");
                         throw new RuntimeException("missing jar");
                     }
                     ctx.put(PROJECT, project);
@@ -164,8 +178,7 @@ public final class PublishCommand implements CliCommand {
                 .execute(ctx -> {
                     JkBuild project = ctx.require(PROJECT);
                     Path jar = ctx.require(JAR);
-                    ctx.label(dryRun ? "dry-run — assembling publish bundle"
-                            : "publish to " + repoUrl);
+                    ctx.label(dryRun ? "dry-run — assembling publish bundle" : "publish to " + repoUrl);
                     try {
                         String summary = runWorker(projectDir, jar, project, cache);
                         ctx.put(PUB_SUMMARY, summary);
@@ -177,10 +190,8 @@ public final class PublishCommand implements CliCommand {
                 })
                 .build();
 
-        Goal goal = Goal.builder("publish")
-                .addPhase(parseBuild)
-                .addPhase(publish)
-                .build();
+        Goal goal =
+                Goal.builder("publish").addPhase(parseBuild).addPhase(publish).build();
 
         GoalResult result = GoalConsole.run(goal, GoalConsole.modeFor(global), cache);
         if (!result.success()) {
@@ -195,7 +206,8 @@ public final class PublishCommand implements CliCommand {
             JkBuild project = goal.get(PROJECT).orElseThrow();
             String summary = goal.get(PUB_SUMMARY).orElse("");
             System.out.println("Published "
-                    + Coords.gav(project.project().group(),
+                    + Coords.gav(
+                            project.project().group(),
                             project.project().name(),
                             project.project().version())
                     + (summary.isBlank() ? "" : " " + summary));
@@ -214,24 +226,28 @@ public final class PublishCommand implements CliCommand {
             Path javaExe = CompileToolchain.runningJavaHome()
                     .resolve("bin")
                     .resolve(HostPlatform.isWindows() ? "java.exe" : "java");
-            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(javaExe.toString(), 1,
+            List<String> cmd = dev.jkbuild.worker.JvmOptions.javaCommand(
+                    javaExe.toString(),
+                    1,
                     List.of("-jar", workerJar.toString(), spec.toAbsolutePath().toString()));
 
             int[] files = {0};
             String[] error = {null};
             StringBuilder workerDiag = new StringBuilder();
-            int exit = WorkerProcess.run(cmd, "##JKPU:", json -> {
-                if ("result".equals(Ndjson.str(json, "t"))) {
-                    files[0] = Ndjson.intValue(json, "files", 0);
-                    error[0] = Ndjson.str(json, "error");
-                }
-            }, line -> workerDiag.append(line).append('\n'));
+            int exit = WorkerProcess.run(
+                    cmd,
+                    "##JKPU:",
+                    json -> {
+                        if ("result".equals(Ndjson.str(json, "t"))) {
+                            files[0] = Ndjson.intValue(json, "files", 0);
+                            error[0] = Ndjson.str(json, "error");
+                        }
+                    },
+                    line -> workerDiag.append(line).append('\n'));
             if (exit != 0) {
                 String diag = workerDiag.length() > 0 ? workerDiag.toString().trim() : null;
                 throw new RuntimeException("publish worker failed"
-                        + (error[0] != null ? ": " + error[0]
-                                : diag != null ? ": " + diag
-                                : " (exit " + exit + ")"));
+                        + (error[0] != null ? ": " + error[0] : diag != null ? ": " + diag : " (exit " + exit + ")"));
             }
             return dryRun ? "(dry-run)" : "(" + files[0] + " files)";
         } finally {
@@ -239,16 +255,15 @@ public final class PublishCommand implements CliCommand {
         }
     }
 
-    private Path writeSpec(Path projectDir, Path jar, RepoCredential cred)
-            throws IOException {
+    private Path writeSpec(Path projectDir, Path jar, RepoCredential cred) throws IOException {
         List<String> lines = new ArrayList<>();
         lines.add("PROJECT_DIR " + projectDir.toAbsolutePath());
-        lines.add("JAR "         + jar.toAbsolutePath());
-        lines.add("REPO_URL "    + repoUrl);
-        lines.add("DRY_RUN "     + dryRun);
-        lines.add("NO_SOURCES "  + noSources);
-        lines.add("SLSA "        + slsa);
-        lines.add("SBOM "        + sbom);
+        lines.add("JAR " + jar.toAbsolutePath());
+        lines.add("REPO_URL " + repoUrl);
+        lines.add("DRY_RUN " + dryRun);
+        lines.add("NO_SOURCES " + noSources);
+        lines.add("SLSA " + slsa);
+        lines.add("SBOM " + sbom);
         lines.add("SIGN_SIGSTORE " + sigstore);
 
         // Credential (resolved in parent so the worker doesn't need keychain access).
@@ -265,19 +280,19 @@ public final class PublishCommand implements CliCommand {
 
         if (sign && keyFile != null) {
             lines.add("SIGN_GPG " + keyFile.toAbsolutePath());
-            String pass = keyPassphrase != null ? keyPassphrase
-                    : System.getenv("JK_GPG_PASSPHRASE");
+            String pass = keyPassphrase != null ? keyPassphrase : System.getenv("JK_GPG_PASSPHRASE");
             if (pass != null) lines.add("SIGN_GPG_PASS " + pass);
         }
-        if (region != null && !region.isBlank())   lines.add("OBJECT_STORE_REGION " + region);
+        if (region != null && !region.isBlank()) lines.add("OBJECT_STORE_REGION " + region);
         if (endpoint != null && !endpoint.isBlank()) lines.add("OBJECT_STORE_ENDPOINT " + endpoint);
 
         // Use a 0600 temp file so credentials aren't world-readable.
         Path spec;
         try {
-            spec = Files.createTempFile("jk-publish-", ".spec",
-                    PosixFilePermissions.asFileAttribute(
-                            PosixFilePermissions.fromString("rw-------")));
+            spec = Files.createTempFile(
+                    "jk-publish-",
+                    ".spec",
+                    PosixFilePermissions.asFileAttribute(PosixFilePermissions.fromString("rw-------")));
         } catch (UnsupportedOperationException ignored) {
             // Non-POSIX filesystem (Windows): fall back to default permissions.
             spec = Files.createTempFile("jk-publish-", ".spec");
@@ -323,5 +338,4 @@ public final class PublishCommand implements CliCommand {
         }
         return null;
     }
-
 }

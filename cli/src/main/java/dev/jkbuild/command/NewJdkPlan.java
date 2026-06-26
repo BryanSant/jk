@@ -3,7 +3,6 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.jdk.JdkSelector;
 import dev.jkbuild.model.JkBuild;
-
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -75,8 +74,7 @@ final class NewJdkPlan {
      * hasDefault} uses the global default) <em>and</em> there's a real choice —
      * more than one eligible installed JDK for the chosen Java level.
      */
-    static boolean shouldPrompt(boolean module, boolean hasDefault,
-                                List<NewJdkCandidate> candidates, int floor) {
+    static boolean shouldPrompt(boolean module, boolean hasDefault, List<NewJdkCandidate> candidates, int floor) {
         if (module || hasDefault) return false;
         return eligibleInstalled(candidates, floor).size() > 1;
     }
@@ -92,26 +90,24 @@ final class NewJdkPlan {
      *       be installed like {@code jk jdk install lts}.</li>
      * </ol>
      */
-    static Optional<NewJdkCandidate> autoCandidate(List<NewJdkCandidate> candidates,
-                                                   int floor, int preferredMajor, int lts) {
+    static Optional<NewJdkCandidate> autoCandidate(
+            List<NewJdkCandidate> candidates, int floor, int preferredMajor, int lts) {
         if (preferredMajor > 0) {
             Optional<NewJdkCandidate> installedPref = candidates.stream()
                     .filter(NewJdkCandidate::installed)
                     .filter(c -> c.major() == preferredMajor)
                     .findFirst();
             if (installedPref.isPresent()) return installedPref;
-            Optional<NewJdkCandidate> anyPref = candidates.stream()
-                    .filter(c -> c.major() == preferredMajor)
-                    .findFirst();
+            Optional<NewJdkCandidate> anyPref =
+                    candidates.stream().filter(c -> c.major() == preferredMajor).findFirst();
             if (anyPref.isPresent()) return anyPref;
         }
         List<NewJdkCandidate> eligible = eligibleInstalled(candidates, floor);
         if (!eligible.isEmpty()) return Optional.of(eligible.get(0));
 
         int target = floor > lts ? latestMajor(candidates) : lts;
-        Optional<NewJdkCandidate> atTarget = candidates.stream()
-                .filter(c -> c.major() == target)
-                .findFirst();
+        Optional<NewJdkCandidate> atTarget =
+                candidates.stream().filter(c -> c.major() == target).findFirst();
         if (atTarget.isPresent()) return atTarget;
         return candidates.stream()
                 .filter(c -> c.major() >= floor)

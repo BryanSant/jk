@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.worker;
 
-import org.junit.jupiter.api.Test;
-
 import static org.assertj.core.api.Assertions.assertThat;
+
+import org.junit.jupiter.api.Test;
 
 /** The memory-budget routine, exercised against the four worked examples in the spec. */
 class HeapPlanTest {
@@ -18,7 +18,7 @@ class HeapPlanTest {
         HeapPlan.Plan p = HeapPlan.compute(mb(1228), 4);
         assertThat(p.parallelism()).isEqualTo(2);
         assertThat(HeapPlan.mib(p.xmxBytes())).isBetween(540L, 560L);
-        assertThat(HeapPlan.mib(p.softMaxBytes())).isEqualTo(512);   // clamp floor
+        assertThat(HeapPlan.mib(p.softMaxBytes())).isEqualTo(512); // clamp floor
         assertThat(p.warning()).isNull();
     }
 
@@ -28,7 +28,7 @@ class HeapPlanTest {
         HeapPlan.Plan p = HeapPlan.compute(mb(22528), 4);
         assertThat(p.parallelism()).isEqualTo(4);
         assertThat(HeapPlan.mib(p.xmxBytes())).isBetween(5000L, 5100L);
-        assertThat(HeapPlan.mib(p.softMaxBytes())).isBetween(2500L, 2540L);   // 50% of perJvm
+        assertThat(HeapPlan.mib(p.softMaxBytes())).isBetween(2500L, 2540L); // 50% of perJvm
         assertThat(p.warning()).isNull();
     }
 
@@ -63,15 +63,15 @@ class HeapPlanTest {
     @Test
     void xms_stays_small_so_nothing_is_pre_committed() {
         HeapPlan.Plan p = HeapPlan.compute(mb(22528), 4);
-        assertThat(HeapPlan.mib(p.xmsBytes())).isEqualTo(64);   // XMS_FLOOR, not the 5 GiB burst
+        assertThat(HeapPlan.mib(p.xmsBytes())).isEqualTo(64); // XMS_FLOOR, not the 5 GiB burst
     }
 
     @Test
     void requested_jvms_folds_workers_and_parallel_tests() {
-        assertThat(HeapPlan.requestedJvms(4, 1, false, 16)).isEqualTo(4);   // modules only
-        assertThat(HeapPlan.requestedJvms(1, 8, false, 16)).isEqualTo(8);   // workers in one module
-        assertThat(HeapPlan.requestedJvms(4, 2, true, 16)).isEqualTo(8);    // overlap multiplies
-        assertThat(HeapPlan.requestedJvms(4, 2, true, 4)).isEqualTo(4);     // clamped to cap
-        assertThat(HeapPlan.requestedJvms(0, 0, false, 16)).isEqualTo(1);   // never below 1
+        assertThat(HeapPlan.requestedJvms(4, 1, false, 16)).isEqualTo(4); // modules only
+        assertThat(HeapPlan.requestedJvms(1, 8, false, 16)).isEqualTo(8); // workers in one module
+        assertThat(HeapPlan.requestedJvms(4, 2, true, 16)).isEqualTo(8); // overlap multiplies
+        assertThat(HeapPlan.requestedJvms(4, 2, true, 4)).isEqualTo(4); // clamped to cap
+        assertThat(HeapPlan.requestedJvms(0, 0, false, 16)).isEqualTo(1); // never below 1
     }
 }

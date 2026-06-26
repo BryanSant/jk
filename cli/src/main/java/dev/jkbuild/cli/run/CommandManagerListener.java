@@ -7,7 +7,6 @@ import dev.jkbuild.run.GoalResult;
 import dev.jkbuild.run.GoalView;
 import dev.jkbuild.run.Phase;
 import dev.jkbuild.run.PhaseStatus;
-
 import java.io.PrintStream;
 import java.time.Duration;
 import java.util.List;
@@ -35,8 +34,8 @@ public final class CommandManagerListener implements GoalListener {
     private CommandManager cm;
     private CommandManager.OutputScope capture;
 
-    public CommandManagerListener(PrintStream out, ConsoleSpec spec,
-                                  String module, List<Phase> phases, boolean animate) {
+    public CommandManagerListener(
+            PrintStream out, ConsoleSpec spec, String module, List<Phase> phases, boolean animate) {
         this.out = out;
         this.spec = spec;
         this.module = module;
@@ -107,8 +106,8 @@ public final class CommandManagerListener implements GoalListener {
         if (result.success()) {
             String tail = spec.onSuccess().apply(result) + suffix;
             if (spec.chip() && spec.exec()) cm.finishGoalExec(tail, above);
-            else if (spec.chip())            cm.finishGoalSuccess(tail, above);
-            else                             cm.finishSuccess(tail, above);
+            else if (spec.chip()) cm.finishGoalSuccess(tail, above);
+            else cm.finishSuccess(tail, above);
         } else {
             if (spec.chip()) cm.finishGoalFailure(spec.onFailure().apply(result) + suffix, above);
             else cm.finishFailure(spec.onFailure().apply(result) + suffix, above);

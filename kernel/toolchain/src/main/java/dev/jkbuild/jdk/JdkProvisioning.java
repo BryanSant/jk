@@ -28,7 +28,11 @@ import java.util.function.Function;
 public final class JdkProvisioning {
 
     public record Result(InstalledJdk jdk, Source source, String detail) {
-        public enum Source { CACHED, JAVA_HOME }
+        public enum Source {
+            CACHED,
+            JAVA_HOME
+        }
+
         public Result {
             if (jdk == null) throw new IllegalArgumentException("jdk");
             if (source == null) throw new IllegalArgumentException("source");
@@ -43,8 +47,7 @@ public final class JdkProvisioning {
     private final String arch;
 
     public JdkProvisioning(JdkRegistry registry) {
-        this(registry, new JdkCatalogClient(), System::getenv,
-                HostPlatform.currentOs(), HostPlatform.currentArch());
+        this(registry, new JdkCatalogClient(), System::getenv, HostPlatform.currentOs(), HostPlatform.currentArch());
     }
 
     public JdkProvisioning(
@@ -72,7 +75,9 @@ public final class JdkProvisioning {
 
         Optional<InstalledJdk> javaHome = matchJavaHome(spec, entry);
         if (javaHome.isPresent()) {
-            return Optional.of(new Result(javaHome.get(), Result.Source.JAVA_HOME,
+            return Optional.of(new Result(
+                    javaHome.get(),
+                    Result.Source.JAVA_HOME,
                     "JAVA_HOME=" + javaHome.get().home()));
         }
         return Optional.empty();
@@ -101,23 +106,19 @@ public final class JdkProvisioning {
         String implementor = stripQuotes(release.getProperty("IMPLEMENTOR", ""));
         if (!matchesSpec(spec, entry, version, implementor)) return Optional.empty();
 
-        String identifier = home.getFileName() != null
-                ? home.getFileName().toString()
-                : "java-home";
+        String identifier = home.getFileName() != null ? home.getFileName().toString() : "java-home";
         return Optional.of(new InstalledJdk(identifier, home));
     }
 
     private static boolean matchesSpec(
-            JdkSpec spec,
-            Optional<JdkCatalog.Entry> entry,
-            String version,
-            String implementor) {
+            JdkSpec spec, Optional<JdkCatalog.Entry> entry, String version, String implementor) {
         if (version.isEmpty()) return false;
         if (entry.isPresent()) {
             JdkCatalog.Entry e = entry.get();
             return version.startsWith(String.valueOf(e.majorVersion()))
                     && (implementor.isEmpty()
-                            || implementor.toLowerCase(Locale.ROOT)
+                            || implementor
+                                    .toLowerCase(Locale.ROOT)
                                     .contains(e.product().toLowerCase(Locale.ROOT)));
         }
         // No catalog match — accept JAVA_HOME if its version satisfies a

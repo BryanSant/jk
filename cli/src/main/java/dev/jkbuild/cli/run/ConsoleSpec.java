@@ -4,7 +4,6 @@ package dev.jkbuild.cli.run;
 import dev.jkbuild.cli.theme.Theme;
 import dev.jkbuild.cli.tui.Glyphs;
 import dev.jkbuild.run.GoalResult;
-
 import java.time.Duration;
 import java.util.function.Function;
 
@@ -35,22 +34,19 @@ public record ConsoleSpec(
      * settle with {@code Glyphs.PLAY} instead of {@code Glyphs.CHECK} — for
      * commands that hand off to a subprocess after the goal (e.g. {@code jk run}).
      */
-    public ConsoleSpec(String verb,
-                       Function<GoalResult, String> onSuccess,
-                       Function<GoalResult, String> onFailure) {
+    public ConsoleSpec(String verb, Function<GoalResult, String> onSuccess, Function<GoalResult, String> onFailure) {
         this(verb, onSuccess, onFailure, false, false);
     }
 
-    public ConsoleSpec(String verb,
-                       Function<GoalResult, String> onSuccess,
-                       Function<GoalResult, String> onFailure,
-                       boolean chip) {
+    public ConsoleSpec(
+            String verb, Function<GoalResult, String> onSuccess, Function<GoalResult, String> onFailure, boolean chip) {
         this(verb, onSuccess, onFailure, chip, false);
     }
 
     /** Dim italic {@code "took Xms"} duration suffix — appended by the framework to every result line. */
     public static String took(Duration d) {
-        return Theme.colorize("took " + fmtDuration(d), Theme.active().darkGray().italic());
+        return Theme.colorize(
+                "took " + fmtDuration(d), Theme.active().darkGray().italic());
     }
 
     /**
@@ -60,8 +56,8 @@ public record ConsoleSpec(
      * Foo.java:3: package … does not exist</pre>
      */
     public static String errorLine(String phase, String message) {
-        return Theme.colorize(Glyphs.CROSS + " Error", Theme.active().error())
-                + " [" + phase + "]:" + System.lineSeparator() + message;
+        return Theme.colorize(Glyphs.CROSS + " Error", Theme.active().error()) + " [" + phase + "]:"
+                + System.lineSeparator() + message;
     }
 
     /** Render an error diagnostic for the console, per its {@code code}. */
@@ -87,8 +83,8 @@ public record ConsoleSpec(
      * compiler's verbatim block colorized like an error (relative paths, etc.).
      */
     public static String compilerWarning(String phase, String message) {
-        return Theme.colorize(Glyphs.CROSS + " Warning", Theme.active().warning())
-                + " [" + phase + "]:" + System.lineSeparator() + CompilerDiagnostic.render(message);
+        return Theme.colorize(Glyphs.CROSS + " Warning", Theme.active().warning()) + " [" + phase + "]:"
+                + System.lineSeparator() + CompilerDiagnostic.render(message);
     }
 
     /** Compiler diagnostics (javac/kotlinc) carry a verbatim multi-line block. */
@@ -102,11 +98,11 @@ public record ConsoleSpec(
         if (ms < 1000) return ms + "ms";
         long totalSec = d.toSeconds();
         if (totalSec < 60) return String.format("%.1fs", ms / 1000.0);
-        long days    = totalSec / 86400;
-        long hours   = (totalSec % 86400) / 3600;
+        long days = totalSec / 86400;
+        long hours = (totalSec % 86400) / 3600;
         long minutes = (totalSec % 3600) / 60;
         long seconds = totalSec % 60;
-        if (days > 0)  return days + "d " + hours + "h " + minutes + "m " + seconds + "s";
+        if (days > 0) return days + "d " + hours + "h " + minutes + "m " + seconds + "s";
         if (hours > 0) return hours + "h " + minutes + "m " + seconds + "s";
         return minutes + "m " + seconds + "s";
     }

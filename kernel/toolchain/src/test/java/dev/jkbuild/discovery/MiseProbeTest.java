@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.discovery;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.jdk.JdkHit;
 import dev.jkbuild.jdk.JdkVendor;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MiseProbeTest {
 
@@ -49,8 +48,7 @@ class MiseProbeTest {
 
         List<JdkHit> hits = new MiseProbe(mise).discoverAllJdks();
         assertThat(hits).hasSize(2);
-        assertThat(hits).extracting(JdkHit::vendor)
-                .containsExactlyInAnyOrder(JdkVendor.TEMURIN, JdkVendor.CORRETTO);
+        assertThat(hits).extracting(JdkHit::vendor).containsExactlyInAnyOrder(JdkVendor.TEMURIN, JdkVendor.CORRETTO);
         assertThat(hits).extracting(JdkHit::source).containsOnly("mise");
     }
 
@@ -76,7 +74,8 @@ class MiseProbeTest {
     @Test
     void discover_returns_empty_when_root_absent(@TempDir Path tempDir) throws Exception {
         // Fail-fast: no installs dir → empty list, no syscall storm.
-        assertThat(new MiseProbe(tempDir.resolve("does-not-exist")).discoverAllJdks()).isEmpty();
+        assertThat(new MiseProbe(tempDir.resolve("does-not-exist")).discoverAllJdks())
+                .isEmpty();
     }
 
     @Test
@@ -98,8 +97,7 @@ class MiseProbeTest {
 
     @Test
     void data_dir_falls_back_to_user_home() {
-        assertThat(MiseProbe.resolveDataDir(name -> null, "/home/u"))
-                .isEqualTo(Path.of("/home/u/.local/share/mise"));
+        assertThat(MiseProbe.resolveDataDir(name -> null, "/home/u")).isEqualTo(Path.of("/home/u/.local/share/mise"));
     }
 
     /** Move every entry under {@code src} into {@code dst}. Mirrors SdkmanProbeTest's helper. */
@@ -117,8 +115,12 @@ class MiseProbeTest {
             }
         }
         try (var stream = Files.walk(src)) {
-            stream.sorted(Comparator.reverseOrder())
-                    .forEach(p -> { try { Files.deleteIfExists(p); } catch (Exception ignored) {} });
+            stream.sorted(Comparator.reverseOrder()).forEach(p -> {
+                try {
+                    Files.deleteIfExists(p);
+                } catch (Exception ignored) {
+                }
+            });
         }
     }
 }

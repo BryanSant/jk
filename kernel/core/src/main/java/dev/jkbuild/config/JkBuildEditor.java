@@ -2,13 +2,12 @@
 package dev.jkbuild.config;
 
 import dev.jkbuild.model.Scope;
-import org.tomlj.Toml;
-import org.tomlj.TomlParseResult;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.tomlj.Toml;
+import org.tomlj.TomlParseResult;
 
 /**
  * Surgical text editor for {@code jk.toml}. Adds and removes single-line
@@ -39,8 +38,8 @@ public final class JkBuildEditor {
     private static final Pattern DEPS_FLAT_HEADER = Pattern.compile("^\\s*\\[dependencies]\\s*$");
 
     /** Header line for {@code [dependencies.<scope>]}. Captures scope name in group 1. */
-    private static final Pattern DEPS_SCOPE_HEADER = Pattern.compile(
-            "^\\s*\\[dependencies\\.([a-zA-Z][a-zA-Z0-9_-]*)]\\s*$");
+    private static final Pattern DEPS_SCOPE_HEADER =
+            Pattern.compile("^\\s*\\[dependencies\\.([a-zA-Z][a-zA-Z0-9_-]*)]\\s*$");
 
     /** Any TOML table header. */
     private static final Pattern ANY_HEADER = Pattern.compile("^\\s*\\[[^]]+]\\s*$");
@@ -58,8 +57,8 @@ public final class JkBuildEditor {
     private static final Pattern QUOTED = Pattern.compile("\"([^\"]*)\"");
 
     /** A dep entry line: {@code key = { ... }} or {@code key.workspace = true}. Captures key in group 2. */
-    private static final Pattern DEP_ENTRY = Pattern.compile(
-            "^(\\s*)([A-Za-z][A-Za-z0-9_-]*)(?:\\.[a-zA-Z][a-zA-Z0-9_-]*)?\\s*=.*$");
+    private static final Pattern DEP_ENTRY =
+            Pattern.compile("^(\\s*)([A-Za-z][A-Za-z0-9_-]*)(?:\\.[a-zA-Z][a-zA-Z0-9_-]*)?\\s*=.*$");
 
     private JkBuildEditor() {}
 
@@ -84,8 +83,8 @@ public final class JkBuildEditor {
      *                       Pass {@code "=1.2.3"} for an exact pin or {@code "1.2.3"}
      *                       for caret-floating (the parser uses {@code parseFloating}).
      */
-    public static String addDependency(String content, Scope scope, String name,
-                                       String group, String artifact, String versionLiteral) {
+    public static String addDependency(
+            String content, Scope scope, String name, String group, String artifact, String versionLiteral) {
         validateName(name);
         if (group == null || group.isBlank()) {
             throw new IllegalArgumentException("group must not be blank");
@@ -97,8 +96,7 @@ public final class JkBuildEditor {
 
         List<String> lines = splitPreservingTerminator(content);
         if (findDepKey(lines, scope, name) >= 0) {
-            throw new IllegalStateException(
-                    "dependencies." + scope.canonical() + " already contains \"" + name + "\"");
+            throw new IllegalStateException("dependencies." + scope.canonical() + " already contains \"" + name + "\"");
         }
 
         String entryLine = renderEntry(name, group, artifact, versionLiteral);
@@ -139,9 +137,8 @@ public final class JkBuildEditor {
      * {@code library}, following the same convention as
      * {@link #addDependency}.
      */
-    public static String addFileDependency(String content, Scope scope, String library,
-                                           String group, String artifact, String version,
-                                           String sha256) {
+    public static String addFileDependency(
+            String content, Scope scope, String library, String group, String artifact, String version, String sha256) {
         validateName(library);
         if (group == null || group.isBlank()) {
             throw new IllegalArgumentException("group must not be blank");
@@ -160,9 +157,12 @@ public final class JkBuildEditor {
                     "dependencies." + scope.canonical() + " already contains \"" + library + "\"");
         }
 
-        StringBuilder sb = new StringBuilder(library).append(" = { sha256 = \"")
-                .append(escape(sha256)).append("\", group = \"")
-                .append(escape(group)).append("\"");
+        StringBuilder sb = new StringBuilder(library)
+                .append(" = { sha256 = \"")
+                .append(escape(sha256))
+                .append("\", group = \"")
+                .append(escape(group))
+                .append("\"");
         if (!artifact.equals(library)) {
             sb.append(", name = \"").append(escape(artifact)).append("\"");
         }
@@ -202,11 +202,9 @@ public final class JkBuildEditor {
         if (hit < 0) {
             // Determine whether the scope sub-table existed for a better error.
             if (findScopeHeader(lines, scope) < 0) {
-                throw new IllegalStateException(
-                        "dependencies." + scope.canonical() + " not found in jk.toml");
+                throw new IllegalStateException("dependencies." + scope.canonical() + " not found in jk.toml");
             }
-            throw new IllegalStateException(
-                    "\"" + name + "\" not found in dependencies." + scope.canonical());
+            throw new IllegalStateException("\"" + name + "\" not found in dependencies." + scope.canonical());
         }
         lines.remove(hit);
         return validated(join(lines));
@@ -289,7 +287,10 @@ public final class JkBuildEditor {
         // never contain ']', so the first ']' at/after modulesLine closes it.
         int closeLine = -1;
         for (int i = modulesLine; i < end; i++) {
-            if (lines.get(i).indexOf(']') >= 0) { closeLine = i; break; }
+            if (lines.get(i).indexOf(']') >= 0) {
+                closeLine = i;
+                break;
+            }
         }
         if (closeLine < 0) {
             throw new IllegalStateException("malformed modules array in [workspace]");
@@ -297,7 +298,8 @@ public final class JkBuildEditor {
 
         // Idempotency: collect existing elements across the array's lines.
         StringBuilder arrayText = new StringBuilder();
-        for (int i = modulesLine; i <= closeLine; i++) arrayText.append(lines.get(i)).append('\n');
+        for (int i = modulesLine; i <= closeLine; i++)
+            arrayText.append(lines.get(i)).append('\n');
         Matcher q = QUOTED.matcher(arrayText);
         while (q.find()) {
             if (q.group(1).equals(path)) return content; // already a module
@@ -318,11 +320,12 @@ public final class JkBuildEditor {
         int j = close - 1;
         while (j >= 0 && Character.isWhitespace(line.charAt(j))) j--;
         char prev = j >= 0 ? line.charAt(j) : '\0';
-        String insertion = switch (prev) {
-            case '[' -> "\"" + escape(path) + "\"";       // empty array
-            case ',' -> " \"" + escape(path) + "\"";       // trailing comma already present
-            default  -> ", \"" + escape(path) + "\"";
-        };
+        String insertion =
+                switch (prev) {
+                    case '[' -> "\"" + escape(path) + "\""; // empty array
+                    case ',' -> " \"" + escape(path) + "\""; // trailing comma already present
+                    default -> ", \"" + escape(path) + "\"";
+                };
         lines.set(lineIdx, line.substring(0, close) + insertion + line.substring(close));
     }
 
@@ -459,8 +462,10 @@ public final class JkBuildEditor {
                 && hit.get().artifact().equals(artifact)) {
             return name + " = \"" + escape(versionLiteral) + "\"";
         }
-        StringBuilder sb = new StringBuilder(name).append(" = { group = \"")
-                .append(escape(group)).append("\"");
+        StringBuilder sb = new StringBuilder(name)
+                .append(" = { group = \"")
+                .append(escape(group))
+                .append("\"");
         if (!artifact.equals(name)) {
             sb.append(", name = \"").append(escape(artifact)).append("\"");
         }
@@ -492,8 +497,7 @@ public final class JkBuildEditor {
         // Bare-key character class per TOML: [A-Za-z0-9_-]+. We additionally
         // require a leading letter to keep the rendered TOML free of quoting.
         if (!name.matches("[A-Za-z][A-Za-z0-9_-]*")) {
-            throw new IllegalArgumentException(
-                    "dependency name must match [A-Za-z][A-Za-z0-9_-]* (got: " + name + ")");
+            throw new IllegalArgumentException("dependency name must match [A-Za-z][A-Za-z0-9_-]* (got: " + name + ")");
         }
     }
 

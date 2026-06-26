@@ -3,7 +3,6 @@ package dev.jkbuild.command;
 
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
-
 import java.util.List;
 
 /**

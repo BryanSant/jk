@@ -35,8 +35,8 @@ import java.util.List;
 final class CompileSpec {
 
     File outputDir;
-    File workingDir;          // null ⇒ non-incremental full compile
-    File snapshotDir;         // null ⇒ no classpath ABI snapshots
+    File workingDir; // null ⇒ non-incremental full compile
+    File snapshotDir; // null ⇒ no classpath ABI snapshots
     String jvmTarget;
     String moduleName;
     String languageVersion;

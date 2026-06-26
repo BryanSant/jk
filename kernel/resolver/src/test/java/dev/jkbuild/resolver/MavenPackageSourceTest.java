@@ -1,17 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.resolver;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import com.sun.net.httpserver.HttpServer;
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.http.Http;
 import dev.jkbuild.repo.EffectivePomBuilder;
 import dev.jkbuild.repo.MavenRepo;
 import dev.jkbuild.resolver.pubgrub.Term;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -19,8 +16,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class MavenPackageSourceTest {
 
@@ -46,7 +45,9 @@ class MavenPackageSourceTest {
     }
 
     @AfterEach
-    void stop() { server.stop(0); }
+    void stop() {
+        server.stop(0);
+    }
 
     @Test
     void versions_returns_highest_first(@TempDir Path tempDir) throws Exception {
@@ -64,8 +65,7 @@ class MavenPackageSourceTest {
                 </metadata>
                 """);
         MavenPackageSource src = newSource(tempDir);
-        assertThat(src.versions("com.foo:widget"))
-                .containsExactly("2.0", "1.5", "1.0");
+        assertThat(src.versions("com.foo:widget")).containsExactly("2.0", "1.5", "1.0");
     }
 
     @Test
@@ -111,8 +111,8 @@ class MavenPackageSourceTest {
     }
 
     private void servePom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".pom";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".pom";
         servePath(path, body);
     }
 }

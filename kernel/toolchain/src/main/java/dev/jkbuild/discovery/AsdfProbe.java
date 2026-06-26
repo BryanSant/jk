@@ -2,7 +2,6 @@
 package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.JdkHit;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -31,7 +30,9 @@ public final class AsdfProbe implements LocalToolProbe {
     }
 
     @Override
-    public String name() { return "asdf"; }
+    public String name() {
+        return "asdf";
+    }
 
     @Override
     public Optional<DiscoveredTool> find(ToolSpec spec) throws IOException {
@@ -40,7 +41,11 @@ public final class AsdfProbe implements LocalToolProbe {
         try (Stream<Path> entries = Files.list(kindDir)) {
             return entries.filter(Files::isDirectory)
                     .map(path -> {
-                        try { return path.toRealPath(); } catch (IOException e) { return path; }
+                        try {
+                            return path.toRealPath();
+                        } catch (IOException e) {
+                            return path;
+                        }
                     })
                     .filter(path -> ToolHealth.isHealthy(spec, path))
                     .findFirst()

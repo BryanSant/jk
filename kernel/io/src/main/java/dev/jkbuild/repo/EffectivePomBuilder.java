@@ -2,7 +2,6 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.model.Coordinate;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.ArrayList;
@@ -68,13 +67,12 @@ public final class EffectivePomBuilder {
         String key = coord.toGav();
         if (cache.containsKey(key)) return cache.get(key);
         if (!visiting.add(key)) {
-            throw new PomParseException("cycle in POM chain at " + key
-                    + " (already visiting: " + visiting + ")");
+            throw new PomParseException("cycle in POM chain at " + key + " (already visiting: " + visiting + ")");
         }
         try {
             RepoGroup.RepoFetched hit = repos.tryFetchPom(coord)
-                    .orElseThrow(() -> new MavenRepo.ArtifactNotFoundException(
-                            "POM not found in any declared repo: " + coord));
+                    .orElseThrow(() ->
+                            new MavenRepo.ArtifactNotFoundException("POM not found in any declared repo: " + coord));
             Pom raw = PomParser.parse(Files.readAllBytes(hit.fetched().cachePath()));
             EffectivePom effective = merge(raw, visiting, depth);
             cache.put(key, effective);
@@ -84,25 +82,19 @@ public final class EffectivePomBuilder {
         }
     }
 
-    private EffectivePom merge(Pom child, Set<String> visiting, int depth)
-            throws IOException, InterruptedException {
+    private EffectivePom merge(Pom child, Set<String> visiting, int depth) throws IOException, InterruptedException {
 
         EffectivePom parent = null;
         if (child.parent() != null) {
             Pom.Parent p = child.parent();
-            parent = buildInternal(
-                    Coordinate.of(p.groupId(), p.artifactId(), p.version()),
-                    visiting, depth + 1);
+            parent = buildInternal(Coordinate.of(p.groupId(), p.artifactId(), p.version()), visiting, depth + 1);
         }
 
         // 1. Coords — child wins, parent fills holes.
-        String groupId = child.groupId() != null ? child.groupId()
-                : (parent != null ? parent.groupId() : null);
-        String version = child.version() != null ? child.version()
-                : (parent != null ? parent.version() : null);
+        String groupId = child.groupId() != null ? child.groupId() : (parent != null ? parent.groupId() : null);
+        String version = child.version() != null ? child.version() : (parent != null ? parent.version() : null);
         if (groupId == null || version == null) {
-            throw new PomParseException(
-                    "cannot determine effective groupId/version for " + child.artifactId());
+            throw new PomParseException("cannot determine effective groupId/version for " + child.artifactId());
         }
 
         // 2. Properties — parent first, child overrides. Implicit project.* always come from child.
@@ -121,7 +113,8 @@ public final class EffectivePomBuilder {
             if (isBomImport(dep)) {
                 EffectivePom bom = buildInternal(
                         Coordinate.of(dep.groupId(), dep.artifactId(), substitute(dep.version(), props)),
-                        visiting, depth + 1);
+                        visiting,
+                        depth + 1);
                 mergedManaged.addAll(bom.managedDependencies());
             } else {
                 mergedManaged.add(dep);
@@ -154,8 +147,7 @@ public final class EffectivePomBuilder {
         finalDeps = substituteAll(finalDeps, props);
 
         return new EffectivePom(
-                groupId, child.artifactId(), version, child.packaging(),
-                props, finalDeps, mergedManaged);
+                groupId, child.artifactId(), version, child.packaging(), props, finalDeps, mergedManaged);
     }
 
     // --- merge helpers -----------------------------------------------------
@@ -199,11 +191,9 @@ public final class EffectivePomBuilder {
         String type = blank(dep.type()) ? managed.type() : dep.type();
         String classifier = blank(dep.classifier()) ? managed.classifier() : dep.classifier();
         List<Pom.Dep.Exclusion> exclusions =
-                (dep.exclusions() == null || dep.exclusions().isEmpty())
-                        ? managed.exclusions() : dep.exclusions();
+                (dep.exclusions() == null || dep.exclusions().isEmpty()) ? managed.exclusions() : dep.exclusions();
         return new Pom.Dep(
-                dep.groupId(), dep.artifactId(), version,
-                scope, dep.optional(), classifier, type, exclusions);
+                dep.groupId(), dep.artifactId(), version, scope, dep.optional(), classifier, type, exclusions);
     }
 
     private static boolean blank(String s) {

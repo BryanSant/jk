@@ -1,16 +1,15 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.cli.tui;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.theme.Rgb;
 import dev.jkbuild.cli.theme.Theme;
-import org.jline.utils.AttributedStyle;
-import org.junit.jupiter.api.Test;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.jline.utils.AttributedStyle;
+import org.junit.jupiter.api.Test;
 
 /** Simple-task mode of the CommandManager component. */
 class CommandManagerTest {
@@ -37,7 +36,8 @@ class CommandManagerTest {
         assertThat(visible).contains("· Syncing…");
         // "✓ <goal> Successful: <message>", head in green.
         assertThat(visible).contains("✓ Syncing Successful: Finished syncing 13 artifacts");
-        assertThat(raw).contains(Theme.colorize("✓ Syncing Successful", Theme.active().success()));
+        assertThat(raw)
+                .contains(Theme.colorize("✓ Syncing Successful", Theme.active().success()));
         assertThat(raw).contains("\033[?25h"); // cursor restored
     }
 
@@ -46,8 +46,8 @@ class CommandManagerTest {
         var buf = new ByteArrayOutputStream();
         var cm = new CommandManager(stream(buf), false); // pipe / --quiet
         cm.label("Build");
-        cm.finishSuccess("built 17 modules", java.util.List.of(
-                "‼ Warning [compile-test]:", "  deprecation in Foo.java"));
+        cm.finishSuccess(
+                "built 17 modules", java.util.List.of("‼ Warning [compile-test]:", "  deprecation in Foo.java"));
 
         String visible = stripAnsi(buf.toString(StandardCharsets.UTF_8));
         int warn = visible.indexOf("‼ Warning [compile-test]:");
@@ -64,7 +64,7 @@ class CommandManagerTest {
         var cm = new CommandManager(stream(buf), true, true, 80); // animate + goal mode
         cm.progress(2, 4);
         cm.phaseRunning("m", "compile");
-        cm.tick();          // paint the live region
+        cm.tick(); // paint the live region
         buf.reset();
 
         cm.finishSuccess("built 17 modules", java.util.List.of("‼ Warning [compile-test]:"));
@@ -110,13 +110,13 @@ class CommandManagerTest {
         var buf = new ByteArrayOutputStream();
         var cm = new CommandManager(stream(buf), false); // pipe / --quiet
         cm.label("Locking");
-        cm.tick();                       // animator never runs; harmless if poked
+        cm.tick(); // animator never runs; harmless if poked
         cm.finishSuccess("done");
 
         String raw = buf.toString(StandardCharsets.UTF_8);
         assertThat(stripAnsi(raw)).contains("✓ Locking Successful: done");
         assertThat(stripAnsi(raw)).doesNotContain("Locking…"); // no spinner line
-        assertThat(raw).doesNotContain("\033[?25h");           // never hid the cursor
+        assertThat(raw).doesNotContain("\033[?25h"); // never hid the cursor
     }
 
     @Test
@@ -171,7 +171,7 @@ class CommandManagerTest {
     void eta_countdown_flips_to_count_up_when_the_build_overruns_the_estimate() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Build", false);
         cm.nerdfont = false;
-        cm.setEtaEstimate(10_000);   // 10s estimate
+        cm.setEtaEstimate(10_000); // 10s estimate
         // 15s elapsed → 5s overrun → clock flips to "+5s".
         assertThat(stripAnsi(cm.renderGoalLines(120, 15_000).get(0))).contains("+5s");
     }
@@ -179,7 +179,7 @@ class CommandManagerTest {
     @Test
     void goal_header_bar_and_rows() {
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
-        cm.nerdfont = false;   // plain (non-pill) header
+        cm.nerdfont = false; // plain (non-pill) header
         cm.progress(45, 100);
         cm.addPhase("acme:api", "parse-build");
         cm.phaseDone("acme:api", "parse-build", true);
@@ -190,15 +190,20 @@ class CommandManagerTest {
         String all = String.join("\n", stripAll(raw));
         // Header: {name} {bar} · {clock} — bright-white name, bar inlined, module NOT in
         // the header. No estimate set, so the clock counts elapsed up (112s → "1m 52s").
-        assertThat(stripAnsi(raw.get(0))).contains("Building").contains("1m 52s")
-                .doesNotContain("[").doesNotContain("acme:api");
-        assertThat(raw.get(0)).contains(Theme.colorize("Building", Theme.active().focused()));
+        assertThat(stripAnsi(raw.get(0)))
+                .contains("Building")
+                .contains("1m 52s")
+                .doesNotContain("[")
+                .doesNotContain("acme:api");
+        assertThat(raw.get(0))
+                .contains(Theme.colorize("Building", Theme.active().focused()));
         // Bar with percent, inlined into the header line — the N-of-M count is gone.
         assertThat(all).contains("45%");
         assertThat(all).doesNotContain("[45 of 100]");
         // Active row only: colored module, phase, message, no trailing ellipsis.
         assertThat(all).contains("acme:api › Compile java › javac 12 sources");
-        assertThat(raw.get(1)).contains(Theme.colorize("acme", Theme.active().cyan()))
+        assertThat(raw.get(1))
+                .contains(Theme.colorize("acme", Theme.active().cyan()))
                 .contains(Theme.colorize("api", Theme.active().brightCyan()));
         // Completed phases are not listed, and no status glyphs are drawn.
         assertThat(all).doesNotContain("Parse build");
@@ -225,8 +230,12 @@ class CommandManagerTest {
         // Cap: foreground = the chip green; background = the bar's first cell color,
         // so the chip tapers into the block immediately to its right.
         Rgb lead = new ProgressBar().leadColor(45, 100);
-        assertThat(header).contains(Theme.colorize(Glyphs.SEGMENT_END_NERD,
-                Theme.active().withBackground(Theme.active().bright(Theme.active().planBadgeColor()), lead)));
+        assertThat(header)
+                .contains(Theme.colorize(
+                        Glyphs.SEGMENT_END_NERD,
+                        Theme.active()
+                                .withBackground(
+                                        Theme.active().bright(Theme.active().planBadgeColor()), lead)));
     }
 
     @Test
@@ -235,7 +244,7 @@ class CommandManagerTest {
         var cm = new CommandManager(stream(buf), true, true, 80); // animate + goal mode
         cm.progress(2, 4);
         cm.phaseRunning("m", "compile");
-        cm.tick();          // paint the live region
+        cm.tick(); // paint the live region
         buf.reset();
 
         cm.renderCanceled();
@@ -270,7 +279,7 @@ class CommandManagerTest {
         // cancel). So the active-row list is capped to fit the terminal height.
         var cm = CommandManager.goal(stream(new ByteArrayOutputStream()), "Building", false);
         cm.height = 6;
-        for (int i = 0; i < 20; i++) cm.phaseRunning("m", "p" + i);  // 20 concurrently active
+        for (int i = 0; i < 20; i++) cm.phaseRunning("m", "p" + i); // 20 concurrently active
 
         var lines = cm.renderGoalLines(120, 0);
         // header (bar inlined) + active rows, all within height (with a line of headroom).
@@ -322,7 +331,7 @@ class CommandManagerTest {
         var cm = new CommandManager(stream(buf), true, true, 80);
         cm.progress(1, 4);
         cm.phaseRunning("m", "compile");
-        cm.tick();          // initial region paint
+        cm.tick(); // initial region paint
         buf.reset();
 
         cm.writeAbove("javac: warning in Foo.java");
@@ -347,9 +356,9 @@ class CommandManagerTest {
         try (var scope = cm.captureOutput()) {
             System.out.println("from a phase");
         }
-        assertThat(System.out).isSameAs(original);       // streams restored
+        assertThat(System.out).isSameAs(original); // streams restored
         assertThat(stripAnsi(buf.toString(StandardCharsets.UTF_8)))
-                .contains("from a phase");               // routed to the region's real stdout
+                .contains("from a phase"); // routed to the region's real stdout
     }
 
     @Test

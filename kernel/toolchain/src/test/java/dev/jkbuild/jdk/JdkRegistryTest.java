@@ -1,21 +1,20 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.discovery.DiscoveredTool;
 import dev.jkbuild.discovery.JkProbe;
 import dev.jkbuild.discovery.LocalToolProbe;
 import dev.jkbuild.discovery.ToolSpec;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class JdkRegistryTest {
 
@@ -46,12 +45,10 @@ class JdkRegistryTest {
         Files.writeString(macHome.resolve("release"), "JAVA_VERSION=\"21\"\n");
 
         JdkRegistry registry = isolatedRegistry(tempDir);
-        assertThat(registry.list())
-                .singleElement()
-                .satisfies(jdk -> {
-                    assertThat(jdk.identifier()).isEqualTo("temurin-21");
-                    assertThat(jdk.home()).isEqualTo(macHome.toRealPath());
-                });
+        assertThat(registry.list()).singleElement().satisfies(jdk -> {
+            assertThat(jdk.identifier()).isEqualTo("temurin-21");
+            assertThat(jdk.home()).isEqualTo(macHome.toRealPath());
+        });
     }
 
     @Test
@@ -66,7 +63,8 @@ class JdkRegistryTest {
         JdkRegistry registry = isolatedRegistry(tempDir);
         assertThat(registry.findByPrefix("temurin-21"))
                 .isPresent()
-                .get().extracting(InstalledJdk::identifier)
+                .get()
+                .extracting(InstalledJdk::identifier)
                 .isEqualTo("temurin-21.0.5");
     }
 
@@ -89,7 +87,9 @@ class JdkRegistryTest {
         JdkRegistry registry = isolatedRegistry(tempDir);
         assertThat(registry.findBySpec("25"))
                 .isPresent()
-                .get().extracting(InstalledJdk::identifier).isEqualTo("corretto-25.0.3");
+                .get()
+                .extracting(InstalledJdk::identifier)
+                .isEqualTo("corretto-25.0.3");
     }
 
     @Test
@@ -99,7 +99,9 @@ class JdkRegistryTest {
         makeJdkInstall(tempDir.resolve("corretto-25.0.3"), "25.0.3", "Amazon.com Inc.");
         JdkRegistry registry = isolatedRegistry(tempDir);
         assertThat(registry.findBySpec("temurin-25"))
-                .get().extracting(InstalledJdk::identifier).isEqualTo("temurin-25.0.1");
+                .get()
+                .extracting(InstalledJdk::identifier)
+                .isEqualTo("temurin-25.0.1");
     }
 
     @Test
@@ -108,7 +110,9 @@ class JdkRegistryTest {
         makeJdkInstall(tempDir.resolve("corretto-25.0.3"), "25.0.3", "Amazon.com Inc.");
         JdkRegistry registry = isolatedRegistry(tempDir);
         assertThat(registry.findBySpec("corretto-25.0.3"))
-                .get().extracting(InstalledJdk::identifier).isEqualTo("corretto-25.0.3");
+                .get()
+                .extracting(InstalledJdk::identifier)
+                .isEqualTo("corretto-25.0.3");
     }
 
     @Test
@@ -118,7 +122,9 @@ class JdkRegistryTest {
         makeJdkInstall(tempDir.resolve("temurin-26.0.1"), "26.0.1", "Eclipse Adoptium");
         JdkRegistry registry = isolatedRegistry(tempDir);
         assertThat(registry.findBySpec("26.0.1-librca"))
-                .get().extracting(InstalledJdk::identifier).isEqualTo("liberica-26.0.1");
+                .get()
+                .extracting(InstalledJdk::identifier)
+                .isEqualTo("liberica-26.0.1");
     }
 
     @Test
@@ -132,9 +138,11 @@ class JdkRegistryTest {
         // EnvVarProbe ($JAVA_HOME → "java-home") sits first in the chain, but a
         // manager probe that reports the same home must win the attribution.
         Path home = tempDir.resolve("25.0.3-tem");
-        JdkRegistry registry = new JdkRegistry(tempDir, List.of(
-                fakeProbe("java-home", new JdkHit(home, "25.0.3", JdkVendor.UNKNOWN, "java-home")),
-                fakeProbe("sdkman", new JdkHit(home, "25.0.3", JdkVendor.UNKNOWN, "sdkman"))));
+        JdkRegistry registry = new JdkRegistry(
+                tempDir,
+                List.of(
+                        fakeProbe("java-home", new JdkHit(home, "25.0.3", JdkVendor.UNKNOWN, "java-home")),
+                        fakeProbe("sdkman", new JdkHit(home, "25.0.3", JdkVendor.UNKNOWN, "sdkman"))));
 
         assertThat(registry.listHits())
                 .singleElement()
@@ -147,8 +155,8 @@ class JdkRegistryTest {
         // A JDK reachable only via $JAVA_HOME (no manager owns it) is kept, but
         // the ephemeral "java-home" label is replaced with "path".
         Path home = tempDir.resolve("opt-jdk-25");
-        JdkRegistry registry = new JdkRegistry(tempDir, List.of(
-                fakeProbe("java-home", new JdkHit(home, "25", JdkVendor.UNKNOWN, "java-home"))));
+        JdkRegistry registry = new JdkRegistry(
+                tempDir, List.of(fakeProbe("java-home", new JdkHit(home, "25", JdkVendor.UNKNOWN, "java-home"))));
 
         assertThat(registry.listHits())
                 .singleElement()
@@ -242,9 +250,20 @@ class JdkRegistryTest {
     /** A {@link LocalToolProbe} that enumerates exactly the given hits. */
     private static LocalToolProbe fakeProbe(String name, JdkHit... hits) {
         return new LocalToolProbe() {
-            @Override public String name() { return name; }
-            @Override public Optional<DiscoveredTool> find(ToolSpec spec) { return Optional.empty(); }
-            @Override public List<JdkHit> discoverAllJdks() { return List.of(hits); }
+            @Override
+            public String name() {
+                return name;
+            }
+
+            @Override
+            public Optional<DiscoveredTool> find(ToolSpec spec) {
+                return Optional.empty();
+            }
+
+            @Override
+            public List<JdkHit> discoverAllJdks() {
+                return List.of(hits);
+            }
         };
     }
 
@@ -255,7 +274,7 @@ class JdkRegistryTest {
     private static void makeJdkInstall(Path home, String version, String implementor) throws IOException {
         Files.createDirectories(home.resolve("bin"));
         Files.writeString(home.resolve("bin").resolve("java"), "#!/fake");
-        Files.writeString(home.resolve("release"),
-                "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"" + implementor + "\"\n");
+        Files.writeString(
+                home.resolve("release"), "JAVA_VERSION=\"" + version + "\"\nIMPLEMENTOR=\"" + implementor + "\"\n");
     }
 }

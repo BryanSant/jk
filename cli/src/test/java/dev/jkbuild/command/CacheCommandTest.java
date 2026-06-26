@@ -1,11 +1,9 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
@@ -14,8 +12,8 @@ import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class CacheCommandTest {
 
@@ -59,36 +57,28 @@ class CacheCommandTest {
         Path keptBlob = writeBlob(cache.resolve("sha256/ab/cd/realblob"), new byte[128]);
 
         // Backdate the stale entry by 60 days.
-        Files.setLastModifiedTime(stale,
-                FileTime.from(Instant.now().minus(60, ChronoUnit.DAYS)));
+        Files.setLastModifiedTime(stale, FileTime.from(Instant.now().minus(60, ChronoUnit.DAYS)));
 
-        String stdout = capture(() -> run("cache", "prune",
-                "--cache-dir", cache.toString(), "--older-than", "30"));
+        String stdout = capture(() -> run("cache", "prune", "--cache-dir", cache.toString(), "--older-than", "30"));
 
         assertThat(Files.exists(stale)).isFalse();
         assertThat(Files.exists(fresh)).isTrue();
         assertThat(Files.exists(leftoverTmp)).isFalse();
         assertThat(Files.exists(keptBlob)).isTrue();
         // New summary format breaks the count out by phase.
-        assertThat(stdout)
-                .contains("records expired 1")
-                .contains("temps 1");
+        assertThat(stdout).contains("records expired 1").contains("temps 1");
     }
 
     @Test
     void prune_dry_run_does_not_delete(@TempDir Path tempDir) throws Exception {
         Path cache = tempDir.resolve("cache");
         Path stale = writeBlob(cache.resolve("actions/keys/old"), new byte[1024]);
-        Files.setLastModifiedTime(stale,
-                FileTime.from(Instant.now().minus(60, ChronoUnit.DAYS)));
+        Files.setLastModifiedTime(stale, FileTime.from(Instant.now().minus(60, ChronoUnit.DAYS)));
 
-        String stdout = capture(() -> run("cache", "prune",
-                "--cache-dir", cache.toString(), "--dry-run"));
+        String stdout = capture(() -> run("cache", "prune", "--cache-dir", cache.toString(), "--dry-run"));
 
         assertThat(Files.exists(stale)).isTrue();
-        assertThat(stdout)
-                .startsWith("Would prune")
-                .contains("records expired 1");
+        assertThat(stdout).startsWith("Would prune").contains("records expired 1");
     }
 
     @Test
@@ -111,8 +101,7 @@ class CacheCommandTest {
         Path cache = tempDir.resolve("cache");
         writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), new byte[4096]);
 
-        String stdout = withStdin("n\n", () ->
-                capture(() -> run("cache", "purge", "--cache-dir", cache.toString())));
+        String stdout = withStdin("n\n", () -> capture(() -> run("cache", "purge", "--cache-dir", cache.toString())));
 
         assertThat(stdout).contains("Aborted");
         assertThat(Files.exists(cache.resolve("sha256/ab/cd/deadbeef"))).isTrue();
@@ -123,8 +112,7 @@ class CacheCommandTest {
         Path cache = tempDir.resolve("cache");
         writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), new byte[4096]);
 
-        String stdout = withStdin("y\n", () ->
-                capture(() -> run("cache", "purge", "--cache-dir", cache.toString())));
+        String stdout = withStdin("y\n", () -> capture(() -> run("cache", "purge", "--cache-dir", cache.toString())));
 
         assertThat(stdout).contains("Removed 1 files");
         assertThat(Files.exists(cache.resolve("sha256/ab/cd/deadbeef"))).isFalse();
@@ -135,8 +123,7 @@ class CacheCommandTest {
         Path cache = tempDir.resolve("cache");
         writeBlob(cache.resolve("sha256/ab/cd/deadbeef"), new byte[4096]);
 
-        String stdout = capture(() -> run("cache", "purge",
-                "--cache-dir", cache.toString(), "--dry-run"));
+        String stdout = capture(() -> run("cache", "purge", "--cache-dir", cache.toString(), "--dry-run"));
 
         assertThat(stdout).contains("Would remove 1 files");
         assertThat(Files.exists(cache.resolve("sha256/ab/cd/deadbeef"))).isTrue();
@@ -157,8 +144,7 @@ class CacheCommandTest {
         seedRepo(cache, "com.google.guava", "guava", "33.0.0-jre");
 
         // Coordinates print in color; strip ANSI to assert on the visible text.
-        String stdout = stripAnsi(capture(() -> run("cache", "search", "jackson",
-                "--cache-dir", cache.toString())));
+        String stdout = stripAnsi(capture(() -> run("cache", "search", "jackson", "--cache-dir", cache.toString())));
 
         assertThat(stdout).contains("com.fasterxml.jackson.core:jackson-databind");
         // newest-first version ordering

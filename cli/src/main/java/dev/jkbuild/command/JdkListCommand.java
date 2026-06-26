@@ -7,19 +7,17 @@ import dev.jkbuild.http.Http;
 import dev.jkbuild.jdk.ActiveJavac;
 import dev.jkbuild.jdk.GlobalDefaultJdk;
 import dev.jkbuild.jdk.HostPlatform;
+import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.IntellijJdkDir;
 import dev.jkbuild.jdk.JdkCatalog;
 import dev.jkbuild.jdk.JdkCatalogClient;
 import dev.jkbuild.jdk.JdkHit;
-import dev.jkbuild.jdk.InstalledJdk;
 import dev.jkbuild.jdk.JdkRegistry;
 import dev.jkbuild.jdk.JdkVendor;
-import dev.jkbuild.resolver.Versions;
-import org.jline.utils.AttributedStyle;
 import dev.jkbuild.model.command.CliCommand;
 import dev.jkbuild.model.command.Invocation;
 import dev.jkbuild.model.command.Opt;
-
+import dev.jkbuild.resolver.Versions;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
@@ -32,6 +30,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.TreeMap;
 import java.util.regex.Pattern;
+import org.jline.utils.AttributedStyle;
 
 /**
  * {@code jk jdk list} — every JDK the probe chain finds on this machine
@@ -51,14 +50,26 @@ import java.util.regex.Pattern;
  */
 public final class JdkListCommand implements CliCommand {
 
-    @Override public String name() { return "list"; }
-    @Override public String description() { return "List installed JDKs (--all adds available ones)"; }
-    @Override public List<Opt> options() {
+    @Override
+    public String name() {
+        return "list";
+    }
+
+    @Override
+    public String description() {
+        return "List installed JDKs (--all adds available ones)";
+    }
+
+    @Override
+    public List<Opt> options() {
         return List.of(
                 Opt.flag("Also list JDKs available for download from the JetBrains feed.", "--all"),
-                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide(),
-                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url").hide(),
-                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file").hide());
+                Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir")
+                        .hide(),
+                Opt.value("<url>", "Override the JetBrains JDK feed URL (for tests).", "--feed-url")
+                        .hide(),
+                Opt.value("<file>", "Override the catalog cache path (for tests).", "--cache-file")
+                        .hide());
     }
 
     boolean all;
@@ -78,7 +89,9 @@ public final class JdkListCommand implements CliCommand {
 
         final String label;
 
-        Status(String label) { this.label = label; }
+        Status(String label) {
+            this.label = label;
+        }
     }
 
     /**
@@ -92,8 +105,14 @@ public final class JdkListCommand implements CliCommand {
     private static String compositeLabel(boolean active, boolean isDefault, boolean isNative) {
         StringBuilder sb = new StringBuilder();
         if (active) sb.append("active");
-        if (isDefault) { if (sb.length() > 0) sb.append('/'); sb.append("default"); }
-        if (isNative) { if (sb.length() > 0) sb.append('/'); sb.append("native"); }
+        if (isDefault) {
+            if (sb.length() > 0) sb.append('/');
+            sb.append("default");
+        }
+        if (isNative) {
+            if (sb.length() > 0) sb.append('/');
+            sb.append("native");
+        }
         return sb.length() == 0 ? "installed" : sb.toString();
     }
 
@@ -117,10 +136,14 @@ public final class JdkListCommand implements CliCommand {
         // is marked; a re-run of `jk jdk default` then records the exact home.
         try {
             if (defaultHome == null) {
-                defaultHome = gd.currentIdentifier().flatMap(id -> findHome(registry, id)).orElse(null);
+                defaultHome = gd.currentIdentifier()
+                        .flatMap(id -> findHome(registry, id))
+                        .orElse(null);
             }
             if (graalHome == null) {
-                graalHome = gd.graalIdentifier().flatMap(id -> findHome(registry, id)).orElse(null);
+                graalHome = gd.graalIdentifier()
+                        .flatMap(id -> findHome(registry, id))
+                        .orElse(null);
             }
         } catch (IOException ignored) {
             // malformed config — leave both null (no row marked)
@@ -139,9 +162,7 @@ public final class JdkListCommand implements CliCommand {
 
         List<Row> rows = buildRows(installed, defaultHome, catalog, os, arch, currentHome, graalHome);
         if (!all) {
-            rows = rows.stream()
-                    .filter(r -> r.status() != Status.AVAILABLE)
-                    .toList();
+            rows = rows.stream().filter(r -> r.status() != Status.AVAILABLE).toList();
         }
         if (rows.isEmpty()) {
             String suffix = all ? ", no remote JDKs found" : "";
@@ -156,7 +177,10 @@ public final class JdkListCommand implements CliCommand {
         return 0;
     }
 
-    @Override public String toString() { return "jdk list"; }
+    @Override
+    public String toString() {
+        return "jdk list";
+    }
 
     static List<Row> buildRows(
             List<JdkHit> installed,
@@ -195,13 +219,10 @@ public final class JdkListCommand implements CliCommand {
             boolean isNative = sameHome(graalHome, j.home());
             // A JDK can hold several roles at once; status is the primary (for
             // sort/style), statusLabel the composite shown to the user.
-            Status status = isActive ? Status.ACTIVE
-                    : isDefault ? Status.DEFAULT
-                    : isNative ? Status.NATIVE
-                    : Status.INSTALLED;
+            Status status =
+                    isActive ? Status.ACTIVE : isDefault ? Status.DEFAULT : isNative ? Status.NATIVE : Status.INSTALLED;
             if (isActive) currentShown = true;
-            rows.add(new Row(major, vendor, id, status,
-                    compositeLabel(isActive, isDefault, isNative), j.source()));
+            rows.add(new Row(major, vendor, id, status, compositeLabel(isActive, isDefault, isNative), j.source()));
         }
 
         // The active javac may resolve to a JDK no probe surfaced (e.g. on PATH
@@ -209,12 +230,12 @@ public final class JdkListCommand implements CliCommand {
         // JDK this shell actually uses is never absent from the list.
         if (currentHome != null && !currentShown) {
             dev.jkbuild.discovery.ProbeSupport.discoverJdk(currentHome, "path").ifPresent(hit -> {
-                String id = IntellijJdkDir.installDirOf(hit.home()).getFileName().toString();
+                String id =
+                        IntellijJdkDir.installDirOf(hit.home()).getFileName().toString();
                 String vendor = hit.vendor() != JdkVendor.UNKNOWN ? hit.vendor().displayName() : "";
                 boolean d = sameHome(defaultHome, hit.home());
                 boolean n = sameHome(graalHome, hit.home());
-                rows.add(new Row(parseMajor(id), vendor, id, Status.ACTIVE,
-                        compositeLabel(true, d, n), hit.source()));
+                rows.add(new Row(parseMajor(id), vendor, id, Status.ACTIVE, compositeLabel(true, d, n), hit.source()));
             });
         }
 
@@ -250,8 +271,8 @@ public final class JdkListCommand implements CliCommand {
 
         // Sort: major desc, then status priority (current > default > installed
         // > available, via enum ordinal), then vendor alphabetical.
-        rows.sort(Comparator
-                .comparingInt(Row::major).reversed()
+        rows.sort(Comparator.comparingInt(Row::major)
+                .reversed()
                 .thenComparingInt((Row r) -> r.status().ordinal())
                 .thenComparing(Row::vendor, Comparator.nullsLast(String::compareTo)));
         return rows;
@@ -312,20 +333,21 @@ public final class JdkListCommand implements CliCommand {
         int inner = innerWidth(widths);
 
         List<String> out = new ArrayList<>();
-        out.add(border("╭", "─", "╮", inner));                       // ╭───╮
-        out.add(titleLine(title, inner));                                            // │ <gradient> │
-        out.add(divider("├", "┬", "┤", widths));                     // ├─┬─┤
-        out.add(headerRow(widths));                                                  // │ Version │ ...
-        out.add(divider("├", "┼", "┤", widths));                     // ├─┼─┤
+        out.add(border("╭", "─", "╮", inner)); // ╭───╮
+        out.add(titleLine(title, inner)); // │ <gradient> │
+        out.add(divider("├", "┬", "┤", widths)); // ├─┬─┤
+        out.add(headerRow(widths)); // │ Version │ ...
+        out.add(divider("├", "┼", "┤", widths)); // ├─┼─┤
 
         // Group rows by major, in their already-sorted order.
         Map<Integer, List<Row>> grouped = new TreeMap<>(Comparator.reverseOrder());
-        for (Row r : rows) grouped.computeIfAbsent(r.major(), k -> new ArrayList<>()).add(r);
+        for (Row r : rows)
+            grouped.computeIfAbsent(r.major(), k -> new ArrayList<>()).add(r);
 
         boolean firstGroup = true;
         for (var entry : grouped.entrySet()) {
             if (!firstGroup) {
-                out.add(divider("├", "┼", "┤", widths));             // ├─┼─┤ between groups
+                out.add(divider("├", "┼", "┤", widths)); // ├─┼─┤ between groups
             }
             firstGroup = false;
             var groupRows = entry.getValue();
@@ -336,7 +358,7 @@ public final class JdkListCommand implements CliCommand {
             }
         }
 
-        out.add(divider("╰", "┴", "╯", widths));                     // ╰─┴─╯ closes cols
+        out.add(divider("╰", "┴", "╯", widths)); // ╰─┴─╯ closes cols
         return out;
     }
 
@@ -419,17 +441,18 @@ public final class JdkListCommand implements CliCommand {
         Rgb band = active ? Theme.active().darkBlackColor() : null;
 
         String outerBar = Theme.colorize("│", Theme.active().darkGray());
-        String innerBar = band == null ? outerBar
+        String innerBar = band == null
+                ? outerBar
                 : Theme.colorize("│", banded(Theme.active().darkGray(), band));
         String sp = bandSpaces(1, band);
 
-        String versionCell = Theme.colorize(center(version, widths[0]),
-                banded(deco(AttributedStyle.DEFAULT, italic, bold), band));
+        String versionCell =
+                Theme.colorize(center(version, widths[0]), banded(deco(AttributedStyle.DEFAULT, italic, bold), band));
         String vendor = r.vendor() == null ? "" : r.vendor();
-        String vendorCell = Theme.colorize(padRight(vendor, widths[1]),
-                banded(deco(AttributedStyle.DEFAULT, italic, bold), band));
-        String specCell = Theme.colorize(padRight(r.spec(), widths[2]),
-                banded(deco(Theme.active().settled(), italic, bold), band));
+        String vendorCell =
+                Theme.colorize(padRight(vendor, widths[1]), banded(deco(AttributedStyle.DEFAULT, italic, bold), band));
+        String specCell = Theme.colorize(
+                padRight(r.spec(), widths[2]), banded(deco(Theme.active().settled(), italic, bold), band));
 
         String location = r.location();
         String locStyled;
@@ -439,16 +462,33 @@ public final class JdkListCommand implements CliCommand {
             // AVAILABLE rows render the source ("download") in the same dark-gray
             // as their status, so the entire catalog-only row reads as de-emphasised
             // relative to actually-installed JDKs.
-            AttributedStyle locStyle = status == Status.AVAILABLE ? Theme.active().darkGray() : Theme.active().path();
+            AttributedStyle locStyle = status == Status.AVAILABLE
+                    ? Theme.active().darkGray()
+                    : Theme.active().path();
             locStyled = Theme.colorize(location, banded(deco(locStyle, italic, bold), band))
                     + bandSpaces(widths[4] - location.length(), band);
         }
         return outerBar
-                + sp + versionCell + sp + innerBar
-                + sp + vendorCell + sp + innerBar
-                + sp + specCell + sp + innerBar
-                + sp + statusCell(label, widths[3], italic, bold, band) + sp + innerBar
-                + sp + locStyled + sp + outerBar;
+                + sp
+                + versionCell
+                + sp
+                + innerBar
+                + sp
+                + vendorCell
+                + sp
+                + innerBar
+                + sp
+                + specCell
+                + sp
+                + innerBar
+                + sp
+                + statusCell(label, widths[3], italic, bold, band)
+                + sp
+                + innerBar
+                + sp
+                + locStyled
+                + sp
+                + outerBar;
     }
 
     /** Layer the active-row indigo band background onto a cell style (no-op when not banded). */
@@ -460,7 +500,8 @@ public final class JdkListCommand implements CliCommand {
     private static String bandSpaces(int n, Rgb band) {
         if (n <= 0) return "";
         String spaces = " ".repeat(n);
-        return band == null ? spaces
+        return band == null
+                ? spaces
                 : Theme.colorize(spaces, Theme.active().withBackground(AttributedStyle.DEFAULT, band));
     }
 
@@ -495,7 +536,7 @@ public final class JdkListCommand implements CliCommand {
             case "default" -> Theme.active().brightYellow();
             case "native" -> Theme.active().brightGreen();
             case "available" -> Theme.active().darkGray();
-            default -> Theme.active().completedStep();   // "installed"
+            default -> Theme.active().completedStep(); // "installed"
         };
     }
 
@@ -520,24 +561,25 @@ public final class JdkListCommand implements CliCommand {
     // Helpers / catalog plumbing
     // ---------------------------------------------------------------
 
-
     private JdkCatalog fetchCatalogOrNull() {
         if (!HostPlatform.supported()) return null;
         try {
             boolean refresh = dev.jkbuild.config.ActiveConfig.get().refreshOr(false);
             JdkCatalogClient client = (feedUrl != null
-                    ? new JdkCatalogClient(new Http(), feedUrl,
-                            cacheFile != null ? cacheFile : ephemeralCachePath(),
-                            java.time.Duration.ZERO)
-                    : new JdkCatalogClient())
+                            ? new JdkCatalogClient(
+                                    new Http(),
+                                    feedUrl,
+                                    cacheFile != null ? cacheFile : ephemeralCachePath(),
+                                    java.time.Duration.ZERO)
+                            : new JdkCatalogClient())
                     .onWarning(System.err::println);
             // --all is the "show me everything" view: every vendor/product at
             // every major >= 17, not just jk's curated LTS-or-latest set.
             return client.fetch(refresh, /* firstClassOnly = */ false);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) Thread.currentThread().interrupt();
-            System.err.println("jk jdk list: JetBrains feed unreachable ("
-                    + e.getMessage() + "); showing installed JDKs only.");
+            System.err.println(
+                    "jk jdk list: JetBrains feed unreachable (" + e.getMessage() + "); showing installed JDKs only.");
             return null;
         }
     }

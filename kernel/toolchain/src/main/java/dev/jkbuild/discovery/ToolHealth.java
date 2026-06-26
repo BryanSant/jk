@@ -3,7 +3,6 @@ package dev.jkbuild.discovery;
 
 import dev.jkbuild.jdk.HostPlatform;
 import dev.jkbuild.jdk.JdkVendor;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -128,8 +127,7 @@ public final class ToolHealth {
     private static Optional<String> findVersionInLibByPattern(Path libDir, Pattern p) {
         if (!Files.isDirectory(libDir)) return Optional.empty();
         try (Stream<Path> stream = Files.list(libDir)) {
-            return stream
-                    .map(path -> path.getFileName().toString())
+            return stream.map(path -> path.getFileName().toString())
                     .map(p::matcher)
                     .filter(Matcher::matches)
                     .map(m -> m.group("v"))
@@ -145,7 +143,7 @@ public final class ToolHealth {
         Path jar = home.resolve("lib").resolve("kotlin-compiler.jar");
         if (!Files.isRegularFile(jar)) return Optional.empty();
         try (InputStream in = Files.newInputStream(jar);
-             ZipInputStream zis = new ZipInputStream(in)) {
+                ZipInputStream zis = new ZipInputStream(in)) {
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
                 if (!entry.getName().equalsIgnoreCase("META-INF/MANIFEST.MF")) continue;
@@ -172,13 +170,15 @@ public final class ToolHealth {
     /** {@code <home>/bin/<binary>} (or {@code .exe} / {@code .bat} on Windows). */
     public static Path requiredBinary(ToolSpec spec, Path home) {
         boolean win = HostPlatform.isWindows();
-        return home.resolve("bin").resolve(switch (spec.kind()) {
-            case "java" -> win ? "java.exe" : "java";
-            case "maven" -> win ? "mvn.cmd" : "mvn";
-            case "gradle" -> win ? "gradle.bat" : "gradle";
-            case "kotlin" -> win ? "kotlinc.bat" : "kotlinc";
-            default -> throw new IllegalArgumentException("unknown tool kind: " + spec.kind());
-        });
+        return home.resolve("bin")
+                .resolve(
+                        switch (spec.kind()) {
+                            case "java" -> win ? "java.exe" : "java";
+                            case "maven" -> win ? "mvn.cmd" : "mvn";
+                            case "gradle" -> win ? "gradle.bat" : "gradle";
+                            case "kotlin" -> win ? "kotlinc.bat" : "kotlinc";
+                            default -> throw new IllegalArgumentException("unknown tool kind: " + spec.kind());
+                        });
     }
 
     /** Required artifacts beyond the launcher — useful for cheap structural checks. */

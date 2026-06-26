@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class ImportCommandTest {
 
@@ -33,15 +31,15 @@ class ImportCommandTest {
                 </project>
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("import", "--report",
-                tempDir.resolve("jk-import-report.md").toString(), pom.toString());
+        int exit =
+                run("import", "--report", tempDir.resolve("jk-import-report.md").toString(), pom.toString());
         assertThat(exit).isEqualTo(0);
 
         String jkBuild = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(jkBuild).contains("name     = \"widget\"");
         assertThat(jkBuild).contains("[dependencies.main]");
-        assertThat(jkBuild).contains(
-                "jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
+        assertThat(jkBuild)
+                .contains("jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
 
         String report = Files.readString(tempDir.resolve("jk-import-report.md"));
         assertThat(report).contains("# jk import report");
@@ -81,8 +79,8 @@ class ImportCommandTest {
                 """, StandardCharsets.UTF_8);
         Files.writeString(tempDir.resolve("jk.toml"), "[project]\ngroup = \"prior\"\n");
 
-        int exit = run("import", "--force", "--report",
-                tempDir.resolve("report.md").toString(), pom.toString());
+        int exit = run(
+                "import", "--force", "--report", tempDir.resolve("report.md").toString(), pom.toString());
         assertThat(exit).isEqualTo(0);
         assertThat(Files.readString(tempDir.resolve("jk.toml")))
                 .contains("name     = \"widget\"")
@@ -105,19 +103,18 @@ class ImportCommandTest {
                 }
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("import", "--report",
-                tempDir.resolve("jk-import-report.md").toString(), gradle.toString());
+        int exit =
+                run("import", "--report", tempDir.resolve("jk-import-report.md").toString(), gradle.toString());
         assertThat(exit).isEqualTo(0);
 
         String jkBuild = Files.readString(tempDir.resolve("jk.toml"));
         assertThat(jkBuild).contains("group    = \"com.example\"");
         assertThat(jkBuild).contains("jdk      = \"21\"");
         assertThat(jkBuild).contains("[dependencies.main]");
-        assertThat(jkBuild).contains(
-                "jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
+        assertThat(jkBuild)
+                .contains("jackson-databind = { group = \"com.fasterxml.jackson.core\", version = \"=2.18.2\" }");
 
-        assertThat(Files.readString(tempDir.resolve("jk-import-report.md")))
-                .contains("# jk import report");
+        assertThat(Files.readString(tempDir.resolve("jk-import-report.md"))).contains("# jk import report");
     }
 
     @Test
@@ -174,8 +171,11 @@ class ImportCommandTest {
                 </project>
                 """, StandardCharsets.UTF_8);
 
-        int exit = run("import", "--report",
-                tempDir.resolve("report.md").toString(), tempDir.resolve("pom.xml").toString());
+        int exit = run(
+                "import",
+                "--report",
+                tempDir.resolve("report.md").toString(),
+                tempDir.resolve("pom.xml").toString());
         assertThat(exit).isEqualTo(0);
 
         String root = Files.readString(tempDir.resolve("jk.toml"));
@@ -183,30 +183,24 @@ class ImportCommandTest {
         assertThat(root).contains("[workspace]");
         assertThat(root).contains("modules = [\"core\", \"app\"]");
 
-        assertThat(Files.readString(tempDir.resolve("core/jk.toml")))
-                .contains("name     = \"widget-core\"");
-        assertThat(Files.readString(tempDir.resolve("app/jk.toml")))
-                .contains("name     = \"widget-app\"");
+        assertThat(Files.readString(tempDir.resolve("core/jk.toml"))).contains("name     = \"widget-core\"");
+        assertThat(Files.readString(tempDir.resolve("app/jk.toml"))).contains("name     = \"widget-app\"");
     }
 
     @Test
-    void default_report_path_names_by_coordinate_and_increments_on_collision(@TempDir Path tmp)
-            throws Exception {
+    void default_report_path_names_by_coordinate_and_increments_on_collision(@TempDir Path tmp) throws Exception {
         Path first = ImportCommand.defaultReportPath(tmp, "com.example-widget-1.0.0", "pom.xml");
-        assertThat(first.getFileName().toString())
-                .isEqualTo("com.example-widget-1.0.0-1-pom.xml-import.md");
+        assertThat(first.getFileName().toString()).isEqualTo("com.example-widget-1.0.0-1-pom.xml-import.md");
         assertThat(first.getParent()).isEqualTo(tmp);
 
         // Once it exists, the next call bumps n.
         Files.writeString(first, "x");
         Path second = ImportCommand.defaultReportPath(tmp, "com.example-widget-1.0.0", "pom.xml");
-        assertThat(second.getFileName().toString())
-                .isEqualTo("com.example-widget-1.0.0-2-pom.xml-import.md");
+        assertThat(second.getFileName().toString()).isEqualTo("com.example-widget-1.0.0-2-pom.xml-import.md");
 
         // Source filename is reflected (e.g. Gradle).
         Path gradle = ImportCommand.defaultReportPath(tmp, "g-a-2.0", "build.gradle.kts");
-        assertThat(gradle.getFileName().toString())
-                .isEqualTo("g-a-2.0-1-build.gradle.kts-import.md");
+        assertThat(gradle.getFileName().toString()).isEqualTo("g-a-2.0-1-build.gradle.kts-import.md");
     }
 
     private static int run(String... args) {

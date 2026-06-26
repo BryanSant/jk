@@ -1,10 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.forge;
 
-import dev.jkbuild.forge.ForgeAuth;
-import dev.jkbuild.forge.ForgeKind;
-import dev.jkbuild.forge.ResolvedToken;
-
 import java.net.URI;
 import java.util.Optional;
 
@@ -50,8 +46,7 @@ public final class ForgeGitCredentials {
             return Optional.empty();
         }
         String scheme = uri.getScheme();
-        if (scheme == null
-                || !(scheme.equalsIgnoreCase("https") || scheme.equalsIgnoreCase("http"))) {
+        if (scheme == null || !(scheme.equalsIgnoreCase("https") || scheme.equalsIgnoreCase("http"))) {
             return Optional.empty();
         }
         String host = uri.getHost();
@@ -64,9 +59,9 @@ public final class ForgeGitCredentials {
 
     static String[] usernamePassword(ForgeKind kind, String token) {
         return switch (kind) {
-            case GITHUB, GITEA -> new String[]{token, ""};
-            case GITLAB        -> new String[]{"oauth2", token};
-            case BITBUCKET     -> new String[]{"x-token-auth", token};
+            case GITHUB, GITEA -> new String[] {token, ""};
+            case GITLAB -> new String[] {"oauth2", token};
+            case BITBUCKET -> new String[] {"x-token-auth", token};
         };
     }
 }

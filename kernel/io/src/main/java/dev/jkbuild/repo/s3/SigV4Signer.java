@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.repo.s3;
 
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -10,6 +8,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.StringJoiner;
 import java.util.TreeMap;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  * AWS Signature Version 4 request signing (the {@code Authorization: AWS4-HMAC-SHA256}
@@ -43,10 +43,16 @@ public final class SigV4Signer {
      * @param service     e.g. {@code s3}
      * @param amzDate     ISO basic timestamp {@code yyyyMMdd'T'HHmmss'Z'}
      */
-    public static String authorization(String method, URI uri,
-                                       Map<String, String> signedHeaders, String payloadHashHex,
-                                       String accessKeyId, String secretKey,
-                                       String region, String service, String amzDate) {
+    public static String authorization(
+            String method,
+            URI uri,
+            Map<String, String> signedHeaders,
+            String payloadHashHex,
+            String accessKeyId,
+            String secretKey,
+            String region,
+            String service,
+            String amzDate) {
         // Normalise headers: lowercase names, trimmed values, sorted.
         TreeMap<String, String> headers = new TreeMap<>();
         for (Map.Entry<String, String> e : signedHeaders.entrySet()) {
@@ -120,8 +126,8 @@ public final class SigV4Signer {
     }
 
     private static byte[] signingKey(String secretKey, String dateStamp, String region, String service) {
-        byte[] kDate = hmac(("AWS4" + secretKey).getBytes(StandardCharsets.UTF_8),
-                dateStamp.getBytes(StandardCharsets.UTF_8));
+        byte[] kDate =
+                hmac(("AWS4" + secretKey).getBytes(StandardCharsets.UTF_8), dateStamp.getBytes(StandardCharsets.UTF_8));
         byte[] kRegion = hmac(kDate, region.getBytes(StandardCharsets.UTF_8));
         byte[] kService = hmac(kRegion, service.getBytes(StandardCharsets.UTF_8));
         return hmac(kService, "aws4_request".getBytes(StandardCharsets.UTF_8));
@@ -139,8 +145,7 @@ public final class SigV4Signer {
 
     private static String hex(byte[] bytes) {
         StringBuilder sb = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) sb.append(Character.forDigit((b >> 4) & 0xf, 16))
-                .append(Character.forDigit(b & 0xf, 16));
+        for (byte b : bytes) sb.append(Character.forDigit((b >> 4) & 0xf, 16)).append(Character.forDigit(b & 0xf, 16));
         return sb.toString();
     }
 
@@ -149,8 +154,13 @@ public final class SigV4Signer {
         StringBuilder out = new StringBuilder(s.length());
         for (byte b : s.getBytes(StandardCharsets.UTF_8)) {
             char c = (char) (b & 0xff);
-            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')
-                    || c == '-' || c == '_' || c == '.' || c == '~') {
+            if ((c >= 'A' && c <= 'Z')
+                    || (c >= 'a' && c <= 'z')
+                    || (c >= '0' && c <= '9')
+                    || c == '-'
+                    || c == '_'
+                    || c == '.'
+                    || c == '~') {
                 out.append(c);
             } else {
                 out.append('%')

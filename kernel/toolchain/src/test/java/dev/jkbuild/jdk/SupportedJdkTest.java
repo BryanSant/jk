@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
-import org.junit.jupiter.api.Test;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
 
 class SupportedJdkTest {
 
@@ -30,8 +29,7 @@ class SupportedJdkTest {
     @Test
     void first_class_keeps_latest_even_when_it_is_lts() {
         // No non-LTS in the set — the single-latest pass folds into the LTS set.
-        assertThat(SupportedJdk.firstClassMajors(List.of(17, 21, 25)))
-                .containsExactly(17, 21, 25);
+        assertThat(SupportedJdk.firstClassMajors(List.of(17, 21, 25))).containsExactly(17, 21, 25);
     }
 
     @Test

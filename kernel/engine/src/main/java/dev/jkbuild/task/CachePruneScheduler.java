@@ -2,7 +2,6 @@
 package dev.jkbuild.task;
 
 import dev.jkbuild.config.JkCacheConfig;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -54,7 +53,8 @@ public final class CachePruneScheduler {
         if (!Files.isRegularFile(stamp)) return true;
         long last;
         try {
-            last = Long.parseLong(Files.readString(stamp, StandardCharsets.UTF_8).trim());
+            last = Long.parseLong(
+                    Files.readString(stamp, StandardCharsets.UTF_8).trim());
         } catch (NumberFormatException e) {
             return true;
         }
@@ -85,8 +85,7 @@ public final class CachePruneScheduler {
         return cmd;
     }
 
-    private static void spawnDetached(JkCacheConfig config, Path cacheRoot, String jkExe)
-            throws IOException {
+    private static void spawnDetached(JkCacheConfig config, Path cacheRoot, String jkExe) throws IOException {
         if (jkExe == null || jkExe.isBlank()) return;
         ProcessBuilder pb = new ProcessBuilder(commandFor(config, cacheRoot, jkExe));
         pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
@@ -113,8 +112,7 @@ public final class CachePruneScheduler {
             var cmd = info.command();
             if (cmd.isPresent()) {
                 Path path = Path.of(cmd.get());
-                if (path.getFileName() != null
-                        && path.getFileName().toString().contains("jk")) {
+                if (path.getFileName() != null && path.getFileName().toString().contains("jk")) {
                     return Optional.of(path.toAbsolutePath().toString());
                 }
             }

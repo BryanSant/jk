@@ -1,20 +1,18 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.task;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.compile.KotlincRequest;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * The action-cache fast path of {@link KotlinCompile}: an exact-input hit
@@ -41,14 +39,14 @@ class KotlinCompileTest {
         String sha = cas.hashFromPath(blob).orElseThrow();
         cache.storeWithOutputs("compile-kotlin", key, Map.of(), Map.of("x/A.class", sha));
 
-        KotlinCompile.Result r = KotlinCompile.run(
-                "compile-kotlin", req, "jk-test", /*useCache=*/ true, cas, cache);
+        KotlinCompile.Result r = KotlinCompile.run("compile-kotlin", req, "jk-test", /*useCache=*/ true, cas, cache);
 
         assertThat(r.success()).isTrue();
         assertThat(r.cacheHit()).isTrue();
         assertThat(r.actionKey()).isEqualTo(key);
         // Output restored from the CAS, no compile.
-        assertThat(out.resolve("x/A.class")).usingCharset(StandardCharsets.UTF_8)
+        assertThat(out.resolve("x/A.class"))
+                .usingCharset(StandardCharsets.UTF_8)
                 .hasContent("CLASS BYTES");
     }
 

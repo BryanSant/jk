@@ -1,17 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
-import dev.jkbuild.cli.Jk;
+import static org.assertj.core.api.Assertions.assertThat;
 
 import com.sun.net.httpserver.HttpServer;
+import dev.jkbuild.cli.Jk;
 import dev.jkbuild.config.ActiveConfig;
 import dev.jkbuild.lock.Lockfile;
 import dev.jkbuild.lock.LockfileReader;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -20,8 +16,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.Map;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class UpdateCommandTest {
 
@@ -64,19 +62,24 @@ class UpdateCommandTest {
         // Warm cache + journal online.
         run("new", tempDir.toString());
         run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
-        assertThat(run("update", "-C", tempDir.toString(),
-                "--repo-url", base.toString(), "--cache-dir", cache.toString())).isEqualTo(0);
+        assertThat(run(
+                        "update",
+                        "-C",
+                        tempDir.toString(),
+                        "--repo-url",
+                        base.toString(),
+                        "--cache-dir",
+                        cache.toString()))
+                .isEqualTo(0);
         Files.delete(tempDir.resolve("jk.lock"));
 
         // Offline re-solve must come entirely from the journal.
         server.stop(0);
-        int exit = run("update", "--offline", "-C", tempDir.toString(),
-                "--cache-dir", cache.toString());
+        int exit = run("update", "--offline", "-C", tempDir.toString(), "--cache-dir", cache.toString());
         assertThat(exit).isEqualTo(0);
 
         Lockfile lock = LockfileReader.read(tempDir.resolve("jk.lock"));
-        assertThat(DefaultTestDepsFixture.projectCoords(lock))
-                .containsExactly("com.foo:leaf");
+        assertThat(DefaultTestDepsFixture.projectCoords(lock)).containsExactly("com.foo:leaf");
     }
 
     @Test
@@ -87,18 +90,27 @@ class UpdateCommandTest {
 
         // Initial state: no deps.
         run("new", tempDir.toString());
-        run("lock", "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        run(
+                "lock",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         Lockfile initial = LockfileReader.read(tempDir.resolve("jk.lock"));
         assertThat(DefaultTestDepsFixture.projectCoords(initial)).isEmpty();
 
         // Add a dep, then update.
         run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
-        int exit = run("update",
-                "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "update",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         Lockfile updated = LockfileReader.read(tempDir.resolve("jk.lock"));
@@ -113,19 +125,29 @@ class UpdateCommandTest {
 
         run("new", tempDir.toString());
         run("add", "com.foo:leaf:1.0", "-C", tempDir.toString());
-        int exit = run("update",
-                "-C", tempDir.toString(),
-                "--precise", "com.foo:leaf@1.0",
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "update",
+                "-C",
+                tempDir.toString(),
+                "--precise",
+                "com.foo:leaf@1.0",
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
     }
 
     @Test
     void update_without_build_jk_fails(@TempDir Path tempDir) {
-        int exit = run("update", "-C", tempDir.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "update",
+                "-C",
+                tempDir.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(2);
     }
 
@@ -164,16 +186,19 @@ class UpdateCommandTest {
                 """);
 
         // Invoke from module — updates only that module's lock.
-        int exit = run("update",
-                "-C", app.toString(),
-                "--repo-url", base.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "update",
+                "-C",
+                app.toString(),
+                "--repo-url",
+                base.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         // Module owns its own lock; sibling dep filtered out.
         Lockfile lock = LockfileReader.read(app.resolve("jk.lock"));
-        assertThat(DefaultTestDepsFixture.projectCoords(lock))
-                .containsExactly("com.foo:leaf");
+        assertThat(DefaultTestDepsFixture.projectCoords(lock)).containsExactly("com.foo:leaf");
 
         // Workspace root lock NOT created by this invocation.
         assertThat(Files.exists(tempDir.resolve("jk.lock"))).isFalse();
@@ -186,24 +211,27 @@ class UpdateCommandTest {
     }
 
     private void registerPom(String group, String artifact, String version, String body) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".pom";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".pom";
         served.put(path, body.getBytes(StandardCharsets.UTF_8));
     }
 
     private void registerJar(String group, String artifact, String version, byte[] bytes) {
-        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version
-                + "/" + artifact + "-" + version + ".jar";
+        String path = "/" + group.replace('.', '/') + "/" + artifact + "/" + version + "/" + artifact + "-" + version
+                + ".jar";
         served.put(path, bytes);
     }
 
     private void registerMetadata(String group, String artifact, String... versions) {
-        StringBuilder xml = new StringBuilder("<metadata><groupId>").append(group)
-                .append("</groupId><artifactId>").append(artifact)
+        StringBuilder xml = new StringBuilder("<metadata><groupId>")
+                .append(group)
+                .append("</groupId><artifactId>")
+                .append(artifact)
                 .append("</artifactId><versioning><versions>");
         for (String v : versions) xml.append("<version>").append(v).append("</version>");
         xml.append("</versions></versioning></metadata>");
-        served.put("/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
+        served.put(
+                "/" + group.replace('.', '/') + "/" + artifact + "/maven-metadata.xml",
                 xml.toString().getBytes(StandardCharsets.UTF_8));
     }
 

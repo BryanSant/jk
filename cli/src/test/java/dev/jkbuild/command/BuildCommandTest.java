@@ -1,25 +1,22 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.command;
 
+import static org.assertj.core.api.Assertions.assertThat;
+
 import dev.jkbuild.cli.Jk;
-
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.jar.JarFile;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 class BuildCommandTest {
 
     @Test
     void builds_jar_from_main_sources(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", "--layout", "traditional",
-                tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional", tempDir.toString());
 
         Path src = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(src.getParent());
@@ -30,8 +27,12 @@ class BuildCommandTest {
                 }
                 """);
 
-        int exit = run("build", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "build",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         Path jar = tempDir.resolve("target/widget-0.1.0.jar");
@@ -44,8 +45,7 @@ class BuildCommandTest {
 
     @Test
     void skip_tests_leaves_the_test_phases_out_of_the_build(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", "--layout", "traditional",
-                tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional", tempDir.toString());
         Path main = tempDir.resolve("src/main/java/example/Hello.java");
         Files.createDirectories(main.getParent());
         Files.writeString(main, "package example;\npublic class Hello {}\n");
@@ -55,58 +55,76 @@ class BuildCommandTest {
         Files.writeString(test, "package example;\nclass BrokenTest { void t(  // syntax error\n");
 
         // Normal build compiles the (broken) test → fails.
-        int failed = run("build", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int failed = run(
+                "build",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(failed).isNotEqualTo(0);
 
         // --skip-tests drops the test phases → the broken test is never compiled.
-        int ok = run("build", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString(), "--skip-tests");
+        int ok = run(
+                "build",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString(),
+                "--skip-tests");
         assertThat(ok).isEqualTo(0);
         assertThat(tempDir.resolve("target/widget-0.1.0.jar")).exists();
     }
 
     @Test
     void copies_resources_into_jar(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", "--layout", "traditional",
-                tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional", tempDir.toString());
         Path res = tempDir.resolve("src/main/resources/application.properties");
         Files.createDirectories(res.getParent());
         Files.writeString(res, "name=widget\n");
 
-        int exit = run("build", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "build",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         try (JarFile jf = new JarFile(tempDir.resolve("target/widget-0.1.0.jar").toFile())) {
             assertThat(jf.getJarEntry("application.properties")).isNotNull();
             String content = new String(
-                    jf.getInputStream(jf.getJarEntry("application.properties")).readAllBytes(),
-                    StandardCharsets.UTF_8);
+                    jf.getInputStream(jf.getJarEntry("application.properties")).readAllBytes(), StandardCharsets.UTF_8);
             assertThat(content).contains("name=widget");
         }
     }
 
     @Test
     void build_fails_on_syntax_error(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "widget", "--layout", "traditional",
-                tempDir.toString());
+        run("new", "--name", "widget", "--layout", "traditional", tempDir.toString());
         Path src = tempDir.resolve("src/main/java/Bad.java");
         Files.createDirectories(src.getParent());
         Files.writeString(src, "public class Bad { void f(   // missing\n");
 
-        int exit = run("build", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "build",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(1);
     }
 
     @Test
     void build_without_lockfile_auto_locks(@TempDir Path tempDir) throws Exception {
         // jk build auto-resolves the lockfile when jk.lock is absent.
-        Files.writeString(tempDir.resolve("jk.toml"),
-                "[project]\ngroup = \"com.example\"\nname = \"x\"\nversion = \"0.1\"\n");
-        int exit = run("build", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        Files.writeString(
+                tempDir.resolve("jk.toml"), "[project]\ngroup = \"com.example\"\nname = \"x\"\nversion = \"0.1\"\n");
+        int exit = run(
+                "build",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         // No sources → still succeeds and jk.lock was created.
         assertThat(exit).isEqualTo(0);
         assertThat(tempDir.resolve("jk.lock")).exists();
@@ -114,10 +132,13 @@ class BuildCommandTest {
 
     @Test
     void build_with_no_sources_still_produces_jar(@TempDir Path tempDir) throws Exception {
-        run("new", "--name", "empty", "--layout", "traditional",
-                tempDir.toString());
-        int exit = run("build", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        run("new", "--name", "empty", "--layout", "traditional", tempDir.toString());
+        int exit = run(
+                "build",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
         assertThat(tempDir.resolve("target/empty-0.1.0.jar")).exists();
     }
@@ -145,8 +166,12 @@ class BuildCommandTest {
                 libb = { group = "com.example", name = "libb", version = "1.0.0" }
                 """);
 
-        int exit = run("build", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int exit = run(
+                "build",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(exit).isEqualTo(0);
 
         // All three modules produced their jars (parallel default).
@@ -155,13 +180,17 @@ class BuildCommandTest {
         assertThat(tempDir.resolve("app/target/app-1.0.0.jar")).exists();
 
         // --no-parallel still builds the workspace (the serial rich path).
-        int serial = run("build", "--no-parallel", "-C", tempDir.toString(),
-                "--cache-dir", tempDir.resolve("cache").toString());
+        int serial = run(
+                "build",
+                "--no-parallel",
+                "-C",
+                tempDir.toString(),
+                "--cache-dir",
+                tempDir.resolve("cache").toString());
         assertThat(serial).isEqualTo(0);
     }
 
-    private static void module(Path dir, String name, String pkg, String cls, String extra)
-            throws IOException {
+    private static void module(Path dir, String name, String pkg, String cls, String extra) throws IOException {
         Files.createDirectories(dir.resolve("src/main/java/" + pkg));
         Files.writeString(dir.resolve("jk.toml"), """
                 [project]
@@ -172,8 +201,10 @@ class BuildCommandTest {
                 java = 25
                 %s
                 """.formatted(name, extra), StandardCharsets.UTF_8);
-        Files.writeString(dir.resolve("src/main/java/" + pkg + "/" + cls + ".java"),
-                "package " + pkg + "; public class " + cls + " {}", StandardCharsets.UTF_8);
+        Files.writeString(
+                dir.resolve("src/main/java/" + pkg + "/" + cls + ".java"),
+                "package " + pkg + "; public class " + cls + " {}",
+                StandardCharsets.UTF_8);
     }
 
     private static int run(String... args) {
