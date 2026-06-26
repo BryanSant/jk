@@ -23,13 +23,14 @@ import java.util.Optional;
 public final class JdkPinCommand implements CliCommand {
 
     @Override public String name() { return "pin"; }
-    @Override public String description() { return "Pin to a specific JDK version"; }
+    @Override public String description() { return "Pin to a specific Java Development Kit"; }
 
     @Override public List<Opt> options() {
         return List.of(Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide());
     }
     @Override public List<Param> parameters() {
-        return List.of(Param.of("spec", Arity.ONE, "Installed JDK to pin (e.g. temurin-25). Pins <vendor>-<major>."));
+        return List.of(Param.of("spec", Arity.ONE, "The vendor/version of JDK you'd like to pin to\n"
+                + "  (ex: 25, lts, latest, temurin-25, openjdk-26)"));
     }
 
     @Override

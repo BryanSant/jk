@@ -54,7 +54,7 @@ import java.util.Optional;
 public final class JdkEnsureCommand implements CliCommand {
 
     @Override public String name() { return "ensure"; }
-    @Override public String description() { return "Ensure a JDK matching <spec> is installed"; }
+    @Override public String description() { return "Ensure a Java Development Kit is available"; }
 
     @Override public List<Opt> options() {
         return List.of(
@@ -65,8 +65,8 @@ public final class JdkEnsureCommand implements CliCommand {
 
     @Override public List<Param> parameters() {
         return List.of(Param.of("spec", Arity.ONE,
-                "Major version (e.g. 25, 17), full version (e.g. 25.0.3), or a keyword "
-                + "(lts / stable / latest, or native for the latest Oracle GraalVM)."));
+                "The vendor/version of JDK you'd like to ensure is installed\n"
+                + "  and available (ex: 25, lts, latest, temurin-25, openjdk-26)"));
     }
 
     private String spec;

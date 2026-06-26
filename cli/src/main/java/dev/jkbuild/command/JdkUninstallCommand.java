@@ -64,16 +64,16 @@ public final class JdkUninstallCommand implements CliCommand {
 
     @Override public String name() { return "uninstall"; }
     @Override public java.util.List<String> aliases() { return java.util.List.of("remove", "rm", "del"); }
-    @Override public String description() { return "Uninstall JDK versions"; }
+    @Override public String description() { return "Uninstall a Java Development Kit"; }
     @Override public java.util.List<Opt> options() {
         return java.util.List.of(
                 Opt.flag("Skip the confirmation prompt.", "-y", "--yes"),
                 Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide());
     }
     @Override public java.util.List<Param> parameters() {
-        return java.util.List.of(Param.of("source/spec", Arity.ZERO_OR_ONE,
-                "Install to remove (e.g. temurin-26.0.1). Optionally source-qualify it "
-                + "(e.g. intellij/temurin-26.0.1) to disambiguate. Omit to launch the interactive wizard."));
+        return java.util.List.of(Param.of("spec", Arity.ZERO_OR_ONE,
+                "The vendor/version of JDK you'd like to uninstall\n"
+                + "  (ex: 25, lts, latest, temurin-25, openjdk-26)"));
     }
 
     private static final Set<String> KNOWN_SOURCES = Set.of(

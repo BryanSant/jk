@@ -29,14 +29,15 @@ import java.util.Optional;
 public final class JdkGraalCommand implements CliCommand {
 
     @Override public String name() { return "graal"; }
-    @Override public String description() { return "Set the default GraalVM JDK (jk native / GRAALVM_HOME)"; }
+    @Override public String description() { return "Set a specific GraalVM JDK to be the native-image default"; }
 
     @Override public List<Opt> options() {
         return List.of(Opt.value("<dir>", "Override the JDK install root.", "--jdks-dir").hide());
     }
     @Override public List<Param> parameters() {
         return List.of(Param.of("spec", Arity.ZERO_OR_ONE,
-                "GraalVM spec (e.g. graalvm-25, graalce-25). Default: the newest installed GraalVM."));
+                "The vendor/version of GraalVM you'd like to make the default\n"
+                + "  (ex: 25, lts, latest, graal-25, graalce-25)"));
     }
 
     @Override

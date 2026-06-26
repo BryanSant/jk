@@ -55,7 +55,7 @@ public final class JdkUpdateCommand implements CliCommand {
 
     @Override public String name() { return "update"; }
     @Override public List<String> aliases() { return List.of("upgrade"); }
-    @Override public String description() { return "Update jk-managed JDKs to the latest point release"; }
+    @Override public String description() { return "Update a Java Development Kit"; }
 
     @Override public List<Opt> options() {
         return List.of(
@@ -67,8 +67,8 @@ public final class JdkUpdateCommand implements CliCommand {
 
     @Override public List<Param> parameters() {
         return List.of(Param.of("spec", Arity.ZERO_OR_ONE,
-                "Limit to JDKs matching this (e.g. 25, temurin, temurin-25). "
-                + "Omit to update every jk-managed JDK."));
+                "The vendor/version of JDK you'd like to update\n"
+                + "  (ex: 25, lts, latest, temurin-25, openjdk-26)"));
     }
 
     /** A planned update: the installed JDK being superseded and the feed entry replacing it. */

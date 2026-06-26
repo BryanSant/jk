@@ -30,7 +30,7 @@ import java.util.Optional;
 public final class JdkDefaultCommand implements CliCommand {
 
     @Override public String name() { return "default"; }
-    @Override public String description() { return "Set an installed JDK as the system default"; }
+    @Override public String description() { return "Set a specific Java Development Kit to be the default"; }
 
     @Override public List<Opt> options() {
         return List.of(
@@ -38,7 +38,8 @@ public final class JdkDefaultCommand implements CliCommand {
                 Opt.value("<dir>", "Override the JDK install root. Default: the IntelliJ JDK directory.", "--jdks-dir").hide());
     }
     @Override public List<Param> parameters() {
-        return List.of(Param.of("spec", Arity.ZERO_OR_ONE, "JDK spec to resolve (e.g. 25, temurin-25, corretto-25.0.3)."));
+        return List.of(Param.of("spec", Arity.ZERO_OR_ONE, "The vendor/version of JDK you'd like to make the default\n"
+                + "  (ex: 25, lts, latest, temurin-25, openjdk-26)"));
     }
 
     @Override

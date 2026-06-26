@@ -67,8 +67,8 @@ public final class JdkInstallCommand implements CliCommand {
     }
     @Override public java.util.List<Param> parameters() {
         return java.util.List.of(Param.of("spec", Arity.ZERO_OR_ONE,
-                "Keyword (`lts` / `stable` / `latest` / `native`, where `native` is the latest Oracle GraalVM) "
-                + "or a denormalized version. Omit to launch the interactive wizard."));
+                "The vendor/version of JDK you'd like to install\n"
+                + "  (ex: 25, lts, latest, native, temurin-25.0.3)"));
     }
 
     String spec;
