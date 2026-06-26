@@ -8,10 +8,14 @@ import org.tomlj.TomlParseResult;
 import org.tomlj.TomlTable;
 
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Parses {@code jk.lock} (TOML) into a {@link Lockfile}.
@@ -24,9 +28,36 @@ public final class LockfileReader {
 
     private LockfileReader() {}
 
+    /**
+     * Memoises {@link #read(Path)} results for the life of the process, keyed by
+     * file identity (absolute path + size + mtime). jk is single-shot and the
+     * lockfile does not change during a build: the engine reads {@code jk.lock}
+     * from several places (parse-build scope, parse-build execute, sync-deps scope,
+     * predictSync in EffortWeights, sibling-lockfile loops) that all resolve to the
+     * same bytes on disk. Caching collapses those repeated TOML parses to a single
+     * read per distinct file per process. Keying on size + mtime means an
+     * auto-lock update (which rewrites the file) gets a fresh parse.
+     */
+    private static final ConcurrentHashMap<CacheKey, Lockfile> READ_CACHE =
+            new ConcurrentHashMap<>();
+
+    private record CacheKey(Path path, long size, FileTime modified) {}
+
+    /** Test seam: drop the per-process read memo so freshly-written files re-parse. */
+    public static void clearCache() {
+        READ_CACHE.clear();
+    }
+
     public static Lockfile read(Path file) throws IOException {
+        BasicFileAttributes attrs = Files.readAttributes(file, BasicFileAttributes.class);
+        CacheKey key = new CacheKey(
+                file.toAbsolutePath().normalize(), attrs.size(), attrs.lastModifiedTime());
+        Lockfile cached = READ_CACHE.get(key);
+        if (cached != null) return cached;
         TomlParseResult result = Toml.parse(file);
-        return fromResult(result, file.toString());
+        Lockfile lockfile = fromResult(result, file.toString());
+        READ_CACHE.put(key, lockfile);
+        return lockfile;
     }
 
     public static Lockfile parse(String content) {

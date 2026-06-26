@@ -245,6 +245,18 @@ public final class BuildPipeline {
             return p;
         };
 
+        // Source-list caches shared between the scope suppliers (estimate phase)
+        // and the parse-build execute (authoritative collection). The scope fires
+        // first (goal-start estimation); parse-build execute reuses the result
+        // instead of walking the same directories again. Using AtomicReference
+        // with lazy init: whichever side fires first populates the cache; the
+        // other side finds the value already set.
+        final java.util.concurrent.atomic.AtomicReference<List<Path>> javaMainSrcRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.concurrent.atomic.AtomicReference<List<Path>> kotlinMainSrcRef =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final Path javaMainSrcDir = compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java");
+
         // ---- parse-build ------------------------------------------------
         Phase parseBuild = Phase.builder("parse-build")
                 .label("Parsing")
@@ -370,9 +382,22 @@ public final class BuildPipeline {
                     }
                     ctx.put(COMPILE_TEST_CP, compileTestCp);
                     ctx.put(TEST_RUNTIME_CP, testRuntimeCp);
-                    Path javaMainSrc = compact ? in.dir().resolve("src") : in.dir().resolve("src/main/java");
-                    ctx.put(JAVA_SOURCES, CompileSupport.collectJavaSources(javaMainSrc));
-                    ctx.put(KOTLIN_SOURCES, CompileSupport.collectKotlinSources(in.dir(), compact));
+                    // Reuse source lists that the scope suppliers may have already walked.
+                    // If the scope hasn't fired yet (unusual ordering), populate and cache now.
+                    List<Path> javaMainSrcs = javaMainSrcRef.get();
+                    if (javaMainSrcs == null) {
+                        javaMainSrcs = CompileSupport.collectJavaSources(javaMainSrcDir);
+                        javaMainSrcRef.compareAndSet(null, javaMainSrcs);
+                        javaMainSrcs = javaMainSrcRef.get();
+                    }
+                    ctx.put(JAVA_SOURCES, javaMainSrcs);
+                    List<Path> kotlinMainSrcs = kotlinMainSrcRef.get();
+                    if (kotlinMainSrcs == null) {
+                        kotlinMainSrcs = CompileSupport.collectKotlinSources(in.dir(), compact);
+                        kotlinMainSrcRef.compareAndSet(null, kotlinMainSrcs);
+                        kotlinMainSrcs = kotlinMainSrcRef.get();
+                    }
+                    ctx.put(KOTLIN_SOURCES, kotlinMainSrcs);
                     ctx.put(RELEASE, project.project().javaRelease());
                     ctx.put(JAVA_HOME, CompileToolchain.resolveJavaHome(in.dir()));
                     ctx.put(MAIN_CLASSES, layout.classesDir());
@@ -448,7 +473,21 @@ public final class BuildPipeline {
                 // slice forward over time while it runs instead of sitting flat.
                 .weight(() -> plan.get().compileJava())
                 .interpolated()
-                .scope(() -> estimateJavaSources(in, compact))
+                .scope(() -> {
+                    // Populate the cache if not yet done (may have been filled by
+                    // parse-build execute or by EffortWeights.predict via collectJavaSources).
+                    List<Path> srcs = javaMainSrcRef.get();
+                    if (srcs == null) {
+                        try {
+                            srcs = CompileSupport.collectJavaSources(javaMainSrcDir);
+                        } catch (Exception ignored) {
+                            srcs = List.of();
+                        }
+                        javaMainSrcRef.compareAndSet(null, srcs);
+                        srcs = javaMainSrcRef.get();
+                    }
+                    return srcs.size();
+                })
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
                     // javac always writes to the canonical classes dir (java/main/).
@@ -570,7 +609,19 @@ public final class BuildPipeline {
                 // (see compile-java). kotlinc is opaque too, so ease it over time.
                 .weight(() -> plan.get().compileKotlin())
                 .interpolated()
-                .scope(() -> estimateKotlinSources(in, compact))
+                .scope(() -> {
+                    List<Path> srcs = kotlinMainSrcRef.get();
+                    if (srcs == null) {
+                        try {
+                            srcs = CompileSupport.collectKotlinSources(in.dir(), compact);
+                        } catch (Exception ignored) {
+                            srcs = List.of();
+                        }
+                        kotlinMainSrcRef.compareAndSet(null, srcs);
+                        srcs = kotlinMainSrcRef.get();
+                    }
+                    return srcs.size();
+                })
                 .execute(ctx -> {
                     Path classes = ctx.require(MAIN_CLASSES);
                     Files.createDirectories(classes);   // compile-java may be skipped
