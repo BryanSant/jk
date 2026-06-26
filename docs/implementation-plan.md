@@ -26,21 +26,46 @@ This document is a **terse strategic implementation overview**, not a per-featur
 
 ## 3. Module map
 
-**Multi-module Gradle build from day one**, but consolidated by area — not one module per package. **Nine modules** at the repo root, grouped by dependency tier and how often the contained packages change together. Packages remain granular inside each module: `:core` contains `dev.jkbuild.util`, `dev.jkbuild.model`, etc. Inter-module dependencies are explicit in each `build.gradle.kts`; no cycles. Convention plugins live in `buildSrc/` (Java 25 toolchain, SPDX header check, Spotless, Checkstyle, JUnit 6). Library pins live in `gradle/libs.versions.toml` (Gradle version catalog).
+**Multi-module Gradle build**, structured in three tiers: kernel (universal, no plugin deps), plugins (first-party, loaded at runtime), and the CLI host. Convention plugins live in `buildSrc/` (Java 25 toolchain, SPDX header check, Spotless, Checkstyle, JUnit 6). Library pins live in `gradle/libs.versions.toml` (Gradle version catalog). Inter-module dependencies are explicit in each `build.gradle.kts`; no cycles.
 
 Listed in dependency order — foundations first, the native binary last.
 
+### Kernel modules (`kernel/`)
+
 | Module | Packages | Responsibility |
 |---|---|---|
-| `:core` | `dev.jkbuild.{util, event, model, config, lock}` | Foundations. Hashing/paths/ANSI/env-scrubbing, JSONL event log + chrome://tracing emitter, `jk.toml` model + coordinate types, TOML parser wrapper (line-precise diagnostics for PRD §31 #3), `jk.lock` read/write/merge. Zero network, zero process spawning. |
-| `:io` | `dev.jkbuild.{http, cache, git, repo}` | All fetches and on-disk artifact storage. HTTP/2 client wrapper, CAS + action cache + `~/.m2` view, JGit-backed git resolver (sparse checkout, URL canonicalization, tag-rewrite detection), Maven repo client (sparse-index, mirror, auth, normalization). |
+| `:model` | `dev.jkbuild.{model, run, util, credential, image, publish}` | Domain types: coordinate model, `jk.toml` data model, `GoalKey` / `Phase` / `PhaseKind`, path utilities, credential types, image and publish metadata. Zero network, zero process spawning. |
+| `:core` | `dev.jkbuild.{config, lock, layout, library, audit, deny}` | TOML parser wrapper (line-precise diagnostics), `jk.toml` parse + validation, `jk.lock` read/write/merge, `BuildLayout` path conventions, library catalog lookup, audit and deny policy parsers. |
+| `:io` | `dev.jkbuild.{http, cache, repo, forge}` | All fetches and on-disk artifact storage. HTTP/2 client wrapper, CAS + action cache + `~/.m2` view, Maven repo client (sparse-index, mirror, auth, normalization), forge credential helpers. |
 | `:resolver` | `dev.jkbuild.resolver` | PubGrub solver, version selectors, prose conflict diagnostics. Depends on `:io` for POM fetch, `:core` for types. |
-| `:toolchain` | `dev.jkbuild.{jdk, script, tool, discovery}` | Anything that manages a JVM, kotlinc, mvn, or gradle on disk. JDK manager (JetBrains feed client, install/default/graal/pin, the `jk activate` shell hook + `jk shell`, unified resolution shared with the build), JBang-compatible single-file Java 25 scripts, `jk tool install` / `jk exec` tool envs with LRU eviction, and the good-neighbor `discovery` package (probes for jk/IntelliJ/Gradle/SDKMAN/JBang/mise/asdf/jenv/Homebrew/system + symlink provisioner — used for JDK discovery and for Maven/Gradle/Kotlin tools). |
-| `:engine` | `dev.jkbuild.{task, compile, test}` | The compile/test pipeline. Action graph engine + parallel worker pool, subprocess-driven javac and kotlinc strategies behind a pluggable SPI, JUnit Platform launcher with Surefire-XML/SARIF/JaCoCo output. (Named `:engine`, not `:build`, because `build/` at the repo root would collide with Gradle's default output directory.) |
-| `:supply-chain` | `dev.jkbuild.{audit, sbom, deny, publish}` | Everything that gates or attests a release. `jk audit` (OSV), CycloneDX + SPDX SBOMs, `jk deny` license/source/yanked policy gate, `jk publish` (POM export, GPG + Sigstore signing, SLSA in-toto attestation). |
-| `:image` | `dev.jkbuild.image` | Jib-core OCI builder for `jk image`. Kept isolated because jib-core is a heavyweight dependency that most builds never load. |
-| `:compat` | `dev.jkbuild.{mvn, gradle}` | Maven/Gradle migration layer. `jk mvn` / `jk gradle` passthroughs (wired through the discovery probes), three-tier `jk import pom.xml`, best-effort `jk import build.gradle(.kts)`, `jk export pom.xml`. Depends on `:toolchain` for `ToolProvisioning`. |
-| `:cli` | `dev.jkbuild.cli` | picocli verb dispatch, flag parsing, exit codes, ANSI rendering. Depends on every module above. Also the application entrypoint: applies `application` + `org.graalvm.buildtools.native` plugins, so `./gradlew :cli:run` and `./gradlew :cli:nativeCompile` produce the JVM and native binaries respectively. |
+| `:toolchain` | `dev.jkbuild.{jdk, script, tool, discovery, compat, gradle, mvn, kotlin}` | Anything that manages a JVM, kotlinc, mvn, or gradle on disk. JDK manager (JetBrains feed client, install/default/graal/pin, the `jk activate` shell hook + `jk shell`, unified resolution shared with the build), JBang-compatible single-file Java 25 scripts, `jk tool install` / `jk tool run` tool envs with LRU eviction, and the good-neighbor `discovery` package (probes for jk/IntelliJ/Gradle/SDKMAN/JBang/mise/asdf/jenv/Homebrew/system — used for JDK discovery and for Maven/Gradle/Kotlin tools). Also owns the Maven/Gradle migration layer (`jk import`, `jk export`, passthroughs). |
+| `:engine` | `dev.jkbuild.{compile, runtime, task, test, git, worker}` | The compile/test pipeline. Action graph engine + parallel worker pool (`BuildPipeline`), subprocess-driven javac and kotlinc strategies behind a pluggable `CompileStrategy` SPI, JUnit Platform launcher with Surefire-XML/SARIF/JaCoCo output, progress-bar weight prediction (`EffortWeights` + `PhaseTimings`). (Named `:engine`, not `:build`, because `build/` at the repo root would collide with Gradle's default output directory.) |
+
+### Plugin modules (`plugins/`)
+
+First-party plugins loaded at runtime by the engine via the plugin API. Each is an isolated module with no inbound deps from `:cli`.
+
+| Module | Responsibility |
+|---|---|
+| `:java-compiler` | subprocess javac strategy |
+| `:kotlin-compiler` | subprocess kotlinc strategy |
+| `:test-runner` | JUnit Platform launcher |
+| `:auditor` | OSV vulnerability scanner (`jk audit`) |
+| `:publisher` | Maven Central publish + GPG + Sigstore + SLSA |
+| `:image-builder` | Jib-core OCI image builder (`jk image`) |
+| `:compat-bridge` | Maven/Gradle passthrough runners |
+| `:git-client` | JGit resolver for git-source dependencies |
+| `:formatter` | Spotless-wrapped Java/Kotlin formatter (`jk format`) |
+
+### Plugin API (`plugin-api/`)
+
+The SPI that kernel `:engine` and all plugin modules share. Plugins declare their `CompileStrategy`, `TestStrategy`, etc. against this API; the engine loads them at startup.
+
+### CLI host (`cli/`)
+
+| Module | Packages | Responsibility |
+|---|---|
+| `:cli` | `dev.jkbuild.{cli, command}` | Verb dispatch, arg parsing (`ArgParser`), ANSI/TUI rendering, exit codes. Depends on every kernel module. Also the application entrypoint: applies `application` + `org.graalvm.buildtools.native` plugins, so `./gradlew :cli:installDist` produces the JVM distribution and `./gradlew :cli:nativeCompile` the native binary. |
 
 ---
 
@@ -48,9 +73,8 @@ Listed in dependency order — foundations first, the native binary last.
 
 | Slot | Pick | Rationale |
 |---|---|---|
-| TOML parser | **Lightbend Config** (`com.typesafe:config`) | Canonical reference impl; PRD §5.1 specifies. Wrapped with a line-precise diagnostic decorator to fix PRD §31 #3. |
-| TOML parser | **tomlj** | Pure Java, TOML 1.0 conformant, GraalVM-friendly, no transitive Jackson. |
-| CLI parsing | **picocli** | GraalVM-first design (used by Quarkus). Minimal reflection footprint, completion-script generation, mature subcommand support. |
+| TOML parser | **tomlj** (`org.tomlj:tomlj`) | Pure Java, TOML 1.0 conformant, GraalVM-friendly, no transitive Jackson. Wrapped in `dev.jkbuild.config` with line-precise error rendering. (Lightbend Config was the original pick; tomlj was substituted for its lighter footprint and GraalVM compatibility.) |
+| CLI parsing | **Hand-rolled `ArgParser`** (`dev.jkbuild.cli.args`) | Zero reflection, no native-image hints needed, gives full control over alias rewriting and help rendering. picocli was the original pick; it was phased out as commands moved to the ported dispatch layer. |
 | HTTP/2 client | **`java.net.http.HttpClient`** (JDK built-in) | Zero added dep, HTTP/2 native, virtual-thread friendly, GraalVM-safe. Avoids Netty's binary-size cost. |
 | Git client | **JGit** (`org.eclipse.jgit`) | Pure Java, no native libs, well-tested under GraalVM. libgit2 via FFI is rejected for native-image complexity. |
 | Bytecode / ABI | **ASM 9.10** | PRD-specified. Pulled in at v0.2 for jar manifest assembly; v1.5 ABI fingerprinting reuses it. |
@@ -79,10 +103,10 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 - **v0.3 — Kotlin & workspaces.** ✅ Shipped. kotlinc subprocess strategy, KSP, user-facing multi-module workspaces (in `jk.toml`), features, profiles.
 - **v0.4 — Toolchain.** ✅ Shipped. JDK manager installs from the JetBrains JDK feed and discovers JDKs from all common locations (jk/IntelliJ/Gradle/SDKMAN/mise/asdf/jenv/Homebrew/system) via the probe chain; foojay/Disco usage retired. Unified resolution order shared by the build and the `jk activate` shell hook (manages `JAVA_HOME`/`GRAALVM_HOME`); `jk shell`; project-level JDK pinning + a global default / default-GraalVM. See [jdk-resolution.md](./jdk-resolution.md).
 - **v0.5 — Migration.** ✅ Shipped. `jk mvn` / `jk gradle` passthroughs, three-tier `jk import pom.xml` (single + multi-module), best-effort `jk import build.gradle(.kts)`, `jk export pom.xml`.
-- **v0.6 — Publishing & scripting.** ✅ Shipped. `jk publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOMs). `jk tool run script.java` (JBang-compat). `jk tool install` / `jk exec` (was `jk install` / `jkx` pre-Option-1; `jkx` is kept as an alias for `jk exec`).
+- **v0.6 — Publishing & scripting.** ✅ Shipped. `jk publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOMs). `jk tool run script.java` (JBang-compat). `jk tool install` / `jk tool run` for tool envs with LRU eviction; `jkx` is a shell alias (installed by `jk activate`) for `jk tool run`.
 - **v0.7 — Git deps.** ✅ Shipped. JGit resolver, TOML git-source syntax, GitFetcher + GitSource + GitUrl.
 - **v0.8 — Container & supply chain.** ✅ Shipped. `jk image` (Jib-core), `jk audit` (OSV), `jk deny`, CycloneDX + SPDX, `jk native` (GraalVM native-image driver).
-- **v0.9 — Self-hosting.** ✅ Shipped. `jk verify-build`, candidate self-hosting `jk.tomls`, jk builds itself end-to-end. Subprocess compile strategies behind a pluggable SPI (kotlin-compiler-embeddable removed). Native-image config consolidated; binary trimmed 187 MB → 138 MB. Good-neighbor tool discovery layered on after the milestone.
+- **v0.9 — Self-hosting.** ✅ Shipped. `jk verify` (reproducibility check), candidate self-hosting `jk.tomls`, jk builds itself end-to-end. Subprocess compile strategies behind a pluggable SPI (kotlin-compiler-embeddable removed). Native-image config consolidated; binary trimmed 187 MB → 138 MB. Good-neighbor tool discovery layered on after the milestone.
 - **v1.0 — GA.** Next. IntelliJ plugin (synthetic-POM bridge mode), VS Code extension shell, docs site, benchmark dashboard, `setup-jk` GitHub Action, signed v1.0.0 release.
 
 ---
@@ -101,7 +125,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 
 1. ✅ Every feature the jk-build itself depends on shipped in a tagged release before the flip.
 2. ✅ Candidate `jk.tomls` files committed in v0.9 slice A; multi-module workspace derived from the existing Gradle build.
-3. ✅ Parity via `jk verify-build` (byte-identical jar across boxes).
+3. ✅ Parity via `jk verify` (byte-identical jar across boxes).
 4. ✅ jk builds itself end-to-end as of commit `88c2fdf`. Gradle build retained at the repo root as the bootstrap path through at least v1.1.
 
 ---
@@ -111,7 +135,7 @@ Logical sequencing, dependency-driven, no calendar estimates. Each milestone is 
 - **Unit:** JUnit 6 + AssertJ per subsystem.
 - **Resolver fixtures:** snapshot real Maven POMs (Spring Boot 3.4, Quarkus 3.x, Micronaut 4, Kotlin stdlib, Jackson, Netty) into `src/test/resources/fixtures/`. Serve via an in-memory HTTP/2 stub. PubGrub regressions caught by golden-output diffs.
 - **End-to-end:** shell-level scripts under `src/test/e2e/`, run via JUnit + `ProcessBuilder` first against the JVM build, then against the native binary in CI.
-- **Reproducibility:** every release tag runs `jk verify-build` in a clean workspace and on at least one second OS/arch combination.
+- **Reproducibility:** every release tag runs `jk verify` in a clean workspace and on at least one second OS/arch combination.
 
 ---
 
@@ -142,27 +166,34 @@ jk/
 ├── NOTICE                           # short attribution
 ├── .gitignore
 ├── .sdkmanrc                        # java=25.0.3-graal, gradle=9.5.1
-├── settings.gradle.kts              # include(":core", ":io", ":resolver", ...)
+├── settings.gradle.kts              # include(":model", ":core", ":io", ...)
 ├── build.gradle.kts                 # root: applies convention plugins to subprojects
-├── jk.toml                         # candidate self-hosting build (v0.9 — jk builds itself)
+├── jk.toml                          # self-hosting build (jk builds itself since v0.9)
+├── jk.lock                          # locked dependency graph for the jk build itself
 ├── buildSrc/                        # Gradle convention plugins
 │   └── src/main/kotlin/             # jk.java-conventions.gradle.kts, jk.spdx-header.gradle.kts, ...
 ├── gradle/
 │   └── libs.versions.toml           # version catalog (single source of truth for deps)
-├── docs/
-│   ├── requirements.md              # PRD
-│   ├── implementation-plan.md       # this document
-│   ├── comparison.md                # jk vs uv / Cargo / Gradle / Maven
-│   └── tool-discovery-plan.md       # good-neighbor symlink discovery (shipped)
-├── core/   src/{main,test}/java/dev/jkbuild/{util,event,model,config,lock}/
-├── io/     src/{main,test}/java/dev/jkbuild/{http,cache,git,repo}/
-├── resolver/   src/{main,test}/java/dev/jkbuild/resolver/
-├── toolchain/  src/{main,test}/java/dev/jkbuild/{jdk,script,tool,discovery}/
-├── engine/     src/{main,test}/java/dev/jkbuild/{task,compile,test}/        # subprocess CompileStrategy SPI
-├── supply-chain/ src/{main,test}/java/dev/jkbuild/{audit,sbom,deny,publish}/
-├── image/      src/{main,test}/java/dev/jkbuild/image/                      # Jib-core
-├── compat/     src/{main,test}/java/dev/jkbuild/{mvn,gradle}/
-└── cli/        src/{main,test}/java/dev/jkbuild/cli/                        # picocli; application + native-image
+├── docs/                            # design documents
+├── kernel/                          # universal kernel modules (no plugin-api deps)
+│   ├── model/    src/{main,test}/java/dev/jkbuild/{model,run,util,credential,image,publish}/
+│   ├── core/     src/{main,test}/java/dev/jkbuild/{config,lock,layout,library,audit,deny}/
+│   ├── io/       src/{main,test}/java/dev/jkbuild/{http,cache,repo,forge}/
+│   ├── resolver/ src/{main,test}/java/dev/jkbuild/resolver/
+│   ├── toolchain/ src/{main,test}/java/dev/jkbuild/{jdk,script,tool,discovery,compat,gradle,mvn,kotlin}/
+│   └── engine/   src/{main,test}/java/dev/jkbuild/{compile,runtime,task,test,git,worker}/
+├── plugin-api/  src/{main,test}/java/                # CompileStrategy / TestStrategy SPI
+├── plugins/                         # first-party plugins (loaded at runtime)
+│   ├── java-compiler/
+│   ├── kotlin-compiler/
+│   ├── test-runner/
+│   ├── auditor/
+│   ├── publisher/
+│   ├── image-builder/
+│   ├── compat-bridge/
+│   ├── git-client/
+│   └── formatter/
+└── cli/        src/{main,test}/java/dev/jkbuild/{cli,command}/  # verb dispatch + native-image entrypoint
 ```
 
 ---

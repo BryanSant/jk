@@ -299,7 +299,7 @@ churn on peripheral/report-style commands:
   removing their hand-rolled `✓ …` summary.
 - **Goal view wiring:** `publish`, `image` → `runGoal(…, module)` (have
   dry-run / tarball-vs-push branches to fold into the success mapper).
-- **Report-style (`verify-build`, `audit`):** they print multi-line reports
+- **Report-style (`verify`, `audit`):** they print multi-line reports
   (hashes / markdown), not a single result line — decide whether to keep their
   output and only wrap the goal, or restructure. Likely keep custom output.
 - **Interactive goals** (`jk new`, `jdk install/uninstall`, `run`, `script`):

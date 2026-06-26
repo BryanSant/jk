@@ -472,7 +472,7 @@ All foundational decisions are settled.
 ## 9. Risks
 
 - **Reproducibility regression.** Moving code between modules changes jar
-  contents/order. Mitigated by `jk verify-build` gating every phase.
+  contents/order. Mitigated by `jk verify` gating every phase.
 - **Native-image breakage.** Reflection/resource config is currently
   per-subsystem under `META-INF/native-image/`. Module merges must carry that
   config along. The CLI shrinks (picocli gone, plugin bytecode never reachable),

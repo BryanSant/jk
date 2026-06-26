@@ -80,7 +80,7 @@ the dependency auditor, the git client — are first-party subsystems compiled
 - **Ephemeral tool exec (≈ `uvx`).** `jk tool run <coord>` resolves, caches,
   runs, and LRU-evicts any published CLI without polluting your project.
 - **Reproducible by default.** Locked deps, locked toolchain, scrubbed
-  environment, sorted jar entries, deterministic timestamps. `jk verify-build`
+  environment, sorted jar entries, deterministic timestamps. `jk verify`
   rebuilds in a scratch dir and diffs the SHA-256.
 
 ### 2. Adopt it without migrating
@@ -255,13 +255,13 @@ locally in your `jk.toml`'s `[libraries]` table.
 | Publishing | `publish` (GPG + Sigstore + SLSA + CycloneDX/SPDX SBOM) |
 | Supply chain | `audit` (OSV), `deny` (license/source/yanked policy) |
 | Containers / native | `image` (Jib-core OCI), `native` (GraalVM native-image) |
-| Reproducibility | `verify-build` |
+| Reproducibility | `verify` |
 | Cache & maintenance | `cache dir/info/prune/purge`, `doctor` |
 | Scripting | `run script.java` (JBang-compatible) |
 
 `jk --help` lists every canonical verb. Hidden migration aliases
-(`jk package` → `jk build`, `jk install` → `jk tool install`,
-`jk nativeCompile` → `jk native`, …) are documented in
+(`jk package` → `jk build`, `jk nativeCompile` → `jk native`,
+`jk verify-build` → `jk verify`, …) are documented in
 [`docs/aliases.md`](docs/aliases.md).
 
 ## Status
@@ -272,8 +272,8 @@ shipped — including self-hosting (jk builds itself). v1.0 work focuses on
 IntelliJ / VS Code integration, the benchmark dashboard, and the GA release
 artifact pipeline.
 
-The native binary is built via `gradle :cli:nativeCompile`. A JVM-mode entry
-point ships as `./gradlew :cli:run`.
+The native binary is built via `./gradlew :cli:nativeCompile`. A runnable JVM
+distribution is produced by `./gradlew :cli:installDist` under `cli/build/install/`.
 
 ## Documentation
 

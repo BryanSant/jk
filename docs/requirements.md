@@ -48,7 +48,7 @@ centrally by `dev.jkbuild.jdk.SupportedJdk`.
 - Best-effort import of `pom.xml` (Tier 1 lossless, Tier 2 best-effort, Tier 3 stub-with-diagnostic).
 - Generate `pom.xml` on publish so jk-built jars are first-class on Maven Central.
 - Subsume JBang's single-file scripting role (`jk tool run script.java` with header-comment deps).
-- `jk tool install` / `jk exec` for installing and ephemerally running JVM CLIs as tools.
+- `jk tool install` / `jk tool run` for installing and ephemerally running JVM CLIs as tools.
 - Built-in `jk audit` (OSV database) and `jk image` (Jib-style daemonless OCI images, distroless, multi-arch).
 - SLSA L3 provenance and Sigstore keyless signing by default for `jk publish` from CI.
 - SBOM emission (CycloneDX + SPDX) on every build.
@@ -81,7 +81,7 @@ centrally by `dev.jkbuild.jdk.SupportedJdk`.
 
 - **Gradle/Kotlin developer (Greg).** Ships a Spring Boot service in Kotlin. Loves the Kotlin DSL but resents the daemon, configuration-cache breakage, and uninspectable resolution. **jk wins him by:** TOML with schema validation in IntelliJ, `jk why-rebuilt :foo:compile`, native binary speed, and first-class Kotlin (K2 + KSP + Spring/JPA compiler plugins).
 
-- **Polyglot adopter (Pria).** Heavy `uv` and `cargo` user, occasional Java contributor to a backend service. Wants the JVM to feel like the rest of her toolchain. **jk wins her by:** `jk init`, `jk add`, `jk sync`, `jk lock`, `jk tool install`, `jk exec`, `jk audit`, and a 5-second `cargo new`-equivalent.
+- **Polyglot adopter (Pria).** Heavy `uv` and `cargo` user, occasional Java contributor to a backend service. Wants the JVM to feel like the rest of her toolchain. **jk wins her by:** `jk init`, `jk add`, `jk sync`, `jk lock`, `jk tool install`, `jk tool run`, `jk audit`, and a 5-second `cargo new`-equivalent.
 
 - **Library author (Liam).** Publishes an OSS Java library to Maven Central. Needs sources/javadoc jars, GPG signatures, valid POM with licenses/SCM/developers, Sigstore attestations, SLSA provenance. **jk wins him by:** one-command `jk publish` from CI with all of the above, no `nexus-staging-maven-plugin` rituals.
 
@@ -266,9 +266,9 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk publish [--repo <name>] [--dry-run]` | Sign, package, upload to a Maven-style repository. |
 | `jk image [--registry <url>] [--push]` | Build an OCI image (Jib-style). |
 | `jk native` | Build a GraalVM native binary from a `--bin` artifact. (Verb is `native`, not `native-image`, to keep it distinct from `jk image` which builds OCI container images.) |
-| `jk tool install --git ... --bin ...` or `jk tool install <coord> --bin <name>` | Install a JVM CLI as a tool. (`jk install <coord>` is a hidden alias.) |
-| `jk exec <coord>[@ver] [-- args...]` | Ephemeral tool execution. (`jk jkx` is a kept alias.) |
-| `jk tool {list,update,uninstall,run}` | Manage installed tools. |
+| `jk tool install --git ... --bin ...` or `jk tool install <coord> --bin <name>` | Install a JVM CLI as a tool. `jk install <coord>` also installs from a coord (and can build+install the current project when no arg is given). |
+| `jk tool run <coord>[@ver] [-- args...]` | Ephemeral tool execution. `jkx` is a shell alias (installed by `jk activate`) that expands to `jk tool run`. |
+| `jk tool {list,uninstall,run}` | Manage installed tools. |
 | `jk jdk {install,list,use,uninstall,pin,gc}` | JDK management. |
 | `jk activate <shell>` / `jk shell` | Install the directory-aware `JAVA_HOME`/`GRAALVM_HOME` hook (`eval "$(jk activate bash)"`), or spawn a one-off subshell for the project's JDK. (`jk jdk home` prints a single export line.) |
 | `jk mvn ...` | Passthrough to Maven (jk downloads/manages Maven). |
@@ -276,7 +276,7 @@ A small, stable, Cargo-style verb set. No verbs are pluggable in v1.
 | `jk import {pom.xml\|build.gradle\|build.gradle.kts}` | Best-effort convert to `jk.toml`. |
 | `jk export {pom.xml}` | Emit a publishable POM (Gradle export is v1.1+). |
 | `jk scan` | Write a local HTML/JSON build scan report. |
-| `jk verify-build` | Rebuild in a clean directory and diff outputs. |
+| `jk verify` | Rebuild in a clean directory and diff outputs. (`jk verify-build` is a back-compat alias.) |
 
 Common flags:
 
@@ -1043,7 +1043,7 @@ Java 25 (with unnamed-class / instance-main / JEP 512). Kotlin (`.kts` with jk-s
 
 ---
 
-## 20. Tools (`jk tool install` / `jk exec`)
+## 20. Tools (`jk tool install` / `jk tool run`)
 
 ### 20.1 Install
 
@@ -1062,14 +1062,14 @@ $JK_BIN_DIR/<launcher>            # user-PATH entry, shell wrapper or native bin
 
 `jk tool install` prints the `export PATH=...` line for `$JK_BIN_DIR`; it does not mutate dotfiles. `jk tool update-shell` writes it with explicit user confirmation.
 
-### 20.3 Ephemeral execution: `jk exec`
+### 20.3 Ephemeral execution: `jk tool run`
 
 ```
-jk exec com.diffplug.spotless:spotless-cli:2.45.0 -- check
-jk exec --from com.foo:bar --bin baz -- arg1 arg2
+jk tool run com.diffplug.spotless:spotless-cli:2.45.0 -- check
+jk tool run --from com.foo:bar --bin baz -- arg1 arg2
 ```
 
-Resolves, caches under `$JK_CACHE_DIR`, executes. LRU-evicted. Subsequent runs of the same coord+version are near-instant. `jk jkx` is retained as an alias for muscle-memory continuity with `uvx`.
+Resolves, caches under `$JK_CACHE_DIR`, executes. LRU-evicted. Subsequent runs of the same coord+version are near-instant. `jkx` is a shell function (installed by `eval "$(jk activate <shell>)"`) that expands to `jk tool run` for muscle-memory continuity with `uvx`.
 
 ### 20.4 Native-image tools
 
@@ -1183,7 +1183,7 @@ First-class. Verify cosign signatures and Rekor inclusion proofs when present. `
 
 - Hermetic build inputs (locked deps, locked toolchain).
 - Non-falsifiable build platform identity via OIDC.
-- Reproducible verification (`jk verify-build` rerun in clean dir).
+- Reproducible verification (`jk verify` rerun in clean dir).
 
 Opt-out: `publish.slsa = false` for air-gapped environments. Default-on is by design.
 
@@ -1228,7 +1228,7 @@ Default behavior:
 Opt-in:
 
 - `jk build --hermetic` enables sandbox-exec (macOS) / bwrap (Linux) per-action sandboxing. Not the default in v1.0.
-- `jk verify-build` rebuilds in a clean directory and diffs.
+- `jk verify` rebuilds in a clean directory and diffs.
 
 ### 23.8 Dependency confusion defense
 

@@ -15,7 +15,7 @@ Use the appropriate comment syntax for the file type (`//` for Java/Kotlin/Gradl
 The bootstrap build pins JDK and Gradle versions in `.sdkmanrc`:
 
 ```
-java=25.0.3-tem
+java=25.0.3-graal
 gradle=9.5.1
 ```
 
@@ -24,16 +24,22 @@ With SDKMAN: `sdk env install && sdk env`. Without SDKMAN: Gradle will toolchain
 ## Building
 
 ```
-gradle clean build
+./gradlew classes
 ```
 
-The native binary is opt-in (not part of `build`):
+Run `./gradlew :cli:installDist` to produce a runnable JVM distribution under `cli/build/install/`. The end-to-end test suite (`./gradlew build`) downloads artifacts from Maven Central; avoid running it in environments with rate-limited network access.
+
+The native binary is opt-in:
 
 ```
-gradle :cli:nativeCompile
+./gradlew :cli:nativeCompile
 ```
 
-`nativeCompile` requires a GraalVM-capable JDK; Gradle's toolchain auto-provisions one when needed.
+`nativeCompile` requires a GraalVM-capable JDK (the pinned `25.0.3-graal` above satisfies this). After compilation, install locally with:
+
+```
+./install.sh cli/build/native/nativeCompile/jk
+```
 
 ## Project layout
 

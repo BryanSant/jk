@@ -32,8 +32,8 @@ These commands map directly across all five tools. Differences shown in the
 | Run tests | `jk test` | — | `cargo test` | `gradle test` | `mvn test` | uv defers to `pytest` / `unittest`. jk emits Surefire-shaped XML so existing CI test reporters work. |
 | Clean build outputs | `jk clean` | — | `cargo clean` | `gradle clean` | `mvn clean` | jk wipes `target/` and `.jk/generated/`; the others wipe their own conventional dirs. |
 | Publish artifacts | `jk publish` | `uv publish` | `cargo publish` | `gradle publish` | `mvn deploy` | jk publishes a Maven-Central-grade POM + jar by default; signing, Sigstore, SLSA and SBOM are flags on the same verb (see §3 below). |
-| Install a tool globally | `jk tool install <coord>` | `uv tool install <pkg>` | `cargo install <crate>` | — | — | jk and cargo install the artifact's own launcher; jk writes to `$JK_BIN_DIR` (`~/.local/bin` by default), cargo to `~/.cargo/bin/`. uv creates a per-tool venv. `jk install <coord>` is a hidden alias for back-compat. |
-| Ephemeral tool exec | `jk exec <coord>` (alias: `jk jkx`; underlying: `jk tool run <coord>`) | `uvx <pkg>` | — | — | — | "Resolve, cache, run, evict LRU." `exec` is the top-level shorthand, parallel to `uvx`; `jkx` is kept as an alias for muscle-memory continuity. |
+| Install a tool globally | `jk tool install <coord>` | `uv tool install <pkg>` | `cargo install <crate>` | — | — | jk and cargo install the artifact's own launcher; jk writes to `$JK_BIN_DIR` (`~/.jk/bin` by default), cargo to `~/.cargo/bin/`. uv creates a per-tool venv. `jk install <coord>` also installs a tool (and builds + locally-publishes the current project when no coord is given). |
+| Ephemeral tool exec | `jk tool run <coord>` (shell alias: `jkx`) | `uvx <pkg>` | — | — | — | "Resolve, cache, run, evict LRU." `jkx` is a shell function installed by `eval "$(jk activate <shell>)"` that expands to `jk tool run`. |
 | Repair discovered build tools | `jk doctor` | — | — | — | — | Prunes broken mvn/gradle/kotlin symlinks under `$JK_CACHE_DIR/tools/`. |
 | Single-file scripts | `jk tool run script.java` | `uv run script.py` | — | — | — | jk's header (`//jk dep …`) is also JBang-compatible. uv reads PEP 723 inline metadata. |
 
@@ -57,7 +57,7 @@ Same job, different default behaviour or filesystem layout.
 | Build profiles | `profiles.{dev,ci,…}` block | — | `[profile.dev]` / `[profile.release]` | `gradle -PsomeProp` | `<profiles>` | jk's profiles change javac/JVM args, not deps (deps belong in features). |
 | Optional feature sets | `features { … }` block | `[project.optional-dependencies]` | `[features]` | *(no native; via separate sourceset)* | `<profile>` *(awkward)* | jk uses cargo's word "feature" deliberately — additive, named dep sets. |
 | Native compile | `jk native` *(GraalVM)* | — | `cargo build` *(native by default)* | *(graalvm plugin)* | *(graalvm plugin)* | jk drives the GraalVM `native-image` binary; cargo is native-by-default because Rust is AOT. |
-| Reproducibility check | `jk verify-build` | — | *(community: cargo-bisect-rustc, manual)* | — | — | jk's verb rebuilds in a scratch dir and diffs the jar's SHA-256. |
+| Reproducibility check | `jk verify` | — | *(community: cargo-bisect-rustc, manual)* | — | — | jk's verb rebuilds in a scratch dir and diffs the jar's SHA-256. |
 | Action / build cache | `$JK_CACHE_DIR/actions/` *(content-addressed)* | — | `target/` *(incremental compile)* | `--build-cache` *(local + optional remote)* | *(none)* | jk caches per-task by the SHA of its inputs (Bazel-shape); gradle's build cache is the nearest analogue. |
 
 ---
@@ -95,8 +95,8 @@ the rows above hide more than they reveal.
 
 * **From Cargo:** caret defaults, highest-wins resolution, lockfile discipline,
   workspaces, `cargo install` shape, prose conflict diagnostics.
-* **From uv:** the `uvx`-style ephemeral-exec UX (`jk exec`, aliased `jkx`), integrated Python/JDK toolchain
-  management, the "fast native binary" delivery.
+* **From uv:** the `uvx`-style ephemeral-exec UX (`jk tool run`, shell alias `jkx`), integrated Python/JDK
+  toolchain management, the "fast native binary" delivery.
 * **From Gradle:** workspaces, multi-module composite-build semantics,
   build cache (jk's action cache is the equivalent), Kotlin support.
 * **From Maven:** the artifact ecosystem (Central, scopes, BOM imports, GPG
