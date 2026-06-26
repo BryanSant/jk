@@ -51,6 +51,7 @@ class UpdateCommandTest {
     void stop() {
         server.stop(0);
         ActiveConfig.reset();
+        LockfileReader.clearCache();
     }
 
     @Test
