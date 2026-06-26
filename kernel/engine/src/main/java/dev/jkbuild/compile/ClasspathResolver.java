@@ -53,9 +53,34 @@ public final class ClasspathResolver {
             String checksum = pkg.checksum();
             if (checksum == null) continue;
             String hex = checksum.startsWith("sha256:") ? checksum.substring("sha256:".length()) : checksum;
-            result.add(cas.pathFor(hex));
+            // Prefer the human-readable repos/<name>/<m2-path>.jar path; fall back to the CAS
+            // hash path for artifacts fetched before the named-repo store was introduced.
+            Path repoPath = resolveFromRepos(pkg);
+            result.add(repoPath != null ? repoPath : cas.pathFor(hex));
             ledger.touch(hex);
         }
         return result;
+    }
+
+    /**
+     * Resolve the artifact path from the named-repo store ({@code repos/<name>/<m2-path>.jar}).
+     * Returns {@code null} when the artifact is absent from the store, the source is not a Maven
+     * repo (git, path, local), or the source field is missing — callers fall back to the CAS path.
+     */
+    private Path resolveFromRepos(Lockfile.Artifact pkg) {
+        String source = pkg.source();
+        if (source == null) return null;
+        int plus = source.indexOf('+');
+        if (plus <= 0 || plus >= source.length() - 1) return null;
+        String repoName = source.substring(0, plus);
+        // Skip special / non-Maven sources.
+        if (repoName.isEmpty() || repoName.equals("local") || repoName.startsWith("git:")) return null;
+        int colon = pkg.name().indexOf(':');
+        if (colon < 0) return null;
+        dev.jkbuild.model.Coordinate coord = dev.jkbuild.model.Coordinate.of(
+                pkg.name().substring(0, colon), pkg.name().substring(colon + 1), pkg.version());
+        String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
+        dev.jkbuild.repo.RepoArtifactStore store = new dev.jkbuild.repo.RepoArtifactStore(cas.root(), repoName);
+        return store.locate(m2Path).orElse(null);
     }
 }

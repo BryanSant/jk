@@ -84,7 +84,10 @@ public final class CacheSync {
                     ? pkg.checksum().substring("sha256:".length())
                     : pkg.checksum();
 
-            if (!refresh && cas.contains(hex)) {
+            // Check the named-repo store first (repos/<name>/<m2-path>.sha256) — a stat call
+            // that works cross-project without any CAS knowledge.  Fall back to the CAS for
+            // artifacts fetched before this store existed (old lockfiles / old builds).
+            if (!refresh && (repoStoreContains(pkg) || cas.contains(hex))) {
                 upToDate++;
                 observer.upToDate(pkg);
                 continue;
@@ -237,6 +240,23 @@ public final class CacheSync {
             Thread.currentThread().interrupt();
             return FetchResult.failure(p.pkg.name() + " v" + p.pkg.version() + ": interrupted");
         }
+    }
+
+    /**
+     * True when the artifact's coordinate is already present in the named-repo store
+     * ({@code repos/<name>/<m2-path>.sha256} exists). A single stat call, no content read.
+     * Returns false for non-Maven sources (git, path, local) or malformed source strings.
+     */
+    private boolean repoStoreContains(Lockfile.Artifact pkg) {
+        String source = pkg.source();
+        if (source == null) return false;
+        int plus = source.indexOf('+');
+        if (plus <= 0 || plus >= source.length() - 1) return false;
+        String repoName = source.substring(0, plus);
+        Coordinate coord = toCoord(pkg);
+        String m2Path = dev.jkbuild.repo.MavenLayout.artifactPath(coord);
+        dev.jkbuild.repo.RepoArtifactStore store = new dev.jkbuild.repo.RepoArtifactStore(cas.root(), repoName);
+        return store.contains(m2Path);
     }
 
     private MavenRepo repoFor(String source, Map<String, MavenRepo> cache) {

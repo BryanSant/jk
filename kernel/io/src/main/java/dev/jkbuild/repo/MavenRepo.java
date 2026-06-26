@@ -36,6 +36,7 @@ public final class MavenRepo {
     private final RepoTransport transport;
     private final Cas cas;
     private final JkMavenLocalRepo localRepo;
+    private final RepoArtifactStore repoStore;
     private final RepoCredential credential;
 
     /** TTL + conditional-GET cache for maven-metadata.xml; null for non-HTTP transports. */
@@ -99,6 +100,7 @@ public final class MavenRepo {
         this.transport = Objects.requireNonNull(transport, "transport");
         this.cas = Objects.requireNonNull(cas, "cas");
         this.localRepo = Objects.requireNonNull(localRepo, "localRepo");
+        this.repoStore = new RepoArtifactStore(cas.root(), name);
         this.credential = Objects.requireNonNull(credential, "credential");
         // The metadata cache speaks HTTP directly (conditional GET), so it only
         // applies to http(s) repos — a file:// (or other) baseUrl can be paired
@@ -144,7 +146,9 @@ public final class MavenRepo {
      */
     public List<String> availableVersions(Coordinate coord) throws IOException, InterruptedException {
         if (ActiveConfig.get().offlineOr(false)) {
-            return localRepo.versions(coord.group(), coord.artifact());
+            // Prefer the new per-named-repo store; fall back to the legacy mirror.
+            List<String> versions = repoStore.versions(coord.group(), coord.artifact());
+            return versions.isEmpty() ? localRepo.versions(coord.group(), coord.artifact()) : versions;
         }
         try {
             byte[] xml = metadataCache != null
@@ -173,6 +177,11 @@ public final class MavenRepo {
             stored = cas.putStream(in);
         }
         if (mirror) {
+            // Write to the new named repo store (repos/<name>/<m2-path> + .sha256 sidecar) so
+            // subsequent lookups by coordinate skip the network entirely.
+            repoStore.materialize(relativePath, stored.path(), stored.sha256());
+            // Also maintain the legacy mirror for backward compatibility with old lockfiles
+            // whose ClasspathResolver still resolves CAS paths via sha256/AB/CD/….
             localRepo.materialize(relativePath, stored.path());
         }
         return new Fetched(uri, stored.path(), stored.sha256(), stored.size());
@@ -184,10 +193,12 @@ public final class MavenRepo {
      * treated as not-found and the resolver falls through cleanly.
      */
     private Fetched fetchOffline(Coordinate coord, String relativePath) throws IOException {
-        Optional<Path> found = localRepo.locate(relativePath);
+        // Prefer the new named repo store (repos/<name>/…); fall back to the legacy mirror.
+        Optional<Path> found = repoStore.locate(relativePath);
+        if (found.isEmpty()) found = localRepo.locate(relativePath);
         if (found.isEmpty()) {
             throw new ArtifactNotFoundException(
-                    "offline: " + coord + " (" + relativePath + ") not in local repo for " + name);
+                    "offline: " + coord + " (" + relativePath + ") not in local index for " + name);
         }
         Path path = found.get();
         // Hash by streaming the file rather than reading it whole — keeps an

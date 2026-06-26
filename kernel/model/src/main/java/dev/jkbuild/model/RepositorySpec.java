@@ -19,6 +19,9 @@ public record RepositorySpec(
     public static final RepositorySpec MAVEN_CENTRAL =
             new RepositorySpec("central", URI.create("https://repo.maven.apache.org/maven2/"));
 
+    public static final RepositorySpec GOOGLE_MAVEN =
+            new RepositorySpec("google", URI.create("https://maven.google.com/"));
+
     /** Convenience: a repository with no inline credential or object-store config. */
     public RepositorySpec(String name, URI url) {
         this(name, url, Optional.empty(), Optional.empty());
