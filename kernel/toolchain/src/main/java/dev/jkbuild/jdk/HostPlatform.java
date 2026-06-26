@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 package dev.jkbuild.jdk;
 
+import java.util.Locale;
+
 /**
  * The host's OS / architecture in the vocabulary the JetBrains JDK feed
  * uses ({@code linux} / {@code macOS} / {@code windows}; {@code x86_64} /
@@ -62,7 +64,7 @@ public final class HostPlatform {
 
     static String mapOs(String osName) {
         if (osName == null) return UNSUPPORTED;
-        String lower = osName.toLowerCase();
+        String lower = osName.toLowerCase(Locale.ROOT);
         if (lower.contains("linux")) return "linux";
         if (lower.contains("mac") || lower.contains("darwin")) return "macOS";
         if (lower.contains("windows")) return "windows";
@@ -71,7 +73,7 @@ public final class HostPlatform {
 
     static String mapArch(String osArch) {
         if (osArch == null) return UNSUPPORTED;
-        return switch (osArch.toLowerCase()) {
+        return switch (osArch.toLowerCase(Locale.ROOT)) {
             case "amd64", "x86_64", "x64" -> "x86_64";
             case "aarch64", "arm64" -> "aarch64";
             default -> UNSUPPORTED;
