@@ -199,12 +199,13 @@ class JdkCommandTest {
     }
 
     @Test
-    void uninstall_rejects_bare_major_spec(@TempDir Path tempDir) throws Exception {
+    void uninstall_accepts_bare_major_spec(@TempDir Path tempDir) throws Exception {
         Path jdks = tempDir.resolve("jdks");
         makeJdkInstall(jdks.resolve("temurin-21.0.5"));
+        // Bare major is now a valid spec: jk/21 resolves to temurin-21.0.5.
         int exit = run("jdk", "uninstall", "jk/21", "--yes",
                 "--jdks-dir", jdks.toString());
-        assertThat(exit).isEqualTo(64);
+        assertThat(exit).isEqualTo(0);
     }
 
     @Test
