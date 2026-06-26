@@ -3,6 +3,7 @@ package dev.jkbuild.task;
 
 import dev.jkbuild.cache.Cas;
 import dev.jkbuild.repo.JkMavenLocalRepo;
+import dev.jkbuild.repo.RepoArtifactStore;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -34,6 +35,26 @@ import java.util.stream.Stream;
 public final class CasSweep {
 
     private CasSweep() {}
+
+    /**
+     * Walk {@code <cacheRoot>/repos/} and call {@link RepoArtifactStore#removeShas} on each named
+     * sub-directory, removing hard-links to any CAS blob that was just swept. Best-effort — IO
+     * errors are swallowed so a stuck file never aborts the sweep.
+     */
+    private static void sweepNamedRepos(Path cacheRoot, Set<String> deletedShas, boolean dryRun) {
+        if (deletedShas.isEmpty()) return;
+        Path reposDir = cacheRoot.resolve("repos");
+        if (!Files.isDirectory(reposDir)) return;
+        try (Stream<Path> named = Files.list(reposDir)) {
+            for (Path nameDir : (Iterable<Path>) named::iterator) {
+                if (!Files.isDirectory(nameDir)) continue;
+                String repoName = nameDir.getFileName().toString();
+                new RepoArtifactStore(cacheRoot, repoName).removeShas(deletedShas, dryRun);
+            }
+        } catch (IOException ignored) {
+            // best-effort
+        }
+    }
 
     public record Report(int deleted, long freedBytes, int kept) {}
 
@@ -90,6 +111,9 @@ public final class CasSweep {
         // Drop the m2 mirror's hard-links for everything swept, else the
         // inode (and its bytes) survives behind the repo/ path.
         new JkMavenLocalRepo(cas.root()).removeShas(deletedShas, dryRun);
+        // Drop hard-links from every named per-repo store (repos/<name>/)
+        // for the same reason — each is a separate hard-link tree.
+        sweepNamedRepos(cas.root(), deletedShas, dryRun);
         return new Report(deleted, freedBytes, kept);
     }
 }

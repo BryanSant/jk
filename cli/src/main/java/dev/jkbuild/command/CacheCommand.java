@@ -473,6 +473,8 @@ public final class CacheCommand implements CliCommand {
                 var runLogReport = dev.jkbuild.task.RunLogGc.sweep(root, dev.jkbuild.task.RunLogGc.DEFAULT_TTL, dryRun);
                 var formatStampReport =
                         dev.jkbuild.task.FormatStampGc.sweep(root, dev.jkbuild.task.FormatStampGc.DEFAULT_TTL, dryRun);
+                var m2LocalSidecarReport =
+                        dev.jkbuild.task.M2LocalSidecarGc.sweep(root, dev.jkbuild.task.M2LocalSidecarGc.DEFAULT_TTL, dryRun);
                 var timingsReport = dev.jkbuild.runtime.PhaseTimings.prune(
                         root,
                         dev.jkbuild.runtime.PhaseTimings.Limits.resolve(
@@ -530,6 +532,10 @@ public final class CacheCommand implements CliCommand {
                     System.out.printf(
                             ", format-stamps %s (%s)",
                             fmtCount(formatStampReport.deleted()), fmtBytes(formatStampReport.freedBytes()));
+                if (m2LocalSidecarReport.deleted() > 0)
+                    System.out.printf(
+                            ", m2local-index %s (%s)",
+                            fmtCount(m2LocalSidecarReport.deleted()), fmtBytes(m2LocalSidecarReport.freedBytes()));
                 if (cacheDir == null)
                     System.out.printf(", tmp %s (%s)", fmtCount(tmpReport.deleted()), fmtBytes(tmpReport.freedBytes()));
                 if (timingsReport.evictedByAge() + timingsReport.evictedBySize() > 0)

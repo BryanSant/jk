@@ -2,13 +2,17 @@
 package dev.jkbuild.repo;
 
 import dev.jkbuild.cache.Linking;
+import dev.jkbuild.util.Hashing;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Stream;
 
 /**
@@ -140,7 +144,74 @@ public final class RepoArtifactStore {
         return root;
     }
 
+    /**
+     * Remove every artifact whose content SHA-256 is in {@code shas}, along with its {@code .sha256}
+     * sidecar, then prune any directories left empty. Used by the cache GC / sweep to keep the
+     * per-repo store in lock-step with the CAS — a hard link left behind would keep the inode (and
+     * its bytes) alive after the CAS blob is deleted. Returns the number of artifact files removed
+     * (not counting sidecars). Never throws.
+     */
+    public int removeShas(Set<String> shas, boolean dryRun) {
+        if (root == null || shas.isEmpty() || !Files.isDirectory(root)) return 0;
+        int removed = 0;
+        for (var entry : indexBySha().entrySet()) {
+            if (!shas.contains(entry.getKey())) continue;
+            for (Path artifact : entry.getValue()) {
+                try {
+                    if (!dryRun) {
+                        Files.deleteIfExists(artifact);
+                        // Remove the paired .sha256 sidecar if it exists.
+                        Path sidecar = Path.of(artifact + ".sha256");
+                        Files.deleteIfExists(sidecar);
+                        pruneEmptyParents(artifact.getParent());
+                    }
+                    removed++;
+                } catch (IOException ignored) {
+                    // best-effort; a stuck file just stays mirrored
+                }
+            }
+        }
+        return removed;
+    }
+
+    /**
+     * Index the store by the SHA-256 of each non-sidecar file's content. Paths are the artifact
+     * files themselves (not the {@code .sha256} sidecars). Done only when something is being purged,
+     * so the rehashing cost is paid rarely.
+     */
+    public Map<String, List<Path>> indexBySha() {
+        Map<String, List<Path>> out = new HashMap<>();
+        if (root == null || !Files.isDirectory(root)) return out;
+        try (Stream<Path> walk = Files.walk(root)) {
+            for (Path p : (Iterable<Path>) walk::iterator) {
+                if (!Files.isRegularFile(p)) continue;
+                if (p.getFileName().toString().endsWith(".sha256")) continue;
+                try {
+                    String hex = Hashing.sha256Hex(Files.readAllBytes(p));
+                    out.computeIfAbsent(hex, k -> new ArrayList<>()).add(p);
+                } catch (IOException ignored) {
+                    // unreadable file — skip
+                }
+            }
+        } catch (IOException ignored) {
+            // walk failure — return what we have
+        }
+        return out;
+    }
+
     // -------------------------------------------------------------------------
+
+    private void pruneEmptyParents(Path dir) {
+        Path cur = dir;
+        while (cur != null && cur.startsWith(root) && !cur.equals(root)) {
+            try {
+                Files.delete(cur); // throws if non-empty — stop climbing
+            } catch (IOException stop) {
+                return;
+            }
+            cur = cur.getParent();
+        }
+    }
 
     private Path sidecarPath(String relativePath) {
         return root.resolve(relativePath + ".sha256");
